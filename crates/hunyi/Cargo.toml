@@ -1,0 +1,23 @@
+[package]
+name = "hunyi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+# 渾儀 (Húnyí) — the semantic dimension. A coined / narrative name (like 圭表, 璇璣,
+# 漏刻), no role-prefix: meaning lives here in the SSOT. It observes *meaning* via the AST
+# (`syn`) — public-API exposure, trait-impl locality, visibility, and forbidden markers —
+# the semantic complement of the static import boundary.
+description = "渾儀 (Hunyi) — the semantic observation dimension of Tianheng: declare in Rust how a module's public surface must behave — what types its API must not expose, where a trait may be implemented, that a module declares no bare pub, and which markers a type must not acquire — observed via the AST (syn), reacted in CI. The semantic complement of the static import boundary; the syn dependency is quarantined here, never in the core."
+keywords = ["governance", "architecture", "boundary", "ast", "ci"]
+categories = ["development-tools"]
+
+[dependencies]
+xuanji = { workspace = true }
+serde_json = { workspace = true }
+syn = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

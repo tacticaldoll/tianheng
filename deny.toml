@@ -1,0 +1,37 @@
+# cargo-deny supply-chain policy — Tianheng gates its own dependency surface, the same
+# spirit as `crates/tianheng/tests/self_governance.rs`. This file is repo tooling (it
+# lives at the workspace root, outside the crates, so it is never packaged).
+#
+# Run: `cargo deny check`. Wired into CI as the `supply-chain` job.
+
+[advisories]
+version = 2
+# Deny known-vulnerable and yanked crates (RUSTSEC). No ignores: a real advisory must be
+# fixed or consciously ignored here with a rationale, never silently.
+ignore = []
+
+[licenses]
+version = 2
+# Every license below is present in the actual dependency graph (all permissive):
+#   MIT / Apache-2.0      — xuanji, guibiao, tianheng, hunyi, serde_json, serde_core,
+#                           itoa, ryu, and 渾儀's AST stack: syn, proc-macro2, quote
+#   Unlicense             — memchr (dual Unlicense OR MIT)
+#   Unicode-3.0           — unicode-ident (licensed `(MIT OR Apache-2.0) AND Unicode-3.0`,
+#                           pulled by syn): the Unicode data tables it embeds carry the
+#                           permissive Unicode license, which the SPDX `AND` requires us to
+#                           accept explicitly. Reviewed and accepted — it ships no code we
+#                           author, only Unicode's own character-class data.
+# Adding a dependency under any other license fails CI until it is reviewed here.
+allow = ["MIT", "Apache-2.0", "Unlicense", "Unicode-3.0"]
+confidence-threshold = 0.9
+
+[bans]
+# New external dependencies are already governed by Tianheng's own reaction (the 圭表
+# core is serde_json-only; see self_governance.rs); here we only flag accidental
+# duplicate versions so the tiny tree stays tidy.
+multiple-versions = "warn"
+
+[sources]
+# Only crates.io and known git sources; an unknown registry/source fails loud.
+unknown-registry = "deny"
+unknown-git = "deny"

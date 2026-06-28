@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dod:
+    name: Definition of Done
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build / test / clippy / fmt / doc
+        run: |
+          # Default features = louke's prod-light config (its CI scanner is gated behind the
+          # non-default `audit` feature). Build + lint that config on its own so an unused
+          # item/import when `audit` is OFF fails here, not silently in a downstream prod build.
+          cargo build --workspace
+          cargo clippy --all-targets -- -D warnings
+          # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
+          # feature-gated item (it would break docs.rs, which builds default features).
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+          # --all-features turns ON louke/audit so the gated probe-coverage scanner tests
+          # actually RUN — a plain `--workspace` would cfg them out and silently skip them.
+          # TIANHENG_WORKSPACE_TESTS=1 makes the workspace-dependent dogfood/dispatch tests
+          # fail loud if the workspace manifest is ever absent here (never silently skip in CI).
+          TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
+          cargo clippy --all-targets --all-features -- -D warnings
+          cargo fmt --all --check
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+
+  msrv:
+    name: MSRV (rust-version)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build and test on the declared minimum supported Rust version
+        run: |
+          msrv="$(cargo metadata --no-deps --format-version 1 \
+            | sed -n 's/.*"rust_version":"\([^"]*\)".*/\1/p' | head -n1)"
+          echo "declared rust-version: ${msrv:?could not read rust-version}"
+          rustup toolchain install "$msrv" --profile minimal --no-self-update
+          cargo "+$msrv" build --workspace
+          # --all-features so the gated CI-scanner tests run on the MSRV toolchain too;
+          # TIANHENG_WORKSPACE_TESTS=1 so a missing workspace manifest fails loud, never skips.
+          TIANHENG_WORKSPACE_TESTS=1 cargo "+$msrv" test --workspace --all-features
+
+  supply-chain:
+    name: Supply chain (cargo-deny)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: license / advisory / bans / sources policy
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  reaction:
+    name: Tianheng reaction
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: reaction passes on a clean target
+        run: cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/clean/Cargo.toml
+      - name: reaction fails on a violating target (must not silently pass)
+        run: |
+          if cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/violating/Cargo.toml; then
+            echo "::error::reaction returned 0 on a known violation — it silently passed"
+            exit 1
+          fi

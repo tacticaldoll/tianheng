@@ -1,0 +1,28 @@
+[package]
+name = "louke"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+# 漏刻 (Lòukè) — the runtime dimension. A coined / narrative name (like 圭表, 渾儀, 璇璣):
+# the clepsydra, the instrument of flow/time. Meaning lives here in the SSOT.
+description = "漏刻 (Louke) — the runtime observation dimension of Tianheng: declare which concrete-type origins may cross a runtime seam, probe live dyn objects in production fail-closed, react as a structured event (panic opt-in), and audit probe coverage at CI time. Ships into the production binary; hot path is std-only, depends on 璇璣 only."
+keywords = ["governance", "architecture", "boundary", "runtime", "ci"]
+categories = ["development-tools"]
+
+# docs.rs builds default features (audit OFF) by default, which would omit the entire CI face
+# (`audit_probe_coverage`) from the published docs. Build all features there so the CI face is
+# documented; the prod-light default is unaffected for actual dependents.
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+# The CI face (`audit_probe_coverage` + the hand-rolled source scanner). OFF by default so a
+# production binary depending on louke for the runtime hot path compiles zero scanner code.
+# The `tianheng` shell enables it to run the audit inside `check`. (See PROJECT.md.)
+audit = []
+
+[dependencies]
+xuanji = { workspace = true }
