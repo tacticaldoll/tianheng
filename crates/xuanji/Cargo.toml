@@ -1,0 +1,21 @@
+[package]
+name = "xuanji"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+# 璇璣 (Xuánjī) — the jade pivot of the armillary sphere, the instrument of celestial
+# measure. A coined / narrative name (like 圭表, 渾儀, 漏刻), no role-prefix: meaning
+# lives here in the SSOT, not in a self-describing name. It is the dimension-agnostic
+# measure every dimension (圭表 static, 渾儀 semantic, 漏刻 runtime) reacts in.
+description = "璇璣 (Xuanji) — the shared reaction model of Tianheng: Severity, Violation, Report, Baseline, and Outcome — the dimension-agnostic measure every observation dimension reacts in, with the JSON serialization intrinsic to those types. serde_json-only; carries no observation engine."
+keywords = ["governance", "architecture", "boundary", "drift", "ci"]
+categories = ["development-tools"]
+
+[dependencies]
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
