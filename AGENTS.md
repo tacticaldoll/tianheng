@@ -3,6 +3,31 @@
 Working agreement for humans and AI agents. `PROJECT.md` is the contract (the *why* and
 the invariants); this file is the *how* of contributing. Keep both short.
 
+## Agent workflow — read the law, react against it, repair toward the reason
+
+When you (human or agent) change code in a Tianheng-governed project, work *with* the
+reaction, not around it:
+
+1. **Before changing code — read the declared law.** `tianheng list --format markdown`
+   (or `--format json`) projects the whole constitution: every boundary's target, what it
+   forbids or restricts, and its declared reason. Read it so you know the architectural
+   shape you must not drift.
+2. **After changing code — react.** `tianheng check --format json` evaluates the
+   constitution against the workspace. Exit `0` is clean (or warn-only / fully baselined),
+   `1` is an enforced violation, `2` is a constitution/scan/usage error.
+3. **On a violation — repair toward the declared reason.** Each violation carries its
+   `reason` — the intent the boundary protects. Repair the code so the reason holds again;
+   do not weaken the boundary to make the reaction pass.
+4. **To change the law itself — amend it deliberately.** A boundary is wrong only by a
+   human-reviewed amendment (an OpenSpec change / steward review), never by quietly editing
+   the constitution so CI turns green.
+
+This SOP is **orientation, not the binding mechanism**: the reaction (a failed `check`, a
+runtime probe) is what binds: reading the law first does not *grant* compliance, it just
+saves a round-trip. It is convention, not constitution — an observable architectural fact
+belongs in the declared law and reacts; a working agreement like this one does not, so the
+drift law keeps it here, not in `Constitution`.
+
 ## Commits & PRs
 
 - **No AI/agent attribution.** Commit messages and PR descriptions must NOT contain a

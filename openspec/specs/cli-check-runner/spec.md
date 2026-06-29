@@ -82,7 +82,7 @@ The runner SHALL accept two mutually exclusive baseline flags: `--baseline <file
 
 ### Requirement: Machine-readable report format
 
-The runner SHALL accept `--format json` (and `--format=json`) and emit the outcome as a JSON document on standard output; the default format SHALL remain human-readable text, so existing invocations are unchanged. An unrecognized format value SHALL be a usage error that exits 2, never a silent fallback. The JSON SHALL faithfully project the outcome: an `outcome` discriminant (`clean`, `violations`, or `constitution_error`), the `exit_code` mirroring the process exit, a `violations` array, a `stale_baseline` array (empty outside gate mode), and an `error` message (null unless a constitution error). Each violation SHALL carry its `kind` (`crate` or `module`), `target`, `rule`, `finding`, `reason`, `severity`, and `baselined` flag; the `reason` SHALL serve as the repair hint with no separate invented field.
+The runner SHALL accept `--format json` (and `--format=json`) and emit the outcome as a JSON document on standard output; the default format SHALL remain human-readable text, so existing invocations are unchanged. An unrecognized format value SHALL be a usage error that exits 2, never a silent fallback. The `markdown` format is a `list`-only projection of the declared law and is NOT a `check` format: `check --format markdown` SHALL be a usage error that exits 2, because `check`'s machine-readable output is the JSON report, not a law summary. The JSON SHALL faithfully project the outcome: an `outcome` discriminant (`clean`, `violations`, or `constitution_error`), the `exit_code` mirroring the process exit, a `violations` array, a `stale_baseline` array (empty outside gate mode), and an `error` message (null unless a constitution error). Each violation SHALL carry its `kind`, `target`, `rule`, `finding`, `reason`, `severity`, and `baselined` flag; the `reason` SHALL serve as the repair hint with no separate invented field.
 
 #### Scenario: JSON format emits a parseable violations document
 
@@ -103,6 +103,11 @@ The runner SHALL accept `--format json` (and `--format=json`) and emit the outco
 
 - **WHEN** the runner is invoked with `--format` set to a value other than `text` or `json`
 - **THEN** it prints usage guidance and exits 2
+
+#### Scenario: Check rejects the list-only markdown format
+
+- **WHEN** the runner is invoked as `check --format markdown`
+- **THEN** it prints usage guidance and exits 2, because `markdown` projects the declared law and is a `list` format, while `check`'s machine output is the JSON report
 
 #### Scenario: Gate mode JSON reflects baseline and stale entries
 
@@ -238,7 +243,6 @@ The `list` command observes no workspace and performs no reaction; it SHALL acce
 - **WHEN** the runner is invoked as `list --bogus`
 - **THEN** it prints usage guidance and exits `2`, exactly as the unrecognized-argument rule already requires
 
-
 ### Requirement: Unified constitution declaration
 
 The runner SHALL accept the declared law as a **single constitution object** composing every
@@ -292,3 +296,4 @@ exactly as before (no runtime audit performed).
 
 - **WHEN** runtime boundaries are declared but the workspace's member source directories cannot be resolved
 - **THEN** `check` exits `2` with a constitution error, never `0`
+

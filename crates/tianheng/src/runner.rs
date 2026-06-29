@@ -43,6 +43,17 @@ enum Command {
     List,
 }
 
+/// The requested output format. `text` (default) and `json` apply to both commands;
+/// `markdown` is a `list`-only projection of the declared law — `check`'s machine-readable
+/// output is the JSON report, never a law summary, so `check --format markdown` is a usage
+/// error (exit 2).
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum Format {
+    Text,
+    Json,
+    Markdown,
+}
+
 /// Run the unified constitution's boundaries against a Cargo workspace and return the
 /// process exit code. The one [`Constitution`] carries every dimension — static (圭表),
 /// semantic (渾儀), and the runtime (漏刻) CI probe-coverage audit — which this gate composes
@@ -123,13 +134,15 @@ where
         }
     }
 
-    // `--format` is validated for both commands so the flag contract stays uniform.
-    let json = match format.as_deref() {
-        None | Some("text") => false,
-        Some("json") => true,
+    // `--format` is parsed for both commands so the flag contract stays uniform; `markdown`
+    // is recognized here but only honored by `list` (rejected for `check` below).
+    let format = match format.as_deref() {
+        None | Some("text") => Format::Text,
+        Some("json") => Format::Json,
+        Some("markdown") => Format::Markdown,
         Some(other) => {
             return usage(&format!(
-                "unknown --format '{other}' (expected text or json)"
+                "unknown --format '{other}' (expected text, json, or markdown)"
             ));
         }
     };
@@ -148,22 +161,45 @@ where
         }
         let semantic = constitution.semantic_boundaries();
         let runtime = constitution.runtime_boundaries();
-        if json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&list_document(constitution))
-                    .expect("a serde_json::Value is always serializable")
-            );
-        } else {
-            println!("{}", constitution_text(constitution.static_boundaries()));
-            print!("{}", semantic_text(&semantic.signature));
-            print!("{}", trait_impl_text(&semantic.trait_impl));
-            print!("{}", visibility_text(&semantic.visibility));
-            print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
-            print!("{}", runtime_text(runtime));
+        match format {
+            Format::Json => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&list_document(constitution))
+                        .expect("a serde_json::Value is always serializable")
+                );
+            }
+            Format::Markdown => {
+                // Rendered from the same `list_document` value the JSON projection emits, so the
+                // Markdown provably carries no less than the JSON and covers exactly the same
+                // dimensions — a pure projection, never a reaction.
+                print!("{}", list_markdown(&list_document(constitution)));
+            }
+            Format::Text => {
+                println!("{}", constitution_text(constitution.static_boundaries()));
+                print!("{}", semantic_text(&semantic.signature));
+                print!("{}", trait_impl_text(&semantic.trait_impl));
+                print!("{}", visibility_text(&semantic.visibility));
+                print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
+                print!("{}", runtime_text(runtime));
+            }
         }
         return 0;
     }
+
+    // The command is `check`. `markdown` is a `list`-only projection of the declared law;
+    // `check`'s machine output is the JSON report, so reject it loud (exit 2) rather than
+    // silently falling back. `text`/`json` map to the existing boolean contract.
+    let json = match format {
+        Format::Text => false,
+        Format::Json => true,
+        Format::Markdown => {
+            return usage(
+                "check supports --format text or json; markdown is a list-only projection \
+                 of the declared law",
+            );
+        }
+    };
 
     // From here on the command is `check`: it requires a workspace to observe.
     // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
@@ -266,7 +302,7 @@ fn usage(message: &str) -> u8 {
          tianheng check --manifest-path <path/to/Cargo.toml> \
          [--baseline <file> | --write-baseline <file>] [--format text|json] \
          [--warn-uncovered]\n  \
-         tianheng list [--format text|json]"
+         tianheng list [--format text|json|markdown]"
     );
     eprintln!("error: {message}");
     2
@@ -731,11 +767,118 @@ fn runtime_boundary_json(boundary: &RuntimeBoundary) -> Value {
     })
 }
 
+/// The `list --format markdown` projection: an agent-readable summary of the *whole* declared
+/// law. It is rendered from the very [`Value`] [`list_document`] emits, so it provably carries
+/// no information absent from the JSON and covers exactly the same dimensions (the spec's
+/// "no less than the JSON" guarantee holds by construction, not by parallel maintenance). Like
+/// `list` as a whole it observes nothing and never reacts. A dimension with no declared
+/// boundaries contributes no section, mirroring the text and JSON projections.
+fn list_markdown(document: &Value) -> String {
+    let name = document
+        .get("constitution")
+        .and_then(Value::as_str)
+        .unwrap_or("(unnamed)");
+    let mut out = format!("# Constitution: {name}\n");
+    // The dimension sections in projection order; each key matches `list_document`'s, and a
+    // section absent or empty there is skipped here, so the two projections stay in lockstep.
+    for (key, heading) in [
+        ("boundaries", "Static boundaries"),
+        (
+            "semantic_boundaries",
+            "Semantic boundaries (signature-coupling)",
+        ),
+        ("trait_impl_boundaries", "Trait-impl-locality boundaries"),
+        ("visibility_boundaries", "Visibility boundaries"),
+        ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
+        ("runtime_boundaries", "Runtime boundaries"),
+    ] {
+        let Some(Value::Array(items)) = document.get(key) else {
+            continue;
+        };
+        if items.is_empty() {
+            continue;
+        }
+        out.push_str(&format!("\n## {heading}\n"));
+        for item in items {
+            out.push_str(&boundary_markdown(item));
+        }
+    }
+    out
+}
+
+/// One boundary as a Markdown block: its `target` as the heading, a context line (kind,
+/// severity, and the owning crate when present), its `rule` with any rule parameters, and its
+/// declared `reason` (the intent). Every field is read from the JSON projection, so an agent
+/// reads the same law the JSON carries.
+fn boundary_markdown(boundary: &Value) -> String {
+    let field = |key: &str| boundary.get(key).and_then(Value::as_str).unwrap_or("");
+    let mut out = format!("\n### `{}`\n", field("target"));
+    let mut context = format!("- **kind**: {}", field("kind"));
+    let severity = field("severity");
+    if !severity.is_empty() {
+        context.push_str(&format!(" · **severity**: {severity}"));
+    }
+    if let Some(krate) = boundary.get("crate").and_then(Value::as_str) {
+        context.push_str(&format!(" · **crate**: {krate}"));
+    }
+    out.push_str(&context);
+    out.push('\n');
+    out.push_str(&format!("- **rule**: {}", field("rule")));
+    let params = boundary_params(boundary);
+    if !params.is_empty() {
+        out.push_str(&format!(" ({params})"));
+    }
+    out.push('\n');
+    let reason = field("reason");
+    if !reason.is_empty() {
+        out.push_str(&format!("- **reason**: {reason}\n"));
+    }
+    out
+}
+
+/// The rule parameters of a boundary — every JSON field that is not one of the structural keys
+/// (kind/target/crate/rule/severity/reason) — rendered inline. This generically surfaces each
+/// dimension's specifics (a forbidden set, allowed locations, allowed origins, a posture, a
+/// dependency kind) without hard-coding any dimension, so a new dimension's parameters appear
+/// in the Markdown the moment they appear in the JSON.
+fn boundary_params(boundary: &Value) -> String {
+    const STRUCTURAL: [&str; 6] = ["kind", "target", "crate", "rule", "severity", "reason"];
+    let Some(object) = boundary.as_object() else {
+        return String::new();
+    };
+    object
+        .iter()
+        .filter(|(key, _)| !STRUCTURAL.contains(&key.as_str()))
+        .map(|(key, value)| format!("{key}: {}", inline_value(value)))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// Render a JSON value compactly for a Markdown parameter: a string as itself, an array as a
+/// comma-joined list, a scalar via its display, an object via its JSON text. Each rendering is
+/// a pure function of the value, so the projection is stable and diffable; within a boundary,
+/// `boundary_params` walks the object in serde_json's default `Map` order — lexicographic by
+/// key (a `BTreeMap`), not declaration order — which is likewise deterministic.
+fn inline_value(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Array(items) => items
+            .iter()
+            .map(inline_value)
+            .collect::<Vec<_>>()
+            .join(", "),
+        Value::Bool(boolean) => boolean.to_string(),
+        Value::Number(number) => number.to_string(),
+        Value::Null => "null".to_string(),
+        Value::Object(_) => value.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        dispatch, list_document, merge_outcomes, runtime_text, semantic_text, trait_impl_text,
-        visibility_text,
+        dispatch, list_document, list_markdown, merge_outcomes, runtime_text, semantic_text,
+        trait_impl_text, visibility_text,
     };
     use crate::prelude::*;
     use std::path::PathBuf;
@@ -1108,6 +1251,117 @@ mod tests {
         // And the text projection of the runtime section is non-empty and names the seam.
         let text = runtime_text(full.runtime_boundaries());
         assert!(text.contains("seam domain-entry"), "{text}");
+    }
+
+    /// A multi-dimension constitution to exercise the Markdown projection across every
+    /// dimension at once (mirrors the JSON test's `full`).
+    fn full_constitution() -> Constitution {
+        Constitution::new("full")
+            .boundary(
+                CrateBoundary::crate_("core")
+                    .deny_external_dependencies()
+                    .because("core stays light"),
+            )
+            .signature_boundary(
+                SemanticBoundary::in_crate("app")
+                    .module("crate::domain")
+                    .must_not_expose("crate::infra")
+                    .because("no infra leak"),
+            )
+            .trait_impl_boundary(
+                TraitImplBoundary::in_crate("app")
+                    .trait_("crate::Command")
+                    .only_implemented_in("crate::commands")
+                    .because("impls live with the registry"),
+            )
+            .visibility_boundary(
+                VisibilityBoundary::in_crate("app")
+                    .module("crate::internal")
+                    .must_not_declare_pub()
+                    .because("internal is private"),
+            )
+            .forbidden_marker_boundary(
+                ForbiddenMarkerBoundary::in_crate("app")
+                    .module("crate::domain")
+                    .must_not_acquire("serde::Serialize")
+                    .because("domain is not wire"),
+            )
+            .runtime(
+                RuntimeBoundary::at("domain-entry")
+                    .only_origins(["app::domain"])
+                    .because("only domain crosses"),
+            )
+    }
+
+    #[test]
+    fn list_markdown_covers_every_dimension_with_target_rule_and_reason() {
+        // The Markdown is rendered from `list_document`, so this also proves it carries no less
+        // than the JSON: every dimension's target, rule parameter, and declared reason appear.
+        let md = list_markdown(&list_document(&full_constitution()));
+        assert!(md.contains("# Constitution: full"), "{md}");
+        // A section heading per non-empty dimension.
+        for heading in [
+            "## Static boundaries",
+            "## Semantic boundaries",
+            "## Trait-impl-locality boundaries",
+            "## Visibility boundaries",
+            "## Forbidden-marker boundaries",
+            "## Runtime boundaries",
+        ] {
+            assert!(md.contains(heading), "missing {heading} in:\n{md}");
+        }
+        // Each dimension's target, a rule parameter, and its reason (the agent-actionable triple).
+        for needle in [
+            "core",                // static target
+            "core stays light",    // static reason
+            "crate::domain",       // semantic target
+            "crate::infra",        // semantic forbidden param
+            "no infra leak",       // semantic reason
+            "crate::Command",      // trait-impl target
+            "crate::commands",     // trait-impl allowed_locations param
+            "crate::internal",     // visibility target
+            "serde::Serialize",    // forbidden-marker param
+            "domain-entry",        // runtime seam target
+            "app::domain",         // runtime allowed_origins param
+            "only domain crosses", // runtime reason
+        ] {
+            assert!(md.contains(needle), "missing '{needle}' in:\n{md}");
+        }
+    }
+
+    #[test]
+    fn list_markdown_empty_constitution_has_a_title_but_no_sections() {
+        // An empty dimension adds no section, mirroring the text and JSON projections.
+        let md = list_markdown(&list_document(&Constitution::new("empty")));
+        assert!(md.contains("# Constitution: empty"), "{md}");
+        assert!(
+            !md.contains("\n## "),
+            "no dimension sections expected:\n{md}"
+        );
+    }
+
+    #[test]
+    fn list_accepts_markdown_format() {
+        // `list --format markdown` is a pure projection: it observes no workspace and exits 0.
+        assert_eq!(run_args(&["tianheng", "list", "--format", "markdown"]), 0);
+        assert_eq!(run_args(&["tianheng", "list", "--format=markdown"]), 0);
+    }
+
+    #[test]
+    fn check_rejects_the_list_only_markdown_format() {
+        // markdown is a list-only projection of the declared law; check's machine output is the
+        // JSON report, so check --format markdown is a usage error (exit 2), not a silent fallback.
+        assert_eq!(
+            run_args(&[
+                "tianheng",
+                "check",
+                "--manifest-path",
+                &fixture("clean"),
+                "--format",
+                "markdown",
+            ]),
+            2
+        );
     }
 
     #[test]
