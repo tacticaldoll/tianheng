@@ -62,9 +62,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: reaction passes on a clean target
         run: cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/clean/Cargo.toml
-      - name: reaction fails on a violating target (must not silently pass)
+      - name: reaction fails with exit 1 on a violating target (1, not 2 — the contract separates them)
         run: |
-          if cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/violating/Cargo.toml; then
-            echo "::error::reaction returned 0 on a known violation — it silently passed"
+          status=0
+          cargo run -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/violating/Cargo.toml || status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::violating fixture must react with exit 1 (enforced violation), got $status"
             exit 1
           fi
