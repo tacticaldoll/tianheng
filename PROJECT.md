@@ -34,6 +34,31 @@ an explanatory report. The reaction MUST never silently pass, and MUST distingui
 boundary violation (exit 1) from a constitution error / misconfiguration (exit 2). The
 one forbidden bug is a **false negative** (a real violation that silently passes).
 
+## 潛移 (Qiányí) — govern by gravity, too: the idiom is imitated, the reaction is the backstop
+
+The reaction binds, but an autoregressive agent is first an **imitation engine** — it
+continues whatever idiom sits in its context. So compliance has a second source,
+complementary to the non-bypassable reaction: **潛移 (qiányí) — gravity, the quiet pull of an
+idiom** (潛移默化: it is assimilated without being told). The more the declared law and the
+governed code read *as one strong, distinctive idiom in the agent's context*, the more its
+continuations stay in-shape by default — and invocation stops being an act the agent must
+remember and becomes an **emergent property of imitation**. This is neither instruction
+(dictating what to write) nor bare reaction (catching it after); the agent is *pulled*, not
+pushed or told — still consistent with "we do not instruct your agent."
+
+Hence a standing design principle: **every Tianheng-facing semantic surface — the
+declaration DSL, the `because`/`reason` prose, and the law's projections (`list --format
+markdown` foremost) — is designed to be *imitated*, not merely *read* or *parsed*.**
+Legibility serves a human; imitability serves the continuation engine, and the two optimize
+differently — density, distinctiveness, and reason-as-first-class-prose over exhaustive
+enumeration.
+
+Gravity does **not** replace the reaction; it relocates it. Imitation transports *surface
+form*, never *invariants* — a strong idiom still admits a locally-plausible violation. So
+gravity lowers the base rate of drift (the frictionless primary) and the non-bypassable
+reaction forecloses what gravity misses (the backstop). The one forbidden bug is still a
+false negative, and only the reaction can foreclose it.
+
 ## Inherited laws (from modou — non-negotiable)
 
 - **Drift law** — *No drift type without an observation source. No target type or name
@@ -98,6 +123,12 @@ whose own thesis is "the source is the SSOT; names are projections." The brand `
 the jade pivot every measurement aligns to; 衡 → 天衡, the balance that weighs declared
 against observed. The brand is a star (玉衡, in the Dipper's handle), not an instrument — so
 it sits cleanly above the 三儀 it wields, sharing no name with any of them.
+
+潛移 (the gravity thesis above) deliberately breaks the celestial pattern: it names neither
+an instrument (儀) nor an office (司) but a **mode of governance** — compliance by imitation —
+so it is drawn from the idiom 潛移默化 (change that assimilates without the subject's
+awareness), not from 璿璣玉衡. It is a handle for *how* the declared law spreads, parallel to
+govern-by-reaction, never a thing the tool wields.
 
 ## Decisions
 
