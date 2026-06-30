@@ -99,8 +99,10 @@ its own dog food, now across crate boundaries.
 selects governance by depending on the dimensions they want:
 - **`hunyi` (渾儀)** — AST/semantic observation (`syn`). **Built (v0.1.0):**
   signature-coupling (a module's public API must not *expose* a forbidden type), plus
-  trait-impl locality, visibility, and forbidden-marker boundaries. The heavy `syn`
-  dependency is quarantined here, never in the core.
+  trait-impl locality, visibility, and forbidden-marker boundaries; **(v0.1.2):**
+  dyn-trait-boundary (the public API must not expose `dyn` trait-object *syntax* — the
+  type-shape complement of signature-coupling). The heavy `syn` dependency is quarantined
+  here, never in the core.
 - **`louke` (漏刻)** — runtime observation. **Built (v0.1.0):** origin-assertion (a
   declared seam's `only_origins` allowlist), in two faces — the prod probe
   (`assert_boundary!`, fail-closed, a structured event by default, panic opt-in) and the
@@ -217,7 +219,15 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   *expose* a forbidden type — the complement of import-governance, the case that provably
   earns the AST). Also admitted and now built (v0.1.0):
   local trait-impl surface (`only_implemented_in`), visibility (`must_not_declare_pub`), and
-  forbidden-marker boundaries — each born when built. **Rejected**, as explicit non-goals with their reason:
+  forbidden-marker boundaries — each born when built. **(v0.1.2)** **dyn-trait-boundary**
+  (`must_not_expose_dyn`) — the public API must not expose `dyn` trait-object *syntax*, the
+  type-shape complement of signature-coupling and the first **depth** addition (it deepens a
+  proven reaction's predicate from a named type to a type shape on the same `syn` source,
+  rather than widening to a new dimension). It passes all three gates: declarative-not-lint
+  (static dispatch at a *declared* seam is intent — by anchor scoping, not an operand),
+  no *essential* gap (a `dyn` node syntactically present in the local-crate public surface is
+  always observable; the residual is the inherited macro/alias bound), and anchorable (a
+  `syn`-resolvable module). **Rejected**, as explicit non-goals with their reason:
   `Send`/`Sync` constraints (auto-traits are inferred, never written), external trait
   sealing (downstream crates are outside the scan), and transitive effect-purity ("no I/O
   anywhere reachable") — each has an *essential* gap. This test is the standing gate: a new
@@ -284,9 +294,10 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   visibility), the shell `run`/`dispatch` accumulated one `&[…]` slice per capability — by the
   fourth, an unwieldy positional list where empty slices are easy to misorder. The semantic
   boundaries are gathered into a `hunyi::SemanticBoundaries` container (one field per
-  capability), and the shell composes them via `hunyi::check_all` with a single `cargo metadata`
-  read. `run(constitution, &SemanticBoundaries, args)` is then stable as further semantic
-  capabilities are added (they extend the container, not the signature). This is a
+  capability) held by the unified `Constitution`, and the shell composes them via
+  `hunyi::check_all(constitution.semantic_boundaries(), …)` with a single `cargo metadata`
+  read. `run(&Constitution, args)` is then stable as further semantic capabilities are added
+  (they extend the container behind a new typed adder, not the `run` signature). This is a
   **behavior-preserving facade refactor** — the same dimensions compose into the same reaction,
   no capability's requirements change — so, like the 璇璣 extraction, it is **not** an OpenSpec
   capability change; it is recorded here and kept honest by the existing tests and
