@@ -51,7 +51,10 @@ declaration DSL, the `because`/`reason` prose, and the law's projections (`list 
 markdown` foremost) — is designed to be *imitated*, not merely *read* or *parsed*.**
 Legibility serves a human; imitability serves the continuation engine, and the two optimize
 differently — density, distinctiveness, and reason-as-first-class-prose over exhaustive
-enumeration.
+enumeration. But imitability is **bounded by the drift law**: an imitable surface states the
+forward shape its boundary *observes and reacts to*, never structural guidance beyond that
+perimeter. A reason that pulls the agent toward a shape Tianheng cannot react to is prose
+prescription — the open loop this project exists to close, smuggled back in as text.
 
 Gravity does **not** replace the reaction; it relocates it. Imitation transports *surface
 form*, never *invariants* — a strong idiom still admits a locally-plausible violation. So

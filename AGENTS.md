@@ -28,6 +28,16 @@ saves a round-trip. It is convention, not constitution — an observable archite
 belongs in the declared law and reacts; a working agreement like this one does not, so the
 drift law keeps it here, not in `Constitution`.
 
+## Writing a boundary's `reason` — for 潛移 (gravity)
+
+A boundary's `because(...)` is read twice: once by a human, and — projected into an agent's
+context by `list` — once by an autoregressive model that *imitates* it (see PROJECT.md, 潛移).
+Write it as the **forward shape the boundary protects** ("the kernel depends inward only"),
+not a backward justification ("we once hit a cycle"): the forward voice conditions original
+generation, not just repair. But keep it **within the boundary's observable perimeter** — a
+reason must never assert structure the law does not react to (that is prose prescription, an
+open loop with no backstop). Forward voice, bounded to what reacts.
+
 ## Commits & PRs
 
 - **No AI/agent attribution.** Commit messages and PR descriptions must NOT contain a
