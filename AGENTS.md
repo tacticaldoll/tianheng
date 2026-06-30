@@ -6,7 +6,13 @@ the invariants); this file is the *how* of contributing. Keep both short.
 ## Agent workflow — read the law, react against it, repair toward the reason
 
 When you (human or agent) change code in a Tianheng-governed project, work *with* the
-reaction, not around it:
+reaction, not around it.
+
+**AI context order** — entering this repo, read in this order, then stop: `PROJECT.md` (the
+contract and the 潛移 thesis) → [`AGENTS.self-law.md`](AGENTS.self-law.md) (the enforced self-law,
+in imitable form) → the relevant `openspec/specs/*` (the capability you are touching) → the code.
+`PROJECT.md` and this file stay short on purpose; the law's per-boundary detail lives in the
+generated projection, and requirement detail in the specs — read those, do not inflate these.
 
 1. **Before changing code — read the declared law.** `tianheng list --format markdown`
    (or `--format json`) projects the whole constitution: every boundary's target, what it
@@ -22,7 +28,8 @@ reaction, not around it:
    do not weaken the boundary to make the reaction pass.
 4. **To change the law itself — amend it deliberately.** A boundary is wrong only by a
    human-reviewed amendment (an OpenSpec change / steward review), never by quietly editing
-   the constitution so CI turns green.
+   the constitution so CI turns green. Before proposing an OpenSpec change, read the law
+   projection (step 1) so the proposal reasons against the declared shape, not a guess.
 
 This SOP is **orientation, not the binding mechanism**: the reaction (a failed `check`, a
 runtime probe) is what binds: reading the law first does not *grant* compliance, it just
