@@ -435,34 +435,58 @@ fn report(outcome: &Outcome) {
 /// Print each non-baselined violation as a failure (enforce) or advisory (warn),
 /// and summarize how many were suppressed by a baseline.
 fn report_violations(report: &Report) {
+    eprint!("{}", violations_text(report));
+}
+
+/// The human-readable violation report `check` prints, as a pure function so the foregrounding,
+/// file-surfacing, and grouping invariants are unit-testable (the reaction itself,
+/// [`report_violations`], just prints this to stderr).
+///
+/// 潛移: each block **leads with the reason** — the principle and the repair direction — then the
+/// mechanical fields (target, rule, finding), then where to repair (the offending file, when
+/// observed), then the verdict. Violations are **grouped by boundary** via a stable sort of a
+/// local view by `(target, rule)`, so multiple findings under one boundary read consecutively and
+/// the reason is read once. This borrows `&Report` immutably and never reorders the underlying vec,
+/// so the JSON projection (the machine contract) is untouched.
+fn violations_text(report: &Report) -> String {
+    use std::fmt::Write as _;
     if report.violations.is_empty() {
-        eprintln!("Tianheng: clean — no boundary violated");
-        return;
+        return "Tianheng: clean — no boundary violated\n".to_string();
     }
-    let mut baselined = 0usize;
-    for violation in &report.violations {
-        if violation.baselined {
-            baselined += 1;
-            continue;
-        }
+    let baselined = report.violations.iter().filter(|v| v.baselined).count();
+    let mut shown: Vec<_> = report.violations.iter().filter(|v| !v.baselined).collect();
+    shown.sort_by(|a, b| {
+        (a.target.as_str(), a.rule.as_str()).cmp(&(b.target.as_str(), b.rule.as_str()))
+    });
+
+    let mut out = String::new();
+    for violation in shown {
         let (header, reaction) = match violation.severity {
             Severity::Enforce => ("Tianheng violation", "CI failed."),
             Severity::Warn => ("Tianheng advisory", "warning only — CI not failed."),
             // `Severity` is non-exhaustive; an unknown future rung reports as advisory.
             _ => ("Tianheng advisory", "warning only — CI not failed."),
         };
-        eprintln!();
-        eprintln!("{header}");
-        eprintln!();
-        eprintln!("Boundary:\n  {}", violation.target);
-        eprintln!("Rule:\n  {}", violation.rule);
-        eprintln!("Found:\n  {}", violation.finding);
-        eprintln!("Reason:\n  {}", violation.reason);
-        eprintln!("Reaction:\n  {reaction}");
+        writeln!(out).unwrap();
+        writeln!(out, "{header}").unwrap();
+        writeln!(out).unwrap();
+        writeln!(out, "Reason:\n  {}", violation.reason).unwrap();
+        writeln!(out, "Boundary:\n  {}", violation.target).unwrap();
+        writeln!(out, "Rule:\n  {}", violation.rule).unwrap();
+        writeln!(out, "Found:\n  {}", violation.finding).unwrap();
+        if let Some(file) = &violation.file {
+            writeln!(out, "File:\n  {file}").unwrap();
+        }
+        writeln!(out, "Reaction:\n  {reaction}").unwrap();
     }
     if baselined > 0 {
-        eprintln!("Tianheng: {baselined} pre-existing violation(s) suppressed by baseline");
+        writeln!(
+            out,
+            "Tianheng: {baselined} pre-existing violation(s) suppressed by baseline"
+        )
+        .unwrap();
     }
+    out
 }
 
 /// Print the workspace coverage summary, and — under `--warn-uncovered` — each
@@ -778,6 +802,20 @@ fn runtime_boundary_json(boundary: &RuntimeBoundary) -> Value {
 /// readability or imitability (e.g. foregrounding a boundary's `reason`). Consumers that need a
 /// stable, machine-parseable projection MUST use the JSON projection (`list --format json`)
 /// instead — depending on the exact Markdown shape is unsupported.
+///
+/// ```
+/// use tianheng::prelude::*;
+/// let c = Constitution::new("my-project").boundary(
+///     CrateBoundary::crate_("my-core")
+///         .deny_external_dependencies()
+///         .because("my-core stays dependency-light"),
+/// );
+/// let md = tianheng::constitution_markdown(&c);
+/// assert!(md.contains("# Constitution: my-project"));
+/// assert!(md.contains("my-core stays dependency-light"));
+/// // Write it where an agent will read it, e.g.:
+/// // std::fs::write("AGENTS.my-project-law.md", md)?;
+/// ```
 pub fn constitution_markdown(constitution: &Constitution) -> String {
     list_markdown(&list_document(constitution))
 }
@@ -902,11 +940,23 @@ fn inline_value(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        constitution_markdown, dispatch, list_document, list_markdown, merge_outcomes,
-        runtime_text, semantic_text, trait_impl_text, visibility_text,
+        constitution_markdown, dispatch, list_document, list_markdown, merge_outcomes, report_json,
+        runtime_text, semantic_text, trait_impl_text, violations_text, visibility_text,
     };
     use crate::prelude::*;
     use std::path::PathBuf;
+
+    fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Violation {
+        Violation::new(
+            BoundaryKind::Crate,
+            target.to_string(),
+            rule.to_string(),
+            finding.to_string(),
+            format!("reason-for-{target}"),
+            Severity::Enforce,
+        )
+        .with_file(file.map(str::to_string))
+    }
 
     fn enforce_violation(kind: BoundaryKind, finding: &str) -> Violation {
         Violation::new(
@@ -1401,6 +1451,74 @@ mod tests {
         assert!(
             md.contains("### `core`\n- **rule**"),
             "heading immediately followed by the rule bullet:\n{md}"
+        );
+    }
+
+    #[test]
+    fn report_text_leads_with_reason_and_shows_the_offending_file() {
+        let report = Report::new(vec![violation(
+            "crate::core",
+            "must not import crate::adapter",
+            "crate::adapter::Db",
+            Some("src/core/mod.rs"),
+        )]);
+        let text = violations_text(&report);
+        let reason = text.find("Reason:").expect("reason");
+        let boundary = text.find("Boundary:").expect("boundary");
+        let rule = text.find("Rule:").expect("rule");
+        let found = text.find("Found:").expect("found");
+        let file = text.find("File:").expect("file");
+        let reaction = text.find("Reaction:").expect("reaction");
+        assert!(
+            reason < boundary && boundary < rule && rule < found && found < file && file < reaction,
+            "order must be reason → boundary → rule → found → file → reaction:\n{text}"
+        );
+        assert!(
+            text.contains("File:\n  src/core/mod.rs"),
+            "the offending file is shown as the repair location:\n{text}"
+        );
+    }
+
+    #[test]
+    fn report_text_omits_the_file_element_when_absent() {
+        let report = Report::new(vec![violation("crate::x", "rule", "finding", None)]);
+        let text = violations_text(&report);
+        assert!(
+            !text.contains("File:"),
+            "no file element when the violation carries none:\n{text}"
+        );
+    }
+
+    #[test]
+    fn report_text_groups_violations_by_boundary() {
+        // Input order is intentionally unsorted; the text groups by (target, rule).
+        let report = Report::new(vec![
+            violation("z-crate", "r1", "f", None),
+            violation("a-crate", "r1", "f", None),
+            violation("a-crate", "r0", "f", None),
+        ]);
+        let text = violations_text(&report);
+        assert!(
+            text.find("Boundary:\n  a-crate").unwrap() < text.find("Boundary:\n  z-crate").unwrap(),
+            "the a-crate group precedes z-crate:\n{text}"
+        );
+        assert!(
+            text.find("\n  r0").unwrap() < text.find("\n  r1").unwrap(),
+            "within a-crate, r0 precedes r1:\n{text}"
+        );
+    }
+
+    #[test]
+    fn json_projection_is_unchanged_by_the_text_grouping() {
+        // The text sort is presentation-only: the JSON keeps the input (detection) order.
+        let outcome = Outcome::Violations(Report::new(vec![
+            violation("z-crate", "r", "f", None),
+            violation("a-crate", "r", "f", None),
+        ]));
+        let json = report_json(&outcome, &[], None);
+        assert!(
+            json.find("z-crate").unwrap() < json.find("a-crate").unwrap(),
+            "JSON keeps input order (z before a), unaffected by the text grouping:\n{json}"
         );
     }
 
