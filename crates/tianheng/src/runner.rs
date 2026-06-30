@@ -767,6 +767,21 @@ fn runtime_boundary_json(boundary: &RuntimeBoundary) -> Value {
     })
 }
 
+/// Render a constitution as the human- and agent-readable Markdown summary of its declared law —
+/// the same projection `list --format markdown` prints, returned as a `String` for library
+/// callers (e.g. to generate an agent-context artifact). It composes the same internal projector,
+/// so it carries no less than the JSON and never reacts; it adds nothing of its own (no preamble,
+/// no trailing newline), so it equals the CLI output byte for byte.
+///
+/// **Format stability.** This Markdown layout is intended for display, review, and LLM context.
+/// It is **not** a machine-stable contract and **may evolve in any compatible release** to improve
+/// readability or imitability (e.g. foregrounding a boundary's `reason`). Consumers that need a
+/// stable, machine-parseable projection MUST use the JSON projection (`list --format json`)
+/// instead — depending on the exact Markdown shape is unsupported.
+pub fn constitution_markdown(constitution: &Constitution) -> String {
+    list_markdown(&list_document(constitution))
+}
+
 /// The `list --format markdown` projection: an agent-readable summary of the *whole* declared
 /// law. It is rendered from the very [`Value`] [`list_document`] emits, so it provably carries
 /// no information absent from the JSON and covers exactly the same dimensions (the spec's
@@ -877,8 +892,8 @@ fn inline_value(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        dispatch, list_document, list_markdown, merge_outcomes, runtime_text, semantic_text,
-        trait_impl_text, visibility_text,
+        constitution_markdown, dispatch, list_document, list_markdown, merge_outcomes,
+        runtime_text, semantic_text, trait_impl_text, visibility_text,
     };
     use crate::prelude::*;
     use std::path::PathBuf;
@@ -1327,6 +1342,16 @@ mod tests {
         ] {
             assert!(md.contains(needle), "missing '{needle}' in:\n{md}");
         }
+    }
+
+    #[test]
+    fn constitution_markdown_equals_the_cli_projection_byte_for_byte() {
+        // The public helper MUST add nothing of its own — no preamble, no trailing newline — so
+        // it equals what the `list --format markdown` branch prints (`list_markdown(&list_document)`,
+        // via `print!`). This guards Contract A's "same renderer, no parallel projection path":
+        // a stray newline or wrapper here would silently drift the agent artifact from the CLI.
+        let c = full_constitution();
+        assert_eq!(constitution_markdown(&c), list_markdown(&list_document(&c)));
     }
 
     #[test]

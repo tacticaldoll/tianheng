@@ -1,0 +1,49 @@
+# Tianheng Self-Law Projection
+
+Generated from `tianheng_constitution()` in `crates/tianheng/tests/self_governance.rs`.
+**Do not edit by hand.** If this file is stale, regenerate it:
+`BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`.
+If the law itself is wrong, amend `self_governance.rs` through review — never edit this projection.
+
+Read the projection below as the imitable shape of Tianheng itself, and work *with* the reaction:
+
+- Declare intent in Rust; the source is the single source of truth.
+- Observe only what has a real observation source; name nothing that does not react.
+- React with the outcomes: `0` clean, `1` violation, `2` constitution/usage error.
+- On a violation, repair toward the boundary's declared reason — never weaken the law to pass.
+- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 三司 (垂象 · 實錄 · 校讎) administer.
+
+# Constitution: tianheng
+
+## Static boundaries
+
+### `xuanji`
+- **kind**: crate · **severity**: enforce
+- **rule**: restrict dependencies to (only: serde_json)
+- **reason**: 璇璣 is the dimension-agnostic reaction model: serde_json only, and below every dimension — it must not depend on any workspace member (no engine, no shell), so nothing in the family sits beneath it
+
+### `guibiao`
+- **kind**: crate · **severity**: enforce
+- **rule**: restrict dependencies to (only: serde_json, xuanji)
+- **reason**: the 圭表 core stays dependency-light: serde_json is the only external dependency (no syn / proc-macro, no heavy graph or runtime crates); the internal dependency on 璇璣 (the shared reaction model) is the price of the family split — the model carries no engine. 三儀 ⊥ 三儀: this allowlist names no sibling dimension, so 圭表 cannot depend on 渾儀 (nor, when born, 漏刻) — the dimensions are composed only by the 天衡 shell, never by each other
+
+### `guibiao`
+- **kind**: crate · **severity**: enforce
+- **rule**: forbid dependency on (crates: tianheng)
+- **reason**: functional core ⊥ imperative shell: the 圭表 core crate must not depend on the 天衡 gate/shell
+
+### `hunyi`
+- **kind**: crate · **severity**: enforce
+- **rule**: restrict dependencies to (only: xuanji, serde_json, syn)
+- **reason**: 渾儀 is the semantic dimension and the sole holder of the heavy syn AST dependency — quarantined here, never the core or the model; it depends on 璇璣 (the reaction model), serde_json, and syn only. 三儀 ⊥ 三儀: it never depends on the sibling 圭表 dimension (nor, when born, 漏刻), and never on the 天衡 shell — the dimensions are composed only by the shell, never by each other (functional dimension ⊥ imperative shell)
+
+### `louke`
+- **kind**: crate · **severity**: enforce
+- **rule**: restrict dependencies to (only: xuanji)
+- **reason**: 漏刻 is the runtime dimension and ships into the user's production binary, so it stays production-light: it depends on 璇璣 (the reaction model) only — no syn, no static engine, no sibling dimension. 三儀 ⊥ 三儀: naming no sibling, it cannot depend on the 圭表/渾儀 dimensions, and it reacts in prod independently of the 天衡 shell (serde_json reaches it only transitively via 璇璣, cold-path only)
+
+### `tianheng`
+- **kind**: crate · **severity**: enforce
+- **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
+- **reason**: the 天衡 shell composes the 三儀 into one reaction, so it depends on the 圭表 static core, the 渾儀 semantic dimension, and the 漏刻 runtime dimension (whose CI probe-coverage face it composes into `check`), plus serde_json; the gate stands on every dimension it gates
+

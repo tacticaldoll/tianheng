@@ -11,7 +11,9 @@ reaction, not around it:
 1. **Before changing code — read the declared law.** `tianheng list --format markdown`
    (or `--format json`) projects the whole constitution: every boundary's target, what it
    forbids or restricts, and its declared reason. Read it so you know the architectural
-   shape you must not drift.
+   shape you must not drift. (The published binary's `list` projects the *demo* constitution;
+   for Tianheng's **own** enforced self-law, read [`AGENTS.self-law.md`](AGENTS.self-law.md) — a
+   projection generated from `self_governance.rs` and staleness-checked by `cargo test`.)
 2. **After changing code — react.** `tianheng check --format json` evaluates the
    constitution against the workspace. Exit `0` is clean (or warn-only / fully baselined),
    `1` is an enforced violation, `2` is a constitution/scan/usage error.
