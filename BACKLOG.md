@@ -17,7 +17,7 @@ Ordered by readiness. All three instruments ship in v0.1.0 (圭表 static, 渾�
 runtime); the entire admitted 三儀 layer is now built. What remains below is the rejected set
 per dimension and the 三司 governance/observability layer.
 
-### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT (v0.1.0) — admitted layer complete**
+### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn-trait)**
 Observation source: the **AST** (`syn`). Sees what the `圭表` `use`-scan cannot — semantics
 in the syntax tree: `pub` signatures, `impl Trait for Type`, attributes/derives, visibility.
 The observation-source fork is **resolved**: `syn` was chosen (stable; its syntactic partial
@@ -37,8 +37,20 @@ in `PROJECT.md` — declarative, no *essential* gap, anchorable):
   is a `syn`-resolvable local element, the second 渾儀 anchor type.
 - **Forbidden-marker / attribute / visibility boundaries**: **BUILT** (`ForbiddenMarkerBoundary`,
   `VisibilityBoundary` `.must_not_declare_pub()`) — "`internal` exposes no `pub`".
+- **Dyn-trait exposure — type-shape exposure**: **BUILT (v0.1.2)** (`DynTraitBoundary`,
+  `.must_not_expose_dyn()`) — "the core's public seam must not leak `dyn`". The first **depth**
+  addition: it deepens signature-coupling's reaction from a forbidden *named type* to a
+  forbidden *type shape* (a `dyn` node at any depth in the public surface), reusing its
+  surface walk + resolver and adding only a trait-object leaf. Shape-only.
 
-The admitted 渾儀 layer is complete; what remains for this dimension is only the rejected set.
+The originally-conceived 渾儀 layer is complete, but the dimension still grows by **depth**
+(new capabilities on the same `syn` observation source, each a born-when-built patch — see
+dyn-trait above), not by width (no new observation source). Named next depths and the rejected
+set follow.
+
+Forward depths (born when built, same `syn` source):
+- **Operand-scoped dyn** (`must_not_expose_dyn_of([…])`) — forbid only a *named* trait's `dyn`
+  rather than any. The next depth past the shape-only dyn-trait boundary; not yet built.
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),

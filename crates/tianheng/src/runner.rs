@@ -29,7 +29,10 @@ use guibiao::{
     Baseline, Coverage, Outcome, Report, Severity, ViolationId, apply_baseline, check_and_cover,
     constitution_json, constitution_text, report_json, workspace_member_src_dirs,
 };
-use hunyi::{ForbiddenMarkerBoundary, SemanticBoundary, TraitImplBoundary, VisibilityBoundary};
+use hunyi::{
+    DynTraitBoundary, ForbiddenMarkerBoundary, SemanticBoundary, TraitImplBoundary,
+    VisibilityBoundary,
+};
 use louke::{RuntimeBoundary, audit_probe_coverage};
 use serde_json::Value;
 
@@ -194,6 +197,7 @@ where
                 print!("{}", trait_impl_text(&semantic.trait_impl));
                 print!("{}", visibility_text(&semantic.visibility));
                 print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
+                print!("{}", dyn_trait_text(&semantic.dyn_trait));
                 print!("{}", runtime_text(runtime));
             }
             // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
@@ -796,6 +800,44 @@ fn forbidden_marker_boundary_json(boundary: &ForbiddenMarkerBoundary) -> Value {
     })
 }
 
+/// The text projection of the dyn-trait boundaries, appended to `list`. Empty when there are
+/// none, so a project not using the dimension sees unchanged output.
+fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> String {
+    if boundaries.is_empty() {
+        return String::new();
+    }
+    let noun = if boundaries.len() == 1 {
+        "boundary"
+    } else {
+        "boundaries"
+    };
+    let mut out = format!("Dyn-trait {noun} ({}):\n", boundaries.len());
+    for boundary in boundaries {
+        out.push_str(&format!(
+            "\n[{}] module {} in {}\n  rule:   must not expose dyn\n  reason: {}\n",
+            boundary.severity().as_str(),
+            boundary.module(),
+            boundary.crate_package(),
+            boundary.reason(),
+        ));
+    }
+    out
+}
+
+/// The JSON projection of one dyn-trait boundary, mirroring a semantic boundary's shape (`kind`,
+/// `target`, `crate`, `rule`, `severity`, `reason`). It carries no `forbidden` set — the rule is
+/// shape-only (any exposed `dyn` reacts), so there is nothing to enumerate.
+fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
+    serde_json::json!({
+        "kind": "semantic",
+        "target": boundary.module(),
+        "crate": boundary.crate_package(),
+        "rule": "must not expose dyn",
+        "severity": boundary.severity().as_str(),
+        "reason": boundary.reason(),
+    })
+}
+
 /// The `list --format json` document: the static constitution's projection augmented with one
 /// array per non-empty dimension, so the document covers every declared law and never silently
 /// omits one. A dimension with no boundaries adds no key (a static-only project's document is
@@ -839,6 +881,15 @@ fn list_document(constitution: &Constitution) -> Value {
                 .forbidden_marker
                 .iter()
                 .map(forbidden_marker_boundary_json)
+                .collect(),
+        );
+    }
+    if !semantic.dyn_trait.is_empty() {
+        document["dyn_trait_boundaries"] = Value::Array(
+            semantic
+                .dyn_trait
+                .iter()
+                .map(dyn_trait_boundary_json)
                 .collect(),
         );
     }
@@ -941,6 +992,7 @@ fn list_markdown(document: &Value) -> String {
         ("trait_impl_boundaries", "Trait-impl-locality boundaries"),
         ("visibility_boundaries", "Visibility boundaries"),
         ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
+        ("dyn_trait_boundaries", "Dyn-trait boundaries"),
         ("runtime_boundaries", "Runtime boundaries"),
     ] {
         let Some(Value::Array(items)) = document.get(key) else {
@@ -1038,11 +1090,12 @@ fn inline_value(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        constitution_markdown, dispatch, list_document, list_markdown, merge_outcomes, report_json,
-        report_sarif, runtime_text, semantic_text, trait_impl_text, violations_text,
-        visibility_text,
+        constitution_markdown, dispatch, dyn_trait_text, list_document, list_markdown,
+        merge_outcomes, report_json, report_sarif, runtime_text, semantic_text, trait_impl_text,
+        violations_text, visibility_text,
     };
     use crate::prelude::*;
+    use serde_json::Value;
     use std::path::PathBuf;
 
     fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Violation {
@@ -1130,6 +1183,46 @@ mod tests {
         let text = semantic_text(&[boundary]);
         assert!(text.contains("module crate::domain in app"), "{text}");
         assert!(text.contains("must not expose: crate::infra"), "{text}");
+    }
+
+    #[test]
+    fn dyn_trait_text_lists_each_boundary() {
+        let boundary = DynTraitBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_dyn()
+            .because("the core seam is statically dispatched");
+        let text = dyn_trait_text(&[boundary]);
+        assert!(text.contains("module crate::core in app"), "{text}");
+        assert!(text.contains("must not expose dyn"), "{text}");
+        assert!(
+            text.contains("the core seam is statically dispatched"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn dyn_trait_boundary_projects_into_list_document_and_markdown() {
+        let c = Constitution::new("app").dyn_trait_boundary(
+            DynTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_dyn()
+                .because("the core seam is statically dispatched"),
+        );
+        let doc = list_document(&c);
+        let arr = doc
+            .get("dyn_trait_boundaries")
+            .and_then(Value::as_array)
+            .expect("dyn_trait_boundaries projected");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["rule"], "must not expose dyn");
+        assert!(arr[0].get("forbidden").is_none(), "shape-only: no forbidden set");
+        let md = list_markdown(&doc);
+        assert!(md.contains("## Dyn-trait boundaries"), "{md}");
+        assert!(md.contains("must not expose dyn"), "{md}");
+        assert!(
+            md.contains("the core seam is statically dispatched"),
+            "{md}"
+        );
     }
 
     #[test]

@@ -36,7 +36,7 @@ use syn::visit::Visit;
 
 mod resolve;
 use resolve::{
-    BareFallback, PathCollector, ReexportMap, UseMap, canonical_path_str,
+    BareFallback, DynCollector, PathCollector, ReexportMap, UseMap, canonical_path_str,
     canonicalize_through_reexports, collect_reexports, collect_uses, resolve_path, strip_raw,
     type_to_string,
 };
@@ -510,6 +510,112 @@ impl ForbiddenMarkerBoundaryDraft {
     }
 }
 
+// --- Dyn-trait-boundary declaration DSL --------------------------------------
+
+/// A dyn-trait boundary: a module's public API must not **expose** trait-object (`dyn`)
+/// syntax. The type-shape complement of [`SemanticBoundary`] (signature-coupling): where
+/// that forbids an exposed *named type*, this forbids an exposed *type shape* — a `dyn`
+/// node at any depth in the governed public surface. It is **shape-only**: it takes no
+/// trait operand, so *any* exposed `dyn` reacts (operand-scoped `dyn` is a separate future
+/// capability). Internal `dyn` is never a violation — this governs exposure across the
+/// declared seam, not internal dynamic dispatch, so it is intent (by anchor scoping), not a
+/// lint. Declared in Rust and composed with the other dimensions at the gate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DynTraitBoundary {
+    pub(crate) crate_package: String,
+    pub(crate) module: String,
+    pub(crate) reason: String,
+    pub(crate) severity: Severity,
+}
+
+impl DynTraitBoundary {
+    /// Begin a dyn-trait boundary in the crate named `package`.
+    pub fn in_crate(package: &str) -> DynTraitCrateDraft {
+        DynTraitCrateDraft {
+            crate_package: package.to_string(),
+        }
+    }
+
+    /// The crate this boundary governs.
+    pub fn crate_package(&self) -> &str {
+        &self.crate_package
+    }
+
+    /// The governed module path (e.g. `crate::core`).
+    pub fn module(&self) -> &str {
+        &self.module
+    }
+
+    /// The human-readable reason recorded with the boundary (the repair hint).
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// The boundary's severity (`enforce` or `warn`).
+    pub fn severity(&self) -> Severity {
+        self.severity
+    }
+}
+
+/// A dyn-trait boundary awaiting its module anchor.
+pub struct DynTraitCrateDraft {
+    crate_package: String,
+}
+
+impl DynTraitCrateDraft {
+    /// Anchor the boundary to a module path within the crate (e.g. `crate::core`).
+    pub fn module(self, module: &str) -> DynTraitModuleDraft {
+        DynTraitModuleDraft {
+            crate_package: self.crate_package,
+            module: module.to_string(),
+        }
+    }
+}
+
+/// A module-anchored boundary awaiting the rule.
+pub struct DynTraitModuleDraft {
+    crate_package: String,
+    module: String,
+}
+
+impl DynTraitModuleDraft {
+    /// Forbid the module's public API from exposing any trait-object (`dyn`) syntax. Takes no
+    /// trait operand — *any* exposed `dyn` reacts (shape-only).
+    pub fn must_not_expose_dyn(self) -> DynTraitBoundaryDraft {
+        DynTraitBoundaryDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            severity: Severity::Enforce,
+        }
+    }
+}
+
+/// A boundary awaiting severity (optional) and its reason.
+pub struct DynTraitBoundaryDraft {
+    crate_package: String,
+    module: String,
+    severity: Severity,
+}
+
+impl DynTraitBoundaryDraft {
+    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
+    /// reaction — the first rung of adoption.
+    pub fn warn(mut self) -> Self {
+        self.severity = Severity::Warn;
+        self
+    }
+
+    /// Finish the boundary with its human-readable reason (the repair hint).
+    pub fn because(self, reason: &str) -> DynTraitBoundary {
+        DynTraitBoundary {
+            crate_package: self.crate_package,
+            module: self.module,
+            reason: reason.to_string(),
+            severity: self.severity,
+        }
+    }
+}
+
 // --- Constitution-error messages ---------------------------------------------
 
 fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
@@ -571,6 +677,8 @@ pub struct SemanticBoundaries {
     pub visibility: Vec<VisibilityBoundary>,
     /// Forbidden-marker boundaries (`semantic-forbidden-marker`).
     pub forbidden_marker: Vec<ForbiddenMarkerBoundary>,
+    /// Dyn-trait exposure boundaries (`semantic-dyn-trait-boundary`).
+    pub dyn_trait: Vec<DynTraitBoundary>,
 }
 
 impl SemanticBoundaries {
@@ -580,6 +688,7 @@ impl SemanticBoundaries {
             && self.trait_impl.is_empty()
             && self.visibility.is_empty()
             && self.forbidden_marker.is_empty()
+            && self.dyn_trait.is_empty()
     }
 }
 
@@ -612,6 +721,11 @@ pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outco
     }
     for boundary in &boundaries.forbidden_marker {
         if let Err(error) = check_forbidden_marker_boundary(&metadata, boundary, &mut violations) {
+            return Outcome::ConstitutionError(error);
+        }
+    }
+    for boundary in &boundaries.dyn_trait {
+        if let Err(error) = check_dyn_trait_boundary(&metadata, boundary, &mut violations) {
             return Outcome::ConstitutionError(error);
         }
     }
@@ -726,6 +840,87 @@ pub(crate) fn module_findings(
     findings.sort();
     findings.dedup();
     Ok(findings)
+}
+
+// --- Dyn-trait-boundary: the reaction ----------------------------------------
+
+/// Run the dyn-trait boundaries against the Cargo workspace at `manifest_path`.
+///
+/// Mirrors [`check`]: resolve each boundary's crate and module anchor, observe the module's
+/// public-API surface for trait-object (`dyn`) nodes at any depth, and react. An
+/// unresolvable crate or module (or an unreadable/unparseable source) is a constitution
+/// error (exit 2), never a silent pass. The per-capability entry remains for direct use; the
+/// shell composes via [`check_all`].
+pub fn check_dyn_trait(boundaries: &[DynTraitBoundary], manifest_path: &Path) -> Outcome {
+    let metadata = match cargo_metadata(manifest_path) {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return Outcome::ConstitutionError(unreadable_workspace_error(manifest_path, &err));
+        }
+    };
+    let mut violations = Vec::new();
+    for boundary in boundaries {
+        if let Err(error) = check_dyn_trait_boundary(&metadata, boundary, &mut violations) {
+            return Outcome::ConstitutionError(error);
+        }
+    }
+    if violations.is_empty() {
+        Outcome::Clean
+    } else {
+        Outcome::Violations(Report::new(violations))
+    }
+}
+
+fn check_dyn_trait_boundary(
+    metadata: &Value,
+    boundary: &DynTraitBoundary,
+    violations: &mut Vec<Violation>,
+) -> Result<(), String> {
+    let package = find_package(metadata, &boundary.crate_package)
+        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
+    let root_file =
+        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let src_dir = root_file
+        .parent()
+        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+
+    let findings = dyn_module_findings(src_dir, &root_file, &boundary.module, &boundary.crate_package)?;
+
+    for finding in findings {
+        // Like signature-coupling, a 渾儀 violation's `file` is a faithful `None` (no per-element
+        // source tracking yet — a stated bound shared by every semantic capability).
+        violations.push(Violation::new(
+            BoundaryKind::Semantic,
+            boundary.module.clone(),
+            "must not expose dyn".to_string(),
+            finding,
+            boundary.reason.clone(),
+            boundary.severity,
+        ));
+    }
+    Ok(())
+}
+
+/// The pure heart of dyn-trait-boundary, testable without spawning `cargo`: resolve the
+/// module's items and return the sorted, deduplicated rendered `dyn` shapes exposed in its
+/// public surface. Unlike [`module_findings`], it needs no `use`-map or re-export closure:
+/// the reaction is on the *presence* of a `dyn` node (shape-only), so no name resolution is
+/// involved — `pub use`-chain following is inert for a `dyn` (a re-export carries a name,
+/// never a `dyn` node).
+pub(crate) fn dyn_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<String>, String> {
+    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    let mut exposed = Vec::new();
+    for item in &items {
+        collect_item_dyn_exposures(item, &mut exposed);
+    }
+    exposed.sort();
+    exposed.dedup();
+    Ok(exposed)
 }
 
 // --- Trait-impl-locality: the reaction ---------------------------------------
@@ -1509,6 +1704,24 @@ fn paths_in_generics(generics: &syn::Generics) -> Vec<syn::Path> {
     c.paths
 }
 
+fn dyns_in_signature(sig: &syn::Signature) -> Vec<String> {
+    let mut c = DynCollector::default();
+    c.visit_signature(sig);
+    c.dyns
+}
+
+fn dyns_in_type(ty: &syn::Type) -> Vec<String> {
+    let mut c = DynCollector::default();
+    c.visit_type(ty);
+    c.dyns
+}
+
+fn dyns_in_generics(generics: &syn::Generics) -> Vec<String> {
+    let mut c = DynCollector::default();
+    c.visit_generics(generics);
+    c.dyns
+}
+
 /// Collect the type paths exposed by one item's public surface. Only `pub` items
 /// contribute; `pub(crate)`/`pub(in …)`/private are internal, not exposed. Trait `impl`
 /// blocks are skipped (out of scope — their shape is the trait's, not the impl site's).
@@ -1582,6 +1795,86 @@ fn collect_item_exposures(item: &syn::Item, out: &mut Vec<syn::Path>) {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
                         out.extend(paths_in_signature(&method.sig));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Collect the `dyn` trait-object shapes exposed by one item's public surface — the
+/// dyn-shape complement of [`collect_item_exposures`], over the same governed positions.
+/// Kept **deliberately parallel, not merged**: signature-coupling pushes bare supertrait /
+/// associated-bound *paths* (whose collected paths a shared visitor would change), and this
+/// walk additionally observes associated-type **defaults** (`type T = Box<dyn …>;`), a
+/// position exposure-governance does not cover. A `dyn` cannot appear in a supertrait or a
+/// `: Bound` (those are trait, not type, positions), so they are skipped here.
+fn collect_item_dyn_exposures(item: &syn::Item, out: &mut Vec<String>) {
+    match item {
+        syn::Item::Fn(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_signature(&item.sig));
+        }
+        syn::Item::Struct(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_generics(&item.generics));
+            for field in &item.fields {
+                if is_public(&field.vis) {
+                    out.extend(dyns_in_type(&field.ty));
+                }
+            }
+        }
+        syn::Item::Enum(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_generics(&item.generics));
+            // Enum variants and their fields are as public as the enum itself.
+            for variant in &item.variants {
+                for field in &variant.fields {
+                    out.extend(dyns_in_type(&field.ty));
+                }
+            }
+        }
+        syn::Item::Union(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_generics(&item.generics));
+            for field in &item.fields.named {
+                if is_public(&field.vis) {
+                    out.extend(dyns_in_type(&field.ty));
+                }
+            }
+        }
+        syn::Item::Type(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_generics(&item.generics));
+            // A public type-alias target writing `dyn` is exposed at the alias item itself; a
+            // public item that merely *names* this alias is not expanded (the resolver does
+            // not expand `type` aliases — a stated bound).
+            out.extend(dyns_in_type(&item.ty));
+        }
+        syn::Item::Const(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_type(&item.ty));
+        }
+        syn::Item::Static(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_type(&item.ty));
+        }
+        syn::Item::Trait(item) if is_public(&item.vis) => {
+            out.extend(dyns_in_generics(&item.generics));
+            for trait_item in &item.items {
+                match trait_item {
+                    syn::TraitItem::Fn(method) => out.extend(dyns_in_signature(&method.sig)),
+                    // The associated-type **default** (`type T = Box<dyn …>;`) is an exposed
+                    // type position; the `: Bound`s are trait positions and cannot be `dyn`.
+                    syn::TraitItem::Type(assoc) => {
+                        if let Some((_, default)) = &assoc.default {
+                            out.extend(dyns_in_type(default));
+                        }
+                    }
+                    syn::TraitItem::Const(assoc) => out.extend(dyns_in_type(&assoc.ty)),
+                    _ => {}
+                }
+            }
+        }
+        syn::Item::Impl(item) if item.trait_.is_none() => {
+            for impl_item in &item.items {
+                if let syn::ImplItem::Fn(method) = impl_item {
+                    if is_public(&method.vis) {
+                        out.extend(dyns_in_signature(&method.sig));
                     }
                 }
             }
@@ -2885,5 +3178,212 @@ mod tests {
             .because("r");
         assert_eq!(b.forbidden(), &["serde::Serialize", "serde::Deserialize"]);
         assert_eq!(b.severity(), Severity::Warn);
+    }
+
+    // --- dyn-trait-boundary ---------------------------------------------------
+
+    /// Like [`findings`] but for the dyn-trait capability: write `files`, return the rendered
+    /// `dyn` shapes exposed by `module`. Shape-only, so it takes no forbidden set.
+    fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
+        let dir = std::env::temp_dir().join(format!("hunyi-dyn-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        for (rel, contents) in files {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+            std::fs::write(&path, contents).expect("write source");
+        }
+        let root = src.join("lib.rs");
+        let result = dyn_module_findings(&src, &root, module, "x");
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
+        dyn_findings(
+            name,
+            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
+            "crate::m",
+        )
+    }
+
+    #[test]
+    fn dyn_in_public_return_param_and_field_react() {
+        assert_eq!(
+            dyn_mod("ret", "pub fn connect() -> Box<dyn crate::Port> { todo!() }\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+        assert_eq!(
+            dyn_mod("param", "pub fn drive(x: &dyn crate::Port) { let _ = x; }\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+        assert_eq!(
+            dyn_mod("field", "pub struct S { pub p: Box<dyn crate::Port> }\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+    }
+
+    #[test]
+    fn dyn_reacts_at_any_nesting_depth() {
+        assert_eq!(
+            dyn_mod("vec", "pub fn all() -> Vec<Box<dyn crate::Port>> { todo!() }\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+        assert_eq!(
+            dyn_mod("opt", "pub fn maybe(x: Option<&dyn crate::Port>) { let _ = x; }\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+        // Nested inside an otherwise-static `impl Trait` return — still exposed to the caller.
+        assert_eq!(
+            dyn_mod(
+                "impl-iter",
+                "pub fn ports() -> impl Iterator<Item = Box<dyn crate::Port>> { std::iter::empty() }\n"
+            )
+            .unwrap(),
+            ["dyn crate::Port"]
+        );
+    }
+
+    #[test]
+    fn impl_trait_with_no_dyn_node_is_clean() {
+        let out = dyn_mod("impl-trait", "pub fn port() -> impl crate::Port { todo!() }\n").unwrap();
+        assert!(out.is_empty(), "impl Trait carries no dyn node: {out:?}");
+    }
+
+    #[test]
+    fn dyn_in_const_static_trait_method_assoc_default_and_where_react() {
+        assert_eq!(
+            dyn_mod("const", "pub const C: &dyn crate::Port = todo!();\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+        assert_eq!(
+            dyn_mod("static", "pub static S: &dyn crate::Port = todo!();\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+        assert_eq!(
+            dyn_mod(
+                "trait-method",
+                "pub trait Service { fn port(&self) -> Box<dyn crate::Port>; }\n"
+            )
+            .unwrap(),
+            ["dyn crate::Port"]
+        );
+        assert_eq!(
+            dyn_mod(
+                "assoc-default",
+                "pub trait Service { type Out = Box<dyn crate::Port>; }\n"
+            )
+            .unwrap(),
+            ["dyn crate::Port"]
+        );
+        assert_eq!(
+            dyn_mod(
+                "where",
+                "pub fn run<T>() where Box<dyn crate::Port>: Into<T> { todo!() }\n"
+            )
+            .unwrap(),
+            ["dyn crate::Port"]
+        );
+    }
+
+    #[test]
+    fn public_alias_target_reacts_but_named_alias_is_not_expanded() {
+        // The public alias item's own target exposes dyn → reacts at the alias.
+        assert_eq!(
+            dyn_mod("alias-item", "pub type Handler = Box<dyn crate::Port>;\n").unwrap(),
+            ["dyn crate::Port"]
+        );
+        // A public fn naming a *private* alias: the alias is not expanded (stated bound), and a
+        // private alias is not itself exposed — so the dyn escapes (the documented bound), the
+        // only finding being none.
+        let out = dyn_mod(
+            "alias-named",
+            "type Handler = Box<dyn crate::Port>;\npub fn make() -> Handler { todo!() }\n",
+        )
+        .unwrap();
+        assert!(out.is_empty(), "named private alias is not expanded: {out:?}");
+    }
+
+    #[test]
+    fn internal_dyn_is_structurally_clean() {
+        let out = dyn_mod(
+            "internal",
+            "fn helper() -> Box<dyn crate::Port> { todo!() }\nstruct Private { p: Box<dyn crate::Port> }\n",
+        )
+        .unwrap();
+        assert!(out.is_empty(), "internal dyn is never exposed: {out:?}");
+    }
+
+    #[test]
+    fn dyn_with_multiple_bounds_renders_stably() {
+        assert_eq!(
+            dyn_mod("bounds", "pub fn f() -> Box<dyn crate::Port + Send> { todo!() }\n").unwrap(),
+            ["dyn crate::Port + Send"]
+        );
+    }
+
+    #[test]
+    fn distinct_closures_and_nested_dyns_do_not_collide_into_one_finding() {
+        // The boxed-closure family must render its full shape, not a degenerate placeholder —
+        // else two distinct exposed `dyn` collapse to one finding and a new one is masked by a
+        // baselined one (the one forbidden bug). `Fn`/`FnMut` differ, so two findings.
+        let out = dyn_mod(
+            "closures",
+            "pub fn a(cb: Box<dyn Fn(i32) -> i32>) { let _ = cb; }\n\
+             pub fn b(cb: Box<dyn FnMut(String) -> bool>) { let _ = cb; }\n",
+        )
+        .unwrap();
+        assert_eq!(out, ["dyn Fn(i32) -> i32", "dyn FnMut(String) -> bool"]);
+        // A dyn nested inside another dyn's generic argument: BOTH are exposed dynamic
+        // dispatch, so both react (any-depth node presence) — distinct, non-colliding findings.
+        assert_eq!(
+            dyn_mod(
+                "nested",
+                "pub fn f() -> Box<dyn crate::Foo<Box<dyn crate::Bar>>> { todo!() }\n"
+            )
+            .unwrap(),
+            ["dyn crate::Bar", "dyn crate::Foo<Box<dyn crate::Bar>>"]
+        );
+        // Associated-type bindings (`Iterator<Item = …>`, the most common assoc-bound dyn) keep
+        // their payload — distinct item types stay distinct findings, not `dyn Iterator<_>`.
+        let out = dyn_mod(
+            "assoc",
+            "pub fn a(x: Box<dyn Iterator<Item = u8>>) { let _ = x; }\n\
+             pub fn b(x: Box<dyn Iterator<Item = u16>>) { let _ = x; }\n",
+        )
+        .unwrap();
+        assert_eq!(out, ["dyn Iterator<Item = u16>", "dyn Iterator<Item = u8>"]);
+        // Macro-typed and fn-pointer generic args render by name/shape, not a shared `dyn _`.
+        let out = dyn_mod(
+            "macro-fnptr",
+            "pub fn a(x: Box<dyn crate::Foo<fn(i32)>>) { let _ = x; }\n\
+             pub fn b(x: Box<dyn crate::Foo<fn(u8)>>) { let _ = x; }\n",
+        )
+        .unwrap();
+        assert_eq!(out, ["dyn crate::Foo<fn(i32)>", "dyn crate::Foo<fn(u8)>"]);
+    }
+
+    #[test]
+    fn the_dyn_trait_builder_carries_anchor_and_severity() {
+        let b = DynTraitBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_dyn()
+            .warn()
+            .because("the core seam is statically dispatched");
+        assert_eq!(b.crate_package(), "app");
+        assert_eq!(b.module(), "crate::core");
+        assert_eq!(b.severity(), Severity::Warn);
+        assert_eq!(b.reason(), "the core seam is statically dispatched");
+    }
+
+    #[test]
+    fn dyn_unknown_module_is_a_constitution_error() {
+        let err = dyn_findings(
+            "unknown",
+            &[("lib.rs", "pub mod m;\n"), ("m.rs", "// nothing\n")],
+            "crate::ghost",
+        )
+        .unwrap_err();
+        assert_eq!(err, unknown_module_error("crate::ghost", "x"));
     }
 }

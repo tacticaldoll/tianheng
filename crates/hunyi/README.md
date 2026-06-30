@@ -18,9 +18,15 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
 - **Trait-impl locality** — a trait may only be implemented in declared locations.
 - **Visibility** — a module must not declare bare `pub` items.
 - **Forbidden-marker** — a module's types must not acquire a forbidden trait/derive.
+- **Dyn-trait** — a module's public API must not *expose* trait-object (`dyn`) syntax (the
+  type-shape complement of signature-coupling: internal `dyn` is fine; leaking dynamic
+  dispatch across the declared seam is the violation). Shape-only — any exposed `dyn` reacts.
 
 ```rust
-use hunyi::{SemanticBoundary, TraitImplBoundary, VisibilityBoundary, ForbiddenMarkerBoundary};
+use hunyi::{
+    SemanticBoundary, TraitImplBoundary, VisibilityBoundary, ForbiddenMarkerBoundary,
+    DynTraitBoundary,
+};
 
 // exposure: my-app's public API must not leak crate::infra::DbPool
 let expose = SemanticBoundary::in_crate("my-app")
@@ -45,6 +51,12 @@ let marker = ForbiddenMarkerBoundary::in_crate("my-app")
     .module("crate::domain")
     .must_not_acquire("serde::Serialize")
     .because("domain types must not be wire-coupled");
+
+// dyn-trait: the core's public seam must be statically dispatched
+let dyn_boundary = DynTraitBoundary::in_crate("my-app")
+    .module("crate::core")
+    .must_not_expose_dyn()
+    .because("the core public API must not leak dynamic dispatch");
 ```
 
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including
