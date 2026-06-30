@@ -51,7 +51,7 @@ pub use louke::{
     audit_probe_coverage,
 };
 
-pub use runner::run;
+pub use runner::{constitution_markdown, run};
 
 /// A declared constitution composing every observation dimension's boundaries — the single
 /// source of truth, in Rust. The static (圭表) boundaries, the semantic (渾儀) bundle, and the
@@ -131,6 +131,21 @@ impl Constitution {
     /// project from.
     pub fn runtime_boundaries(&self) -> &[RuntimeBoundary] {
         &self.runtime
+    }
+}
+
+/// Lift a pure static ([`GnomonConstitution`]) constitution into the unified [`Constitution`],
+/// with no semantic or runtime boundaries. This is the projection-side bridge: a static-only
+/// law (e.g. a self-governance constitution) can be rendered through the shell's
+/// [`constitution_markdown`] without being re-declared, while the
+/// static `check` path keeps consuming the `GnomonConstitution` directly.
+impl From<GnomonConstitution> for Constitution {
+    fn from(static_: GnomonConstitution) -> Self {
+        Constitution {
+            static_,
+            semantic: SemanticBoundaries::default(),
+            runtime: Vec::new(),
+        }
     }
 }
 

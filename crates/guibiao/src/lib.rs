@@ -218,6 +218,9 @@ fn check_crate_boundary(
         .ok_or_else(|| crate_not_found_error(&boundary.target.package))?;
 
     for finding in boundary.rule.findings(package, workspace, boundary.kind) {
+        // No `with_file`: a crate-dependency violation is an edge in the dependency graph
+        // (a `Cargo.toml` manifest relation), not a single source line, so its `file` is a
+        // faithful `None` — the location already lives in `(target, finding)`.
         violations.push(Violation::new(
             BoundaryKind::Crate,
             boundary.target.package.clone(),
@@ -306,7 +309,11 @@ fn check_module_boundary(
         // `governed_files(.., "crate", ..)` yields every reachable (file, module) pair —
         // the crate-wide scan, reusing the existing selector with no new scanner.
         let all_files = governed_files(&src_dir, &files, "crate", &reachable);
-        let mut offenders: Vec<String> = Vec::new();
+        // Collect `(importer module, offending file)` pairs *before* de-duplication: the file
+        // is in hand here (the scan reads it to observe the import) but is gone once the list
+        // collapses to module identities. The violation count stays per-importer-module; the
+        // file is attached to the representative after collapsing, never a de-dup key.
+        let mut offenders: Vec<(String, String)> = Vec::new();
         for (file, current_module) in all_files {
             // A file within the protected module's own subtree is never an inbound
             // importer — a module importing itself is not an inbound edge — so it is
@@ -326,25 +333,29 @@ fn check_module_boundary(
                 .iter()
                 .any(|import| import == &governed_module || import.starts_with(&protected_beneath));
             if imports_protected {
-                // finding = the importing module path.
-                offenders.push(current_module);
+                // finding = the importing module path; file = where the forbidden import sits.
+                offenders.push((current_module, file.display().to_string()));
             }
         }
         // One violation per offending importer module (the spec's dedup guarantee). A
         // module can be backed by more than one file — a lib+bin package has both
-        // `lib.rs` and `main.rs` at module `crate` — so the same importer can be pushed
-        // twice; sort then dedup collapses it rather than relying on one-file-per-module.
+        // `lib.rs` and `main.rs` at module `crate` — so the same importer can appear
+        // twice; sort then collapse by the module (the identity), keeping the first file
+        // (deterministic after the sort) as the reported `file`. The count is unchanged.
         offenders.sort();
-        offenders.dedup();
-        for importer_module in offenders {
-            violations.push(Violation::new(
-                BoundaryKind::Module,
-                governed_module.clone(),
-                rule.clone(),
-                importer_module,
-                boundary.reason.clone(),
-                boundary.severity,
-            ));
+        offenders.dedup_by(|a, b| a.0 == b.0);
+        for (importer_module, file) in offenders {
+            violations.push(
+                Violation::new(
+                    BoundaryKind::Module,
+                    governed_module.clone(),
+                    rule.clone(),
+                    importer_module,
+                    boundary.reason.clone(),
+                    boundary.severity,
+                )
+                .with_file(Some(file)),
+            );
         }
         return Ok(());
     }
@@ -390,7 +401,10 @@ fn check_module_boundary(
             unreachable!("the inbound rule is evaluated above and returns early")
         }
     };
-    let mut findings = Vec::new();
+    // `(finding, offending file)` pairs collected before de-duplication, for the same
+    // reason as the inbound rule: the file is in hand during the scan but lost once the
+    // list collapses to findings. The count stays per-finding; the file is metadata.
+    let mut findings: Vec<(String, String)> = Vec::new();
     for (file, current_module) in governed {
         // A governed file we cannot read is "cannot judge", not "nothing to judge":
         // silently skipping it could hide a real violation. Fail as a scan error
@@ -399,25 +413,29 @@ fn check_module_boundary(
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
         for import in imported_module_paths(&text, &current_module, &root_modules) {
             if is_violation(&import) {
-                findings.push(import);
+                findings.push((import, file.display().to_string()));
             }
         }
     }
     // One violation per distinct finding. The governed module's subtree can span more
     // than one file (a parent and child file, or `lib.rs` + `main.rs` both at `crate`),
-    // so the same forbidden import can be found twice; sort then dedup collapses it —
-    // the same identity guarantee the inbound rule makes, now for the outbound rules.
+    // so the same forbidden import can be found twice; sort then collapse by the finding
+    // (the identity), keeping the first file as the reported `file` — the same identity
+    // guarantee the inbound rule makes, now for the outbound rules.
     findings.sort();
-    findings.dedup();
-    for finding in findings {
-        violations.push(Violation::new(
-            BoundaryKind::Module,
-            governed_module.clone(),
-            rule.clone(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+    findings.dedup_by(|a, b| a.0 == b.0);
+    for (finding, file) in findings {
+        violations.push(
+            Violation::new(
+                BoundaryKind::Module,
+                governed_module.clone(),
+                rule.clone(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(Some(file)),
+        );
     }
     Ok(())
 }
@@ -722,6 +740,59 @@ mod tests {
         assert_eq!(violations.len(), 1, "{violations:?}");
         assert_eq!(violations[0].target, "crate::kernel");
         assert_eq!(violations[0].finding, "crate::io::Sink");
+    }
+
+    #[test]
+    fn a_module_violation_carries_its_offending_file() {
+        // The offending import sits in kernel.rs; the violation names that source file so an
+        // agent knows where to repair — a faithful byproduct of the scan, not a new observation.
+        let (result, violations) = run_module_check(
+            "module-file",
+            &[
+                ("lib.rs", "pub mod kernel;\n"),
+                ("kernel.rs", "use crate::io::Sink;\n"),
+            ],
+            restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+        );
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        let file = violations[0]
+            .file
+            .as_deref()
+            .expect("a module-import violation carries its source file");
+        assert!(
+            file.ends_with("kernel.rs"),
+            "file names the offending source: {file}"
+        );
+    }
+
+    #[test]
+    fn a_module_backed_by_two_files_yields_one_violation_with_a_file() {
+        // `crate` is backed by both lib.rs and main.rs (a lib+bin package); the same forbidden
+        // import in each must still collapse to exactly one violation (the file is attached
+        // after collapsing by identity, never a de-dup key), and that one carries a file.
+        let (result, violations) = run_module_check(
+            "module-two-files",
+            &[
+                ("lib.rs", "use crate::forbidden::Thing;\n"),
+                ("main.rs", "use crate::forbidden::Thing;\nfn main() {}\n"),
+            ],
+            ModuleBoundary::in_crate("x")
+                .module("crate")
+                .must_not_import("crate::forbidden")
+                .because("crate must not import forbidden"),
+        );
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(
+            violations.len(),
+            1,
+            "two files of one module collapse to one violation: {violations:?}"
+        );
+        assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+        assert!(
+            violations[0].file.is_some(),
+            "the surviving violation carries a representative file"
+        );
     }
 
     #[test]
@@ -1264,6 +1335,13 @@ mod tests {
             "one offending importer module, even when backed by two root files: {violations:?}"
         );
         assert_eq!(violations[0].finding, "crate");
+        // The collapsed inbound violation still carries a representative file (the inbound path
+        // also collects (key, file) before de-duplication), so the two-file case is locked on
+        // the inbound rule, not only the outbound one.
+        assert!(
+            violations[0].file.is_some(),
+            "the surviving inbound violation carries a representative file"
+        );
     }
 
     #[test]
@@ -1527,6 +1605,37 @@ mod tests {
             ],
             "every non-null-source normal dep is external (incl. a sparse alt \
              registry); the null-source internal dep and the dev dep are excluded",
+        );
+    }
+
+    #[test]
+    fn a_crate_violation_reports_no_file() {
+        // A crate-dependency violation is an edge in the dependency graph (a manifest
+        // relation), not a source line, so its `file` is a faithful `None`.
+        let metadata = serde_json::json!({
+            "packages": [{
+                "name": "core",
+                "dependencies": [
+                    {
+                        "name": "serde",
+                        "source": "registry+https://github.com/rust-lang/crates.io-index",
+                        "kind": null
+                    }
+                ],
+            }]
+        });
+        let boundary = CrateBoundary::crate_("core")
+            .deny_external_dependencies()
+            .because("core stays dependency-light");
+        let mut violations = Vec::new();
+        let result = check_crate_boundary(&metadata, &[], &boundary, &mut violations);
+        assert!(result.is_ok(), "{result:?}");
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(violations[0].kind, BoundaryKind::Crate);
+        assert_eq!(violations[0].finding, "serde");
+        assert!(
+            violations[0].file.is_none(),
+            "a crate-dependency violation has no single source file"
         );
     }
 

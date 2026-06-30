@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 readme = "README.md"
 # 天衡 (Tiānhéng) — the celestial balance: the imperative shell + facade that composes the 三儀 (圭表 + 渾儀 + 漏刻).
-description = "天衡 (Tianheng) — reactive architectural governance. The shell that weighs declared intent against observed shape and turns a Rust-declared constitution into a CI reaction; v0.1.0 composes all 三儀 — the static 圭表 (guibiao), semantic 渾儀 (hunyi), and runtime 漏刻 (louke, CI face) dimensions. Govern by reaction, not instruction."
+description = "天衡 (Tianheng) — reactive architectural governance. The shell that weighs declared intent against observed shape and turns a Rust-declared constitution into a CI reaction; composes all 三儀 — the static 圭表 (guibiao), semantic 渾儀 (hunyi), and runtime 漏刻 (louke, CI face) dimensions. Govern by reaction, not instruction."
 keywords = ["governance", "architecture", "ci", "boundary", "drift"]
 categories = ["development-tools"]
 

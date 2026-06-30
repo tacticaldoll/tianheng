@@ -77,11 +77,15 @@ These are **not new drift types**; they wrap the reaction (how it is surfaced, r
 amended). Most are already built in v0.1.0 or are convention by design — listed so the map
 survives across sessions.
 
-- **垂象 (Chuíxiàng) — the reaction surface.** *Built:* text report, exit codes `0/1/2`,
-  `--format json`. *Deferred surface expansions* (same observation, same constitution — not
-  new drift): CI annotations (GitHub `::error::` / SARIF) so violations land inline in a PR
-  diff; and an **editor/LSP shift-left** so an illegal `use` is red-lined as typed (a large
-  integration; the LSP server could be its own crate, born when built).
+- **垂象 (Chuíxiàng) — the reaction surface.** *Built:* text report (v0.1.1: leads with the
+  `reason`, surfaces the offending file, groups violations by boundary), exit codes `0/1/2`,
+  `--format json`, and **`--format sarif`** (v0.1.1: SARIF 2.1.0, the vendor-neutral CI surface
+  GitHub code-scanning and other tools inline onto a PR diff). *Convention, not a tool format:* a
+  GitHub-specific `::error::` output is deliberately **excluded** — it would couple the tool to one
+  CI vendor; turning the neutral output into vendor annotations is a harness/CI-step recipe (a
+  `jq` one-liner over `--format json`, or uploading the SARIF — see `README.md`). *Deferred (same
+  observation, not new drift):* an **editor/LSP shift-left** so an illegal `use` is red-lined as
+  typed (a large integration; the LSP server could be its own crate, born when built → 0.2.0+).
 - **實錄 (Shílù) — baseline & history.** *Built:* the snapshot gate (record accepted
   violations, fail only on *new* drift). *Deferred:* a **debt-ratchet**
   (`--require-baseline-reduction`, only-fix-never-add) — **in tension** with "baseline is a
@@ -91,6 +95,22 @@ survives across sessions.
   cannot tell shape-drift from policy-drift (not an observable fact), and must not own PR /
   merge orchestration. Realized as **harness convention** — `.github/CODEOWNERS` + steward
   review + the OpenSpec lifecycle + `AGENTS.md`. Already in place; nothing to build.
+
+## 潛移 (Qiányí) — the gravity axis (new in v0.1.1)
+
+Not a 儀 (instrument) and not a 司 (office): a complementary mode of compliance for an
+autoregressive agent — make the declared law **imitable and in its context**, so continuations
+stay in-shape by default; the reaction stays the non-bypassable backstop (see `PROJECT.md`, 潛移).
+*Built (v0.1.1):* the thesis and its drift-law bound (PROJECT.md); the **self-law projection**
+(`AGENTS.self-law.md`, generated from `self_governance.rs`, staleness-gated) so an agent working on
+this repo reads the *enforced* law, not the demo; **reason-foregrounding** in the law projection
+(`list --format markdown` leads each boundary with its reason) and in the reaction's text report;
+the **reason-writing convention** (AGENTS.md). *Forward (phase-2, → 0.2.0):* an **adopter-facing
+潛移 face** — any project generates its own agent-context from its constitution. The library
+primitive (`constitution_markdown`) and a README recipe shipped in v0.1.1; a full generator /
+workflow is deferred (adopter-workflow product weight, and a `list-self`-style CLI would tangle the
+demo-vs-self-law story). Held to the same bound: only what reacts or projects enters context; no
+unobservable wish becomes law (prose prescription is the rejected open loop).
 
 ## Explicitly not on the roadmap
 
