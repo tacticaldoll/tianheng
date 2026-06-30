@@ -70,3 +70,14 @@ jobs:
             echo "::error::violating fixture must react with exit 1 (enforced violation), got $status"
             exit 1
           fi
+      - name: the SARIF projection is valid and still reacts with exit 1
+        run: |
+          status=0
+          out=$(cargo run -q -p tianheng -- check --manifest-path crates/tianheng/tests/fixtures/violating/Cargo.toml --format sarif) || status=$?
+          printf '%s\n' "$out"
+          printf '%s' "$out" | grep -q '"version": "2.1.0"' \
+            || { echo "::error::--format sarif did not emit a SARIF 2.1.0 document"; exit 1; }
+          if [ "$status" -ne 1 ]; then
+            echo "::error::--format sarif must still react with exit 1 on a violation, got $status"
+            exit 1
+          fi

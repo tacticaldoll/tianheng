@@ -1,6 +1,6 @@
 # 天衡 (Tiānhéng) workspace.
 #
-# A reactive architectural-governance crate family. v0.1.0 ships five real crates:
+# A reactive architectural-governance crate family of five real crates:
 #   - xuanji  (璇璣): the dimension-agnostic reaction model — the 底.
 #   - guibiao (圭表): the gnomon — dependency-light static observation core, derived from modou.
 #   - hunyi   (渾儀): the armillary — semantic (AST/syn) observation; the syn dependency lives here.

@@ -19,7 +19,7 @@ it erodes the shape it does not understand, and *instructing* it cannot bind an 
 has no understanding. Tianheng crystallizes the human's intent into a **non-bypassable
 reaction**: neither the agent nor Tianheng needs to understand for the law to hold.
 
-## A declared boundary (v0.1.0)
+## A declared boundary
 
 ```rust
 use tianheng::prelude::*;

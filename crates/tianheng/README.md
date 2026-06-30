@@ -38,7 +38,9 @@ fn main() -> std::process::ExitCode {
 `your-binary check --manifest-path path/to/Cargo.toml` reacts against *your* constitution:
 exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`
 (constitution/scan error). `list` projects the declared constitution and never reacts.
-`--format json` projects the reaction as JSON.
+`check --format json` projects the reaction as JSON (the machine contract); `--format sarif`
+emits a vendor-neutral SARIF 2.1.0 document for CI code-scanning. The violation's `reason` is the
+repair direction; the human text report and the Markdown projection lead with it.
 
 ## The instruments (三儀)
 
