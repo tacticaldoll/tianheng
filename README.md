@@ -57,7 +57,10 @@ exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`
 
 **CI / agent visibility.** `check --format json` is the machine contract; `check --format sarif`
 emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
-onto a PR. There is deliberately no GitHub-specific `--format`: turning the reaction into one CI
+onto a PR. In every machine projection a violation's **`reason` is the repair direction** an agent
+fixes toward — the declared intent the boundary protects — *not* the `rule` label (the rule names
+what tripped; the reason says why, and so where to go). Repair toward the reason; never weaken the
+boundary to pass. There is deliberately no GitHub-specific `--format`: turning the reaction into one CI
 vendor's annotations is a harness step, not a tool format. For GitHub `::error::` inline
 annotations without SARIF upload, convert the JSON report in a CI step — but **preserve the
 reaction's exit code** (a naïve `check | jq` pipeline would exit with `jq`'s status and let a
@@ -84,6 +87,17 @@ projection for a stable machine contract):
 let md = tianheng::constitution_markdown(&constitution());
 std::fs::write("AGENTS.my-project-law.md", md)?;
 ```
+
+**Recommended agent context** (orientation, not a reaction — keep it short): point your agent
+at, in order,
+
+1. your `AGENTS.md` (the working agreement),
+2. the generated `AGENTS.<project>-law.md` (your enforced law, in imitable form),
+3. the relevant OpenSpec specs (the capability being touched),
+4. the code.
+
+The law's per-boundary detail lives in the generated projection, requirement detail in the specs —
+so the entry docs stay short and the agent reads the law where it is densest and most imitable.
 
 ## The instruments (三儀) — observation dimensions
 
