@@ -52,6 +52,18 @@ enum Format {
     Text,
     Json,
     Markdown,
+    Sarif,
+}
+
+/// The `check` output format — the `Format` values `check` accepts, with `markdown` (a `list`-only
+/// law projection) excluded by construction. `sarif` is the CI-consumable projection of the
+/// reaction (an open, vendor-neutral standard); like `json` it changes presentation only, never
+/// the outcome or exit code.
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum ReportFormat {
+    Text,
+    Json,
+    Sarif,
 }
 
 /// Run the unified constitution's boundaries against a Cargo workspace and return the
@@ -140,9 +152,10 @@ where
         None | Some("text") => Format::Text,
         Some("json") => Format::Json,
         Some("markdown") => Format::Markdown,
+        Some("sarif") => Format::Sarif,
         Some(other) => {
             return usage(&format!(
-                "unknown --format '{other}' (expected text, json, or markdown)"
+                "unknown --format '{other}' (expected text, json, markdown, or sarif)"
             ));
         }
     };
@@ -183,6 +196,14 @@ where
                 print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
                 print!("{}", runtime_text(runtime));
             }
+            // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
+            // symmetric to `markdown` being `list`-only.
+            Format::Sarif => {
+                return usage(
+                    "list supports --format text|json|markdown; sarif projects the reaction \
+                     (a check output), not the declared law",
+                );
+            }
         }
         return 0;
     }
@@ -190,13 +211,14 @@ where
     // The command is `check`. `markdown` is a `list`-only projection of the declared law;
     // `check`'s machine output is the JSON report, so reject it loud (exit 2) rather than
     // silently falling back. `text`/`json` map to the existing boolean contract.
-    let json = match format {
-        Format::Text => false,
-        Format::Json => true,
+    let report_format = match format {
+        Format::Text => ReportFormat::Text,
+        Format::Json => ReportFormat::Json,
+        Format::Sarif => ReportFormat::Sarif,
         Format::Markdown => {
             return usage(
-                "check supports --format text or json; markdown is a list-only projection \
-                 of the declared law",
+                "check supports --format text|json|sarif; markdown is a list-only \
+                 projection of the declared law",
             );
         }
     };
@@ -280,15 +302,23 @@ where
     };
 
     if let Some(path) = baseline_path {
-        return gate(&mut outcome, &path, json, coverage.as_ref(), warn_uncovered);
+        return gate(
+            &mut outcome,
+            &path,
+            report_format,
+            coverage.as_ref(),
+            warn_uncovered,
+        );
     }
 
-    if json {
-        println!("{}", report_json(&outcome, &[], coverage.as_ref()));
-    } else {
-        report(&outcome);
-        if let Some(coverage) = &coverage {
-            report_coverage(coverage, warn_uncovered);
+    match report_format {
+        ReportFormat::Json => println!("{}", report_json(&outcome, &[], coverage.as_ref())),
+        ReportFormat::Sarif => println!("{}", report_sarif(&outcome)),
+        ReportFormat::Text => {
+            report(&outcome);
+            if let Some(coverage) = &coverage {
+                report_coverage(coverage, warn_uncovered);
+            }
         }
     }
     outcome.exit_code()
@@ -300,7 +330,7 @@ fn usage(message: &str) -> u8 {
     eprintln!(
         "usage:\n  \
          tianheng check --manifest-path <path/to/Cargo.toml> \
-         [--baseline <file> | --write-baseline <file>] [--format text|json] \
+         [--baseline <file> | --write-baseline <file>] [--format text|json|sarif] \
          [--warn-uncovered]\n  \
          tianheng list [--format text|json|markdown]"
     );
@@ -357,7 +387,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
 fn gate(
     outcome: &mut Outcome,
     path: &str,
-    json: bool,
+    format: ReportFormat,
     coverage: Option<&Coverage>,
     warn_uncovered: bool,
 ) -> u8 {
@@ -365,10 +395,10 @@ fn gate(
     // it is never masked by a missing or unreadable baseline file (both exit 2, but the
     // constitution error is the actionable one).
     if let Outcome::ConstitutionError(message) = outcome {
-        if json {
-            println!("{}", report_json(outcome, &[], None));
-        } else {
-            eprintln!("Tianheng constitution error: {message}");
+        match format {
+            ReportFormat::Json => println!("{}", report_json(outcome, &[], None)),
+            ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+            ReportFormat::Text => eprintln!("Tianheng constitution error: {message}"),
         }
         return 2;
     }
@@ -397,18 +427,20 @@ fn gate(
         _ => &empty,
     };
     let stale: Vec<ViolationId> = baseline.stale(report).into_iter().cloned().collect();
-    if json {
-        println!("{}", report_json(outcome, &stale, coverage));
-    } else {
-        report_violations(report);
-        for entry in &stale {
-            eprintln!(
-                "Tianheng: stale baseline entry (no longer violated): {} / {} / {}",
-                entry.target, entry.rule, entry.finding
-            );
-        }
-        if let Some(coverage) = coverage {
-            report_coverage(coverage, warn_uncovered);
+    match format {
+        ReportFormat::Json => println!("{}", report_json(outcome, &stale, coverage)),
+        ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+        ReportFormat::Text => {
+            report_violations(report);
+            for entry in &stale {
+                eprintln!(
+                    "Tianheng: stale baseline entry (no longer violated): {} / {} / {}",
+                    entry.target, entry.rule, entry.finding
+                );
+            }
+            if let Some(coverage) = coverage {
+                report_coverage(coverage, warn_uncovered);
+            }
         }
     }
     outcome.exit_code()
@@ -516,6 +548,72 @@ fn report_coverage(coverage: &Coverage, warn_uncovered: bool) {
         }
     }
 }
+
+/// Project the reaction as a **SARIF 2.1.0** document (`--format sarif`) — the CI-consumable
+/// surface GitHub code-scanning ingests. One `results[]` entry per non-baselined violation
+/// (`ruleId` = rule, `level` = error/warning, message = reason + finding; the rule lives in
+/// `ruleId`, not the message). A violation's `file` becomes `artifactLocation.uri` with **no
+/// `region`** (the line is not observed — never fabricated); a file-less violation gets no
+/// `locations`. A constitution error is a tool-execution notification under an invocation whose
+/// `executionSuccessful` is `false` (required on any SARIF invocation). Clean → empty `results`.
+/// Presentation only: the outcome and exit code are unchanged.
+fn report_sarif(outcome: &Outcome) -> String {
+    use serde_json::{Value, json};
+    let mut results: Vec<Value> = Vec::new();
+    let mut invocations: Vec<Value> = Vec::new();
+    match outcome {
+        Outcome::Violations(report) => {
+            for v in report.violations.iter().filter(|v| !v.baselined) {
+                let level = match v.severity {
+                    Severity::Enforce => "error",
+                    _ => "warning",
+                };
+                let mut result = json!({
+                    "ruleId": v.rule,
+                    "level": level,
+                    "message": { "text": format!("{} (found: {})", v.reason, v.finding) },
+                });
+                if let Some(file) = &v.file {
+                    // File-level only: artifactLocation.uri, no `region` (line is not observed).
+                    result["locations"] = json!([{
+                        "physicalLocation": { "artifactLocation": { "uri": file } }
+                    }]);
+                }
+                results.push(result);
+            }
+        }
+        Outcome::ConstitutionError(message) => {
+            invocations.push(json!({
+                "executionSuccessful": false,
+                "toolExecutionNotifications": [{
+                    "level": "error",
+                    "message": { "text": message },
+                }],
+            }));
+        }
+        // Clean (and any future outcome) contributes no results.
+        _ => {}
+    }
+    let mut run = json!({
+        "tool": { "driver": { "name": "tianheng" } },
+        "results": results,
+    });
+    if !invocations.is_empty() {
+        run["invocations"] = Value::Array(invocations);
+    }
+    let doc = json!({
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [run],
+    });
+    serde_json::to_string_pretty(&doc).expect("a serde_json::Value is always serializable")
+}
+
+// A GitHub-specific `::error::` workflow-command format is deliberately NOT a built-in: it would
+// couple the tool to one CI vendor's proprietary protocol (and invite an open-ended gitlab/azure/…
+// set). SARIF — an open, vendor-neutral standard that GitHub and others ingest — is 垂象's CI
+// projection; turning it (or the JSON report) into vendor-specific annotations is a harness/CI-step
+// convention, not a tool feature (see the README recipe). This keeps the machine surfaces neutral.
 
 /// Compose the static and semantic outcomes into one reaction. A constitution error from
 /// either dimension supersedes any violation — a boundary that could not be evaluated makes
@@ -941,7 +1039,8 @@ fn inline_value(value: &Value) -> String {
 mod tests {
     use super::{
         constitution_markdown, dispatch, list_document, list_markdown, merge_outcomes, report_json,
-        runtime_text, semantic_text, trait_impl_text, violations_text, visibility_text,
+        report_sarif, runtime_text, semantic_text, trait_impl_text, violations_text,
+        visibility_text,
     };
     use crate::prelude::*;
     use std::path::PathBuf;
@@ -1520,6 +1619,108 @@ mod tests {
             json.find("z-crate").unwrap() < json.find("a-crate").unwrap(),
             "JSON keeps input order (z before a), unaffected by the text grouping:\n{json}"
         );
+    }
+
+    #[test]
+    fn sarif_projects_violations_with_file_level_locations_and_no_region() {
+        let outcome = Outcome::Violations(Report::new(vec![
+            violation(
+                "crate::core",
+                "must not import crate::adapter",
+                "crate::adapter::Db",
+                Some("src/core/mod.rs"),
+            ),
+            violation("dep-crate", "deny external", "serde", None),
+        ]));
+        let doc: serde_json::Value =
+            serde_json::from_str(&report_sarif(&outcome)).expect("valid SARIF JSON");
+        assert_eq!(doc["version"], "2.1.0");
+        assert_eq!(doc["runs"][0]["tool"]["driver"]["name"], "tianheng");
+        let results = doc["runs"][0]["results"].as_array().expect("results array");
+        assert_eq!(results.len(), 2, "one result per non-baselined violation");
+        // With a file: error level, ruleId in place, file-level location with NO region.
+        assert_eq!(results[0]["level"], "error");
+        assert_eq!(results[0]["ruleId"], "must not import crate::adapter");
+        assert!(
+            results[0]["message"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("reason-for-crate::core")
+        );
+        assert_eq!(
+            results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            "src/core/mod.rs"
+        );
+        assert!(
+            results[0]["locations"][0]["physicalLocation"]["region"].is_null(),
+            "no region — the line is not observed, never fabricated"
+        );
+        // File-less violation: no locations at all.
+        assert!(
+            results[1]["locations"].is_null(),
+            "a file-less violation projects no location"
+        );
+    }
+
+    #[test]
+    fn sarif_clean_is_empty_and_constitution_error_marks_execution_unsuccessful() {
+        let clean: serde_json::Value =
+            serde_json::from_str(&report_sarif(&Outcome::Clean)).unwrap();
+        assert!(
+            clean["runs"][0]["results"].as_array().unwrap().is_empty(),
+            "clean → empty results"
+        );
+        let err: serde_json::Value =
+            serde_json::from_str(&report_sarif(&Outcome::ConstitutionError("bad law".into())))
+                .unwrap();
+        assert_eq!(
+            err["runs"][0]["invocations"][0]["executionSuccessful"],
+            serde_json::Value::Bool(false),
+            "a constitution error marks the invocation unsuccessful (required by SARIF)"
+        );
+        assert!(
+            err["runs"][0]["invocations"][0]["toolExecutionNotifications"][0]["message"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("bad law")
+        );
+    }
+
+    #[test]
+    fn sarif_exits_like_json() {
+        // Presentation only: the same outcome exits identically under each machine format.
+        for format in ["json", "sarif"] {
+            assert_eq!(
+                run_args(&[
+                    "tianheng",
+                    "check",
+                    "--manifest-path",
+                    &fixture("violating"),
+                    "--format",
+                    format,
+                ]),
+                1,
+                "violating fixture exits 1 under --format {format}"
+            );
+            assert_eq!(
+                run_args(&[
+                    "tianheng",
+                    "check",
+                    "--manifest-path",
+                    &fixture("clean"),
+                    "--format",
+                    format,
+                ]),
+                0,
+                "clean fixture exits 0 under --format {format}"
+            );
+        }
+    }
+
+    #[test]
+    fn list_rejects_the_check_only_sarif_format() {
+        // SARIF projects the reaction, not the law — check-only, like markdown is list-only.
+        assert_eq!(run_args(&["tianheng", "list", "--format", "sarif"]), 2);
     }
 
     #[test]

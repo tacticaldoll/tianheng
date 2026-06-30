@@ -55,6 +55,17 @@ fn main() -> std::process::ExitCode {
 exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`
 (constitution/scan error). `list` projects the declared constitution and never reacts.
 
+**CI / agent visibility.** `check --format json` is the machine contract; `check --format sarif`
+emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
+onto a PR. There is deliberately no GitHub-specific `--format`: turning the reaction into one CI
+vendor's annotations is a harness step, not a tool format. For GitHub `::error::` inline
+annotations without SARIF upload, convert the JSON report in a CI step, e.g.:
+
+```sh
+your-binary check --manifest-path Cargo.toml --format json \
+  | jq -r '.violations[] | "::error::\(.reason) (rule: \(.rule), found: \(.finding))"'
+```
+
 > The published `tianheng` binary is a *demo* bound to a sample constitution (it governs a
 > crate named `example-core`). Tianheng is consumed as a **library**: declare your own
 > constitution and expose your own binary, as above.
