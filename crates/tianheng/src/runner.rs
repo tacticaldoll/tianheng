@@ -1366,26 +1366,24 @@ mod tests {
 
     #[test]
     fn markdown_foregrounds_the_reason_before_rule_and_classification() {
-        // Contract B / 潛移: the reason leads the block. This asserts the ORDERING INVARIANT only
-        // (reason before rule before kind/severity) — never a byte-for-byte snapshot, so the exact
-        // layout stays free to evolve.
+        // Contract B / 潛移: the reason leads the block. This asserts the ORDERING INVARIANT ONLY
+        // (reason before rule before kind/severity). It deliberately does NOT assert the blockquote
+        // rendering — the spec frees "the blockquote choice, wording, spacing" — so the layout stays
+        // free to evolve; never a byte-for-byte snapshot.
         let c = Constitution::new("t").boundary(
             CrateBoundary::crate_("core")
                 .deny_external_dependencies()
                 .because("the gravity-bearing principle text"),
         );
         let md = constitution_markdown(&c);
-        let r = md.find("the gravity-bearing principle text").expect("reason");
+        let r = md
+            .find("the gravity-bearing principle text")
+            .expect("reason");
         let rule = md.find("**rule**").expect("rule");
         let kind = md.find("**kind**").expect("kind");
         assert!(
             r < rule && rule < kind,
             "reason must lead, then rule, then classification:\n{md}"
-        );
-        // The reason is foregrounded as a leading blockquote (one allowed rendering of the invariant).
-        assert!(
-            md.contains("\n> the gravity-bearing principle text\n"),
-            "reason rendered as a leading blockquote:\n{md}"
         );
     }
 
