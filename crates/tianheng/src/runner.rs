@@ -821,13 +821,33 @@ fn list_markdown(document: &Value) -> String {
     out
 }
 
-/// One boundary as a Markdown block: its `target` as the heading, a context line (kind,
-/// severity, and the owning crate when present), its `rule` with any rule parameters, and its
-/// declared `reason` (the intent). Every field is read from the JSON projection, so an agent
-/// reads the same law the JSON carries.
+/// One boundary as a Markdown block, with the declared `reason` **foregrounded**: the `target`
+/// is the heading; then — when present — the `reason` as a leading blockquote (the block's
+/// principle, set apart from the mechanical metadata); then the `rule` with its parameters (the
+/// reaction's mechanical shape); then the kind/severity classification, and the owning crate for a
+/// module boundary. Every field is read from the JSON projection, so an agent reads the same law
+/// the JSON carries.
+///
+/// The reason leads deliberately (see PROJECT.md, 潛移): it is the gravity-bearing content a model
+/// imitates and the repair hint on a violation. The only layout property pinned is this ordering
+/// (reason → rule → classification); the exact rendering stays free to evolve under Contract B (see
+/// [`constitution_markdown`]). A boundary with no reason emits no blockquote and no orphan blank line.
 fn boundary_markdown(boundary: &Value) -> String {
     let field = |key: &str| boundary.get(key).and_then(Value::as_str).unwrap_or("");
     let mut out = format!("\n### `{}`\n", field("target"));
+
+    let reason = field("reason");
+    if !reason.is_empty() {
+        out.push_str(&format!("\n> {reason}\n\n"));
+    }
+
+    out.push_str(&format!("- **rule**: {}", field("rule")));
+    let params = boundary_params(boundary);
+    if !params.is_empty() {
+        out.push_str(&format!(" ({params})"));
+    }
+    out.push('\n');
+
     let mut context = format!("- **kind**: {}", field("kind"));
     let severity = field("severity");
     if !severity.is_empty() {
@@ -838,16 +858,6 @@ fn boundary_markdown(boundary: &Value) -> String {
     }
     out.push_str(&context);
     out.push('\n');
-    out.push_str(&format!("- **rule**: {}", field("rule")));
-    let params = boundary_params(boundary);
-    if !params.is_empty() {
-        out.push_str(&format!(" ({params})"));
-    }
-    out.push('\n');
-    let reason = field("reason");
-    if !reason.is_empty() {
-        out.push_str(&format!("- **reason**: {reason}\n"));
-    }
     out
 }
 
@@ -1352,6 +1362,48 @@ mod tests {
         // a stray newline or wrapper here would silently drift the agent artifact from the CLI.
         let c = full_constitution();
         assert_eq!(constitution_markdown(&c), list_markdown(&list_document(&c)));
+    }
+
+    #[test]
+    fn markdown_foregrounds_the_reason_before_rule_and_classification() {
+        // Contract B / 潛移: the reason leads the block. This asserts the ORDERING INVARIANT only
+        // (reason before rule before kind/severity) — never a byte-for-byte snapshot, so the exact
+        // layout stays free to evolve.
+        let c = Constitution::new("t").boundary(
+            CrateBoundary::crate_("core")
+                .deny_external_dependencies()
+                .because("the gravity-bearing principle text"),
+        );
+        let md = constitution_markdown(&c);
+        let r = md.find("the gravity-bearing principle text").expect("reason");
+        let rule = md.find("**rule**").expect("rule");
+        let kind = md.find("**kind**").expect("kind");
+        assert!(
+            r < rule && rule < kind,
+            "reason must lead, then rule, then classification:\n{md}"
+        );
+        // The reason is foregrounded as a leading blockquote (one allowed rendering of the invariant).
+        assert!(
+            md.contains("\n> the gravity-bearing principle text\n"),
+            "reason rendered as a leading blockquote:\n{md}"
+        );
+    }
+
+    #[test]
+    fn markdown_reasonless_boundary_has_no_blockquote_or_orphan_blank_line() {
+        // No reason → no blockquote, and the heading is immediately followed by the rule bullet
+        // (no orphan blank line where the blockquote would have been).
+        let c = Constitution::new("t").boundary(
+            CrateBoundary::crate_("core")
+                .deny_external_dependencies()
+                .because(""),
+        );
+        let md = constitution_markdown(&c);
+        assert!(!md.contains("\n> "), "no blockquote when no reason:\n{md}");
+        assert!(
+            md.contains("### `core`\n- **rule**"),
+            "heading immediately followed by the rule bullet:\n{md}"
+        );
     }
 
     #[test]

@@ -59,6 +59,16 @@ exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`
 > crate named `example-core`). Tianheng is consumed as a **library**: declare your own
 > constitution and expose your own binary, as above.
 
+To put your declared law into an AI agent's context, project it to Markdown and write it
+where the agent will read it — `constitution_markdown` is the library primitive behind
+`list --format markdown` (its layout is human/agent-readable and may evolve; use the JSON
+projection for a stable machine contract):
+
+```rust
+let md = tianheng::constitution_markdown(&constitution());
+std::fs::write("AGENTS.my-project-law.md", md)?;
+```
+
 ## The instruments (三儀) — observation dimensions
 
 Tianheng is a **crate family**. You select governance by depending on the dimensions you
