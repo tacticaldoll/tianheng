@@ -139,6 +139,16 @@ alias** are out of scope. No *new* essential gap is introduced by this capabilit
 - **WHEN** a `dyn` node is syntactically present in a public signature of the governed anchor
 - **THEN** the system emits a violation, never exit 0 for that boundary
 
+#### Scenario: Distinct exposed dyn shapes produce distinct findings
+
+- **WHEN** the governed anchor exposes two structurally different trait objects whose differing payload is observable — the boxed-closure family (`Box<dyn Fn(i32) -> i32>` vs `Box<dyn FnMut(String) -> bool>`), associated-type bindings (`dyn Iterator<Item = u8>` vs `<Item = u16>`), nested trait objects, lifetimes, simple const generics, macro-named or fn-pointer generic arguments — and one is recorded in the baseline as accepted
+- **THEN** the second still reacts: its rendered finding differs from the first, so the baseline identity `(target, rule, finding)` does not mask it. The finding renderer MUST render every observable distinguishing payload (never collapse the realistic shapes above to one string — which would silently pass a new exposure under a baselined one, the one forbidden bug)
+
+#### Scenario: An unrenderable sub-node is a stated rendering bound
+
+- **WHEN** two trait objects differ only inside a sub-node that cannot be rendered without macro expansion, token printing, or edit-unstable spans — a complex const-generic *expression* (`dyn Foo<{ N + 1 }>`), a same-named macro with different arguments (`dyn Foo<m!(1)>` vs `dyn Foo<m!(2)>`), a `verbatim` type, or a distinction carried only by a **lifetime** (a reference lifetime or an HRTB `for<'a>` binder, which carry no architectural intent and are not rendered)
+- **THEN** the system does not claim to distinguish them: they share a finding (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated rendering bound** — the same `(target, rule, finding)` render-granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` finding carries — declared here, never a silent claim of cleanliness
+
 ### Requirement: Anchor resolution, CI reaction, severity, baseline, and report parity
 
 The dyn-trait boundary SHALL share the 渾儀 reaction contract with

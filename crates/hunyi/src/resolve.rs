@@ -257,6 +257,105 @@ impl<'ast> Visit<'ast> for PathCollector {
     }
 }
 
+/// A Visitor recording every **trait-object (`dyn`) node** within a syntax node, at any
+/// depth — the leaf observation for `dyn-trait-boundary`. Distinct from [`PathCollector`]:
+/// that one accumulates resolvable *paths* and **erases the `dyn` wrapper** (for
+/// `Box<dyn crate::Port>` it keeps `Box<…>` and `crate::Port`, not the `dyn`-ness), so
+/// dyn-shape governance needs its own collector that records the wrapper node itself,
+/// rendered as a stable finding string. Overriding `visit_type_trait_object` fires for a
+/// `dyn` nested anywhere — `Box<dyn …>`, `&dyn …`, `Vec<Box<dyn …>>`, an `impl Trait`'s
+/// type arguments — so detection is any-depth by construction.
+#[derive(Default)]
+pub(crate) struct DynCollector {
+    pub(crate) dyns: Vec<String>,
+}
+
+impl<'ast> Visit<'ast> for DynCollector {
+    fn visit_type_trait_object(&mut self, node: &'ast syn::TypeTraitObject) {
+        self.dyns.push(trait_object_to_string(node));
+        syn::visit::visit_type_trait_object(self, node);
+    }
+}
+
+/// Render a `dyn` trait-object to a stable finding string (`dyn crate::Port`,
+/// `dyn Port + Send`, `dyn Fn(i32) -> i32`, `dyn Iterator<Item = u8>`) — never `quote`/`syn`'s
+/// `printing` feature. The render is **injective for every realistic exposed `dyn`** (the
+/// closure family, associated-type bindings, lifetimes, simple const generics, macro-named and
+/// fn-pointer arguments all render their distinguishing payload), so two structurally-different
+/// trait objects never collide into one finding and mask a new exposure under the
+/// `(target, rule, finding)` baseline identity (the one forbidden bug). A genuinely
+/// unrenderable sub-node — a complex const-generic *expression*, a same-named macro with
+/// different arguments, a `verbatim` type — is a **stated rendering bound** (it contributes a
+/// `_` and may share a finding with another equally-exotic dyn); this is the same
+/// `(target, rule, finding)` render-granularity bound `semantic-trait-impl-locality`'s
+/// `(impl for <self_ty>)` finding already carries, never a silent claim of cleanliness.
+pub(crate) fn trait_object_to_string(node: &syn::TypeTraitObject) -> String {
+    let parts: Vec<String> = node.bounds.iter().map(bound_to_string).collect();
+    format!("dyn {}", parts.join(" + "))
+}
+
+/// Render one `TypeParamBound` (a trait bound with its `?`/path, or a lifetime) for a finding.
+/// Shared by [`trait_object_to_string`] and the `Constraint` generic-argument arm so a `dyn`
+/// and an `Iterator<Item: Bound>` render the same way. An unrenderable trait path yields `_`
+/// (the stated rendering bound).
+fn bound_to_string(bound: &syn::TypeParamBound) -> String {
+    match bound {
+        syn::TypeParamBound::Trait(tb) => {
+            let modifier = match tb.modifier {
+                syn::TraitBoundModifier::Maybe(_) => "?",
+                _ => "",
+            };
+            let path = path_to_string(&tb.path).unwrap_or_else(|| "_".to_string());
+            format!("{modifier}{path}")
+        }
+        syn::TypeParamBound::Lifetime(lt) => format!("'{}", strip_raw(&lt.ident.to_string())),
+        _ => "_".to_string(),
+    }
+}
+
+/// Render a const-generic expression argument (`Foo<3>`, `Foo<N>`) for a finding — the common
+/// literal and path forms; a complex const expression is a stated bound (`None`).
+fn expr_to_string(expr: &syn::Expr) -> Option<String> {
+    match expr {
+        syn::Expr::Lit(lit) => match &lit.lit {
+            syn::Lit::Int(i) => Some(i.base10_digits().to_string()),
+            syn::Lit::Bool(b) => Some(b.value.to_string()),
+            syn::Lit::Char(c) => Some(format!("{:?}", c.value())),
+            syn::Lit::Str(s) => Some(format!("{:?}", s.value())),
+            _ => None,
+        },
+        syn::Expr::Path(p) => path_to_string(&p.path),
+        _ => None,
+    }
+}
+
+/// Render one angle-bracketed generic argument, keeping each kind's distinguishing payload so
+/// `Iterator<Item = u8>` and `Iterator<Item = u16>` do not collide. A kind it cannot stably
+/// render (a complex const expression) returns `None`, which propagates so the whole path is a
+/// stated rendering bound rather than a silently-distinct collapse.
+fn generic_argument_to_string(arg: &syn::GenericArgument) -> Option<String> {
+    match arg {
+        syn::GenericArgument::Type(ty) => type_to_string(ty),
+        syn::GenericArgument::Lifetime(lt) => Some(format!("'{}", strip_raw(&lt.ident.to_string()))),
+        syn::GenericArgument::AssocType(binding) => Some(format!(
+            "{} = {}",
+            strip_raw(&binding.ident.to_string()),
+            type_to_string(&binding.ty)?
+        )),
+        syn::GenericArgument::AssocConst(binding) => Some(format!(
+            "{} = {}",
+            strip_raw(&binding.ident.to_string()),
+            expr_to_string(&binding.value)?
+        )),
+        syn::GenericArgument::Const(expr) => expr_to_string(expr),
+        syn::GenericArgument::Constraint(c) => {
+            let bounds: Vec<String> = c.bounds.iter().map(bound_to_string).collect();
+            Some(format!("{}: {}", strip_raw(&c.ident.to_string()), bounds.join(" + ")))
+        }
+        _ => None,
+    }
+}
+
 /// Render a `syn::Type` to a stable string for a finding, reusing path-segment joining —
 /// **never** `quote`/`syn`'s `printing` feature, which would breach 渾儀's dependency
 /// allowlist. Covers the common shapes; a shape it cannot render returns `None`, and the
@@ -290,8 +389,33 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
         syn::Type::Array(a) => Some(format!("[{}; _]", type_to_string(&a.elem)?)),
         syn::Type::Group(g) => type_to_string(&g.elem),
         syn::Type::Paren(p) => type_to_string(&p.elem),
-        // A bare-fn, trait-object, impl-Trait, macro, or other exotic self-type is not
-        // rendered; the caller falls back to a location-only finding.
+        // A nested trait-object renders through the same `dyn …` form, so a `dyn` hidden inside
+        // another type (`Box<dyn crate::Foo<Box<dyn crate::Bar>>>`) keeps a distinct, stable
+        // finding rather than collapsing to a degenerate placeholder.
+        syn::Type::TraitObject(t) => Some(trait_object_to_string(t)),
+        syn::Type::Ptr(p) => {
+            let inner = type_to_string(&p.elem)?;
+            if p.mutability.is_some() {
+                Some(format!("*mut {inner}"))
+            } else {
+                Some(format!("*const {inner}"))
+            }
+        }
+        syn::Type::Never(_) => Some("!".to_string()),
+        // A macro-typed argument renders by its macro *name* (`bar!`), so `dyn Foo<bar!()>` and
+        // `dyn Foo<baz!()>` stay distinct; the macro's *arguments* are unobservable without
+        // expansion (the stated macro bound), so two `bar!(…)` with different args share a render.
+        syn::Type::Macro(m) => Some(format!("{}!", path_to_string(&m.mac.path)?)),
+        syn::Type::BareFn(f) => {
+            let inputs: Option<Vec<String>> = f.inputs.iter().map(|a| type_to_string(&a.ty)).collect();
+            let output = match &f.output {
+                syn::ReturnType::Default => String::new(),
+                syn::ReturnType::Type(_, ty) => format!(" -> {}", type_to_string(ty)?),
+            };
+            Some(format!("fn({}){output}", inputs?.join(", ")))
+        }
+        // An impl-Trait, `verbatim`, or other exotic self-type is not rendered; the caller falls
+        // back to a location-only (trait-impl) or `_`-bound (dyn) finding — a stated bound.
         _ => None,
     }
 }
@@ -308,20 +432,22 @@ fn path_to_string(path: &syn::Path) -> Option<String> {
         match &seg.arguments {
             syn::PathArguments::None => segs.push(ident),
             syn::PathArguments::AngleBracketed(args) => {
-                let rendered: Option<Vec<String>> = args
-                    .args
-                    .iter()
-                    .map(|arg| match arg {
-                        syn::GenericArgument::Type(ty) => type_to_string(ty),
-                        // A lifetime or const-generic argument renders as `_` so distinct
-                        // type arguments still differ; we only need self-type identity.
-                        _ => Some("_".to_string()),
-                    })
-                    .collect();
+                let rendered: Option<Vec<String>> =
+                    args.args.iter().map(generic_argument_to_string).collect();
                 segs.push(format!("{ident}<{}>", rendered?.join(", ")));
             }
-            // A parenthesized `Fn(…) -> …` argument list is not rendered.
-            syn::PathArguments::Parenthesized(_) => return None,
+            // A parenthesized `Fn(…) -> …` argument list (the boxed-closure family — the most
+            // common exposed trait object) renders to its full shape, so `dyn Fn(i32) -> i32`
+            // and `dyn FnMut(String) -> bool` stay **distinct** findings instead of both
+            // collapsing to a degenerate placeholder that would collide under the baseline.
+            syn::PathArguments::Parenthesized(args) => {
+                let inputs: Option<Vec<String>> = args.inputs.iter().map(type_to_string).collect();
+                let output = match &args.output {
+                    syn::ReturnType::Default => String::new(),
+                    syn::ReturnType::Type(_, ty) => format!(" -> {}", type_to_string(ty)?),
+                };
+                segs.push(format!("{ident}({}){output}", inputs?.join(", ")));
+            }
         }
     }
     Some(segs.join("::"))

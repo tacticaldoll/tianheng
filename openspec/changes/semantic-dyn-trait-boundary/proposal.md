@@ -10,10 +10,10 @@ that holds that line; the drift is invisible to every existing instrument.
 This change deepens the *same* reaction from named-type exposure to **type-shape
 exposure**, on the same observation source (the `syn` AST). It is the purest available
 demonstration of the project's depth axis: 渾儀 grows by **deepening a proven reaction**,
-not by bolting on a new opinion — it reuses signature-coupling's exposed-surface walk
-(which public positions are governed), its resolver, and its stated bounds, and adds a
-leaf observation that retains type-node structure (a `dyn` node) where the existing
-collector kept only resolved paths.
+not by bolting on a new opinion — it mirrors signature-coupling's governed public positions,
+reuses its resolver, its scanning/IO, and the whole reaction contract, inherits its stated
+bounds, and adds a leaf observation that retains type-node structure (a `dyn` node) where the
+existing collector kept only resolved paths.
 
 ## What Changes
 
@@ -42,10 +42,10 @@ collector kept only resolved paths.
 - `semantic-dyn-trait-boundary`: a module's public API must not **expose** trait-object
   (`dyn`) syntax. The type-shape complement of `semantic-signature-coupling`: reacts on the
   presence of a `dyn` node at any depth in the governed public surface; `impl Trait` does
-  not react (it carries no `dyn` node). Reuses signature-coupling's exposed-surface walk
-  (the public positions governed) and the `hunyi::resolve` resolver; adds a new
-  trait-object-recording visitor, because the existing `PathCollector` yields resolved
-  paths and erases the `dyn` wrapper node.
+  not react (it carries no `dyn` node). Mirrors signature-coupling's governed positions in a
+  parallel walk and reuses the `hunyi::resolve` resolver; adds a new trait-object-recording
+  visitor, because the existing `PathCollector` yields resolved paths and erases the `dyn`
+  wrapper node.
 
 ### Modified Capabilities
 <!-- None. signature-coupling's requirements do not change; this is a new sibling capability

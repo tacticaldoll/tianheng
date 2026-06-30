@@ -48,38 +48,48 @@ reaction from a named type to a type shape).
 
 ## Decisions
 
-### Decision 1 — Reuse the surface walk and resolver; add a trait-object-recording leaf
+### Decision 1 — Mirror the position-walk in a parallel dyn walk; reuse resolver + plumbing; add a trait-object leaf
 
 What is genuinely reused vs. what must be new — stated precisely so the effort is not
 mis-scoped as a "predicate swap":
 
 ```
-            signature-coupling (today)          dyn-trait-boundary (0.1.2)
-  surface   collect_item_exposures decides       REUSED (same governed positions)
-            which positions are public/exposed
-  resolver  pub use chains; no type-alias expand  REUSED (hunyi::resolve, unchanged)
-  bounds    macro-gen, glob, #[path], alias       INHERITED as-is (no new bound)
-  leaf      PathCollector → Vec<syn::Path>;       NEW: a visitor that records the
-            erases the dyn wrapper node           syn::Type::TraitObject node
-  predicate resolved path ∈ forbidden set     →   a recorded TraitObject node is present
+            signature-coupling (today)            dyn-trait-boundary (0.1.2)
+  positions collect_item_exposures decides        MIRRORED in a parallel walk
+            which positions are public/exposed     (collect_item_dyn_exposures) — NOT shared
+  resolver  pub use chains; no type-alias expand   REUSED (hunyi::resolve, unchanged)
+  plumbing  find_package / resolve_module_items /  REUSED (check_dyn_trait_boundary →
+            Outcome / Violation / Baseline          check_all, same as every capability)
+  bounds    macro-gen, glob, #[path], alias        INHERITED as-is (no new bound)
+  leaf      PathCollector → Vec<syn::Path>;        NEW: DynCollector records the
+            erases the dyn wrapper node            syn::Type::TraitObject node, any depth
+  predicate resolved path ∈ forbidden set      →   a recorded TraitObject node is present
 ```
 
-The honest cost is the **leaf**: detection needs a visitor that overrides `visit_type` /
-`visit_type_trait_object` to record the `TraitObject` node (or its rendered finding via the
-existing `resolve::type_to_string`, which already renders types without `quote`/`syn`
-`printing`). The surface walk that decides *which positions are exposed* is reused; the
-collector that observes *what is there* is extended.
+**The position-walk is mirrored, not shared — discovered during implementation, and the
+honest design.** A first instinct was to refactor `collect_item_exposures` to feed two leaf
+visitors. Two facts in the code make that *change* signature-coupling's behavior rather than
+preserve it: (1) for supertraits and associated-type *bounds*, `collect_item_exposures`
+pushes the **bare `trait_bound.path`** and does not descend into its generic arguments;
+routing those through a shared `Visit` would make signature-coupling newly collect nested
+arg paths — a behavior change in the proven capability. (2) The dyn walk must observe a
+position signature-coupling **does not cover** — an associated-type *default* (`type T =
+Box<dyn …>;`, the `= Type` arm of `TraitItem::Type`, which exposure-governance ignores). So
+the two walks are genuinely different and live side by side (`collect_item_dyn_exposures`
+beside `collect_item_exposures`, cross-referenced by comment). What *is* shared: the
+resolver, the module-scanning, the `cargo metadata` IO, and the whole `Outcome` / `Violation`
+/ `Baseline` reaction contract. signature-coupling's engine is **untouched**; its full
+existing suite (59 tests) is the regression gate and stayed green.
 
-**Why X over Y:** an alternative was to *generalize signature-coupling itself* — add a
-"shape" variant to `must_not_expose`. Rejected: it would entangle two declarations (a named
-forbidden set vs. a shape that takes no operand) in one builder and one spec, and 渾儀's
-established pattern is one capability = one builder = one spec, each born when built
-(signature-coupling, trait-impl-locality, visibility, forbidden-marker are all separate). So
-this ships as a **sibling** `DynTraitBoundary` + `must_not_expose_dyn`, sharing the surface
-walk but owning its own declaration, leaf observation, and spec. Refactoring the surface
-walk to feed two leaf observations touches signature-coupling's engine, so it is
-**behavior-preserving only if** signature-coupling's existing fixtures stay green — that is
-the regression gate, not a spec change to signature-coupling (see Risks).
+The leaf is a new `DynCollector` (in `resolve.rs`) overriding `visit_type_trait_object`,
+which fires for a `dyn` at any depth; findings render via a new `resolve::trait_object_to_string`
+(the existing `type_to_string` returns `None` for a `TraitObject`), never `quote`/`syn`
+`printing`.
+
+**Why a sibling, not a generalized `must_not_expose`:** entangling a named-forbidden-set
+declaration and an operand-less shape in one builder/spec fights 渾儀's established pattern
+(one capability = one builder = one spec, each born when built). So `DynTraitBoundary` +
+`must_not_expose_dyn` ships as its own declaration, leaf, and spec.
 
 ### Decision 2 — Detection is any-depth; `impl Trait` is clean only for lack of a dyn node
 
@@ -148,6 +158,25 @@ anywhere" toggle would be a lint; a `dyn`-free *declared seam* is architecture.
 - **[impl-Trait nesting surprise]** users may expect `-> impl Trait` to always be clean. →
   Mitigation: Decision 2's node-presence framing is documented; the spec carries both the
   clean (`impl P`) and the reacting (`impl Iterator<Item = Box<dyn P>>`) scenarios.
+- **[Finding-render collision → baseline-masked false negative]** *(found by adversarial review
+  of the implementation.)* The finding identity is `(target, rule, finding)`, so if the renderer
+  maps two structurally-distinct trait objects to the same string, a baselined one masks a new
+  one — a silent pass, the one forbidden bug. The first draft rendered any unrenderable bound as
+  `dyn _`, which the boxed-closure family (`dyn Fn(…)`, `dyn FnMut(…)`, the *most common* exposed
+  trait object) and `dyn Foo<…dyn…>` all hit. A **second review round** found the same collision
+  class still open for **associated-type bindings** (`dyn Iterator<Item = u8>` vs `<Item = u16>`
+  — both → `dyn Iterator<_>`; the most common assoc-bound dyn) and **macro/bare-fn generic args**
+  (→ `dyn _`). → Mitigation: the renderer now renders every *observable* distinguishing payload —
+  the `Fn(…) -> …` shape, associated-type/const bindings (`Item = T`), lifetimes, simple const
+  generics, macro *names* (`bar!`), fn-pointers, and nested trait-objects (and `*ptr`/`!`). Unit
+  tests pin closures, assoc-type, and macro/fn-pointer distinctness. The **irreducible residual**
+  — a complex const-generic *expression*, a same-named macro with different args, a `verbatim`
+  type — cannot be rendered without `quote`/token-printing (architecturally forbidden) or
+  edit-unstable spans, so it is a **stated rendering bound** (declared in the spec and the
+  `trait_object_to_string` doc): the dyn still *reacts*, only baseline-dedup granularity is
+  bounded for those exotic shapes. This is the same `(target, rule, finding)` render-granularity
+  bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` finding already carries — the
+  honest limit, not a silent pass.
 
 ## Migration Plan
 

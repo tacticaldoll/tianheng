@@ -36,12 +36,13 @@ pub use guibiao::Constitution as GnomonConstitution;
 // boundaries the same way as static ones, then folds them into the unified [`Constitution`].
 // `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
 pub use hunyi::{
+    DynTraitBoundary, DynTraitBoundaryDraft, DynTraitCrateDraft, DynTraitModuleDraft,
     ForbiddenMarkerBoundary, ForbiddenMarkerBoundaryDraft, ForbiddenMarkerCrateDraft,
     ForbiddenMarkerModuleDraft, SemanticBoundaries, SemanticBoundary, SemanticBoundaryDraft,
     SemanticCrateDraft, SemanticModuleDraft, TraitImplBoundary, TraitImplBoundaryDraft,
     TraitImplCrateDraft, TraitImplTraitDraft, VisibilityBoundary, VisibilityBoundaryDraft,
     VisibilityCrateDraft, VisibilityModuleDraft, check as check_semantic, check_all,
-    check_forbidden_marker, check_trait_impl_locality, check_visibility,
+    check_dyn_trait, check_forbidden_marker, check_trait_impl_locality, check_visibility,
 };
 // 漏刻 (runtime) dimension DSL: declared here, then projected two ways — the CI probe-coverage
 // audit (composed by [`run`]) and the prod face (the adopter calls [`louke::install`] /
@@ -110,6 +111,12 @@ impl Constitution {
         self
     }
 
+    /// Add a 渾儀 dyn-trait boundary (a module's API must not expose `dyn` trait-object syntax).
+    pub fn dyn_trait_boundary(mut self, boundary: DynTraitBoundary) -> Self {
+        self.semantic.dyn_trait.push(boundary);
+        self
+    }
+
     /// Add a 漏刻 runtime boundary. The CI face audits its probe coverage (via [`run`]); the same
     /// object is what the adopter hands to [`louke::install`] for the prod face.
     pub fn runtime(mut self, boundary: RuntimeBoundary) -> Self {
@@ -154,7 +161,7 @@ impl From<GnomonConstitution> for Constitution {
 /// `Constitution` / `run` (and `check` for the pure static core).
 pub mod prelude {
     pub use super::{
-        Boundary, BoundaryKind, Constitution, CrateBoundary, DependencyKind,
+        Boundary, BoundaryKind, Constitution, CrateBoundary, DependencyKind, DynTraitBoundary,
         ForbiddenMarkerBoundary, ModuleBoundary, Outcome, Report, Rule, RuntimeBoundary,
         SemanticBoundary, Severity, TraitImplBoundary, Violation, ViolationId, VisibilityBoundary,
         check, run,
