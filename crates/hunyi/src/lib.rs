@@ -673,6 +673,13 @@ fn check_boundary(
     )?;
 
     for finding in findings {
+        // No `with_file`: the 渾儀 dimension does not yet observe a per-element source file.
+        // `finding` is a canonical type path (resolved through re-export chains), so the
+        // offending element may live in a different file than the governed module's, and the
+        // construction scope holds only the crate root, not that file. Surfacing it would need
+        // new per-finding tracking — a stated bound (born when built), the same for every
+        // semantic capability (exposure, trait-impl-locality, visibility, forbidden-marker).
+        // So a semantic violation's `file` is a faithful `None`.
         violations.push(Violation::new(
             BoundaryKind::Semantic,
             boundary.module.clone(),

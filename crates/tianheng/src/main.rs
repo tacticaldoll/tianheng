@@ -8,7 +8,9 @@
 //!
 //! Usage:
 //!   tianheng check --manifest-path <path/to/Cargo.toml>
-//!                [--baseline <file> | --write-baseline <file>] [--format text|json]
+//!                [--baseline <file> | --write-baseline <file>] [--format text|json|sarif]
+//!                [--warn-uncovered]
+//!   tianheng list [--format text|json|markdown]
 //!
 //! Exits 0 (clean / warn-only / fully baselined), 1 (enforced violation), or
 //! 2 (constitution/scan error, unreadable baseline, or a usage mistake).

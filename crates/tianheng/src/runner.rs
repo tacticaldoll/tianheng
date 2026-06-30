@@ -43,6 +43,29 @@ enum Command {
     List,
 }
 
+/// The requested output format. `text` (default) and `json` apply to both commands;
+/// `markdown` is a `list`-only projection of the declared law — `check`'s machine-readable
+/// output is the JSON report, never a law summary, so `check --format markdown` is a usage
+/// error (exit 2).
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum Format {
+    Text,
+    Json,
+    Markdown,
+    Sarif,
+}
+
+/// The `check` output format — the `Format` values `check` accepts, with `markdown` (a `list`-only
+/// law projection) excluded by construction. `sarif` is the CI-consumable projection of the
+/// reaction (an open, vendor-neutral standard); like `json` it changes presentation only, never
+/// the outcome or exit code.
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum ReportFormat {
+    Text,
+    Json,
+    Sarif,
+}
+
 /// Run the unified constitution's boundaries against a Cargo workspace and return the
 /// process exit code. The one [`Constitution`] carries every dimension — static (圭表),
 /// semantic (渾儀), and the runtime (漏刻) CI probe-coverage audit — which this gate composes
@@ -123,13 +146,16 @@ where
         }
     }
 
-    // `--format` is validated for both commands so the flag contract stays uniform.
-    let json = match format.as_deref() {
-        None | Some("text") => false,
-        Some("json") => true,
+    // `--format` is parsed for both commands so the flag contract stays uniform; `markdown`
+    // is recognized here but only honored by `list` (rejected for `check` below).
+    let format = match format.as_deref() {
+        None | Some("text") => Format::Text,
+        Some("json") => Format::Json,
+        Some("markdown") => Format::Markdown,
+        Some("sarif") => Format::Sarif,
         Some(other) => {
             return usage(&format!(
-                "unknown --format '{other}' (expected text or json)"
+                "unknown --format '{other}' (expected text, json, markdown, or sarif)"
             ));
         }
     };
@@ -148,22 +174,54 @@ where
         }
         let semantic = constitution.semantic_boundaries();
         let runtime = constitution.runtime_boundaries();
-        if json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&list_document(constitution))
-                    .expect("a serde_json::Value is always serializable")
-            );
-        } else {
-            println!("{}", constitution_text(constitution.static_boundaries()));
-            print!("{}", semantic_text(&semantic.signature));
-            print!("{}", trait_impl_text(&semantic.trait_impl));
-            print!("{}", visibility_text(&semantic.visibility));
-            print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
-            print!("{}", runtime_text(runtime));
+        match format {
+            Format::Json => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&list_document(constitution))
+                        .expect("a serde_json::Value is always serializable")
+                );
+            }
+            Format::Markdown => {
+                // Rendered from the same `list_document` value the JSON projection emits, so the
+                // Markdown provably carries no less than the JSON and covers exactly the same
+                // dimensions — a pure projection, never a reaction.
+                print!("{}", list_markdown(&list_document(constitution)));
+            }
+            Format::Text => {
+                println!("{}", constitution_text(constitution.static_boundaries()));
+                print!("{}", semantic_text(&semantic.signature));
+                print!("{}", trait_impl_text(&semantic.trait_impl));
+                print!("{}", visibility_text(&semantic.visibility));
+                print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
+                print!("{}", runtime_text(runtime));
+            }
+            // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
+            // symmetric to `markdown` being `list`-only.
+            Format::Sarif => {
+                return usage(
+                    "list supports --format text|json|markdown; sarif projects the reaction \
+                     (a check output), not the declared law",
+                );
+            }
         }
         return 0;
     }
+
+    // The command is `check`. `markdown` is a `list`-only projection of the declared law;
+    // `check`'s machine output is the JSON report, so reject it loud (exit 2) rather than
+    // silently falling back. `text`/`json` map to the existing boolean contract.
+    let report_format = match format {
+        Format::Text => ReportFormat::Text,
+        Format::Json => ReportFormat::Json,
+        Format::Sarif => ReportFormat::Sarif,
+        Format::Markdown => {
+            return usage(
+                "check supports --format text|json|sarif; markdown is a list-only \
+                 projection of the declared law",
+            );
+        }
+    };
 
     // From here on the command is `check`: it requires a workspace to observe.
     // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
@@ -244,15 +302,23 @@ where
     };
 
     if let Some(path) = baseline_path {
-        return gate(&mut outcome, &path, json, coverage.as_ref(), warn_uncovered);
+        return gate(
+            &mut outcome,
+            &path,
+            report_format,
+            coverage.as_ref(),
+            warn_uncovered,
+        );
     }
 
-    if json {
-        println!("{}", report_json(&outcome, &[], coverage.as_ref()));
-    } else {
-        report(&outcome);
-        if let Some(coverage) = &coverage {
-            report_coverage(coverage, warn_uncovered);
+    match report_format {
+        ReportFormat::Json => println!("{}", report_json(&outcome, &[], coverage.as_ref())),
+        ReportFormat::Sarif => println!("{}", report_sarif(&outcome)),
+        ReportFormat::Text => {
+            report(&outcome);
+            if let Some(coverage) = &coverage {
+                report_coverage(coverage, warn_uncovered);
+            }
         }
     }
     outcome.exit_code()
@@ -264,9 +330,9 @@ fn usage(message: &str) -> u8 {
     eprintln!(
         "usage:\n  \
          tianheng check --manifest-path <path/to/Cargo.toml> \
-         [--baseline <file> | --write-baseline <file>] [--format text|json] \
+         [--baseline <file> | --write-baseline <file>] [--format text|json|sarif] \
          [--warn-uncovered]\n  \
-         tianheng list [--format text|json]"
+         tianheng list [--format text|json|markdown]"
     );
     eprintln!("error: {message}");
     2
@@ -321,7 +387,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
 fn gate(
     outcome: &mut Outcome,
     path: &str,
-    json: bool,
+    format: ReportFormat,
     coverage: Option<&Coverage>,
     warn_uncovered: bool,
 ) -> u8 {
@@ -329,10 +395,10 @@ fn gate(
     // it is never masked by a missing or unreadable baseline file (both exit 2, but the
     // constitution error is the actionable one).
     if let Outcome::ConstitutionError(message) = outcome {
-        if json {
-            println!("{}", report_json(outcome, &[], None));
-        } else {
-            eprintln!("Tianheng constitution error: {message}");
+        match format {
+            ReportFormat::Json => println!("{}", report_json(outcome, &[], None)),
+            ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+            ReportFormat::Text => eprintln!("Tianheng constitution error: {message}"),
         }
         return 2;
     }
@@ -361,18 +427,20 @@ fn gate(
         _ => &empty,
     };
     let stale: Vec<ViolationId> = baseline.stale(report).into_iter().cloned().collect();
-    if json {
-        println!("{}", report_json(outcome, &stale, coverage));
-    } else {
-        report_violations(report);
-        for entry in &stale {
-            eprintln!(
-                "Tianheng: stale baseline entry (no longer violated): {} / {} / {}",
-                entry.target, entry.rule, entry.finding
-            );
-        }
-        if let Some(coverage) = coverage {
-            report_coverage(coverage, warn_uncovered);
+    match format {
+        ReportFormat::Json => println!("{}", report_json(outcome, &stale, coverage)),
+        ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+        ReportFormat::Text => {
+            report_violations(report);
+            for entry in &stale {
+                eprintln!(
+                    "Tianheng: stale baseline entry (no longer violated): {} / {} / {}",
+                    entry.target, entry.rule, entry.finding
+                );
+            }
+            if let Some(coverage) = coverage {
+                report_coverage(coverage, warn_uncovered);
+            }
         }
     }
     outcome.exit_code()
@@ -399,34 +467,58 @@ fn report(outcome: &Outcome) {
 /// Print each non-baselined violation as a failure (enforce) or advisory (warn),
 /// and summarize how many were suppressed by a baseline.
 fn report_violations(report: &Report) {
+    eprint!("{}", violations_text(report));
+}
+
+/// The human-readable violation report `check` prints, as a pure function so the foregrounding,
+/// file-surfacing, and grouping invariants are unit-testable (the reaction itself,
+/// [`report_violations`], just prints this to stderr).
+///
+/// 潛移: each block **leads with the reason** — the principle and the repair direction — then the
+/// mechanical fields (target, rule, finding), then where to repair (the offending file, when
+/// observed), then the verdict. Violations are **grouped by boundary** via a stable sort of a
+/// local view by `(target, rule)`, so multiple findings under one boundary read consecutively and
+/// the reason is read once. This borrows `&Report` immutably and never reorders the underlying vec,
+/// so the JSON projection (the machine contract) is untouched.
+fn violations_text(report: &Report) -> String {
+    use std::fmt::Write as _;
     if report.violations.is_empty() {
-        eprintln!("Tianheng: clean — no boundary violated");
-        return;
+        return "Tianheng: clean — no boundary violated\n".to_string();
     }
-    let mut baselined = 0usize;
-    for violation in &report.violations {
-        if violation.baselined {
-            baselined += 1;
-            continue;
-        }
+    let baselined = report.violations.iter().filter(|v| v.baselined).count();
+    let mut shown: Vec<_> = report.violations.iter().filter(|v| !v.baselined).collect();
+    shown.sort_by(|a, b| {
+        (a.target.as_str(), a.rule.as_str()).cmp(&(b.target.as_str(), b.rule.as_str()))
+    });
+
+    let mut out = String::new();
+    for violation in shown {
         let (header, reaction) = match violation.severity {
             Severity::Enforce => ("Tianheng violation", "CI failed."),
             Severity::Warn => ("Tianheng advisory", "warning only — CI not failed."),
             // `Severity` is non-exhaustive; an unknown future rung reports as advisory.
             _ => ("Tianheng advisory", "warning only — CI not failed."),
         };
-        eprintln!();
-        eprintln!("{header}");
-        eprintln!();
-        eprintln!("Boundary:\n  {}", violation.target);
-        eprintln!("Rule:\n  {}", violation.rule);
-        eprintln!("Found:\n  {}", violation.finding);
-        eprintln!("Reason:\n  {}", violation.reason);
-        eprintln!("Reaction:\n  {reaction}");
+        writeln!(out).unwrap();
+        writeln!(out, "{header}").unwrap();
+        writeln!(out).unwrap();
+        writeln!(out, "Reason:\n  {}", violation.reason).unwrap();
+        writeln!(out, "Boundary:\n  {}", violation.target).unwrap();
+        writeln!(out, "Rule:\n  {}", violation.rule).unwrap();
+        writeln!(out, "Found:\n  {}", violation.finding).unwrap();
+        if let Some(file) = &violation.file {
+            writeln!(out, "File:\n  {file}").unwrap();
+        }
+        writeln!(out, "Reaction:\n  {reaction}").unwrap();
     }
     if baselined > 0 {
-        eprintln!("Tianheng: {baselined} pre-existing violation(s) suppressed by baseline");
+        writeln!(
+            out,
+            "Tianheng: {baselined} pre-existing violation(s) suppressed by baseline"
+        )
+        .unwrap();
     }
+    out
 }
 
 /// Print the workspace coverage summary, and — under `--warn-uncovered` — each
@@ -456,6 +548,72 @@ fn report_coverage(coverage: &Coverage, warn_uncovered: bool) {
         }
     }
 }
+
+/// Project the reaction as a **SARIF 2.1.0** document (`--format sarif`) — the CI-consumable
+/// surface GitHub code-scanning ingests. One `results[]` entry per non-baselined violation
+/// (`ruleId` = rule, `level` = error/warning, message = reason + finding; the rule lives in
+/// `ruleId`, not the message). A violation's `file` becomes `artifactLocation.uri` with **no
+/// `region`** (the line is not observed — never fabricated); a file-less violation gets no
+/// `locations`. A constitution error is a tool-execution notification under an invocation whose
+/// `executionSuccessful` is `false` (required on any SARIF invocation). Clean → empty `results`.
+/// Presentation only: the outcome and exit code are unchanged.
+fn report_sarif(outcome: &Outcome) -> String {
+    use serde_json::{Value, json};
+    let mut results: Vec<Value> = Vec::new();
+    let mut invocations: Vec<Value> = Vec::new();
+    match outcome {
+        Outcome::Violations(report) => {
+            for v in report.violations.iter().filter(|v| !v.baselined) {
+                let level = match v.severity {
+                    Severity::Enforce => "error",
+                    _ => "warning",
+                };
+                let mut result = json!({
+                    "ruleId": v.rule,
+                    "level": level,
+                    "message": { "text": format!("{} (found: {})", v.reason, v.finding) },
+                });
+                if let Some(file) = &v.file {
+                    // File-level only: artifactLocation.uri, no `region` (line is not observed).
+                    result["locations"] = json!([{
+                        "physicalLocation": { "artifactLocation": { "uri": file } }
+                    }]);
+                }
+                results.push(result);
+            }
+        }
+        Outcome::ConstitutionError(message) => {
+            invocations.push(json!({
+                "executionSuccessful": false,
+                "toolExecutionNotifications": [{
+                    "level": "error",
+                    "message": { "text": message },
+                }],
+            }));
+        }
+        // Clean (and any future outcome) contributes no results.
+        _ => {}
+    }
+    let mut run = json!({
+        "tool": { "driver": { "name": "tianheng" } },
+        "results": results,
+    });
+    if !invocations.is_empty() {
+        run["invocations"] = Value::Array(invocations);
+    }
+    let doc = json!({
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [run],
+    });
+    serde_json::to_string_pretty(&doc).expect("a serde_json::Value is always serializable")
+}
+
+// A GitHub-specific `::error::` workflow-command format is deliberately NOT a built-in: it would
+// couple the tool to one CI vendor's proprietary protocol (and invite an open-ended gitlab/azure/…
+// set). SARIF — an open, vendor-neutral standard that GitHub and others ingest — is 垂象's CI
+// projection; turning it (or the JSON report) into vendor-specific annotations is a harness/CI-step
+// convention, not a tool feature (see the README recipe). This keeps the machine surfaces neutral.
 
 /// Compose the static and semantic outcomes into one reaction. A constitution error from
 /// either dimension supersedes any violation — a boundary that could not be evaluated makes
@@ -731,14 +889,173 @@ fn runtime_boundary_json(boundary: &RuntimeBoundary) -> Value {
     })
 }
 
+/// Render a constitution as the human- and agent-readable Markdown summary of its declared law —
+/// the same projection `list --format markdown` prints, returned as a `String` for library
+/// callers (e.g. to generate an agent-context artifact). It composes the same internal projector,
+/// so it carries no less than the JSON and never reacts; it adds nothing of its own (no preamble,
+/// no trailing newline), so it equals the CLI output byte for byte.
+///
+/// **Format stability.** This Markdown layout is intended for display, review, and LLM context.
+/// It is **not** a machine-stable contract and **may evolve in any compatible release** to improve
+/// readability or imitability (e.g. foregrounding a boundary's `reason`). Consumers that need a
+/// stable, machine-parseable projection MUST use the JSON projection (`list --format json`)
+/// instead — depending on the exact Markdown shape is unsupported.
+///
+/// ```
+/// use tianheng::prelude::*;
+/// let c = Constitution::new("my-project").boundary(
+///     CrateBoundary::crate_("my-core")
+///         .deny_external_dependencies()
+///         .because("my-core stays dependency-light"),
+/// );
+/// let md = tianheng::constitution_markdown(&c);
+/// assert!(md.contains("# Constitution: my-project"));
+/// assert!(md.contains("my-core stays dependency-light"));
+/// // Write it where an agent will read it, e.g.:
+/// // std::fs::write("AGENTS.my-project-law.md", md)?;
+/// ```
+pub fn constitution_markdown(constitution: &Constitution) -> String {
+    list_markdown(&list_document(constitution))
+}
+
+/// The `list --format markdown` projection: an agent-readable summary of the *whole* declared
+/// law. It is rendered from the very [`Value`] [`list_document`] emits, so it provably carries
+/// no information absent from the JSON and covers exactly the same dimensions (the spec's
+/// "no less than the JSON" guarantee holds by construction, not by parallel maintenance). Like
+/// `list` as a whole it observes nothing and never reacts. A dimension with no declared
+/// boundaries contributes no section, mirroring the text and JSON projections.
+fn list_markdown(document: &Value) -> String {
+    let name = document
+        .get("constitution")
+        .and_then(Value::as_str)
+        .unwrap_or("(unnamed)");
+    let mut out = format!("# Constitution: {name}\n");
+    // The dimension sections in projection order; each key matches `list_document`'s, and a
+    // section absent or empty there is skipped here, so the two projections stay in lockstep.
+    for (key, heading) in [
+        ("boundaries", "Static boundaries"),
+        (
+            "semantic_boundaries",
+            "Semantic boundaries (signature-coupling)",
+        ),
+        ("trait_impl_boundaries", "Trait-impl-locality boundaries"),
+        ("visibility_boundaries", "Visibility boundaries"),
+        ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
+        ("runtime_boundaries", "Runtime boundaries"),
+    ] {
+        let Some(Value::Array(items)) = document.get(key) else {
+            continue;
+        };
+        if items.is_empty() {
+            continue;
+        }
+        out.push_str(&format!("\n## {heading}\n"));
+        for item in items {
+            out.push_str(&boundary_markdown(item));
+        }
+    }
+    out
+}
+
+/// One boundary as a Markdown block, with the declared `reason` **foregrounded**: the `target`
+/// is the heading; then — when present — the `reason` as a leading blockquote (the block's
+/// principle, set apart from the mechanical metadata); then the `rule` with its parameters (the
+/// reaction's mechanical shape); then the kind/severity classification, and the owning crate for a
+/// module boundary. Every field is read from the JSON projection, so an agent reads the same law
+/// the JSON carries.
+///
+/// The reason leads deliberately (see PROJECT.md, 潛移): it is the gravity-bearing content a model
+/// imitates and the repair hint on a violation. The only layout property pinned is this ordering
+/// (reason → rule → classification); the exact rendering stays free to evolve under Contract B (see
+/// [`constitution_markdown`]). A boundary with no reason emits no blockquote and no orphan blank line.
+fn boundary_markdown(boundary: &Value) -> String {
+    let field = |key: &str| boundary.get(key).and_then(Value::as_str).unwrap_or("");
+    let mut out = format!("\n### `{}`\n", field("target"));
+
+    let reason = field("reason");
+    if !reason.is_empty() {
+        out.push_str(&format!("\n> {reason}\n\n"));
+    }
+
+    out.push_str(&format!("- **rule**: {}", field("rule")));
+    let params = boundary_params(boundary);
+    if !params.is_empty() {
+        out.push_str(&format!(" ({params})"));
+    }
+    out.push('\n');
+
+    let mut context = format!("- **kind**: {}", field("kind"));
+    let severity = field("severity");
+    if !severity.is_empty() {
+        context.push_str(&format!(" · **severity**: {severity}"));
+    }
+    if let Some(krate) = boundary.get("crate").and_then(Value::as_str) {
+        context.push_str(&format!(" · **crate**: {krate}"));
+    }
+    out.push_str(&context);
+    out.push('\n');
+    out
+}
+
+/// The rule parameters of a boundary — every JSON field that is not one of the structural keys
+/// (kind/target/crate/rule/severity/reason) — rendered inline. This generically surfaces each
+/// dimension's specifics (a forbidden set, allowed locations, allowed origins, a posture, a
+/// dependency kind) without hard-coding any dimension, so a new dimension's parameters appear
+/// in the Markdown the moment they appear in the JSON.
+fn boundary_params(boundary: &Value) -> String {
+    const STRUCTURAL: [&str; 6] = ["kind", "target", "crate", "rule", "severity", "reason"];
+    let Some(object) = boundary.as_object() else {
+        return String::new();
+    };
+    object
+        .iter()
+        .filter(|(key, _)| !STRUCTURAL.contains(&key.as_str()))
+        .map(|(key, value)| format!("{key}: {}", inline_value(value)))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// Render a JSON value compactly for a Markdown parameter: a string as itself, an array as a
+/// comma-joined list, a scalar via its display, an object via its JSON text. Each rendering is
+/// a pure function of the value, so the projection is stable and diffable; within a boundary,
+/// `boundary_params` walks the object in serde_json's default `Map` order — lexicographic by
+/// key (a `BTreeMap`), not declaration order — which is likewise deterministic.
+fn inline_value(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Array(items) => items
+            .iter()
+            .map(inline_value)
+            .collect::<Vec<_>>()
+            .join(", "),
+        Value::Bool(boolean) => boolean.to_string(),
+        Value::Number(number) => number.to_string(),
+        Value::Null => "null".to_string(),
+        Value::Object(_) => value.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        dispatch, list_document, merge_outcomes, runtime_text, semantic_text, trait_impl_text,
+        constitution_markdown, dispatch, list_document, list_markdown, merge_outcomes, report_json,
+        report_sarif, runtime_text, semantic_text, trait_impl_text, violations_text,
         visibility_text,
     };
     use crate::prelude::*;
     use std::path::PathBuf;
+
+    fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Violation {
+        Violation::new(
+            BoundaryKind::Crate,
+            target.to_string(),
+            rule.to_string(),
+            finding.to_string(),
+            format!("reason-for-{target}"),
+            Severity::Enforce,
+        )
+        .with_file(file.map(str::to_string))
+    }
 
     fn enforce_violation(kind: BoundaryKind, finding: &str) -> Violation {
         Violation::new(
@@ -1108,6 +1425,337 @@ mod tests {
         // And the text projection of the runtime section is non-empty and names the seam.
         let text = runtime_text(full.runtime_boundaries());
         assert!(text.contains("seam domain-entry"), "{text}");
+    }
+
+    /// A multi-dimension constitution to exercise the Markdown projection across every
+    /// dimension at once (mirrors the JSON test's `full`).
+    fn full_constitution() -> Constitution {
+        Constitution::new("full")
+            .boundary(
+                CrateBoundary::crate_("core")
+                    .deny_external_dependencies()
+                    .because("core stays light"),
+            )
+            .signature_boundary(
+                SemanticBoundary::in_crate("app")
+                    .module("crate::domain")
+                    .must_not_expose("crate::infra")
+                    .because("no infra leak"),
+            )
+            .trait_impl_boundary(
+                TraitImplBoundary::in_crate("app")
+                    .trait_("crate::Command")
+                    .only_implemented_in("crate::commands")
+                    .because("impls live with the registry"),
+            )
+            .visibility_boundary(
+                VisibilityBoundary::in_crate("app")
+                    .module("crate::internal")
+                    .must_not_declare_pub()
+                    .because("internal is private"),
+            )
+            .forbidden_marker_boundary(
+                ForbiddenMarkerBoundary::in_crate("app")
+                    .module("crate::domain")
+                    .must_not_acquire("serde::Serialize")
+                    .because("domain is not wire"),
+            )
+            .runtime(
+                RuntimeBoundary::at("domain-entry")
+                    .only_origins(["app::domain"])
+                    .because("only domain crosses"),
+            )
+    }
+
+    #[test]
+    fn list_markdown_covers_every_dimension_with_target_rule_and_reason() {
+        // The Markdown is rendered from `list_document`, so this also proves it carries no less
+        // than the JSON: every dimension's target, rule parameter, and declared reason appear.
+        let md = list_markdown(&list_document(&full_constitution()));
+        assert!(md.contains("# Constitution: full"), "{md}");
+        // A section heading per non-empty dimension.
+        for heading in [
+            "## Static boundaries",
+            "## Semantic boundaries",
+            "## Trait-impl-locality boundaries",
+            "## Visibility boundaries",
+            "## Forbidden-marker boundaries",
+            "## Runtime boundaries",
+        ] {
+            assert!(md.contains(heading), "missing {heading} in:\n{md}");
+        }
+        // Each dimension's target, a rule parameter, and its reason (the agent-actionable triple).
+        for needle in [
+            "core",                // static target
+            "core stays light",    // static reason
+            "crate::domain",       // semantic target
+            "crate::infra",        // semantic forbidden param
+            "no infra leak",       // semantic reason
+            "crate::Command",      // trait-impl target
+            "crate::commands",     // trait-impl allowed_locations param
+            "crate::internal",     // visibility target
+            "serde::Serialize",    // forbidden-marker param
+            "domain-entry",        // runtime seam target
+            "app::domain",         // runtime allowed_origins param
+            "only domain crosses", // runtime reason
+        ] {
+            assert!(md.contains(needle), "missing '{needle}' in:\n{md}");
+        }
+    }
+
+    #[test]
+    fn constitution_markdown_equals_the_cli_projection_byte_for_byte() {
+        // The public helper MUST add nothing of its own — no preamble, no trailing newline — so
+        // it equals what the `list --format markdown` branch prints (`list_markdown(&list_document)`,
+        // via `print!`). This guards Contract A's "same renderer, no parallel projection path":
+        // a stray newline or wrapper here would silently drift the agent artifact from the CLI.
+        let c = full_constitution();
+        assert_eq!(constitution_markdown(&c), list_markdown(&list_document(&c)));
+    }
+
+    #[test]
+    fn markdown_foregrounds_the_reason_before_rule_and_classification() {
+        // Contract B / 潛移: the reason leads the block. This asserts the ORDERING INVARIANT ONLY
+        // (reason before rule before kind/severity). It deliberately does NOT assert the blockquote
+        // rendering — the spec frees "the blockquote choice, wording, spacing" — so the layout stays
+        // free to evolve; never a byte-for-byte snapshot.
+        let c = Constitution::new("t").boundary(
+            CrateBoundary::crate_("core")
+                .deny_external_dependencies()
+                .because("the gravity-bearing principle text"),
+        );
+        let md = constitution_markdown(&c);
+        let r = md
+            .find("the gravity-bearing principle text")
+            .expect("reason");
+        let rule = md.find("**rule**").expect("rule");
+        let kind = md.find("**kind**").expect("kind");
+        assert!(
+            r < rule && rule < kind,
+            "reason must lead, then rule, then classification:\n{md}"
+        );
+    }
+
+    #[test]
+    fn markdown_reasonless_boundary_has_no_blockquote_or_orphan_blank_line() {
+        // No reason → no blockquote, and the heading is immediately followed by the rule bullet
+        // (no orphan blank line where the blockquote would have been).
+        let c = Constitution::new("t").boundary(
+            CrateBoundary::crate_("core")
+                .deny_external_dependencies()
+                .because(""),
+        );
+        let md = constitution_markdown(&c);
+        assert!(!md.contains("\n> "), "no blockquote when no reason:\n{md}");
+        assert!(
+            md.contains("### `core`\n- **rule**"),
+            "heading immediately followed by the rule bullet:\n{md}"
+        );
+    }
+
+    #[test]
+    fn report_text_leads_with_reason_and_shows_the_offending_file() {
+        let report = Report::new(vec![violation(
+            "crate::core",
+            "must not import crate::adapter",
+            "crate::adapter::Db",
+            Some("src/core/mod.rs"),
+        )]);
+        let text = violations_text(&report);
+        let reason = text.find("Reason:").expect("reason");
+        let boundary = text.find("Boundary:").expect("boundary");
+        let rule = text.find("Rule:").expect("rule");
+        let found = text.find("Found:").expect("found");
+        let file = text.find("File:").expect("file");
+        let reaction = text.find("Reaction:").expect("reaction");
+        assert!(
+            reason < boundary && boundary < rule && rule < found && found < file && file < reaction,
+            "order must be reason → boundary → rule → found → file → reaction:\n{text}"
+        );
+        assert!(
+            text.contains("File:\n  src/core/mod.rs"),
+            "the offending file is shown as the repair location:\n{text}"
+        );
+    }
+
+    #[test]
+    fn report_text_omits_the_file_element_when_absent() {
+        let report = Report::new(vec![violation("crate::x", "rule", "finding", None)]);
+        let text = violations_text(&report);
+        assert!(
+            !text.contains("File:"),
+            "no file element when the violation carries none:\n{text}"
+        );
+    }
+
+    #[test]
+    fn report_text_groups_violations_by_boundary() {
+        // Input order is intentionally unsorted; the text groups by (target, rule).
+        let report = Report::new(vec![
+            violation("z-crate", "r1", "f", None),
+            violation("a-crate", "r1", "f", None),
+            violation("a-crate", "r0", "f", None),
+        ]);
+        let text = violations_text(&report);
+        assert!(
+            text.find("Boundary:\n  a-crate").unwrap() < text.find("Boundary:\n  z-crate").unwrap(),
+            "the a-crate group precedes z-crate:\n{text}"
+        );
+        assert!(
+            text.find("\n  r0").unwrap() < text.find("\n  r1").unwrap(),
+            "within a-crate, r0 precedes r1:\n{text}"
+        );
+    }
+
+    #[test]
+    fn json_projection_is_unchanged_by_the_text_grouping() {
+        // The text sort is presentation-only: the JSON keeps the input (detection) order.
+        let outcome = Outcome::Violations(Report::new(vec![
+            violation("z-crate", "r", "f", None),
+            violation("a-crate", "r", "f", None),
+        ]));
+        let json = report_json(&outcome, &[], None);
+        assert!(
+            json.find("z-crate").unwrap() < json.find("a-crate").unwrap(),
+            "JSON keeps input order (z before a), unaffected by the text grouping:\n{json}"
+        );
+    }
+
+    #[test]
+    fn sarif_projects_violations_with_file_level_locations_and_no_region() {
+        let outcome = Outcome::Violations(Report::new(vec![
+            violation(
+                "crate::core",
+                "must not import crate::adapter",
+                "crate::adapter::Db",
+                Some("src/core/mod.rs"),
+            ),
+            violation("dep-crate", "deny external", "serde", None),
+        ]));
+        let doc: serde_json::Value =
+            serde_json::from_str(&report_sarif(&outcome)).expect("valid SARIF JSON");
+        assert_eq!(doc["version"], "2.1.0");
+        assert_eq!(doc["runs"][0]["tool"]["driver"]["name"], "tianheng");
+        let results = doc["runs"][0]["results"].as_array().expect("results array");
+        assert_eq!(results.len(), 2, "one result per non-baselined violation");
+        // With a file: error level, ruleId in place, file-level location with NO region.
+        assert_eq!(results[0]["level"], "error");
+        assert_eq!(results[0]["ruleId"], "must not import crate::adapter");
+        assert!(
+            results[0]["message"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("reason-for-crate::core")
+        );
+        assert_eq!(
+            results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            "src/core/mod.rs"
+        );
+        assert!(
+            results[0]["locations"][0]["physicalLocation"]["region"].is_null(),
+            "no region — the line is not observed, never fabricated"
+        );
+        // File-less violation: no locations at all.
+        assert!(
+            results[1]["locations"].is_null(),
+            "a file-less violation projects no location"
+        );
+    }
+
+    #[test]
+    fn sarif_clean_is_empty_and_constitution_error_marks_execution_unsuccessful() {
+        let clean: serde_json::Value =
+            serde_json::from_str(&report_sarif(&Outcome::Clean)).unwrap();
+        assert!(
+            clean["runs"][0]["results"].as_array().unwrap().is_empty(),
+            "clean → empty results"
+        );
+        let err: serde_json::Value =
+            serde_json::from_str(&report_sarif(&Outcome::ConstitutionError("bad law".into())))
+                .unwrap();
+        assert_eq!(
+            err["runs"][0]["invocations"][0]["executionSuccessful"],
+            serde_json::Value::Bool(false),
+            "a constitution error marks the invocation unsuccessful (required by SARIF)"
+        );
+        assert!(
+            err["runs"][0]["invocations"][0]["toolExecutionNotifications"][0]["message"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("bad law")
+        );
+    }
+
+    #[test]
+    fn sarif_exits_like_json() {
+        // Presentation only: the same outcome exits identically under each machine format.
+        for format in ["json", "sarif"] {
+            assert_eq!(
+                run_args(&[
+                    "tianheng",
+                    "check",
+                    "--manifest-path",
+                    &fixture("violating"),
+                    "--format",
+                    format,
+                ]),
+                1,
+                "violating fixture exits 1 under --format {format}"
+            );
+            assert_eq!(
+                run_args(&[
+                    "tianheng",
+                    "check",
+                    "--manifest-path",
+                    &fixture("clean"),
+                    "--format",
+                    format,
+                ]),
+                0,
+                "clean fixture exits 0 under --format {format}"
+            );
+        }
+    }
+
+    #[test]
+    fn list_rejects_the_check_only_sarif_format() {
+        // SARIF projects the reaction, not the law — check-only, like markdown is list-only.
+        assert_eq!(run_args(&["tianheng", "list", "--format", "sarif"]), 2);
+    }
+
+    #[test]
+    fn list_markdown_empty_constitution_has_a_title_but_no_sections() {
+        // An empty dimension adds no section, mirroring the text and JSON projections.
+        let md = list_markdown(&list_document(&Constitution::new("empty")));
+        assert!(md.contains("# Constitution: empty"), "{md}");
+        assert!(
+            !md.contains("\n## "),
+            "no dimension sections expected:\n{md}"
+        );
+    }
+
+    #[test]
+    fn list_accepts_markdown_format() {
+        // `list --format markdown` is a pure projection: it observes no workspace and exits 0.
+        assert_eq!(run_args(&["tianheng", "list", "--format", "markdown"]), 0);
+        assert_eq!(run_args(&["tianheng", "list", "--format=markdown"]), 0);
+    }
+
+    #[test]
+    fn check_rejects_the_list_only_markdown_format() {
+        // markdown is a list-only projection of the declared law; check's machine output is the
+        // JSON report, so check --format markdown is a usage error (exit 2), not a silent fallback.
+        assert_eq!(
+            run_args(&[
+                "tianheng",
+                "check",
+                "--manifest-path",
+                &fixture("clean"),
+                "--format",
+                "markdown",
+            ]),
+            2
+        );
     }
 
     #[test]

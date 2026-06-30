@@ -572,17 +572,24 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) 
     unauditable_files.sort_unstable();
     unauditable_files.dedup();
     for file in unauditable_files {
-        violations.push(Violation::new(
-            BoundaryKind::Runtime,
-            "<un-auditable probe>".to_string(),
-            "an assert_boundary! seam must be a string literal to be auditable".to_string(),
-            format!(
-                "{file} has an assert_boundary! probe with a non-literal seam (const or \
-                 expression), which the CI face cannot trace to a declared seam"
-            ),
-            "spell the seam as a string literal so probe coverage can be verified".to_string(),
-            Severity::Enforce,
-        ));
+        // The offending source file is in hand here (the probe scan captured it). Project it
+        // into the `file` field as well as the finding text: it is a genuine observation, so
+        // reporting `null` would be a dishonest null. This is the one runtime violation with a
+        // source location — the seam-level ones below/above name a seam, not a file.
+        violations.push(
+            Violation::new(
+                BoundaryKind::Runtime,
+                "<un-auditable probe>".to_string(),
+                "an assert_boundary! seam must be a string literal to be auditable".to_string(),
+                format!(
+                    "{file} has an assert_boundary! probe with a non-literal seam (const or \
+                     expression), which the CI face cannot trace to a declared seam"
+                ),
+                "spell the seam as a string literal so probe coverage can be verified".to_string(),
+                Severity::Enforce,
+            )
+            .with_file(Some(file.to_string())),
+        );
     }
     if violations.is_empty() {
         Outcome::Clean
@@ -967,6 +974,18 @@ mod tests {
             .unwrap();
         assert_eq!(v.kind, BoundaryKind::Runtime);
         assert!(v.finding.contains("app::infra"));
+        // This is the prod default-sink violation (emitted via `to_json`). An origin-assertion
+        // violation names an origin, not a source file, so its `file` is `None` and the
+        // emitted JSON carries `file: null` — the additive, non-breaking effect of the shared
+        // `to_json` gaining a `file` key, asserted here on the default-sink path.
+        assert!(
+            v.file.is_none(),
+            "an origin-assertion violation has no source file"
+        );
+        assert!(
+            v.to_json()["file"].is_null(),
+            "the prod default-sink JSON carries file: null"
+        );
     }
 
     #[test]
@@ -1379,6 +1398,41 @@ mod tests {
             outcome.exit_code(),
             1,
             "an un-auditable probe must react: {outcome:?}"
+        );
+        // The un-auditable violation carries the offending source file (the probe scan
+        // captured it): a genuine observation, not a dishonest null.
+        let violations = match &outcome {
+            Outcome::Violations(report) => &report.violations,
+            other => panic!("expected violations, got {other:?}"),
+        };
+        let file = violations
+            .iter()
+            .find_map(|v| v.file.as_deref())
+            .expect("the un-auditable-probe violation carries its source file");
+        assert!(
+            file.ends_with("a.rs"),
+            "file names the probe's source: {file}"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    #[cfg(feature = "audit")]
+    fn a_seam_level_runtime_violation_has_no_file() {
+        // A declared-but-never-probed seam names a seam, not a source location, so its `file`
+        // is a faithful `None` — distinct from the un-auditable case, which does have a file.
+        let base =
+            std::env::temp_dir().join(format!("louke-audit-seamnull-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let dir = write_dir(&base, "unprobed", "fn f() {}");
+        let outcome = audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[dir]);
+        let violations = match &outcome {
+            Outcome::Violations(report) => &report.violations,
+            other => panic!("expected violations, got {other:?}"),
+        };
+        assert!(
+            violations.iter().all(|v| v.file.is_none()),
+            "a seam-level runtime violation has no source file: {violations:?}"
         );
         let _ = std::fs::remove_dir_all(&base);
     }

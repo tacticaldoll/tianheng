@@ -9,8 +9,8 @@
 
 use std::path::PathBuf;
 
-use tianheng::GnomonConstitution;
 use tianheng::prelude::*;
+use tianheng::{GnomonConstitution, constitution_markdown};
 
 /// The Tianheng workspace manifest. `None` when it is absent — e.g. inside a published
 /// `.crate` tarball, which has no workspace root — so the self-governance gate SKIPS rather
@@ -153,4 +153,77 @@ fn tianheng_governs_itself() {
         "Tianheng's self-constitution drifted: {outcome:?}"
     );
     assert_eq!(outcome.exit_code(), 0);
+}
+
+/// The fixed preamble of the agent-loaded self-law projection (`AGENTS.self-law.md`). It is a
+/// generated constant — never hand-edited prose — so the whole artifact is byte-checked and
+/// cannot drift. It describes only **how to read the projection** and the reaction loop it
+/// serves; it makes **no crate-specific architectural claim** (every such claim comes only from
+/// the generated projection below it, where it traces to a boundary that actually reacts —
+/// otherwise it would be the open-loop prose prescription PROJECT.md's 潛移 section forbids).
+const SELF_LAW_PREAMBLE: &str = "\
+# Tianheng Self-Law Projection
+
+Generated from `tianheng_constitution()` in `crates/tianheng/tests/self_governance.rs`.
+**Do not edit by hand.** If this file is stale, regenerate it:
+`BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`.
+If the law itself is wrong, amend `self_governance.rs` through review — never edit this projection.
+
+Read the projection below as the imitable shape of Tianheng itself, and work *with* the reaction:
+
+- Declare intent in Rust; the source is the single source of truth.
+- Observe only what has a real observation source; name nothing that does not react.
+- React with the outcomes: `0` clean, `1` violation, `2` constitution/usage error.
+- On a violation, repair toward the boundary's declared reason — never weaken the law to pass.
+- 三儀 (圭表 static · 渾儀 semantic · 漏刻 runtime) measure; 三司 (垂象 · 實錄 · 校讎) administer.
+";
+
+/// The repository root — the parent of the workspace manifest. Reuses [`workspace_manifest`]'s
+/// repo-only discipline verbatim: `None` (skip) outside a checkout, fail-loud under
+/// `TIANHENG_WORKSPACE_TESTS`.
+fn workspace_root() -> Option<PathBuf> {
+    workspace_manifest().map(|m| {
+        m.parent()
+            .expect("the workspace manifest has a parent directory")
+            .to_path_buf()
+    })
+}
+
+/// The whole self-law artifact: the fixed preamble, then the live projection of the *same*
+/// self-constitution the dogfood gate reacts against, rendered by the *same* renderer as
+/// `list --format markdown`. The seam newline between the two is owned here (the doc-builder),
+/// never smuggled into [`constitution_markdown`], which adds nothing of its own; the trailing
+/// newline makes the file end conventionally.
+fn render_self_law_doc() -> String {
+    let projection = constitution_markdown(&Constitution::from(tianheng_constitution()));
+    format!("{SELF_LAW_PREAMBLE}\n{projection}\n")
+}
+
+/// Contract A — the agent-loaded `AGENTS.self-law.md` must byte-match the live projection of
+/// `tianheng_constitution()`. Stale → fail (with the regenerate command); `BLESS=1` → rewrite
+/// the file instead of asserting (so the artifact changes by regeneration, never by hand).
+#[test]
+fn self_law_projection_is_fresh() {
+    let Some(root) = workspace_root() else {
+        return; // outside a checkout — same repo-only discipline as the governance gate
+    };
+    let path = root.join("AGENTS.self-law.md");
+    let live = render_self_law_doc();
+
+    if std::env::var_os("BLESS").is_some() {
+        std::fs::write(&path, &live).expect("write AGENTS.self-law.md");
+        return;
+    }
+
+    let checked_in = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "read {}: {e} — generate it with `BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`",
+            path.display()
+        )
+    });
+    assert_eq!(
+        checked_in, live,
+        "AGENTS.self-law.md is stale; regenerate it with \
+         `BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`"
+    );
 }

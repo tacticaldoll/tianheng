@@ -110,6 +110,13 @@ pub struct Violation {
     pub severity: Severity,
     /// Whether this violation is recorded in the active baseline (so it does not fail).
     pub baselined: bool,
+    /// The offending source file, when the producing dimension genuinely observes one — a
+    /// faithful byproduct of the scan (e.g. the file a forbidden import sits in). `None` when
+    /// the violation has no single source file (a dependency edge, a seam name) or the
+    /// dimension does not yet observe a per-element file. Set via [`Violation::with_file`], not
+    /// the constructor, so adding it leaves [`Violation::new`] non-breaking; it is **not** part
+    /// of the baseline identity ([`Violation::id`]), so it never affects baseline matching.
+    pub file: Option<String>,
 }
 
 impl Violation {
@@ -133,7 +140,18 @@ impl Violation {
             reason,
             severity,
             baselined: false,
+            file: None,
         }
+    }
+
+    /// Attach the offending source file, consuming and returning `self` so a dimension can
+    /// fold it into construction: `Violation::new(…).with_file(Some(path))`. Kept off
+    /// [`Violation::new`] on purpose — the constructor's signature stays stable (non-breaking)
+    /// and dimensions that observe no file simply never call this. The file is metadata, never
+    /// part of the baseline identity ([`Violation::id`]).
+    pub fn with_file(mut self, file: Option<String>) -> Self {
+        self.file = file;
+        self
     }
 
     /// The `(target, rule, finding)` identity used to match against a baseline.
@@ -157,6 +175,7 @@ impl Violation {
             "reason": self.reason,
             "severity": self.severity.as_str(),
             "baselined": self.baselined,
+            "file": self.file,
         })
     }
 }
@@ -333,5 +352,38 @@ mod tests {
         assert_eq!(BoundaryKind::Module.as_str(), "module");
         assert_eq!(BoundaryKind::Semantic.as_str(), "semantic");
         assert_eq!(BoundaryKind::Runtime.as_str(), "runtime");
+    }
+
+    fn sample_violation() -> Violation {
+        Violation::new(
+            BoundaryKind::Module,
+            "crate::kernel".to_string(),
+            "must not import".to_string(),
+            "crate::projection".to_string(),
+            "the kernel must not depend on a projection".to_string(),
+            Severity::Enforce,
+        )
+    }
+
+    #[test]
+    fn to_json_emits_the_file_key_in_both_states() {
+        // Absent → explicit null (a faithful absence, distinguishable from an unknown schema).
+        let without = sample_violation();
+        assert_eq!(without.to_json()["file"], Value::Null);
+        // Present → the string.
+        let with = sample_violation().with_file(Some("src/kernel.rs".to_string()));
+        assert_eq!(
+            with.to_json()["file"],
+            Value::String("src/kernel.rs".to_string())
+        );
+    }
+
+    #[test]
+    fn file_is_not_part_of_the_baseline_identity() {
+        // Attaching a file must not change the (target, rule, finding) identity, so a
+        // file-bearing violation still matches a baseline entry recorded without one.
+        let without = sample_violation();
+        let with = sample_violation().with_file(Some("src/kernel.rs".to_string()));
+        assert_eq!(without.id(), with.id());
     }
 }
