@@ -68,7 +68,10 @@ violation pass green, the one forbidden false negative). Capture, annotate, then
 Tianheng's own code:
 
 ```sh
-report=$(your-binary check --manifest-path Cargo.toml --format json); status=$?
+# `|| status=$?` keeps the capture from aborting under GitHub Actions' default
+# `bash -eo pipefail`: a violation (check exit 1) must still print annotations, then fail the step.
+status=0
+report=$(your-binary check --manifest-path Cargo.toml --format json) || status=$?
 printf '%s\n' "$report" \
   | jq -r '.violations[] | "::error::\(.reason) (rule: \(.rule), found: \(.finding))"'
 exit "$status"   # 0 clean · 1 enforced violation · 2 constitution/scan error

@@ -24,8 +24,10 @@ generated projection, and requirement detail in the specs — read those, do not
    constitution against the workspace. Exit `0` is clean (or warn-only / fully baselined),
    `1` is an enforced violation, `2` is a constitution/scan/usage error.
 3. **On a violation — repair toward the declared reason.** Each violation carries its
-   `reason` — the intent the boundary protects. Repair the code so the reason holds again;
-   do not weaken the boundary to make the reaction pass.
+   `reason` — the intent the boundary protects. In any projection (text report, `--format
+   json`, `--format sarif`), **read the `reason` first** — it is the repair direction — then
+   `file` (where), then `finding` / `rule` (what tripped). Repair the code so the reason holds
+   again; do not weaken the boundary to make the reaction pass.
 4. **To change the law itself — amend it deliberately.** A boundary is wrong only by a
    human-reviewed amendment (an OpenSpec change / steward review), never by quietly editing
    the constitution so CI turns green. Before proposing an OpenSpec change, read the law
