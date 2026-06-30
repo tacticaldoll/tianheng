@@ -59,11 +59,16 @@ exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`
 emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
 onto a PR. There is deliberately no GitHub-specific `--format`: turning the reaction into one CI
 vendor's annotations is a harness step, not a tool format. For GitHub `::error::` inline
-annotations without SARIF upload, convert the JSON report in a CI step, e.g.:
+annotations without SARIF upload, convert the JSON report in a CI step — but **preserve the
+reaction's exit code** (a naïve `check | jq` pipeline would exit with `jq`'s status and let a
+violation pass green, the one forbidden false negative). Capture, annotate, then re-exit with
+Tianheng's own code:
 
 ```sh
-your-binary check --manifest-path Cargo.toml --format json \
+report=$(your-binary check --manifest-path Cargo.toml --format json); status=$?
+printf '%s\n' "$report" \
   | jq -r '.violations[] | "::error::\(.reason) (rule: \(.rule), found: \(.finding))"'
+exit "$status"   # 0 clean · 1 enforced violation · 2 constitution/scan error
 ```
 
 > The published `tianheng` binary is a *demo* bound to a sample constitution (it governs a
