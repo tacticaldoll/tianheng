@@ -99,10 +99,11 @@ its own dog food, now across crate boundaries.
 selects governance by depending on the dimensions they want:
 - **`hunyi` (渾儀)** — AST/semantic observation (`syn`). **Built (v0.1.0):**
   signature-coupling (a module's public API must not *expose* a forbidden type), plus
-  trait-impl locality, visibility, and forbidden-marker boundaries; **(v0.1.2):**
-  dyn-trait-boundary (the public API must not expose `dyn` trait-object *syntax* — the
-  type-shape complement of signature-coupling). The heavy `syn` dependency is quarantined
-  here, never in the core.
+  trait-impl locality, visibility, and forbidden-marker boundaries; **(v0.1.2):** a
+  type-shape/existential **depth stair** on the same `syn` source — dyn-trait and impl-trait
+  exposure (each shape-only *and* named-operand-scoped) and async-fn exposure — the type-shape
+  and existential complements of signature-coupling (detailed in the Decisions section). The
+  heavy `syn` dependency is quarantined here, never in the core.
 - **`louke` (漏刻)** — runtime observation. **Built (v0.1.0):** origin-assertion (a
   declared seam's `only_origins` allowlist), in two faces — the prod probe
   (`assert_boundary!`, fail-closed, a structured event by default, panic opt-in) and the
@@ -282,9 +283,16 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   layering), by anchor scoping, not a blanket "no async" lint; observability (a local AST flag) and
   anchoring are strong. Its finding is an **owner-qualified item identity**
   (`async fn <SelfTy>::name(…)`, `async fn trait <Trait>::name(…)`), NOT a bare name or a
-  future-shape — a deliberate departure from the sibling *shape* findings, because same-named
+  future-shape, because same-named
   public async fns across impls/traits in one module would otherwise collide under the
-  `(target, rule, finding)` baseline and let a new leak be masked (the one forbidden bug). A future
+  `(target, rule, finding)` baseline and let a new leak be masked (the one forbidden bug).
+  **(v0.1.2 hardening)** the sibling exposure findings now carry the same guarantee:
+  signature-coupling, dyn-trait, and impl-trait findings are **seam-qualified**
+  (`{type|shape} exposed by {seam}`, the seam being the owning item / sub-element — free fn,
+  owner-qualified inherent method, trait method, field, variant, alias, const/static, or
+  supertrait/associated position), so two distinct seams exposing the same type or shape no longer
+  collapse to one finding — closing the same masking bug across every exposure rule, not only async.
+  A future
   `must_not_expose_existential` could unify written + implicit, deferred until it earns admission
   without blurring those identities. **Rejected**, as explicit non-goals with their reason:
   `Send`/`Sync` constraints (auto-traits are inferred, never written), external trait

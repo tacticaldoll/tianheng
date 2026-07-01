@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/hunyi"
 readme = "README.md"
 # 渾儀 (Húnyí) — the semantic dimension. A coined / narrative name (like 圭表, 璇璣,
 # 漏刻), no role-prefix: meaning lives here in the SSOT. It observes *meaning* via the AST
@@ -18,6 +19,3 @@ categories = ["development-tools"]
 xuanji = { workspace = true }
 serde_json = { workspace = true }
 syn = { workspace = true }
-
-[dev-dependencies]
-serde_json = { workspace = true }

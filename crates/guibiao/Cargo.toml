@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/guibiao"
 readme = "README.md"
 # 圭表 (Guībiǎo) — the gnomon, reading the cast shadow (imports & deps). Meaning lives here in the SSOT, not in a
 # self-describing name (a name that pretends to describe itself can drift; this one
@@ -15,7 +16,4 @@ categories = ["development-tools"]
 
 [dependencies]
 xuanji = { workspace = true }
-serde_json = { workspace = true }
-
-[dev-dependencies]
 serde_json = { workspace = true }
