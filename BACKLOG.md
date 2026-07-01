@@ -30,15 +30,19 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   is not seen), and it is source-kind hygiene, not a `cargo publish` oracle (a `{ git, version }`
   dep is flagged though it would publish).
 
-Forward depths (born when built, same `cargo metadata` source):
-- **Resolved dependency-source / build-provenance (capability B)** — *named, deferred.* "What my
+**Declined — externally covered (not a forward depth):**
+- **Resolved dependency-source / build-provenance (would-be capability B)** — *declined.* "What my
   build **actually** pulls from, after `[patch]`/`[source] replace-with`", read from the
-  **resolved** graph (`cargo metadata` **with** deps, the lockfile + patch applied). It catches a
-  `[patch]`/`replace-with` redirect to a git source that the declared-layer crate-source-boundary
-  is deliberately blind to, and in turn misses an *optional-off* git dep (not in the build) —
-  the mirror blind spot. A genuinely distinct capability, not a completion of the declared one
-  (see `PROJECT.md`); born when built, adding a resolved-layer read (heavier, lockfile-dependent),
-  never retrofitted onto the hermetic declared rule.
+  **resolved** graph (`cargo metadata` **with** deps, the lockfile + patch applied). It would catch
+  a `[patch]`/`replace-with` redirect to a git source that the declared-layer crate-source-boundary
+  is deliberately blind to (and in turn miss an *optional-off* git dep — the mirror blind spot). But
+  that resolved, **whole-graph** source-provenance concern is **cargo-deny's lane**, not Tianheng's:
+  `deny.toml [sources]` (run in the `supply-chain` CI job) already denies unknown git/registry
+  sources on the resolved graph — so a `[patch]`→git redirect surfaces there — and a whole-graph
+  view fits build-provenance better than Tianheng's per-target model. So B is **declined, not
+  deferred**: Tianheng keeps only the *declared*, per-target crate-source-boundary (A), the
+  hermetic manifest-hygiene reaction cargo-deny does not provide. See the declared-vs-resolved
+  division of labor in `PROJECT.md`.
 
 ### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn/impl-trait stair + async-exposure)**
 Observation source: the **AST** (`syn`). Sees what the `圭表` `use`-scan cannot — semantics
@@ -183,5 +187,9 @@ unobservable wish becomes law (prose prescription is the rejected open loop).
 
 Active code-shaping / generation; a prescriptive framework you build inside; a **lint**
 (built-in opinion rather than declared intent); a **universal graph API** (whole-graph
-analysis rather than declared per-target boundaries); a **runtime policy engine**. Each
-dimension keeps its own observation source; nothing is named before its reaction exists.
+analysis rather than declared per-target boundaries); a **runtime policy engine**; a
+**supply-chain policy engine** (resolved / whole-graph advisories, dependency licenses,
+bans / duplicates, resolved source allowlists — cargo-deny's lane, run in this repo's
+`supply-chain` CI job; Tianheng governs the *declared, per-target* layer instead — this is
+why would-be capability B is declined above, not deferred). Each dimension keeps its own
+observation source; nothing is named before its reaction exists.

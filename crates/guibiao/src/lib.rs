@@ -1990,7 +1990,7 @@ mod tests {
         // The declared-vs-resolved bound: a registry dep that `[patch]` would redirect to
         // git still declares `source = registry+…` in `--no-deps` metadata, so it
         // classifies Registry and does NOT violate a [Registry] allowlist. Observing the
-        // resolved git source is the separate future build-provenance capability.
+        // resolved git source is cargo-deny's `[sources]` lane, not a Tianheng capability.
         let package = serde_json::json!({
             "dependencies": [
                 { "name": "patched", "source": "registry+https://x", "kind": null },

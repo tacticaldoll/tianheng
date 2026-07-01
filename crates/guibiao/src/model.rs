@@ -206,7 +206,8 @@ pub enum Rule {
     /// counterpart of [`RestrictDependenciesTo`](Rule::RestrictDependenciesTo) (which
     /// governs dependency *names*). An empty allowlist forbids every dependency by
     /// source. Governs the *declared* source, not the resolved one — a `[patch]`/
-    /// `replace-with` redirect is not observed (a future resolved capability).
+    /// `replace-with` redirect is not observed (the resolved layer is cargo-deny's
+    /// `[sources]` lane, not a Tianheng capability).
     RestrictDependencySourcesTo {
         /// The closed allowlist of permitted declared source kinds.
         allowed: Vec<SourceKind>,
@@ -436,8 +437,8 @@ impl CrateBoundaryBuilder {
     /// - It governs the **declared** source, not the *resolved* one. A registry
     ///   dependency redirected to git/path by `[patch]` or `[source] replace-with`
     ///   reads as `Registry` (no violation) — correct for manifest hygiene, since
-    ///   `[patch]` is workspace-local and never blocks `cargo publish`. Resolved build
-    ///   provenance is a separate future capability.
+    ///   `[patch]` is workspace-local and never blocks `cargo publish`. Observing the
+    ///   resolved source is cargo-deny's `[sources]` lane, not a Tianheng capability.
     /// - It is source-kind **hygiene**, not a `cargo publish` oracle. A
     ///   `{ git = "…", version = "…" }` (or `{ path = "…", version = "…" }`) dependency
     ///   declares a non-registry source and is flagged even though it would publish

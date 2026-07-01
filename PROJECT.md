@@ -25,6 +25,13 @@ observation dimensions — without becoming a god crate.
   a CLI + library.
 - It is **not a lint**: every dimension must be real drift — declared intent vs. observed
   reality — never an opinionated style check.
+- It is **not a supply-chain policy engine**: resolved, whole-graph dependency policy —
+  advisories, dependency licenses, bans / duplicates, resolved source allowlists — is
+  cargo-deny's lane (run in this repo's `supply-chain` CI job). Tianheng governs the
+  *declared, per-target, architectural* layer instead (deps / imports by name, declared
+  dependency-source kind for manifest hygiene, type exposure, impl locality, visibility,
+  runtime seams). The two are complementary, not overlapping — the reason resolved
+  build-provenance is cargo-deny's, not a Tianheng capability (see the 圭表 depth decision).
 
 ## Core Contract
 
@@ -181,7 +188,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
   from an unknown-module typo, never a silent pass. Governing inline modules as targets is
   a deliberate non-goal here; if ever wanted it is a separate amendment.
-- **圭表 grows by depth: declared vs. resolved dependency-source are two layers, not one.**
+- **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
   (dependency governance) on the *same* observation source (`cargo metadata --no-deps`, the
@@ -191,12 +198,17 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   naming a git source (an *optional* git dep included), while `[patch]`/`[source] replace-with`
   is workspace-local, never part of the published manifest, and never blocks `cargo publish`, so
   a patch-redirected registry dep correctly reads `Registry` and does not violate. The mirror
-  capability — **resolved build-provenance (B, deferred, in BACKLOG)** — reads the *resolved*
-  graph (lockfile + patch applied) to answer "what my build actually pulls from"; it catches the
-  patch-redirect the declared layer is blind to, and in turn misses an optional-off git dep.
-  Neither dominates: A governs optional-git and is patch-blind (both publish-correct), B is the
-  inverse (both build-correct). So A is not an incomplete B — they are distinct capabilities,
-  each born when built, and A stays hermetic (no lockfile, no network) by design. A stated
+  concern — **resolved build-provenance** ("what my build *actually* pulls from", the *resolved*
+  graph after lockfile + `[patch]` applied) — catches the patch-redirect the declared layer is
+  blind to, and in turn misses an optional-off git dep; neither layer dominates (A governs
+  optional-git and is patch-blind; the resolved layer is the inverse). But that resolved,
+  **whole-graph** concern is **cargo-deny's lane**, not Tianheng's: `deny.toml [sources]` (run in
+  the `supply-chain` CI job) already denies unknown git/registry sources on the resolved graph — so
+  a `[patch]`→git redirect surfaces there — and a whole-graph view fits build-provenance better than
+  Tianheng's per-target model. So Tianheng **declines** resolved build-provenance (a would-be
+  *capability B*) rather than deferring it: A is not an incomplete B, it is the whole of Tianheng's
+  source concern — the hermetic, declared, per-target layer (no lockfile, no network), the
+  complement cargo-deny does not cover. A stated
   second bound: A is source-kind *hygiene*, not a `cargo publish` oracle — a `{ git, version }`
   dep declares a git source and is flagged though it would publish (the rule does not parse
   `version`), deliberately conservative.

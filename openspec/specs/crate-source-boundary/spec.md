@@ -104,7 +104,9 @@ silently overreach. (1) It does not observe the **resolved** source: a registry 
 redirected to git/path by `[patch]` or `[source] replace-with` declares a `registry+` source and
 SHALL classify as `Registry` (no violation) — correct for the manifest-hygiene intent, since
 `[patch]` is workspace-local, is not part of a published manifest, and does not block
-`cargo publish`. Resolved build provenance is a separate future capability. (2) It is not a
+`cargo publish`. Observing the **resolved** source is out of scope for Tianheng — that
+whole-graph build-provenance concern is supply-chain tooling's lane (cargo-deny's `[sources]`,
+which reads the resolved graph), not a future Tianheng capability. (2) It is not a
 `cargo publish` oracle: a `{ git/path = "…", version = "…" }` dependency declares a non-registry
 source yet publishes successfully; the system SHALL classify it by its declared source (`Git`/
 `Path`) and flag it, NOT parse the `version` key — a deliberately conservative hygiene guard.
@@ -112,7 +114,7 @@ source yet publishes successfully; the system SHALL classify it by its declared 
 #### Scenario: A patch-redirected dependency is governed by its declared registry source
 
 - **WHEN** the target declares a registry dependency that `[patch]` redirects to a `git` source, and the boundary permits only `[Registry]`
-- **THEN** the system classifies it as `Registry` (its declared source is `registry+…`) and reports no violation — the declared layer does not observe the patch, which is correct here because `[patch]` does not block publishing; observing the resolved git source is the separate future build-provenance capability
+- **THEN** the system classifies it as `Registry` (its declared source is `registry+…`) and reports no violation — the declared layer does not observe the patch, which is correct here because `[patch]` does not block publishing; observing the resolved git source is supply-chain tooling's lane (cargo-deny's `[sources]`), outside Tianheng's declared per-target layer
 
 #### Scenario: A git-plus-version dependency is flagged though it would publish
 
