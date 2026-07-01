@@ -1633,6 +1633,26 @@ mod tests {
     }
 
     #[test]
+    fn markdown_projects_a_dependency_source_boundary_with_its_allowed_sources() {
+        // The source rule projects through the generic static-boundary path (no per-rule
+        // markdown code): its label and the `allowed_sources` param surface as params.
+        let c = Constitution::new("t").boundary(
+            CrateBoundary::crate_("infra")
+                .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+                .because("infra must publish to crates.io"),
+        );
+        let md = constitution_markdown(&c);
+        assert!(
+            md.contains("restrict dependency sources to"),
+            "the source rule label surfaces:\n{md}"
+        );
+        assert!(
+            md.contains("allowed_sources: registry, path"),
+            "the allowed source kinds surface as a generic param:\n{md}"
+        );
+    }
+
+    #[test]
     fn markdown_reasonless_boundary_has_no_blockquote_or_orphan_blank_line() {
         // No reason → no blockquote, and the heading is immediately followed by the rule bullet
         // (no orphan blank line where the blockquote would have been).

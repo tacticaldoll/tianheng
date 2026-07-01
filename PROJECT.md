@@ -180,6 +180,25 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
   from an unknown-module typo, never a silent pass. Governing inline modules as targets is
   a deliberate non-goal here; if ever wanted it is a separate amendment.
+- **圭表 grows by depth: declared vs. resolved dependency-source are two layers, not one.**
+  **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
+  dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
+  (dependency governance) on the *same* observation source (`cargo metadata --no-deps`, the
+  declared manifests), reading the `source` field one notch finer (git vs. registry vs. path)
+  rather than widening to a new source. It reads the **declared** layer, and that is the right
+  SSOT for its intent — manifest hygiene / publishability: a published manifest is rejected for
+  naming a git source (an *optional* git dep included), while `[patch]`/`[source] replace-with`
+  is workspace-local, never part of the published manifest, and never blocks `cargo publish`, so
+  a patch-redirected registry dep correctly reads `Registry` and does not violate. The mirror
+  capability — **resolved build-provenance (B, deferred, in BACKLOG)** — reads the *resolved*
+  graph (lockfile + patch applied) to answer "what my build actually pulls from"; it catches the
+  patch-redirect the declared layer is blind to, and in turn misses an optional-off git dep.
+  Neither dominates: A governs optional-git and is patch-blind (both publish-correct), B is the
+  inverse (both build-correct). So A is not an incomplete B — they are distinct capabilities,
+  each born when built, and A stays hermetic (no lockfile, no network) by design. A stated
+  second bound: A is source-kind *hygiene*, not a `cargo publish` oracle — a `{ git, version }`
+  dep declares a git source and is flagged though it would publish (the rule does not parse
+  `version`), deliberately conservative.
 - **`xuanji` is an internal refactor, not a spec'd capability.** When the second
   dimension (渾儀) is built it needs the shared reaction DSL — `Severity`, `Baseline`,
   `Violation`, `Report`, `Outcome` — without `guibiao`'s static engine, so those leaf

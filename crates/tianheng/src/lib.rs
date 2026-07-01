@@ -25,8 +25,8 @@ mod runner;
 pub use guibiao::{
     Boundary, BoundaryKind, CrateBoundary, CrateBoundaryBuilder, CrateBoundaryDraft, CrateTarget,
     DenyExternalDraft, DependencyKind, ModuleBoundary, ModuleBoundaryBuilder, ModuleBoundaryDraft,
-    ModuleRule, ModuleTargetDraft, Outcome, Report, Rule, Severity, Violation, ViolationId, check,
-    workspace_member_src_dirs,
+    ModuleRule, ModuleTargetDraft, Outcome, Report, Rule, Severity, SourceKind, Violation,
+    ViolationId, check, workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
@@ -163,7 +163,7 @@ pub mod prelude {
     pub use super::{
         Boundary, BoundaryKind, Constitution, CrateBoundary, DependencyKind, DynTraitBoundary,
         ForbiddenMarkerBoundary, ModuleBoundary, Outcome, Report, Rule, RuntimeBoundary,
-        SemanticBoundary, Severity, TraitImplBoundary, Violation, ViolationId, VisibilityBoundary,
-        check, run,
+        SemanticBoundary, Severity, SourceKind, TraitImplBoundary, Violation, ViolationId,
+        VisibilityBoundary, check, run,
     };
 }

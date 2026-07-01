@@ -1856,6 +1856,271 @@ mod tests {
         assert_eq!(doc["boundaries"][1]["only"].as_array().unwrap().len(), 0);
     }
 
+    // A synthesized `cargo metadata --no-deps` package mirroring the source-kind probe:
+    // a registry dep, a path dep, a plain git dep, an optional git dep, a renamed git dep
+    // (real name `serde`, local alias `mydep`), a `{ git, version }` dep, an inherited
+    // workspace git dep (cargo flattens the source into the member as `git+…`), and a git
+    // dev-dependency. Every `source` string is exactly what cargo emits (verified).
+    fn source_package() -> Value {
+        serde_json::json!({
+            "dependencies": [
+                {
+                    "name": "crates_io",
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    "kind": null
+                },
+                { "name": "localdep", "source": null, "kind": null },
+                { "name": "gitdep", "source": "git+https://example.invalid/a.git", "kind": null },
+                {
+                    "name": "optgit",
+                    "source": "git+https://example.invalid/b.git",
+                    "kind": null,
+                    "optional": true
+                },
+                {
+                    "name": "serde",
+                    "rename": "mydep",
+                    "source": "git+https://example.invalid/c.git",
+                    "kind": null
+                },
+                { "name": "gitver", "source": "git+https://example.invalid/d.git", "kind": null },
+                {
+                    "name": "inherited",
+                    "source": "git+https://example.invalid/e.git",
+                    "kind": null
+                },
+                { "name": "devgit", "source": "git+https://example.invalid/f.git", "kind": "dev" },
+            ]
+        })
+    }
+
+    #[test]
+    fn source_rule_flags_every_git_source_outside_a_registry_or_path_allowlist() {
+        let package = source_package();
+        // Permit [Registry, Path]: every git-sourced normal dep is flagged — the plain
+        // git dep, the OPTIONAL git dep (declared regardless of feature state), the
+        // `{ git, version }` dep (a stated hygiene bound — it would publish, yet its
+        // declared source is git), and the INHERITED workspace git dep (cargo flattens
+        // the git source into the member). A RENAMED git dep is reported by its REAL
+        // package name `serde`, not its alias `mydep`. The registry and path deps pass;
+        // the git DEV-dep is not in the Normal-scoped surface.
+        let rule = Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry, SourceKind::Path],
+        };
+        assert_eq!(
+            rule.findings(&package, &[], DependencyKind::Normal),
+            vec![
+                "gitdep".to_string(),
+                "gitver".to_string(),
+                "inherited".to_string(),
+                "optgit".to_string(),
+                "serde".to_string(),
+            ],
+            "every declared git source is flagged (optional/version/inherited included), \
+             by real package name, while registry+path pass and the dev git dep is unscoped",
+        );
+    }
+
+    #[test]
+    fn source_rule_registry_only_flags_a_path_dependency() {
+        // Permit only [Registry]: the path dep is now flagged too (alongside every git
+        // dep), documenting that Path is a governed source, not a silent exemption.
+        let package = source_package();
+        let rule = Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry],
+        };
+        let findings = rule.findings(&package, &[], DependencyKind::Normal);
+        assert!(findings.contains(&"localdep".to_string()), "{findings:?}");
+        assert!(!findings.contains(&"crates_io".to_string()), "{findings:?}");
+    }
+
+    #[test]
+    fn source_rule_is_clean_when_every_governed_source_is_allowed() {
+        // A package whose only normal deps are registry + path, under [Registry, Path].
+        let package = serde_json::json!({
+            "dependencies": [
+                { "name": "crates_io", "source": "registry+https://x", "kind": null },
+                { "name": "localdep", "source": null, "kind": null },
+            ]
+        });
+        let rule = Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry, SourceKind::Path],
+        };
+        assert!(
+            rule.findings(&package, &[], DependencyKind::Normal)
+                .is_empty(),
+            "all-registry-or-path is clean under a [Registry, Path] allowlist",
+        );
+    }
+
+    #[test]
+    fn source_rule_does_not_observe_a_patch_redirect_declared_as_registry() {
+        // The declared-vs-resolved bound: a registry dep that `[patch]` would redirect to
+        // git still declares `source = registry+…` in `--no-deps` metadata, so it
+        // classifies Registry and does NOT violate a [Registry] allowlist. Observing the
+        // resolved git source is the separate future build-provenance capability.
+        let package = serde_json::json!({
+            "dependencies": [
+                { "name": "patched", "source": "registry+https://x", "kind": null },
+            ]
+        });
+        let rule = Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry],
+        };
+        assert!(
+            rule.findings(&package, &[], DependencyKind::Normal)
+                .is_empty(),
+            "the declared layer does not observe [patch]; correct — [patch] never blocks publish",
+        );
+    }
+
+    #[test]
+    fn source_rule_scopes_to_the_dependency_kind() {
+        // Only the git dev-dep exists; a Normal-scoped boundary does not observe it, a
+        // Dev-scoped one does.
+        let package = serde_json::json!({
+            "dependencies": [
+                { "name": "devgit", "source": "git+https://x", "kind": "dev" },
+            ]
+        });
+        let rule = Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry],
+        };
+        assert!(
+            rule.findings(&package, &[], DependencyKind::Normal)
+                .is_empty(),
+            "a dev git dep is outside a Normal-scoped surface",
+        );
+        assert_eq!(
+            rule.findings(&package, &[], DependencyKind::Dev),
+            vec!["devgit".to_string()],
+            "a Dev-scoped boundary governs the dev table",
+        );
+    }
+
+    #[test]
+    fn source_rule_empty_allowlist_forbids_every_dependency_by_source() {
+        let package = serde_json::json!({
+            "dependencies": [
+                { "name": "crates_io", "source": "registry+https://x", "kind": null },
+                { "name": "localdep", "source": null, "kind": null },
+                { "name": "gitdep", "source": "git+https://x", "kind": null },
+            ]
+        });
+        let rule = Rule::RestrictDependencySourcesTo { allowed: vec![] };
+        assert_eq!(
+            rule.findings(&package, &[], DependencyKind::Normal),
+            vec![
+                "crates_io".to_string(),
+                "gitdep".to_string(),
+                "localdep".to_string(),
+            ],
+            "an empty source allowlist forbids every dependency regardless of source",
+        );
+    }
+
+    #[test]
+    fn source_boundary_absent_target_is_a_constitution_error() {
+        // Parity with the other crate rules: a boundary on a crate not in the workspace is
+        // a constitution error (→ exit 2), never a silent pass.
+        let metadata = serde_json::json!({ "packages": [{ "name": "present" }] });
+        let boundary = CrateBoundary::crate_("absent")
+            .restrict_dependency_sources_to([SourceKind::Registry])
+            .because("absent must publish to crates.io");
+        let mut violations = Vec::new();
+        let result = check_crate_boundary(&metadata, &[], &boundary, &mut violations);
+        assert!(
+            result.is_err(),
+            "an absent target crate must be a constitution error, not exit 0/1",
+        );
+    }
+
+    #[test]
+    fn source_boundary_carries_its_severity_and_gates_against_the_baseline() {
+        // A source violation folds into the shared report identity (target, rule,
+        // finding) and honors severity + baseline exactly as the sibling rules do.
+        let metadata = serde_json::json!({
+            "packages": [{
+                "name": "infra",
+                "dependencies": [
+                    { "name": "gitdep", "source": "git+https://x", "kind": null },
+                ],
+            }]
+        });
+        // Warn severity: the violation is recorded but must not fail the reaction.
+        let warn = CrateBoundary::crate_("infra")
+            .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+            .warn()
+            .because("infra should publish; a git source is advisory here");
+        let mut violations = Vec::new();
+        check_crate_boundary(&metadata, &[], &warn, &mut violations).unwrap();
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].severity, Severity::Warn);
+        assert_eq!(violations[0].rule, "restrict dependency sources to");
+        assert_eq!(violations[0].finding, "gitdep");
+        assert!(
+            violations[0].file.is_none(),
+            "a source violation is a manifest relation, not a source line",
+        );
+
+        // Enforce + baseline parity: the same violation, once baselined, does not fail.
+        let enforce = CrateBoundary::crate_("infra")
+            .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+            .because("infra must publish to crates.io, so no git source");
+        let mut v = Vec::new();
+        check_crate_boundary(&metadata, &[], &enforce, &mut v).unwrap();
+        let mut report = Report::new(v);
+        let baseline = Baseline::of(&report);
+        apply_baseline(&mut report, &baseline);
+        assert_eq!(
+            Outcome::Violations(report).exit_code(),
+            0,
+            "a fully baselined source violation does not fail the reaction",
+        );
+    }
+
+    #[test]
+    fn source_boundary_projects_its_allowed_sources() {
+        let constitution = Constitution::new("p")
+            .boundary(
+                CrateBoundary::crate_("infra")
+                    .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+                    .because("infra must publish to crates.io, so its manifest declares no git"),
+            )
+            .boundary(
+                CrateBoundary::crate_("locked")
+                    .restrict_dependency_sources_to([])
+                    .because("locked must declare no dependencies at all"),
+            );
+
+        let text = constitution_text(&constitution);
+        assert!(
+            text.contains("restrict dependency sources to: registry, path"),
+            "{text}"
+        );
+        assert!(
+            text.contains("forbid all dependencies (by source)"),
+            "{text}"
+        );
+
+        let doc: serde_json::Value =
+            serde_json::from_str(&constitution_json(&constitution)).unwrap();
+        assert_eq!(
+            doc["boundaries"][0]["rule"],
+            "restrict dependency sources to"
+        );
+        assert_eq!(doc["boundaries"][0]["allowed_sources"][0], "registry");
+        assert_eq!(doc["boundaries"][0]["allowed_sources"][1], "path");
+        // The empty allowlist is still emitted, as `[]`.
+        assert_eq!(
+            doc["boundaries"][1]["allowed_sources"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+    }
+
     #[test]
     fn module_restrict_imports_to_projects_its_allowlist() {
         let constitution = Constitution::new("p")

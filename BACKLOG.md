@@ -17,6 +17,29 @@ Ordered by readiness. All three instruments ship in v0.1.0 (圭表 static, 渾�
 runtime); the entire admitted 三儀 layer is now built. What remains below is the rejected set
 per dimension and the 三司 governance/observability layer.
 
+### 圭表 (Guībiǎo) — the static dimension  · crate `guibiao`  · **BUILT — proven core (v0.1.0, from modou); growing by depth (v0.1.2 crate-source-boundary)**
+Observation source: `cargo metadata --no-deps` (the declared manifests) + a source `use` scan.
+Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation source), not by width.
+
+- **Declared dependency-source boundary — crate-source-boundary**: **BUILT (v0.1.2)**
+  (`restrict_dependency_sources_to([SourceKind…])`). Deepens the dependency reaction from
+  *which crate* (by name / external-internal split) to *which declared source kind* — git vs.
+  registry vs. path — reading the same `--no-deps` `source` field one notch finer. Hermetic; the
+  publish-hygiene case (a manifest declaring no git source, optional git included). Two stated
+  bounds: it observes the **declared** source (not the resolved one — `[patch]`/`replace-with`
+  is not seen), and it is source-kind hygiene, not a `cargo publish` oracle (a `{ git, version }`
+  dep is flagged though it would publish).
+
+Forward depths (born when built, same `cargo metadata` source):
+- **Resolved dependency-source / build-provenance (capability B)** — *named, deferred.* "What my
+  build **actually** pulls from, after `[patch]`/`[source] replace-with`", read from the
+  **resolved** graph (`cargo metadata` **with** deps, the lockfile + patch applied). It catches a
+  `[patch]`/`replace-with` redirect to a git source that the declared-layer crate-source-boundary
+  is deliberately blind to, and in turn misses an *optional-off* git dep (not in the build) —
+  the mirror blind spot. A genuinely distinct capability, not a completion of the declared one
+  (see `PROJECT.md`); born when built, adding a resolved-layer read (heavier, lockfile-dependent),
+  never retrofitted onto the hermetic declared rule.
+
 ### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn-trait)**
 Observation source: the **AST** (`syn`). Sees what the `圭表` `use`-scan cannot — semantics
 in the syntax tree: `pub` signatures, `impl Trait for Type`, attributes/derives, visibility.
