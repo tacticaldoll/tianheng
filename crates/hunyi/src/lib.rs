@@ -689,11 +689,17 @@ impl DynTraitBoundaryDraft {
 /// (return-position `impl Trait` / RPIT). The **existential** complement of [`DynTraitBoundary`]:
 /// where that forbids the *dynamic-dispatch* shape (`dyn`), this forbids the *existential* shape —
 /// an unnameable type the caller cannot name, store without boxing, or rely on beyond its declared
-/// bounds. It is **shape-only**: any returned `impl Trait` reacts (operand-scoped `impl Trait` is a
-/// future depth). Governs **return positions only**: argument-position `impl Trait` (APIT) is
-/// *universal* (a caller-chosen generic), not an existential leak, and is never governed; `async
-/// fn`'s implicit `impl Future` is a distinct compiler-inserted existential, out of scope. Declared
-/// in Rust and composed with the other dimensions at the gate.
+/// bounds. Governs **return positions only**: argument-position `impl Trait` (APIT) is *universal*
+/// (a caller-chosen generic), not an existential leak, and is never governed; `async fn`'s implicit
+/// `impl Future` is a distinct compiler-inserted existential, out of scope. Declared in Rust and
+/// composed with the other dimensions at the gate.
+///
+/// Two depths on one boundary type, selected by the builder (mirroring [`DynTraitBoundary`]):
+/// - [`must_not_expose_impl_trait`](ImplTraitModuleDraft::must_not_expose_impl_trait) —
+///   **shape-only**: an empty operand set, so *any* returned `impl Trait` reacts.
+/// - [`must_not_expose_impl_trait_of`](ImplTraitModuleDraft::must_not_expose_impl_trait_of) —
+///   **operand-scoped**: only a returned `impl Trait` whose principal trait resolves into the named
+///   `forbidden_operands` set reacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImplTraitBoundary {
     pub(crate) crate_package: String,
