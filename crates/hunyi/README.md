@@ -27,6 +27,13 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   degenerates to shape-only (any `dyn`), never a no-op; auto-trait markers (`Send`) are never
   operands; a principal trait outside the resolver's coverage (a bare std trait, macro/glob
   re-export) is the stated bound, never a silent pass of a resolvable operand.
+- **Impl-trait** — a module's public API must not *return* a written `impl Trait` (RPIT), the
+  **existential** complement of dyn-trait's dynamic dispatch: an RPIT at a seam leaks an
+  unnameable type the caller cannot name or store, and silently commits to its auto-traits.
+  `must_not_expose_impl_trait()` is shape-only (any returned `impl Trait` reacts). Governs
+  **return positions only**: argument-position `impl Trait` (APIT) is universal, not a leak, and
+  `async fn`'s implicit `impl Future` is a distinct, out-of-scope existential form — both stated
+  bounds, never silent misses.
 
 ```rust
 use hunyi::{
@@ -69,6 +76,12 @@ let dyn_operand_boundary = DynTraitBoundary::in_crate("my-app")
     .module("crate::core")
     .must_not_expose_dyn_of(["crate::ports::Port"])
     .because("the core seam must not leak a dyn Port (a std dyn Error is fine)");
+
+// impl-trait: the core's public seam must not return an existential impl Trait (RPIT)
+let impl_trait_boundary = ImplTraitBoundary::in_crate("my-app")
+    .module("crate::core")
+    .must_not_expose_impl_trait()
+    .because("the core seam must return named types, not an unnameable existential");
 ```
 
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including

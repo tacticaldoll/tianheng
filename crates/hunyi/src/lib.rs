@@ -36,8 +36,8 @@ use syn::visit::Visit;
 
 mod resolve;
 use resolve::{
-    BareFallback, DynCollector, DynExposure, PathCollector, ReexportMap, UseMap,
-    canonical_path_str, canonicalize_through_reexports, collect_reexports, collect_uses,
+    BareFallback, DynCollector, DynExposure, ImplTraitCollector, PathCollector, ReexportMap,
+    UseMap, canonical_path_str, canonicalize_through_reexports, collect_reexports, collect_uses,
     resolve_path, strip_raw, type_to_string,
 };
 
@@ -661,6 +661,114 @@ impl DynTraitBoundaryDraft {
     }
 }
 
+/// An impl-trait boundary: a module's public API must not **return** a written `impl Trait`
+/// (return-position `impl Trait` / RPIT). The **existential** complement of [`DynTraitBoundary`]:
+/// where that forbids the *dynamic-dispatch* shape (`dyn`), this forbids the *existential* shape —
+/// an unnameable type the caller cannot name, store without boxing, or rely on beyond its declared
+/// bounds. It is **shape-only**: any returned `impl Trait` reacts (operand-scoped `impl Trait` is a
+/// future depth). Governs **return positions only**: argument-position `impl Trait` (APIT) is
+/// *universal* (a caller-chosen generic), not an existential leak, and is never governed; `async
+/// fn`'s implicit `impl Future` is a distinct compiler-inserted existential, out of scope. Declared
+/// in Rust and composed with the other dimensions at the gate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplTraitBoundary {
+    pub(crate) crate_package: String,
+    pub(crate) module: String,
+    pub(crate) reason: String,
+    pub(crate) severity: Severity,
+}
+
+impl ImplTraitBoundary {
+    /// Begin an impl-trait boundary in the crate named `package`.
+    pub fn in_crate(package: &str) -> ImplTraitCrateDraft {
+        ImplTraitCrateDraft {
+            crate_package: package.to_string(),
+        }
+    }
+
+    /// The crate this boundary governs.
+    pub fn crate_package(&self) -> &str {
+        &self.crate_package
+    }
+
+    /// The governed module path (e.g. `crate::core`).
+    pub fn module(&self) -> &str {
+        &self.module
+    }
+
+    /// The human-readable reason recorded with the boundary (the repair hint).
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// The boundary's severity (`enforce` or `warn`).
+    pub fn severity(&self) -> Severity {
+        self.severity
+    }
+}
+
+/// An impl-trait boundary awaiting its module anchor.
+pub struct ImplTraitCrateDraft {
+    crate_package: String,
+}
+
+impl ImplTraitCrateDraft {
+    /// Anchor the boundary to a module path within the crate (e.g. `crate::core`).
+    pub fn module(self, module: &str) -> ImplTraitModuleDraft {
+        ImplTraitModuleDraft {
+            crate_package: self.crate_package,
+            module: module.to_string(),
+        }
+    }
+}
+
+/// A module-anchored boundary awaiting the rule.
+pub struct ImplTraitModuleDraft {
+    crate_package: String,
+    module: String,
+}
+
+impl ImplTraitModuleDraft {
+    /// Forbid the module's public API from **returning** a written `impl Trait` (RPIT) — any
+    /// `impl Trait` at any depth in a public function/method return type (and a public trait
+    /// method's declared return). Takes no trait operand — *any* returned `impl Trait` reacts
+    /// (shape-only). Argument-position `impl Trait` (APIT) and `async fn`'s implicit `impl Future`
+    /// are not governed (stated bounds — the former is universal, the latter a distinct form).
+    pub fn must_not_expose_impl_trait(self) -> ImplTraitBoundaryDraft {
+        ImplTraitBoundaryDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            severity: Severity::Enforce,
+        }
+    }
+}
+
+/// A boundary awaiting severity (optional) and its reason.
+pub struct ImplTraitBoundaryDraft {
+    crate_package: String,
+    module: String,
+    severity: Severity,
+}
+
+impl ImplTraitBoundaryDraft {
+    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
+    /// reaction — the first rung of adoption.
+    pub fn warn(mut self) -> Self {
+        self.severity = Severity::Warn;
+        self
+    }
+
+    /// Finish the boundary with its human-readable reason (the repair hint).
+    pub fn because(self, reason: &str) -> ImplTraitBoundary {
+        ImplTraitBoundary {
+            crate_package: self.crate_package,
+            module: self.module,
+            reason: reason.to_string(),
+            severity: self.severity,
+        }
+    }
+}
+
 // --- Constitution-error messages ---------------------------------------------
 
 fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
@@ -724,6 +832,8 @@ pub struct SemanticBoundaries {
     pub forbidden_marker: Vec<ForbiddenMarkerBoundary>,
     /// Dyn-trait exposure boundaries (`semantic-dyn-trait-boundary`).
     pub dyn_trait: Vec<DynTraitBoundary>,
+    /// Impl-trait (existential) exposure boundaries (`semantic-impl-trait-boundary`).
+    pub impl_trait: Vec<ImplTraitBoundary>,
 }
 
 impl SemanticBoundaries {
@@ -734,6 +844,7 @@ impl SemanticBoundaries {
             && self.visibility.is_empty()
             && self.forbidden_marker.is_empty()
             && self.dyn_trait.is_empty()
+            && self.impl_trait.is_empty()
     }
 }
 
@@ -771,6 +882,11 @@ pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outco
     }
     for boundary in &boundaries.dyn_trait {
         if let Err(error) = check_dyn_trait_boundary(&metadata, boundary, &mut violations) {
+            return Outcome::ConstitutionError(error);
+        }
+    }
+    for boundary in &boundaries.impl_trait {
+        if let Err(error) = check_impl_trait_boundary(&metadata, boundary, &mut violations) {
             return Outcome::ConstitutionError(error);
         }
     }
@@ -1032,6 +1148,131 @@ pub(crate) fn dyn_operand_module_findings(
     findings.sort();
     findings.dedup();
     Ok(findings)
+}
+
+// --- Impl-trait-boundary (existential exposure): the reaction -----------------
+
+/// Run the impl-trait boundaries against the Cargo workspace at `manifest_path`.
+///
+/// Mirrors [`check_dyn_trait`]: resolve each boundary's crate and module anchor, observe the
+/// module's public-API **return** positions for written `impl Trait` (RPIT) nodes at any depth,
+/// and react. An unresolvable crate or module (or an unreadable/unparseable source) is a
+/// constitution error (exit 2), never a silent pass. The shell composes via [`check_all`].
+pub fn check_impl_trait(boundaries: &[ImplTraitBoundary], manifest_path: &Path) -> Outcome {
+    let metadata = match cargo_metadata(manifest_path) {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return Outcome::ConstitutionError(unreadable_workspace_error(manifest_path, &err));
+        }
+    };
+    let mut violations = Vec::new();
+    for boundary in boundaries {
+        if let Err(error) = check_impl_trait_boundary(&metadata, boundary, &mut violations) {
+            return Outcome::ConstitutionError(error);
+        }
+    }
+    if violations.is_empty() {
+        Outcome::Clean
+    } else {
+        Outcome::Violations(Report::new(violations))
+    }
+}
+
+fn check_impl_trait_boundary(
+    metadata: &Value,
+    boundary: &ImplTraitBoundary,
+    violations: &mut Vec<Violation>,
+) -> Result<(), String> {
+    let package = find_package(metadata, &boundary.crate_package)
+        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
+    let root_file =
+        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let src_dir = root_file
+        .parent()
+        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+
+    let findings = impl_trait_module_findings(
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
+
+    for finding in findings {
+        // Like the sibling 渾儀 rules, a violation's `file` is a faithful `None` (no per-element
+        // source tracking yet — a stated bound shared by every semantic capability).
+        violations.push(Violation::new(
+            BoundaryKind::Semantic,
+            boundary.module.clone(),
+            "must not expose impl trait".to_string(),
+            finding,
+            boundary.reason.clone(),
+            boundary.severity,
+        ));
+    }
+    Ok(())
+}
+
+/// The pure heart of impl-trait-boundary, testable without spawning `cargo`: resolve the module's
+/// items and return the sorted, deduplicated rendered `impl …` shapes appearing in a **return
+/// position** of the module's public functions/methods. Shape-only, so no name resolution is
+/// involved. Governs return positions only — argument-position `impl Trait` (APIT) is universal,
+/// not existential, and is never visited; a trait-*impl* method's return is dictated by the trait
+/// declaration (governed there), so it is excluded.
+pub(crate) fn impl_trait_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<String>, String> {
+    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    let mut found = Vec::new();
+    for item in &items {
+        collect_item_return_impl_traits(item, &mut found);
+    }
+    found.sort();
+    found.dedup();
+    Ok(found)
+}
+
+/// Collect the rendered `impl Trait` shapes in the **return type** of a public item's
+/// functions/methods only (the existential positions). Never visits argument positions (APIT is
+/// universal, not a leak) nor trait-*impl* methods (their return shape is dictated by the trait).
+fn collect_item_return_impl_traits(item: &syn::Item, out: &mut Vec<String>) {
+    match item {
+        syn::Item::Fn(item) if is_public(&item.vis) => {
+            out.extend(impl_traits_in_return(&item.sig));
+        }
+        syn::Item::Trait(item) if is_public(&item.vis) => {
+            // A trait method's return is part of the public trait API (trait items carry no
+            // individual visibility); the trait DECLARES any RPIT here.
+            for trait_item in &item.items {
+                if let syn::TraitItem::Fn(method) = trait_item {
+                    out.extend(impl_traits_in_return(&method.sig));
+                }
+            }
+        }
+        syn::Item::Impl(item) if item.trait_.is_none() => {
+            for impl_item in &item.items {
+                if let syn::ImplItem::Fn(method) = impl_item {
+                    if is_public(&method.vis) {
+                        out.extend(impl_traits_in_return(&method.sig));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The rendered `impl Trait` shapes in a signature's **return type** (at any depth). Visits
+/// `sig.output` ONLY — never `sig.inputs`, so argument-position `impl Trait` (APIT) is excluded.
+fn impl_traits_in_return(sig: &syn::Signature) -> Vec<String> {
+    let mut collector = ImplTraitCollector::default();
+    if let syn::ReturnType::Type(_, ty) = &sig.output {
+        collector.visit_type(ty);
+    }
+    collector.impls
 }
 
 // --- Trait-impl-locality: the reaction ---------------------------------------
@@ -3489,6 +3730,143 @@ mod tests {
             .must_not_expose_dyn()
             .because("no dyn at all");
         assert!(shape.forbidden_operands().is_empty());
+    }
+
+    // --- impl-trait-boundary (existential exposure) ---------------------------
+
+    /// Like [`dyn_findings`] but for the impl-trait capability: write `files`, return the rendered
+    /// `impl …` shapes returned by `module`'s public API.
+    fn impl_trait_findings(
+        name: &str,
+        files: &[(&str, &str)],
+        module: &str,
+    ) -> Result<Vec<String>, String> {
+        let dir = std::env::temp_dir().join(format!("hunyi-impl-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        for (rel, contents) in files {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+            std::fs::write(&path, contents).expect("write source");
+        }
+        let root = src.join("lib.rs");
+        let result = impl_trait_module_findings(&src, &root, module, "x");
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
+        impl_trait_findings(
+            name,
+            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
+            "crate::m",
+        )
+    }
+
+    #[test]
+    fn impl_trait_flags_a_returned_impl_trait() {
+        assert_eq!(
+            impl_trait_mod("ret", "pub fn make() -> impl crate::Port { todo!() }\n").unwrap(),
+            ["impl crate::Port"],
+        );
+    }
+
+    #[test]
+    fn impl_trait_flags_a_nested_returned_impl_trait() {
+        assert_eq!(
+            impl_trait_mod(
+                "nested",
+                "pub fn maybe() -> Option<impl crate::Port> { todo!() }\n"
+            )
+            .unwrap(),
+            ["impl crate::Port"],
+            "an impl Trait at depth in the return type is existential and reacts",
+        );
+    }
+
+    #[test]
+    fn impl_trait_flags_a_trait_method_rpit() {
+        assert_eq!(
+            impl_trait_mod(
+                "rpitit",
+                "pub trait T { fn make(&self) -> impl crate::Port; }\n"
+            )
+            .unwrap(),
+            ["impl crate::Port"],
+            "a trait method's declared RPIT is the existential, governed at the declaration",
+        );
+    }
+
+    #[test]
+    fn impl_trait_does_not_flag_an_argument_position() {
+        // APIT is universal (a caller-chosen generic), not an existential leak.
+        assert!(
+            impl_trait_mod("apit", "pub fn drive(p: impl crate::Port) { let _ = p; }\n")
+                .unwrap()
+                .is_empty(),
+            "argument-position impl Trait is not governed",
+        );
+    }
+
+    #[test]
+    fn impl_trait_does_not_flag_an_async_fn() {
+        // async fn leaks a compiler-inserted `impl Future`, not a written `impl Trait` — a
+        // distinct, out-of-scope existential form (stated bound).
+        assert!(
+            impl_trait_mod("async", "pub async fn connect() -> u8 { 0 }\n")
+                .unwrap()
+                .is_empty(),
+            "async fn's implicit impl Future is out of scope",
+        );
+    }
+
+    #[test]
+    fn impl_trait_does_not_flag_a_private_fn_or_a_trait_impl_method() {
+        // Private fn: not public API.
+        assert!(
+            impl_trait_mod("priv", "fn make() -> impl crate::Port { todo!() }\n")
+                .unwrap()
+                .is_empty(),
+            "a private fn's RPIT is not public API",
+        );
+        // Trait-impl method: return shape dictated by the trait declaration (governed there).
+        assert!(
+            impl_trait_mod(
+                "traitimpl",
+                "pub struct S; impl crate::T for S { fn make(&self) -> impl crate::Port { todo!() } }\n"
+            )
+            .unwrap()
+            .is_empty(),
+            "a trait-impl method's return is not double-counted",
+        );
+    }
+
+    #[test]
+    fn impl_trait_renders_iterator_and_fn_shapes_distinctly() {
+        assert_eq!(
+            impl_trait_mod(
+                "iter",
+                "pub fn it() -> impl Iterator<Item = u8> { todo!() }\n"
+            )
+            .unwrap(),
+            ["impl Iterator<Item = u8>"],
+        );
+        assert_eq!(
+            impl_trait_mod("clo", "pub fn f() -> impl Fn(i32) -> i32 { todo!() }\n").unwrap(),
+            ["impl Fn(i32) -> i32"],
+        );
+    }
+
+    #[test]
+    fn impl_trait_boundary_carries_anchor_and_severity() {
+        let b = ImplTraitBoundary::in_crate("core")
+            .module("crate::core")
+            .must_not_expose_impl_trait()
+            .warn()
+            .because("the core seam must return named types");
+        assert_eq!(b.crate_package(), "core");
+        assert_eq!(b.module(), "crate::core");
+        assert_eq!(b.severity(), Severity::Warn);
     }
 
     #[test]

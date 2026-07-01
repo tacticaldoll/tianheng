@@ -111,7 +111,7 @@ measuring instruments — each reads a different surface of the code.
 | 儀 Instrument | Crate | Observes | Observation source | Status |
 |---|---|---|---|---|
 | 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.0** (static core, from modou); **v0.1.2** (declared dependency-source boundary) |
-| 渾儀 armillary (semantic) | `hunyi` | type exposure, impl locality, visibility, forbidden markers & `dyn` exposure (shape-only and named-operand) | AST (`syn`) | **v0.1.0** (signature-coupling, trait-impl-locality, visibility, forbidden-marker); **v0.1.2** (dyn-trait-boundary, shape-only + operand-scoped) |
+| 渾儀 armillary (semantic) | `hunyi` | type exposure, impl locality, visibility, forbidden markers, `dyn` exposure (shape-only & named-operand) & `impl Trait` (existential) exposure | AST (`syn`) | **v0.1.0** (signature-coupling, trait-impl-locality, visibility, forbidden-marker); **v0.1.2** (dyn-trait shape-only + operand-scoped; impl-trait) |
 | 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.0** (origin-assertion; CI probe-coverage face composed into `tianheng check`) |
 
 **漏刻's two faces, one declared source.** The runtime boundaries you declare in the

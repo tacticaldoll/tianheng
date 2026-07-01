@@ -257,7 +257,18 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   (`Of([])`), so a mis-declared operand set never becomes a false negative. Auto-trait markers
   are never operands (only the principal, first, trait), and an unresolvable principal (a bare
   std trait, a macro/glob re-export) is the inherited resolver bound, never a silent pass of a
-  *resolvable* operand. **Rejected**, as explicit non-goals with their reason:
+  *resolvable* operand. **(v0.1.2, same release)** its **existential sibling**
+  `ImplTraitBoundary` (`must_not_expose_impl_trait`) — where dyn-trait forbids the *dynamic-
+  dispatch* shape (`dyn`), this forbids the *existential* shape: a public seam must not **return**
+  a written `impl Trait` (RPIT), an unnameable type that commits the seam to the hidden type's
+  auto-traits. It passes the same gates: declarative (an existential at a *declared* seam is
+  intent — and **argument-position `impl Trait`/APIT is deliberately not governed**, since it is
+  *universal*, a caller-chosen generic, not a leak, which is what keeps this a boundary and not an
+  `impl Trait`-style lint); no *essential* gap (a written `impl Trait` in a return position is
+  always syntactically observable — `async fn`'s *implicit* `impl Future` and nightly TAIT are
+  **distinct, stated-out-of-scope** forms, not silent misses of the written-RPIT domain); and
+  anchorable (module). It reuses the public-surface walk and the `dyn` bound renderer, governing
+  return positions only. **Rejected**, as explicit non-goals with their reason:
   `Send`/`Sync` constraints (auto-traits are inferred, never written), external trait
   sealing (downstream crates are outside the scan), and transitive effect-purity ("no I/O
   anywhere reachable") — each has an *essential* gap. This test is the standing gate: a new

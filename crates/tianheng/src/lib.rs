@@ -38,11 +38,13 @@ pub use guibiao::Constitution as GnomonConstitution;
 pub use hunyi::{
     DynTraitBoundary, DynTraitBoundaryDraft, DynTraitCrateDraft, DynTraitModuleDraft,
     ForbiddenMarkerBoundary, ForbiddenMarkerBoundaryDraft, ForbiddenMarkerCrateDraft,
-    ForbiddenMarkerModuleDraft, SemanticBoundaries, SemanticBoundary, SemanticBoundaryDraft,
+    ForbiddenMarkerModuleDraft, ImplTraitBoundary, ImplTraitBoundaryDraft, ImplTraitCrateDraft,
+    ImplTraitModuleDraft, SemanticBoundaries, SemanticBoundary, SemanticBoundaryDraft,
     SemanticCrateDraft, SemanticModuleDraft, TraitImplBoundary, TraitImplBoundaryDraft,
     TraitImplCrateDraft, TraitImplTraitDraft, VisibilityBoundary, VisibilityBoundaryDraft,
     VisibilityCrateDraft, VisibilityModuleDraft, check as check_semantic, check_all,
-    check_dyn_trait, check_forbidden_marker, check_trait_impl_locality, check_visibility,
+    check_dyn_trait, check_forbidden_marker, check_impl_trait, check_trait_impl_locality,
+    check_visibility,
 };
 // 漏刻 (runtime) dimension DSL: declared here, then projected two ways — the CI probe-coverage
 // audit (composed by [`run`]) and the prod face (the adopter calls [`louke::install`] /
@@ -117,6 +119,12 @@ impl Constitution {
         self
     }
 
+    /// Add a 渾儀 impl-trait boundary (a module's API must not return a written `impl Trait`).
+    pub fn impl_trait_boundary(mut self, boundary: ImplTraitBoundary) -> Self {
+        self.semantic.impl_trait.push(boundary);
+        self
+    }
+
     /// Add a 漏刻 runtime boundary. The CI face audits its probe coverage (via [`run`]); the same
     /// object is what the adopter hands to [`louke::install`] for the prod face.
     pub fn runtime(mut self, boundary: RuntimeBoundary) -> Self {
@@ -162,8 +170,8 @@ impl From<GnomonConstitution> for Constitution {
 pub mod prelude {
     pub use super::{
         Boundary, BoundaryKind, Constitution, CrateBoundary, DependencyKind, DynTraitBoundary,
-        ForbiddenMarkerBoundary, ModuleBoundary, Outcome, Report, Rule, RuntimeBoundary,
-        SemanticBoundary, Severity, SourceKind, TraitImplBoundary, Violation, ViolationId,
-        VisibilityBoundary, check, run,
+        ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, Outcome, Report, Rule,
+        RuntimeBoundary, SemanticBoundary, Severity, SourceKind, TraitImplBoundary, Violation,
+        ViolationId, VisibilityBoundary, check, run,
     };
 }

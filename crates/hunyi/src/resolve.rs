@@ -322,6 +322,30 @@ pub(crate) fn trait_object_to_string(node: &syn::TypeTraitObject) -> String {
     format!("dyn {}", parts.join(" + "))
 }
 
+/// Render an `impl Trait` node (`syn::TypeImplTrait`) to a stable finding string
+/// (`impl crate::Port`, `impl Iterator<Item = u8>`, `impl Fn(i32) -> i32`) — its `bounds` are the
+/// same `Punctuated<TypeParamBound>` a trait object carries, so it renders through the same
+/// [`bound_to_string`], sharing the `dyn` renderer's injectivity and rendering bound.
+pub(crate) fn impl_trait_to_string(node: &syn::TypeImplTrait) -> String {
+    let parts: Vec<String> = node.bounds.iter().map(bound_to_string).collect();
+    format!("impl {}", parts.join(" + "))
+}
+
+/// A Visitor recording every **`impl Trait` node** within a syntax node, at any depth — the leaf
+/// observation for `semantic-impl-trait-boundary`. Fed only a function/method **return type** by
+/// the caller (existential positions), so argument-position `impl Trait` (APIT) is never collected.
+#[derive(Default)]
+pub(crate) struct ImplTraitCollector {
+    pub(crate) impls: Vec<String>,
+}
+
+impl<'ast> Visit<'ast> for ImplTraitCollector {
+    fn visit_type_impl_trait(&mut self, node: &'ast syn::TypeImplTrait) {
+        self.impls.push(impl_trait_to_string(node));
+        syn::visit::visit_type_impl_trait(self, node);
+    }
+}
+
 /// Render one `TypeParamBound` (a trait bound with its `?`/path, or a lifetime) for a finding.
 /// Shared by [`trait_object_to_string`] and the `Constraint` generic-argument arm so a `dyn`
 /// and an `Iterator<Item: Bound>` render the same way. An unrenderable trait path yields `_`
