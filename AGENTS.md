@@ -113,3 +113,12 @@ Merging to `main`, tagging, publishing to crates.io, force-pushing, and deleting
 are confirm-first: get explicit human sign-off even if a permission rule would auto-allow
 it. (crates.io publishes are permanent — only yankable, never deletable.) The local
 `.claude/settings.local.json` mirrors this with a `permissions.ask` rule on `gh pr merge`.
+
+Before publishing, confirm every publishable crate **bundles its license texts**: `cargo
+publish` packages only files inside each crate's own directory, so the workspace-root
+`LICENSE-*` and the inherited SPDX `license` field are not enough — each crate must physically
+carry `LICENSE-MIT` and `LICENSE-APACHE`, or it ships without them (as 0.1.0/0.1.1 did, before
+this was caught). `cargo package --list -p <crate>` shows exactly what a crate would ship. This
+is release/packaging hygiene, not architectural drift, so it is a **CI reaction** (the
+`License texts bundled` job), never a Tianheng constitution boundary — the same reason the
+branching/release ritual above stays convention rather than a reaction.
