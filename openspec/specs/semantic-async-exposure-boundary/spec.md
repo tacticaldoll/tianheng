@@ -64,8 +64,16 @@ is shape-only: any public `async fn` at the seam reacts.
 The finding SHALL be an owner-qualified item identity — the owner kind, the owner path or type, the
 function name, and a stable render of the parameters and return type — NOT a bare function name and
 NOT a future type-shape. Two distinct public async fns SHALL yield two distinct findings, so that
-baselining one never masks the other under the `(target, rule, finding)` identity. The rendered
-return type serves readability and collision-avoidance, not to represent the implicit future.
+baselining one never masks the other under the `(target, rule, finding)` identity. The owner render
+SHALL preserve generic arguments (`Foo<u8>` and `Foo<u16>` stay distinct). The rendered return type
+serves readability and collision-avoidance, not to represent the implicit future.
+
+The system MAY render an unrenderable owner or parameter type as `_` — a **stated
+render-granularity bound**, the same class the `dyn` / `impl Trait` shape renderers carry: two
+DISTINCT but unrenderable-typed items with an identical name and signature would then share a
+finding. This is unreachable for a valid inherent `impl` (its self type is always a concrete nominal
+path, which renders), so it is stated rather than guarded — never a silent claim that such a case is
+distinguished.
 
 #### Scenario: Two same-named async methods across two impls yield distinct findings
 

@@ -1595,6 +1595,12 @@ fn collect_item_async_exposures(item: &syn::Item, module: &str, out: &mut Vec<St
         syn::Item::Impl(item) if item.trait_.is_none() => {
             // Owner-qualify by the impl's self type so `impl A`/`impl B` async methods of the same
             // name never collide under the (target, rule, finding) baseline (a false negative).
+            // `type_to_string` renders generics (`Foo<u8>` vs `Foo<u16>` stay distinct). A `None`
+            // owner falls back to `_` — a STATED render-granularity bound (same class as the `dyn`/
+            // `impl Trait` renderers' `_`): two DISTINCT but unrenderable self types with an
+            // identically-named+signed async method would share a finding. Unreachable in practice —
+            // an inherent `impl`'s self type is always a concrete nominal path, which renders — so
+            // per the drift law we state it rather than guard an impossible state.
             let owner = type_to_string(&item.self_ty).unwrap_or_else(|| "_".to_string());
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
