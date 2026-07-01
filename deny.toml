@@ -32,6 +32,13 @@ confidence-threshold = 0.9
 multiple-versions = "warn"
 
 [sources]
+# This section owns resolved / whole-graph source provenance — what the build *actually* pulls
+# from after the lockfile and [patch]/[source] replace-with, so a [patch]->git redirect surfaces
+# here. Tianheng's crate-source-boundary governs the complementary *declared*, per-target source
+# kind (manifest hygiene / publishability; sees optional-git, blind to [patch] by design). The
+# division is deliberate — resolved is cargo-deny's lane, declared is Tianheng's — which is why
+# resolved build-provenance (would-be capability B) is declined, not a Tianheng feature; see
+# PROJECT.md. (Inverse of [bans] above, where Tianheng governs and cargo-deny only tidies.)
 # Only crates.io and known git sources; an unknown registry/source fails loud.
 unknown-registry = "deny"
 unknown-git = "deny"
