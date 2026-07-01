@@ -88,7 +88,7 @@ The operand-scoped dyn boundary SHALL share the 渾儀 dyn-trait reaction contra
 into the same aggregated report and exit-code outcome (**0** clean, **1** enforce violation, **2**
 constitution/scan error such as an unresolvable crate or module); the boundary carries a severity
 (`enforce` default, or `warn`) and is gated against the same `Baseline` under the shared violation
-identity `(target, rule, finding)`, the finding being the rendered `dyn …` shape; and the rule
+identity `(target, rule, finding)`, the finding being the seam-qualified rendered `dyn …` shape (as in the shape-only rule); and the rule
 projects through the existing dyn-trait `list` text/JSON/markdown projection, adding a `forbidden`
 parameter listing the operand set when non-empty (a shape-only, empty-set boundary projects
 unchanged). The implementation SHALL keep the `syn` dependency quarantined in `hunyi` (no new

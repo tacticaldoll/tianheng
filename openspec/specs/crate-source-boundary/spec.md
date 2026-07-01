@@ -126,7 +126,8 @@ dependency rules: findings fold into the same aggregated report and exit-code ou
 **1** enforce violation, **2** constitution/scan error such as an unreadable workspace or an absent
 target crate); the boundary carries a severity (`enforce` default, or `warn`) and is gated against
 the same `Baseline` under the shared violation identity `(target, rule, finding)`, the finding being
-the offending dependency's real package name; and the rule projects through the existing generic
+the offending dependency's real package name (kind-qualified with a ` (dev)`/` (build)` suffix for a
+non-`Normal` boundary, per `crate-dependency-boundary`'s Dependency kind selection); and the rule projects through the existing generic
 `CrateBoundary` text/JSON/markdown projection, its parameters being the allowed source-kind list.
 The implementation SHALL keep `guibiao` `serde_json`-only (no new dependency) and SHALL NOT change
 the `--no-deps` invocation.

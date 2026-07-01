@@ -31,13 +31,15 @@ The system SHALL emit a violation for each written `impl Trait` node appearing, 
 the **return type** of a governed module's public functions, public inherent methods, or public
 trait method declarations, and SHALL report no violation when no such node is present. The finding
 is the rendered `impl …` shape (e.g. `impl crate::Port`, `impl Iterator<Item = u8>`), rendered by
-the same stable, injective form the dyn-trait rule uses for a `dyn` node. The reaction is
+the same stable, injective form the dyn-trait rule uses for a `dyn` node, and **seam-qualified**
+(`{rendered shape} exposed by {seam}`) exactly as `semantic-dyn-trait-boundary` so the same
+returned shape at two seams stays two findings (the one forbidden bug). The reaction is
 shape-only: any returned `impl Trait` reacts, no trait operand.
 
 #### Scenario: A public function returning impl Trait is flagged
 
 - **WHEN** the governed module declares `pub fn make() -> impl crate::Port { … }`
-- **THEN** the system emits a violation whose finding is the rendered shape `impl crate::Port`
+- **THEN** the system emits a violation whose finding is the rendered shape `impl crate::Port exposed by fn <module>::make`
 
 #### Scenario: A returned impl Trait nested in the return type is flagged
 
@@ -70,7 +72,7 @@ The impl-trait boundary SHALL share the 渾儀 reaction contract with the dyn-tr
 fold into the same aggregated report and exit-code outcome (**0** clean, **1** enforce violation,
 **2** constitution/scan error such as an unresolvable crate or module); the boundary carries a
 severity (`enforce` default, or `warn`) and is gated against the same `Baseline` under the shared
-violation identity `(target, rule, finding)`, the finding being the rendered `impl …` shape; and
+violation identity `(target, rule, finding)`, the finding being the seam-qualified rendered `impl …` shape; and
 the rule projects through the `list` text/JSON/markdown projection with its own boundary section,
 parallel to dyn-trait. The implementation SHALL keep the `syn` dependency quarantined in `hunyi`
 (no new dependency) and SHALL NOT change the existing rules' behavior.
