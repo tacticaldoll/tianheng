@@ -50,7 +50,7 @@ repair direction; the human text report and the Markdown projection lead with it
 | 儀 | Crate | Observes |
 |---|---|---|
 | 圭表 (static) | [`guibiao`](https://crates.io/crates/guibiao) | imports, dependencies & their declared source kind (`cargo metadata` + `use` scan) |
-| 渾儀 (semantic) | [`hunyi`](https://crates.io/crates/hunyi) | type exposure, impl locality, visibility, forbidden markers, `dyn` exposure (AST/`syn`) |
+| 渾儀 (semantic) | [`hunyi`](https://crates.io/crates/hunyi) | type exposure, impl locality, visibility, forbidden markers, `dyn` exposure — shape-only & named-operand (AST/`syn`) |
 | 漏刻 (runtime) | [`louke`](https://crates.io/crates/louke) | the concrete type behind a `dyn Trait` crossing a seam (runtime `TypeId`) |
 
 Beneath them sits [`xuanji`](https://crates.io/crates/xuanji) — the dimension-agnostic

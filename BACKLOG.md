@@ -71,9 +71,18 @@ The originally-conceived 渾儀 layer is complete, but the dimension still grows
 dyn-trait above), not by width (no new observation source). Named next depths and the rejected
 set follow.
 
+Built depths past the shape-only dyn (same `syn` source):
+- **Operand-scoped dyn** (`must_not_expose_dyn_of([…])`) — **BUILT (v0.1.2).** Forbid only a
+  *named* trait's `dyn` rather than any: a `dyn` whose **principal trait** (first trait bound)
+  canonicalizes into the forbidden set reacts, resolved through the shared 渾儀 resolver (exact-
+  or-module-prefix, re-export消歧) exactly as signature-coupling resolves a forbidden type. The
+  next rung on the `name → shape → named-operand` stair. Empty operand set degenerates to
+  shape-only (any `dyn`), never a no-op; auto-trait markers are never operands; an unresolvable
+  principal is the stated resolver bound.
+
 Forward depths (born when built, same `syn` source):
-- **Operand-scoped dyn** (`must_not_expose_dyn_of([…])`) — forbid only a *named* trait's `dyn`
-  rather than any. The next depth past the shape-only dyn-trait boundary; not yet built.
+- (none named yet — the shape-only and operand-scoped dyn depths are built; a further depth is
+  admitted only when it passes the capability-admission test.)
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),

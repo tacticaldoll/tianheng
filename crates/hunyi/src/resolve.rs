@@ -265,16 +265,44 @@ impl<'ast> Visit<'ast> for PathCollector {
 /// rendered as a stable finding string. Overriding `visit_type_trait_object` fires for a
 /// `dyn` nested anywhere — `Box<dyn …>`, `&dyn …`, `Vec<Box<dyn …>>`, an `impl Trait`'s
 /// type arguments — so detection is any-depth by construction.
+/// One observed `dyn` node: its rendered shape (the stable finding string) plus its
+/// **principal trait** path as written (for operand-scoped matching). Shape-only governance
+/// reads `shape`; operand-scoped governance resolves `principal` (via [`resolve_path`], which
+/// reads the path's segment idents and ignores any generic/parenthesized args) against the
+/// forbidden set.
+pub(crate) struct DynExposure {
+    pub(crate) shape: String,
+    pub(crate) principal: Option<syn::Path>,
+}
+
 #[derive(Default)]
 pub(crate) struct DynCollector {
-    pub(crate) dyns: Vec<String>,
+    pub(crate) exposures: Vec<DynExposure>,
 }
 
 impl<'ast> Visit<'ast> for DynCollector {
     fn visit_type_trait_object(&mut self, node: &'ast syn::TypeTraitObject) {
-        self.dyns.push(trait_object_to_string(node));
+        self.exposures.push(DynExposure {
+            shape: trait_object_to_string(node),
+            principal: trait_object_principal_path(node),
+        });
         syn::visit::visit_type_trait_object(self, node);
     }
+}
+
+/// The **principal (base) trait** path of a trait object: the path of the **first**
+/// `TypeParamBound::Trait`. Rust's grammar guarantees the base trait is syntactically first, so
+/// any auto-trait (`Send`, `Sync`) or lifetime bound can only follow it and is never the
+/// principal — hence "first trait bound", not a name-skip (`dyn Send` correctly yields `Send`,
+/// its own principal). `None` if the object carries no trait bound at all (only lifetimes — not a
+/// constructible exposed `dyn`). Returned as the `syn::Path` as written; the caller resolves and
+/// canonicalizes it exactly as an exposed type path (segment idents only; any generic/
+/// parenthesized args on `dyn Iterator<…>` / `dyn Fn(…)` are ignored by [`resolve_path`]).
+pub(crate) fn trait_object_principal_path(node: &syn::TypeTraitObject) -> Option<syn::Path> {
+    node.bounds.iter().find_map(|bound| match bound {
+        syn::TypeParamBound::Trait(trait_bound) => Some(trait_bound.path.clone()),
+        _ => None,
+    })
 }
 
 /// Render a `dyn` trait-object to a stable finding string (`dyn crate::Port`,

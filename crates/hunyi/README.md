@@ -20,7 +20,13 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
 - **Forbidden-marker** — a module's types must not acquire a forbidden trait/derive.
 - **Dyn-trait** — a module's public API must not *expose* trait-object (`dyn`) syntax (the
   type-shape complement of signature-coupling: internal `dyn` is fine; leaking dynamic
-  dispatch across the declared seam is the violation). Shape-only — any exposed `dyn` reacts.
+  dispatch across the declared seam is the violation). Two depths: `must_not_expose_dyn()` is
+  **shape-only** (any exposed `dyn` reacts), and `must_not_expose_dyn_of([...])` is
+  **operand-scoped** (only a `dyn` whose principal trait resolves into the named set reacts —
+  e.g. forbid `dyn crate::Port` while allowing `dyn std::error::Error`). An empty operand set
+  degenerates to shape-only (any `dyn`), never a no-op; auto-trait markers (`Send`) are never
+  operands; a principal trait outside the resolver's coverage (a bare std trait, macro/glob
+  re-export) is the stated bound, never a silent pass of a resolvable operand.
 
 ```rust
 use hunyi::{
@@ -52,11 +58,17 @@ let marker = ForbiddenMarkerBoundary::in_crate("my-app")
     .must_not_acquire("serde::Serialize")
     .because("domain types must not be wire-coupled");
 
-// dyn-trait: the core's public seam must be statically dispatched
+// dyn-trait (shape-only): the core's public seam must be statically dispatched
 let dyn_boundary = DynTraitBoundary::in_crate("my-app")
     .module("crate::core")
     .must_not_expose_dyn()
     .because("the core public API must not leak dynamic dispatch");
+
+// dyn-trait (operand-scoped): forbid leaking a dyn of a *named* trait, allowing others
+let dyn_operand_boundary = DynTraitBoundary::in_crate("my-app")
+    .module("crate::core")
+    .must_not_expose_dyn_of(["crate::ports::Port"])
+    .because("the core seam must not leak a dyn Port (a std dyn Error is fine)");
 ```
 
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including
