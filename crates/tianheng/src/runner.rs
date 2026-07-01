@@ -1215,7 +1215,10 @@ mod tests {
             .expect("dyn_trait_boundaries projected");
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["rule"], "must not expose dyn");
-        assert!(arr[0].get("forbidden").is_none(), "shape-only: no forbidden set");
+        assert!(
+            arr[0].get("forbidden").is_none(),
+            "shape-only: no forbidden set"
+        );
         let md = list_markdown(&doc);
         assert!(md.contains("## Dyn-trait boundaries"), "{md}");
         assert!(md.contains("must not expose dyn"), "{md}");

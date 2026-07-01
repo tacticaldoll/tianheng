@@ -336,7 +336,9 @@ fn expr_to_string(expr: &syn::Expr) -> Option<String> {
 fn generic_argument_to_string(arg: &syn::GenericArgument) -> Option<String> {
     match arg {
         syn::GenericArgument::Type(ty) => type_to_string(ty),
-        syn::GenericArgument::Lifetime(lt) => Some(format!("'{}", strip_raw(&lt.ident.to_string()))),
+        syn::GenericArgument::Lifetime(lt) => {
+            Some(format!("'{}", strip_raw(&lt.ident.to_string())))
+        }
         syn::GenericArgument::AssocType(binding) => Some(format!(
             "{} = {}",
             strip_raw(&binding.ident.to_string()),
@@ -350,7 +352,11 @@ fn generic_argument_to_string(arg: &syn::GenericArgument) -> Option<String> {
         syn::GenericArgument::Const(expr) => expr_to_string(expr),
         syn::GenericArgument::Constraint(c) => {
             let bounds: Vec<String> = c.bounds.iter().map(bound_to_string).collect();
-            Some(format!("{}: {}", strip_raw(&c.ident.to_string()), bounds.join(" + ")))
+            Some(format!(
+                "{}: {}",
+                strip_raw(&c.ident.to_string()),
+                bounds.join(" + ")
+            ))
         }
         _ => None,
     }
@@ -407,7 +413,8 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
         // expansion (the stated macro bound), so two `bar!(…)` with different args share a render.
         syn::Type::Macro(m) => Some(format!("{}!", path_to_string(&m.mac.path)?)),
         syn::Type::BareFn(f) => {
-            let inputs: Option<Vec<String>> = f.inputs.iter().map(|a| type_to_string(&a.ty)).collect();
+            let inputs: Option<Vec<String>> =
+                f.inputs.iter().map(|a| type_to_string(&a.ty)).collect();
             let output = match &f.output {
                 syn::ReturnType::Default => String::new(),
                 syn::ReturnType::Type(_, ty) => format!(" -> {}", type_to_string(ty)?),
