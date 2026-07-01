@@ -38,7 +38,7 @@ mod resolve;
 use resolve::{
     BareFallback, DynCollector, ImplTraitCollector, PathCollector, ReexportMap, ShapeExposure,
     UseMap, canonical_path_str, canonicalize_through_reexports, collect_reexports, collect_uses,
-    resolve_path, strip_raw, type_to_string,
+    resolve_path, stamp_seam, strip_raw, type_to_string,
 };
 
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
@@ -46,6 +46,30 @@ use resolve::{
 pub use xuanji::{
     Baseline, BoundaryKind, Outcome, Report, Severity, Violation, ViolationId, apply_baseline,
 };
+
+// --- Canonical rule labels (single source per rule) --------------------------
+//
+// Each semantic rule's label is written **once**, here, and referenced by both the
+// `check`-side `Violation::new(...)` (the reaction) and the `list` projections in the
+// 天衡 shell (`tianheng` depends on `hunyi`, so importing these is the allowed direction).
+// Editing a label in one place updates every projection — the `list`/`check` and
+// text/JSON drift this closes. These are the rule *family* strings; a per-boundary operand
+// detail (e.g. the dyn/impl-trait operand set) stays a parameter layered on at projection.
+
+/// Signature-coupling: a module's public API must not expose a forbidden type.
+pub const SIGNATURE_RULE: &str = "must not expose";
+/// Dyn-trait: a module's public API must not expose trait-object (`dyn`) syntax.
+pub const DYN_TRAIT_RULE: &str = "must not expose dyn";
+/// Impl-trait: a module's public API must not return a written `impl Trait` (RPIT).
+pub const IMPL_TRAIT_RULE: &str = "must not expose impl trait";
+/// Async-exposure: a module's public API must not declare an `async fn`.
+pub const ASYNC_EXPOSURE_RULE: &str = "must not expose async fn";
+/// Trait-impl-locality: a trait may be implemented only in its declared location(s).
+pub const TRAIT_IMPL_RULE: &str = "must only be implemented in the declared location(s)";
+/// Visibility: a module must not declare bare-`pub` items.
+pub const VISIBILITY_RULE: &str = "must not declare pub items";
+/// Forbidden-marker: a subtree's types must not acquire a forbidden trait.
+pub const FORBIDDEN_MARKER_RULE: &str = "must not acquire trait";
 
 // --- Declaration DSL ---------------------------------------------------------
 
@@ -918,28 +942,42 @@ impl AsyncExposureBoundaryDraft {
 
 fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
     format!(
-        "cannot read target workspace at {}: {err}",
+        "a boundary is observed against a real workspace, so an unreadable one cannot be judged \
+         and its verdict would be a false pass: cannot read target workspace at {} ({err}); check \
+         the manifest path and that `cargo metadata` succeeds",
         manifest_path.display()
     )
 }
 
 fn crate_not_found_error(crate_package: &str) -> String {
-    format!("target crate '{crate_package}' not found in the workspace")
+    // Duplicated verbatim with guibiao's twin (the price of the dimension split, guibiao:~47);
+    // the two copies carry the SAME wording in-place rather than sharing a module (which would
+    // need a forbidden guibiao↔hunyi edge).
+    format!(
+        "a boundary must govern a real crate or it silently never reacts: target crate \
+         '{crate_package}' is not a member of the target workspace — check the name or --manifest-path"
+    )
 }
 
 fn missing_src_error(crate_package: &str) -> String {
-    format!("cannot locate the crate root source for '{crate_package}'")
+    format!(
+        "a semantic boundary is observed from source, so with no src it could never react: cannot \
+         locate the crate root source for '{crate_package}'"
+    )
 }
 
 fn unknown_module_error(module: &str, crate_package: &str) -> String {
     format!(
-        "module '{module}' not found among the modules of crate '{crate_package}' (declared via `mod`)"
+        "a boundary must anchor to a real module or it silently never reacts: module '{module}' is \
+         not found among the modules of crate '{crate_package}' (declared via `mod`) — check the path"
     )
 }
 
 fn unknown_trait_error(trait_path: &str, crate_package: &str) -> String {
     format!(
-        "trait '{trait_path}' not found as a `trait` item (directly or via a local `pub use`) in crate '{crate_package}'"
+        "a trait-impl-locality boundary must anchor to a real local trait or it silently never \
+         reacts: trait '{trait_path}' is not found as a `trait` item (directly or via a local \
+         `pub use`) in crate '{crate_package}' — check the path"
     )
 }
 
@@ -1111,7 +1149,7 @@ fn check_boundary(
         violations.push(Violation::new(
             BoundaryKind::Semantic,
             boundary.module.clone(),
-            "must not expose".to_string(),
+            SIGNATURE_RULE.to_string(),
             finding,
             boundary.reason.clone(),
             boundary.severity,
@@ -1142,14 +1180,20 @@ pub(crate) fn module_findings(
 
     let mut exposed = Vec::new();
     for item in &items {
-        collect_item_exposures(item, &mut exposed);
+        collect_item_exposures(item, module, &mut exposed);
     }
 
     let mut findings: Vec<String> = exposed
         .iter()
-        .filter_map(|path| resolve_path(path, &uses, module, BareFallback::Ignore))
-        .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
-        .filter(|canonical| matches_forbidden(canonical, &forbidden))
+        .filter_map(|exposure| {
+            resolve_path(&exposure.path, &uses, module, BareFallback::Ignore)
+                .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
+                .filter(|canonical| matches_forbidden(canonical, &forbidden))
+                // Seam-qualify: two distinct seams exposing the same forbidden type stay distinct
+                // findings, so baselining one never masks a new leak at another (the one forbidden
+                // bug) — the shape/existential rules do the same below.
+                .map(|canonical| format!("{canonical} exposed by {}", exposure.seam))
+        })
         .collect();
     findings.sort();
     findings.dedup();
@@ -1223,7 +1267,7 @@ fn check_dyn_trait_boundary(
         violations.push(Violation::new(
             BoundaryKind::Semantic,
             boundary.module.clone(),
-            "must not expose dyn".to_string(),
+            DYN_TRAIT_RULE.to_string(),
             finding,
             boundary.reason.clone(),
             boundary.severity,
@@ -1247,9 +1291,9 @@ pub(crate) fn dyn_module_findings(
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let mut exposures = Vec::new();
     for item in &items {
-        collect_item_dyn_exposures(item, &mut exposures);
+        collect_item_dyn_exposures(item, module, &mut exposures);
     }
-    let mut findings: Vec<String> = exposures.into_iter().map(|e| e.shape).collect();
+    let mut findings: Vec<String> = exposures.into_iter().map(shape_finding).collect();
     findings.sort();
     findings.dedup();
     Ok(findings)
@@ -1279,7 +1323,7 @@ pub(crate) fn dyn_operand_module_findings(
 
     let mut exposures = Vec::new();
     for item in &items {
-        collect_item_dyn_exposures(item, &mut exposures);
+        collect_item_dyn_exposures(item, module, &mut exposures);
     }
 
     let mut findings: Vec<String> = exposures
@@ -1296,7 +1340,7 @@ pub(crate) fn dyn_operand_module_findings(
                     .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
                     .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
         })
-        .map(|exposure| exposure.shape)
+        .map(shape_finding)
         .collect();
     findings.sort();
     findings.dedup();
@@ -1369,7 +1413,7 @@ fn check_impl_trait_boundary(
         violations.push(Violation::new(
             BoundaryKind::Semantic,
             boundary.module.clone(),
-            "must not expose impl trait".to_string(),
+            IMPL_TRAIT_RULE.to_string(),
             finding,
             boundary.reason.clone(),
             boundary.severity,
@@ -1393,9 +1437,9 @@ pub(crate) fn impl_trait_module_findings(
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let mut exposures = Vec::new();
     for item in &items {
-        collect_item_return_impl_traits(item, &mut exposures);
+        collect_item_return_impl_traits(item, module, &mut exposures);
     }
-    let mut findings: Vec<String> = exposures.into_iter().map(|e| e.shape).collect();
+    let mut findings: Vec<String> = exposures.into_iter().map(shape_finding).collect();
     findings.sort();
     findings.dedup();
     Ok(findings)
@@ -1423,7 +1467,7 @@ pub(crate) fn impl_trait_operand_module_findings(
 
     let mut exposures = Vec::new();
     for item in &items {
-        collect_item_return_impl_traits(item, &mut exposures);
+        collect_item_return_impl_traits(item, module, &mut exposures);
     }
 
     let mut findings: Vec<String> = exposures
@@ -1437,7 +1481,7 @@ pub(crate) fn impl_trait_operand_module_findings(
                     .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
                     .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
         })
-        .map(|exposure| exposure.shape)
+        .map(shape_finding)
         .collect();
     findings.sort();
     findings.dedup();
@@ -1447,25 +1491,30 @@ pub(crate) fn impl_trait_operand_module_findings(
 /// Collect the returned-`impl Trait` [`ShapeExposure`]s in the **return type** of a public item's
 /// functions/methods only (the existential positions). Never visits argument positions (APIT is
 /// universal, not a leak) nor trait-*impl* methods (their return shape is dictated by the trait).
-fn collect_item_return_impl_traits(item: &syn::Item, out: &mut Vec<ShapeExposure>) {
+fn collect_item_return_impl_traits(item: &syn::Item, module: &str, out: &mut Vec<ShapeExposure>) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
-            out.extend(impl_traits_in_return(&item.sig));
+            let seam = fn_seam(module, &item.sig.ident);
+            out.extend(stamp_seam(impl_traits_in_return(&item.sig), &seam));
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
             // A trait method's return is part of the public trait API (trait items carry no
             // individual visibility); the trait DECLARES any RPIT here.
+            let trait_name = strip_raw(&item.ident.to_string());
             for trait_item in &item.items {
                 if let syn::TraitItem::Fn(method) = trait_item {
-                    out.extend(impl_traits_in_return(&method.sig));
+                    let seam = trait_method_seam(module, &trait_name, &method.sig.ident);
+                    out.extend(stamp_seam(impl_traits_in_return(&method.sig), &seam));
                 }
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
+            let owner = impl_owner_label(item);
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
-                        out.extend(impl_traits_in_return(&method.sig));
+                        let seam = inherent_method_seam(&owner, &method.sig.ident);
+                        out.extend(stamp_seam(impl_traits_in_return(&method.sig), &seam));
                     }
                 }
             }
@@ -1537,7 +1586,7 @@ fn check_async_exposure_boundary(
         violations.push(Violation::new(
             BoundaryKind::Semantic,
             boundary.module.clone(),
-            "must not expose async fn".to_string(),
+            ASYNC_EXPOSURE_RULE.to_string(),
             finding,
             boundary.reason.clone(),
             boundary.severity,
@@ -1714,7 +1763,7 @@ fn check_trait_impl_boundary(
     // `list` projection and the reason), not part of the violation's identity — so editing
     // the allowed set does not turn a still-misplaced impl into a "new" violation against a
     // baseline (mirroring how `xuanji` excludes reason/severity from the violation id).
-    let rule = "must only be implemented in the declared location(s)".to_string();
+    let rule = TRAIT_IMPL_RULE.to_string();
     for finding in findings {
         violations.push(Violation::new(
             BoundaryKind::Semantic,
@@ -2051,7 +2100,7 @@ fn check_visibility_boundary(
         violations.push(Violation::new(
             BoundaryKind::Semantic,
             boundary.module.clone(),
-            "must not declare pub items".to_string(),
+            VISIBILITY_RULE.to_string(),
             finding,
             boundary.reason.clone(),
             boundary.severity,
@@ -2185,7 +2234,7 @@ fn check_forbidden_marker_boundary(
         violations.push(Violation::new(
             BoundaryKind::Semantic,
             boundary.module.clone(),
-            "must not acquire trait".to_string(),
+            FORBIDDEN_MARKER_RULE.to_string(),
             finding,
             boundary.reason.clone(),
             boundary.severity,
@@ -2456,68 +2505,194 @@ fn dyns_in_generics(generics: &syn::Generics) -> Vec<ShapeExposure> {
     c.exposures
 }
 
+/// One exposed type path (signature-coupling), tagged with the public **seam** it was exposed at
+/// — the `syn::Path` counterpart of [`ShapeExposure`]'s `seam`. The seam becomes part of the
+/// finding so two distinct seams exposing the *same* forbidden type never collapse to one
+/// `(target, rule, finding)` baseline entry and mask a new leak (the one forbidden bug).
+struct PathExposure {
+    seam: String,
+    path: syn::Path,
+}
+
+/// Render a shape exposure (`dyn …` / `impl …`) as its seam-qualified finding string — the
+/// shape/existential analogue of signature-coupling's `{type} exposed by {seam}`. Two distinct
+/// seams exposing the same shape stay distinct findings (the one forbidden bug), so a baselined
+/// exposure never masks a new one at another seam.
+fn shape_finding(exposure: ShapeExposure) -> String {
+    format!("{} exposed by {}", exposure.shape, exposure.seam)
+}
+
+/// Attach `seam` to every path a position-walker produced (the signature-coupling analogue of
+/// [`resolve::stamp_seam`]).
+fn tag_paths(paths: Vec<syn::Path>, seam: &str) -> Vec<PathExposure> {
+    paths
+        .into_iter()
+        .map(|path| PathExposure {
+            seam: seam.to_string(),
+            path,
+        })
+        .collect()
+}
+
+// Seam labels — the public element an exposure lives at, in one vocabulary shared by all three
+// 渾儀 exposure collectors (signature-coupling, dyn, impl-trait) and disjoint-by-prefix with
+// async-exposure's `async fn …` identities, so no two element kinds ever render the same seam.
+// A free fn is `fn {module}::name`; an inherent method `fn <{SelfTy}>::name` (owner-qualified
+// like async, so `impl A`/`impl B` methods stay distinct); a trait method `fn trait
+// {module}::Trait::name`. A named item (struct/enum/union/trait/type/const/static) is `{kind}
+// {module}::name`; a field/variant is `{field|variant} {module}::Owner::name`; a trait associated
+// item `{type|const} trait {module}::Trait::name`.
+
+fn fn_seam(module: &str, name: &syn::Ident) -> String {
+    format!("fn {module}::{}", strip_raw(&name.to_string()))
+}
+
+fn inherent_method_seam(owner: &str, name: &syn::Ident) -> String {
+    format!("fn <{owner}>::{}", strip_raw(&name.to_string()))
+}
+
+fn trait_method_seam(module: &str, trait_name: &str, name: &syn::Ident) -> String {
+    format!(
+        "fn trait {module}::{trait_name}::{}",
+        strip_raw(&name.to_string())
+    )
+}
+
+fn item_seam(kind: &str, module: &str, name: &syn::Ident) -> String {
+    format!("{kind} {module}::{}", strip_raw(&name.to_string()))
+}
+
+fn field_seam(kind: &str, module: &str, owner: &str, member: &str) -> String {
+    format!("{kind} {module}::{owner}::{member}")
+}
+
+fn trait_assoc_seam(kind: &str, module: &str, trait_name: &str, name: &syn::Ident) -> String {
+    format!(
+        "{kind} trait {module}::{trait_name}::{}",
+        strip_raw(&name.to_string())
+    )
+}
+
+/// Render a field's member name — a named field's ident, or a tuple field's positional index.
+fn member_label(index: usize, field: &syn::Field) -> String {
+    match &field.ident {
+        Some(ident) => strip_raw(&ident.to_string()),
+        None => index.to_string(),
+    }
+}
+
+/// The owner label for an inherent-impl seam: the rendered self type, `_` when it does not render
+/// (the same stated render-granularity bound async-exposure's owner carries — unreachable for a
+/// real inherent impl, whose self type is always a concrete nominal path).
+fn impl_owner_label(item: &syn::ItemImpl) -> String {
+    type_to_string(&item.self_ty).unwrap_or_else(|| "_".to_string())
+}
+
 /// Collect the type paths exposed by one item's public surface. Only `pub` items
 /// contribute; `pub(crate)`/`pub(in …)`/private are internal, not exposed. Trait `impl`
 /// blocks are skipped (out of scope — their shape is the trait's, not the impl site's).
-fn collect_item_exposures(item: &syn::Item, out: &mut Vec<syn::Path>) {
+fn collect_item_exposures(item: &syn::Item, module: &str, out: &mut Vec<PathExposure>) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
-            out.extend(paths_in_signature(&item.sig));
+            let seam = fn_seam(module, &item.sig.ident);
+            out.extend(tag_paths(paths_in_signature(&item.sig), &seam));
         }
         syn::Item::Struct(item) if is_public(&item.vis) => {
-            out.extend(paths_in_generics(&item.generics));
-            for field in &item.fields {
+            let name = strip_raw(&item.ident.to_string());
+            out.extend(tag_paths(
+                paths_in_generics(&item.generics),
+                &item_seam("struct", module, &item.ident),
+            ));
+            for (index, field) in item.fields.iter().enumerate() {
                 if is_public(&field.vis) {
-                    out.extend(paths_in_type(&field.ty));
+                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    out.extend(tag_paths(paths_in_type(&field.ty), &seam));
                 }
             }
         }
         syn::Item::Enum(item) if is_public(&item.vis) => {
-            out.extend(paths_in_generics(&item.generics));
+            let name = strip_raw(&item.ident.to_string());
+            out.extend(tag_paths(
+                paths_in_generics(&item.generics),
+                &item_seam("enum", module, &item.ident),
+            ));
             // Enum variants and their fields are as public as the enum itself.
             for variant in &item.variants {
+                let seam = field_seam(
+                    "variant",
+                    module,
+                    &name,
+                    &strip_raw(&variant.ident.to_string()),
+                );
                 for field in &variant.fields {
-                    out.extend(paths_in_type(&field.ty));
+                    out.extend(tag_paths(paths_in_type(&field.ty), &seam));
                 }
             }
         }
         syn::Item::Union(item) if is_public(&item.vis) => {
-            out.extend(paths_in_generics(&item.generics));
-            for field in &item.fields.named {
+            let name = strip_raw(&item.ident.to_string());
+            out.extend(tag_paths(
+                paths_in_generics(&item.generics),
+                &item_seam("union", module, &item.ident),
+            ));
+            for (index, field) in item.fields.named.iter().enumerate() {
                 if is_public(&field.vis) {
-                    out.extend(paths_in_type(&field.ty));
+                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    out.extend(tag_paths(paths_in_type(&field.ty), &seam));
                 }
             }
         }
         syn::Item::Type(item) if is_public(&item.vis) => {
-            out.extend(paths_in_generics(&item.generics));
-            out.extend(paths_in_type(&item.ty));
+            let seam = item_seam("type", module, &item.ident);
+            out.extend(tag_paths(paths_in_generics(&item.generics), &seam));
+            out.extend(tag_paths(paths_in_type(&item.ty), &seam));
         }
         syn::Item::Const(item) if is_public(&item.vis) => {
-            out.extend(paths_in_type(&item.ty));
+            out.extend(tag_paths(
+                paths_in_type(&item.ty),
+                &item_seam("const", module, &item.ident),
+            ));
         }
         syn::Item::Static(item) if is_public(&item.vis) => {
-            out.extend(paths_in_type(&item.ty));
+            out.extend(tag_paths(
+                paths_in_type(&item.ty),
+                &item_seam("static", module, &item.ident),
+            ));
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
-            out.extend(paths_in_generics(&item.generics));
+            let trait_name = strip_raw(&item.ident.to_string());
+            let trait_seam = item_seam("trait", module, &item.ident);
+            out.extend(tag_paths(paths_in_generics(&item.generics), &trait_seam));
             // Supertraits are part of the trait's public contract.
             for bound in &item.supertraits {
                 if let syn::TypeParamBound::Trait(trait_bound) = bound {
-                    out.push(trait_bound.path.clone());
+                    out.push(PathExposure {
+                        seam: trait_seam.clone(),
+                        path: trait_bound.path.clone(),
+                    });
                 }
             }
             for trait_item in &item.items {
                 match trait_item {
-                    syn::TraitItem::Fn(method) => out.extend(paths_in_signature(&method.sig)),
+                    syn::TraitItem::Fn(method) => {
+                        let seam = trait_method_seam(module, &trait_name, &method.sig.ident);
+                        out.extend(tag_paths(paths_in_signature(&method.sig), &seam));
+                    }
                     syn::TraitItem::Type(assoc) => {
+                        let seam = trait_assoc_seam("type", module, &trait_name, &assoc.ident);
                         for bound in &assoc.bounds {
                             if let syn::TypeParamBound::Trait(trait_bound) = bound {
-                                out.push(trait_bound.path.clone());
+                                out.push(PathExposure {
+                                    seam: seam.clone(),
+                                    path: trait_bound.path.clone(),
+                                });
                             }
                         }
                     }
-                    syn::TraitItem::Const(assoc) => out.extend(paths_in_type(&assoc.ty)),
+                    syn::TraitItem::Const(assoc) => {
+                        let seam = trait_assoc_seam("const", module, &trait_name, &assoc.ident);
+                        out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+                    }
                     _ => {}
                 }
             }
@@ -2525,10 +2700,12 @@ fn collect_item_exposures(item: &syn::Item, out: &mut Vec<syn::Path>) {
         // Inherent `impl Type { … }` (no trait): its `pub` methods are public API the module
         // authored. Trait impls (`impl Trait for Type`) carry `trait_` and are out of scope.
         syn::Item::Impl(item) if item.trait_.is_none() => {
+            let owner = impl_owner_label(item);
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
-                        out.extend(paths_in_signature(&method.sig));
+                        let seam = inherent_method_seam(&owner, &method.sig.ident);
+                        out.extend(tag_paths(paths_in_signature(&method.sig), &seam));
                     }
                 }
             }
@@ -2544,71 +2721,112 @@ fn collect_item_exposures(item: &syn::Item, out: &mut Vec<syn::Path>) {
 /// walk additionally observes associated-type **defaults** (`type T = Box<dyn …>;`), a
 /// position exposure-governance does not cover. A `dyn` cannot appear in a supertrait or a
 /// `: Bound` (those are trait, not type, positions), so they are skipped here.
-fn collect_item_dyn_exposures(item: &syn::Item, out: &mut Vec<ShapeExposure>) {
+fn collect_item_dyn_exposures(item: &syn::Item, module: &str, out: &mut Vec<ShapeExposure>) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_signature(&item.sig));
+            let seam = fn_seam(module, &item.sig.ident);
+            out.extend(stamp_seam(dyns_in_signature(&item.sig), &seam));
         }
         syn::Item::Struct(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_generics(&item.generics));
-            for field in &item.fields {
+            let name = strip_raw(&item.ident.to_string());
+            out.extend(stamp_seam(
+                dyns_in_generics(&item.generics),
+                &item_seam("struct", module, &item.ident),
+            ));
+            for (index, field) in item.fields.iter().enumerate() {
                 if is_public(&field.vis) {
-                    out.extend(dyns_in_type(&field.ty));
+                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
                 }
             }
         }
         syn::Item::Enum(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_generics(&item.generics));
+            let name = strip_raw(&item.ident.to_string());
+            out.extend(stamp_seam(
+                dyns_in_generics(&item.generics),
+                &item_seam("enum", module, &item.ident),
+            ));
             // Enum variants and their fields are as public as the enum itself.
             for variant in &item.variants {
+                let seam = field_seam(
+                    "variant",
+                    module,
+                    &name,
+                    &strip_raw(&variant.ident.to_string()),
+                );
                 for field in &variant.fields {
-                    out.extend(dyns_in_type(&field.ty));
+                    out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
                 }
             }
         }
         syn::Item::Union(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_generics(&item.generics));
-            for field in &item.fields.named {
+            let name = strip_raw(&item.ident.to_string());
+            out.extend(stamp_seam(
+                dyns_in_generics(&item.generics),
+                &item_seam("union", module, &item.ident),
+            ));
+            for (index, field) in item.fields.named.iter().enumerate() {
                 if is_public(&field.vis) {
-                    out.extend(dyns_in_type(&field.ty));
+                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
                 }
             }
         }
         syn::Item::Type(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_generics(&item.generics));
+            let seam = item_seam("type", module, &item.ident);
+            out.extend(stamp_seam(dyns_in_generics(&item.generics), &seam));
             // A public type-alias target writing `dyn` is exposed at the alias item itself; a
             // public item that merely *names* this alias is not expanded (the resolver does
             // not expand `type` aliases — a stated bound).
-            out.extend(dyns_in_type(&item.ty));
+            out.extend(stamp_seam(dyns_in_type(&item.ty), &seam));
         }
         syn::Item::Const(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_type(&item.ty));
+            out.extend(stamp_seam(
+                dyns_in_type(&item.ty),
+                &item_seam("const", module, &item.ident),
+            ));
         }
         syn::Item::Static(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_type(&item.ty));
+            out.extend(stamp_seam(
+                dyns_in_type(&item.ty),
+                &item_seam("static", module, &item.ident),
+            ));
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
-            out.extend(dyns_in_generics(&item.generics));
+            let trait_name = strip_raw(&item.ident.to_string());
+            out.extend(stamp_seam(
+                dyns_in_generics(&item.generics),
+                &item_seam("trait", module, &item.ident),
+            ));
             for trait_item in &item.items {
                 match trait_item {
-                    syn::TraitItem::Fn(method) => out.extend(dyns_in_signature(&method.sig)),
+                    syn::TraitItem::Fn(method) => {
+                        let seam = trait_method_seam(module, &trait_name, &method.sig.ident);
+                        out.extend(stamp_seam(dyns_in_signature(&method.sig), &seam));
+                    }
                     // The associated-type **default** (`type T = Box<dyn …>;`) is an exposed
                     // type position; the `: Bound`s are trait positions and cannot be `dyn`.
                     syn::TraitItem::Type(assoc) => {
                         if let Some((_, default)) = &assoc.default {
-                            out.extend(dyns_in_type(default));
+                            let seam = trait_assoc_seam("type", module, &trait_name, &assoc.ident);
+                            out.extend(stamp_seam(dyns_in_type(default), &seam));
                         }
                     }
-                    syn::TraitItem::Const(assoc) => out.extend(dyns_in_type(&assoc.ty)),
+                    syn::TraitItem::Const(assoc) => {
+                        let seam = trait_assoc_seam("const", module, &trait_name, &assoc.ident);
+                        out.extend(stamp_seam(dyns_in_type(&assoc.ty), &seam));
+                    }
                     _ => {}
                 }
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
+            let owner = impl_owner_label(item);
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
-                        out.extend(dyns_in_signature(&method.sig));
+                        let seam = inherent_method_seam(&owner, &method.sig.ident);
+                        out.extend(stamp_seam(dyns_in_signature(&method.sig), &seam));
                     }
                 }
             }
@@ -2687,7 +2905,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
+        );
     }
 
     #[test]
@@ -2726,7 +2947,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by field crate::domain::Service::pool"]
+        );
     }
 
     #[test]
@@ -2762,7 +2986,7 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(out, ["crate::infra::DbPool exposed by fn <S>::pool"]);
     }
 
     #[test]
@@ -2801,7 +3025,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
+        );
     }
 
     #[test]
@@ -2819,7 +3046,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
+        );
     }
 
     #[test]
@@ -2858,7 +3088,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::Pooled"]);
+        assert_eq!(
+            out,
+            ["crate::infra::Pooled exposed by fn crate::domain::run"]
+        );
     }
 
     #[test]
@@ -2878,7 +3111,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             out,
-            ["crate::infra::db::Pool"],
+            ["crate::infra::db::Pool exposed by fn crate::domain::a"],
             "sibling must not match: {out:?}"
         );
     }
@@ -2898,7 +3131,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn crate::domain::pools"]
+        );
     }
 
     #[test]
@@ -2931,7 +3167,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
+        );
     }
 
     #[test]
@@ -2946,7 +3185,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
+        );
     }
 
     // --- signature-coupling re-export back-fill (S1) -------------------------
@@ -2971,7 +3213,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             out,
-            ["crate::infra::DbPool"],
+            ["crate::infra::DbPool exposed by fn crate::domain::pool"],
             "a forbidden type reached through a pub use facade must react"
         );
     }
@@ -2995,7 +3237,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
+        );
     }
 
     // --- trait-impl-locality ------------------------------------------------
@@ -3987,7 +4232,7 @@ mod tests {
                 &["crate::ports::Port"],
             )
             .unwrap(),
-            ["dyn crate::ports::Port"],
+            ["dyn crate::ports::Port exposed by fn crate::m::c"],
         );
         assert!(
             dyn_operand_mod(
@@ -4011,7 +4256,7 @@ mod tests {
                 &["crate::ports"],
             )
             .unwrap(),
-            ["dyn crate::ports::Port"],
+            ["dyn crate::ports::Port exposed by fn crate::m::c"],
         );
     }
 
@@ -4037,7 +4282,7 @@ mod tests {
                 &["crate::ports::Port"]
             )
             .unwrap(),
-            ["dyn crate::Port"],
+            ["dyn crate::Port exposed by fn crate::m::c"],
             "a dyn written through a re-export facade matches the forbidden defining path",
         );
     }
@@ -4054,7 +4299,7 @@ mod tests {
                 &["crate::ports::Port"],
             )
             .unwrap(),
-            ["dyn crate::ports::Port + Send"],
+            ["dyn crate::ports::Port + Send exposed by fn crate::m::c"],
         );
         assert!(
             dyn_operand_mod(
@@ -4078,7 +4323,7 @@ mod tests {
                 &["crate::ports::Port"],
             )
             .unwrap(),
-            ["dyn crate::ports::Port"],
+            ["dyn crate::ports::Port exposed by fn crate::m::c"],
         );
     }
 
@@ -4093,7 +4338,7 @@ mod tests {
         );
         assert_eq!(
             dyn_operand_mod("empty2", body, &[]).unwrap(),
-            ["dyn crate::ports::Port"],
+            ["dyn crate::ports::Port exposed by fn crate::m::c"],
         );
     }
 
@@ -4149,7 +4394,7 @@ mod tests {
     fn impl_trait_flags_a_returned_impl_trait() {
         assert_eq!(
             impl_trait_mod("ret", "pub fn make() -> impl crate::Port { todo!() }\n").unwrap(),
-            ["impl crate::Port"],
+            ["impl crate::Port exposed by fn crate::m::make"],
         );
     }
 
@@ -4161,7 +4406,7 @@ mod tests {
                 "pub fn maybe() -> Option<impl crate::Port> { todo!() }\n"
             )
             .unwrap(),
-            ["impl crate::Port"],
+            ["impl crate::Port exposed by fn crate::m::maybe"],
             "an impl Trait at depth in the return type is existential and reacts",
         );
     }
@@ -4174,7 +4419,7 @@ mod tests {
                 "pub trait T { fn make(&self) -> impl crate::Port; }\n"
             )
             .unwrap(),
-            ["impl crate::Port"],
+            ["impl crate::Port exposed by fn trait crate::m::T::make"],
             "a trait method's declared RPIT is the existential, governed at the declaration",
         );
     }
@@ -4231,11 +4476,11 @@ mod tests {
                 "pub fn it() -> impl Iterator<Item = u8> { todo!() }\n"
             )
             .unwrap(),
-            ["impl Iterator<Item = u8>"],
+            ["impl Iterator<Item = u8> exposed by fn crate::m::it"],
         );
         assert_eq!(
             impl_trait_mod("clo", "pub fn f() -> impl Fn(i32) -> i32 { todo!() }\n").unwrap(),
-            ["impl Fn(i32) -> i32"],
+            ["impl Fn(i32) -> i32 exposed by fn crate::m::f"],
         );
     }
 
@@ -4296,7 +4541,7 @@ mod tests {
                 &["crate::ports::Port"],
             )
             .unwrap(),
-            ["impl crate::ports::Port"],
+            ["impl crate::ports::Port exposed by fn crate::m::make"],
         );
         // A returned impl Iterator (ergonomic existential) passes when only a domain port is forbidden.
         assert!(
@@ -4320,7 +4565,7 @@ mod tests {
                 &["crate::ports"],
             )
             .unwrap(),
-            ["impl crate::ports::Port"],
+            ["impl crate::ports::Port exposed by fn crate::m::make"],
         );
     }
 
@@ -4337,7 +4582,7 @@ mod tests {
         assert_eq!(
             impl_trait_operand_findings("reexport", files, "crate::m", &["crate::ports::Port"])
                 .unwrap(),
-            ["impl crate::Port"],
+            ["impl crate::Port exposed by fn crate::m::make"],
         );
     }
 
@@ -4350,7 +4595,7 @@ mod tests {
                 &["crate::ports::Port"],
             )
             .unwrap(),
-            ["impl crate::ports::Port + Send"],
+            ["impl crate::ports::Port + Send exposed by fn crate::m::make"],
         );
         assert!(
             impl_trait_operand_mod(
@@ -4373,7 +4618,7 @@ mod tests {
                 &["crate::ports::Port"],
             )
             .unwrap(),
-            ["impl crate::ports::Port"],
+            ["impl crate::ports::Port exposed by fn crate::m::maybe"],
         );
     }
 
@@ -4563,7 +4808,7 @@ mod tests {
                 "pub fn connect() -> Box<dyn crate::Port> { todo!() }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by fn crate::m::connect"]
         );
         assert_eq!(
             dyn_mod(
@@ -4571,11 +4816,11 @@ mod tests {
                 "pub fn drive(x: &dyn crate::Port) { let _ = x; }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by fn crate::m::drive"]
         );
         assert_eq!(
             dyn_mod("field", "pub struct S { pub p: Box<dyn crate::Port> }\n").unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by field crate::m::S::p"]
         );
     }
 
@@ -4587,7 +4832,7 @@ mod tests {
                 "pub fn all() -> Vec<Box<dyn crate::Port>> { todo!() }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by fn crate::m::all"]
         );
         assert_eq!(
             dyn_mod(
@@ -4595,7 +4840,7 @@ mod tests {
                 "pub fn maybe(x: Option<&dyn crate::Port>) { let _ = x; }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by fn crate::m::maybe"]
         );
         // Nested inside an otherwise-static `impl Trait` return — still exposed to the caller.
         assert_eq!(
@@ -4604,7 +4849,7 @@ mod tests {
                 "pub fn ports() -> impl Iterator<Item = Box<dyn crate::Port>> { std::iter::empty() }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by fn crate::m::ports"]
         );
     }
 
@@ -4622,11 +4867,11 @@ mod tests {
     fn dyn_in_const_static_trait_method_assoc_default_and_where_react() {
         assert_eq!(
             dyn_mod("const", "pub const C: &dyn crate::Port = todo!();\n").unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by const crate::m::C"]
         );
         assert_eq!(
             dyn_mod("static", "pub static S: &dyn crate::Port = todo!();\n").unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by static crate::m::S"]
         );
         assert_eq!(
             dyn_mod(
@@ -4634,7 +4879,7 @@ mod tests {
                 "pub trait Service { fn port(&self) -> Box<dyn crate::Port>; }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by fn trait crate::m::Service::port"]
         );
         assert_eq!(
             dyn_mod(
@@ -4642,7 +4887,7 @@ mod tests {
                 "pub trait Service { type Out = Box<dyn crate::Port>; }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by type trait crate::m::Service::Out"]
         );
         assert_eq!(
             dyn_mod(
@@ -4650,7 +4895,7 @@ mod tests {
                 "pub fn run<T>() where Box<dyn crate::Port>: Into<T> { todo!() }\n"
             )
             .unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by fn crate::m::run"]
         );
     }
 
@@ -4659,7 +4904,7 @@ mod tests {
         // The public alias item's own target exposes dyn → reacts at the alias.
         assert_eq!(
             dyn_mod("alias-item", "pub type Handler = Box<dyn crate::Port>;\n").unwrap(),
-            ["dyn crate::Port"]
+            ["dyn crate::Port exposed by type crate::m::Handler"]
         );
         // A public fn naming a *private* alias: the alias is not expanded (stated bound), and a
         // private alias is not itself exposed — so the dyn escapes (the documented bound), the
@@ -4693,7 +4938,7 @@ mod tests {
                 "pub fn f() -> Box<dyn crate::Port + Send> { todo!() }\n"
             )
             .unwrap(),
-            ["dyn crate::Port + Send"]
+            ["dyn crate::Port + Send exposed by fn crate::m::f"]
         );
     }
 
@@ -4708,7 +4953,13 @@ mod tests {
              pub fn b(cb: Box<dyn FnMut(String) -> bool>) { let _ = cb; }\n",
         )
         .unwrap();
-        assert_eq!(out, ["dyn Fn(i32) -> i32", "dyn FnMut(String) -> bool"]);
+        assert_eq!(
+            out,
+            [
+                "dyn Fn(i32) -> i32 exposed by fn crate::m::a",
+                "dyn FnMut(String) -> bool exposed by fn crate::m::b"
+            ]
+        );
         // A dyn nested inside another dyn's generic argument: BOTH are exposed dynamic
         // dispatch, so both react (any-depth node presence) — distinct, non-colliding findings.
         assert_eq!(
@@ -4717,7 +4968,10 @@ mod tests {
                 "pub fn f() -> Box<dyn crate::Foo<Box<dyn crate::Bar>>> { todo!() }\n"
             )
             .unwrap(),
-            ["dyn crate::Bar", "dyn crate::Foo<Box<dyn crate::Bar>>"]
+            [
+                "dyn crate::Bar exposed by fn crate::m::f",
+                "dyn crate::Foo<Box<dyn crate::Bar>> exposed by fn crate::m::f"
+            ]
         );
         // Associated-type bindings (`Iterator<Item = …>`, the most common assoc-bound dyn) keep
         // their payload — distinct item types stay distinct findings, not `dyn Iterator<_>`.
@@ -4727,7 +4981,13 @@ mod tests {
              pub fn b(x: Box<dyn Iterator<Item = u16>>) { let _ = x; }\n",
         )
         .unwrap();
-        assert_eq!(out, ["dyn Iterator<Item = u16>", "dyn Iterator<Item = u8>"]);
+        assert_eq!(
+            out,
+            [
+                "dyn Iterator<Item = u16> exposed by fn crate::m::b",
+                "dyn Iterator<Item = u8> exposed by fn crate::m::a"
+            ]
+        );
         // Macro-typed and fn-pointer generic args render by name/shape, not a shared `dyn _`.
         let out = dyn_mod(
             "macro-fnptr",
@@ -4735,7 +4995,58 @@ mod tests {
              pub fn b(x: Box<dyn crate::Foo<fn(u8)>>) { let _ = x; }\n",
         )
         .unwrap();
-        assert_eq!(out, ["dyn crate::Foo<fn(i32)>", "dyn crate::Foo<fn(u8)>"]);
+        assert_eq!(
+            out,
+            [
+                "dyn crate::Foo<fn(i32)> exposed by fn crate::m::a",
+                "dyn crate::Foo<fn(u8)> exposed by fn crate::m::b"
+            ]
+        );
+    }
+
+    #[test]
+    fn same_shape_at_two_seams_stays_two_findings() {
+        // The closed collision false-negative: two distinct public seams exposing the SAME dyn
+        // shape must stay two findings, not collapse to one — else a new leak is masked by a
+        // baselined one. Seam-qualification keeps them distinct.
+        let out = dyn_mod(
+            "two-seams",
+            "pub fn a() -> Box<dyn crate::infra::Port> { todo!() }\n\
+             pub fn b() -> Box<dyn crate::infra::Port> { todo!() }\n",
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "dyn crate::infra::Port exposed by fn crate::m::a",
+                "dyn crate::infra::Port exposed by fn crate::m::b"
+            ],
+            "the same dyn shape at two seams must not collapse to one finding",
+        );
+        // The same guarantee for signature-coupling: two fns exposing the SAME forbidden type
+        // stay two findings, one per seam.
+        let out = findings(
+            "two-seams-sig",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub fn a() -> crate::infra::DbPool { todo!() }\n\
+                     pub fn b() -> crate::infra::DbPool { todo!() }\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::DbPool exposed by fn crate::domain::a",
+                "crate::infra::DbPool exposed by fn crate::domain::b"
+            ],
+            "the same forbidden type at two seams must not collapse to one finding",
+        );
     }
 
     #[test]

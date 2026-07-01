@@ -48,6 +48,22 @@ pub enum DependencyKind {
     Build,
 }
 
+impl DependencyKind {
+    /// The finding suffix that keeps a dependency's identity distinct per table. `Normal` (the
+    /// default, the overwhelming common case) stays bare — so existing baselines do not churn —
+    /// while `Dev`/`Build` carry ` (dev)`/` (build)`. Without this, two boundaries governing the
+    /// same crate under the same rule but different kinds (e.g. a `serde` git source in both
+    /// `[dependencies]` and `[dev-dependencies]`) would emit the identical `(target, rule,
+    /// finding)` and one baselined violation would mask the other (the one forbidden bug).
+    pub(crate) fn finding_suffix(&self) -> &'static str {
+        match self {
+            DependencyKind::Normal => "",
+            DependencyKind::Dev => " (dev)",
+            DependencyKind::Build => " (build)",
+        }
+    }
+}
+
 /// A dependency's **declared** source kind, classified from `cargo metadata`'s
 /// `source` field. The vocabulary of the [`Rule::RestrictDependencySourcesTo`]
 /// allowlist. Like [`DependencyKind`], it mirrors a fixed cargo distinction (a
@@ -288,7 +304,7 @@ impl Rule {
         workspace_members: &[String],
         kind: DependencyKind,
     ) -> Vec<String> {
-        match self {
+        let dependencies: Vec<String> = match self {
             Rule::DenyExternalDependencies { allowed } => external_dependencies(package, kind)
                 .into_iter()
                 .filter(|dependency| !allowed.contains(dependency))
@@ -310,6 +326,17 @@ impl Rule {
             Rule::RestrictDependencySourcesTo { allowed } => {
                 dependencies_with_disallowed_source(package, kind, allowed)
             }
+        };
+        // Kind-qualify so the same dependency name in two tables (normal vs dev/build) stays a
+        // distinct finding — a baselined `serde` normal-dep must never mask a new `serde (dev)`.
+        let suffix = kind.finding_suffix();
+        if suffix.is_empty() {
+            dependencies
+        } else {
+            dependencies
+                .into_iter()
+                .map(|dependency| format!("{dependency}{suffix}"))
+                .collect()
         }
     }
 }

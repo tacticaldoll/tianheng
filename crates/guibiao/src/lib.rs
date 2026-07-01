@@ -53,19 +53,27 @@ pub use xuanji::{
 /// `cargo metadata` failure. `err` is the underlying cause.
 fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
     format!(
-        "cannot read target workspace at {}: {err}",
+        "a boundary is observed against a real workspace, so an unreadable one cannot be judged \
+         and its verdict would be a false pass: cannot read target workspace at {} ({err}); check \
+         the manifest path and that `cargo metadata` succeeds",
         manifest_path.display()
     )
 }
 
 /// A boundary names a crate that is not a member of the target workspace.
 fn crate_not_found_error(crate_package: &str) -> String {
-    format!("target crate '{crate_package}' not found in the workspace")
+    format!(
+        "a boundary must govern a real crate or it silently never reacts: target crate \
+         '{crate_package}' is not a member of the target workspace — check the name or --manifest-path"
+    )
 }
 
 /// A workspace member's `src` directory could not be located from its manifest.
 fn missing_src_error(crate_package: &str) -> String {
-    format!("cannot locate src for crate '{crate_package}'")
+    format!(
+        "a module/semantic boundary is observed from source, so with no src it could never react: \
+         cannot locate the src for crate '{crate_package}'"
+    )
 }
 
 /// A module boundary targets an inline `mod name { … }`, which owns no source file
@@ -119,7 +127,8 @@ fn must_not_be_imported_by_on_crate_error(crate_package: &str) -> String {
 /// which could hide a real violation.
 fn unreadable_governed_file_error(file: &Path, err: &str) -> String {
     format!(
-        "cannot read governed source file '{}': {err}",
+        "a governed file that cannot be read is 'cannot judge', not 'nothing to judge' — skipping \
+         it could hide a real violation: cannot read governed source file '{}' ({err})",
         file.display()
     )
 }
@@ -1650,19 +1659,42 @@ mod tests {
             ]
         });
         let deny = Rule::DenyExternalDependencies { allowed: vec![] };
-        // Default (normal) sees only serde; dev sees only proptest; build only cc.
+        // Default (normal) sees only serde; dev sees only proptest; build only cc. The dev/build
+        // findings carry a kind suffix so the same dep name in two tables stays a distinct finding.
         assert_eq!(
             deny.findings(&package, &[], DependencyKind::Normal),
             vec!["serde".to_string()]
         );
         assert_eq!(
             deny.findings(&package, &[], DependencyKind::Dev),
-            vec!["proptest".to_string()]
+            vec!["proptest (dev)".to_string()]
         );
         assert_eq!(
             deny.findings(&package, &[], DependencyKind::Build),
-            vec!["cc".to_string()]
+            vec!["cc (build)".to_string()]
         );
+    }
+
+    #[test]
+    fn the_same_dep_in_two_tables_yields_distinct_findings() {
+        // The one forbidden bug for the dependency family: `serde` from a git source in BOTH the
+        // normal and the dev table, governed by same-rule boundaries differing only by kind, must
+        // not collapse to one `(target, rule, finding)` — else baselining the normal violation
+        // masks a new dev one. The kind suffix keeps them distinct.
+        let package = serde_json::json!({
+            "dependencies": [
+                { "name": "serde", "source": "git+https://x", "kind": null },
+                { "name": "serde", "source": "git+https://x", "kind": "dev" },
+            ]
+        });
+        let rule = Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry],
+        };
+        let normal = rule.findings(&package, &[], DependencyKind::Normal);
+        let dev = rule.findings(&package, &[], DependencyKind::Dev);
+        assert_eq!(normal, vec!["serde".to_string()]);
+        assert_eq!(dev, vec!["serde (dev)".to_string()]);
+        assert_ne!(normal, dev, "same dep in two tables must not collide");
     }
 
     #[test]
@@ -1993,7 +2025,7 @@ mod tests {
         );
         assert_eq!(
             rule.findings(&package, &[], DependencyKind::Dev),
-            vec!["devgit".to_string()],
+            vec!["devgit (dev)".to_string()],
             "a Dev-scoped boundary governs the dev table",
         );
     }

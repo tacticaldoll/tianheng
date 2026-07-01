@@ -166,9 +166,9 @@ A trait-impl-locality boundary SHALL carry a severity (`enforce` by default, or 
 
 ### Requirement: Human-readable violation report
 
-A trait-impl-locality violation report SHALL identify the governed trait anchor, the rule (that the trait may only be implemented in the declared location(s)), the offending impl (its module location and implemented-for type — the finding), and the human-readable reason supplied with the boundary, and SHALL state that the reaction failed — the same report contract as the other boundaries.
+A trait-impl-locality violation report SHALL identify the governed trait anchor, the rule ("must only be implemented in the declared location(s)"), the offending impl (its module location and implemented-for type — the finding), and the human-readable reason supplied with the boundary, and SHALL state that the reaction failed — the same report contract as the other boundaries.
 
 #### Scenario: Report explains the misplaced impl
 
 - **WHEN** the crate `app` defines `impl Command for Foo` in `crate::domain` under a boundary allowing only `crate::commands`
-- **THEN** the report names the trait anchor `crate::command::Command`, the rule (that it may only be implemented in the declared location(s)), the finding identifying `crate::domain` / `Foo`, the boundary's reason, and indicates CI failed (the allowed locations themselves are surfaced in the `list` projection and the reason, not embedded in the rule identity)
+- **THEN** the report names the trait anchor `crate::command::Command`, the rule "must only be implemented in the declared location(s)", the finding identifying `crate::domain` / `Foo`, the boundary's reason, and indicates CI failed (the allowed locations themselves are surfaced in the `list` projection and the reason, not embedded in the rule identity)
