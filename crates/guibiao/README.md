@@ -57,6 +57,19 @@ Two **stated bounds** (deliberate, never silently overreached):
   dependency declares a git source and is flagged even though it would publish successfully;
   the rule classifies by the declared source and does not parse the `version` key.
 
+**The crate-boundary rules** (each declared in Rust, each carrying a `.because(…)` reason and an
+optional `.warn()` severity): `deny_external_dependencies` (allow a named exception list),
+`forbid_dependency_on([…])`, `restrict_dependencies_to([…])` (a closed allowlist),
+`restrict_workspace_dependencies_to([…])` / `forbid_all_workspace_dependencies` (the
+crate-to-crate layering surface), and `restrict_dependency_sources_to([…])` (above). **The
+module-boundary rules**: `must_not_import`, `restrict_imports_to([…])`, `must_not_be_imported_by`.
+
+By default a crate rule observes the normal `[dependencies]` table; `.dependency_kind(DependencyKind::Dev)`
+(or `Build`) targets `[dev-dependencies]` / `[build-dependencies]` instead — a boundary governs
+exactly one table, so govern two by declaring two. Dev/build findings carry a ` (dev)` / ` (build)`
+suffix so the same dependency governed in two tables stays a distinct finding (a normal-table
+finding keeps the bare name, so existing baselines do not churn).
+
 **Stated partial coverage** (never silently passed): the hand-rolled `use` scanner does not
 see bare path expressions, macro-generated imports, or `#[path]`-remapped modules — closing
 those would require an AST, an amendment, not a silent trade.

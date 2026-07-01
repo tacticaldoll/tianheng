@@ -173,6 +173,22 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
         }
     }
 
+    // Two identical crate boundaries (same target/rule/kind) declared on one constitution would
+    // each flag the same dependency, emitting duplicate violations with equal identity. The
+    // baseline already dedups by identity, so gating is unaffected, but the report and its count
+    // should not double-count a single architectural fact — dedup by `(target, rule, finding)`,
+    // keeping first occurrence (module rules already dedup per finding).
+    let mut seen = Vec::new();
+    violations.retain(|violation| {
+        let id = violation.id();
+        if seen.contains(&id) {
+            false
+        } else {
+            seen.push(id);
+            true
+        }
+    });
+
     if violations.is_empty() {
         Outcome::Clean
     } else {

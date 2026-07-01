@@ -10,7 +10,7 @@ readme = "README.md"
 # 圭表 (Guībiǎo) — the gnomon, reading the cast shadow (imports & deps). Meaning lives here in the SSOT, not in a
 # self-describing name (a name that pretends to describe itself can drift; this one
 # points at the authoritative description instead).
-description = "圭表 (Guibiao) — the dependency-light static core of Tianheng: declare crate & module boundaries in Rust, observe drift from cargo metadata and source use-scans, react in CI. Derived from modou."
+description = "圭表 (Guibiao) — the dependency-light static core of Tianheng: declare crate, module, and declared-dependency-source boundaries in Rust (dependencies by name, imports, and each dependency's declared source kind — git/registry/path — for manifest hygiene), observe drift from cargo metadata and source use-scans, react in CI. Derived from modou."
 keywords = ["governance", "architecture", "boundary", "static-analysis", "ci"]
 categories = ["development-tools"]
 

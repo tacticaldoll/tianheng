@@ -37,8 +37,8 @@ use syn::visit::Visit;
 mod resolve;
 use resolve::{
     BareFallback, DynCollector, ImplTraitCollector, PathCollector, ReexportMap, ShapeExposure,
-    UseMap, canonical_path_str, canonicalize_through_reexports, collect_reexports, collect_uses,
-    resolve_path, stamp_seam, strip_raw, type_to_string,
+    UseMap, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
+    collect_reexports, collect_uses, resolve_path, stamp_seam, strip_raw, type_to_string,
 };
 
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
@@ -1179,8 +1179,8 @@ pub(crate) fn module_findings(
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposed = Vec::new();
-    for item in &items {
-        collect_item_exposures(item, module, &mut exposed);
+    for (ordinal, item) in items.iter().enumerate() {
+        collect_item_exposures(item, module, &uses, ordinal, &mut exposed);
     }
 
     let mut findings: Vec<String> = exposed
@@ -1278,10 +1278,11 @@ fn check_dyn_trait_boundary(
 
 /// The pure heart of dyn-trait-boundary, testable without spawning `cargo`: resolve the
 /// module's items and return the sorted, deduplicated rendered `dyn` shapes exposed in its
-/// public surface. Unlike [`module_findings`], it needs no `use`-map or re-export closure:
-/// the reaction is on the *presence* of a `dyn` node (shape-only), so no name resolution is
-/// involved — `pub use`-chain following is inert for a `dyn` (a re-export carries a name,
-/// never a `dyn` node).
+/// public surface. The *reaction* is on the *presence* of a `dyn` node (shape-only), so it needs
+/// no name resolution and no re-export closure — `pub use`-chain following is inert for a `dyn`
+/// (a re-export carries a name, never a `dyn` node). The `use`-map it does collect serves only to
+/// canonicalize an inherent impl's self-type **owner** in the seam (a finding-identity concern,
+/// not detection); no re-export closure is needed for that.
 pub(crate) fn dyn_module_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -1289,9 +1290,13 @@ pub(crate) fn dyn_module_findings(
     crate_package: &str,
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    // `uses` is not needed to *detect* a `dyn` (shape-only), but it canonicalizes an inherent
+    // impl's self-type owner in the seam — cheap (reads the already-parsed items' `use` decls),
+    // and it needs no re-export closure (the owner identity does not resolve through facades).
+    let uses = collect_uses(&items);
     let mut exposures = Vec::new();
-    for item in &items {
-        collect_item_dyn_exposures(item, module, &mut exposures);
+    for (ordinal, item) in items.iter().enumerate() {
+        collect_item_dyn_exposures(item, module, &uses, ordinal, &mut exposures);
     }
     let mut findings: Vec<String> = exposures.into_iter().map(shape_finding).collect();
     findings.sort();
@@ -1322,8 +1327,8 @@ pub(crate) fn dyn_operand_module_findings(
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposures = Vec::new();
-    for item in &items {
-        collect_item_dyn_exposures(item, module, &mut exposures);
+    for (ordinal, item) in items.iter().enumerate() {
+        collect_item_dyn_exposures(item, module, &uses, ordinal, &mut exposures);
     }
 
     let mut findings: Vec<String> = exposures
@@ -1435,9 +1440,11 @@ pub(crate) fn impl_trait_module_findings(
     crate_package: &str,
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    // `uses` canonicalizes an inherent impl's self-type owner in the seam (see the dyn path).
+    let uses = collect_uses(&items);
     let mut exposures = Vec::new();
-    for item in &items {
-        collect_item_return_impl_traits(item, module, &mut exposures);
+    for (ordinal, item) in items.iter().enumerate() {
+        collect_item_return_impl_traits(item, module, &uses, ordinal, &mut exposures);
     }
     let mut findings: Vec<String> = exposures.into_iter().map(shape_finding).collect();
     findings.sort();
@@ -1466,8 +1473,8 @@ pub(crate) fn impl_trait_operand_module_findings(
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposures = Vec::new();
-    for item in &items {
-        collect_item_return_impl_traits(item, module, &mut exposures);
+    for (ordinal, item) in items.iter().enumerate() {
+        collect_item_return_impl_traits(item, module, &uses, ordinal, &mut exposures);
     }
 
     let mut findings: Vec<String> = exposures
@@ -1491,7 +1498,13 @@ pub(crate) fn impl_trait_operand_module_findings(
 /// Collect the returned-`impl Trait` [`ShapeExposure`]s in the **return type** of a public item's
 /// functions/methods only (the existential positions). Never visits argument positions (APIT is
 /// universal, not a leak) nor trait-*impl* methods (their return shape is dictated by the trait).
-fn collect_item_return_impl_traits(item: &syn::Item, module: &str, out: &mut Vec<ShapeExposure>) {
+fn collect_item_return_impl_traits(
+    item: &syn::Item,
+    module: &str,
+    uses: &UseMap,
+    ordinal: usize,
+    out: &mut Vec<ShapeExposure>,
+) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             let seam = fn_seam(module, &item.sig.ident);
@@ -1509,7 +1522,7 @@ fn collect_item_return_impl_traits(item: &syn::Item, module: &str, out: &mut Vec
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            let owner = impl_owner_label(item);
+            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
@@ -1607,16 +1620,24 @@ pub(crate) fn async_exposure_module_findings(
     crate_package: &str,
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    // `uses` canonicalizes an inherent impl's self-type owner in the seam (see the dyn path).
+    let uses = collect_uses(&items);
     let mut found = Vec::new();
-    for item in &items {
-        collect_item_async_exposures(item, module, &mut found);
+    for (ordinal, item) in items.iter().enumerate() {
+        collect_item_async_exposures(item, module, &uses, ordinal, &mut found);
     }
     found.sort();
     found.dedup();
     Ok(found)
 }
 
-fn collect_item_async_exposures(item: &syn::Item, module: &str, out: &mut Vec<String>) {
+fn collect_item_async_exposures(
+    item: &syn::Item,
+    module: &str,
+    uses: &UseMap,
+    ordinal: usize,
+    out: &mut Vec<String>,
+) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             if item.sig.asyncness.is_some() {
@@ -1642,15 +1663,12 @@ fn collect_item_async_exposures(item: &syn::Item, module: &str, out: &mut Vec<St
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            // Owner-qualify by the impl's self type so `impl A`/`impl B` async methods of the same
-            // name never collide under the (target, rule, finding) baseline (a false negative).
-            // `type_to_string` renders generics (`Foo<u8>` vs `Foo<u16>` stay distinct). A `None`
-            // owner falls back to `_` — a STATED render-granularity bound (same class as the `dyn`/
-            // `impl Trait` renderers' `_`): two DISTINCT but unrenderable self types with an
-            // identically-named+signed async method would share a finding. Unreachable in practice —
-            // an inherent `impl`'s self type is always a concrete nominal path, which renders — so
-            // per the drift law we state it rather than guard an impossible state.
-            let owner = type_to_string(&item.self_ty).unwrap_or_else(|| "_".to_string());
+            // Owner-qualify by the impl's canonical self type (via the shared `canonical_self_owner`,
+            // as the other three collectors do) so `impl A`/`impl B` async methods of the same name
+            // never collide under the (target, rule, finding) baseline (a false negative). Generics
+            // stay distinct (`Foo<u8>` vs `Foo<u16>`); a self type with an unrenderable const-generic
+            // expression is disambiguated by the impl's position, never collapsed.
+            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) && method.sig.asyncness.is_some() {
@@ -1797,7 +1815,7 @@ pub(crate) fn trait_impl_findings(
     let allowed: Vec<String> = allowed.iter().map(|a| canonical_path_str(a)).collect();
 
     let mut findings = Vec::new();
-    for site in &scan.impls {
+    for (ordinal, site) in scan.impls.iter().enumerate() {
         let Some(resolved) = resolve_path(
             &site.trait_path,
             &site.uses,
@@ -1814,14 +1832,16 @@ pub(crate) fn trait_impl_findings(
         if matches_allowed(&site.module, &allowed) {
             continue;
         }
-        // The finding identifies the offending impl by its module location and the
-        // implemented-for type, so two misplaced impls in one module stay distinct. A
-        // self-type the hand-rolled renderer cannot express falls back to location-only.
-        let finding = match type_to_string(&site.self_ty) {
-            Some(self_ty) => format!("{} (impl for {self_ty})", site.module),
-            None => site.module.clone(),
-        };
-        findings.push(finding);
+        // The finding identifies the offending impl by its module location and its implemented-for
+        // type, canonicalized like the inherent-impl seam owner, so two misplaced impls in one
+        // module stay distinct — even when the self type carries an unrenderable const-generic
+        // expression (then disambiguated by the impl's position, never collapsed to a shared
+        // location-only finding that would mask one). Stated label bound: a trait impl's self type
+        // MAY be foreign (`impl LocalTrait for Box<Foo>`), which the module-relative
+        // canonicalization over-qualifies (`crate::m::Box<…>`) — this is a stable identity label,
+        // not a resolved-path claim; the actionable part (the module location) is exact.
+        let owner = canonical_self_owner(&site.self_ty, &site.uses, &site.module, ordinal);
+        findings.push(format!("{} (impl for {owner})", site.module));
     }
     findings.sort();
     findings.dedup();
@@ -2581,17 +2601,16 @@ fn member_label(index: usize, field: &syn::Field) -> String {
     }
 }
 
-/// The owner label for an inherent-impl seam: the rendered self type, `_` when it does not render
-/// (the same stated render-granularity bound async-exposure's owner carries — unreachable for a
-/// real inherent impl, whose self type is always a concrete nominal path).
-fn impl_owner_label(item: &syn::ItemImpl) -> String {
-    type_to_string(&item.self_ty).unwrap_or_else(|| "_".to_string())
-}
-
 /// Collect the type paths exposed by one item's public surface. Only `pub` items
 /// contribute; `pub(crate)`/`pub(in …)`/private are internal, not exposed. Trait `impl`
 /// blocks are skipped (out of scope — their shape is the trait's, not the impl site's).
-fn collect_item_exposures(item: &syn::Item, module: &str, out: &mut Vec<PathExposure>) {
+fn collect_item_exposures(
+    item: &syn::Item,
+    module: &str,
+    uses: &UseMap,
+    ordinal: usize,
+    out: &mut Vec<PathExposure>,
+) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             let seam = fn_seam(module, &item.sig.ident);
@@ -2700,7 +2719,7 @@ fn collect_item_exposures(item: &syn::Item, module: &str, out: &mut Vec<PathExpo
         // Inherent `impl Type { … }` (no trait): its `pub` methods are public API the module
         // authored. Trait impls (`impl Trait for Type`) carry `trait_` and are out of scope.
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            let owner = impl_owner_label(item);
+            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
@@ -2721,7 +2740,13 @@ fn collect_item_exposures(item: &syn::Item, module: &str, out: &mut Vec<PathExpo
 /// walk additionally observes associated-type **defaults** (`type T = Box<dyn …>;`), a
 /// position exposure-governance does not cover. A `dyn` cannot appear in a supertrait or a
 /// `: Bound` (those are trait, not type, positions), so they are skipped here.
-fn collect_item_dyn_exposures(item: &syn::Item, module: &str, out: &mut Vec<ShapeExposure>) {
+fn collect_item_dyn_exposures(
+    item: &syn::Item,
+    module: &str,
+    uses: &UseMap,
+    ordinal: usize,
+    out: &mut Vec<ShapeExposure>,
+) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             let seam = fn_seam(module, &item.sig.ident);
@@ -2821,7 +2846,7 @@ fn collect_item_dyn_exposures(item: &syn::Item, module: &str, out: &mut Vec<Shap
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            let owner = impl_owner_label(item);
+            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
@@ -2986,7 +3011,10 @@ mod tests {
             &["crate::infra"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::infra::DbPool exposed by fn <S>::pool"]);
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by fn <crate::domain::S>::pool"]
+        );
     }
 
     #[test]
@@ -3282,7 +3310,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::domain (impl for Foo)"]);
+        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
     }
 
     #[test]
@@ -3348,7 +3376,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             out,
-            ["crate::commandeer (impl for Foo)"],
+            ["crate::commandeer (impl for crate::commandeer::Foo)"],
             "a sibling of the allowed prefix is not allowed"
         );
     }
@@ -3390,7 +3418,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::command (impl for Foo)"]);
+        assert_eq!(out, ["crate::command (impl for crate::command::Foo)"]);
     }
 
     #[test]
@@ -3409,7 +3437,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::domain (impl for Foo)"]);
+        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
     }
 
     #[test]
@@ -3431,7 +3459,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::domain (impl for Foo)"]);
+        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
     }
 
     #[test]
@@ -3479,7 +3507,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::domain (impl for Foo)"]);
+        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
     }
 
     #[test]
@@ -3504,7 +3532,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::domain (impl for Foo)"]);
+        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
     }
 
     #[test]
@@ -3556,7 +3584,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::domain (impl for Foo)"]);
+        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
     }
 
     #[test]
@@ -3624,7 +3652,73 @@ mod tests {
         .unwrap();
         assert_eq!(
             out,
-            ["crate::domain (impl for A)", "crate::domain (impl for B)"]
+            [
+                "crate::domain (impl for crate::domain::A)",
+                "crate::domain (impl for crate::domain::B)"
+            ]
+        );
+    }
+
+    #[test]
+    fn const_generic_expr_self_types_stay_distinct_owners() {
+        // Two inherent impls whose self types differ ONLY in a complex const-generic
+        // *expression* argument (`Arr<{ 1 + 1 }>` vs `Arr<{ 2 + 2 }>`). The expression is
+        // unrenderable, so the owner falls back to `{base}<_#{ordinal}>` keyed on the impl
+        // block's position among the module's items — keeping the two blocks INJECTIVE.
+        // Previously both collapsed to `fn <_>::a`, masking one leak behind the other.
+        // Items in `domain`: 0 = `struct Arr`, 1 = first impl, 2 = second impl.
+        let out = findings(
+            "const-generic-expr",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Arr<const N: usize>(u8);\n\
+                     impl Arr<{ 1 + 1 }> { pub fn a(&self) -> crate::infra::T { todo!() } }\n\
+                     impl Arr<{ 2 + 2 }> { pub fn a(&self) -> crate::infra::T { todo!() } }\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::T exposed by fn <crate::domain::Arr<_#1>>::a",
+                "crate::infra::T exposed by fn <crate::domain::Arr<_#2>>::a",
+            ],
+            "two const-generic-expr self types yield two distinct positional owners, not one",
+        );
+    }
+
+    #[test]
+    fn owner_is_canonical_across_written_forms() {
+        // The same self type written two ways — a bare `impl Foo` and a fully-qualified
+        // `impl crate::m::Foo` — must render to the IDENTICAL canonical owner
+        // `crate::m::Foo`, so the token form never over-splits a single type into two owners.
+        let out = findings(
+            "canonical-forms",
+            &[
+                ("lib.rs", "pub mod m;\n"),
+                (
+                    "m.rs",
+                    "pub struct Foo;\n\
+                     impl Foo { pub fn a(&self) -> crate::infra::T { todo!() } }\n\
+                     impl crate::m::Foo { pub fn b(&self) -> crate::infra::T { todo!() } }\n",
+                ),
+            ],
+            "crate::m",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::T exposed by fn <crate::m::Foo>::a",
+                "crate::infra::T exposed by fn <crate::m::Foo>::b",
+            ],
+            "both written forms of the same self type render the identical canonical owner",
         );
     }
 
@@ -3646,7 +3740,7 @@ mod tests {
             &["crate::commands"],
         )
         .unwrap();
-        assert_eq!(out, ["crate::domain (impl for Foo)"]);
+        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
     }
 
     #[test]
@@ -3930,8 +4024,8 @@ mod tests {
         assert_eq!(
             out,
             [
-                "crate::domain (impl for W<u16>)",
-                "crate::domain (impl for W<u8>)"
+                "crate::domain (impl for crate::domain::W<u16>)",
+                "crate::domain (impl for crate::domain::W<u8>)"
             ]
         );
     }
@@ -4717,7 +4811,7 @@ mod tests {
                 "pub struct Service; impl Service { pub async fn run(&self) {} }\n"
             )
             .unwrap(),
-            ["async fn <Service>::run(&self)"],
+            ["async fn <crate::m::Service>::run(&self)"],
         );
     }
 
@@ -4768,8 +4862,8 @@ mod tests {
         assert_eq!(
             two_impls,
             [
-                "async fn <A>::run(&self)".to_string(),
-                "async fn <B>::run(&self)".to_string(),
+                "async fn <crate::m::A>::run(&self)".to_string(),
+                "async fn <crate::m::B>::run(&self)".to_string(),
             ],
             "same-named async methods across two impls yield two distinct owner-qualified findings",
         );
