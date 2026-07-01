@@ -48,6 +48,33 @@ pub enum DependencyKind {
     Build,
 }
 
+/// A dependency's **declared** source kind, classified from `cargo metadata`'s
+/// `source` field. The vocabulary of the [`Rule::RestrictDependencySourcesTo`]
+/// allowlist. Like [`DependencyKind`], it mirrors a fixed cargo distinction (a
+/// declared source is a registry, a git, or a path), so it is intentionally not
+/// `#[non_exhaustive]`: it will not grow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceKind {
+    /// A registry source (`registry+…`, `sparse+…`, or an alternative registry) —
+    /// the residual kind, matched by neither of the others.
+    Registry,
+    /// A git source (`git+…`).
+    Git,
+    /// A path/internal source (a null declared source).
+    Path,
+}
+
+impl SourceKind {
+    /// The stable string label, feeding the rule's text and JSON projection.
+    pub(crate) fn label(&self) -> &'static str {
+        match self {
+            SourceKind::Registry => "registry",
+            SourceKind::Git => "git",
+            SourceKind::Path => "path",
+        }
+    }
+}
+
 /// One boundary, of either kind. Named `Boundary` (umbrella) with the crate kind as
 /// [`CrateBoundary`]: now that a module reaction exists, the v0.1 rename is earned
 /// (drift law D2).
@@ -157,6 +184,17 @@ pub enum Rule {
         /// The closed allowlist of permitted workspace-member names.
         allowed: Vec<String>,
     },
+    /// Restrict the **declared source kinds** of the target's dependencies to a closed
+    /// allowlist: any dependency whose classified [`SourceKind`] (from its `cargo
+    /// metadata` declared `source`) is not in `allowed` is a violation. The source-kind
+    /// counterpart of [`RestrictDependenciesTo`](Rule::RestrictDependenciesTo) (which
+    /// governs dependency *names*). An empty allowlist forbids every dependency by
+    /// source. Governs the *declared* source, not the resolved one — a `[patch]`/
+    /// `replace-with` redirect is not observed (a future resolved capability).
+    RestrictDependencySourcesTo {
+        /// The closed allowlist of permitted declared source kinds.
+        allowed: Vec<SourceKind>,
+    },
 }
 
 impl Rule {
@@ -172,6 +210,7 @@ impl Rule {
             Rule::ForbidDependencyOn { .. } => "forbid dependency on",
             Rule::RestrictDependenciesTo { .. } => "restrict dependencies to",
             Rule::RestrictWorkspaceDependenciesTo { .. } => "restrict workspace dependencies to",
+            Rule::RestrictDependencySourcesTo { .. } => "restrict dependency sources to",
         }
     }
 
@@ -199,6 +238,19 @@ impl Rule {
             Rule::RestrictWorkspaceDependenciesTo { allowed } => {
                 format!("restrict workspace dependencies to: {}", allowed.join(", "))
             }
+            Rule::RestrictDependencySourcesTo { allowed } if allowed.is_empty() => {
+                "forbid all dependencies (by source)".to_string()
+            }
+            Rule::RestrictDependencySourcesTo { allowed } => {
+                format!(
+                    "restrict dependency sources to: {}",
+                    allowed
+                        .iter()
+                        .map(SourceKind::label)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
         }
     }
 
@@ -217,6 +269,10 @@ impl Rule {
             Rule::RestrictDependenciesTo { allowed } => vec![("only", serde_json::json!(allowed))],
             Rule::RestrictWorkspaceDependenciesTo { allowed } => {
                 vec![("only_workspace", serde_json::json!(allowed))]
+            }
+            Rule::RestrictDependencySourcesTo { allowed } => {
+                let sources: Vec<&str> = allowed.iter().map(SourceKind::label).collect();
+                vec![("allowed_sources", serde_json::json!(sources))]
             }
         }
     }
@@ -251,6 +307,9 @@ impl Rule {
                     workspace_members.contains(dependency) && !allowed.contains(dependency)
                 })
                 .collect(),
+            Rule::RestrictDependencySourcesTo { allowed } => {
+                dependencies_with_disallowed_source(package, kind, allowed)
+            }
         }
     }
 }
@@ -336,6 +395,38 @@ impl CrateBoundaryBuilder {
     /// [`restrict_workspace_dependencies_to`](Self::restrict_workspace_dependencies_to).
     pub fn forbid_all_workspace_dependencies(self) -> CrateBoundaryDraft {
         self.restrict_workspace_dependencies_to(Vec::<String>::new())
+    }
+
+    /// Restrict the **declared source kinds** of this crate's dependencies to a closed
+    /// allowlist: any dependency whose classified [`SourceKind`] is not in `allowed` is
+    /// a violation (a publishable infra crate declares `[Registry, Path]` to forbid a
+    /// `git` source; a workspace tool may declare the opposite). An empty allowlist
+    /// forbids every dependency by source. Chain [`warn`](CrateBoundaryDraft::warn),
+    /// [`dependency_kind`](CrateBoundaryDraft::dependency_kind), and
+    /// [`because`](CrateBoundaryDraft::because) as with the other crate rules.
+    ///
+    /// Two stated bounds (deliberate, not silent):
+    /// - It governs the **declared** source, not the *resolved* one. A registry
+    ///   dependency redirected to git/path by `[patch]` or `[source] replace-with`
+    ///   reads as `Registry` (no violation) — correct for manifest hygiene, since
+    ///   `[patch]` is workspace-local and never blocks `cargo publish`. Resolved build
+    ///   provenance is a separate future capability.
+    /// - It is source-kind **hygiene**, not a `cargo publish` oracle. A
+    ///   `{ git = "…", version = "…" }` (or `{ path = "…", version = "…" }`) dependency
+    ///   declares a non-registry source and is flagged even though it would publish
+    ///   successfully; the rule does not parse the `version` key.
+    pub fn restrict_dependency_sources_to<I>(self, allowed: I) -> CrateBoundaryDraft
+    where
+        I: IntoIterator<Item = SourceKind>,
+    {
+        CrateBoundaryDraft {
+            target: self.target,
+            rule: Rule::RestrictDependencySourcesTo {
+                allowed: allowed.into_iter().collect(),
+            },
+            severity: Severity::Enforce,
+            kind: DependencyKind::Normal,
+        }
     }
 }
 
