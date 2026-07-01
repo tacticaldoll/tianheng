@@ -869,14 +869,21 @@ fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
 }
 
 fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    serde_json::json!({
+    let mut object = serde_json::json!({
         "kind": "semantic",
         "target": boundary.module(),
         "crate": boundary.crate_package(),
         "rule": "must not expose impl trait",
         "severity": boundary.severity().as_str(),
         "reason": boundary.reason(),
-    })
+    });
+    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
+    // (empty set) projects unchanged, with no `forbidden` param.
+    let operands = boundary.forbidden_operands();
+    if !operands.is_empty() {
+        object["forbidden"] = serde_json::json!(operands);
+    }
+    object
 }
 
 /// The `list --format json` document: the static constitution's projection augmented with one
@@ -1295,6 +1302,25 @@ mod tests {
         let md = list_markdown(&doc);
         assert!(md.contains("## Impl-trait boundaries"), "{md}");
         assert!(md.contains("must not expose impl trait"), "{md}");
+    }
+
+    #[test]
+    fn operand_scoped_impl_trait_boundary_projects_its_forbidden_operands() {
+        let c = Constitution::new("app").impl_trait_boundary(
+            ImplTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_impl_trait_of(["crate::ports::Port"])
+                .because("the core seam must not return an existential Port"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["impl_trait_boundaries"].as_array().expect("projected");
+        assert_eq!(arr[0]["rule"], "must not expose impl trait");
+        assert_eq!(arr[0]["forbidden"][0], "crate::ports::Port");
+        let md = list_markdown(&doc);
+        assert!(
+            md.contains("forbidden: crate::ports::Port"),
+            "the operand set surfaces as a param:\n{md}"
+        );
     }
 
     #[test]

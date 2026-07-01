@@ -85,14 +85,18 @@ Built depths past the shape-only dyn (same `syn` source):
   silently commits to its auto-traits. Shape-only; reuses the public-surface walk and the `dyn`
   bound renderer, governing **return positions only**. Argument-position `impl Trait` (APIT,
   universal) and `async fn`'s implicit `impl Future` are stated out-of-scope bounds.
+- **Operand-scoped impl-trait** (`.must_not_expose_impl_trait_of([…])`) — **BUILT (v0.1.2).** The
+  named-operand depth of the shape-only impl-trait, mirroring the dyn stair: a returned `impl
+  Trait` whose **principal trait** canonicalizes into the forbidden set reacts (so a seam may allow
+  `impl Iterator` while forbidding `impl crate::Port`), resolved through the shared 渾儀 resolver
+  and generalized with dyn onto one `ShapeExposure` collector + `principal_trait_path`. Empty set ⇒
+  any (never a no-op); return-position scoping and the APIT/async bounds are inherited.
 
 Forward depths (born when built, same `syn` source):
 - **Async-exposure** — a public seam must not expose an `async fn` (its compiler-inserted
   `impl Future` existential), the sibling of impl-trait for the *implicit* existential. Distinct
   syntactic signal (`sig.asyncness`); a broader `must_not_expose_existential` could unify it with
   RPIT. Not yet built; admitted only when it passes the capability-admission test.
-- **Operand-scoped impl-trait** (`must_not_expose_impl_trait_of([…])`) — the named-operand depth of
-  the shape-only impl-trait, mirroring the dyn stair. Not yet built.
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),
