@@ -130,6 +130,32 @@ louke::install(
 // then at each seam: louke::assert_boundary!("domain-entry", obj);
 ```
 
+**渾儀's depth stair — start shape-only, tighten to a named operand.** A semantic boundary is
+declared at the same seam in two rungs: forbid the *shape* first, then narrow to a *named* trait
+once the intent is precise. The same stair applies to `impl Trait` (`must_not_expose_impl_trait`
+→ `must_not_expose_impl_trait_of`) and, for the implicit existential, `must_not_expose_async_fn`.
+
+```rust
+Constitution::new("my-project")
+    // Rung 1 — shape-only: the core seam must not leak ANY dyn (no dynamic dispatch at the seam).
+    .dyn_trait_boundary(
+        DynTraitBoundary::in_crate("my-core")
+            .module("crate::core")
+            .must_not_expose_dyn()
+            .because("the core's public seam is statically dispatched"),
+    )
+    // Rung 2 — operand-scoped: allow a std `dyn Error`, but never a `dyn` of our own Port.
+    .dyn_trait_boundary(
+        DynTraitBoundary::in_crate("my-core")
+            .module("crate::adapters")
+            .must_not_expose_dyn_of(["crate::ports::Port"])
+            .because("adapters may surface std errors but must not leak a dyn Port"),
+    )
+```
+
+An empty operand set degenerates to shape-only (any `dyn`) — a loud over-reaction, never a
+silent no-op — so a mis-declared narrowing can never become a false negative.
+
 Beneath the dimensions sits **`xuanji` (璇璣) — the 底**: the dimension-agnostic
 **reaction model** (`Severity`, `Violation`, `Report`, `Baseline`, `Outcome`) every
 dimension reacts in. It is `serde_json`-only, carries no observation engine, and depends

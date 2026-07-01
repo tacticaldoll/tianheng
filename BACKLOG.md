@@ -40,7 +40,7 @@ Forward depths (born when built, same `cargo metadata` source):
   (see `PROJECT.md`); born when built, adding a resolved-layer read (heavier, lockfile-dependent),
   never retrofitted onto the hermetic declared rule.
 
-### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn-trait)**
+### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn/impl-trait stair + async-exposure)**
 Observation source: the **AST** (`syn`). Sees what the `圭表` `use`-scan cannot — semantics
 in the syntax tree: `pub` signatures, `impl Trait for Type`, attributes/derives, visibility.
 The observation-source fork is **resolved**: `syn` was chosen (stable; its syntactic partial

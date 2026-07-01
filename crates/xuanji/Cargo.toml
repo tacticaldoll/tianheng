@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/xuanji"
 readme = "README.md"
 # 璇璣 (Xuánjī) — the jade pivot of the armillary sphere, the instrument of celestial
 # measure. A coined / narrative name (like 圭表, 渾儀, 漏刻), no role-prefix: meaning
@@ -15,7 +16,4 @@ keywords = ["governance", "architecture", "boundary", "drift", "ci"]
 categories = ["development-tools"]
 
 [dependencies]
-serde_json = { workspace = true }
-
-[dev-dependencies]
 serde_json = { workspace = true }
