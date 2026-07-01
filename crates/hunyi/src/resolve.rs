@@ -505,6 +505,59 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
     }
 }
 
+/// The canonical, injective owner label for an `impl` block's self type — used to seam-qualify
+/// the block's methods (`fn <{owner}>::name`) and its trait-impl-locality finding (`impl for
+/// {owner}`), so two distinct impl blocks never collapse to one `(target, rule, finding)` and
+/// mask a leak (the one forbidden bug).
+///
+/// The self type's **base path** is resolved and canonicalized against `uses`/`module`, so
+/// `Foo`, `self::Foo`, and `crate::m::Foo` all render to the same identity (no baseline churn from
+/// the written token form); its generic arguments are appended as rendered, so `Foo<u8>` and
+/// `Foo<u16>` stay distinct. When a part cannot render — a **complex const-generic expression**
+/// argument (`Arr<{ N + 1 }>`), or a non-path / `verbatim` / impl-Trait self type — the label
+/// falls back to a positional marker `_#{ordinal}` (the impl block's index among the module's
+/// items / the scanned impl sites), which stays injective for two otherwise-indistinguishable
+/// blocks. `ordinal` is reached only by these rare unrenderable self types and is stable unless
+/// the items are reordered — this is the render-granularity bound, now injective rather than a
+/// silent collapse (previously the self type wrongly rendered `_`, masking a distinct block).
+pub(crate) fn canonical_self_owner(
+    self_ty: &syn::Type,
+    uses: &UseMap,
+    module: &str,
+    ordinal: usize,
+) -> String {
+    if let syn::Type::Path(tp) = self_ty {
+        if tp.qself.is_none() {
+            if let Some(base) = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule) {
+                return match render_last_segment_args(&tp.path) {
+                    Some(args) => format!("{base}{args}"),
+                    // Base resolved but a generic arg is unrenderable: keep the readable base,
+                    // disambiguate the arg by the block's position so two blocks stay distinct.
+                    None => format!("{base}<_#{ordinal}>"),
+                };
+            }
+        }
+    }
+    // A non-path self type: render it if the hand-rolled renderer can, else a positional marker.
+    type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}"))
+}
+
+/// Render a path's **last** segment's angle-bracketed generic arguments (`<u8, T>`), `""` when it
+/// has none, or `None` when any argument is unrenderable (a complex const-generic expression) or
+/// the segment is parenthesized (`Fn(..)`). Used to append a self type's generics to its resolved
+/// base path in [`canonical_self_owner`].
+fn render_last_segment_args(path: &syn::Path) -> Option<String> {
+    match &path.segments.last()?.arguments {
+        syn::PathArguments::None => Some(String::new()),
+        syn::PathArguments::AngleBracketed(args) => {
+            let rendered: Option<Vec<String>> =
+                args.args.iter().map(generic_argument_to_string).collect();
+            Some(format!("<{}>", rendered?.join(", ")))
+        }
+        syn::PathArguments::Parenthesized(_) => None,
+    }
+}
+
 /// Render a `syn::Path` (idents joined by `::`, with angle-bracketed type arguments) for
 /// a finding string. `None` for a shape it cannot render (e.g. parenthesized `Fn` args).
 fn path_to_string(path: &syn::Path) -> Option<String> {

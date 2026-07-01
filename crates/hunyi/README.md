@@ -49,7 +49,7 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
 ```rust
 use hunyi::{
     SemanticBoundary, TraitImplBoundary, VisibilityBoundary, ForbiddenMarkerBoundary,
-    DynTraitBoundary,
+    DynTraitBoundary, ImplTraitBoundary, AsyncExposureBoundary,
 };
 
 // exposure: my-app's public API must not leak crate::infra::DbPool
