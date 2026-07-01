@@ -30,8 +30,8 @@ use guibiao::{
     constitution_json, constitution_text, report_json, workspace_member_src_dirs,
 };
 use hunyi::{
-    DynTraitBoundary, ForbiddenMarkerBoundary, SemanticBoundary, TraitImplBoundary,
-    VisibilityBoundary,
+    DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary, SemanticBoundary,
+    TraitImplBoundary, VisibilityBoundary,
 };
 use louke::{RuntimeBoundary, audit_probe_coverage};
 use serde_json::Value;
@@ -198,6 +198,7 @@ where
                 print!("{}", visibility_text(&semantic.visibility));
                 print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
                 print!("{}", dyn_trait_text(&semantic.dyn_trait));
+                print!("{}", impl_trait_text(&semantic.impl_trait));
                 print!("{}", runtime_text(runtime));
             }
             // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
@@ -824,9 +825,31 @@ fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> String {
     out
 }
 
+fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> String {
+    if boundaries.is_empty() {
+        return String::new();
+    }
+    let noun = if boundaries.len() == 1 {
+        "boundary"
+    } else {
+        "boundaries"
+    };
+    let mut out = format!("Impl-trait {noun} ({}):\n", boundaries.len());
+    for boundary in boundaries {
+        out.push_str(&format!(
+            "\n[{}] module {} in {}\n  rule:   must not expose impl trait\n  reason: {}\n",
+            boundary.severity().as_str(),
+            boundary.module(),
+            boundary.crate_package(),
+            boundary.reason(),
+        ));
+    }
+    out
+}
+
 /// The JSON projection of one dyn-trait boundary, mirroring a semantic boundary's shape (`kind`,
-/// `target`, `crate`, `rule`, `severity`, `reason`). It carries no `forbidden` set — the rule is
-/// shape-only (any exposed `dyn` reacts), so there is nothing to enumerate.
+/// `target`, `crate`, `rule`, `severity`, `reason`). An operand-scoped boundary additionally
+/// carries the `forbidden` operand set; a shape-only boundary (empty set) emits no such field.
 fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
     let mut object = serde_json::json!({
         "kind": "semantic",
@@ -843,6 +866,17 @@ fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
         object["forbidden"] = serde_json::json!(operands);
     }
     object
+}
+
+fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
+    serde_json::json!({
+        "kind": "semantic",
+        "target": boundary.module(),
+        "crate": boundary.crate_package(),
+        "rule": "must not expose impl trait",
+        "severity": boundary.severity().as_str(),
+        "reason": boundary.reason(),
+    })
 }
 
 /// The `list --format json` document: the static constitution's projection augmented with one
@@ -897,6 +931,15 @@ fn list_document(constitution: &Constitution) -> Value {
                 .dyn_trait
                 .iter()
                 .map(dyn_trait_boundary_json)
+                .collect(),
+        );
+    }
+    if !semantic.impl_trait.is_empty() {
+        document["impl_trait_boundaries"] = Value::Array(
+            semantic
+                .impl_trait
+                .iter()
+                .map(impl_trait_boundary_json)
                 .collect(),
         );
     }
@@ -1000,6 +1043,7 @@ fn list_markdown(document: &Value) -> String {
         ("visibility_boundaries", "Visibility boundaries"),
         ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
         ("dyn_trait_boundaries", "Dyn-trait boundaries"),
+        ("impl_trait_boundaries", "Impl-trait boundaries"),
         ("runtime_boundaries", "Runtime boundaries"),
     ] {
         let Some(Value::Array(items)) = document.get(key) else {
@@ -1233,6 +1277,24 @@ mod tests {
             md.contains("the core seam is statically dispatched"),
             "{md}"
         );
+    }
+
+    #[test]
+    fn impl_trait_boundary_projects_into_list_document_and_markdown() {
+        let c = Constitution::new("app").impl_trait_boundary(
+            ImplTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_impl_trait()
+                .because("the core seam must return named types, not an existential"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["impl_trait_boundaries"].as_array().expect("projected");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["rule"], "must not expose impl trait");
+        assert_eq!(arr[0]["target"], "crate::core");
+        let md = list_markdown(&doc);
+        assert!(md.contains("## Impl-trait boundaries"), "{md}");
+        assert!(md.contains("must not expose impl trait"), "{md}");
     }
 
     #[test]
