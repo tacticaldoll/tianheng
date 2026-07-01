@@ -257,14 +257,6 @@ impl<'ast> Visit<'ast> for PathCollector {
     }
 }
 
-/// A Visitor recording every **trait-object (`dyn`) node** within a syntax node, at any
-/// depth — the leaf observation for `dyn-trait-boundary`. Distinct from [`PathCollector`]:
-/// that one accumulates resolvable *paths* and **erases the `dyn` wrapper** (for
-/// `Box<dyn crate::Port>` it keeps `Box<…>` and `crate::Port`, not the `dyn`-ness), so
-/// dyn-shape governance needs its own collector that records the wrapper node itself,
-/// rendered as a stable finding string. Overriding `visit_type_trait_object` fires for a
-/// `dyn` nested anywhere — `Box<dyn …>`, `&dyn …`, `Vec<Box<dyn …>>`, an `impl Trait`'s
-/// type arguments — so detection is any-depth by construction.
 /// One observed shape node — a `dyn Trait` or a returned `impl Trait` — as its rendered shape
 /// (the stable finding string) plus its **principal trait** path as written (for operand-scoped
 /// matching). Shape-only governance reads `shape`; operand-scoped governance resolves `principal`
@@ -293,6 +285,14 @@ pub(crate) fn stamp_seam(mut exposures: Vec<ShapeExposure>, seam: &str) -> Vec<S
     exposures
 }
 
+/// A Visitor recording every **trait-object (`dyn`) node** within a syntax node, at any
+/// depth — the leaf observation for `dyn-trait-boundary`. Distinct from [`PathCollector`]:
+/// that one accumulates resolvable *paths* and **erases the `dyn` wrapper** (for
+/// `Box<dyn crate::Port>` it keeps `Box<…>` and `crate::Port`, not the `dyn`-ness), so
+/// dyn-shape governance needs its own collector that records the wrapper node itself,
+/// rendered as a stable finding string. Overriding `visit_type_trait_object` fires for a
+/// `dyn` nested anywhere — `Box<dyn …>`, `&dyn …`, `Vec<Box<dyn …>>`, an `impl Trait`'s
+/// type arguments — so detection is any-depth by construction.
 #[derive(Default)]
 pub(crate) struct DynCollector {
     pub(crate) exposures: Vec<ShapeExposure>,

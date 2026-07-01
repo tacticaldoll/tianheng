@@ -13,7 +13,8 @@ It defines:
 
 - `Severity` — `Enforce` (fails the reaction) or `Warn` (advisory).
 - `Violation` — the dimension-agnostic finding: `kind`, `target`, `rule`, `finding`,
-  `reason`, `severity`, `baselined`, with its intrinsic JSON serialization.
+  `reason`, `severity`, `baselined`, and an optional source `file`, with its intrinsic JSON
+  serialization. Identity is `(target, rule, finding)` — `file` is a non-identity byproduct.
 - `Report` — every violation from one evaluation.
 - `Baseline` — a generated snapshot of accepted violations, so a dirty project can adopt a
   boundary and gate only on *new* drift. A baseline **is** a JSON snapshot.
