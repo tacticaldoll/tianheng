@@ -46,6 +46,34 @@ jobs:
           # TIANHENG_WORKSPACE_TESTS=1 so a missing workspace manifest fails loud, never skips.
           TIANHENG_WORKSPACE_TESTS=1 cargo "+$msrv" test --workspace --all-features
 
+  license-files:
+    name: License texts bundled
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: every publishable crate bundles its license texts
+        run: |
+          # `cargo publish` packages only files inside each crate's own directory, so the
+          # workspace-root LICENSE-* files and the inherited SPDX `license` field are NOT enough:
+          # each publishable crate must physically carry its license texts or it ships without
+          # them (a packaging defect latent in 0.1.0/0.1.1). This is release hygiene, not
+          # architectural drift, so it is a CI reaction here — not a Tianheng boundary. Catch a
+          # new crate that forgets the texts before it is ever published.
+          missing=0
+          for manifest in crates/*/Cargo.toml; do
+            dir="${manifest%/Cargo.toml}"
+            if grep -qE '^[[:space:]]*publish[[:space:]]*=[[:space:]]*false' "$manifest"; then
+              continue  # not published — its directory need not carry license texts
+            fi
+            for f in LICENSE-MIT LICENSE-APACHE; do
+              if [ ! -s "$dir/$f" ]; then
+                echo "::error file=$dir/$f::$dir is missing $f — cargo publish ships only crate-local files, so the crate would publish without its license text (the SPDX license field is not enough)"
+                missing=1
+              fi
+            done
+          done
+          exit "$missing"
+
   supply-chain:
     name: Supply chain (cargo-deny)
     runs-on: ubuntu-latest

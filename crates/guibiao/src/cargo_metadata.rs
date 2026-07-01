@@ -169,6 +169,62 @@ pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String>
     found
 }
 
+/// Classify a dependency's **declared** source kind from its `cargo metadata`
+/// (`--no-deps`) `source` field. Mirrors [`external_dependencies`]'s convention (a
+/// null source is internal/path) one notch finer:
+///
+/// - **null** source → `Path` (a `path = "…"` / internal dependency)
+/// - source beginning **`git+`** → `Git` (cargo spells a declared git source `git+<url>`)
+/// - any other non-null source → `Registry` (the residual: `registry+`, `sparse+`, and
+///   alternative registries, so a new registry scheme classifies correctly with no code
+///   change — the same robustness `external_dependencies` relies on)
+///
+/// Only `Git` is matched by a positive prefix and only `Path` by null; `Registry` is the
+/// residual. Verified against `cargo metadata --no-deps` on a probe manifest: a
+/// `git = "…"` dependency reads `source = "git+…"` **even with a `version` key and even
+/// when `optional = true`**, and a workspace-**inherited** git dependency
+/// (`{ workspace = true }`) reads `git+…` too (cargo flattens the inherited source into
+/// the member's manifest). A path dependency reads `source = null`. The read is hermetic
+/// — a pure function of the manifests, no lockfile and no network.
+fn classify_source(dependency: &Value) -> SourceKind {
+    match dependency["source"].as_str() {
+        None => SourceKind::Path,
+        Some(source) if source.starts_with("git+") => SourceKind::Git,
+        Some(_) => SourceKind::Registry,
+    }
+}
+
+/// The **real package names** (not local renames) of the target's dependencies in the
+/// selected table whose classified [`SourceKind`] is not in `allowed`. The observation
+/// for [`Rule::RestrictDependencySourcesTo`]. Same conventions as [`dependencies`]:
+/// walks every declared dependency of the kind (path/internal included, since `Path` is
+/// a governed source), reports the package name (a renamed dep by its real name), and
+/// includes `optional` deps — a declared source is governed as declared (PROJECT.md), and
+/// an optional git dependency blocks publishing just as a required one does. An empty
+/// `allowed` set flags every dependency of the kind.
+pub(crate) fn dependencies_with_disallowed_source(
+    package: &Value,
+    kind: DependencyKind,
+    allowed: &[SourceKind],
+) -> Vec<String> {
+    let mut found = Vec::new();
+    if let Some(deps) = package["dependencies"].as_array() {
+        for dependency in deps {
+            if !kind_matches(dependency, kind) {
+                continue;
+            }
+            if !allowed.contains(&classify_source(dependency)) {
+                if let Some(name) = dependency["name"].as_str() {
+                    found.push(name.to_string());
+                }
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +272,41 @@ mod tests {
         let dirs = member_src_dirs(&metadata);
         // The lib target wins; both targets share the same src dir here, so one entry.
         assert_eq!(dirs, vec![PathBuf::from("/ws/both/src")], "{dirs:?}");
+    }
+
+    #[test]
+    fn classify_source_reads_the_declared_source_field() {
+        // The three classifications, against the exact source strings `cargo metadata
+        // --no-deps` emits (verified on a probe manifest).
+        assert_eq!(
+            classify_source(&json!({ "name": "localdep", "source": null })),
+            SourceKind::Path,
+            "a null source is a path/internal dependency",
+        );
+        assert_eq!(
+            classify_source(&json!({ "name": "gitdep", "source": "git+https://example.com/x" })),
+            SourceKind::Git,
+            "a git+ source is git",
+        );
+        assert_eq!(
+            classify_source(&json!({
+                "name": "crates_io",
+                "source": "registry+https://github.com/rust-lang/crates.io-index"
+            })),
+            SourceKind::Registry,
+            "a registry+ source is registry",
+        );
+        assert_eq!(
+            classify_source(
+                &json!({ "name": "alt", "source": "sparse+https://my.registry/index/" })
+            ),
+            SourceKind::Registry,
+            "a sparse+ alternative registry is the residual Registry, not misread as git/path",
+        );
+        // An absent `source` key (Value::Null) classifies as Path, like a null one.
+        assert_eq!(
+            classify_source(&json!({ "name": "no_source_key" })),
+            SourceKind::Path,
+        );
     }
 }

@@ -33,6 +33,43 @@ let constitution = Constitution::new("my-project")
 let outcome = check(&constitution, std::path::Path::new("path/to/Cargo.toml"));
 ```
 
+Beyond *which* crates a target may depend on (by name, or the external/internal split), a
+crate boundary can also restrict the **declared source kind** of its dependencies — the
+git-vs-registry-vs-path distinction `cargo metadata` records:
+
+```rust
+use guibiao::{CrateBoundary, SourceKind};
+
+// A crate prepared for crates.io declares no git source: its manifest must name only
+// registry and path dependencies (an *optional* git dependency blocks publishing too).
+let boundary = CrateBoundary::crate_("infra")
+    .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+    .because("infra must publish to crates.io, so its manifest declares no git dependencies");
+```
+
+Two **stated bounds** (deliberate, never silently overreached):
+- It governs the **declared** source, not the *resolved* one. A registry dependency that
+  `[patch]` or `[source] replace-with` redirects to git reads as `registry+…` and does **not**
+  violate — correct for manifest hygiene, since `[patch]` is workspace-local and never blocks
+  `cargo publish`. Observing the resolved source is cargo-deny's `[sources]` lane, not a
+  Tianheng capability.
+- It is source-kind **hygiene**, not a `cargo publish` oracle. A `{ git = "…", version = "…" }`
+  dependency declares a git source and is flagged even though it would publish successfully;
+  the rule classifies by the declared source and does not parse the `version` key.
+
+**The crate-boundary rules** (each declared in Rust, each carrying a `.because(…)` reason and an
+optional `.warn()` severity): `deny_external_dependencies` (allow a named exception list),
+`forbid_dependency_on([…])`, `restrict_dependencies_to([…])` (a closed allowlist),
+`restrict_workspace_dependencies_to([…])` / `forbid_all_workspace_dependencies` (the
+crate-to-crate layering surface), and `restrict_dependency_sources_to([…])` (above). **The
+module-boundary rules**: `must_not_import`, `restrict_imports_to([…])`, `must_not_be_imported_by`.
+
+By default a crate rule observes the normal `[dependencies]` table; `.dependency_kind(DependencyKind::Dev)`
+(or `Build`) targets `[dev-dependencies]` / `[build-dependencies]` instead — a boundary governs
+exactly one table, so govern two by declaring two. Dev/build findings carry a ` (dev)` / ` (build)`
+suffix so the same dependency governed in two tables stays a distinct finding (a normal-table
+finding keeps the bare name, so existing baselines do not churn).
+
 **Stated partial coverage** (never silently passed): the hand-rolled `use` scanner does not
 see bare path expressions, macro-generated imports, or `#[path]`-remapped modules — closing
 those would require an AST, an amendment, not a silent trade.

@@ -42,6 +42,13 @@ use std::sync::OnceLock;
 
 pub use xuanji::{BoundaryKind, Outcome, Report, Severity, Violation};
 
+/// The canonical runtime seam-origin rule label — written **once** here and referenced by
+/// both the prod reaction (the crate's internal `check_crossing`) and the 天衡 shell's `list`
+/// projection (`tianheng` depends on `louke`, so importing this is the allowed direction). Editing it
+/// in one place updates every projection. The specific allowed-origin set is a per-boundary
+/// detail layered on at each site, not part of this rule-family label.
+pub const RUNTIME_SEAM_RULE: &str = "only declared origins may cross the seam";
+
 // --- Tracked: the trait-level instrumentation -------------------------------
 
 /// The supertrait a governed trait carries so a probe can recover the concrete type behind
@@ -327,10 +334,15 @@ fn check_crossing(
     type_id: TypeId,
     registry: &Registry,
 ) -> Result<Option<Violation>, String> {
-    let s = registry
-        .seams
-        .get(seam)
-        .ok_or_else(|| format!("probe references undeclared runtime seam '{seam}'"))?;
+    let s = registry.seams.get(seam).ok_or_else(|| {
+        // Reason-led, aligned with the CI-audit twin: name the intent (an undeclared seam is
+        // never enforced) before the mechanics. Keeps the `undeclared runtime seam '{seam}'`
+        // substring the prod contract and tests depend on.
+        format!(
+            "an undeclared seam is never enforced — declare the RuntimeBoundary or fix the \
+                 probe's seam name: probe references undeclared runtime seam '{seam}'"
+        )
+    })?;
 
     let info = registry.origins.get(&type_id);
     let origin = info.map(|i| i.origin);
@@ -347,7 +359,13 @@ fn check_crossing(
         Some(i) => format!("{} ({})", i.origin, i.type_name),
         None => "<unregistered origin>".to_string(),
     };
-    let rule = format!("only origins: {}", s.allowed.join(", "));
+    // The rule family is the canonical `RUNTIME_SEAM_RULE` label; the allowed-origin set is the
+    // per-boundary detail appended here, so the prod reaction and the `list` projection share one
+    // rule label (the shell's `runtime` projection references the same const).
+    let rule = format!(
+        "{RUNTIME_SEAM_RULE} (only origins: {})",
+        s.allowed.join(", ")
+    );
     Ok(Some(Violation::new(
         BoundaryKind::Runtime,
         seam.to_string(),
