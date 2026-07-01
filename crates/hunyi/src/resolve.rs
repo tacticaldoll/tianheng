@@ -265,41 +265,44 @@ impl<'ast> Visit<'ast> for PathCollector {
 /// rendered as a stable finding string. Overriding `visit_type_trait_object` fires for a
 /// `dyn` nested anywhere — `Box<dyn …>`, `&dyn …`, `Vec<Box<dyn …>>`, an `impl Trait`'s
 /// type arguments — so detection is any-depth by construction.
-/// One observed `dyn` node: its rendered shape (the stable finding string) plus its
-/// **principal trait** path as written (for operand-scoped matching). Shape-only governance
-/// reads `shape`; operand-scoped governance resolves `principal` (via [`resolve_path`], which
-/// reads the path's segment idents and ignores any generic/parenthesized args) against the
-/// forbidden set.
-pub(crate) struct DynExposure {
+/// One observed shape node — a `dyn Trait` or a returned `impl Trait` — as its rendered shape
+/// (the stable finding string) plus its **principal trait** path as written (for operand-scoped
+/// matching). Shape-only governance reads `shape`; operand-scoped governance resolves `principal`
+/// (via [`resolve_path`], which reads the path's segment idents and ignores any generic/
+/// parenthesized args) against the forbidden set. Shared by the `dyn` and `impl Trait` collectors.
+pub(crate) struct ShapeExposure {
     pub(crate) shape: String,
     pub(crate) principal: Option<syn::Path>,
 }
 
 #[derive(Default)]
 pub(crate) struct DynCollector {
-    pub(crate) exposures: Vec<DynExposure>,
+    pub(crate) exposures: Vec<ShapeExposure>,
 }
 
 impl<'ast> Visit<'ast> for DynCollector {
     fn visit_type_trait_object(&mut self, node: &'ast syn::TypeTraitObject) {
-        self.exposures.push(DynExposure {
+        self.exposures.push(ShapeExposure {
             shape: trait_object_to_string(node),
-            principal: trait_object_principal_path(node),
+            principal: principal_trait_path(&node.bounds),
         });
         syn::visit::visit_type_trait_object(self, node);
     }
 }
 
-/// The **principal (base) trait** path of a trait object: the path of the **first**
+/// The **principal (base) trait** path of a shape node's bounds: the path of the **first**
 /// `TypeParamBound::Trait`. Rust's grammar guarantees the base trait is syntactically first, so
 /// any auto-trait (`Send`, `Sync`) or lifetime bound can only follow it and is never the
-/// principal — hence "first trait bound", not a name-skip (`dyn Send` correctly yields `Send`,
-/// its own principal). `None` if the object carries no trait bound at all (only lifetimes — not a
-/// constructible exposed `dyn`). Returned as the `syn::Path` as written; the caller resolves and
-/// canonicalizes it exactly as an exposed type path (segment idents only; any generic/
-/// parenthesized args on `dyn Iterator<…>` / `dyn Fn(…)` are ignored by [`resolve_path`]).
-pub(crate) fn trait_object_principal_path(node: &syn::TypeTraitObject) -> Option<syn::Path> {
-    node.bounds.iter().find_map(|bound| match bound {
+/// principal — hence "first trait bound", not a name-skip (`dyn Send` / `impl Send` correctly
+/// yields `Send`, its own principal). `None` if there is no trait bound at all (only lifetimes).
+/// Returned as the `syn::Path` as written; the caller resolves and canonicalizes it exactly as an
+/// exposed type path (segment idents only; generic/parenthesized args on `Iterator<…>` / `Fn(…)`
+/// are ignored by [`resolve_path`]). A `dyn` and an `impl Trait` share this — their `bounds` are
+/// the same `Punctuated<TypeParamBound>`.
+pub(crate) fn principal_trait_path(
+    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
+) -> Option<syn::Path> {
+    bounds.iter().find_map(|bound| match bound {
         syn::TypeParamBound::Trait(trait_bound) => Some(trait_bound.path.clone()),
         _ => None,
     })
@@ -336,12 +339,15 @@ pub(crate) fn impl_trait_to_string(node: &syn::TypeImplTrait) -> String {
 /// the caller (existential positions), so argument-position `impl Trait` (APIT) is never collected.
 #[derive(Default)]
 pub(crate) struct ImplTraitCollector {
-    pub(crate) impls: Vec<String>,
+    pub(crate) exposures: Vec<ShapeExposure>,
 }
 
 impl<'ast> Visit<'ast> for ImplTraitCollector {
     fn visit_type_impl_trait(&mut self, node: &'ast syn::TypeImplTrait) {
-        self.impls.push(impl_trait_to_string(node));
+        self.exposures.push(ShapeExposure {
+            shape: impl_trait_to_string(node),
+            principal: principal_trait_path(&node.bounds),
+        });
         syn::visit::visit_type_impl_trait(self, node);
     }
 }

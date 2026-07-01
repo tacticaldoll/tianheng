@@ -268,7 +268,12 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   always syntactically observable — `async fn`'s *implicit* `impl Future` and nightly TAIT are
   **distinct, stated-out-of-scope** forms, not silent misses of the written-RPIT domain); and
   anchorable (module). It reuses the public-surface walk and the `dyn` bound renderer, governing
-  return positions only. **Rejected**, as explicit non-goals with their reason:
+  return positions only. Its **named-operand depth** (`must_not_expose_impl_trait_of([…])`, same
+  release) climbs the same `shape → named-operand` stair as operand-scoped dyn — a returned
+  `impl Trait` whose principal trait resolves into a forbidden set reacts (so a seam may allow
+  `impl Iterator` yet forbid `impl crate::Port`); dyn and impl-trait were generalized onto one
+  `ShapeExposure` collector and a shared `principal_trait_path`, so the two shapes share the
+  operand machinery exactly. **Rejected**, as explicit non-goals with their reason:
   `Send`/`Sync` constraints (auto-traits are inferred, never written), external trait
   sealing (downstream crates are outside the scan), and transitive effect-purity ("no I/O
   anywhere reachable") — each has an *essential* gap. This test is the standing gate: a new

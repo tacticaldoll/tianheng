@@ -36,7 +36,7 @@ use syn::visit::Visit;
 
 mod resolve;
 use resolve::{
-    BareFallback, DynCollector, DynExposure, ImplTraitCollector, PathCollector, ReexportMap,
+    BareFallback, DynCollector, ImplTraitCollector, PathCollector, ReexportMap, ShapeExposure,
     UseMap, canonical_path_str, canonicalize_through_reexports, collect_reexports, collect_uses,
     resolve_path, strip_raw, type_to_string,
 };
@@ -674,6 +674,9 @@ impl DynTraitBoundaryDraft {
 pub struct ImplTraitBoundary {
     pub(crate) crate_package: String,
     pub(crate) module: String,
+    /// The forbidden trait operands. **Empty ⇒ shape-only** (any returned `impl Trait` reacts); a
+    /// named set ⇒ only a returned `impl Trait` whose principal trait canonicalizes into the set.
+    pub(crate) forbidden_operands: Vec<String>,
     pub(crate) reason: String,
     pub(crate) severity: Severity,
 }
@@ -694,6 +697,12 @@ impl ImplTraitBoundary {
     /// The governed module path (e.g. `crate::core`).
     pub fn module(&self) -> &str {
         &self.module
+    }
+
+    /// The forbidden trait operands. Empty ⇒ shape-only (any returned `impl Trait` reacts); a named
+    /// set ⇒ only a returned `impl Trait` whose principal trait resolves into the set reacts.
+    pub fn forbidden_operands(&self) -> &[String] {
+        &self.forbidden_operands
     }
 
     /// The human-readable reason recorded with the boundary (the repair hint).
@@ -738,6 +747,34 @@ impl ImplTraitModuleDraft {
         ImplTraitBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
+            forbidden_operands: Vec::new(),
+            severity: Severity::Enforce,
+        }
+    }
+
+    /// Forbid the module's public API from **returning** a `impl Trait` of any **named trait** —
+    /// the operand-scoped depth of [`must_not_expose_impl_trait`](Self::must_not_expose_impl_trait).
+    /// A returned `impl Trait` whose **principal trait** (its first trait bound) canonicalizes into
+    /// `operands` is a violation; a returned `impl Trait` of any other trait passes (so a seam may
+    /// allow ergonomic existentials like `impl Iterator` while forbidding `impl crate::Port`). An
+    /// `operands` entry may be an exact trait path or a module prefix, and a re-exported/aliased
+    /// facade matches its defining path (the same 渾儀 resolver the forbidden-type rule uses).
+    ///
+    /// Bounds (stated): an **empty** `operands` set degenerates to shape-only (any returned
+    /// `impl Trait`) — loud, never an inert no-op. Auto-trait/lifetime bounds are never operands
+    /// (only the principal, first, trait). A principal that does not resolve — a bare std trait
+    /// (`impl Iterator`/`impl Future` written bare), a macro/glob re-export — is out of the
+    /// resolver's stated coverage and not matched; a *resolvable* operand is never silently passed.
+    /// Return-position scoping is inherited (APIT and `async fn` are not governed).
+    pub fn must_not_expose_impl_trait_of<I, S>(self, operands: I) -> ImplTraitBoundaryDraft
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        ImplTraitBoundaryDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            forbidden_operands: operands.into_iter().map(Into::into).collect(),
             severity: Severity::Enforce,
         }
     }
@@ -747,6 +784,7 @@ impl ImplTraitModuleDraft {
 pub struct ImplTraitBoundaryDraft {
     crate_package: String,
     module: String,
+    forbidden_operands: Vec<String>,
     severity: Severity,
 }
 
@@ -763,6 +801,7 @@ impl ImplTraitBoundaryDraft {
         ImplTraitBoundary {
             crate_package: self.crate_package,
             module: self.module,
+            forbidden_operands: self.forbidden_operands,
             reason: reason.to_string(),
             severity: self.severity,
         }
@@ -1191,12 +1230,24 @@ fn check_impl_trait_boundary(
         .parent()
         .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
 
-    let findings = impl_trait_module_findings(
-        src_dir,
-        &root_file,
-        &boundary.module,
-        &boundary.crate_package,
-    )?;
+    // Empty operand set ⇒ shape-only (any returned impl Trait), via the resolution-free path; a
+    // named set ⇒ operand-scoped, resolving each returned impl Trait's principal trait.
+    let findings = if boundary.forbidden_operands.is_empty() {
+        impl_trait_module_findings(
+            src_dir,
+            &root_file,
+            &boundary.module,
+            &boundary.crate_package,
+        )?
+    } else {
+        impl_trait_operand_module_findings(
+            src_dir,
+            &root_file,
+            &boundary.module,
+            &boundary.forbidden_operands,
+            &boundary.crate_package,
+        )?
+    };
 
     for finding in findings {
         // Like the sibling 渾儀 rules, a violation's `file` is a faithful `None` (no per-element
@@ -1226,19 +1277,63 @@ pub(crate) fn impl_trait_module_findings(
     crate_package: &str,
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
-    let mut found = Vec::new();
+    let mut exposures = Vec::new();
     for item in &items {
-        collect_item_return_impl_traits(item, &mut found);
+        collect_item_return_impl_traits(item, &mut exposures);
     }
-    found.sort();
-    found.dedup();
-    Ok(found)
+    let mut findings: Vec<String> = exposures.into_iter().map(|e| e.shape).collect();
+    findings.sort();
+    findings.dedup();
+    Ok(findings)
 }
 
-/// Collect the rendered `impl Trait` shapes in the **return type** of a public item's
+/// The pure heart of the **operand-scoped** impl-trait boundary: like [`impl_trait_module_findings`]
+/// but keeps only the returned `impl Trait` nodes whose **principal trait** resolves into the
+/// forbidden operand set — the exact pipeline [`dyn_operand_module_findings`] uses
+/// (`resolve_path(BareFallback::Ignore)` → `canonicalize_through_reexports` → `matches_forbidden`,
+/// exact-or-module-prefix), so a re-exported/aliased trait facade matches its defining path. An
+/// empty set ⇒ any returned `impl Trait` (never a silent no-op). An unresolvable principal (a bare
+/// std trait, macro/glob re-export) is dropped — the stated resolver bound, never a silent pass of
+/// a *resolvable* operand. The finding stays the rendered `impl …` shape (parity with shape-only).
+pub(crate) fn impl_trait_operand_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    forbidden: &[String],
+    crate_package: &str,
+) -> Result<Vec<String>, String> {
+    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    let uses = collect_uses(&items);
+    let reexports = scan_crate(src_dir, root_file, crate_package)?.reexports;
+    let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
+
+    let mut exposures = Vec::new();
+    for item in &items {
+        collect_item_return_impl_traits(item, &mut exposures);
+    }
+
+    let mut findings: Vec<String> = exposures
+        .into_iter()
+        .filter(|exposure| {
+            forbidden.is_empty()
+                || exposure
+                    .principal
+                    .as_ref()
+                    .and_then(|path| resolve_path(path, &uses, module, BareFallback::Ignore))
+                    .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
+                    .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
+        })
+        .map(|exposure| exposure.shape)
+        .collect();
+    findings.sort();
+    findings.dedup();
+    Ok(findings)
+}
+
+/// Collect the returned-`impl Trait` [`ShapeExposure`]s in the **return type** of a public item's
 /// functions/methods only (the existential positions). Never visits argument positions (APIT is
 /// universal, not a leak) nor trait-*impl* methods (their return shape is dictated by the trait).
-fn collect_item_return_impl_traits(item: &syn::Item, out: &mut Vec<String>) {
+fn collect_item_return_impl_traits(item: &syn::Item, out: &mut Vec<ShapeExposure>) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             out.extend(impl_traits_in_return(&item.sig));
@@ -1265,14 +1360,15 @@ fn collect_item_return_impl_traits(item: &syn::Item, out: &mut Vec<String>) {
     }
 }
 
-/// The rendered `impl Trait` shapes in a signature's **return type** (at any depth). Visits
-/// `sig.output` ONLY — never `sig.inputs`, so argument-position `impl Trait` (APIT) is excluded.
-fn impl_traits_in_return(sig: &syn::Signature) -> Vec<String> {
+/// The returned-`impl Trait` [`ShapeExposure`]s in a signature's **return type** (at any depth).
+/// Visits `sig.output` ONLY — never `sig.inputs`, so argument-position `impl Trait` (APIT) is
+/// excluded.
+fn impl_traits_in_return(sig: &syn::Signature) -> Vec<ShapeExposure> {
     let mut collector = ImplTraitCollector::default();
     if let syn::ReturnType::Type(_, ty) = &sig.output {
         collector.visit_type(ty);
     }
-    collector.impls
+    collector.exposures
 }
 
 // --- Trait-impl-locality: the reaction ---------------------------------------
@@ -2056,19 +2152,19 @@ fn paths_in_generics(generics: &syn::Generics) -> Vec<syn::Path> {
     c.paths
 }
 
-fn dyns_in_signature(sig: &syn::Signature) -> Vec<DynExposure> {
+fn dyns_in_signature(sig: &syn::Signature) -> Vec<ShapeExposure> {
     let mut c = DynCollector::default();
     c.visit_signature(sig);
     c.exposures
 }
 
-fn dyns_in_type(ty: &syn::Type) -> Vec<DynExposure> {
+fn dyns_in_type(ty: &syn::Type) -> Vec<ShapeExposure> {
     let mut c = DynCollector::default();
     c.visit_type(ty);
     c.exposures
 }
 
-fn dyns_in_generics(generics: &syn::Generics) -> Vec<DynExposure> {
+fn dyns_in_generics(generics: &syn::Generics) -> Vec<ShapeExposure> {
     let mut c = DynCollector::default();
     c.visit_generics(generics);
     c.exposures
@@ -2162,7 +2258,7 @@ fn collect_item_exposures(item: &syn::Item, out: &mut Vec<syn::Path>) {
 /// walk additionally observes associated-type **defaults** (`type T = Box<dyn …>;`), a
 /// position exposure-governance does not cover. A `dyn` cannot appear in a supertrait or a
 /// `: Bound` (those are trait, not type, positions), so they are skipped here.
-fn collect_item_dyn_exposures(item: &syn::Item, out: &mut Vec<DynExposure>) {
+fn collect_item_dyn_exposures(item: &syn::Item, out: &mut Vec<ShapeExposure>) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             out.extend(dyns_in_signature(&item.sig));
@@ -3867,6 +3963,182 @@ mod tests {
         assert_eq!(b.crate_package(), "core");
         assert_eq!(b.module(), "crate::core");
         assert_eq!(b.severity(), Severity::Warn);
+    }
+
+    // --- operand-scoped impl-trait --------------------------------------------
+
+    fn impl_trait_operand_findings(
+        name: &str,
+        files: &[(&str, &str)],
+        module: &str,
+        forbidden: &[&str],
+    ) -> Result<Vec<String>, String> {
+        let dir = std::env::temp_dir().join(format!("hunyi-implop-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        for (rel, contents) in files {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+            std::fs::write(&path, contents).expect("write source");
+        }
+        let root = src.join("lib.rs");
+        let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
+        let result = impl_trait_operand_module_findings(&src, &root, module, &forbidden, "x");
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    fn impl_trait_operand_mod(
+        name: &str,
+        body: &str,
+        forbidden: &[&str],
+    ) -> Result<Vec<String>, String> {
+        impl_trait_operand_findings(
+            name,
+            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
+            "crate::m",
+            forbidden,
+        )
+    }
+
+    #[test]
+    fn impl_trait_operand_flags_a_named_trait_and_passes_others() {
+        assert_eq!(
+            impl_trait_operand_mod(
+                "named",
+                "pub fn make() -> impl crate::ports::Port { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap(),
+            ["impl crate::ports::Port"],
+        );
+        // A returned impl Iterator (ergonomic existential) passes when only a domain port is forbidden.
+        assert!(
+            impl_trait_operand_mod(
+                "iter",
+                "pub fn it() -> impl Iterator<Item = u8> { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap()
+            .is_empty(),
+            "a returned impl of an unlisted (and bare-std) trait passes",
+        );
+    }
+
+    #[test]
+    fn impl_trait_operand_honors_a_module_prefix() {
+        assert_eq!(
+            impl_trait_operand_mod(
+                "prefix",
+                "pub fn make() -> impl crate::ports::Port { todo!() }\n",
+                &["crate::ports"],
+            )
+            .unwrap(),
+            ["impl crate::ports::Port"],
+        );
+    }
+
+    #[test]
+    fn impl_trait_operand_matches_a_reexported_trait_by_its_defining_path() {
+        let files = &[
+            (
+                "lib.rs",
+                "pub mod ports;\npub use crate::ports::Port;\npub mod m;\n",
+            ),
+            ("ports.rs", "pub trait Port {}\n"),
+            ("m.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+        ];
+        assert_eq!(
+            impl_trait_operand_findings("reexport", files, "crate::m", &["crate::ports::Port"])
+                .unwrap(),
+            ["impl crate::Port"],
+        );
+    }
+
+    #[test]
+    fn impl_trait_operand_ignores_auto_trait_markers() {
+        assert_eq!(
+            impl_trait_operand_mod(
+                "marker-port",
+                "pub fn make() -> impl crate::ports::Port + Send { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap(),
+            ["impl crate::ports::Port + Send"],
+        );
+        assert!(
+            impl_trait_operand_mod(
+                "marker-send",
+                "pub fn make() -> impl crate::ports::Port + Send { todo!() }\n",
+                &["Send"],
+            )
+            .unwrap()
+            .is_empty(),
+            "the trailing Send marker is not the operand",
+        );
+    }
+
+    #[test]
+    fn impl_trait_operand_matches_a_nested_returned_impl() {
+        assert_eq!(
+            impl_trait_operand_mod(
+                "nested",
+                "pub fn maybe() -> Option<impl crate::ports::Port> { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap(),
+            ["impl crate::ports::Port"],
+        );
+    }
+
+    #[test]
+    fn impl_trait_operand_empty_set_degenerates_to_any() {
+        let body = "pub fn make() -> impl crate::ports::Port { todo!() }\n";
+        assert_eq!(
+            impl_trait_operand_mod("empty", body, &[]).unwrap(),
+            impl_trait_mod("empty-shape", body).unwrap(),
+            "must_not_expose_impl_trait_of([]) matches exactly what shape-only does",
+        );
+    }
+
+    #[test]
+    fn impl_trait_operand_inherits_return_position_scoping() {
+        // APIT and async fn stay out of scope under the operand variant too.
+        assert!(
+            impl_trait_operand_mod(
+                "apit",
+                "pub fn drive(p: impl crate::ports::Port) { let _ = p; }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap()
+            .is_empty(),
+            "argument-position impl Trait is not governed even with a matching operand",
+        );
+        assert!(
+            impl_trait_operand_mod(
+                "async",
+                "pub async fn c() -> u8 { 0 }\n",
+                &["crate::ports::Port"]
+            )
+            .unwrap()
+            .is_empty(),
+        );
+    }
+
+    #[test]
+    fn impl_trait_operand_boundary_carries_operands_and_severity() {
+        let b = ImplTraitBoundary::in_crate("core")
+            .module("crate::core")
+            .must_not_expose_impl_trait_of(["crate::ports::Port"])
+            .warn()
+            .because("the core seam must not return an existential Port");
+        assert_eq!(b.forbidden_operands(), ["crate::ports::Port"]);
+        assert_eq!(b.severity(), Severity::Warn);
+        let shape = ImplTraitBoundary::in_crate("core")
+            .module("crate::core")
+            .must_not_expose_impl_trait()
+            .because("no existential at all");
+        assert!(shape.forbidden_operands().is_empty());
     }
 
     #[test]
