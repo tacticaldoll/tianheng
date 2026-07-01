@@ -828,14 +828,21 @@ fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> String {
 /// `target`, `crate`, `rule`, `severity`, `reason`). It carries no `forbidden` set — the rule is
 /// shape-only (any exposed `dyn` reacts), so there is nothing to enumerate.
 fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
-    serde_json::json!({
+    let mut object = serde_json::json!({
         "kind": "semantic",
         "target": boundary.module(),
         "crate": boundary.crate_package(),
         "rule": "must not expose dyn",
         "severity": boundary.severity().as_str(),
         "reason": boundary.reason(),
-    })
+    });
+    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
+    // (empty set) projects unchanged, with no `forbidden` param.
+    let operands = boundary.forbidden_operands();
+    if !operands.is_empty() {
+        object["forbidden"] = serde_json::json!(operands);
+    }
+    object
 }
 
 /// The `list --format json` document: the static constitution's projection augmented with one
@@ -1225,6 +1232,28 @@ mod tests {
         assert!(
             md.contains("the core seam is statically dispatched"),
             "{md}"
+        );
+    }
+
+    #[test]
+    fn operand_scoped_dyn_boundary_projects_its_forbidden_operands() {
+        let c = Constitution::new("app").dyn_trait_boundary(
+            DynTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_dyn_of(["crate::ports::Port"])
+                .because("the core seam must not leak a dyn Port"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["dyn_trait_boundaries"].as_array().expect("projected");
+        assert_eq!(arr[0]["rule"], "must not expose dyn");
+        assert_eq!(
+            arr[0]["forbidden"][0], "crate::ports::Port",
+            "an operand-scoped boundary projects its forbidden operand set"
+        );
+        let md = list_markdown(&doc);
+        assert!(
+            md.contains("forbidden: crate::ports::Port"),
+            "the operand set surfaces as a generic param:\n{md}"
         );
     }
 

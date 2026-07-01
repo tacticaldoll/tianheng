@@ -36,9 +36,9 @@ use syn::visit::Visit;
 
 mod resolve;
 use resolve::{
-    BareFallback, DynCollector, PathCollector, ReexportMap, UseMap, canonical_path_str,
-    canonicalize_through_reexports, collect_reexports, collect_uses, resolve_path, strip_raw,
-    type_to_string,
+    BareFallback, DynCollector, DynExposure, PathCollector, ReexportMap, UseMap,
+    canonical_path_str, canonicalize_through_reexports, collect_reexports, collect_uses,
+    resolve_path, strip_raw, type_to_string,
 };
 
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
@@ -515,15 +515,23 @@ impl ForbiddenMarkerBoundaryDraft {
 /// A dyn-trait boundary: a module's public API must not **expose** trait-object (`dyn`)
 /// syntax. The type-shape complement of [`SemanticBoundary`] (signature-coupling): where
 /// that forbids an exposed *named type*, this forbids an exposed *type shape* — a `dyn`
-/// node at any depth in the governed public surface. It is **shape-only**: it takes no
-/// trait operand, so *any* exposed `dyn` reacts (operand-scoped `dyn` is a separate future
-/// capability). Internal `dyn` is never a violation — this governs exposure across the
-/// declared seam, not internal dynamic dispatch, so it is intent (by anchor scoping), not a
-/// lint. Declared in Rust and composed with the other dimensions at the gate.
+/// node at any depth in the governed public surface. Internal `dyn` is never a violation —
+/// this governs exposure across the declared seam, not internal dynamic dispatch, so it is
+/// intent (by anchor scoping), not a lint. Declared in Rust and composed with the other
+/// dimensions at the gate.
+///
+/// Two depths on one boundary type, selected by the builder:
+/// - [`must_not_expose_dyn`](DynTraitModuleDraft::must_not_expose_dyn) — **shape-only**: an
+///   empty operand set, so *any* exposed `dyn` reacts.
+/// - [`must_not_expose_dyn_of`](DynTraitModuleDraft::must_not_expose_dyn_of) — **operand-scoped**:
+///   only a `dyn` whose principal trait resolves into the named `forbidden_operands` set reacts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynTraitBoundary {
     pub(crate) crate_package: String,
     pub(crate) module: String,
+    /// The forbidden trait operands. **Empty ⇒ shape-only** (any `dyn` reacts); a named set ⇒
+    /// only a `dyn` whose principal trait canonicalizes into the set reacts.
+    pub(crate) forbidden_operands: Vec<String>,
     pub(crate) reason: String,
     pub(crate) severity: Severity,
 }
@@ -544,6 +552,12 @@ impl DynTraitBoundary {
     /// The governed module path (e.g. `crate::core`).
     pub fn module(&self) -> &str {
         &self.module
+    }
+
+    /// The forbidden trait operands. Empty ⇒ shape-only (any `dyn` reacts); a named set ⇒
+    /// only a `dyn` whose principal trait resolves into the set reacts.
+    pub fn forbidden_operands(&self) -> &[String] {
+        &self.forbidden_operands
     }
 
     /// The human-readable reason recorded with the boundary (the repair hint).
@@ -585,6 +599,35 @@ impl DynTraitModuleDraft {
         DynTraitBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
+            forbidden_operands: Vec::new(),
+            severity: Severity::Enforce,
+        }
+    }
+
+    /// Forbid the module's public API from exposing a `dyn` of any **named trait** — the
+    /// operand-scoped depth of [`must_not_expose_dyn`](Self::must_not_expose_dyn). A `dyn` whose
+    /// **principal trait** (its first trait bound) canonicalizes into `operands` is a violation;
+    /// a `dyn` of any other trait passes. An `operands` entry may be an exact trait path
+    /// (`crate::ports::Port`) or a module prefix (`crate::ports`), and a re-exported/aliased
+    /// trait facade matches its defining path (resolved through the same 渾儀 resolver the
+    /// forbidden-type rule uses).
+    ///
+    /// Bounds (stated, not silent): an **empty** `operands` set degenerates to shape-only
+    /// (`must_not_expose_dyn`) — a loud "any `dyn` reacts", never an inert no-op. A principal
+    /// trait that does not resolve — a bare name with no `use` (a std `dyn Fn(…)` / `dyn
+    /// Iterator<…>`, a bare `dyn Send`), a macro-generated or glob/cross-crate re-exported trait
+    /// — is out of the resolver's stated coverage and is not matched; a *resolvable* operand is
+    /// never silently passed. Auto-trait / lifetime bounds are never operands (only the principal,
+    /// first, trait is matched).
+    pub fn must_not_expose_dyn_of<I, S>(self, operands: I) -> DynTraitBoundaryDraft
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        DynTraitBoundaryDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            forbidden_operands: operands.into_iter().map(Into::into).collect(),
             severity: Severity::Enforce,
         }
     }
@@ -594,6 +637,7 @@ impl DynTraitModuleDraft {
 pub struct DynTraitBoundaryDraft {
     crate_package: String,
     module: String,
+    forbidden_operands: Vec<String>,
     severity: Severity,
 }
 
@@ -610,6 +654,7 @@ impl DynTraitBoundaryDraft {
         DynTraitBoundary {
             crate_package: self.crate_package,
             module: self.module,
+            forbidden_operands: self.forbidden_operands,
             reason: reason.to_string(),
             severity: self.severity,
         }
@@ -884,12 +929,24 @@ fn check_dyn_trait_boundary(
         .parent()
         .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
 
-    let findings = dyn_module_findings(
-        src_dir,
-        &root_file,
-        &boundary.module,
-        &boundary.crate_package,
-    )?;
+    // Empty operand set ⇒ shape-only (any dyn), using the resolution-free path unchanged; a
+    // named set ⇒ operand-scoped, resolving each dyn's principal trait against the forbidden set.
+    let findings = if boundary.forbidden_operands.is_empty() {
+        dyn_module_findings(
+            src_dir,
+            &root_file,
+            &boundary.module,
+            &boundary.crate_package,
+        )?
+    } else {
+        dyn_operand_module_findings(
+            src_dir,
+            &root_file,
+            &boundary.module,
+            &boundary.forbidden_operands,
+            &boundary.crate_package,
+        )?
+    };
 
     for finding in findings {
         // Like signature-coupling, a 渾儀 violation's `file` is a faithful `None` (no per-element
@@ -919,13 +976,62 @@ pub(crate) fn dyn_module_findings(
     crate_package: &str,
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
-    let mut exposed = Vec::new();
+    let mut exposures = Vec::new();
     for item in &items {
-        collect_item_dyn_exposures(item, &mut exposed);
+        collect_item_dyn_exposures(item, &mut exposures);
     }
-    exposed.sort();
-    exposed.dedup();
-    Ok(exposed)
+    let mut findings: Vec<String> = exposures.into_iter().map(|e| e.shape).collect();
+    findings.sort();
+    findings.dedup();
+    Ok(findings)
+}
+
+/// The pure heart of the **operand-scoped** dyn-trait boundary: like [`dyn_module_findings`]
+/// but keeps only the `dyn` nodes whose **principal trait** resolves into the forbidden operand
+/// set. Unlike the shape-only path it **needs** the module's `use`-map and re-export closure —
+/// the principal trait is resolved and canonicalized exactly as [`module_findings`] resolves an
+/// exposed type (`resolve_path(BareFallback::Ignore)` → `canonicalize_through_reexports` →
+/// `matches_forbidden`, exact-or-module-prefix), so a re-exported/aliased trait facade matches
+/// its defining path. A principal that does not resolve (a bare name with no `use`, a
+/// macro-generated or glob/cross-crate re-exported trait) is dropped — the stated
+/// resolver-coverage bound, never a silent pass of a *resolvable* operand. The finding stays the
+/// rendered `dyn …` shape (parity with the shape-only rule and its baseline identity).
+pub(crate) fn dyn_operand_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    forbidden: &[String],
+    crate_package: &str,
+) -> Result<Vec<String>, String> {
+    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    let uses = collect_uses(&items);
+    let reexports = scan_crate(src_dir, root_file, crate_package)?.reexports;
+    let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
+
+    let mut exposures = Vec::new();
+    for item in &items {
+        collect_item_dyn_exposures(item, &mut exposures);
+    }
+
+    let mut findings: Vec<String> = exposures
+        .into_iter()
+        .filter(|exposure| {
+            // Empty forbidden set ⇒ any dyn (the shape-only semantic), never a silent no-op —
+            // safe even if a future caller routes an empty set here (check routes it to the
+            // cheaper resolution-free path, but the invariant must not depend on that).
+            forbidden.is_empty()
+                || exposure
+                    .principal
+                    .as_ref()
+                    .and_then(|path| resolve_path(path, &uses, module, BareFallback::Ignore))
+                    .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
+                    .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
+        })
+        .map(|exposure| exposure.shape)
+        .collect();
+    findings.sort();
+    findings.dedup();
+    Ok(findings)
 }
 
 // --- Trait-impl-locality: the reaction ---------------------------------------
@@ -1709,22 +1815,22 @@ fn paths_in_generics(generics: &syn::Generics) -> Vec<syn::Path> {
     c.paths
 }
 
-fn dyns_in_signature(sig: &syn::Signature) -> Vec<String> {
+fn dyns_in_signature(sig: &syn::Signature) -> Vec<DynExposure> {
     let mut c = DynCollector::default();
     c.visit_signature(sig);
-    c.dyns
+    c.exposures
 }
 
-fn dyns_in_type(ty: &syn::Type) -> Vec<String> {
+fn dyns_in_type(ty: &syn::Type) -> Vec<DynExposure> {
     let mut c = DynCollector::default();
     c.visit_type(ty);
-    c.dyns
+    c.exposures
 }
 
-fn dyns_in_generics(generics: &syn::Generics) -> Vec<String> {
+fn dyns_in_generics(generics: &syn::Generics) -> Vec<DynExposure> {
     let mut c = DynCollector::default();
     c.visit_generics(generics);
-    c.dyns
+    c.exposures
 }
 
 /// Collect the type paths exposed by one item's public surface. Only `pub` items
@@ -1815,7 +1921,7 @@ fn collect_item_exposures(item: &syn::Item, out: &mut Vec<syn::Path>) {
 /// walk additionally observes associated-type **defaults** (`type T = Box<dyn …>;`), a
 /// position exposure-governance does not cover. A `dyn` cannot appear in a supertrait or a
 /// `: Bound` (those are trait, not type, positions), so they are skipped here.
-fn collect_item_dyn_exposures(item: &syn::Item, out: &mut Vec<String>) {
+fn collect_item_dyn_exposures(item: &syn::Item, out: &mut Vec<DynExposure>) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             out.extend(dyns_in_signature(&item.sig));
@@ -3214,6 +3320,175 @@ mod tests {
             &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
             "crate::m",
         )
+    }
+
+    /// Like [`dyn_findings`] but for the operand-scoped rule: write `files`, return the rendered
+    /// `dyn` shapes whose principal trait resolves into `forbidden`.
+    fn dyn_operand_findings(
+        name: &str,
+        files: &[(&str, &str)],
+        module: &str,
+        forbidden: &[&str],
+    ) -> Result<Vec<String>, String> {
+        let dir = std::env::temp_dir().join(format!("hunyi-dynop-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        for (rel, contents) in files {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+            std::fs::write(&path, contents).expect("write source");
+        }
+        let root = src.join("lib.rs");
+        let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
+        let result = dyn_operand_module_findings(&src, &root, module, &forbidden, "x");
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
+        dyn_operand_findings(
+            name,
+            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
+            "crate::m",
+            forbidden,
+        )
+    }
+
+    #[test]
+    fn dyn_operand_flags_a_named_trait_and_passes_others() {
+        // A dyn of the listed trait is flagged; a dyn of an unlisted trait passes.
+        assert_eq!(
+            dyn_operand_mod(
+                "named",
+                "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap(),
+            ["dyn crate::ports::Port"],
+        );
+        assert!(
+            dyn_operand_mod(
+                "other",
+                "pub fn e() -> Box<dyn std::error::Error> { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap()
+            .is_empty(),
+            "a dyn of an unlisted trait passes",
+        );
+    }
+
+    #[test]
+    fn dyn_operand_honors_a_module_prefix() {
+        // A module-prefix operand forbids any dyn of a trait under it (exact-or-`::` prefix).
+        assert_eq!(
+            dyn_operand_mod(
+                "prefix",
+                "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n",
+                &["crate::ports"],
+            )
+            .unwrap(),
+            ["dyn crate::ports::Port"],
+        );
+    }
+
+    #[test]
+    fn dyn_operand_matches_a_reexported_trait_by_its_defining_path() {
+        // The trait is defined at crate::ports::Port and re-exported as crate::Port; the module
+        // exposes `dyn crate::Port`. Forbidding either path matches — both canonicalize through
+        // the re-export closure to the defining path.
+        let files = &[
+            (
+                "lib.rs",
+                "pub mod ports;\npub use crate::ports::Port;\npub mod m;\n",
+            ),
+            ("ports.rs", "pub trait Port {}\n"),
+            ("m.rs", "pub fn c() -> Box<dyn crate::Port> { todo!() }\n"),
+        ];
+        // Forbid by the DEFINING path — the exposed facade `crate::Port` canonicalizes to it.
+        assert_eq!(
+            dyn_operand_findings(
+                "reexport-defining",
+                files,
+                "crate::m",
+                &["crate::ports::Port"]
+            )
+            .unwrap(),
+            ["dyn crate::Port"],
+            "a dyn written through a re-export facade matches the forbidden defining path",
+        );
+    }
+
+    #[test]
+    fn dyn_operand_ignores_auto_trait_markers() {
+        // `dyn Port + Send`: principal is Port (first bound). Forbidding Port flags it; forbidding
+        // only the Send marker flags nothing (Send is not the principal, and a bare Send does not
+        // resolve).
+        assert_eq!(
+            dyn_operand_mod(
+                "marker-port",
+                "pub fn c() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap(),
+            ["dyn crate::ports::Port + Send"],
+        );
+        assert!(
+            dyn_operand_mod(
+                "marker-send",
+                "pub fn c() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
+                &["Send"],
+            )
+            .unwrap()
+            .is_empty(),
+            "the trailing Send marker is not the operand",
+        );
+    }
+
+    #[test]
+    fn dyn_operand_matches_a_dyn_nested_deep() {
+        // Nested inside Vec<Box<dyn …>> — still matched by its principal trait.
+        assert_eq!(
+            dyn_operand_mod(
+                "nested",
+                "pub fn c() -> Vec<Box<dyn crate::ports::Port>> { todo!() }\n",
+                &["crate::ports::Port"],
+            )
+            .unwrap(),
+            ["dyn crate::ports::Port"],
+        );
+    }
+
+    #[test]
+    fn dyn_operand_empty_set_degenerates_to_any() {
+        // An empty forbidden set reacts to any dyn — identical to shape-only, never a no-op.
+        let body = "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n";
+        assert_eq!(
+            dyn_operand_mod("empty", body, &[]).unwrap(),
+            dyn_mod("empty-shape", body).unwrap(),
+            "must_not_expose_dyn_of([]) matches exactly what shape-only must_not_expose_dyn does",
+        );
+        assert_eq!(
+            dyn_operand_mod("empty2", body, &[]).unwrap(),
+            ["dyn crate::ports::Port"],
+        );
+    }
+
+    #[test]
+    fn dyn_operand_boundary_carries_its_operands_and_severity() {
+        let b = DynTraitBoundary::in_crate("core")
+            .module("crate::core")
+            .must_not_expose_dyn_of(["crate::ports::Port"])
+            .warn()
+            .because("the core seam must not leak a dyn Port");
+        assert_eq!(b.forbidden_operands(), ["crate::ports::Port"]);
+        assert_eq!(b.severity(), Severity::Warn);
+        // Shape-only still constructs an empty operand set (regression guard).
+        let shape = DynTraitBoundary::in_crate("core")
+            .module("crate::core")
+            .must_not_expose_dyn()
+            .because("no dyn at all");
+        assert!(shape.forbidden_operands().is_empty());
     }
 
     #[test]

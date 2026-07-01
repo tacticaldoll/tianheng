@@ -246,7 +246,18 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   (static dispatch at a *declared* seam is intent — by anchor scoping, not an operand),
   no *essential* gap (a `dyn` node syntactically present in the local-crate public surface is
   always observable; the residual is the inherited macro/alias bound), and anchorable (a
-  `syn`-resolvable module). **Rejected**, as explicit non-goals with their reason:
+  `syn`-resolvable module). **(v0.1.2, same release)** its **named-operand depth**
+  (`must_not_expose_dyn_of([…])`) — the next rung on the `name → shape → named-operand` stair:
+  it refines the shape-only predicate ("any `dyn`") to "a `dyn` of a *named* trait", resolving
+  each `dyn`'s **principal trait** (first trait bound, guaranteed first by Rust's grammar)
+  through the same 渾儀 resolver signature-coupling uses (exact-or-module-prefix, re-export
+  canonicalization). It reuses the shape-only surface walk and the resolver, adding only the
+  operand match — no new source, no new struct. An **empty** operand set degenerates to
+  shape-only ("any `dyn`") — a loud over-reaction chosen deliberately over a silent no-op
+  (`Of([])`), so a mis-declared operand set never becomes a false negative. Auto-trait markers
+  are never operands (only the principal, first, trait), and an unresolvable principal (a bare
+  std trait, a macro/glob re-export) is the inherited resolver bound, never a silent pass of a
+  *resolvable* operand. **Rejected**, as explicit non-goals with their reason:
   `Send`/`Sync` constraints (auto-traits are inferred, never written), external trait
   sealing (downstream crates are outside the scan), and transitive effect-purity ("no I/O
   anywhere reachable") — each has an *essential* gap. This test is the standing gate: a new
