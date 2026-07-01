@@ -48,6 +48,49 @@ pub enum DependencyKind {
     Build,
 }
 
+impl DependencyKind {
+    /// The finding suffix that keeps a dependency's identity distinct per table. `Normal` (the
+    /// default, the overwhelming common case) stays bare — so existing baselines do not churn —
+    /// while `Dev`/`Build` carry ` (dev)`/` (build)`. Without this, two boundaries governing the
+    /// same crate under the same rule but different kinds (e.g. a `serde` git source in both
+    /// `[dependencies]` and `[dev-dependencies]`) would emit the identical `(target, rule,
+    /// finding)` and one baselined violation would mask the other (the one forbidden bug).
+    pub(crate) fn finding_suffix(&self) -> &'static str {
+        match self {
+            DependencyKind::Normal => "",
+            DependencyKind::Dev => " (dev)",
+            DependencyKind::Build => " (build)",
+        }
+    }
+}
+
+/// A dependency's **declared** source kind, classified from `cargo metadata`'s
+/// `source` field. The vocabulary of the [`Rule::RestrictDependencySourcesTo`]
+/// allowlist. Like [`DependencyKind`], it mirrors a fixed cargo distinction (a
+/// declared source is a registry, a git, or a path), so it is intentionally not
+/// `#[non_exhaustive]`: it will not grow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceKind {
+    /// A registry source (`registry+…`, `sparse+…`, or an alternative registry) —
+    /// the residual kind, matched by neither of the others.
+    Registry,
+    /// A git source (`git+…`).
+    Git,
+    /// A path/internal source (a null declared source).
+    Path,
+}
+
+impl SourceKind {
+    /// The stable string label, feeding the rule's text and JSON projection.
+    pub(crate) fn label(&self) -> &'static str {
+        match self {
+            SourceKind::Registry => "registry",
+            SourceKind::Git => "git",
+            SourceKind::Path => "path",
+        }
+    }
+}
+
 /// One boundary, of either kind. Named `Boundary` (umbrella) with the crate kind as
 /// [`CrateBoundary`]: now that a module reaction exists, the v0.1 rename is earned
 /// (drift law D2).
@@ -157,6 +200,18 @@ pub enum Rule {
         /// The closed allowlist of permitted workspace-member names.
         allowed: Vec<String>,
     },
+    /// Restrict the **declared source kinds** of the target's dependencies to a closed
+    /// allowlist: any dependency whose classified [`SourceKind`] (from its `cargo
+    /// metadata` declared `source`) is not in `allowed` is a violation. The source-kind
+    /// counterpart of [`RestrictDependenciesTo`](Rule::RestrictDependenciesTo) (which
+    /// governs dependency *names*). An empty allowlist forbids every dependency by
+    /// source. Governs the *declared* source, not the resolved one — a `[patch]`/
+    /// `replace-with` redirect is not observed (the resolved layer is cargo-deny's
+    /// `[sources]` lane, not a Tianheng capability).
+    RestrictDependencySourcesTo {
+        /// The closed allowlist of permitted declared source kinds.
+        allowed: Vec<SourceKind>,
+    },
 }
 
 impl Rule {
@@ -172,6 +227,7 @@ impl Rule {
             Rule::ForbidDependencyOn { .. } => "forbid dependency on",
             Rule::RestrictDependenciesTo { .. } => "restrict dependencies to",
             Rule::RestrictWorkspaceDependenciesTo { .. } => "restrict workspace dependencies to",
+            Rule::RestrictDependencySourcesTo { .. } => "restrict dependency sources to",
         }
     }
 
@@ -199,6 +255,19 @@ impl Rule {
             Rule::RestrictWorkspaceDependenciesTo { allowed } => {
                 format!("restrict workspace dependencies to: {}", allowed.join(", "))
             }
+            Rule::RestrictDependencySourcesTo { allowed } if allowed.is_empty() => {
+                "forbid all dependencies (by source)".to_string()
+            }
+            Rule::RestrictDependencySourcesTo { allowed } => {
+                format!(
+                    "restrict dependency sources to: {}",
+                    allowed
+                        .iter()
+                        .map(SourceKind::label)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
         }
     }
 
@@ -218,6 +287,10 @@ impl Rule {
             Rule::RestrictWorkspaceDependenciesTo { allowed } => {
                 vec![("only_workspace", serde_json::json!(allowed))]
             }
+            Rule::RestrictDependencySourcesTo { allowed } => {
+                let sources: Vec<&str> = allowed.iter().map(SourceKind::label).collect();
+                vec![("allowed_sources", serde_json::json!(sources))]
+            }
         }
     }
 
@@ -232,7 +305,7 @@ impl Rule {
         workspace_members: &[String],
         kind: DependencyKind,
     ) -> Vec<String> {
-        match self {
+        let dependencies: Vec<String> = match self {
             Rule::DenyExternalDependencies { allowed } => external_dependencies(package, kind)
                 .into_iter()
                 .filter(|dependency| !allowed.contains(dependency))
@@ -251,6 +324,20 @@ impl Rule {
                     workspace_members.contains(dependency) && !allowed.contains(dependency)
                 })
                 .collect(),
+            Rule::RestrictDependencySourcesTo { allowed } => {
+                dependencies_with_disallowed_source(package, kind, allowed)
+            }
+        };
+        // Kind-qualify so the same dependency name in two tables (normal vs dev/build) stays a
+        // distinct finding — a baselined `serde` normal-dep must never mask a new `serde (dev)`.
+        let suffix = kind.finding_suffix();
+        if suffix.is_empty() {
+            dependencies
+        } else {
+            dependencies
+                .into_iter()
+                .map(|dependency| format!("{dependency}{suffix}"))
+                .collect()
         }
     }
 }
@@ -336,6 +423,38 @@ impl CrateBoundaryBuilder {
     /// [`restrict_workspace_dependencies_to`](Self::restrict_workspace_dependencies_to).
     pub fn forbid_all_workspace_dependencies(self) -> CrateBoundaryDraft {
         self.restrict_workspace_dependencies_to(Vec::<String>::new())
+    }
+
+    /// Restrict the **declared source kinds** of this crate's dependencies to a closed
+    /// allowlist: any dependency whose classified [`SourceKind`] is not in `allowed` is
+    /// a violation (a publishable infra crate declares `[Registry, Path]` to forbid a
+    /// `git` source; a workspace tool may declare the opposite). An empty allowlist
+    /// forbids every dependency by source. Chain [`warn`](CrateBoundaryDraft::warn),
+    /// [`dependency_kind`](CrateBoundaryDraft::dependency_kind), and
+    /// [`because`](CrateBoundaryDraft::because) as with the other crate rules.
+    ///
+    /// Two stated bounds (deliberate, not silent):
+    /// - It governs the **declared** source, not the *resolved* one. A registry
+    ///   dependency redirected to git/path by `[patch]` or `[source] replace-with`
+    ///   reads as `Registry` (no violation) — correct for manifest hygiene, since
+    ///   `[patch]` is workspace-local and never blocks `cargo publish`. Observing the
+    ///   resolved source is cargo-deny's `[sources]` lane, not a Tianheng capability.
+    /// - It is source-kind **hygiene**, not a `cargo publish` oracle. A
+    ///   `{ git = "…", version = "…" }` (or `{ path = "…", version = "…" }`) dependency
+    ///   declares a non-registry source and is flagged even though it would publish
+    ///   successfully; the rule does not parse the `version` key.
+    pub fn restrict_dependency_sources_to<I>(self, allowed: I) -> CrateBoundaryDraft
+    where
+        I: IntoIterator<Item = SourceKind>,
+    {
+        CrateBoundaryDraft {
+            target: self.target,
+            rule: Rule::RestrictDependencySourcesTo {
+                allowed: allowed.into_iter().collect(),
+            },
+            severity: Severity::Enforce,
+            kind: DependencyKind::Normal,
+        }
     }
 }
 

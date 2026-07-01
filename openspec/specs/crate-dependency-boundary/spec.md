@@ -236,6 +236,13 @@ A boundary SHALL support a rule that restricts the target crate's dependencies o
 
 A crate boundary SHALL select which dependency table its rule observes — `Normal` (the default), `Dev`, or `Build` — declared in Rust via `.dependency_kind(kind)` on the boundary builder. A boundary that does not select a kind SHALL observe the normal `[dependencies]` table, preserving prior behavior exactly. When `Dev` or `Build` is selected the rule SHALL observe `[dev-dependencies]` or `[build-dependencies]` respectively and SHALL NOT observe the normal table; a boundary observes exactly one table, so governing two tables SHALL be expressed as two boundaries. The selection SHALL apply uniformly to every crate rule (deny-external, forbid, restrict, restrict-workspace), and SHALL appear in the projection when it is not `Normal`.
 
+The `finding` SHALL be **kind-qualified** so the same dependency name governed under two tables stays distinct: a `Normal` finding is the bare dependency name (preserving prior baselines), while `Dev`/`Build` findings carry a ` (dev)`/` (build)` suffix. Without this, two boundaries governing the same crate under the same rule but different kinds would emit the identical `(target, rule, finding)`, and baselining one table's violation would mask a new violation of the same dependency in the other table (the one forbidden bug).
+
+#### Scenario: The same dependency in two tables stays distinct findings
+
+- **WHEN** a crate declares the same dependency (e.g. `serde`) from a forbidden source in both `[dependencies]` and `[dev-dependencies]`, governed by two same-rule boundaries differing only by kind, and the normal violation is recorded in the baseline
+- **THEN** the dev violation still reacts: its finding `serde (dev)` differs from the baselined `serde`, so it is not masked
+
 #### Scenario: A boundary defaults to normal dependencies
 
 - **WHEN** a crate boundary is declared without selecting a dependency kind

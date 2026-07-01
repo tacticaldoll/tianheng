@@ -110,8 +110,8 @@ measuring instruments — each reads a different surface of the code.
 
 | 儀 Instrument | Crate | Observes | Observation source | Status |
 |---|---|---|---|---|
-| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports & dependencies | `cargo metadata` + source `use` scan | **v0.1.0** (static core, from modou) |
-| 渾儀 armillary (semantic) | `hunyi` | type exposure, impl locality, visibility & forbidden markers | AST (`syn`) | **v0.1.0** (signature-coupling, trait-impl-locality, visibility, forbidden-marker) |
+| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.0** (static core, from modou); **v0.1.2** (declared dependency-source boundary) |
+| 渾儀 armillary (semantic) | `hunyi` | type exposure, impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure | AST (`syn`) | **v0.1.0** (signature-coupling, trait-impl-locality, visibility, forbidden-marker); **v0.1.2** (dyn-trait & impl-trait shape-only + operand-scoped; async-exposure) |
 | 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.0** (origin-assertion; CI probe-coverage face composed into `tianheng check`) |
 
 **漏刻's two faces, one declared source.** The runtime boundaries you declare in the
@@ -129,6 +129,32 @@ louke::install(
 );
 // then at each seam: louke::assert_boundary!("domain-entry", obj);
 ```
+
+**渾儀's depth stair — start shape-only, tighten to a named operand.** A semantic boundary is
+declared at the same seam in two rungs: forbid the *shape* first, then narrow to a *named* trait
+once the intent is precise. The same stair applies to `impl Trait` (`must_not_expose_impl_trait`
+→ `must_not_expose_impl_trait_of`) and, for the implicit existential, `must_not_expose_async_fn`.
+
+```rust
+Constitution::new("my-project")
+    // Rung 1 — shape-only: the core seam must not leak ANY dyn (no dynamic dispatch at the seam).
+    .dyn_trait_boundary(
+        DynTraitBoundary::in_crate("my-core")
+            .module("crate::core")
+            .must_not_expose_dyn()
+            .because("the core's public seam is statically dispatched"),
+    )
+    // Rung 2 — operand-scoped: allow a std `dyn Error`, but never a `dyn` of our own Port.
+    .dyn_trait_boundary(
+        DynTraitBoundary::in_crate("my-core")
+            .module("crate::adapters")
+            .must_not_expose_dyn_of(["crate::ports::Port"])
+            .because("adapters may surface std errors but must not leak a dyn Port"),
+    )
+```
+
+An empty operand set degenerates to shape-only (any `dyn`) — a loud over-reaction, never a
+silent no-op — so a mis-declared narrowing can never become a false negative.
 
 Beneath the dimensions sits **`xuanji` (璇璣) — the 底**: the dimension-agnostic
 **reaction model** (`Severity`, `Violation`, `Report`, `Baseline`, `Outcome`) every
@@ -150,9 +176,17 @@ dimension, and the core stays dependency-light — enforced as a `cargo test` ga
 ## Non-goals
 
 Not active code-shaping/generation, not a prescriptive framework you build inside, not a
-schema crate, not a lint, not a universal graph API. No TOML/Markdown for the constitution.
-Each dimension keeps its own observation source; nothing is named before its reaction
-exists.
+schema crate, not a lint, not a universal graph API, not a supply-chain policy engine. No
+TOML/Markdown for the constitution. Each dimension keeps its own observation source; nothing
+is named before its reaction exists.
+
+**Relationship to cargo-deny.** Resolved, whole-graph supply-chain policy — advisories,
+dependency licenses, bans/duplicates, resolved source allowlists — is [cargo-deny](https://github.com/EmbarkStudios/cargo-deny)'s
+job; Tianheng governs the complementary *declared, per-target, architectural* layer. For
+dependency **sources** the split is concrete: cargo-deny's `[sources]` governs what your
+*resolved* build pulls from (catching `[patch]`→git redirects); Tianheng's crate-source-boundary
+governs each crate's *declared* manifest source kind (manifest hygiene / publishability, seeing
+optional-git, blind to `[patch]` by design). They complement, they do not overlap.
 
 ## License
 

@@ -29,8 +29,13 @@ use guibiao::{
     Baseline, Coverage, Outcome, Report, Severity, ViolationId, apply_baseline, check_and_cover,
     constitution_json, constitution_text, report_json, workspace_member_src_dirs,
 };
-use hunyi::{ForbiddenMarkerBoundary, SemanticBoundary, TraitImplBoundary, VisibilityBoundary};
-use louke::{RuntimeBoundary, audit_probe_coverage};
+use hunyi::{
+    ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
+    FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
+    SIGNATURE_RULE, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, VISIBILITY_RULE,
+    VisibilityBoundary,
+};
+use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary, audit_probe_coverage};
 use serde_json::Value;
 
 use crate::Constitution;
@@ -194,6 +199,9 @@ where
                 print!("{}", trait_impl_text(&semantic.trait_impl));
                 print!("{}", visibility_text(&semantic.visibility));
                 print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
+                print!("{}", dyn_trait_text(&semantic.dyn_trait));
+                print!("{}", impl_trait_text(&semantic.impl_trait));
+                print!("{}", async_exposure_text(&semantic.async_exposure));
                 print!("{}", runtime_text(runtime));
             }
             // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
@@ -655,10 +663,11 @@ fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
     let mut out = format!("Semantic {noun} ({}):\n", boundaries.len());
     for boundary in boundaries {
         out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   must not expose: {}\n  reason: {}\n",
+            "\n[{}] module {} in {}\n  rule:   {}: {}\n  reason: {}\n",
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
+            SIGNATURE_RULE,
             boundary.forbidden().join(", "),
             boundary.reason(),
         ));
@@ -673,7 +682,7 @@ fn semantic_boundary_json(boundary: &SemanticBoundary) -> Value {
         "kind": "semantic",
         "target": boundary.module(),
         "crate": boundary.crate_package(),
-        "rule": "must not expose",
+        "rule": SIGNATURE_RULE,
         "severity": boundary.severity().as_str(),
         "forbidden": boundary.forbidden(),
         "reason": boundary.reason(),
@@ -694,10 +703,11 @@ fn trait_impl_text(boundaries: &[TraitImplBoundary]) -> String {
     let mut out = format!("Trait-impl-locality {noun} ({}):\n", boundaries.len());
     for boundary in boundaries {
         out.push_str(&format!(
-            "\n[{}] trait {} in {}\n  rule:   may only be implemented in: {}\n  reason: {}\n",
+            "\n[{}] trait {} in {}\n  rule:   {} (declared: {})\n  reason: {}\n",
             boundary.severity().as_str(),
             boundary.trait_(),
             boundary.crate_package(),
+            TRAIT_IMPL_RULE,
             boundary.allowed_locations().join(", "),
             boundary.reason(),
         ));
@@ -713,7 +723,7 @@ fn trait_impl_boundary_json(boundary: &TraitImplBoundary) -> Value {
         "kind": "semantic",
         "target": boundary.trait_(),
         "crate": boundary.crate_package(),
-        "rule": "must only be implemented in the declared location(s)",
+        "rule": TRAIT_IMPL_RULE,
         "severity": boundary.severity().as_str(),
         "allowed_locations": boundary.allowed_locations(),
         "reason": boundary.reason(),
@@ -734,10 +744,11 @@ fn visibility_text(boundaries: &[VisibilityBoundary]) -> String {
     let mut out = format!("Visibility {noun} ({}):\n", boundaries.len());
     for boundary in boundaries {
         out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   must not declare pub items\n  reason: {}\n",
+            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
+            VISIBILITY_RULE,
             boundary.reason(),
         ));
     }
@@ -751,7 +762,7 @@ fn visibility_boundary_json(boundary: &VisibilityBoundary) -> Value {
         "kind": "semantic",
         "target": boundary.module(),
         "crate": boundary.crate_package(),
-        "rule": "must not declare pub items",
+        "rule": VISIBILITY_RULE,
         "severity": boundary.severity().as_str(),
         "reason": boundary.reason(),
     })
@@ -771,10 +782,11 @@ fn forbidden_marker_text(boundaries: &[ForbiddenMarkerBoundary]) -> String {
     let mut out = format!("Forbidden-marker {noun} ({}):\n", boundaries.len());
     for boundary in boundaries {
         out.push_str(&format!(
-            "\n[{}] subtree {} in {}\n  rule:   must not acquire: {}\n  reason: {}\n",
+            "\n[{}] subtree {} in {}\n  rule:   {}: {}\n  reason: {}\n",
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
+            FORBIDDEN_MARKER_RULE,
             boundary.forbidden().join(", "),
             boundary.reason(),
         ));
@@ -789,9 +801,141 @@ fn forbidden_marker_boundary_json(boundary: &ForbiddenMarkerBoundary) -> Value {
         "kind": "semantic",
         "target": boundary.module(),
         "crate": boundary.crate_package(),
-        "rule": "must not acquire trait",
+        "rule": FORBIDDEN_MARKER_RULE,
         "severity": boundary.severity().as_str(),
         "forbidden": boundary.forbidden(),
+        "reason": boundary.reason(),
+    })
+}
+
+/// The text projection of the dyn-trait boundaries, appended to `list`. Empty when there are
+/// none, so a project not using the dimension sees unchanged output.
+fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> String {
+    if boundaries.is_empty() {
+        return String::new();
+    }
+    let noun = if boundaries.len() == 1 {
+        "boundary"
+    } else {
+        "boundaries"
+    };
+    let mut out = format!("Dyn-trait {noun} ({}):\n", boundaries.len());
+    for boundary in boundaries {
+        out.push_str(&format!(
+            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
+            boundary.severity().as_str(),
+            boundary.module(),
+            boundary.crate_package(),
+            shape_rule_text(DYN_TRAIT_RULE, boundary.forbidden_operands()),
+            boundary.reason(),
+        ));
+    }
+    out
+}
+
+/// The text rule line for a shape/existential boundary: the bare shape rule when shape-only, or
+/// `… of: A, B` when operand-scoped — so `list --format text` surfaces the operand set the JSON
+/// and markdown projections already carry (parity across the three `list` formats).
+fn shape_rule_text(rule: &str, operands: &[String]) -> String {
+    if operands.is_empty() {
+        rule.to_string()
+    } else {
+        format!("{rule} of: {}", operands.join(", "))
+    }
+}
+
+fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> String {
+    if boundaries.is_empty() {
+        return String::new();
+    }
+    let noun = if boundaries.len() == 1 {
+        "boundary"
+    } else {
+        "boundaries"
+    };
+    let mut out = format!("Impl-trait {noun} ({}):\n", boundaries.len());
+    for boundary in boundaries {
+        out.push_str(&format!(
+            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
+            boundary.severity().as_str(),
+            boundary.module(),
+            boundary.crate_package(),
+            shape_rule_text(IMPL_TRAIT_RULE, boundary.forbidden_operands()),
+            boundary.reason(),
+        ));
+    }
+    out
+}
+
+/// The JSON projection of one dyn-trait boundary, mirroring a semantic boundary's shape (`kind`,
+/// `target`, `crate`, `rule`, `severity`, `reason`). An operand-scoped boundary additionally
+/// carries the `forbidden` operand set; a shape-only boundary (empty set) emits no such field.
+fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
+    let mut object = serde_json::json!({
+        "kind": "semantic",
+        "target": boundary.module(),
+        "crate": boundary.crate_package(),
+        "rule": DYN_TRAIT_RULE,
+        "severity": boundary.severity().as_str(),
+        "reason": boundary.reason(),
+    });
+    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
+    // (empty set) projects unchanged, with no `forbidden` param.
+    let operands = boundary.forbidden_operands();
+    if !operands.is_empty() {
+        object["forbidden"] = serde_json::json!(operands);
+    }
+    object
+}
+
+fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
+    let mut object = serde_json::json!({
+        "kind": "semantic",
+        "target": boundary.module(),
+        "crate": boundary.crate_package(),
+        "rule": IMPL_TRAIT_RULE,
+        "severity": boundary.severity().as_str(),
+        "reason": boundary.reason(),
+    });
+    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
+    // (empty set) projects unchanged, with no `forbidden` param.
+    let operands = boundary.forbidden_operands();
+    if !operands.is_empty() {
+        object["forbidden"] = serde_json::json!(operands);
+    }
+    object
+}
+
+fn async_exposure_text(boundaries: &[AsyncExposureBoundary]) -> String {
+    if boundaries.is_empty() {
+        return String::new();
+    }
+    let noun = if boundaries.len() == 1 {
+        "boundary"
+    } else {
+        "boundaries"
+    };
+    let mut out = format!("Async-exposure {noun} ({}):\n", boundaries.len());
+    for boundary in boundaries {
+        out.push_str(&format!(
+            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
+            boundary.severity().as_str(),
+            boundary.module(),
+            boundary.crate_package(),
+            ASYNC_EXPOSURE_RULE,
+            boundary.reason(),
+        ));
+    }
+    out
+}
+
+fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
+    serde_json::json!({
+        "kind": "semantic",
+        "target": boundary.module(),
+        "crate": boundary.crate_package(),
+        "rule": ASYNC_EXPOSURE_RULE,
+        "severity": boundary.severity().as_str(),
         "reason": boundary.reason(),
     })
 }
@@ -842,6 +986,33 @@ fn list_document(constitution: &Constitution) -> Value {
                 .collect(),
         );
     }
+    if !semantic.dyn_trait.is_empty() {
+        document["dyn_trait_boundaries"] = Value::Array(
+            semantic
+                .dyn_trait
+                .iter()
+                .map(dyn_trait_boundary_json)
+                .collect(),
+        );
+    }
+    if !semantic.impl_trait.is_empty() {
+        document["impl_trait_boundaries"] = Value::Array(
+            semantic
+                .impl_trait
+                .iter()
+                .map(impl_trait_boundary_json)
+                .collect(),
+        );
+    }
+    if !semantic.async_exposure.is_empty() {
+        document["async_exposure_boundaries"] = Value::Array(
+            semantic
+                .async_exposure
+                .iter()
+                .map(async_exposure_boundary_json)
+                .collect(),
+        );
+    }
     if !runtime.is_empty() {
         document["runtime_boundaries"] =
             Value::Array(runtime.iter().map(runtime_boundary_json).collect());
@@ -851,6 +1022,13 @@ fn list_document(constitution: &Constitution) -> Value {
 
 /// The text projection of the runtime (漏刻) boundaries, appended to `list`. Empty when there
 /// are none, so a project not using the dimension sees unchanged output.
+///
+/// #16 doc note: this seam-origin rule reacts at **runtime** (the prod `assert_boundary!` face),
+/// NOT at `check` time. `check`'s runtime face is only the probe-coverage audit (does every
+/// declared seam have a probe?) — it never observes a live crossing. So an agent reading this
+/// `list` entry must not expect `check` to react to an origin crossing the seam; the origin
+/// reaction happens in the running binary. The rule label is the canonical `RUNTIME_SEAM_RULE`
+/// (the same const `check_crossing` renders), with the allowed-origin set as a per-boundary detail.
 fn runtime_text(boundaries: &[RuntimeBoundary]) -> String {
     if boundaries.is_empty() {
         return String::new();
@@ -862,10 +1040,14 @@ fn runtime_text(boundaries: &[RuntimeBoundary]) -> String {
     };
     let mut out = format!("Runtime {noun} ({}):\n", boundaries.len());
     for boundary in boundaries {
+        // The rule label is driven from the canonical `RUNTIME_SEAM_RULE` const (shared with the
+        // JSON projection and the prod reaction), so the text and JSON no longer drift; the
+        // allowed-origin set is the per-boundary detail, like the dyn/impl operand set.
         out.push_str(&format!(
-            "\n[{}] seam {}\n  rule:    only origins: {}\n  posture: {}\n  reason:  {}\n",
+            "\n[{}] seam {} (reacts at runtime, not at check)\n  rule:    {} (only origins: {})\n  posture: {}\n  reason:  {}\n",
             boundary.severity().as_str(),
             boundary.seam(),
+            RUNTIME_SEAM_RULE,
             boundary.allowed_origins().join(", "),
             boundary.posture().as_str(),
             boundary.reason(),
@@ -877,11 +1059,15 @@ fn runtime_text(boundaries: &[RuntimeBoundary]) -> String {
 /// The JSON projection of one runtime boundary (`kind` = runtime, `target` = the seam, `rule`,
 /// `severity`, `posture`, `reason`) plus the `allowed_origins` set. `posture` is projected so a
 /// `panic_on_violation` boundary does not project identically to a default event-only one.
+///
+/// #16 doc note: the projected `rule` reacts at **runtime** (the prod `assert_boundary!` face),
+/// not at `check` — `check`'s runtime face is only probe-coverage. The label is the canonical
+/// `RUNTIME_SEAM_RULE` const, shared with the text projection and the prod `check_crossing`.
 fn runtime_boundary_json(boundary: &RuntimeBoundary) -> Value {
     serde_json::json!({
         "kind": "runtime",
         "target": boundary.seam(),
-        "rule": "only declared origins may cross the seam",
+        "rule": RUNTIME_SEAM_RULE,
         "severity": boundary.severity().as_str(),
         "posture": boundary.posture().as_str(),
         "allowed_origins": boundary.allowed_origins(),
@@ -941,6 +1127,9 @@ fn list_markdown(document: &Value) -> String {
         ("trait_impl_boundaries", "Trait-impl-locality boundaries"),
         ("visibility_boundaries", "Visibility boundaries"),
         ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
+        ("dyn_trait_boundaries", "Dyn-trait boundaries"),
+        ("impl_trait_boundaries", "Impl-trait boundaries"),
+        ("async_exposure_boundaries", "Async-exposure boundaries"),
         ("runtime_boundaries", "Runtime boundaries"),
     ] {
         let Some(Value::Array(items)) = document.get(key) else {
@@ -1038,11 +1227,12 @@ fn inline_value(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        constitution_markdown, dispatch, list_document, list_markdown, merge_outcomes, report_json,
-        report_sarif, runtime_text, semantic_text, trait_impl_text, violations_text,
-        visibility_text,
+        constitution_markdown, dispatch, dyn_trait_text, impl_trait_text, list_document,
+        list_markdown, merge_outcomes, report_json, report_sarif, runtime_text, semantic_text,
+        trait_impl_text, violations_text, visibility_text,
     };
     use crate::prelude::*;
+    use serde_json::Value;
     use std::path::PathBuf;
 
     fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Violation {
@@ -1133,6 +1323,147 @@ mod tests {
     }
 
     #[test]
+    fn dyn_trait_text_lists_each_boundary() {
+        let boundary = DynTraitBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_dyn()
+            .because("the core seam is statically dispatched");
+        let text = dyn_trait_text(&[boundary]);
+        assert!(text.contains("module crate::core in app"), "{text}");
+        assert!(text.contains("must not expose dyn"), "{text}");
+        assert!(
+            text.contains("the core seam is statically dispatched"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn dyn_trait_boundary_projects_into_list_document_and_markdown() {
+        let c = Constitution::new("app").dyn_trait_boundary(
+            DynTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_dyn()
+                .because("the core seam is statically dispatched"),
+        );
+        let doc = list_document(&c);
+        let arr = doc
+            .get("dyn_trait_boundaries")
+            .and_then(Value::as_array)
+            .expect("dyn_trait_boundaries projected");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["rule"], "must not expose dyn");
+        assert!(
+            arr[0].get("forbidden").is_none(),
+            "shape-only: no forbidden set"
+        );
+        let md = list_markdown(&doc);
+        assert!(md.contains("## Dyn-trait boundaries"), "{md}");
+        assert!(md.contains("must not expose dyn"), "{md}");
+        assert!(
+            md.contains("the core seam is statically dispatched"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn async_exposure_boundary_projects_into_list_document_and_markdown() {
+        let c = Constitution::new("app").async_exposure_boundary(
+            AsyncExposureBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_async_fn()
+                .because("the core seam is synchronous; async lives at the edges"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["async_exposure_boundaries"]
+            .as_array()
+            .expect("projected");
+        assert_eq!(arr[0]["rule"], "must not expose async fn");
+        assert_eq!(arr[0]["target"], "crate::core");
+        let md = list_markdown(&doc);
+        assert!(md.contains("## Async-exposure boundaries"), "{md}");
+        assert!(md.contains("must not expose async fn"), "{md}");
+    }
+
+    #[test]
+    fn impl_trait_boundary_projects_into_list_document_and_markdown() {
+        let c = Constitution::new("app").impl_trait_boundary(
+            ImplTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_impl_trait()
+                .because("the core seam must return named types, not an existential"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["impl_trait_boundaries"].as_array().expect("projected");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["rule"], "must not expose impl trait");
+        assert_eq!(arr[0]["target"], "crate::core");
+        let md = list_markdown(&doc);
+        assert!(md.contains("## Impl-trait boundaries"), "{md}");
+        assert!(md.contains("must not expose impl trait"), "{md}");
+    }
+
+    #[test]
+    fn operand_scoped_impl_trait_boundary_projects_its_forbidden_operands() {
+        let c = Constitution::new("app").impl_trait_boundary(
+            ImplTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_impl_trait_of(["crate::ports::Port"])
+                .because("the core seam must not return an existential Port"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["impl_trait_boundaries"].as_array().expect("projected");
+        assert_eq!(arr[0]["rule"], "must not expose impl trait");
+        assert_eq!(arr[0]["forbidden"][0], "crate::ports::Port");
+        let md = list_markdown(&doc);
+        assert!(
+            md.contains("forbidden: crate::ports::Port"),
+            "the operand set surfaces as a param:\n{md}"
+        );
+        // Text parity: the operand set must surface in `list --format text` too, not only JSON /
+        // markdown — else an operand-scoped and a shape-only boundary read identically in text.
+        let text = impl_trait_text(&[ImplTraitBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_impl_trait_of(["crate::ports::Port"])
+            .because("the core seam must not return an existential Port")]);
+        assert!(
+            text.contains("must not expose impl trait of: crate::ports::Port"),
+            "operand set must surface in text:\n{text}"
+        );
+    }
+
+    #[test]
+    fn operand_scoped_dyn_boundary_projects_its_forbidden_operands() {
+        let c = Constitution::new("app").dyn_trait_boundary(
+            DynTraitBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_dyn_of(["crate::ports::Port"])
+                .because("the core seam must not leak a dyn Port"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["dyn_trait_boundaries"].as_array().expect("projected");
+        assert_eq!(arr[0]["rule"], "must not expose dyn");
+        assert_eq!(
+            arr[0]["forbidden"][0], "crate::ports::Port",
+            "an operand-scoped boundary projects its forbidden operand set"
+        );
+        let md = list_markdown(&doc);
+        assert!(
+            md.contains("forbidden: crate::ports::Port"),
+            "the operand set surfaces as a generic param:\n{md}"
+        );
+        // Text parity: the operand set must surface in `list --format text` too (see the impl-trait
+        // sibling test) — the defect that let text drift from JSON / markdown for operand scoping.
+        let text = dyn_trait_text(&[DynTraitBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_dyn_of(["crate::ports::Port"])
+            .because("the core seam must not leak a dyn Port")]);
+        assert!(
+            text.contains("must not expose dyn of: crate::ports::Port"),
+            "operand set must surface in text:\n{text}"
+        );
+    }
+
+    #[test]
     fn trait_impl_text_lists_each_boundary() {
         let boundary = TraitImplBoundary::in_crate("app")
             .trait_("crate::command::Command")
@@ -1144,10 +1475,13 @@ mod tests {
             text.contains("trait crate::command::Command in app"),
             "{text}"
         );
+        // Unified with the JSON/check phrasing (the three-way drift closed): the text now says
+        // "must only be implemented in the declared location(s)", with the locations as a detail.
         assert!(
-            text.contains("may only be implemented in: crate::commands, crate::builtins"),
+            text.contains("must only be implemented in the declared location(s)"),
             "{text}"
         );
+        assert!(text.contains("crate::commands, crate::builtins"), "{text}");
     }
 
     #[test]
@@ -1322,6 +1656,41 @@ mod tests {
             dispatch(&Constitution::new("wiring"), args()),
             0,
             "an empty constitution over the same workspace is clean (the audit is skipped)"
+        );
+    }
+
+    #[test]
+    fn the_crate_source_rule_is_wired_through_dispatch() {
+        // End-to-end proof the crate-source rule composes into `dispatch` (not only unit-tested in
+        // guibiao's pure heart): restricting `guibiao`'s declared dependency sources to Registry
+        // flags its internal `xuanji` path dependency (source-kind Path), flowing through dispatch
+        // + real `cargo metadata` to an enforce violation (exit 1). Causation: the same workspace
+        // under an empty constitution is clean (exit 0), so the exit-1 is caused by this rule.
+        let Some(manifest) = workspace_manifest() else {
+            return; // no workspace root (e.g. a packaged crate) — skip this end-to-end test
+        };
+        let args = || {
+            [
+                "tianheng".to_string(),
+                "check".to_string(),
+                "--manifest-path".to_string(),
+                manifest.to_string_lossy().into_owned(),
+            ]
+        };
+        let c = Constitution::new("wiring").boundary(
+            CrateBoundary::crate_("guibiao")
+                .restrict_dependency_sources_to([SourceKind::Registry])
+                .because("wiring check"),
+        );
+        assert_eq!(
+            dispatch(&c, args()),
+            1,
+            "a path dependency under a Registry-only source rule reaches exit 1 through dispatch"
+        );
+        assert_eq!(
+            dispatch(&Constitution::new("wiring"), args()),
+            0,
+            "an empty constitution over the same workspace is clean"
         );
     }
 
@@ -1533,6 +1902,26 @@ mod tests {
         assert!(
             r < rule && rule < kind,
             "reason must lead, then rule, then classification:\n{md}"
+        );
+    }
+
+    #[test]
+    fn markdown_projects_a_dependency_source_boundary_with_its_allowed_sources() {
+        // The source rule projects through the generic static-boundary path (no per-rule
+        // markdown code): its label and the `allowed_sources` param surface as params.
+        let c = Constitution::new("t").boundary(
+            CrateBoundary::crate_("infra")
+                .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+                .because("infra must publish to crates.io"),
+        );
+        let md = constitution_markdown(&c);
+        assert!(
+            md.contains("restrict dependency sources to"),
+            "the source rule label surfaces:\n{md}"
+        );
+        assert!(
+            md.contains("allowed_sources: registry, path"),
+            "the allowed source kinds surface as a generic param:\n{md}"
         );
     }
 

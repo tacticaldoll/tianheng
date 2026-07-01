@@ -17,7 +17,34 @@ Ordered by readiness. All three instruments ship in v0.1.0 (圭表 static, 渾�
 runtime); the entire admitted 三儀 layer is now built. What remains below is the rejected set
 per dimension and the 三司 governance/observability layer.
 
-### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT (v0.1.0) — admitted layer complete**
+### 圭表 (Guībiǎo) — the static dimension  · crate `guibiao`  · **BUILT — proven core (v0.1.0, from modou); growing by depth (v0.1.2 crate-source-boundary)**
+Observation source: `cargo metadata --no-deps` (the declared manifests) + a source `use` scan.
+Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation source), not by width.
+
+- **Declared dependency-source boundary — crate-source-boundary**: **BUILT (v0.1.2)**
+  (`restrict_dependency_sources_to([SourceKind…])`). Deepens the dependency reaction from
+  *which crate* (by name / external-internal split) to *which declared source kind* — git vs.
+  registry vs. path — reading the same `--no-deps` `source` field one notch finer. Hermetic; the
+  publish-hygiene case (a manifest declaring no git source, optional git included). Two stated
+  bounds: it observes the **declared** source (not the resolved one — `[patch]`/`replace-with`
+  is not seen), and it is source-kind hygiene, not a `cargo publish` oracle (a `{ git, version }`
+  dep is flagged though it would publish).
+
+**Declined — externally covered (not a forward depth):**
+- **Resolved dependency-source / build-provenance (would-be capability B)** — *declined.* "What my
+  build **actually** pulls from, after `[patch]`/`[source] replace-with`", read from the
+  **resolved** graph (`cargo metadata` **with** deps, the lockfile + patch applied). It would catch
+  a `[patch]`/`replace-with` redirect to a git source that the declared-layer crate-source-boundary
+  is deliberately blind to (and in turn miss an *optional-off* git dep — the mirror blind spot). But
+  that resolved, **whole-graph** source-provenance concern is **cargo-deny's lane**, not Tianheng's:
+  `deny.toml [sources]` (run in the `supply-chain` CI job) already denies unknown git/registry
+  sources on the resolved graph — so a `[patch]`→git redirect surfaces there — and a whole-graph
+  view fits build-provenance better than Tianheng's per-target model. So B is **declined, not
+  deferred**: Tianheng keeps only the *declared*, per-target crate-source-boundary (A), the
+  hermetic manifest-hygiene reaction cargo-deny does not provide. See the declared-vs-resolved
+  division of labor in `PROJECT.md`.
+
+### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn/impl-trait stair + async-exposure)**
 Observation source: the **AST** (`syn`). Sees what the `圭表` `use`-scan cannot — semantics
 in the syntax tree: `pub` signatures, `impl Trait for Type`, attributes/derives, visibility.
 The observation-source fork is **resolved**: `syn` was chosen (stable; its syntactic partial
@@ -37,8 +64,52 @@ in `PROJECT.md` — declarative, no *essential* gap, anchorable):
   is a `syn`-resolvable local element, the second 渾儀 anchor type.
 - **Forbidden-marker / attribute / visibility boundaries**: **BUILT** (`ForbiddenMarkerBoundary`,
   `VisibilityBoundary` `.must_not_declare_pub()`) — "`internal` exposes no `pub`".
+- **Dyn-trait exposure — type-shape exposure**: **BUILT (v0.1.2)** (`DynTraitBoundary`,
+  `.must_not_expose_dyn()`) — "the core's public seam must not leak `dyn`". The first **depth**
+  addition: it deepens signature-coupling's reaction from a forbidden *named type* to a
+  forbidden *type shape* (a `dyn` node at any depth in the public surface), reusing its
+  surface walk + resolver and adding only a trait-object leaf. Shape-only.
 
-The admitted 渾儀 layer is complete; what remains for this dimension is only the rejected set.
+The originally-conceived 渾儀 layer is complete, but the dimension still grows by **depth**
+(new capabilities on the same `syn` observation source, each a born-when-built patch — see
+dyn-trait above), not by width (no new observation source). Named next depths and the rejected
+set follow.
+
+Built depths past the shape-only dyn (same `syn` source):
+- **Operand-scoped dyn** (`must_not_expose_dyn_of([…])`) — **BUILT (v0.1.2).** Forbid only a
+  *named* trait's `dyn` rather than any: a `dyn` whose **principal trait** (first trait bound)
+  canonicalizes into the forbidden set reacts, resolved through the shared 渾儀 resolver (exact-
+  or-module-prefix, re-export消歧) exactly as signature-coupling resolves a forbidden type. The
+  next rung on the `name → shape → named-operand` stair. Empty operand set degenerates to
+  shape-only (any `dyn`), never a no-op; auto-trait markers are never operands; an unresolvable
+  principal is the stated resolver bound.
+- **Impl-trait (existential) exposure** (`ImplTraitBoundary`, `.must_not_expose_impl_trait()`) —
+  **BUILT (v0.1.2).** The **existential complement** of dyn-trait's dynamic-dispatch shape: a
+  public seam must not *return* a written `impl Trait` (RPIT), which leaks an unnameable type and
+  silently commits to its auto-traits. Shape-only; reuses the public-surface walk and the `dyn`
+  bound renderer, governing **return positions only**. Argument-position `impl Trait` (APIT,
+  universal) and `async fn`'s implicit `impl Future` are stated out-of-scope bounds.
+- **Operand-scoped impl-trait** (`.must_not_expose_impl_trait_of([…])`) — **BUILT (v0.1.2).** The
+  named-operand depth of the shape-only impl-trait, mirroring the dyn stair: a returned `impl
+  Trait` whose **principal trait** canonicalizes into the forbidden set reacts (so a seam may allow
+  `impl Iterator` while forbidding `impl crate::Port`), resolved through the shared 渾儀 resolver
+  and generalized with dyn onto one `ShapeExposure` collector + `principal_trait_path`. Empty set ⇒
+  any (never a no-op); return-position scoping and the APIT/async bounds are inherited.
+
+- **Async-exposure** (`AsyncExposureBoundary`, `.must_not_expose_async_fn()`) — **BUILT (v0.1.2).**
+  The **implicit-existential** complement of impl-trait: a public seam must not declare an `async
+  fn` (its compiler-inserted `impl Future`), observed from `sig.asyncness` over public free fns /
+  inherent methods / trait method declarations (trait-impl methods and private items excluded).
+  The finding is an **owner-qualified item identity** (`async fn <Ty>::name(…)`) so same-named
+  async fns across impls/traits never collide under the baseline (a false-negative guard). Its
+  declarative gate is the dimension's weakest but holds (implicit existential at a declared seam,
+  anchor-scoped). Complementary to impl-trait's *written* `-> impl Future`.
+
+Forward depths (born when built, same `syn` source):
+- **`must_not_expose_existential` (unifier)** — a possible future capability folding impl-trait
+  (written `impl Future`/RPIT) and async-exposure (implicit `impl Future`) under one "no
+  existential at this seam" rule. Deferred: the two syntactic signals stay distinct rules until a
+  unification earns its own admission (it must not blur the two findings' identities). Not built.
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),
@@ -116,5 +187,9 @@ unobservable wish becomes law (prose prescription is the rejected open loop).
 
 Active code-shaping / generation; a prescriptive framework you build inside; a **lint**
 (built-in opinion rather than declared intent); a **universal graph API** (whole-graph
-analysis rather than declared per-target boundaries); a **runtime policy engine**. Each
-dimension keeps its own observation source; nothing is named before its reaction exists.
+analysis rather than declared per-target boundaries); a **runtime policy engine**; a
+**supply-chain policy engine** (resolved / whole-graph advisories, dependency licenses,
+bans / duplicates, resolved source allowlists — cargo-deny's lane, run in this repo's
+`supply-chain` CI job; Tianheng governs the *declared, per-target* layer instead — this is
+why would-be capability B is declined above, not deferred). Each dimension keeps its own
+observation source; nothing is named before its reaction exists.

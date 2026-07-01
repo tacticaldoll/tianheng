@@ -25,6 +25,13 @@ observation dimensions — without becoming a god crate.
   a CLI + library.
 - It is **not a lint**: every dimension must be real drift — declared intent vs. observed
   reality — never an opinionated style check.
+- It is **not a supply-chain policy engine**: resolved, whole-graph dependency policy —
+  advisories, dependency licenses, bans / duplicates, resolved source allowlists — is
+  cargo-deny's lane (run in this repo's `supply-chain` CI job). Tianheng governs the
+  *declared, per-target, architectural* layer instead (deps / imports by name, declared
+  dependency-source kind for manifest hygiene, type exposure, impl locality, visibility,
+  runtime seams). The two are complementary, not overlapping — the reason resolved
+  build-provenance is cargo-deny's, not a Tianheng capability (see the 圭表 depth decision).
 
 ## Core Contract
 
@@ -99,8 +106,11 @@ its own dog food, now across crate boundaries.
 selects governance by depending on the dimensions they want:
 - **`hunyi` (渾儀)** — AST/semantic observation (`syn`). **Built (v0.1.0):**
   signature-coupling (a module's public API must not *expose* a forbidden type), plus
-  trait-impl locality, visibility, and forbidden-marker boundaries. The heavy `syn`
-  dependency is quarantined here, never in the core.
+  trait-impl locality, visibility, and forbidden-marker boundaries; **(v0.1.2):** a
+  type-shape/existential **depth stair** on the same `syn` source — dyn-trait and impl-trait
+  exposure (each shape-only *and* named-operand-scoped) and async-fn exposure — the type-shape
+  and existential complements of signature-coupling (detailed in the Decisions section). The
+  heavy `syn` dependency is quarantined here, never in the core.
 - **`louke` (漏刻)** — runtime observation. **Built (v0.1.0):** origin-assertion (a
   declared seam's `only_origins` allowlist), in two faces — the prod probe
   (`assert_boundary!`, fail-closed, a structured event by default, panic opt-in) and the
@@ -178,6 +188,30 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
   from an unknown-module typo, never a silent pass. Governing inline modules as targets is
   a deliberate non-goal here; if ever wanted it is a separate amendment.
+- **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
+  **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
+  dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
+  (dependency governance) on the *same* observation source (`cargo metadata --no-deps`, the
+  declared manifests), reading the `source` field one notch finer (git vs. registry vs. path)
+  rather than widening to a new source. It reads the **declared** layer, and that is the right
+  SSOT for its intent — manifest hygiene / publishability: a published manifest is rejected for
+  naming a git source (an *optional* git dep included), while `[patch]`/`[source] replace-with`
+  is workspace-local, never part of the published manifest, and never blocks `cargo publish`, so
+  a patch-redirected registry dep correctly reads `Registry` and does not violate. The mirror
+  concern — **resolved build-provenance** ("what my build *actually* pulls from", the *resolved*
+  graph after lockfile + `[patch]` applied) — catches the patch-redirect the declared layer is
+  blind to, and in turn misses an optional-off git dep; neither layer dominates (A governs
+  optional-git and is patch-blind; the resolved layer is the inverse). But that resolved,
+  **whole-graph** concern is **cargo-deny's lane**, not Tianheng's: `deny.toml [sources]` (run in
+  the `supply-chain` CI job) already denies unknown git/registry sources on the resolved graph — so
+  a `[patch]`→git redirect surfaces there — and a whole-graph view fits build-provenance better than
+  Tianheng's per-target model. So Tianheng **declines** resolved build-provenance (a would-be
+  *capability B*) rather than deferring it: A is not an incomplete B, it is the whole of Tianheng's
+  source concern — the hermetic, declared, per-target layer (no lockfile, no network), the
+  complement cargo-deny does not cover. A stated
+  second bound: A is source-kind *hygiene*, not a `cargo publish` oracle — a `{ git, version }`
+  dep declares a git source and is flagged though it would publish (the rule does not parse
+  `version`), deliberately conservative.
 - **`xuanji` is an internal refactor, not a spec'd capability.** When the second
   dimension (渾儀) is built it needs the shared reaction DSL — `Severity`, `Baseline`,
   `Violation`, `Report`, `Outcome` — without `guibiao`'s static engine, so those leaf
@@ -217,7 +251,62 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   *expose* a forbidden type — the complement of import-governance, the case that provably
   earns the AST). Also admitted and now built (v0.1.0):
   local trait-impl surface (`only_implemented_in`), visibility (`must_not_declare_pub`), and
-  forbidden-marker boundaries — each born when built. **Rejected**, as explicit non-goals with their reason:
+  forbidden-marker boundaries — each born when built. **(v0.1.2)** **dyn-trait-boundary**
+  (`must_not_expose_dyn`) — the public API must not expose `dyn` trait-object *syntax*, the
+  type-shape complement of signature-coupling and the first **depth** addition (it deepens a
+  proven reaction's predicate from a named type to a type shape on the same `syn` source,
+  rather than widening to a new dimension). It passes all three gates: declarative-not-lint
+  (static dispatch at a *declared* seam is intent — by anchor scoping, not an operand),
+  no *essential* gap (a `dyn` node syntactically present in the local-crate public surface is
+  always observable; the residual is the inherited macro/alias bound), and anchorable (a
+  `syn`-resolvable module). **(v0.1.2, same release)** its **named-operand depth**
+  (`must_not_expose_dyn_of([…])`) — the next rung on the `name → shape → named-operand` stair:
+  it refines the shape-only predicate ("any `dyn`") to "a `dyn` of a *named* trait", resolving
+  each `dyn`'s **principal trait** (first trait bound, guaranteed first by Rust's grammar)
+  through the same 渾儀 resolver signature-coupling uses (exact-or-module-prefix, re-export
+  canonicalization). It reuses the shape-only surface walk and the resolver, adding only the
+  operand match — no new source, no new struct. An **empty** operand set degenerates to
+  shape-only ("any `dyn`") — a loud over-reaction chosen deliberately over a silent no-op
+  (`Of([])`), so a mis-declared operand set never becomes a false negative. Auto-trait markers
+  are never operands (only the principal, first, trait), and an unresolvable principal (a bare
+  std trait, a macro/glob re-export) is the inherited resolver bound, never a silent pass of a
+  *resolvable* operand. **(v0.1.2, same release)** its **existential sibling**
+  `ImplTraitBoundary` (`must_not_expose_impl_trait`) — where dyn-trait forbids the *dynamic-
+  dispatch* shape (`dyn`), this forbids the *existential* shape: a public seam must not **return**
+  a written `impl Trait` (RPIT), an unnameable type that commits the seam to the hidden type's
+  auto-traits. It passes the same gates: declarative (an existential at a *declared* seam is
+  intent — and **argument-position `impl Trait`/APIT is deliberately not governed**, since it is
+  *universal*, a caller-chosen generic, not a leak, which is what keeps this a boundary and not an
+  `impl Trait`-style lint); no *essential* gap (a written `impl Trait` in a return position is
+  always syntactically observable — `async fn`'s *implicit* `impl Future` and nightly TAIT are
+  **distinct, stated-out-of-scope** forms, not silent misses of the written-RPIT domain); and
+  anchorable (module). It reuses the public-surface walk and the `dyn` bound renderer, governing
+  return positions only. Its **named-operand depth** (`must_not_expose_impl_trait_of([…])`, same
+  release) climbs the same `shape → named-operand` stair as operand-scoped dyn — a returned
+  `impl Trait` whose principal trait resolves into a forbidden set reacts (so a seam may allow
+  `impl Iterator` yet forbid `impl crate::Port`); dyn and impl-trait were generalized onto one
+  `ShapeExposure` collector and a shared `principal_trait_path`, so the two shapes share the
+  operand machinery exactly. **(v0.1.2, same release)** its **implicit-existential complement**
+  `AsyncExposureBoundary` (`must_not_expose_async_fn`) — an `async fn` leaks a compiler-inserted
+  `impl Future`, so where impl-trait forbids the *written* existential this forbids the `async fn`
+  sugar (observed from the pure AST flag `sig.asyncness`, over the same public-surface item kinds,
+  trait-impl methods excluded). Its admission is the dimension's **weakest declarative** gate but
+  holds: the intent is *implicit existential exposure at a declared seam* (a sync-core/async-edges
+  layering), by anchor scoping, not a blanket "no async" lint; observability (a local AST flag) and
+  anchoring are strong. Its finding is an **owner-qualified item identity**
+  (`async fn <SelfTy>::name(…)`, `async fn trait <Trait>::name(…)`), NOT a bare name or a
+  future-shape, because same-named
+  public async fns across impls/traits in one module would otherwise collide under the
+  `(target, rule, finding)` baseline and let a new leak be masked (the one forbidden bug).
+  **(v0.1.2 hardening)** the sibling exposure findings now carry the same guarantee:
+  signature-coupling, dyn-trait, and impl-trait findings are **seam-qualified**
+  (`{type|shape} exposed by {seam}`, the seam being the owning item / sub-element — free fn,
+  owner-qualified inherent method, trait method, field, variant, alias, const/static, or
+  supertrait/associated position), so two distinct seams exposing the same type or shape no longer
+  collapse to one finding — closing the same masking bug across every exposure rule, not only async.
+  A future
+  `must_not_expose_existential` could unify written + implicit, deferred until it earns admission
+  without blurring those identities. **Rejected**, as explicit non-goals with their reason:
   `Send`/`Sync` constraints (auto-traits are inferred, never written), external trait
   sealing (downstream crates are outside the scan), and transitive effect-purity ("no I/O
   anywhere reachable") — each has an *essential* gap. This test is the standing gate: a new
@@ -284,9 +373,10 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   visibility), the shell `run`/`dispatch` accumulated one `&[…]` slice per capability — by the
   fourth, an unwieldy positional list where empty slices are easy to misorder. The semantic
   boundaries are gathered into a `hunyi::SemanticBoundaries` container (one field per
-  capability), and the shell composes them via `hunyi::check_all` with a single `cargo metadata`
-  read. `run(constitution, &SemanticBoundaries, args)` is then stable as further semantic
-  capabilities are added (they extend the container, not the signature). This is a
+  capability) held by the unified `Constitution`, and the shell composes them via
+  `hunyi::check_all(constitution.semantic_boundaries(), …)` with a single `cargo metadata`
+  read. `run(&Constitution, args)` is then stable as further semantic capabilities are added
+  (they extend the container behind a new typed adder, not the `run` signature). This is a
   **behavior-preserving facade refactor** — the same dimensions compose into the same reaction,
   no capability's requirements change — so, like the 璇璣 extraction, it is **not** an OpenSpec
   capability change; it is recorded here and kept honest by the existing tests and

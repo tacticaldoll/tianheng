@@ -128,6 +128,13 @@ The system SHALL fold semantic-boundary findings into the same exit-code contrac
 
 A semantic boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as a static boundary: a `warn` violation is reported but does not by itself fail the reaction. Semantic violations SHALL be gated against the same `Baseline` mechanism as static violations, sharing the violation identity `(target, rule, finding)`, so a project may adopt a semantic boundary on a dirty codebase and gate only on new exposure.
 
+The `finding` SHALL be **seam-qualified**: it names both the exposed type and the public **seam** (the owning item / sub-element — a free fn, an inherent method owner-qualified by self type, a trait method, a field, a variant, a type alias, a const/static, a supertrait or associated-item position) that exposes it, rendered as `{canonical type} exposed by {seam}`. Two distinct seams exposing the *same* forbidden type therefore SHALL produce distinct findings, so baselining one exposure MUST NOT mask a new exposure of the same type at another seam (the one forbidden bug — the same guarantee async-exposure secures with its owner-qualified identity).
+
+#### Scenario: Two seams exposing the same forbidden type stay distinct findings
+
+- **WHEN** two public functions in the governed module each expose the forbidden type `crate::infra::DbPool`, and one is recorded in the baseline as accepted
+- **THEN** the second still reacts: its finding is qualified by its own seam, so the baseline identity `(target, rule, finding)` does not mask it
+
 #### Scenario: A warn semantic boundary reports without failing
 
 - **WHEN** a `warn`-severity semantic boundary is violated and no enforce-severity boundary is violated
@@ -145,12 +152,12 @@ A semantic boundary SHALL carry a severity (`enforce` by default, or `warn`) wit
 
 ### Requirement: Human-readable violation report
 
-A semantic violation report SHALL identify the governed anchor, the rule, the offending exposed type (the finding), and the human-readable reason supplied with the boundary, and SHALL state that the reaction failed — the same report contract as a static violation.
+A semantic violation report SHALL identify the governed anchor, the rule, the offending finding (the exposed type, seam-qualified as above), and the human-readable reason supplied with the boundary, and SHALL state that the reaction failed — the same report contract as a static violation.
 
 #### Scenario: Report explains the exposure
 
-- **WHEN** the module `crate::domain` of crate `app` exposes `crate::infra::DbPool` under a boundary forbidding `crate::infra`
-- **THEN** the report names the anchor `crate::domain`, the rule "must not expose", the finding `crate::infra::DbPool`, the boundary's reason, and indicates CI failed
+- **WHEN** the public function `pool` in module `crate::domain` of crate `app` exposes `crate::infra::DbPool` under a boundary forbidding `crate::infra`
+- **THEN** the report names the anchor `crate::domain`, the rule "must not expose", the finding `crate::infra::DbPool exposed by fn crate::domain::pool`, the boundary's reason, and indicates CI failed
 
 ### Requirement: The syn dependency is quarantined
 

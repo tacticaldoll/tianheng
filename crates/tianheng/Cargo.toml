@@ -5,19 +5,22 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/tianheng"
 readme = "README.md"
 # 天衡 (Tiānhéng) — the celestial balance: the imperative shell + facade that composes the 三儀 (圭表 + 渾儀 + 漏刻).
 description = "天衡 (Tianheng) — reactive architectural governance. The shell that weighs declared intent against observed shape and turns a Rust-declared constitution into a CI reaction; composes all 三儀 — the static 圭表 (guibiao), semantic 渾儀 (hunyi), and runtime 漏刻 (louke, CI face) dimensions. Govern by reaction, not instruction."
 keywords = ["governance", "architecture", "ci", "boundary", "drift"]
-categories = ["development-tools"]
+categories = ["development-tools", "command-line-utilities"]
+
+# tianheng is the facade that composes all 三儀; its docs should show everything,
+# including feature-gated faces pulled in from member crates (e.g. louke's audit).
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 guibiao = { workspace = true }
 hunyi = { workspace = true }
 louke = { workspace = true, features = ["audit"] }
-serde_json = { workspace = true }
-
-[dev-dependencies]
 serde_json = { workspace = true }
 
 [lib]
