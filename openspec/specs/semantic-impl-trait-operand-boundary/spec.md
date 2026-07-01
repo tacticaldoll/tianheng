@@ -40,14 +40,14 @@ matched exactly as signature-coupling matches a forbidden type (resolved against
 so a re-exported or aliased trait facade matches its defining path; a principal trait that does not
 resolve (a bare name with no `use`, a macro-generated or glob/cross-crate re-exported trait) is
 dropped — the stated resolver-coverage bound, never a silent pass of a *resolvable* operand.
-Auto-trait and lifetime bounds are never operands. The finding is the rendered `impl …` shape, and
-the return-position scoping is inherited unchanged (argument-position `impl Trait` and `async fn`
-are not governed).
+Auto-trait and lifetime bounds are never operands. The finding is the **seam-qualified** rendered
+`impl …` shape (`{shape} exposed by {seam}`), and the return-position scoping is inherited
+unchanged (argument-position `impl Trait` and `async fn` are not governed).
 
 #### Scenario: A returned impl Trait of a named forbidden trait is flagged
 
 - **WHEN** the governed module declares `pub fn make() -> impl crate::ports::Port` and the boundary forbids `["crate::ports::Port"]`
-- **THEN** the system emits a violation whose finding is the rendered shape `impl crate::ports::Port`
+- **THEN** the system emits a violation whose finding is the seam-qualified rendered shape (`impl crate::ports::Port exposed by {seam}`)
 
 #### Scenario: A returned impl Trait of an unlisted trait passes
 

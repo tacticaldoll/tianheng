@@ -42,12 +42,12 @@ closure via `BareFallback::Ignore`, then compared exact-or-module-prefix), so a 
 aliased trait facade matches its defining path; a principal trait that does not resolve (a bare
 name with no `use`, a macro-generated or glob/cross-crate re-exported trait) is dropped — the same
 stated resolver-coverage bound signature-coupling carries, never a silent pass of a *resolvable*
-operand. The finding is the rendered `dyn …` shape, matching the shape-only rule.
+operand. The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule.
 
 #### Scenario: A dyn of a named forbidden trait is flagged
 
 - **WHEN** the governed module's public API exposes `Box<dyn crate::ports::Port>` and the boundary forbids `["crate::ports::Port"]`
-- **THEN** the system emits a violation whose finding is the rendered shape `dyn crate::ports::Port`, because the principal trait is in the forbidden operand set
+- **THEN** the system emits a violation whose finding is the seam-qualified rendered shape (`dyn crate::ports::Port exposed by {seam}`), because the principal trait is in the forbidden operand set
 
 #### Scenario: A dyn of an unlisted trait passes
 

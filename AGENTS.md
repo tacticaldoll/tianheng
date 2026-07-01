@@ -111,8 +111,9 @@ weakening it so CI turns green.
 
 Merging to `main`, tagging, publishing to crates.io, force-pushing, and deleting a repo
 are confirm-first: get explicit human sign-off even if a permission rule would auto-allow
-it. (crates.io publishes are permanent — only yankable, never deletable.) The local
-`.claude/settings.local.json` mirrors this with a `permissions.ask` rule on `gh pr merge`.
+it. (crates.io publishes are permanent — only yankable, never deletable.) A local
+`.claude/settings.local.json` `permissions.ask` rule on `gh pr merge` is a recommended way to
+mirror this in a dev environment, but the confirm-first rule binds regardless of local settings.
 
 Before publishing, confirm every publishable crate **bundles its license texts**: `cargo
 publish` packages only files inside each crate's own directory, so the workspace-root

@@ -137,7 +137,7 @@ the `--no-deps` invocation.
 #### Scenario: A source violation fails CI
 
 - **WHEN** an enforce-severity source boundary is violated
-- **THEN** the system prints a report naming the target, the rule (with its allowed source kinds), the offending dependency, and the reason, and exits 1
+- **THEN** the system prints a report naming the target, the rule, the offending dependency, and the reason, and exits 1 (the allowed source kinds appear in the `list` projection, not the violation report — as for the other crate rules)
 
 #### Scenario: An absent target crate is a constitution error
 
