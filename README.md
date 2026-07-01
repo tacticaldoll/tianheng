@@ -176,9 +176,17 @@ dimension, and the core stays dependency-light — enforced as a `cargo test` ga
 ## Non-goals
 
 Not active code-shaping/generation, not a prescriptive framework you build inside, not a
-schema crate, not a lint, not a universal graph API. No TOML/Markdown for the constitution.
-Each dimension keeps its own observation source; nothing is named before its reaction
-exists.
+schema crate, not a lint, not a universal graph API, not a supply-chain policy engine. No
+TOML/Markdown for the constitution. Each dimension keeps its own observation source; nothing
+is named before its reaction exists.
+
+**Relationship to cargo-deny.** Resolved, whole-graph supply-chain policy — advisories,
+dependency licenses, bans/duplicates, resolved source allowlists — is [cargo-deny](https://github.com/EmbarkStudios/cargo-deny)'s
+job; Tianheng governs the complementary *declared, per-target, architectural* layer. For
+dependency **sources** the split is concrete: cargo-deny's `[sources]` governs what your
+*resolved* build pulls from (catching `[patch]`→git redirects); Tianheng's crate-source-boundary
+governs each crate's *declared* manifest source kind (manifest hygiene / publishability, seeing
+optional-git, blind to `[patch]` by design). They complement, they do not overlap.
 
 ## License
 

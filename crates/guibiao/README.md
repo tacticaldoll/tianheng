@@ -51,7 +51,8 @@ Two **stated bounds** (deliberate, never silently overreached):
 - It governs the **declared** source, not the *resolved* one. A registry dependency that
   `[patch]` or `[source] replace-with` redirects to git reads as `registry+…` and does **not**
   violate — correct for manifest hygiene, since `[patch]` is workspace-local and never blocks
-  `cargo publish`. Resolved build-provenance is a separate future capability.
+  `cargo publish`. Observing the resolved source is cargo-deny's `[sources]` lane, not a
+  Tianheng capability.
 - It is source-kind **hygiene**, not a `cargo publish` oracle. A `{ git = "…", version = "…" }`
   dependency declares a git source and is flagged even though it would publish successfully;
   the rule classifies by the declared source and does not parse the `version` key.
