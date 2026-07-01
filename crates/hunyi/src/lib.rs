@@ -884,7 +884,12 @@ fn check_dyn_trait_boundary(
         .parent()
         .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
 
-    let findings = dyn_module_findings(src_dir, &root_file, &boundary.module, &boundary.crate_package)?;
+    let findings = dyn_module_findings(
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
 
     for finding in findings {
         // Like signature-coupling, a 渾儀 violation's `file` is a faithful `None` (no per-element
@@ -3184,7 +3189,11 @@ mod tests {
 
     /// Like [`findings`] but for the dyn-trait capability: write `files`, return the rendered
     /// `dyn` shapes exposed by `module`. Shape-only, so it takes no forbidden set.
-    fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
+    fn dyn_findings(
+        name: &str,
+        files: &[(&str, &str)],
+        module: &str,
+    ) -> Result<Vec<String>, String> {
         let dir = std::env::temp_dir().join(format!("hunyi-dyn-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let src = dir.join("src");
@@ -3210,11 +3219,19 @@ mod tests {
     #[test]
     fn dyn_in_public_return_param_and_field_react() {
         assert_eq!(
-            dyn_mod("ret", "pub fn connect() -> Box<dyn crate::Port> { todo!() }\n").unwrap(),
+            dyn_mod(
+                "ret",
+                "pub fn connect() -> Box<dyn crate::Port> { todo!() }\n"
+            )
+            .unwrap(),
             ["dyn crate::Port"]
         );
         assert_eq!(
-            dyn_mod("param", "pub fn drive(x: &dyn crate::Port) { let _ = x; }\n").unwrap(),
+            dyn_mod(
+                "param",
+                "pub fn drive(x: &dyn crate::Port) { let _ = x; }\n"
+            )
+            .unwrap(),
             ["dyn crate::Port"]
         );
         assert_eq!(
@@ -3226,11 +3243,19 @@ mod tests {
     #[test]
     fn dyn_reacts_at_any_nesting_depth() {
         assert_eq!(
-            dyn_mod("vec", "pub fn all() -> Vec<Box<dyn crate::Port>> { todo!() }\n").unwrap(),
+            dyn_mod(
+                "vec",
+                "pub fn all() -> Vec<Box<dyn crate::Port>> { todo!() }\n"
+            )
+            .unwrap(),
             ["dyn crate::Port"]
         );
         assert_eq!(
-            dyn_mod("opt", "pub fn maybe(x: Option<&dyn crate::Port>) { let _ = x; }\n").unwrap(),
+            dyn_mod(
+                "opt",
+                "pub fn maybe(x: Option<&dyn crate::Port>) { let _ = x; }\n"
+            )
+            .unwrap(),
             ["dyn crate::Port"]
         );
         // Nested inside an otherwise-static `impl Trait` return — still exposed to the caller.
@@ -3246,7 +3271,11 @@ mod tests {
 
     #[test]
     fn impl_trait_with_no_dyn_node_is_clean() {
-        let out = dyn_mod("impl-trait", "pub fn port() -> impl crate::Port { todo!() }\n").unwrap();
+        let out = dyn_mod(
+            "impl-trait",
+            "pub fn port() -> impl crate::Port { todo!() }\n",
+        )
+        .unwrap();
         assert!(out.is_empty(), "impl Trait carries no dyn node: {out:?}");
     }
 
@@ -3301,7 +3330,10 @@ mod tests {
             "type Handler = Box<dyn crate::Port>;\npub fn make() -> Handler { todo!() }\n",
         )
         .unwrap();
-        assert!(out.is_empty(), "named private alias is not expanded: {out:?}");
+        assert!(
+            out.is_empty(),
+            "named private alias is not expanded: {out:?}"
+        );
     }
 
     #[test]
@@ -3317,7 +3349,11 @@ mod tests {
     #[test]
     fn dyn_with_multiple_bounds_renders_stably() {
         assert_eq!(
-            dyn_mod("bounds", "pub fn f() -> Box<dyn crate::Port + Send> { todo!() }\n").unwrap(),
+            dyn_mod(
+                "bounds",
+                "pub fn f() -> Box<dyn crate::Port + Send> { todo!() }\n"
+            )
+            .unwrap(),
             ["dyn crate::Port + Send"]
         );
     }
