@@ -37,6 +37,14 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   argument-position `impl Trait` (APIT) is universal, not a leak, and `async fn`'s implicit
   `impl Future` is a distinct, out-of-scope existential form — both stated bounds, never silent
   misses; auto-trait markers are never operands.
+- **Async-exposure** — a module's public API must not declare an `async fn`, the **implicit**
+  existential complement of impl-trait: an `async fn` leaks a compiler-inserted `impl Future` and
+  commits the seam to async. `must_not_expose_async_fn()` is shape-only (any public `async fn` at
+  the seam reacts), over public free fns / inherent methods / trait method declarations (trait-impl
+  methods and private items excluded). It governs the `async fn` sugar; a *written* `-> impl Future`
+  is impl-trait's domain. The finding is an **owner-qualified item identity** (`async fn <Ty>::name(…)`)
+  so two same-named async fns never collide under the baseline. Declarative = "this seam is
+  synchronous" by anchor scoping (a sync-core/async-edges layering), not a blanket "no async".
 
 ```rust
 use hunyi::{
@@ -91,6 +99,12 @@ let impl_trait_operand_boundary = ImplTraitBoundary::in_crate("my-app")
     .module("crate::core")
     .must_not_expose_impl_trait_of(["crate::ports::Port"])
     .because("the core seam may return impl Iterator but never leak an existential Port");
+
+// async-exposure: the core's public seam must be synchronous (no implicit impl Future)
+let async_boundary = AsyncExposureBoundary::in_crate("my-app")
+    .module("crate::core")
+    .must_not_expose_async_fn()
+    .because("the core seam is synchronous; async lives at the adapter edges");
 ```
 
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including

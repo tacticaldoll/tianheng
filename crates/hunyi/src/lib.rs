@@ -808,6 +808,112 @@ impl ImplTraitBoundaryDraft {
     }
 }
 
+/// An async-exposure boundary: a module's public API must not declare an `async fn`. The
+/// **implicit-existential** complement of [`ImplTraitBoundary`]: an `async fn` leaks a
+/// compiler-inserted `impl Future` (and commits the seam's contract to an async model), so where
+/// impl-trait forbids a *written* `-> impl Future`, this forbids the `async fn` sugar (observed
+/// from `syn::Signature.asyncness`). Governs public free fns, public inherent methods, and public
+/// trait method declarations; trait-*impl* methods (asyncness dictated by the trait) and private
+/// items are excluded. Declarative intent by anchor scoping — "this declared seam is synchronous"
+/// (a sync-core/async-edges layering), not a blanket "no async".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsyncExposureBoundary {
+    pub(crate) crate_package: String,
+    pub(crate) module: String,
+    pub(crate) reason: String,
+    pub(crate) severity: Severity,
+}
+
+impl AsyncExposureBoundary {
+    /// Begin an async-exposure boundary in the crate named `package`.
+    pub fn in_crate(package: &str) -> AsyncExposureCrateDraft {
+        AsyncExposureCrateDraft {
+            crate_package: package.to_string(),
+        }
+    }
+
+    /// The crate this boundary governs.
+    pub fn crate_package(&self) -> &str {
+        &self.crate_package
+    }
+
+    /// The governed module path (e.g. `crate::core`).
+    pub fn module(&self) -> &str {
+        &self.module
+    }
+
+    /// The human-readable reason recorded with the boundary (the repair hint).
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// The boundary's severity (`enforce` or `warn`).
+    pub fn severity(&self) -> Severity {
+        self.severity
+    }
+}
+
+/// An async-exposure boundary awaiting its module anchor.
+pub struct AsyncExposureCrateDraft {
+    crate_package: String,
+}
+
+impl AsyncExposureCrateDraft {
+    /// Anchor the boundary to a module path within the crate (e.g. `crate::core`).
+    pub fn module(self, module: &str) -> AsyncExposureModuleDraft {
+        AsyncExposureModuleDraft {
+            crate_package: self.crate_package,
+            module: module.to_string(),
+        }
+    }
+}
+
+/// A module-anchored boundary awaiting the rule.
+pub struct AsyncExposureModuleDraft {
+    crate_package: String,
+    module: String,
+}
+
+impl AsyncExposureModuleDraft {
+    /// Forbid the module's public API from declaring an `async fn` — a public free function, a
+    /// public inherent method, or a public trait method declaration. Shape-only (any public
+    /// `async fn` at the seam reacts). Governs the implicit `impl Future` existential; a *written*
+    /// `-> impl Future` is [`ImplTraitBoundary`]'s domain (a distinct syntactic signal).
+    pub fn must_not_expose_async_fn(self) -> AsyncExposureBoundaryDraft {
+        AsyncExposureBoundaryDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            severity: Severity::Enforce,
+        }
+    }
+}
+
+/// A boundary awaiting severity (optional) and its reason.
+pub struct AsyncExposureBoundaryDraft {
+    crate_package: String,
+    module: String,
+    severity: Severity,
+}
+
+impl AsyncExposureBoundaryDraft {
+    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
+    /// reaction — the first rung of adoption.
+    pub fn warn(mut self) -> Self {
+        self.severity = Severity::Warn;
+        self
+    }
+
+    /// Finish the boundary with its human-readable reason (the repair hint).
+    pub fn because(self, reason: &str) -> AsyncExposureBoundary {
+        AsyncExposureBoundary {
+            crate_package: self.crate_package,
+            module: self.module,
+            reason: reason.to_string(),
+            severity: self.severity,
+        }
+    }
+}
+
 // --- Constitution-error messages ---------------------------------------------
 
 fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
@@ -873,6 +979,8 @@ pub struct SemanticBoundaries {
     pub dyn_trait: Vec<DynTraitBoundary>,
     /// Impl-trait (existential) exposure boundaries (`semantic-impl-trait-boundary`).
     pub impl_trait: Vec<ImplTraitBoundary>,
+    /// Async-fn (implicit existential) exposure boundaries (`semantic-async-exposure-boundary`).
+    pub async_exposure: Vec<AsyncExposureBoundary>,
 }
 
 impl SemanticBoundaries {
@@ -884,6 +992,7 @@ impl SemanticBoundaries {
             && self.forbidden_marker.is_empty()
             && self.dyn_trait.is_empty()
             && self.impl_trait.is_empty()
+            && self.async_exposure.is_empty()
     }
 }
 
@@ -926,6 +1035,11 @@ pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outco
     }
     for boundary in &boundaries.impl_trait {
         if let Err(error) = check_impl_trait_boundary(&metadata, boundary, &mut violations) {
+            return Outcome::ConstitutionError(error);
+        }
+    }
+    for boundary in &boundaries.async_exposure {
+        if let Err(error) = check_async_exposure_boundary(&metadata, boundary, &mut violations) {
             return Outcome::ConstitutionError(error);
         }
     }
@@ -1369,6 +1483,172 @@ fn impl_traits_in_return(sig: &syn::Signature) -> Vec<ShapeExposure> {
         collector.visit_type(ty);
     }
     collector.exposures
+}
+
+// --- Async-exposure-boundary (implicit existential): the reaction ------------
+
+/// Run the async-exposure boundaries against the Cargo workspace at `manifest_path`.
+///
+/// Mirrors [`check_impl_trait`]: resolve each boundary's crate and module anchor, observe the
+/// module's public-API `async fn` declarations, and react. An unresolvable crate or module (or an
+/// unreadable/unparseable source) is a constitution error (exit 2). The shell composes via
+/// [`check_all`].
+pub fn check_async_exposure(boundaries: &[AsyncExposureBoundary], manifest_path: &Path) -> Outcome {
+    let metadata = match cargo_metadata(manifest_path) {
+        Ok(metadata) => metadata,
+        Err(err) => {
+            return Outcome::ConstitutionError(unreadable_workspace_error(manifest_path, &err));
+        }
+    };
+    let mut violations = Vec::new();
+    for boundary in boundaries {
+        if let Err(error) = check_async_exposure_boundary(&metadata, boundary, &mut violations) {
+            return Outcome::ConstitutionError(error);
+        }
+    }
+    if violations.is_empty() {
+        Outcome::Clean
+    } else {
+        Outcome::Violations(Report::new(violations))
+    }
+}
+
+fn check_async_exposure_boundary(
+    metadata: &Value,
+    boundary: &AsyncExposureBoundary,
+    violations: &mut Vec<Violation>,
+) -> Result<(), String> {
+    let package = find_package(metadata, &boundary.crate_package)
+        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
+    let root_file =
+        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let src_dir = root_file
+        .parent()
+        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+
+    let findings = async_exposure_module_findings(
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
+
+    for finding in findings {
+        violations.push(Violation::new(
+            BoundaryKind::Semantic,
+            boundary.module.clone(),
+            "must not expose async fn".to_string(),
+            finding,
+            boundary.reason.clone(),
+            boundary.severity,
+        ));
+    }
+    Ok(())
+}
+
+/// The pure heart of async-exposure-boundary: resolve the module's items and return the sorted,
+/// deduplicated **owner-qualified** identities of the public `async fn`s it declares — public free
+/// fns, public inherent methods, and public trait method declarations (observed from
+/// `sig.asyncness`). Trait-*impl* methods (asyncness dictated by the trait) and private items are
+/// excluded. Shape-only: no name resolution, no return-type walk.
+pub(crate) fn async_exposure_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<String>, String> {
+    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+    let mut found = Vec::new();
+    for item in &items {
+        collect_item_async_exposures(item, module, &mut found);
+    }
+    found.sort();
+    found.dedup();
+    Ok(found)
+}
+
+fn collect_item_async_exposures(item: &syn::Item, module: &str, out: &mut Vec<String>) {
+    match item {
+        syn::Item::Fn(item) if is_public(&item.vis) => {
+            if item.sig.asyncness.is_some() {
+                out.push(format!(
+                    "async fn {module}::{}{}",
+                    strip_raw(&item.sig.ident.to_string()),
+                    render_sig_tail(&item.sig),
+                ));
+            }
+        }
+        syn::Item::Trait(item) if is_public(&item.vis) => {
+            let trait_name = strip_raw(&item.ident.to_string());
+            for trait_item in &item.items {
+                if let syn::TraitItem::Fn(method) = trait_item {
+                    if method.sig.asyncness.is_some() {
+                        out.push(format!(
+                            "async fn trait {module}::{trait_name}::{}{}",
+                            strip_raw(&method.sig.ident.to_string()),
+                            render_sig_tail(&method.sig),
+                        ));
+                    }
+                }
+            }
+        }
+        syn::Item::Impl(item) if item.trait_.is_none() => {
+            // Owner-qualify by the impl's self type so `impl A`/`impl B` async methods of the same
+            // name never collide under the (target, rule, finding) baseline (a false negative).
+            let owner = type_to_string(&item.self_ty).unwrap_or_else(|| "_".to_string());
+            for impl_item in &item.items {
+                if let syn::ImplItem::Fn(method) = impl_item {
+                    if is_public(&method.vis) && method.sig.asyncness.is_some() {
+                        out.push(format!(
+                            "async fn <{owner}>::{}{}",
+                            strip_raw(&method.sig.ident.to_string()),
+                            render_sig_tail(&method.sig),
+                        ));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Render a signature's `(params) -> ret` tail for an owner-qualified finding — for readability and
+/// extra collision-margin, NOT to represent the implicit future. Params render each input's type
+/// via [`type_to_string`] (a receiver as `self`/`&self`/`&mut self`); the return renders
+/// `sig.output`'s written type (empty for `-> ()`); an unrenderable type contributes `_`.
+fn render_sig_tail(sig: &syn::Signature) -> String {
+    let params: Vec<String> = sig
+        .inputs
+        .iter()
+        .map(|arg| match arg {
+            syn::FnArg::Receiver(receiver) => {
+                let reference = if receiver.reference.is_some() {
+                    "&"
+                } else {
+                    ""
+                };
+                let mutability = if receiver.mutability.is_some() {
+                    "mut "
+                } else {
+                    ""
+                };
+                format!("{reference}{mutability}self")
+            }
+            syn::FnArg::Typed(pat_type) => {
+                type_to_string(&pat_type.ty).unwrap_or_else(|| "_".to_string())
+            }
+        })
+        .collect();
+    let ret = match &sig.output {
+        syn::ReturnType::Type(_, ty) => {
+            format!(
+                " -> {}",
+                type_to_string(ty).unwrap_or_else(|| "_".to_string())
+            )
+        }
+        syn::ReturnType::Default => String::new(),
+    };
+    format!("({}){ret}", params.join(", "))
 }
 
 // --- Trait-impl-locality: the reaction ---------------------------------------
@@ -4139,6 +4419,134 @@ mod tests {
             .must_not_expose_impl_trait()
             .because("no existential at all");
         assert!(shape.forbidden_operands().is_empty());
+    }
+
+    // --- async-exposure -------------------------------------------------------
+
+    fn async_findings(
+        name: &str,
+        files: &[(&str, &str)],
+        module: &str,
+    ) -> Result<Vec<String>, String> {
+        let dir = std::env::temp_dir().join(format!("hunyi-async-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        for (rel, contents) in files {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+            std::fs::write(&path, contents).expect("write source");
+        }
+        let root = src.join("lib.rs");
+        let result = async_exposure_module_findings(&src, &root, module, "x");
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
+        async_findings(
+            name,
+            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
+            "crate::m",
+        )
+    }
+
+    #[test]
+    fn async_exposure_flags_a_public_async_free_fn() {
+        assert_eq!(
+            async_mod("free", "pub async fn connect() -> u8 { 0 }\n").unwrap(),
+            ["async fn crate::m::connect() -> u8"],
+        );
+    }
+
+    #[test]
+    fn async_exposure_flags_a_public_inherent_async_method() {
+        assert_eq!(
+            async_mod(
+                "inherent",
+                "pub struct Service; impl Service { pub async fn run(&self) {} }\n"
+            )
+            .unwrap(),
+            ["async fn <Service>::run(&self)"],
+        );
+    }
+
+    #[test]
+    fn async_exposure_flags_a_public_trait_async_method_declaration() {
+        assert_eq!(
+            async_mod("trait", "pub trait Port { async fn fetch(&self) -> u8; }\n").unwrap(),
+            ["async fn trait crate::m::Port::fetch(&self) -> u8"],
+        );
+    }
+
+    #[test]
+    fn async_exposure_does_not_flag_trait_impl_private_or_nonasync() {
+        // Trait-impl async method: dictated by the trait declaration — not double-counted.
+        assert!(
+            async_mod(
+                "traitimpl",
+                "pub struct S; impl crate::T for S { async fn run(&self) {} }\n"
+            )
+            .unwrap()
+            .is_empty(),
+        );
+        // Private async fn: not public API.
+        assert!(
+            async_mod("priv", "async fn helper() {}\n")
+                .unwrap()
+                .is_empty(),
+        );
+        // Non-async public fn: not async.
+        assert!(
+            async_mod("sync", "pub fn ready() -> u8 { 0 }\n")
+                .unwrap()
+                .is_empty(),
+        );
+    }
+
+    #[test]
+    fn async_exposure_finding_is_injective_across_same_named_owners() {
+        // The crux: two same-named async methods across two inherent impls must NOT collide, or a
+        // baselined one would mask the other (a false negative).
+        let two_impls = async_mod(
+            "two-impls",
+            "pub struct A; pub struct B;\n\
+             impl A { pub async fn run(&self) {} }\n\
+             impl B { pub async fn run(&self) {} }\n",
+        )
+        .unwrap();
+        assert_eq!(
+            two_impls,
+            [
+                "async fn <A>::run(&self)".to_string(),
+                "async fn <B>::run(&self)".to_string(),
+            ],
+            "same-named async methods across two impls yield two distinct owner-qualified findings",
+        );
+        // And two same-named async methods across two traits.
+        let two_traits = async_mod(
+            "two-traits",
+            "pub trait T { async fn run(&self); }\npub trait U { async fn run(&self); }\n",
+        )
+        .unwrap();
+        assert_eq!(
+            two_traits,
+            [
+                "async fn trait crate::m::T::run(&self)".to_string(),
+                "async fn trait crate::m::U::run(&self)".to_string(),
+            ],
+        );
+    }
+
+    #[test]
+    fn async_exposure_boundary_carries_anchor_and_severity() {
+        let b = AsyncExposureBoundary::in_crate("core")
+            .module("crate::core")
+            .must_not_expose_async_fn()
+            .warn()
+            .because("the core seam is synchronous");
+        assert_eq!(b.crate_package(), "core");
+        assert_eq!(b.module(), "crate::core");
+        assert_eq!(b.severity(), Severity::Warn);
     }
 
     #[test]
