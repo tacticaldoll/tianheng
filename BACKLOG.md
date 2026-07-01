@@ -92,11 +92,20 @@ Built depths past the shape-only dyn (same `syn` source):
   and generalized with dyn onto one `ShapeExposure` collector + `principal_trait_path`. Empty set ⇒
   any (never a no-op); return-position scoping and the APIT/async bounds are inherited.
 
+- **Async-exposure** (`AsyncExposureBoundary`, `.must_not_expose_async_fn()`) — **BUILT (v0.1.2).**
+  The **implicit-existential** complement of impl-trait: a public seam must not declare an `async
+  fn` (its compiler-inserted `impl Future`), observed from `sig.asyncness` over public free fns /
+  inherent methods / trait method declarations (trait-impl methods and private items excluded).
+  The finding is an **owner-qualified item identity** (`async fn <Ty>::name(…)`) so same-named
+  async fns across impls/traits never collide under the baseline (a false-negative guard). Its
+  declarative gate is the dimension's weakest but holds (implicit existential at a declared seam,
+  anchor-scoped). Complementary to impl-trait's *written* `-> impl Future`.
+
 Forward depths (born when built, same `syn` source):
-- **Async-exposure** — a public seam must not expose an `async fn` (its compiler-inserted
-  `impl Future` existential), the sibling of impl-trait for the *implicit* existential. Distinct
-  syntactic signal (`sig.asyncness`); a broader `must_not_expose_existential` could unify it with
-  RPIT. Not yet built; admitted only when it passes the capability-admission test.
+- **`must_not_expose_existential` (unifier)** — a possible future capability folding impl-trait
+  (written `impl Future`/RPIT) and async-exposure (implicit `impl Future`) under one "no
+  existential at this seam" rule. Deferred: the two syntactic signals stay distinct rules until a
+  unification earns its own admission (it must not blur the two findings' identities). Not built.
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),

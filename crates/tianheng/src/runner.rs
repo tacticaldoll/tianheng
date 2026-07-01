@@ -30,8 +30,8 @@ use guibiao::{
     constitution_json, constitution_text, report_json, workspace_member_src_dirs,
 };
 use hunyi::{
-    DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary, SemanticBoundary,
-    TraitImplBoundary, VisibilityBoundary,
+    AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
+    SemanticBoundary, TraitImplBoundary, VisibilityBoundary,
 };
 use louke::{RuntimeBoundary, audit_probe_coverage};
 use serde_json::Value;
@@ -199,6 +199,7 @@ where
                 print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
                 print!("{}", dyn_trait_text(&semantic.dyn_trait));
                 print!("{}", impl_trait_text(&semantic.impl_trait));
+                print!("{}", async_exposure_text(&semantic.async_exposure));
                 print!("{}", runtime_text(runtime));
             }
             // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
@@ -886,6 +887,39 @@ fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
     object
 }
 
+fn async_exposure_text(boundaries: &[AsyncExposureBoundary]) -> String {
+    if boundaries.is_empty() {
+        return String::new();
+    }
+    let noun = if boundaries.len() == 1 {
+        "boundary"
+    } else {
+        "boundaries"
+    };
+    let mut out = format!("Async-exposure {noun} ({}):\n", boundaries.len());
+    for boundary in boundaries {
+        out.push_str(&format!(
+            "\n[{}] module {} in {}\n  rule:   must not expose async fn\n  reason: {}\n",
+            boundary.severity().as_str(),
+            boundary.module(),
+            boundary.crate_package(),
+            boundary.reason(),
+        ));
+    }
+    out
+}
+
+fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
+    serde_json::json!({
+        "kind": "semantic",
+        "target": boundary.module(),
+        "crate": boundary.crate_package(),
+        "rule": "must not expose async fn",
+        "severity": boundary.severity().as_str(),
+        "reason": boundary.reason(),
+    })
+}
+
 /// The `list --format json` document: the static constitution's projection augmented with one
 /// array per non-empty dimension, so the document covers every declared law and never silently
 /// omits one. A dimension with no boundaries adds no key (a static-only project's document is
@@ -947,6 +981,15 @@ fn list_document(constitution: &Constitution) -> Value {
                 .impl_trait
                 .iter()
                 .map(impl_trait_boundary_json)
+                .collect(),
+        );
+    }
+    if !semantic.async_exposure.is_empty() {
+        document["async_exposure_boundaries"] = Value::Array(
+            semantic
+                .async_exposure
+                .iter()
+                .map(async_exposure_boundary_json)
                 .collect(),
         );
     }
@@ -1051,6 +1094,7 @@ fn list_markdown(document: &Value) -> String {
         ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
         ("dyn_trait_boundaries", "Dyn-trait boundaries"),
         ("impl_trait_boundaries", "Impl-trait boundaries"),
+        ("async_exposure_boundaries", "Async-exposure boundaries"),
         ("runtime_boundaries", "Runtime boundaries"),
     ] {
         let Some(Value::Array(items)) = document.get(key) else {
@@ -1284,6 +1328,25 @@ mod tests {
             md.contains("the core seam is statically dispatched"),
             "{md}"
         );
+    }
+
+    #[test]
+    fn async_exposure_boundary_projects_into_list_document_and_markdown() {
+        let c = Constitution::new("app").async_exposure_boundary(
+            AsyncExposureBoundary::in_crate("app")
+                .module("crate::core")
+                .must_not_expose_async_fn()
+                .because("the core seam is synchronous; async lives at the edges"),
+        );
+        let doc = list_document(&c);
+        let arr = doc["async_exposure_boundaries"]
+            .as_array()
+            .expect("projected");
+        assert_eq!(arr[0]["rule"], "must not expose async fn");
+        assert_eq!(arr[0]["target"], "crate::core");
+        let md = list_markdown(&doc);
+        assert!(md.contains("## Async-exposure boundaries"), "{md}");
+        assert!(md.contains("must not expose async fn"), "{md}");
     }
 
     #[test]

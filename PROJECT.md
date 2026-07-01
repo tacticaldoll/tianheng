@@ -273,7 +273,20 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   `impl Trait` whose principal trait resolves into a forbidden set reacts (so a seam may allow
   `impl Iterator` yet forbid `impl crate::Port`); dyn and impl-trait were generalized onto one
   `ShapeExposure` collector and a shared `principal_trait_path`, so the two shapes share the
-  operand machinery exactly. **Rejected**, as explicit non-goals with their reason:
+  operand machinery exactly. **(v0.1.2, same release)** its **implicit-existential complement**
+  `AsyncExposureBoundary` (`must_not_expose_async_fn`) — an `async fn` leaks a compiler-inserted
+  `impl Future`, so where impl-trait forbids the *written* existential this forbids the `async fn`
+  sugar (observed from the pure AST flag `sig.asyncness`, over the same public-surface item kinds,
+  trait-impl methods excluded). Its admission is the dimension's **weakest declarative** gate but
+  holds: the intent is *implicit existential exposure at a declared seam* (a sync-core/async-edges
+  layering), by anchor scoping, not a blanket "no async" lint; observability (a local AST flag) and
+  anchoring are strong. Its finding is an **owner-qualified item identity**
+  (`async fn <SelfTy>::name(…)`, `async fn trait <Trait>::name(…)`), NOT a bare name or a
+  future-shape — a deliberate departure from the sibling *shape* findings, because same-named
+  public async fns across impls/traits in one module would otherwise collide under the
+  `(target, rule, finding)` baseline and let a new leak be masked (the one forbidden bug). A future
+  `must_not_expose_existential` could unify written + implicit, deferred until it earns admission
+  without blurring those identities. **Rejected**, as explicit non-goals with their reason:
   `Send`/`Sync` constraints (auto-traits are inferred, never written), external trait
   sealing (downstream crates are outside the scan), and transitive effect-purity ("no I/O
   anywhere reachable") — each has an *essential* gap. This test is the standing gate: a new

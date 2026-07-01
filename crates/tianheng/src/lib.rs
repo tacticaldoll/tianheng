@@ -36,15 +36,16 @@ pub use guibiao::Constitution as GnomonConstitution;
 // boundaries the same way as static ones, then folds them into the unified [`Constitution`].
 // `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
 pub use hunyi::{
-    DynTraitBoundary, DynTraitBoundaryDraft, DynTraitCrateDraft, DynTraitModuleDraft,
-    ForbiddenMarkerBoundary, ForbiddenMarkerBoundaryDraft, ForbiddenMarkerCrateDraft,
-    ForbiddenMarkerModuleDraft, ImplTraitBoundary, ImplTraitBoundaryDraft, ImplTraitCrateDraft,
-    ImplTraitModuleDraft, SemanticBoundaries, SemanticBoundary, SemanticBoundaryDraft,
-    SemanticCrateDraft, SemanticModuleDraft, TraitImplBoundary, TraitImplBoundaryDraft,
-    TraitImplCrateDraft, TraitImplTraitDraft, VisibilityBoundary, VisibilityBoundaryDraft,
-    VisibilityCrateDraft, VisibilityModuleDraft, check as check_semantic, check_all,
-    check_dyn_trait, check_forbidden_marker, check_impl_trait, check_trait_impl_locality,
-    check_visibility,
+    AsyncExposureBoundary, AsyncExposureBoundaryDraft, AsyncExposureCrateDraft,
+    AsyncExposureModuleDraft, DynTraitBoundary, DynTraitBoundaryDraft, DynTraitCrateDraft,
+    DynTraitModuleDraft, ForbiddenMarkerBoundary, ForbiddenMarkerBoundaryDraft,
+    ForbiddenMarkerCrateDraft, ForbiddenMarkerModuleDraft, ImplTraitBoundary,
+    ImplTraitBoundaryDraft, ImplTraitCrateDraft, ImplTraitModuleDraft, SemanticBoundaries,
+    SemanticBoundary, SemanticBoundaryDraft, SemanticCrateDraft, SemanticModuleDraft,
+    TraitImplBoundary, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
+    VisibilityBoundary, VisibilityBoundaryDraft, VisibilityCrateDraft, VisibilityModuleDraft,
+    check as check_semantic, check_all, check_async_exposure, check_dyn_trait,
+    check_forbidden_marker, check_impl_trait, check_trait_impl_locality, check_visibility,
 };
 // 漏刻 (runtime) dimension DSL: declared here, then projected two ways — the CI probe-coverage
 // audit (composed by [`run`]) and the prod face (the adopter calls [`louke::install`] /
@@ -125,6 +126,12 @@ impl Constitution {
         self
     }
 
+    /// Add a 渾儀 async-exposure boundary (a module's API must not declare an `async fn`).
+    pub fn async_exposure_boundary(mut self, boundary: AsyncExposureBoundary) -> Self {
+        self.semantic.async_exposure.push(boundary);
+        self
+    }
+
     /// Add a 漏刻 runtime boundary. The CI face audits its probe coverage (via [`run`]); the same
     /// object is what the adopter hands to [`louke::install`] for the prod face.
     pub fn runtime(mut self, boundary: RuntimeBoundary) -> Self {
@@ -169,9 +176,9 @@ impl From<GnomonConstitution> for Constitution {
 /// `Constitution` / `run` (and `check` for the pure static core).
 pub mod prelude {
     pub use super::{
-        Boundary, BoundaryKind, Constitution, CrateBoundary, DependencyKind, DynTraitBoundary,
-        ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, Outcome, Report, Rule,
-        RuntimeBoundary, SemanticBoundary, Severity, SourceKind, TraitImplBoundary, Violation,
-        ViolationId, VisibilityBoundary, check, run,
+        AsyncExposureBoundary, Boundary, BoundaryKind, Constitution, CrateBoundary, DependencyKind,
+        DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, Outcome,
+        Report, Rule, RuntimeBoundary, SemanticBoundary, Severity, SourceKind, TraitImplBoundary,
+        Violation, ViolationId, VisibilityBoundary, check, run,
     };
 }
