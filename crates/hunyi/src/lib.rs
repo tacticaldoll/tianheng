@@ -15,12 +15,17 @@
 //! its `pub` free functions (params/returns), `pub` struct/enum/union field types, `pub`
 //! type-alias targets, `pub` const/static types, `pub` trait method signatures and
 //! associated-type bounds (and supertraits), the generic bounds / `where`-clauses of those
-//! items, and the `pub` methods of **inherent** `impl` blocks. Out of scope (stated bounds,
-//! not silent passes): **trait** `impl` blocks (their shape is dictated by the trait, not
-//! the impl site); a type reachable only through a **glob** import or a **macro**; and a
-//! type knowable only through **inference** (a return-position `impl Trait` that *hides* a
-//! concrete type, or an alias chain). Within the resolved scope there is no false negative:
-//! a forbidden type that *is* resolvable always reacts.
+//! items, the `pub` methods of **inherent** `impl` blocks, and **named public re-exports**
+//! (a `pub use crate::infra::X;` republishes the forbidden type on the module's surface — observed
+//! by default; a glob re-export reacts when its root is in/under the forbidden set). A **trait**
+//! `impl` block's impl-site-authored positions are out of scope by default but observable via the opt-in
+//! `.including_trait_impls()` depth (`semantic-trait-impl-exposure`): the trait ref's generic
+//! args, the `Self` type, associated-type bindings, the impl's own generics/`where`-clause, and
+//! the method **return** type as written (its params/receiver stay trait-dictated). Out of scope
+//! (stated bounds, not silent passes): a type reachable only through a **glob** import or a
+//! **macro**; and a type knowable only through **inference** (a return-position `impl Trait` that
+//! *hides* a concrete type, or an alias chain). Within the resolved scope there is no false
+//! negative: a forbidden type that *is* resolvable always reacts.
 //!
 //! Govern by reaction, not instruction.
 
@@ -38,7 +43,8 @@ mod resolve;
 use resolve::{
     BareFallback, DynCollector, ImplTraitCollector, PathCollector, ReexportMap, ShapeExposure,
     UseMap, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
-    collect_reexports, collect_uses, resolve_path, stamp_seam, strip_raw, type_to_string,
+    collect_reexports, collect_uses, path_to_string, resolve_path, stamp_seam, strip_raw,
+    type_to_string,
 };
 
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
@@ -84,6 +90,9 @@ pub struct SemanticBoundary {
     pub(crate) forbidden: Vec<String>,
     pub(crate) reason: String,
     pub(crate) severity: Severity,
+    /// Opt-in depth (`semantic-trait-impl-exposure`): also observe the module's trait `impl`
+    /// blocks' impl-site-authored positions. `false` keeps the v1 signature-coupling surface.
+    pub(crate) including_trait_impls: bool,
 }
 
 impl SemanticBoundary {
@@ -118,6 +127,12 @@ impl SemanticBoundary {
     pub fn severity(&self) -> Severity {
         self.severity
     }
+
+    /// Whether the boundary also observes trait `impl` blocks (the opt-in
+    /// `semantic-trait-impl-exposure` depth). `false` is the v1 signature-coupling surface.
+    pub fn including_trait_impls(&self) -> bool {
+        self.including_trait_impls
+    }
 }
 
 /// A semantic boundary awaiting its module anchor.
@@ -150,6 +165,7 @@ impl SemanticModuleDraft {
             module: self.module,
             forbidden: vec![path.to_string()],
             severity: Severity::Enforce,
+            including_trait_impls: false,
         }
     }
 }
@@ -160,6 +176,7 @@ pub struct SemanticBoundaryDraft {
     module: String,
     forbidden: Vec<String>,
     severity: Severity,
+    including_trait_impls: bool,
 }
 
 impl SemanticBoundaryDraft {
@@ -177,6 +194,18 @@ impl SemanticBoundaryDraft {
         self
     }
 
+    /// **Opt-in depth** (`semantic-trait-impl-exposure`): also observe the module's trait `impl`
+    /// blocks. A bare `must_not_expose` keeps the v1 surface (trait impls out of scope); this
+    /// deepens it to a trait impl's impl-site-authored positions — the trait's generic arguments,
+    /// the `Self` type (bare and nested), associated-type bindings, the impl's own generics /
+    /// `where`-clause, and the method **return type as written** (which RPITIT lets the impl author
+    /// refine to a concrete type). Method parameters/receiver stay trait-dictated and out of scope,
+    /// and implementing a forbidden *trait* is `must_not_acquire`/locality's concern, not this.
+    pub fn including_trait_impls(mut self) -> Self {
+        self.including_trait_impls = true;
+        self
+    }
+
     /// Finish the boundary with its human-readable reason (the repair hint).
     pub fn because(self, reason: &str) -> SemanticBoundary {
         SemanticBoundary {
@@ -185,6 +214,7 @@ impl SemanticBoundaryDraft {
             forbidden: self.forbidden,
             reason: reason.to_string(),
             severity: self.severity,
+            including_trait_impls: self.including_trait_impls,
         }
     }
 }
@@ -1142,6 +1172,7 @@ fn check_boundary(
         &boundary.module,
         &boundary.forbidden,
         &boundary.crate_package,
+        boundary.including_trait_impls,
     )?;
 
     for finding in findings {
@@ -1173,6 +1204,7 @@ pub(crate) fn module_findings(
     module: &str,
     forbidden: &[String],
     crate_package: &str,
+    include_trait_impls: bool,
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let uses = collect_uses(&items);
@@ -1187,6 +1219,12 @@ pub(crate) fn module_findings(
     let mut exposed = Vec::new();
     for (ordinal, item) in items.iter().enumerate() {
         collect_item_exposures(item, module, &uses, ordinal, &mut exposed);
+        // Opt-in depth: also observe the module's trait `impl` blocks' impl-site-authored
+        // positions (`semantic-trait-impl-exposure`). The same resolve → canonicalize → match →
+        // `{type} exposed by {seam}` pipeline below applies unchanged; only the seam differs.
+        if include_trait_impls {
+            collect_trait_impl_exposures(item, module, &uses, ordinal, &mut exposed);
+        }
     }
 
     let mut findings: Vec<String> = exposed
@@ -2735,7 +2773,254 @@ fn collect_item_exposures(
                 }
             }
         }
+        // A bare `pub use` republishes what it names on the module's public surface — the most
+        // direct exposure (`semantic-reexport-exposure`). Restricted-visibility re-exports are
+        // internal, like a private field. The walked path flows through the same resolve →
+        // canonicalize → match pipeline as any exposed type.
+        syn::Item::Use(item) if is_public(&item.vis) => {
+            walk_reexport_tree(&item.tree, Vec::new(), module, out);
+        }
         _ => {}
+    }
+}
+
+/// Walk a `pub use` tree, pushing one [`PathExposure`] per re-exported leaf (and the root of a
+/// glob), seam-qualified by the **exported** path so two aliases of the same forbidden type stay
+/// distinct findings. Handles: named/renamed leaves; grouped re-exports (per leaf); a whole-module
+/// re-export (`pub use crate::infra as fs` — the leaf path is a module, matched like any path); a
+/// `self` group member (`{self, X}` — re-exports the prefix module, keyed by the prefix's final
+/// segment, never the literal `self`); a glob (the root prefix, which reacts iff it resolves
+/// in/under the forbidden set). `as _` binds no nameable path — a stated non-observed bound.
+/// `self` group member and a renamed `self` both mean "the prefix module itself" — collapse to
+/// the prefix, keyed by the prefix's final segment (or the alias). Recognised on the raw `Ident`
+/// (`self` is a keyword and never a raw identifier, so a string compare is exact).
+fn is_self_segment(ident: &syn::Ident) -> bool {
+    ident == "self"
+}
+fn walk_reexport_tree(
+    tree: &syn::UseTree,
+    prefix: Vec<syn::Ident>,
+    module: &str,
+    out: &mut Vec<PathExposure>,
+) {
+    match tree {
+        syn::UseTree::Path(path) => {
+            let mut segs = prefix;
+            segs.push(path.ident.clone());
+            walk_reexport_tree(&path.tree, segs, module, out);
+        }
+        syn::UseTree::Name(name) => {
+            if is_self_segment(&name.ident) {
+                // `pub use crate::infra::{self, …}` re-exports the prefix module, bound under the
+                // prefix's final segment (never the literal `self`).
+                let exported = prefix.last().map(seg_name);
+                push_reexport(&prefix, exported.as_deref(), module, out);
+            } else {
+                let exported = seg_name(&name.ident);
+                let mut segs = prefix;
+                segs.push(name.ident.clone());
+                push_reexport(&segs, Some(&exported), module, out);
+            }
+        }
+        syn::UseTree::Rename(rename) => {
+            let alias = seg_name(&rename.rename);
+            if alias == "_" {
+                return; // `as _` binds no nameable path — a stated non-observed bound
+            }
+            if is_self_segment(&rename.ident) {
+                // `pub use crate::infra::{self as fs}` — the prefix module, renamed.
+                push_reexport(&prefix, Some(&alias), module, out);
+            } else {
+                let mut segs = prefix;
+                segs.push(rename.ident.clone());
+                push_reexport(&segs, Some(&alias), module, out);
+            }
+        }
+        syn::UseTree::Glob(_) => {
+            // The glob root: reacts iff it resolves in/under the forbidden set (the pipeline
+            // decides). A sibling/ancestor root simply does not match — a stated glob bound.
+            push_reexport(&prefix, Some("*"), module, out);
+        }
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                walk_reexport_tree(item, prefix.clone(), module, out);
+            }
+        }
+    }
+}
+
+/// A path segment's display name, raw-identifier prefix stripped (`r#type` → `type`), for the
+/// human-facing exported name in the seam.
+fn seg_name(ident: &syn::Ident) -> String {
+    strip_raw(&ident.to_string())
+}
+
+/// Push a re-export exposure. The `syn::Path` is built **directly from the segment idents** (never
+/// re-parsed from a string), so a raw-identifier segment (`pub use crate::r#type::X;`) is preserved
+/// and matches correctly — `resolve_path`/`matches_forbidden` normalize raw idents downstream. The
+/// seam is `pub use {module}::{exported}`. An empty segment list is skipped (a `self` under no
+/// prefix cannot arise from a legal re-export).
+fn push_reexport(
+    segs: &[syn::Ident],
+    exported: Option<&str>,
+    module: &str,
+    out: &mut Vec<PathExposure>,
+) {
+    let (Some(exported), false) = (exported, segs.is_empty()) else {
+        return;
+    };
+    let segments = segs
+        .iter()
+        .map(|ident| syn::PathSegment {
+            ident: ident.clone(),
+            arguments: syn::PathArguments::None,
+        })
+        .collect();
+    out.push(PathExposure {
+        path: syn::Path {
+            leading_colon: None,
+            segments,
+        },
+        seam: format!("pub use {module}::{exported}"),
+    });
+}
+
+/// The type paths in a signature's **return type** only (`sig.output`) — never `sig.inputs`.
+/// A trait impl method's parameters/receiver are invariant with the trait declaration (not
+/// refinable at the impl site), but its return MAY be refined (return-position `impl Trait` in
+/// traits / async fn in traits), so a concretely-written return can expose an impl-site-authored
+/// type. Observed without classifying refined-vs-dictated (that would need the possibly-foreign
+/// trait definition — an essential gap), so a concrete return is observed either way.
+fn paths_in_return(sig: &syn::Signature) -> Vec<syn::Path> {
+    let mut c = PathCollector::default();
+    if let syn::ReturnType::Type(_, ty) = &sig.output {
+        c.visit_type(ty);
+    }
+    c.paths
+}
+
+/// The paths named across a set of trait-bounds — each bound's trait path *and* any type nested
+/// in its generic arguments (`T: From<crate::infra::Secret>` yields both `From` and
+/// `crate::infra::Secret`). Used for the impl-site `where` position.
+fn paths_in_bounds(
+    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
+) -> Vec<syn::Path> {
+    let mut c = PathCollector::default();
+    for bound in bounds {
+        c.visit_type_param_bound(bound);
+    }
+    c.paths
+}
+
+/// Collect the type paths exposed by one **trait `impl` block**'s impl-site-authored positions
+/// (`semantic-trait-impl-exposure`, opt-in). Only fires for `impl Trait for Type` (inherent impls
+/// are `collect_item_exposures`'s job). The observed positions — each seam-qualified so two of them
+/// exposing the same forbidden type stay distinct findings (the one forbidden bug) — are:
+/// `trait-arg` (the trait ref's generic arguments, NOT the trait path itself: implementing a
+/// forbidden *trait* is `must_not_acquire`/locality's concern), `self` (the Self type, bare and
+/// nested), `assoc {name}` (associated type/value bindings), `where {bounded-type}` (the impl's own
+/// generics + `where`-clause, keyed by the bounded type so two bounds never collapse), and
+/// `method {name} return` (the written return type only — params/receiver are trait-dictated). The
+/// pushed [`PathExposure`]s flow through the same resolve → canonicalize → match → `{type} exposed
+/// by {seam}` pipeline as signature-coupling, with `BareFallback::Ignore` parity.
+fn collect_trait_impl_exposures(
+    item: &syn::Item,
+    module: &str,
+    uses: &UseMap,
+    ordinal: usize,
+    out: &mut Vec<PathExposure>,
+) {
+    let syn::Item::Impl(item) = item else { return };
+    let Some((_, trait_path, _)) = &item.trait_ else {
+        return; // inherent impl — governed by `collect_item_exposures`
+    };
+    // Seam prefix `impl {Trait} for {SelfTy}`. The Self label is canonicalized (parity with the
+    // inherent-impl / locality seam owner); the trait label is the written path (a rendering-
+    // granularity choice — its generic args distinguish `From<Vec<X>>` from `From<Box<X>>`).
+    let trait_label = path_to_string(trait_path).unwrap_or_else(|| format!("trait_#{ordinal}"));
+    let self_label = canonical_self_owner(&item.self_ty, uses, module, ordinal);
+    let prefix = format!("impl {trait_label} for {self_label}");
+
+    // 1. trait-arg — the trait ref's generic arguments (not the trait base path).
+    if let Some(syn::PathArguments::AngleBracketed(args)) =
+        trait_path.segments.last().map(|s| &s.arguments)
+    {
+        let seam = format!("{prefix} (trait-arg)");
+        for arg in &args.args {
+            match arg {
+                syn::GenericArgument::Type(ty) => out.extend(tag_paths(paths_in_type(ty), &seam)),
+                syn::GenericArgument::AssocType(at) => {
+                    out.extend(tag_paths(paths_in_type(&at.ty), &seam))
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // 2. self — the Self type, bare (`impl T for infra::Forbidden`) and nested
+    //    (`impl T for Vec<infra::Forbidden>`). A bare `Self`/`Self::X` in a return (position 5)
+    //    does not resolve and cannot double-fire here.
+    out.extend(tag_paths(
+        paths_in_type(&item.self_ty),
+        &format!("{prefix} (self)"),
+    ));
+
+    // 4. where — impl generic-param bounds and the `where`-clause, keyed by the bounded type so
+    //    two distinct bounds exposing the same type never collapse under the baseline.
+    for param in &item.generics.params {
+        match param {
+            syn::GenericParam::Type(tp) => {
+                let key = strip_raw(&tp.ident.to_string());
+                let seam = format!("{prefix} (where {key})");
+                out.extend(tag_paths(paths_in_bounds(&tp.bounds), &seam));
+            }
+            // A const-param's *type* annotation (`impl<const N: crate::infra::X>`) is impl-site-
+            // authored — v1's `paths_in_generics` observes it, so the hand-rolled walk must too.
+            syn::GenericParam::Const(cp) => {
+                let key = strip_raw(&cp.ident.to_string());
+                let seam = format!("{prefix} (where {key})");
+                out.extend(tag_paths(paths_in_type(&cp.ty), &seam));
+            }
+            syn::GenericParam::Lifetime(_) => {}
+        }
+    }
+    if let Some(where_clause) = &item.generics.where_clause {
+        for predicate in &where_clause.predicates {
+            if let syn::WherePredicate::Type(pt) = predicate {
+                let key = type_to_string(&pt.bounded_ty).unwrap_or_else(|| "_".to_string());
+                let seam = format!("{prefix} (where {key})");
+                // Both sides are impl-site-authored: a forbidden type in the bounded (LHS) type
+                // (`where crate::infra::X: Clone`) leaks as surely as one in the bound (RHS). v1's
+                // `paths_in_generics` observes both; the hand-rolled walk must not lose that.
+                out.extend(tag_paths(paths_in_type(&pt.bounded_ty), &seam));
+                out.extend(tag_paths(paths_in_bounds(&pt.bounds), &seam));
+            }
+        }
+    }
+
+    for impl_item in &item.items {
+        match impl_item {
+            // 3. assoc {name} — associated type/value bindings authored in the impl. Both an
+            //    associated `type X = …` and an associated `const X: … ` carry an impl-site type
+            //    (parity with v1's trait-def walk, which observes both).
+            syn::ImplItem::Type(assoc) => {
+                let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));
+                out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+            }
+            syn::ImplItem::Const(assoc) => {
+                let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));
+                out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+            }
+            // 5. method {name} return — the written return type only (never params/receiver).
+            syn::ImplItem::Fn(method) => {
+                let seam = format!(
+                    "{prefix} (method {} return)",
+                    strip_raw(&method.sig.ident.to_string())
+                );
+                out.extend(tag_paths(paths_in_return(&method.sig), &seam));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -2916,9 +3201,728 @@ mod tests {
         }
         let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
         let root = src.join("lib.rs");
-        let result = module_findings(&src, &root, module, &forbidden, "x");
+        let result = module_findings(&src, &root, module, &forbidden, "x", false);
         let _ = std::fs::remove_dir_all(&dir);
         result
+    }
+
+    /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
+    /// `impl` block's impl-site-authored positions are also observed.
+    fn findings_including_trait_impls(
+        name: &str,
+        files: &[(&str, &str)],
+        module: &str,
+        forbidden: &[&str],
+    ) -> Result<Vec<String>, String> {
+        let dir = std::env::temp_dir().join(format!("hunyi-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        for (rel, contents) in files {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+            std::fs::write(&path, contents).expect("write source");
+        }
+        let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
+        let root = src.join("lib.rs");
+        let result = module_findings(&src, &root, module, &forbidden, "x", true);
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    // --- semantic-trait-impl-exposure (opt-in depth) --------------------------
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_the_trait_arg_position() {
+        let out = findings_including_trait_impls(
+            "ti-trait-arg",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl From<crate::infra::DbPool> for Service {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::DbPool exposed by impl From<crate::infra::DbPool> for crate::domain::Service (trait-arg)"
+            ]
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_the_self_position_bare() {
+        // F3a: the Self type IS the forbidden type — exposure, like a `pub fn` parameter.
+        let out = findings_including_trait_impls(
+            "ti-self-bare",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub trait Loc {}\nimpl Loc for crate::infra::Forbidden {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::Forbidden exposed by impl Loc for crate::infra::Forbidden (self)"]
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_the_self_position_nested() {
+        // A forbidden type nested inside the Self type (`impl T for Vec<Forbidden>`).
+        let out = findings_including_trait_impls(
+            "ti-self-nested",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub trait Loc {}\nimpl Loc for Vec<crate::infra::DbPool> {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(out.len(), 1, "one self-position finding expected: {out:?}");
+        assert!(
+            out[0].starts_with("crate::infra::DbPool exposed by impl Loc for")
+                && out[0].ends_with("(self)"),
+            "nested Self finding shape: {out:?}"
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_the_assoc_position() {
+        let out = findings_including_trait_impls(
+            "ti-assoc",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl Iterator for Service { type Item = crate::infra::Secret; }\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::Secret exposed by impl Iterator for crate::domain::Service (assoc Item)"
+            ]
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_the_where_position() {
+        let out = findings_including_trait_impls(
+            "ti-where",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl<T: crate::infra::Secret> Loc for Service {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::Secret exposed by impl Loc for crate::domain::Service (where T)"]
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_an_associated_const_type() {
+        // Parity with the v1 trait-def walk (which observes assoc-const types): an impl-authored
+        // associated const's type is impl-site-authored and must react.
+        let out = findings_including_trait_impls(
+            "ti-assoc-const",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl Marker for Service { const MAX: crate::infra::Limit = 0; }\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::Limit exposed by impl Marker for crate::domain::Service (assoc MAX)"]
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_a_where_clause_bounded_type() {
+        // The forbidden type on the LHS of a where-predicate (`where crate::infra::X: Clone`) is
+        // impl-site-authored — must react, not just the RHS bound.
+        let out = findings_including_trait_impls(
+            "ti-where-lhs",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl Loc for Service where crate::infra::Assoc: Clone {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::Assoc exposed by impl Loc for crate::domain::Service (where crate::infra::Assoc)"
+            ]
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_a_const_generic_param_type() {
+        // The const-param's *type* annotation is impl-site-authored (position 4). The struct's own
+        // param uses a plain `usize`, so the forbidden path appears ONLY on the impl block — a
+        // signature-coupling finding cannot mask the trait-impl one.
+        let out = findings_including_trait_impls(
+            "ti-const-param",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service<const N: usize>;\nimpl<const N: crate::infra::Forbidden> Loc for Service<N> {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::Forbidden exposed by impl Loc for crate::domain::Service<N> (where N)"]
+        );
+    }
+
+    #[test]
+    fn trait_impl_exposure_reacts_at_a_refined_rpitit_return() {
+        // The blocking review finding: a trait declares an opaque return, the impl refines it to a
+        // concrete forbidden type at the impl site — must react (else the one forbidden bug).
+        let out = findings_including_trait_impls(
+            "ti-rpitit",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl Port for Service { fn items(&self) -> crate::infra::Iter { todo!() } }\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::Iter exposed by impl Port for crate::domain::Service (method items return)"
+            ]
+        );
+    }
+
+    #[test]
+    fn trait_impl_method_parameter_is_not_observed_but_the_return_is() {
+        // Params/receiver are trait-dictated (invariant), so the parameter `crate::infra::DbPool`
+        // does NOT react; the impl-refined return `crate::infra::Iter` DOES.
+        let out = findings_including_trait_impls(
+            "ti-param-vs-return",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl Sink for Service { fn put(&self, x: crate::infra::DbPool) -> crate::infra::Iter { todo!() } }\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::Iter exposed by impl Sink for crate::domain::Service (method put return)"
+            ]
+        );
+    }
+
+    #[test]
+    fn implementing_a_forbidden_trait_is_a_non_goal() {
+        // F3b: the forbidden path is the trait being IMPLEMENTED, not a type it exposes —
+        // that is `must_not_acquire`/locality's concern, not exposure. No finding.
+        let out = findings_including_trait_impls(
+            "ti-forbidden-trait",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl crate::infra::Sealed for Service {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert!(
+            out.is_empty(),
+            "implementing a forbidden trait must not react: {out:?}"
+        );
+    }
+
+    #[test]
+    fn a_bare_boundary_ignores_trait_impls() {
+        // Without `.including_trait_impls()`, the v1 signature-coupling surface is preserved.
+        let out = findings(
+            "ti-bare-off",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl From<crate::infra::DbPool> for Service {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert!(
+            out.is_empty(),
+            "a bare boundary must not observe trait impls: {out:?}"
+        );
+    }
+
+    #[test]
+    fn two_where_bounds_exposing_the_same_type_stay_distinct() {
+        // F2 false-negative guard: distinct bounds keyed by their bounded type never collapse.
+        let out = findings_including_trait_impls(
+            "ti-where-distinct",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl<T, U> Loc for Service where T: crate::infra::Secret, U: crate::infra::Secret {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::Secret exposed by impl Loc for crate::domain::Service (where T)",
+                "crate::infra::Secret exposed by impl Loc for crate::domain::Service (where U)",
+            ]
+        );
+    }
+
+    #[test]
+    fn two_positions_exposing_the_same_type_stay_distinct() {
+        // The one forbidden bug: same type at trait-arg and self must be two findings.
+        let out = findings_including_trait_impls(
+            "ti-two-positions",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "impl From<crate::infra::DbPool> for crate::infra::DbPool {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::DbPool exposed by impl From<crate::infra::DbPool> for crate::infra::DbPool (self)",
+                "crate::infra::DbPool exposed by impl From<crate::infra::DbPool> for crate::infra::DbPool (trait-arg)",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_reexported_type_in_a_trait_impl_position_resolves_and_reacts() {
+        // Resolver reuse: a `pub use` facade path canonicalizes to its defining path before matching.
+        let out = findings_including_trait_impls(
+            "ti-reexport",
+            &[
+                ("lib.rs", "pub mod domain;\npub mod facade;\n"),
+                ("facade.rs", "pub use crate::infra::DbPool;\n"),
+                (
+                    "domain.rs",
+                    "use crate::facade::DbPool;\npub struct Service;\nimpl From<DbPool> for Service {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::DbPool exposed by impl From<DbPool> for crate::domain::Service (trait-arg)"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_bare_name_in_a_trait_impl_position_is_not_a_false_positive() {
+        // F6: BareFallback::Ignore parity — a bare local name is not resolved against the current
+        // module, so a boundary forbidding the module's own path does not fire on it.
+        let out = findings_including_trait_impls(
+            "ti-bare-name",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub struct Service;\nimpl From<DbPool> for Service {}\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::domain"],
+        )
+        .unwrap();
+        assert!(
+            out.is_empty(),
+            "a bare name must not resolve against the current module: {out:?}"
+        );
+    }
+
+    // --- semantic-reexport-exposure (default-on) ------------------------------
+
+    #[test]
+    fn reexport_of_a_forbidden_type_reacts_by_default() {
+        let out = findings(
+            "rx-named",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::DbPool;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by pub use crate::domain::DbPool"]
+        );
+    }
+
+    #[test]
+    fn aliased_reexport_is_keyed_by_the_alias() {
+        let out = findings(
+            "rx-alias",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::DbPool as Pool;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by pub use crate::domain::Pool"]
+        );
+    }
+
+    #[test]
+    fn two_aliases_of_the_same_type_stay_distinct_findings() {
+        let out = findings(
+            "rx-two-alias",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub use crate::infra::DbPool;\npub use crate::infra::DbPool as Pool;\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::DbPool exposed by pub use crate::domain::DbPool",
+                "crate::infra::DbPool exposed by pub use crate::domain::Pool",
+            ]
+        );
+    }
+
+    #[test]
+    fn grouped_reexport_reacts_per_leaf() {
+        let out = findings(
+            "rx-group",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::{DbPool, Config};\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra::Config exposed by pub use crate::domain::Config",
+                "crate::infra::DbPool exposed by pub use crate::domain::DbPool",
+            ]
+        );
+    }
+
+    #[test]
+    fn reexport_through_a_facade_chain_reacts() {
+        let out = findings(
+            "rx-facade",
+            &[
+                ("lib.rs", "pub mod domain;\npub mod facade;\n"),
+                ("facade.rs", "pub use crate::infra::DbPool;\n"),
+                ("domain.rs", "pub use crate::facade::DbPool;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::DbPool exposed by pub use crate::domain::DbPool"]
+        );
+    }
+
+    #[test]
+    fn reexport_through_a_self_group_facade_chain_reacts() {
+        // The facade republishes the whole forbidden module via `{self}`; the governed module then
+        // re-exports that republished module. The closure must collapse the facade's trailing
+        // `self` (key it by the prefix's final segment, target the prefix module) or the chain does
+        // not canonicalize back to `crate::infra` and the leak passes silently — a false negative.
+        let out = findings(
+            "rx-self-facade",
+            &[
+                (
+                    "lib.rs",
+                    "pub mod infra;\npub mod facade;\npub mod domain;\n",
+                ),
+                ("infra.rs", "pub struct DbPool;\n"),
+                ("facade.rs", "pub use crate::infra::{self};\n"),
+                ("domain.rs", "pub use crate::facade::infra;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra exposed by pub use crate::domain::infra"]
+        );
+    }
+
+    #[test]
+    fn reexport_through_a_renamed_self_facade_chain_reacts_cleanly() {
+        // The MAJOR companion: `{self as fs}` in the facade. Before the closure collapse this
+        // reacted only by accident, emitting a malformed `crate::infra::self` canonical. It must
+        // now canonicalize to a clean `crate::infra`.
+        let out = findings(
+            "rx-renamed-self-facade",
+            &[
+                (
+                    "lib.rs",
+                    "pub mod infra;\npub mod facade;\npub mod domain;\n",
+                ),
+                ("infra.rs", "pub struct DbPool;\n"),
+                ("facade.rs", "pub use crate::infra::{self as fs};\n"),
+                ("domain.rs", "pub use crate::facade::fs;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::fs"]);
+    }
+
+    #[test]
+    fn named_whole_module_reexport_reacts() {
+        let out = findings(
+            "rx-module",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra as fs;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::fs"]);
+    }
+
+    #[test]
+    fn self_group_module_reexport_reacts_keyed_by_module_name() {
+        let out = findings(
+            "rx-self-group",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::{self, DbPool};\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            [
+                "crate::infra exposed by pub use crate::domain::infra",
+                "crate::infra::DbPool exposed by pub use crate::domain::DbPool",
+            ]
+        );
+    }
+
+    #[test]
+    fn reexport_with_raw_identifier_segment_reacts() {
+        // A raw-identifier (keyword) segment must not be dropped — the syn::Path is built from the
+        // idents, not re-parsed from a stripped string, so `r#type` matches forbidden `crate::type`.
+        let out = findings(
+            "rx-raw",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::r#type::DbPool;\n"),
+            ],
+            "crate::domain",
+            &["crate::type"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::type::DbPool exposed by pub use crate::domain::DbPool"]
+        );
+    }
+
+    #[test]
+    fn renamed_self_module_reexport_reacts_with_correct_type() {
+        // `{self as fs}` is a Rename node, not a Name — it must still collapse to the prefix module.
+        let out = findings(
+            "rx-self-rename",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::{self as fs};\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::fs"]);
+    }
+
+    #[test]
+    fn glob_reexport_with_forbidden_root_reacts() {
+        let out = findings(
+            "rx-glob-root",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::*;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::*"]);
+    }
+
+    #[test]
+    fn glob_reexport_with_root_deeper_than_forbidden_prefix_reacts() {
+        let out = findings(
+            "rx-glob-deep",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::db::*;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            ["crate::infra::db exposed by pub use crate::domain::*"]
+        );
+    }
+
+    #[test]
+    fn sibling_root_glob_does_not_react() {
+        let out = findings(
+            "rx-glob-sibling",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::elsewhere::*;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert!(
+            out.is_empty(),
+            "sibling-root glob is a stated bound: {out:?}"
+        );
+    }
+
+    #[test]
+    fn ancestor_root_glob_over_a_deeper_forbidden_prefix_does_not_react() {
+        // `pub use crate::infra::*` under a DEEPER forbidden prefix — a stated bound (can't
+        // enumerate whether infra publicly re-exports the forbidden db subtree).
+        let out = findings(
+            "rx-glob-ancestor",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                ("domain.rs", "pub use crate::infra::*;\n"),
+            ],
+            "crate::domain",
+            &["crate::infra::db"],
+        )
+        .unwrap();
+        assert!(
+            out.is_empty(),
+            "ancestor-root glob is a stated bound: {out:?}"
+        );
+    }
+
+    #[test]
+    fn restricted_and_private_and_underscore_reexports_do_not_react() {
+        let out = findings(
+            "rx-nonpublic",
+            &[
+                ("lib.rs", "pub mod domain;\n"),
+                (
+                    "domain.rs",
+                    "pub(crate) use crate::infra::DbPool;\nuse crate::infra::Config;\npub use crate::infra::Trait as _;\n",
+                ),
+            ],
+            "crate::domain",
+            &["crate::infra"],
+        )
+        .unwrap();
+        assert!(
+            out.is_empty(),
+            "pub(crate)/private/`as _` re-exports are not public exposure: {out:?}"
+        );
     }
 
     #[test]

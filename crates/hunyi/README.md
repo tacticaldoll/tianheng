@@ -14,7 +14,19 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
 
 - **Signature-coupling** (flagship) — a module's public API must not *expose* a forbidden
   type (depending on it internally is fine; leaking it across the public surface is the
-  violation).
+  violation). The exposed surface includes **named public re-exports**: a
+  `pub use crate::infra::DbPool;` (and its aliased / grouped / facade-chained forms)
+  republishes the forbidden type on the module's surface, so `must_not_expose` reacts to it
+  by default; a glob re-export reacts when its root resolves in/under the forbidden set.
+  (Re-export observation is a default-on **behavior-changing bugfix** — it closes a real
+  false negative, so a previously-green adopter may newly react to a genuine leak; adopt via
+  the baseline/warn rung as with any tightened reaction.)
+- **Trait-impl exposure** (opt-in depth) — `.including_trait_impls()` extends signature-coupling
+  from a module's items to a trait `impl` block's **impl-site-authored** positions: the trait
+  reference's generic arguments, the `Self` type, associated type/const bindings, the impl's own
+  generics / `where`-clause (including const-generic parameter types), and each method's **return**
+  type. Trait-*dictated* positions (method parameters and the receiver) stay out of scope — they
+  belong to the trait definition, which signature-coupling already governs.
 - **Trait-impl locality** — a trait may only be implemented in declared locations.
 - **Visibility** — a module must not declare bare `pub` items.
 - **Forbidden-marker** — a module's types must not acquire a forbidden trait/derive.
@@ -109,7 +121,8 @@ let async_boundary = AsyncExposureBoundary::in_crate("my-app")
 
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including
 multi-hop and `as`-aliased ones — *are* followed to the item they name. What `syn`'s syntactic
-view cannot see is **glob** imports, **cross-crate** re-exports, **macro**-generated names, and
+view cannot see is **glob** imports (save a re-export glob whose root resolves in/under the
+forbidden set, which reacts), **cross-crate** re-exports, **macro**-generated names, and
 types knowable only through **inference** (e.g. a return-position `impl Trait` hiding a concrete
 type). These gaps are *stated*, not silently passed; an unresolvable anchor is a constitution
 error, never a silent pass. Explicitly **rejected** as false-negative engines: `Send`/`Sync`

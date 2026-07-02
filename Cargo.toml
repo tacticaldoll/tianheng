@@ -1,6 +1,6 @@
 # 天衡 (Tiānhéng) workspace.
 #
-# A reactive architectural-governance crate family of five real crates:
+# A reactive architectural-governance crate family. The real crates (no stubs — see below):
 #   - xuanji  (璇璣): the dimension-agnostic reaction model — the 底.
 #   - guibiao (圭表): the gnomon — dependency-light static observation core, derived from modou.
 #   - hunyi   (渾儀): the armillary — semantic (AST/syn) observation; the syn dependency lives here.
@@ -20,7 +20,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -28,10 +28,10 @@ repository = "https://github.com/tacticaldoll/tianheng"
 homepage = "https://github.com/tacticaldoll/tianheng"
 
 [workspace.dependencies]
-xuanji = { path = "crates/xuanji", version = "0.1.2" }
-hunyi = { path = "crates/hunyi", version = "0.1.2" }
-guibiao = { path = "crates/guibiao", version = "0.1.2" }
-louke = { path = "crates/louke", version = "0.1.2" }
+xuanji = { path = "crates/xuanji", version = "0.1.3" }
+hunyi = { path = "crates/hunyi", version = "0.1.3" }
+guibiao = { path = "crates/guibiao", version = "0.1.3" }
+louke = { path = "crates/louke", version = "0.1.3" }
 serde_json = "1"
 # syn is the heavy AST dependency, quarantined to 渾儀 (hunyi) alone — never the
 # 圭表 core or 璇璣 model (enforced by self_governance.rs).

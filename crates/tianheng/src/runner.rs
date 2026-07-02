@@ -662,13 +662,20 @@ fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
     };
     let mut out = format!("Semantic {noun} ({}):\n", boundaries.len());
     for boundary in boundaries {
+        // The opt-in deepening changes the reaction, so the projected law must show it.
+        let opt_in = if boundary.including_trait_impls() {
+            " (including trait impls)"
+        } else {
+            ""
+        };
         out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}: {}\n  reason: {}\n",
+            "\n[{}] module {} in {}\n  rule:   {}: {}{}\n  reason: {}\n",
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
             SIGNATURE_RULE,
             boundary.forbidden().join(", "),
+            opt_in,
             boundary.reason(),
         ));
     }
@@ -678,7 +685,7 @@ fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
 /// The JSON projection of one semantic boundary, mirroring a static boundary's shape (`kind`,
 /// `target`, `crate`, `rule`, `severity`, `reason`) plus the `forbidden` set.
 fn semantic_boundary_json(boundary: &SemanticBoundary) -> Value {
-    serde_json::json!({
+    let mut object = serde_json::json!({
         "kind": "semantic",
         "target": boundary.module(),
         "crate": boundary.crate_package(),
@@ -686,7 +693,13 @@ fn semantic_boundary_json(boundary: &SemanticBoundary) -> Value {
         "severity": boundary.severity().as_str(),
         "forbidden": boundary.forbidden(),
         "reason": boundary.reason(),
-    })
+    });
+    // Emit the opt-in only when set, so a bare boundary's JSON (and the Markdown derived from it via
+    // `boundary_params`) stays byte-unchanged; when set, Markdown surfaces it generically.
+    if boundary.including_trait_impls() {
+        object["including_trait_impls"] = serde_json::json!(true);
+    }
+    object
 }
 
 /// The text projection of the trait-impl-locality boundaries, appended to `list`. Empty when
@@ -1320,6 +1333,45 @@ mod tests {
         let text = semantic_text(&[boundary]);
         assert!(text.contains("module crate::domain in app"), "{text}");
         assert!(text.contains("must not expose: crate::infra"), "{text}");
+    }
+
+    #[test]
+    fn including_trait_impls_projects_into_text_json_and_markdown() {
+        let boundary = SemanticBoundary::in_crate("app")
+            .module("crate::domain")
+            .must_not_expose("crate::infra")
+            .including_trait_impls()
+            .because("no infra leak even via impl-site contracts");
+        let text = semantic_text(std::slice::from_ref(&boundary));
+        assert!(
+            text.contains("must not expose: crate::infra (including trait impls)"),
+            "{text}"
+        );
+        let c = Constitution::new("app").signature_boundary(boundary);
+        let json = serde_json::to_string(&list_document(&c)).expect("json");
+        assert!(json.contains("\"including_trait_impls\":true"), "{json}");
+        let md = constitution_markdown(&c);
+        // Pin the exact param group so a future ordering/join change (e.g. preserve_order) is
+        // caught: `forbidden` precedes `including_trait_impls` (lexicographic), joined by `; `.
+        assert!(
+            md.contains("(forbidden: crate::infra; including_trait_impls: true)"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn a_bare_boundary_omits_the_opt_in_from_every_projection() {
+        let boundary = SemanticBoundary::in_crate("app")
+            .module("crate::domain")
+            .must_not_expose("crate::infra")
+            .because("the domain API must not leak infrastructure types");
+        let text = semantic_text(std::slice::from_ref(&boundary));
+        assert!(!text.contains("including trait impls"), "{text}");
+        let c = Constitution::new("app").signature_boundary(boundary);
+        let json = serde_json::to_string(&list_document(&c)).expect("json");
+        assert!(!json.contains("including_trait_impls"), "{json}");
+        let md = constitution_markdown(&c);
+        assert!(!md.contains("including_trait_impls"), "{md}");
     }
 
     #[test]

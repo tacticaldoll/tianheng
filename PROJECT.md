@@ -109,8 +109,12 @@ selects governance by depending on the dimensions they want:
   trait-impl locality, visibility, and forbidden-marker boundaries; **(v0.1.2):** a
   type-shape/existential **depth stair** on the same `syn` source — dyn-trait and impl-trait
   exposure (each shape-only *and* named-operand-scoped) and async-fn exposure — the type-shape
-  and existential complements of signature-coupling (detailed in the Decisions section). The
-  heavy `syn` dependency is quarantined here, never in the core.
+  and existential complements of signature-coupling; **(v0.1.3):** two further same-source depth
+  additions to that flagship exposure surface — **re-export exposure** (a named public `pub use`
+  of a forbidden type is itself an exposure, default-on — an API-compatible but behavior-changing
+  false-negative closure) and **trait-impl exposure** (the opt-in `.including_trait_impls()`
+  depth, surfacing a trait impl's impl-site-authored positions) — all detailed in the Decisions
+  section. The heavy `syn` dependency is quarantined here, never in the core.
 - **`louke` (漏刻)** — runtime observation. **Built (v0.1.0):** origin-assertion (a
   declared seam's `only_origins` allowlist), in two faces — the prod probe
   (`assert_boundary!`, fail-closed, a structured event by default, panic opt-in) and the
@@ -311,6 +315,36 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   sealing (downstream crates are outside the scan), and transitive effect-purity ("no I/O
   anywhere reachable") — each has an *essential* gap. This test is the standing gate: a new
   semantic capability passes all three in writing, or it is a lint and does not belong.
+- **(v0.1.3) Two same-source depths on signature-coupling — one default-on, one opt-in — and the
+  patch line they hold.** The flagship exposure surface gained two capabilities on the *same*
+  `syn` source, both passing the admission test. (a) **Re-export exposure**
+  (`semantic-reexport-exposure`) — a named public `pub use crate::infra::X;` republishes a
+  forbidden type on the module's surface, so `must_not_expose` reacts to it (and its aliased /
+  grouped / facade-chained forms; a glob re-export reacts when its root resolves in/under the
+  forbidden set). It is **default-on**, because a missed public-surface item is not a new optional
+  depth but a **false negative of the flagship** — the one forbidden bug — so per the core contract
+  the closure cannot stay silent to keep CI green. That makes it the first 0.1.x change to alter an
+  *existing* boundary's reaction (prior depths were additive/opt-in): an API-compatible
+  **behavior-changing bugfix** — the DSL is unchanged and downstream still compiles, but a
+  previously-green adopter may newly react to a real leak, adopted via the baseline/warn rung.
+  Findings are seam-qualified by the *exported* path (`{type} exposed by pub use {path}`) so two
+  aliases of one type never collapse under the baseline. (b) **Trait-impl exposure**
+  (`semantic-trait-impl-exposure`) — the opt-in `.including_trait_impls()` depth extends exposure
+  from a module's items to a trait `impl` block's **impl-site-authored** positions (the trait
+  reference's generic args, the `Self` type, associated type/const bindings, the impl's own
+  generics / `where`-clause including const-param types, and each method's *return* type);
+  trait-*dictated* params and the receiver stay out of scope — they belong to the trait definition,
+  already governed. It is **opt-in**, not default-on, precisely because a v1 spec declared trait
+  impls out of scope and the impl-authored/trait-dictated split is a real narrowing choice, not a
+  missed item — additive depth, not a bugfix. Both keep 0.1.3 on the **patch** line (SemVer
+  honesty): the opt-in is purely additive, the default-on re-export is API-compatible. Before
+  release, an adversarial review closed two further false negatives — a forbidden type in a
+  trait-impl **const-generic parameter's type** (the generics walk matched only
+  `GenericParam::Type`), and a **`{self}` facade chain** whose whole-module republish did not
+  canonicalize back to the forbidden module — both restoring parity the code's own invariants
+  already required, locked with regression tests. The two capabilities ship as OpenSpec changes
+  (they carry specs); the two review-found fixes are conformance bugfixes within those specs,
+  recorded in git, not new requirements.
 - **Name resolution is a 渾儀-internal shared layer (`hunyi::resolve`), not 璇璣's and not
   cross-dimension.** Resolution maps a path as written to a canonical item — it is
   *observation*, so it belongs to a dimension, never to 璇璣 (the `serde_json`-only,

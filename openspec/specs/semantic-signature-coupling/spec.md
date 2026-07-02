@@ -1,7 +1,15 @@
 # semantic-signature-coupling Specification
 
 ## Purpose
-TBD - created by archiving change semantic-signature-coupling. Update Purpose after archive.
+The flagship semantic reaction: a module's public API must not **expose** a forbidden type.
+Depending on a type internally is fine; naming it across the public surface — in a `pub`
+signature, field, type alias, const/static, trait method, or a named public re-export — is the
+leak. The complement of import-governance, and the case that provably earns the AST (`syn`):
+a type named via a fully-qualified path with no `use` is invisible to a token scanner but caught
+here. Trait-impl positions are out of scope for a bare boundary (see the opt-in
+`semantic-trait-impl-exposure`); named public re-exports are in scope by default (see
+`semantic-reexport-exposure`).
+
 ## Requirements
 ### Requirement: Semantic boundary declared in Rust
 
@@ -28,7 +36,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 
 ### Requirement: Public-signature observation governs exposure
 
-The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; and the public method signatures of **inherent `impl` blocks** for types defined in the module (those methods are public API the module itself authored). **Trait `impl` blocks SHALL be out of scope** for this capability (a documented v1 bound): a trait impl's signatures are dictated by the trait definition rather than chosen at the impl site, so that governance is reserved for a follow-on capability. A forbidden type that is imported or used only in a non-public (internal) position SHALL NOT be a violation — this rule governs exposure, the complement of the static import boundary.
+The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures of **inherent `impl` blocks** for types defined in the module (those methods are public API the module itself authored); and **named public re-exports** — a bare `pub use` that republishes a forbidden type under the module's own path is itself an exposure (the most direct one: a consumer can name it through the module), specified in `semantic-reexport-exposure`. **Trait `impl` blocks SHALL remain out of scope for a bare `must_not_expose`** (the v1 default): a bare boundary does not govern any trait impl. A trait impl's *impl-site-authored* positions — the trait's generic arguments, the `Self` type, associated-type bindings, the impl's own generics / `where`-clause, and the method **return type as written at the impl site** (which return-position `impl Trait` in traits lets the impl author refine to a concrete type) — ARE observable via the opt-in `.including_trait_impls()` depth specified in `semantic-trait-impl-exposure`; without that opt-in they SHALL NOT be a violation. Trait impl method **parameter and receiver** types remain trait-dictated (invariant with the trait declaration, not refinable at the impl site) and are governed at the trait's own definition, not by this opt-in. A forbidden type that is imported or used only in a non-public (internal) position SHALL NOT be a violation — this rule governs exposure, the complement of the static import boundary.
 
 #### Scenario: A forbidden type in a public return is a violation
 
@@ -55,10 +63,15 @@ The system SHALL observe the **public** API surface of the governed module ancho
 - **WHEN** the governed module declares `pub fn run<T: crate::infra::Pooled>(t: T)` and the boundary forbids exposing `crate::infra`
 - **THEN** the system emits a violation naming `crate::infra::Pooled`, because the bound writes the trait path literally and needs no inference to resolve
 
-#### Scenario: A forbidden type in a trait impl is a documented out-of-scope bound
+#### Scenario: A trait impl is out of scope for a bare boundary, governable via the opt-in depth
 
-- **WHEN** the governed module declares `impl From<crate::infra::DbPool> for Service { … }` and the boundary forbids exposing `crate::infra`
-- **THEN** the system does not claim to govern it (trait impls are an out-of-scope v1 bound), rather than silently asserting the boundary is clean
+- **WHEN** the governed module declares `impl From<crate::infra::DbPool> for Service { … }` and the boundary forbids exposing `crate::infra` with a **bare** `must_not_expose` (no `.including_trait_impls()`)
+- **THEN** the system does not claim to govern the trait impl (the v1 bound is preserved), rather than silently asserting the boundary is clean; adding `.including_trait_impls()` opts into the deeper surface governed by `semantic-trait-impl-exposure`
+
+#### Scenario: A named public re-export of a forbidden type is a violation by default
+
+- **WHEN** the governed module declares `pub use crate::infra::DbPool;` under a bare `must_not_expose("crate::infra")` (no opt-in)
+- **THEN** the system emits a violation naming `crate::infra::DbPool` exposed by the re-export, because a public re-export republishes the forbidden type under the module's own public path — the exposure the boundary always meant to catch
 
 ### Requirement: Forbidden-type matching by path and prefix
 

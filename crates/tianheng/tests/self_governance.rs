@@ -36,7 +36,7 @@ fn workspace_manifest() -> Option<PathBuf> {
 ///
 /// Declared in the same Rust DSL adopters use. [`tianheng_governs_itself`] runs it as a
 /// real reaction against the workspace, so the dogfooding is a non-bypassable gate, not
-/// a hope. Seven boundaries, plus one cross-cutting law they jointly realize:
+/// a hope. The boundaries below, plus the cross-cutting law they jointly realize:
 ///
 /// 1. **璇璣 is the bedrock** — the shared reaction model (`xuanji`) depends on
 ///    `serde_json` only and on no workspace member, so the whole family sits *above* it

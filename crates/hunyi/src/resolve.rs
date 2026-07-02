@@ -88,12 +88,31 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
         }
         syn::UseTree::Name(name) => {
             let ident = strip_raw(&name.ident.to_string());
-            map.insert(ident.clone(), join(&prefix, &ident));
+            if ident == "self" {
+                // `use a::b::{self}` binds the prefix module itself under its final segment
+                // (never the literal `self`) — mirror `walk_reexport_tree`'s reaction side so the
+                // closure and the direct walk agree. A `self` under no prefix cannot arise from a
+                // legal `use`.
+                if let Some(last) = prefix.rsplit("::").next().filter(|s| !s.is_empty()) {
+                    map.insert(last.to_string(), prefix.clone());
+                }
+            } else {
+                map.insert(ident.clone(), join(&prefix, &ident));
+            }
         }
         syn::UseTree::Rename(rename) => {
             let ident = strip_raw(&rename.ident.to_string());
             let alias = strip_raw(&rename.rename.to_string());
-            map.insert(alias, join(&prefix, &ident));
+            if alias == "_" {
+                // `as _` binds no nameable path — mirror `walk_reexport_tree`'s stated bound.
+            } else if ident == "self" {
+                // `use a::b::{self as x}` binds the prefix module itself, renamed.
+                if !prefix.is_empty() {
+                    map.insert(alias, prefix.clone());
+                }
+            } else {
+                map.insert(alias, join(&prefix, &ident));
+            }
         }
         // A glob brings no nameable leaf into the map — a documented out-of-scope bound.
         syn::UseTree::Glob(_) => {}
@@ -560,7 +579,7 @@ fn render_last_segment_args(path: &syn::Path) -> Option<String> {
 
 /// Render a `syn::Path` (idents joined by `::`, with angle-bracketed type arguments) for
 /// a finding string. `None` for a shape it cannot render (e.g. parenthesized `Fn` args).
-fn path_to_string(path: &syn::Path) -> Option<String> {
+pub(crate) fn path_to_string(path: &syn::Path) -> Option<String> {
     let mut segs = Vec::with_capacity(path.segments.len());
     if path.leading_colon.is_some() {
         segs.push(String::new());

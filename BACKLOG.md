@@ -11,6 +11,22 @@ not APIs. A new observation dimension is **a crate, born when it is built** (nev
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
 `guibiao` core stays `serde_json`-only.
 
+## Version horizons — what a 0.1.x patch carries vs what earns 0.2.0
+
+The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
+patch, breaking → minor**, and never a vanity minor bump. The admitted 三儀 layer is
+complete, so the near-term line is **0.1.x, a patch line**:
+
+- **0.1.x (patch)** — additive depth on an existing observation source (a born-when-built
+  capability that widens nothing already public), packaging / CI / license-bundling hygiene,
+  and governance-doc corrections. Every *additive* forward item below lands here.
+- **0.2.0 (minor)** — earned only by a **breaking** public-API change. The one on the table
+  is the deliberate pre-1.0 refinement of `guibiao`'s widened public surface
+  (`baseline` / `coverage` / `projection` / `check_and_cover`, made `pub` as the price of the
+  crate split — see `PROJECT.md`, Decisions). Additive adopter-facing work (the LSP crate, the
+  adopter-facing 潛移 generator) does **not** force a minor: it rides whatever release is
+  current, a patch unless bundled with that breaking refinement.
+
 ## Reaction phases — the 三儀 (observation dimensions)
 
 Ordered by readiness. All three instruments ship in v0.1.0 (圭表 static, 渾儀 semantic, 漏刻
@@ -44,7 +60,7 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   hermetic manifest-hygiene reaction cargo-deny does not provide. See the declared-vs-resolved
   division of labor in `PROJECT.md`.
 
-### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn/impl-trait stair + async-exposure)**
+### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn/impl-trait stair + async-exposure; v0.1.3 re-export + trait-impl exposure)**
 Observation source: the **AST** (`syn`). Sees what the `圭表` `use`-scan cannot — semantics
 in the syntax tree: `pub` signatures, `impl Trait for Type`, attributes/derives, visibility.
 The observation-source fork is **resolved**: `syn` was chosen (stable; its syntactic partial
@@ -105,6 +121,28 @@ Built depths past the shape-only dyn (same `syn` source):
   declarative gate is the dimension's weakest but holds (implicit existential at a declared seam,
   anchor-scoped). Complementary to impl-trait's *written* `-> impl Future`.
 
+- **Trait-impl exposure** (`.must_not_expose(…).including_trait_impls()`) — **BUILT (v0.1.3).** An
+  **opt-in surface depth** on signature-coupling (not a new boundary type): it closes the v1
+  trait-`impl`-out-of-scope bound by observing a trait impl's **impl-site-authored** positions —
+  the trait ref's generic args (`trait-arg`), the `Self` type bare+nested (`self`), associated-type
+  bindings (`assoc {name}`), the impl's own generics/`where`-clause keyed by bounded type
+  (`where {type}`), and the method **return as written** (`method {name} return`, catching an
+  RPITIT-refined concrete return — the false negative that made "exclude all method sigs" untenable).
+  Params/receiver stay trait-dictated non-goals; implementing a forbidden *trait* is
+  `must_not_acquire`/locality's concern (stated non-goal). Position-qualified seams keep findings
+  injective; reuses the resolver and `BareFallback::Ignore` verbatim, no new `syn` feature.
+- **Re-export exposure** (`pub use`) — **BUILT (v0.1.3), default-on.** Closes a confirmed false
+  negative in the flagship: `collect_item_exposures` had no `Item::Use` arm, so a bare
+  `must_not_expose("crate::infra")` silently passed `pub use crate::infra::DbPool;` (which republishes
+  the forbidden type under the module's path). Now a bare boundary observes named public re-exports
+  (bare / aliased / grouped / facade-chain / whole-module / `self`-group), and a glob reacts when its
+  root is in/under the forbidden set; `pub(crate)`/private/`as _`/`extern crate` and sibling/ancestor
+  globs are stated bounds. Seam-keyed by the exported path for baseline injectivity. **Behavior-change
+  (the first in 0.1.x):** API-compatible (patch), but a bare boundary now reacts to re-exports it
+  previously missed — a downstream's green CI may go red on a real leak; adopt via `warn`/`Baseline`.
+  This is the standing precedent that a false-negative closure is a patch (the contract's
+  false-negative-first ordering over compatibility comfort).
+
 Forward depths (born when built, same `syn` source):
 - **`must_not_expose_existential` (unifier)** — a possible future capability folding impl-trait
   (written `impl Future`/RPIT) and async-exposure (implicit `impl Future`) under one "no
@@ -156,7 +194,9 @@ survives across sessions.
   CI vendor; turning the neutral output into vendor annotations is a harness/CI-step recipe (a
   `jq` one-liner over `--format json`, or uploading the SARIF — see `README.md`). *Deferred (same
   observation, not new drift):* an **editor/LSP shift-left** so an illegal `use` is red-lined as
-  typed (a large integration; the LSP server could be its own crate, born when built → 0.2.0+).
+  typed (a large integration; the LSP server could be its own crate, born when built — a far
+  horizon, but *additive*: a new crate is a **patch** by SemVer honesty, not a minor by virtue of
+  its size).
 - **實錄 (Shílù) — baseline & history.** *Built:* the snapshot gate (record accepted
   violations, fail only on *new* drift). *Deferred:* a **debt-ratchet**
   (`--require-baseline-reduction`, only-fix-never-add) — **in tension** with "baseline is a
@@ -176,20 +216,22 @@ stay in-shape by default; the reaction stays the non-bypassable backstop (see `P
 (`AGENTS.self-law.md`, generated from `self_governance.rs`, staleness-gated) so an agent working on
 this repo reads the *enforced* law, not the demo; **reason-foregrounding** in the law projection
 (`list --format markdown` leads each boundary with its reason) and in the reaction's text report;
-the **reason-writing convention** (AGENTS.md). *Forward (phase-2, → 0.2.0):* an **adopter-facing
+the **reason-writing convention** (AGENTS.md). *Forward (phase-2):* an **adopter-facing
 潛移 face** — any project generates its own agent-context from its constitution. The library
 primitive (`constitution_markdown`) and a README recipe shipped in v0.1.1; a full generator /
 workflow is deferred (adopter-workflow product weight, and a `list-self`-style CLI would tangle the
 demo-vs-self-law story). Held to the same bound: only what reacts or projects enters context; no
-unobservable wish becomes law (prose prescription is the rejected open loop).
+unobservable wish becomes law (prose prescription is the rejected open loop). *Version by SemVer
+honesty, not by phase:* an additive generator/CLI is a **patch**; a 0.2.0 is earned only by a
+breaking change — e.g. the deliberate pre-1.0 refinement of `guibiao`'s widened public surface
+(see PROJECT.md, Decisions) — never by bundling a milestone.
 
 ## Explicitly not on the roadmap
 
 Active code-shaping / generation; a prescriptive framework you build inside; a **lint**
 (built-in opinion rather than declared intent); a **universal graph API** (whole-graph
 analysis rather than declared per-target boundaries); a **runtime policy engine**; a
-**supply-chain policy engine** (resolved / whole-graph advisories, dependency licenses,
-bans / duplicates, resolved source allowlists — cargo-deny's lane, run in this repo's
-`supply-chain` CI job; Tianheng governs the *declared, per-target* layer instead — this is
-why would-be capability B is declined above, not deferred). Each dimension keeps its own
-observation source; nothing is named before its reaction exists.
+**supply-chain policy engine** (resolved / whole-graph advisories, licenses, bans, source
+allowlists — cargo-deny's lane; Tianheng governs the *declared, per-target* layer instead —
+see the declined capability B above). Each dimension keeps its own observation source;
+nothing is named before its reaction exists.
