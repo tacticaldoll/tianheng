@@ -24,14 +24,16 @@
 //! the method **return** type as written (its params/receiver stay trait-dictated). Out of scope
 //! (stated bounds, not silent passes): a type reachable only through a **glob** import or a
 //! **macro**; and a type knowable only through **inference** (a return-position `impl Trait` that
-//! *hides* a concrete type, or an alias chain). Within the resolved scope there is no false
+//! *hides* a concrete type, or a **complex-target or generic** type alias — `type X = Vec<Db>` /
+//! `type X<T> = …`). A **resolvable single-path** `type X = a::b::C;` alias chain, by contrast, *is*
+//! followed to its defining path and reacts (v0.1.4). Within the resolved scope there is no false
 //! negative: a forbidden type that *is* resolvable always reacts.
 //!
 //! Govern by reaction, not instruction.
 
 #![deny(missing_docs)]
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -41,10 +43,11 @@ use syn::visit::Visit;
 
 mod resolve;
 use resolve::{
-    BareFallback, DynCollector, ImplTraitCollector, PathCollector, ReexportMap, ShapeExposure,
-    UseMap, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
-    collect_reexports, collect_uses, path_to_string, resolve_path, stamp_seam, strip_raw,
-    type_to_string,
+    AliasMap, BareFallback, DynCollector, ExternRenameMap, ImplTraitCollector, PathCollector,
+    ReexportMap, ShapeExposure, UseMap, alias_nominal_target, bare_local_alias, canonical_path_str,
+    canonical_self_owner, canonicalize_through_aliases, canonicalize_through_reexports,
+    collect_reexports, collect_uses, extern_verbatim_renamed, path_to_string, resolve_path,
+    stamp_seam, strip_raw, type_to_string,
 };
 
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
@@ -77,902 +80,8 @@ pub const VISIBILITY_RULE: &str = "must not declare pub items";
 /// Forbidden-marker: a subtree's types must not acquire a forbidden trait.
 pub const FORBIDDEN_MARKER_RULE: &str = "must not acquire trait";
 
-// --- Declaration DSL ---------------------------------------------------------
-
-/// A semantic boundary: the public API of a module must not **expose** any forbidden
-/// type. Declared in Rust (the single source of truth), alongside — and composed with —
-/// the static constitution at the gate. Each dimension owns its own declaration DSL and
-/// expresses findings in the shared 璇璣 model; the shell merges them into one reaction.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SemanticBoundary {
-    pub(crate) crate_package: String,
-    pub(crate) module: String,
-    pub(crate) forbidden: Vec<String>,
-    pub(crate) reason: String,
-    pub(crate) severity: Severity,
-    /// Opt-in depth (`semantic-trait-impl-exposure`): also observe the module's trait `impl`
-    /// blocks' impl-site-authored positions. `false` keeps the v1 signature-coupling surface.
-    pub(crate) including_trait_impls: bool,
-}
-
-impl SemanticBoundary {
-    /// Begin a semantic boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> SemanticCrateDraft {
-        SemanticCrateDraft {
-            crate_package: package.to_string(),
-        }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
-    /// The governed module path (e.g. `crate::domain`).
-    pub fn module(&self) -> &str {
-        &self.module
-    }
-
-    /// The forbidden type paths / module prefixes whose exposure is a violation.
-    pub fn forbidden(&self) -> &[String] {
-        &self.forbidden
-    }
-
-    /// The human-readable reason recorded with the boundary (the repair hint).
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-
-    /// Whether the boundary also observes trait `impl` blocks (the opt-in
-    /// `semantic-trait-impl-exposure` depth). `false` is the v1 signature-coupling surface.
-    pub fn including_trait_impls(&self) -> bool {
-        self.including_trait_impls
-    }
-}
-
-/// A semantic boundary awaiting its module anchor.
-pub struct SemanticCrateDraft {
-    crate_package: String,
-}
-
-impl SemanticCrateDraft {
-    /// Anchor the boundary to a module path within the crate (e.g. `crate::domain`).
-    pub fn module(self, module: &str) -> SemanticModuleDraft {
-        SemanticModuleDraft {
-            crate_package: self.crate_package,
-            module: module.to_string(),
-        }
-    }
-}
-
-/// A module-anchored boundary awaiting the forbidden set.
-pub struct SemanticModuleDraft {
-    crate_package: String,
-    module: String,
-}
-
-impl SemanticModuleDraft {
-    /// Forbid the module's public API from exposing the given type path or module prefix
-    /// (`::`-delimited containment, so `crate::infra` also forbids `crate::infra::db::Pool`).
-    pub fn must_not_expose(self, path: &str) -> SemanticBoundaryDraft {
-        SemanticBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden: vec![path.to_string()],
-            severity: Severity::Enforce,
-            including_trait_impls: false,
-        }
-    }
-}
-
-/// A boundary awaiting severity (optional) and its reason.
-pub struct SemanticBoundaryDraft {
-    crate_package: String,
-    module: String,
-    forbidden: Vec<String>,
-    severity: Severity,
-    including_trait_impls: bool,
-}
-
-impl SemanticBoundaryDraft {
-    /// Also forbid exposing another type path / module prefix (a boundary MAY forbid more
-    /// than one).
-    pub fn and_not_expose(mut self, path: &str) -> Self {
-        self.forbidden.push(path.to_string());
-        self
-    }
-
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
-    /// **Opt-in depth** (`semantic-trait-impl-exposure`): also observe the module's trait `impl`
-    /// blocks. A bare `must_not_expose` keeps the v1 surface (trait impls out of scope); this
-    /// deepens it to a trait impl's impl-site-authored positions — the trait's generic arguments,
-    /// the `Self` type (bare and nested), associated-type bindings, the impl's own generics /
-    /// `where`-clause, and the method **return type as written** (which RPITIT lets the impl author
-    /// refine to a concrete type). Method parameters/receiver stay trait-dictated and out of scope,
-    /// and implementing a forbidden *trait* is `must_not_acquire`/locality's concern, not this.
-    pub fn including_trait_impls(mut self) -> Self {
-        self.including_trait_impls = true;
-        self
-    }
-
-    /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> SemanticBoundary {
-        SemanticBoundary {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden: self.forbidden,
-            reason: reason.to_string(),
-            severity: self.severity,
-            including_trait_impls: self.including_trait_impls,
-        }
-    }
-}
-
-// --- Trait-impl-locality declaration DSL -------------------------------------
-
-/// A trait-impl-locality boundary: within a target crate, the named trait may be
-/// implemented **only** inside the declared allowed module location(s). An
-/// `impl <Trait> for <Type>` block outside them is a violation. Declared in Rust (the
-/// single source of truth) and composed with the other dimensions at the gate. This
-/// governs *impl locality* — the complement of exposure ([`SemanticBoundary`]) and of the
-/// static import boundary. It governs only the target crate's own impl sites; it makes no
-/// claim about downstream crates (that would be external trait sealing, an essential gap).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TraitImplBoundary {
-    pub(crate) crate_package: String,
-    pub(crate) trait_path: String,
-    pub(crate) allowed_locations: Vec<String>,
-    pub(crate) reason: String,
-    pub(crate) severity: Severity,
-}
-
-impl TraitImplBoundary {
-    /// Begin a trait-impl-locality boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> TraitImplCrateDraft {
-        TraitImplCrateDraft {
-            crate_package: package.to_string(),
-        }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
-    /// The governed trait's path (e.g. `crate::command::Command`).
-    pub fn trait_(&self) -> &str {
-        &self.trait_path
-    }
-
-    /// The allowed module-location prefixes where the trait MAY be implemented.
-    pub fn allowed_locations(&self) -> &[String] {
-        &self.allowed_locations
-    }
-
-    /// The human-readable reason recorded with the boundary (the repair hint).
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-}
-
-/// A trait-impl-locality boundary awaiting its trait anchor.
-pub struct TraitImplCrateDraft {
-    crate_package: String,
-}
-
-impl TraitImplCrateDraft {
-    /// Anchor the boundary to a trait path within the crate (e.g. `crate::command::Command`).
-    /// The anchor must resolve to a `trait` item defined in the crate (directly or via a
-    /// local `pub use`); an unresolvable anchor is a constitution error (exit 2).
-    pub fn trait_(self, trait_path: &str) -> TraitImplTraitDraft {
-        TraitImplTraitDraft {
-            crate_package: self.crate_package,
-            trait_path: trait_path.to_string(),
-        }
-    }
-}
-
-/// A trait-anchored boundary awaiting its first allowed location.
-pub struct TraitImplTraitDraft {
-    crate_package: String,
-    trait_path: String,
-}
-
-impl TraitImplTraitDraft {
-    /// Allow the trait to be implemented under the given module path or prefix
-    /// (`::`-delimited containment, so `crate::commands` also allows
-    /// `crate::commands::greet`). Implementations outside the allowed location(s) react.
-    pub fn only_implemented_in(self, location: &str) -> TraitImplBoundaryDraft {
-        TraitImplBoundaryDraft {
-            crate_package: self.crate_package,
-            trait_path: self.trait_path,
-            allowed_locations: vec![location.to_string()],
-            severity: Severity::Enforce,
-        }
-    }
-}
-
-/// A boundary awaiting more allowed locations (optional), severity (optional), and reason.
-pub struct TraitImplBoundaryDraft {
-    crate_package: String,
-    trait_path: String,
-    allowed_locations: Vec<String>,
-    severity: Severity,
-}
-
-impl TraitImplBoundaryDraft {
-    /// Also allow the trait to be implemented under another module path / prefix (a
-    /// boundary MAY allow more than one location).
-    pub fn and_in(mut self, location: &str) -> Self {
-        self.allowed_locations.push(location.to_string());
-        self
-    }
-
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
-    /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> TraitImplBoundary {
-        TraitImplBoundary {
-            crate_package: self.crate_package,
-            trait_path: self.trait_path,
-            allowed_locations: self.allowed_locations,
-            reason: reason.to_string(),
-            severity: self.severity,
-        }
-    }
-}
-
-// --- Visibility-boundary declaration DSL -------------------------------------
-
-/// A visibility boundary: a governed module must not declare any bare-`pub` items —
-/// a declared-visibility hygiene rule for an internal / impl-detail layer. The rule is
-/// **syntactic** (the `pub` keyword on the module's own direct items), not crate-
-/// reachability: `pub(crate)`/`pub(super)`/`pub(in …)`/private are allowed, and attribute-
-/// derived public surface (`#[macro_export]`, `#[no_mangle]`) is out of scope (the deferred
-/// attribute capability's domain). Declared in Rust and composed with the other dimensions
-/// at the gate.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VisibilityBoundary {
-    pub(crate) crate_package: String,
-    pub(crate) module: String,
-    pub(crate) reason: String,
-    pub(crate) severity: Severity,
-}
-
-impl VisibilityBoundary {
-    /// Begin a visibility boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> VisibilityCrateDraft {
-        VisibilityCrateDraft {
-            crate_package: package.to_string(),
-        }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
-    /// The governed module path (e.g. `crate::internal`).
-    pub fn module(&self) -> &str {
-        &self.module
-    }
-
-    /// The human-readable reason recorded with the boundary (the repair hint).
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-}
-
-/// A visibility boundary awaiting its module anchor.
-pub struct VisibilityCrateDraft {
-    crate_package: String,
-}
-
-impl VisibilityCrateDraft {
-    /// Anchor the boundary to a module path within the crate (e.g. `crate::internal`).
-    pub fn module(self, module: &str) -> VisibilityModuleDraft {
-        VisibilityModuleDraft {
-            crate_package: self.crate_package,
-            module: module.to_string(),
-        }
-    }
-}
-
-/// A module-anchored boundary awaiting the rule.
-pub struct VisibilityModuleDraft {
-    crate_package: String,
-    module: String,
-}
-
-impl VisibilityModuleDraft {
-    /// Forbid the module from declaring any bare-`pub` direct item.
-    pub fn must_not_declare_pub(self) -> VisibilityBoundaryDraft {
-        VisibilityBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            severity: Severity::Enforce,
-        }
-    }
-}
-
-/// A boundary awaiting severity (optional) and its reason.
-pub struct VisibilityBoundaryDraft {
-    crate_package: String,
-    module: String,
-    severity: Severity,
-}
-
-impl VisibilityBoundaryDraft {
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
-    /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> VisibilityBoundary {
-        VisibilityBoundary {
-            crate_package: self.crate_package,
-            module: self.module,
-            reason: reason.to_string(),
-            severity: self.severity,
-        }
-    }
-}
-
-// --- Forbidden-marker declaration DSL ----------------------------------------
-
-/// A forbidden-marker boundary: types **defined in a module subtree** must not acquire a
-/// forbidden trait — by `#[derive(T)]` or a hand-written `impl T for <a subtree type>`.
-/// Declared in Rust and composed at the gate. The complement to exposure, impl-locality, and
-/// visibility; it delivers the "this layer is not `T`-able" intent.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForbiddenMarkerBoundary {
-    pub(crate) crate_package: String,
-    pub(crate) module: String,
-    pub(crate) forbidden: Vec<String>,
-    pub(crate) reason: String,
-    pub(crate) severity: Severity,
-}
-
-impl ForbiddenMarkerBoundary {
-    /// Begin a forbidden-marker boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> ForbiddenMarkerCrateDraft {
-        ForbiddenMarkerCrateDraft {
-            crate_package: package.to_string(),
-        }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
-    /// The governed module-subtree prefix (e.g. `crate::domain`).
-    pub fn module(&self) -> &str {
-        &self.module
-    }
-
-    /// The forbidden trait paths/names.
-    pub fn forbidden(&self) -> &[String] {
-        &self.forbidden
-    }
-
-    /// The human-readable reason (the repair hint).
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-
-    /// The boundary's severity.
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-}
-
-/// A forbidden-marker boundary awaiting its module-subtree anchor.
-pub struct ForbiddenMarkerCrateDraft {
-    crate_package: String,
-}
-
-impl ForbiddenMarkerCrateDraft {
-    /// Anchor the boundary to a module-subtree prefix (e.g. `crate::domain`).
-    pub fn module(self, module: &str) -> ForbiddenMarkerModuleDraft {
-        ForbiddenMarkerModuleDraft {
-            crate_package: self.crate_package,
-            module: module.to_string(),
-        }
-    }
-}
-
-/// A subtree-anchored boundary awaiting its first forbidden trait.
-pub struct ForbiddenMarkerModuleDraft {
-    crate_package: String,
-    module: String,
-}
-
-impl ForbiddenMarkerModuleDraft {
-    /// Forbid the subtree's types from acquiring this trait (by name or path). Matching is
-    /// by leaf identifier, so `Serialize`, `serde::Serialize`, and `serde_derive::Serialize`
-    /// all match.
-    pub fn must_not_acquire(self, trait_path: &str) -> ForbiddenMarkerBoundaryDraft {
-        ForbiddenMarkerBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden: vec![trait_path.to_string()],
-            severity: Severity::Enforce,
-        }
-    }
-}
-
-/// A boundary awaiting more forbidden traits (optional), severity (optional), and a reason.
-pub struct ForbiddenMarkerBoundaryDraft {
-    crate_package: String,
-    module: String,
-    forbidden: Vec<String>,
-    severity: Severity,
-}
-
-impl ForbiddenMarkerBoundaryDraft {
-    /// Also forbid acquiring another trait (a boundary MAY forbid more than one).
-    pub fn and_not_acquire(mut self, trait_path: &str) -> Self {
-        self.forbidden.push(trait_path.to_string());
-        self
-    }
-
-    /// Make this an advisory (`warn`) boundary.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
-    /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> ForbiddenMarkerBoundary {
-        ForbiddenMarkerBoundary {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden: self.forbidden,
-            reason: reason.to_string(),
-            severity: self.severity,
-        }
-    }
-}
-
-// --- Dyn-trait-boundary declaration DSL --------------------------------------
-
-/// A dyn-trait boundary: a module's public API must not **expose** trait-object (`dyn`)
-/// syntax. The type-shape complement of [`SemanticBoundary`] (signature-coupling): where
-/// that forbids an exposed *named type*, this forbids an exposed *type shape* — a `dyn`
-/// node at any depth in the governed public surface. Internal `dyn` is never a violation —
-/// this governs exposure across the declared seam, not internal dynamic dispatch, so it is
-/// intent (by anchor scoping), not a lint. Declared in Rust and composed with the other
-/// dimensions at the gate.
-///
-/// Two depths on one boundary type, selected by the builder:
-/// - [`must_not_expose_dyn`](DynTraitModuleDraft::must_not_expose_dyn) — **shape-only**: an
-///   empty operand set, so *any* exposed `dyn` reacts.
-/// - [`must_not_expose_dyn_of`](DynTraitModuleDraft::must_not_expose_dyn_of) — **operand-scoped**:
-///   only a `dyn` whose principal trait resolves into the named `forbidden_operands` set reacts.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DynTraitBoundary {
-    pub(crate) crate_package: String,
-    pub(crate) module: String,
-    /// The forbidden trait operands. **Empty ⇒ shape-only** (any `dyn` reacts); a named set ⇒
-    /// only a `dyn` whose principal trait canonicalizes into the set reacts.
-    pub(crate) forbidden_operands: Vec<String>,
-    pub(crate) reason: String,
-    pub(crate) severity: Severity,
-}
-
-impl DynTraitBoundary {
-    /// Begin a dyn-trait boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> DynTraitCrateDraft {
-        DynTraitCrateDraft {
-            crate_package: package.to_string(),
-        }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
-    /// The governed module path (e.g. `crate::core`).
-    pub fn module(&self) -> &str {
-        &self.module
-    }
-
-    /// The forbidden trait operands. Empty ⇒ shape-only (any `dyn` reacts); a named set ⇒
-    /// only a `dyn` whose principal trait resolves into the set reacts.
-    pub fn forbidden_operands(&self) -> &[String] {
-        &self.forbidden_operands
-    }
-
-    /// The human-readable reason recorded with the boundary (the repair hint).
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-}
-
-/// A dyn-trait boundary awaiting its module anchor.
-pub struct DynTraitCrateDraft {
-    crate_package: String,
-}
-
-impl DynTraitCrateDraft {
-    /// Anchor the boundary to a module path within the crate (e.g. `crate::core`).
-    pub fn module(self, module: &str) -> DynTraitModuleDraft {
-        DynTraitModuleDraft {
-            crate_package: self.crate_package,
-            module: module.to_string(),
-        }
-    }
-}
-
-/// A module-anchored boundary awaiting the rule.
-pub struct DynTraitModuleDraft {
-    crate_package: String,
-    module: String,
-}
-
-impl DynTraitModuleDraft {
-    /// Forbid the module's public API from exposing any trait-object (`dyn`) syntax. Takes no
-    /// trait operand — *any* exposed `dyn` reacts (shape-only).
-    pub fn must_not_expose_dyn(self) -> DynTraitBoundaryDraft {
-        DynTraitBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden_operands: Vec::new(),
-            severity: Severity::Enforce,
-        }
-    }
-
-    /// Forbid the module's public API from exposing a `dyn` of any **named trait** — the
-    /// operand-scoped depth of [`must_not_expose_dyn`](Self::must_not_expose_dyn). A `dyn` whose
-    /// **principal trait** (its first trait bound) canonicalizes into `operands` is a violation;
-    /// a `dyn` of any other trait passes. An `operands` entry may be an exact trait path
-    /// (`crate::ports::Port`) or a module prefix (`crate::ports`), and a re-exported/aliased
-    /// trait facade matches its defining path (resolved through the same 渾儀 resolver the
-    /// forbidden-type rule uses).
-    ///
-    /// Bounds (stated, not silent): an **empty** `operands` set degenerates to shape-only
-    /// (`must_not_expose_dyn`) — a loud "any `dyn` reacts", never an inert no-op. A principal
-    /// trait that does not resolve — a bare name with no `use` (a std `dyn Fn(…)` / `dyn
-    /// Iterator<…>`, a bare `dyn Send`), a macro-generated or glob/cross-crate re-exported trait
-    /// — is out of the resolver's stated coverage and is not matched; a *resolvable* operand is
-    /// never silently passed. Auto-trait / lifetime bounds are never operands (only the principal,
-    /// first, trait is matched).
-    pub fn must_not_expose_dyn_of<I, S>(self, operands: I) -> DynTraitBoundaryDraft
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        DynTraitBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden_operands: operands.into_iter().map(Into::into).collect(),
-            severity: Severity::Enforce,
-        }
-    }
-}
-
-/// A boundary awaiting severity (optional) and its reason.
-pub struct DynTraitBoundaryDraft {
-    crate_package: String,
-    module: String,
-    forbidden_operands: Vec<String>,
-    severity: Severity,
-}
-
-impl DynTraitBoundaryDraft {
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
-    /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> DynTraitBoundary {
-        DynTraitBoundary {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden_operands: self.forbidden_operands,
-            reason: reason.to_string(),
-            severity: self.severity,
-        }
-    }
-}
-
-/// An impl-trait boundary: a module's public API must not **return** a written `impl Trait`
-/// (return-position `impl Trait` / RPIT). The **existential** complement of [`DynTraitBoundary`]:
-/// where that forbids the *dynamic-dispatch* shape (`dyn`), this forbids the *existential* shape —
-/// an unnameable type the caller cannot name, store without boxing, or rely on beyond its declared
-/// bounds. Governs **return positions only**: argument-position `impl Trait` (APIT) is *universal*
-/// (a caller-chosen generic), not an existential leak, and is never governed; `async fn`'s implicit
-/// `impl Future` is a distinct compiler-inserted existential, out of scope. Declared in Rust and
-/// composed with the other dimensions at the gate.
-///
-/// Two depths on one boundary type, selected by the builder (mirroring [`DynTraitBoundary`]):
-/// - [`must_not_expose_impl_trait`](ImplTraitModuleDraft::must_not_expose_impl_trait) —
-///   **shape-only**: an empty operand set, so *any* returned `impl Trait` reacts.
-/// - [`must_not_expose_impl_trait_of`](ImplTraitModuleDraft::must_not_expose_impl_trait_of) —
-///   **operand-scoped**: only a returned `impl Trait` whose principal trait resolves into the named
-///   `forbidden_operands` set reacts.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImplTraitBoundary {
-    pub(crate) crate_package: String,
-    pub(crate) module: String,
-    /// The forbidden trait operands. **Empty ⇒ shape-only** (any returned `impl Trait` reacts); a
-    /// named set ⇒ only a returned `impl Trait` whose principal trait canonicalizes into the set.
-    pub(crate) forbidden_operands: Vec<String>,
-    pub(crate) reason: String,
-    pub(crate) severity: Severity,
-}
-
-impl ImplTraitBoundary {
-    /// Begin an impl-trait boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> ImplTraitCrateDraft {
-        ImplTraitCrateDraft {
-            crate_package: package.to_string(),
-        }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
-    /// The governed module path (e.g. `crate::core`).
-    pub fn module(&self) -> &str {
-        &self.module
-    }
-
-    /// The forbidden trait operands. Empty ⇒ shape-only (any returned `impl Trait` reacts); a named
-    /// set ⇒ only a returned `impl Trait` whose principal trait resolves into the set reacts.
-    pub fn forbidden_operands(&self) -> &[String] {
-        &self.forbidden_operands
-    }
-
-    /// The human-readable reason recorded with the boundary (the repair hint).
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-}
-
-/// An impl-trait boundary awaiting its module anchor.
-pub struct ImplTraitCrateDraft {
-    crate_package: String,
-}
-
-impl ImplTraitCrateDraft {
-    /// Anchor the boundary to a module path within the crate (e.g. `crate::core`).
-    pub fn module(self, module: &str) -> ImplTraitModuleDraft {
-        ImplTraitModuleDraft {
-            crate_package: self.crate_package,
-            module: module.to_string(),
-        }
-    }
-}
-
-/// A module-anchored boundary awaiting the rule.
-pub struct ImplTraitModuleDraft {
-    crate_package: String,
-    module: String,
-}
-
-impl ImplTraitModuleDraft {
-    /// Forbid the module's public API from **returning** a written `impl Trait` (RPIT) — any
-    /// `impl Trait` at any depth in a public function/method return type (and a public trait
-    /// method's declared return). Takes no trait operand — *any* returned `impl Trait` reacts
-    /// (shape-only). Argument-position `impl Trait` (APIT) and `async fn`'s implicit `impl Future`
-    /// are not governed (stated bounds — the former is universal, the latter a distinct form).
-    pub fn must_not_expose_impl_trait(self) -> ImplTraitBoundaryDraft {
-        ImplTraitBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden_operands: Vec::new(),
-            severity: Severity::Enforce,
-        }
-    }
-
-    /// Forbid the module's public API from **returning** a `impl Trait` of any **named trait** —
-    /// the operand-scoped depth of [`must_not_expose_impl_trait`](Self::must_not_expose_impl_trait).
-    /// A returned `impl Trait` whose **principal trait** (its first trait bound) canonicalizes into
-    /// `operands` is a violation; a returned `impl Trait` of any other trait passes (so a seam may
-    /// allow ergonomic existentials like `impl Iterator` while forbidding `impl crate::Port`). An
-    /// `operands` entry may be an exact trait path or a module prefix, and a re-exported/aliased
-    /// facade matches its defining path (the same 渾儀 resolver the forbidden-type rule uses).
-    ///
-    /// Bounds (stated): an **empty** `operands` set degenerates to shape-only (any returned
-    /// `impl Trait`) — loud, never an inert no-op. Auto-trait/lifetime bounds are never operands
-    /// (only the principal, first, trait). A principal that does not resolve — a bare std trait
-    /// (`impl Iterator`/`impl Future` written bare), a macro/glob re-export — is out of the
-    /// resolver's stated coverage and not matched; a *resolvable* operand is never silently passed.
-    /// Return-position scoping is inherited (APIT and `async fn` are not governed).
-    pub fn must_not_expose_impl_trait_of<I, S>(self, operands: I) -> ImplTraitBoundaryDraft
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        ImplTraitBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden_operands: operands.into_iter().map(Into::into).collect(),
-            severity: Severity::Enforce,
-        }
-    }
-}
-
-/// A boundary awaiting severity (optional) and its reason.
-pub struct ImplTraitBoundaryDraft {
-    crate_package: String,
-    module: String,
-    forbidden_operands: Vec<String>,
-    severity: Severity,
-}
-
-impl ImplTraitBoundaryDraft {
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
-    /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> ImplTraitBoundary {
-        ImplTraitBoundary {
-            crate_package: self.crate_package,
-            module: self.module,
-            forbidden_operands: self.forbidden_operands,
-            reason: reason.to_string(),
-            severity: self.severity,
-        }
-    }
-}
-
-/// An async-exposure boundary: a module's public API must not declare an `async fn`. The
-/// **implicit-existential** complement of [`ImplTraitBoundary`]: an `async fn` leaks a
-/// compiler-inserted `impl Future` (and commits the seam's contract to an async model), so where
-/// impl-trait forbids a *written* `-> impl Future`, this forbids the `async fn` sugar (observed
-/// from `syn::Signature.asyncness`). Governs public free fns, public inherent methods, and public
-/// trait method declarations; trait-*impl* methods (asyncness dictated by the trait) and private
-/// items are excluded. Declarative intent by anchor scoping — "this declared seam is synchronous"
-/// (a sync-core/async-edges layering), not a blanket "no async".
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AsyncExposureBoundary {
-    pub(crate) crate_package: String,
-    pub(crate) module: String,
-    pub(crate) reason: String,
-    pub(crate) severity: Severity,
-}
-
-impl AsyncExposureBoundary {
-    /// Begin an async-exposure boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> AsyncExposureCrateDraft {
-        AsyncExposureCrateDraft {
-            crate_package: package.to_string(),
-        }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
-    /// The governed module path (e.g. `crate::core`).
-    pub fn module(&self) -> &str {
-        &self.module
-    }
-
-    /// The human-readable reason recorded with the boundary (the repair hint).
-    pub fn reason(&self) -> &str {
-        &self.reason
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-}
-
-/// An async-exposure boundary awaiting its module anchor.
-pub struct AsyncExposureCrateDraft {
-    crate_package: String,
-}
-
-impl AsyncExposureCrateDraft {
-    /// Anchor the boundary to a module path within the crate (e.g. `crate::core`).
-    pub fn module(self, module: &str) -> AsyncExposureModuleDraft {
-        AsyncExposureModuleDraft {
-            crate_package: self.crate_package,
-            module: module.to_string(),
-        }
-    }
-}
-
-/// A module-anchored boundary awaiting the rule.
-pub struct AsyncExposureModuleDraft {
-    crate_package: String,
-    module: String,
-}
-
-impl AsyncExposureModuleDraft {
-    /// Forbid the module's public API from declaring an `async fn` — a public free function, a
-    /// public inherent method, or a public trait method declaration. Shape-only (any public
-    /// `async fn` at the seam reacts). Governs the implicit `impl Future` existential; a *written*
-    /// `-> impl Future` is [`ImplTraitBoundary`]'s domain (a distinct syntactic signal).
-    pub fn must_not_expose_async_fn(self) -> AsyncExposureBoundaryDraft {
-        AsyncExposureBoundaryDraft {
-            crate_package: self.crate_package,
-            module: self.module,
-            severity: Severity::Enforce,
-        }
-    }
-}
-
-/// A boundary awaiting severity (optional) and its reason.
-pub struct AsyncExposureBoundaryDraft {
-    crate_package: String,
-    module: String,
-    severity: Severity,
-}
-
-impl AsyncExposureBoundaryDraft {
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
-    /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> AsyncExposureBoundary {
-        AsyncExposureBoundary {
-            crate_package: self.crate_package,
-            module: self.module,
-            reason: reason.to_string(),
-            severity: self.severity,
-        }
-    }
-}
+mod dsl;
+pub use dsl::*;
 
 // --- Constitution-error messages ---------------------------------------------
 
@@ -1153,18 +262,81 @@ pub fn check(boundaries: &[SemanticBoundary], manifest_path: &Path) -> Outcome {
     }
 }
 
+/// The governed module's source file rendered for a single-module semantic violation's `file`
+/// (`display()`-rendered to match the static dimension). Resolved **only when there is
+/// something to report**, so a clean module never pays the second traversal and no error path
+/// opens on an empty result; `None` when there are no findings. Shared by the five
+/// single-module semantic capabilities (exposure, dyn-trait, impl-trait, async-exposure,
+/// visibility). The two whole-crate-scan capabilities (trait-impl-locality, forbidden-marker)
+/// do NOT use this — their violations sit at per-site files across the crate, a stated `null`
+/// bound narrowed to them.
+fn seam_file(
+    findings: &[String],
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Option<String>, String> {
+    if findings.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(
+        resolve_module_file(src_dir, root_file, module, crate_package)?
+            .display()
+            .to_string(),
+    ))
+}
+
+/// The source file for a **whole-crate-scan** semantic violation (trait-impl-locality,
+/// forbidden-marker), whose findings each name their own module — unlike [`seam_file`]'s single
+/// per-boundary module. Memoized in `cache` so a boundary with many findings across few modules
+/// parses each module path once. Degrades to `None` on a resolution failure (**`.ok()`, never
+/// `?`**): the module comes from the whole-crate scan while the file comes from the single-path
+/// resolver, so — though they agree for every module a finding can come from — a failure must
+/// leave the violation firing with a `null` file, never turn it into an exit-2 error or drop it.
+fn per_finding_file(
+    module: &str,
+    src_dir: &Path,
+    root_file: &Path,
+    crate_package: &str,
+    cache: &mut HashMap<String, Option<String>>,
+) -> Option<String> {
+    if let Some(cached) = cache.get(module) {
+        return cached.clone();
+    }
+    let file = resolve_module_file(src_dir, root_file, module, crate_package)
+        .ok()
+        .map(|path| path.display().to_string());
+    cache.insert(module.to_string(), file.clone());
+    file
+}
+
+/// Resolve a semantic boundary's target crate to `(package, crate-root file, source dir)` — the
+/// shared preamble every single-crate `check_*_boundary` opens with. One home for the three
+/// constitution errors (crate-not-found, and missing-src for a target with no crate-root file or a
+/// root file with no parent dir) so the seven capabilities cannot drift apart on resolution. The
+/// `src_dir` is returned owned (it would otherwise borrow the root file), so callers hold both.
+fn resolve_crate<'m>(
+    metadata: &'m Value,
+    crate_package: &str,
+) -> Result<(&'m Value, PathBuf, PathBuf), String> {
+    let package = find_package(metadata, crate_package)
+        .ok_or_else(|| crate_not_found_error(crate_package))?;
+    let root_file = crate_root_file(package).ok_or_else(|| missing_src_error(crate_package))?;
+    let src_dir = root_file
+        .parent()
+        .ok_or_else(|| missing_src_error(crate_package))?
+        .to_path_buf();
+    Ok((package, root_file, src_dir))
+}
+
 fn check_boundary(
     metadata: &Value,
     boundary: &SemanticBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let package = find_package(metadata, &boundary.crate_package)
-        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let root_file =
-        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
-    let src_dir = root_file
-        .parent()
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let (package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
+    let src_dir = src_dir.as_path();
 
     let findings = module_findings(
         src_dir,
@@ -1173,26 +345,104 @@ fn check_boundary(
         &boundary.forbidden,
         &boundary.crate_package,
         boundary.including_trait_impls,
+        &dependency_names(package),
     )?;
 
+    // A single-module semantic violation's `file` is the governed module's source file — the
+    // file the scan descended to observe this module's items, where the exposing seam is
+    // written. `finding` is a canonical type path (resolved through re-export chains), so the
+    // forbidden type may be *defined* in another file; the `file` reports the seam's location,
+    // the actionable one. Resolved once (only when reporting), sharing `module_findings`'
+    // traversal so it cannot disagree with the items reacted on.
+    let module_file = seam_file(
+        &findings,
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
     for finding in findings {
-        // No `with_file`: the 渾儀 dimension does not yet observe a per-element source file.
-        // `finding` is a canonical type path (resolved through re-export chains), so the
-        // offending element may live in a different file than the governed module's, and the
-        // construction scope holds only the crate root, not that file. Surfacing it would need
-        // new per-finding tracking — a stated bound (born when built), the same for every
-        // semantic capability (exposure, trait-impl-locality, visibility, forbidden-marker).
-        // So a semantic violation's `file` is a faithful `None`.
-        violations.push(Violation::new(
-            BoundaryKind::Semantic,
-            boundary.module.clone(),
-            SIGNATURE_RULE.to_string(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+        violations.push(
+            Violation::new(
+                BoundaryKind::Semantic,
+                boundary.module.clone(),
+                SIGNATURE_RULE.to_string(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(module_file.clone()),
+        );
     }
     Ok(())
+}
+
+/// The sysroot crates: valid extern path heads that never appear in a package's declared
+/// `dependencies`, so the external-crate set includes them explicitly (forbidding e.g.
+/// `std::process` at a facade seam is legitimate intent, not a lint).
+const SYSROOT_CRATES: [&str; 5] = ["std", "core", "alloc", "proc_macro", "test"];
+
+/// The names a crate's declared dependencies are written under **in source**: each
+/// dependency's `rename` when present (a Cargo `pkg = { package = "…" }` rename), else its
+/// package `name`, normalized `-`→`_` to the Rust path spelling (`async-trait` →
+/// `async_trait`). Read from the `cargo metadata --no-deps` package — declared-manifest data,
+/// no resolved graph, no network. This is a deliberate **superset**: dev/build/target/optional
+/// dependency names are kept too (the false-negative-safe direction — a name that cannot appear
+/// in a compiling public-surface path simply never matches). A dependency that renames its
+/// **`[lib] name`** to something not derivable from the package name is a stated bound (the
+/// foreign crate's target name is not in `--no-deps`).
+fn dependency_names(package: &Value) -> Vec<String> {
+    package["dependencies"]
+        .as_array()
+        .map(|deps| {
+            deps.iter()
+                .filter_map(|dep| {
+                    dep["rename"]
+                        .as_str()
+                        .or_else(|| dep["name"].as_str())
+                        .map(|name| name.replace('-', "_"))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The **raw** external-crate name set: declared dependency names (already `-`→`_` normalized,
+/// rename-aware) ∪ the sysroot crates. This is the oracle for a bare **re-export** (`pub use`)
+/// head, which is an external crate by edition-2018+ grammar regardless of any local module of
+/// the same name. A bare **type-position** head is resolved against this set with the governed
+/// module's own type-namespace items excluded (see [`local_type_namespace_names`]) — the shadow
+/// that keeps a local `mod serde` / `struct serde` from being read as the dependency `serde`.
+fn external_crate_set(dep_names: &[String]) -> HashSet<String> {
+    dep_names
+        .iter()
+        .cloned()
+        .chain(SYSROOT_CRATES.iter().map(|s| s.to_string()))
+        .collect()
+}
+
+/// The governed module's own **type-namespace** item names — `mod`, `struct`, `enum`, `union`,
+/// `trait`, and `type` alias (generic or not) declarations. In a **type-position** path, a bare
+/// head naming one of these denotes that local item, not an external crate of the same name
+/// (rustc: any local type-namespace item shadows the extern prelude — `pub struct serde` makes
+/// bare `serde` the struct, and `serde::X` then cannot denote the dependency at all), so these
+/// are excluded from the external-crate set for type positions (a per-module shadow, correct at
+/// any edition). Scoped to the module being analyzed — a crate-root item never shadows a *child*
+/// module's bare paths. Previously only `mod` was excluded, which false-positived a local type
+/// named like a dependency.
+fn local_type_namespace_names(items: &[syn::Item]) -> HashSet<String> {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Mod(m) => Some(strip_raw(&m.ident.to_string())),
+            syn::Item::Struct(s) => Some(strip_raw(&s.ident.to_string())),
+            syn::Item::Enum(e) => Some(strip_raw(&e.ident.to_string())),
+            syn::Item::Union(u) => Some(strip_raw(&u.ident.to_string())),
+            syn::Item::Trait(t) => Some(strip_raw(&t.ident.to_string())),
+            syn::Item::Type(t) => Some(strip_raw(&t.ident.to_string())),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The pure heart, testable without spawning `cargo`: resolve the module's items, observe
@@ -1205,15 +455,38 @@ pub(crate) fn module_findings(
     forbidden: &[String],
     crate_package: &str,
     include_trait_impls: bool,
+    dep_names: &[String],
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let uses = collect_uses(&items);
-    // The re-export closure is crate-wide: a forbidden type exposed through a `pub use`
-    // facade must canonicalize to its defining path before matching (closes the
-    // re-export false negative). Exposure-governance keeps `BareFallback::Ignore` — a bare
-    // local name is not the cross-module forbidden type, and resolving it could match a
-    // boundary that forbids the module's own path.
-    let reexports = scan_crate(src_dir, root_file, crate_package)?.reexports;
+    // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
+    // the sysroot crates. A bare head in it denotes an external crate, so an inline extern path
+    // resolves to itself verbatim and reacts — closing the extern-path false negative. Applied
+    // only in the bare-fallback branch (after `use`-map / `crate`-relative), and only here + the
+    // re-export closure.
+    let externs = external_crate_set(dep_names);
+    // A bare **type-position** head may be a child module of the governed module (a local
+    // `mod serde` denotes `crate::…::serde`, not the dependency `serde`), so type positions use
+    // the set with the module's own child modules excluded. A bare **re-export** head is extern
+    // by edition-2018+ grammar even with a same-named local module, so re-exports use the raw
+    // set — resolving these differently is what keeps a subtree's real extern re-export reacting
+    // (no false negative) while a same-named local type is not misread (no false positive).
+    let externs_type: HashSet<String> = externs
+        .difference(&local_type_namespace_names(&items))
+        .cloned()
+        .collect();
+    // The re-export and alias closures are crate-wide: a forbidden type exposed through a
+    // `pub use` facade or a `type X = <path>;` alias must canonicalize to its defining path
+    // before matching. The re-export closure retains an extern-headed target (raw set — a bare
+    // `pub use` head is extern by grammar), so a local facade chain terminating at an extern
+    // type canonicalizes to it; the alias closure follows resolvable-nominal-path aliases.
+    let scan = scan_crate(src_dir, root_file, crate_package, &externs)?;
+    let reexports = scan.reexports;
+    let aliases = scan.aliases;
+    // Source-level crate-root `extern crate X as Y;` renames: a renamed head resolves to the real
+    // crate before the extern check (the whole walk completes before we resolve, so the map is
+    // fully populated — no ordering hazard).
+    let extern_renames = scan.extern_renames;
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposed = Vec::new();
@@ -1230,13 +503,49 @@ pub(crate) fn module_findings(
     let mut findings: Vec<String> = exposed
         .iter()
         .filter_map(|exposure| {
-            resolve_path(&exposure.path, &uses, module, BareFallback::Ignore)
-                .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
+            // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
+            // `use`-map); the extern oracle then fires for an external-crate head, resolving
+            // the inline extern path to itself. Ordering guarantees a local `use … as <dep>`
+            // alias (found in the `use`-map) still wins over a dependency of the same name. A
+            // re-export head uses the raw set; a type-position head uses the shadow-excluded set.
+            let type_externs = if exposure.is_reexport {
+                &externs
+            } else {
+                &externs_type
+            };
+            // A leading `::` is an unambiguous extern (edition 2018+): resolve against the RAW
+            // extern set (with the crate-root `extern crate … as` rename applied, so a
+            // `::<rename>::Type` head still resolves to its real crate), bypassing the `use`-map
+            // and the local type-namespace shadow, as a HARD short-circuit — a non-dependency
+            // `::head` stays unresolved (a bound), never mis-attributed through the `use`-map.
+            // `extern_verbatim_renamed` ignores `leading_colon` (it iterates the segments), so
+            // the raw set makes it react to `::serde` under a local `mod serde` (the shadow case)
+            // while the rename hop is preserved; a local `mod` is never a rename, so no FP.
+            // Otherwise: a bare single-segment local `type` alias resolves before the extern
+            // oracle (a local alias shadows a same-named dependency), and the combined closure
+            // follows alias→alias / alias→re-export hops.
+            let resolved = if exposure.path.leading_colon.is_some() {
+                extern_verbatim_renamed(&exposure.path, &externs, &extern_renames)
+            } else {
+                resolve_path(&exposure.path, &uses, module, BareFallback::Ignore)
+                    .or_else(|| bare_local_alias(&exposure.path, module, &aliases))
+                    .or_else(|| {
+                        extern_verbatim_renamed(&exposure.path, type_externs, &extern_renames)
+                    })
+            };
+            resolved
+                .map(|canonical| canonicalize_through_aliases(&canonical, &aliases, &reexports))
                 .filter(|canonical| matches_forbidden(canonical, &forbidden))
                 // Seam-qualify: two distinct seams exposing the same forbidden type stay distinct
                 // findings, so baselining one never masks a new leak at another (the one forbidden
                 // bug) — the shape/existential rules do the same below.
-                .map(|canonical| format!("{canonical} exposed by {}", exposure.seam))
+                .map(|canonical| {
+                    SemanticFinding::Exposed {
+                        subject: canonical,
+                        seam: exposure.seam.clone(),
+                    }
+                    .to_string()
+                })
         })
         .collect();
     findings.sort();
@@ -1278,13 +587,8 @@ fn check_dyn_trait_boundary(
     boundary: &DynTraitBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let package = find_package(metadata, &boundary.crate_package)
-        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let root_file =
-        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
-    let src_dir = root_file
-        .parent()
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let (package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
+    let src_dir = src_dir.as_path();
 
     // Empty operand set ⇒ shape-only (any dyn), using the resolution-free path unchanged; a
     // named set ⇒ operand-scoped, resolving each dyn's principal trait against the forbidden set.
@@ -1302,20 +606,31 @@ fn check_dyn_trait_boundary(
             &boundary.module,
             &boundary.forbidden_operands,
             &boundary.crate_package,
+            &dependency_names(package),
         )?
     };
 
+    // The governed module's source file — where the exposing seam is written (see
+    // `check_boundary`). Shared with the dyn shape/operand hearts' traversal.
+    let module_file = seam_file(
+        &findings,
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
     for finding in findings {
-        // Like signature-coupling, a 渾儀 violation's `file` is a faithful `None` (no per-element
-        // source tracking yet — a stated bound shared by every semantic capability).
-        violations.push(Violation::new(
-            BoundaryKind::Semantic,
-            boundary.module.clone(),
-            DYN_TRAIT_RULE.to_string(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+        violations.push(
+            Violation::new(
+                BoundaryKind::Semantic,
+                boundary.module.clone(),
+                DYN_TRAIT_RULE.to_string(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(module_file.clone()),
+        );
     }
     Ok(())
 }
@@ -1364,10 +679,16 @@ pub(crate) fn dyn_operand_module_findings(
     module: &str,
     forbidden: &[String],
     crate_package: &str,
+    dep_names: &[String],
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let uses = collect_uses(&items);
-    let reexports = scan_crate(src_dir, root_file, crate_package)?.reexports;
+    let ExternResolution {
+        externs,
+        externs_type,
+        reexports,
+        extern_renames,
+    } = extern_resolution(src_dir, root_file, crate_package, dep_names, &items)?;
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposures = Vec::new();
@@ -1385,8 +706,17 @@ pub(crate) fn dyn_operand_module_findings(
                 || exposure
                     .principal
                     .as_ref()
-                    .and_then(|path| resolve_path(path, &uses, module, BareFallback::Ignore))
-                    .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
+                    .and_then(|path| {
+                        resolve_principal(
+                            path,
+                            &uses,
+                            module,
+                            &externs,
+                            &externs_type,
+                            &extern_renames,
+                            &reexports,
+                        )
+                    })
                     .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
         })
         .map(shape_finding)
@@ -1394,6 +724,64 @@ pub(crate) fn dyn_operand_module_findings(
     findings.sort();
     findings.dedup();
     Ok(findings)
+}
+
+/// The extern-resolution context an operand principal-trait match needs, mirroring the type
+/// side's setup in [`module_findings`]: the raw external-crate set, its type-position
+/// shadow-excluded variant, the (extern-aware) re-export closure, and the crate-root
+/// `extern crate … as` rename map. Built once per operand-heart call.
+struct ExternResolution {
+    externs: HashSet<String>,
+    externs_type: HashSet<String>,
+    reexports: ReexportMap,
+    extern_renames: ExternRenameMap,
+}
+
+fn extern_resolution(
+    src_dir: &Path,
+    root_file: &Path,
+    crate_package: &str,
+    dep_names: &[String],
+    items: &[syn::Item],
+) -> Result<ExternResolution, String> {
+    let externs = external_crate_set(dep_names);
+    let externs_type: HashSet<String> = externs
+        .difference(&local_type_namespace_names(items))
+        .cloned()
+        .collect();
+    let scan = scan_crate(src_dir, root_file, crate_package, &externs)?;
+    Ok(ExternResolution {
+        externs,
+        externs_type,
+        reexports: scan.reexports,
+        extern_renames: scan.extern_renames,
+    })
+}
+
+/// Resolve a shape's **principal-trait** path through the same extern-aware ladder
+/// signature-coupling uses for an exposed type — **minus the type-alias closure**: a `dyn`/`impl`
+/// of a type alias is not stable Rust (rustc E0404 "type aliases cannot be used as traits"), so a
+/// trait operand has no alias hop to follow. A leading-`::` head is an unambiguous extern (raw set,
+/// crate-root rename applied); otherwise the `use`-map / `crate`-relative resolution, then the
+/// extern oracle over the type-shadow-excluded set, then the `pub use` re-export closure. `None`
+/// for a genuinely unresolvable principal — a bare local/prelude name, a macro/glob/foreign
+/// re-export — the stated resolver bound, never a silent pass of a *resolvable* operand.
+fn resolve_principal(
+    path: &syn::Path,
+    uses: &UseMap,
+    module: &str,
+    externs: &HashSet<String>,
+    externs_type: &HashSet<String>,
+    extern_renames: &ExternRenameMap,
+    reexports: &ReexportMap,
+) -> Option<String> {
+    let resolved = if path.leading_colon.is_some() {
+        extern_verbatim_renamed(path, externs, extern_renames)
+    } else {
+        resolve_path(path, uses, module, BareFallback::Ignore)
+            .or_else(|| extern_verbatim_renamed(path, externs_type, extern_renames))
+    };
+    resolved.map(|canonical| canonicalize_through_reexports(&canonical, reexports))
 }
 
 // --- Impl-trait-boundary (existential exposure): the reaction -----------------
@@ -1429,13 +817,8 @@ fn check_impl_trait_boundary(
     boundary: &ImplTraitBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let package = find_package(metadata, &boundary.crate_package)
-        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let root_file =
-        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
-    let src_dir = root_file
-        .parent()
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let (package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
+    let src_dir = src_dir.as_path();
 
     // Empty operand set ⇒ shape-only (any returned impl Trait), via the resolution-free path; a
     // named set ⇒ operand-scoped, resolving each returned impl Trait's principal trait.
@@ -1453,20 +836,31 @@ fn check_impl_trait_boundary(
             &boundary.module,
             &boundary.forbidden_operands,
             &boundary.crate_package,
+            &dependency_names(package),
         )?
     };
 
+    // The governed module's source file — where the exposing seam is written (see
+    // `check_boundary`). Shared with the impl-trait shape/operand hearts' traversal.
+    let module_file = seam_file(
+        &findings,
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
     for finding in findings {
-        // Like the sibling 渾儀 rules, a violation's `file` is a faithful `None` (no per-element
-        // source tracking yet — a stated bound shared by every semantic capability).
-        violations.push(Violation::new(
-            BoundaryKind::Semantic,
-            boundary.module.clone(),
-            IMPL_TRAIT_RULE.to_string(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+        violations.push(
+            Violation::new(
+                BoundaryKind::Semantic,
+                boundary.module.clone(),
+                IMPL_TRAIT_RULE.to_string(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(module_file.clone()),
+        );
     }
     Ok(())
 }
@@ -1510,10 +904,16 @@ pub(crate) fn impl_trait_operand_module_findings(
     module: &str,
     forbidden: &[String],
     crate_package: &str,
+    dep_names: &[String],
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let uses = collect_uses(&items);
-    let reexports = scan_crate(src_dir, root_file, crate_package)?.reexports;
+    let ExternResolution {
+        externs,
+        externs_type,
+        reexports,
+        extern_renames,
+    } = extern_resolution(src_dir, root_file, crate_package, dep_names, &items)?;
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposures = Vec::new();
@@ -1528,8 +928,17 @@ pub(crate) fn impl_trait_operand_module_findings(
                 || exposure
                     .principal
                     .as_ref()
-                    .and_then(|path| resolve_path(path, &uses, module, BareFallback::Ignore))
-                    .map(|canonical| canonicalize_through_reexports(&canonical, &reexports))
+                    .and_then(|path| {
+                        resolve_principal(
+                            path,
+                            &uses,
+                            module,
+                            &externs,
+                            &externs_type,
+                            &extern_renames,
+                            &reexports,
+                        )
+                    })
                     .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
         })
         .map(shape_finding)
@@ -1624,13 +1033,8 @@ fn check_async_exposure_boundary(
     boundary: &AsyncExposureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let package = find_package(metadata, &boundary.crate_package)
-        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let root_file =
-        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
-    let src_dir = root_file
-        .parent()
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
+    let src_dir = src_dir.as_path();
 
     let findings = async_exposure_module_findings(
         src_dir,
@@ -1639,15 +1043,27 @@ fn check_async_exposure_boundary(
         &boundary.crate_package,
     )?;
 
+    // The governed module's source file — where the exposing seam is written (see
+    // `check_boundary`). Shared with `async_exposure_module_findings`' traversal.
+    let module_file = seam_file(
+        &findings,
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
     for finding in findings {
-        violations.push(Violation::new(
-            BoundaryKind::Semantic,
-            boundary.module.clone(),
-            ASYNC_EXPOSURE_RULE.to_string(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+        violations.push(
+            Violation::new(
+                BoundaryKind::Semantic,
+                boundary.module.clone(),
+                ASYNC_EXPOSURE_RULE.to_string(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(module_file.clone()),
+        );
     }
     Ok(())
 }
@@ -1685,11 +1101,14 @@ fn collect_item_async_exposures(
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             if item.sig.asyncness.is_some() {
-                out.push(format!(
-                    "async fn {module}::{}{}",
-                    strip_raw(&item.sig.ident.to_string()),
-                    render_sig_tail(&item.sig),
-                ));
+                out.push(
+                    SemanticFinding::AsyncFreeFn {
+                        module: module.to_string(),
+                        name: strip_raw(&item.sig.ident.to_string()),
+                        tail: render_sig_tail(&item.sig),
+                    }
+                    .to_string(),
+                );
             }
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
@@ -1697,11 +1116,15 @@ fn collect_item_async_exposures(
             for trait_item in &item.items {
                 if let syn::TraitItem::Fn(method) = trait_item {
                     if method.sig.asyncness.is_some() {
-                        out.push(format!(
-                            "async fn trait {module}::{trait_name}::{}{}",
-                            strip_raw(&method.sig.ident.to_string()),
-                            render_sig_tail(&method.sig),
-                        ));
+                        out.push(
+                            SemanticFinding::AsyncTraitMethod {
+                                module: module.to_string(),
+                                trait_name: trait_name.clone(),
+                                name: strip_raw(&method.sig.ident.to_string()),
+                                tail: render_sig_tail(&method.sig),
+                            }
+                            .to_string(),
+                        );
                     }
                 }
             }
@@ -1716,11 +1139,14 @@ fn collect_item_async_exposures(
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) && method.sig.asyncness.is_some() {
-                        out.push(format!(
-                            "async fn <{owner}>::{}{}",
-                            strip_raw(&method.sig.ident.to_string()),
-                            render_sig_tail(&method.sig),
-                        ));
+                        out.push(
+                            SemanticFinding::AsyncInherentMethod {
+                                owner: owner.clone(),
+                                name: strip_raw(&method.sig.ident.to_string()),
+                                tail: render_sig_tail(&method.sig),
+                            }
+                            .to_string(),
+                        );
                     }
                 }
             }
@@ -1805,13 +1231,8 @@ fn check_trait_impl_boundary(
     boundary: &TraitImplBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let package = find_package(metadata, &boundary.crate_package)
-        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let root_file =
-        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
-    let src_dir = root_file
-        .parent()
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
+    let src_dir = src_dir.as_path();
 
     let findings = trait_impl_findings(
         src_dir,
@@ -1826,15 +1247,28 @@ fn check_trait_impl_boundary(
     // the allowed set does not turn a still-misplaced impl into a "new" violation against a
     // baseline (mirroring how `xuanji` excludes reason/severity from the violation id).
     let rule = TRAIT_IMPL_RULE.to_string();
-    for finding in findings {
-        violations.push(Violation::new(
-            BoundaryKind::Semantic,
-            canonical_path_str(&boundary.trait_path),
-            rule.clone(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+    // Each finding carries the module its offending impl sits in; report that module's source
+    // file (memoized per module). See `per_finding_file` for the `.ok()`-degrades-to-null rule.
+    let mut file_cache: HashMap<String, Option<String>> = HashMap::new();
+    for (finding, module) in findings {
+        let file = per_finding_file(
+            &module,
+            src_dir,
+            &root_file,
+            &boundary.crate_package,
+            &mut file_cache,
+        );
+        violations.push(
+            Violation::new(
+                BoundaryKind::Semantic,
+                canonical_path_str(&boundary.trait_path),
+                rule.clone(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(file),
+        );
     }
     Ok(())
 }
@@ -1849,8 +1283,8 @@ pub(crate) fn trait_impl_findings(
     trait_path: &str,
     allowed: &[String],
     crate_package: &str,
-) -> Result<Vec<String>, String> {
-    let scan = scan_crate(src_dir, root_file, crate_package)?;
+) -> Result<Vec<(String, String)>, String> {
+    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let given = canonical_path_str(trait_path);
     let true_anchor = canonicalize_through_reexports(&given, &scan.reexports);
     if !scan.trait_defs.contains(&true_anchor) {
@@ -1885,10 +1319,20 @@ pub(crate) fn trait_impl_findings(
         // canonicalization over-qualifies (`crate::m::Box<…>`) — this is a stable identity label,
         // not a resolved-path claim; the actionable part (the module location) is exact.
         let owner = canonical_self_owner(&site.self_ty, &site.uses, &site.module, ordinal);
-        findings.push(format!("{} (impl for {owner})", site.module));
+        // Pair the finding with the module the offending impl sits in, so the reaction layer can
+        // report its source file. Dedup BY FINDING (below) keeps the count identical to before —
+        // `file` is metadata, never a second identity key.
+        findings.push((
+            SemanticFinding::MisplacedImpl {
+                module: site.module.clone(),
+                owner,
+            }
+            .to_string(),
+            site.module.clone(),
+        ));
     }
     findings.sort();
-    findings.dedup();
+    findings.dedup_by(|a, b| a.0 == b.0);
     Ok(findings)
 }
 
@@ -1901,11 +1345,12 @@ struct ImplSite {
     uses: UseMap,
 }
 
-/// One type definition observed in the crate: its canonical path (`module::Name`), leaf
-/// name (for findings), the paths in its `#[derive(...)]`/`#[cfg_attr(_, derive(...))]`, and
-/// its module's `use`-map (for resolving path-qualified derive entries).
+/// One type definition observed in the crate: its canonical path (`module::Name`), the module
+/// it is defined in (for a forbidden-`derive` finding's source file), and the paths in its
+/// `#[derive(...)]`/`#[cfg_attr(_, derive(...))]`.
 struct TypeDef {
     canonical: String,
+    module: String,
     derives: Vec<syn::Path>,
 }
 
@@ -1913,28 +1358,87 @@ struct TypeDef {
 /// paths (for anchor verification), every trait-impl site, and every type definition.
 struct CrateScan {
     reexports: ReexportMap,
+    aliases: AliasMap,
+    extern_renames: ExternRenameMap,
     trait_defs: HashSet<String>,
     impls: Vec<ImplSite>,
     type_defs: Vec<TypeDef>,
+}
+
+/// Collect crate-root `extern crate X as Y;` renames (`Y → X`) into `out`. Crate-root only: such a
+/// rename binds `Y` crate-wide via the extern prelude, whereas a module-scoped `extern crate … as`
+/// binds only locally (collecting it crate-wide would false-positive on a same-named head elsewhere
+/// — a stated bound). `as _` / `X == Y` / `extern crate self as …` are no-ops.
+fn collect_crate_root_extern_renames(items: &[syn::Item], out: &mut ExternRenameMap) {
+    for item in items {
+        if let syn::Item::ExternCrate(ec) = item {
+            if let Some((_, rename)) = &ec.rename {
+                let alias = strip_raw(&rename.to_string());
+                let real = strip_raw(&ec.ident.to_string());
+                if alias != "_" && alias != real && real != "self" {
+                    out.insert(alias, real);
+                }
+            }
+        }
+    }
+}
+
+/// A bare single-segment alias target (`type X = Inner`) whose ident names a non-generic type
+/// alias in the *current* module resolves to that alias's canonical key `{module}::{ident}`, so the
+/// query fixpoint can follow a bare alias-of-an-alias chain (order-independent). `None` for a
+/// leading-`::` / multi-segment / generic-argument-bearing path, or a name that is not a local
+/// alias — leaving a bare non-alias target (a local struct, a std prelude type like `String`)
+/// unresolved, matching the exposure query's `Ignore` policy for a bare non-alias head (no
+/// mis-record, so no false positive even under a boundary forbidding the module's own path).
+fn bare_local_alias_target(
+    target: &syn::Path,
+    module: &str,
+    local_alias_names: &HashSet<String>,
+) -> Option<String> {
+    if target.leading_colon.is_some() || target.segments.len() != 1 {
+        return None;
+    }
+    let seg = &target.segments[0];
+    if !matches!(seg.arguments, syn::PathArguments::None) {
+        return None;
+    }
+    let name = strip_raw(&seg.ident.to_string());
+    local_alias_names
+        .contains(&name)
+        .then(|| format!("{module}::{name}"))
 }
 
 /// Walk the whole crate from its root, descending every file-based and inline module,
 /// collecting re-exports, trait definitions, and trait-impl sites. This is a fresh
 /// whole-crate traversal (the single-path [`descend`] does not fit a "nowhere except
 /// here" property); it reuses only the leaf primitives and the shared resolver.
-fn scan_crate(src_dir: &Path, root_file: &Path, crate_package: &str) -> Result<CrateScan, String> {
+fn scan_crate(
+    src_dir: &Path,
+    root_file: &Path,
+    crate_package: &str,
+    externs: &HashSet<String>,
+) -> Result<CrateScan, String> {
     let root = read_parse(root_file)?;
     let mut scan = CrateScan {
         reexports: ReexportMap::new(),
+        aliases: AliasMap::new(),
+        extern_renames: ExternRenameMap::new(),
         trait_defs: HashSet::new(),
         impls: Vec::new(),
         type_defs: Vec::new(),
     };
+    // Pre-collect crate-root `extern crate X as Y;` renames BEFORE the walk, so the rename map is
+    // complete before any alias-target or re-export-closure resolution — every source-order
+    // (forward-reference) hazard is eliminated (an alias or re-export preceding the `extern crate`
+    // in root source order still resolves). Renames are crate-root-only (they bind crate-wide via
+    // the extern prelude; a module-scoped one is a stated bound), so one root scan suffices.
+    collect_crate_root_extern_renames(&root.items, &mut scan.extern_renames);
     walk_module(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
         crate_package,
+        externs,
         &mut scan,
     )?;
     Ok(scan)
@@ -1945,10 +1449,38 @@ fn walk_module(
     module: String,
     child_dir: PathBuf,
     crate_package: &str,
+    externs: &HashSet<String>,
     scan: &mut CrateScan,
 ) -> Result<(), String> {
     let uses = collect_uses(&items);
-    collect_reexports(&items, &module, &mut scan.reexports);
+    collect_reexports(
+        &items,
+        &module,
+        externs,
+        &scan.extern_renames,
+        &mut scan.reexports,
+    );
+    // Alias targets resolve in the same per-module shadow as type positions: a bare head naming
+    // a local child module (`mod serde` + `type X = serde::Foo`) is local, not the dependency.
+    let externs_type: HashSet<String> = externs
+        .difference(&local_type_namespace_names(&items))
+        .cloned()
+        .collect();
+    // This module's own non-generic type-alias names — the only bare single-segment targets the
+    // alias-collection ladder resolves against the current module (a bare intermediate in an
+    // alias-of-an-alias chain, always same-module). Gating to these names keeps a bare non-alias
+    // target (a local struct, or a std prelude type like `String`) from being mis-recorded as
+    // `{module}::{name}` — which would false-positive under a boundary forbidding the module's own
+    // path. Computed once here so the check is order-independent within the module.
+    let local_alias_names: HashSet<String> = items
+        .iter()
+        .filter_map(|it| match it {
+            syn::Item::Type(t) if t.generics.params.is_empty() => {
+                Some(strip_raw(&t.ident.to_string()))
+            }
+            _ => None,
+        })
+        .collect();
 
     for item in &items {
         match item {
@@ -1977,6 +1509,46 @@ fn walk_module(
             syn::Item::Union(i) => {
                 push_type_def(&i.attrs, &i.ident, &module, scan)?;
             }
+            // A non-generic `type X = <nominal path>;` alias: record `{module}::X → target`
+            // so the exposure pipeline can follow it to the defining path. The target-resolution
+            // ladder is byte-identical to the query site's, so no resolvable target is dropped and
+            // no local shadow is misread:
+            //   0. a leading-`::` target — an unambiguous extern (raw set, with the crate-root
+            //      rename applied), a HARD short-circuit, so `type X = ::serde::Value;` records the
+            //      extern even under a local `mod serde`, and `type X = ::<rename>::Foo;` too;
+            //   1. `resolve_path(Ignore)` — use-map / `crate`·`self`·`super`;
+            //   2. `bare_local_alias_target` — a bare single-segment target naming one of THIS
+            //      module's own type aliases recorded as `{module}::{name}` (its canonical alias-map
+            //      key), tried BEFORE the extern oracle so a local alias shadows a same-named
+            //      dependency (rustc's own resolution); the query-time `canonicalize_through_aliases`
+            //      fixpoint then closes a *bare* alias-of-an-alias chain regardless of source order.
+            //      Gated to local alias names, so a bare non-alias target (a local struct, a std
+            //      prelude type like `String`) is never mis-recorded — no false positive;
+            //   3. `extern_verbatim_renamed` — an extern head, incl. a crate-root `extern crate as`
+            //      rename (the rename map is pre-collected, so this is order-independent).
+            // A generic alias (`type X<T> = …`) or a complex target (`Vec<T>`, `&T`, a
+            // tuple/`dyn`/`impl`) is skipped — a stated coverage bound, never a silent claim.
+            syn::Item::Type(type_item) if type_item.generics.params.is_empty() => {
+                if let Some(target) = alias_nominal_target(&type_item.ty) {
+                    let alias = format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
+                    let resolved = if target.leading_colon.is_some() {
+                        extern_verbatim_renamed(target, externs, &scan.extern_renames)
+                    } else {
+                        resolve_path(target, &uses, &module, BareFallback::Ignore)
+                            .or_else(|| {
+                                bare_local_alias_target(target, &module, &local_alias_names)
+                            })
+                            .or_else(|| {
+                                extern_verbatim_renamed(target, &externs_type, &scan.extern_renames)
+                            })
+                    };
+                    if let Some(resolved) = resolved {
+                        if resolved != alias {
+                            scan.aliases.insert(alias, resolved);
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -1998,6 +1570,7 @@ fn walk_module(
                         child_module,
                         child_dir.join(&name),
                         crate_package,
+                        externs,
                         scan,
                     )?;
                 }
@@ -2010,6 +1583,7 @@ fn walk_module(
                             child_module,
                             child_dir.join(&name),
                             crate_package,
+                            externs,
                             scan,
                         )?;
                     }
@@ -2044,6 +1618,7 @@ fn push_type_def(
     let derives = extract_derives(attrs)?;
     scan.type_defs.push(TypeDef {
         canonical: format!("{module}::{name}"),
+        module: module.to_string(),
         derives,
     });
     Ok(())
@@ -2145,13 +1720,8 @@ fn check_visibility_boundary(
     boundary: &VisibilityBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let package = find_package(metadata, &boundary.crate_package)
-        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let root_file =
-        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
-    let src_dir = root_file
-        .parent()
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
+    let src_dir = src_dir.as_path();
 
     let findings = visibility_findings(
         src_dir,
@@ -2160,15 +1730,27 @@ fn check_visibility_boundary(
         &boundary.crate_package,
     )?;
 
+    // The governed module's source file — where the offending `pub` item is declared (see
+    // `check_boundary`). Shared with `visibility_findings`' traversal.
+    let module_file = seam_file(
+        &findings,
+        src_dir,
+        &root_file,
+        &boundary.module,
+        &boundary.crate_package,
+    )?;
     for finding in findings {
-        violations.push(Violation::new(
-            BoundaryKind::Semantic,
-            boundary.module.clone(),
-            VISIBILITY_RULE.to_string(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+        violations.push(
+            Violation::new(
+                BoundaryKind::Semantic,
+                boundary.module.clone(),
+                VISIBILITY_RULE.to_string(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(module_file.clone()),
+        );
     }
     Ok(())
 }
@@ -2278,13 +1860,8 @@ fn check_forbidden_marker_boundary(
     boundary: &ForbiddenMarkerBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let package = find_package(metadata, &boundary.crate_package)
-        .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let root_file =
-        crate_root_file(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
-    let src_dir = root_file
-        .parent()
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
+    let src_dir = src_dir.as_path();
 
     let findings = forbidden_marker_findings(
         src_dir,
@@ -2294,15 +1871,29 @@ fn check_forbidden_marker_boundary(
         &boundary.crate_package,
     )?;
 
-    for finding in findings {
-        violations.push(Violation::new(
-            BoundaryKind::Semantic,
-            boundary.module.clone(),
-            FORBIDDEN_MARKER_RULE.to_string(),
-            finding,
-            boundary.reason.clone(),
-            boundary.severity,
-        ));
+    // Each finding carries the module its offending element sits in — the impl site's module for
+    // an `impl`, the defining type's module for a `#[derive]`; report that module's source file
+    // (memoized per module). See `per_finding_file` for the `.ok()`-degrades-to-null rule.
+    let mut file_cache: HashMap<String, Option<String>> = HashMap::new();
+    for (finding, module) in findings {
+        let file = per_finding_file(
+            &module,
+            src_dir,
+            &root_file,
+            &boundary.crate_package,
+            &mut file_cache,
+        );
+        violations.push(
+            Violation::new(
+                BoundaryKind::Semantic,
+                boundary.module.clone(),
+                FORBIDDEN_MARKER_RULE.to_string(),
+                finding,
+                boundary.reason.clone(),
+                boundary.severity,
+            )
+            .with_file(file),
+        );
     }
     Ok(())
 }
@@ -2317,8 +1908,8 @@ pub(crate) fn forbidden_marker_findings(
     subtree: &str,
     forbidden: &[String],
     crate_package: &str,
-) -> Result<Vec<String>, String> {
-    let scan = scan_crate(src_dir, root_file, crate_package)?;
+) -> Result<Vec<(String, String)>, String> {
+    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let subtree = canonical_path_str(subtree);
 
     let mut findings = Vec::new();
@@ -2332,7 +1923,16 @@ pub(crate) fn forbidden_marker_findings(
             }
             for derived in &td.derives {
                 if path_leaf(derived) == entry_leaf {
-                    findings.push(format!("derive {entry} on {}", td.canonical));
+                    // A derive sits in the defining type's module — its source file, not any
+                    // impl site's.
+                    findings.push((
+                        SemanticFinding::ForbiddenDerive {
+                            marker: entry.clone(),
+                            canonical: td.canonical.clone(),
+                        }
+                        .to_string(),
+                        td.module.clone(),
+                    ));
                 }
             }
         }
@@ -2347,19 +1947,34 @@ pub(crate) fn forbidden_marker_findings(
                 continue; // self-type not placeable (glob/external/complex) — a stated bound
             };
             if under_subtree(&self_canonical, &subtree) {
-                findings.push(format!("impl {entry} for {self_canonical}"));
+                // A forbidden `impl` sits in the impl site's module.
+                findings.push((
+                    format!("impl {entry} for {self_canonical}"),
+                    site.module.clone(),
+                ));
             }
         }
     }
     findings.sort();
-    findings.dedup();
+    // Dedup BY FINDING (keep the first module), so the count is identical to before — `file` is
+    // metadata attached to a finding, never a second identity key.
+    findings.dedup_by(|a, b| a.0 == b.0);
     Ok(findings)
 }
 
-/// `::`-delimited subtree containment: a type's canonical path is under the subtree when it
-/// equals the prefix or sits beneath it (sibling-safe).
+/// Sibling-safe `::`-path containment: `path` equals `prefix` or sits strictly beneath it
+/// (`crate::a` contains `crate::a::b`, never the sibling `crate::ab`). The single home of the
+/// containment rule every capability's subtree/forbidden/allowed test shares, so no copy can
+/// drift to a bare `starts_with` that would admit a sibling — a false positive on the allowed
+/// side, a false negative on the forbidden side.
+fn path_within(path: &str, prefix: &str) -> bool {
+    path == prefix || path.starts_with(&format!("{prefix}::"))
+}
+
+/// A canonical path is under `subtree` — [`path_within`] read with subtree-containment naming at
+/// the call site (`crate::a` contains `crate::a::b`, never the sibling `crate::ab`).
 fn under_subtree(canonical: &str, subtree: &str) -> bool {
-    canonical == subtree || canonical.starts_with(&format!("{subtree}::"))
+    path_within(canonical, subtree)
 }
 
 /// The leaf identifier of a `::`-delimited path string.
@@ -2428,11 +2043,41 @@ fn resolve_module_items(
     module: &str,
     crate_package: &str,
 ) -> Result<Vec<syn::Item>, String> {
+    resolve_module(src_dir, root_file, module, crate_package).map(|(items, _file)| items)
+}
+
+/// Resolve a module path to the **source file** its items live in — the crate root for `crate`
+/// or an inline module, or the located `<name>.rs` / `<name>/mod.rs` for a file module. This is
+/// the file a single-module semantic violation reports (`Violation::with_file`): the file the
+/// reaction already descends to in order to observe the module's items, where the offending
+/// seam is written (the finding names the canonicalized forbidden type, which may be *defined*
+/// elsewhere). It shares [`resolve_module`]'s one traversal with [`resolve_module_items`], so
+/// the reported file can never disagree with the items reacted on.
+fn resolve_module_file(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<PathBuf, String> {
+    resolve_module(src_dir, root_file, module, crate_package).map(|(_items, file)| file)
+}
+
+/// The shared module resolution: the items a module owns **and** the file they live in, from
+/// one descent. [`resolve_module_items`] and [`resolve_module_file`] each keep one half, so the
+/// two views come from the same traversal and never drift (a `mod`-resolution divergence is the
+/// false-negative class the project forbids).
+fn resolve_module(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<(Vec<syn::Item>, PathBuf), String> {
     let root = read_parse(root_file)?;
     let segments = module_segments(module);
     descend(
         root.items,
         src_dir.to_path_buf(),
+        root_file.to_path_buf(),
         &segments,
         module,
         crate_package,
@@ -2442,32 +2087,43 @@ fn resolve_module_items(
 fn descend(
     items: Vec<syn::Item>,
     child_dir: PathBuf,
+    current_file: PathBuf,
     segments: &[String],
     module: &str,
     crate_package: &str,
-) -> Result<Vec<syn::Item>, String> {
+) -> Result<(Vec<syn::Item>, PathBuf), String> {
     let Some(seg) = segments.first() else {
-        return Ok(items);
+        return Ok((items, current_file));
     };
     for item in &items {
         if let syn::Item::Mod(module_item) = item {
+            // A `#[path]`-remapped module is located off the conventional path; the
+            // single-module resolver does not observe it (matching `walk_module`'s
+            // crate-wide skip), so it falls through to a loud `unknown_module_error`
+            // (exit 2) rather than governing a same-named stale conventional file — never
+            // a silent claim of cleanliness over a file rustc does not compile.
+            if has_path_attr(&module_item.attrs) {
+                continue;
+            }
             if strip_raw(&module_item.ident.to_string()) != *seg {
                 continue;
             }
             match &module_item.content {
-                // Inline `mod x { … }`: descend into the lexical items; its file-children
-                // (if any) live under `<child_dir>/x/`.
+                // Inline `mod x { … }`: descend into the lexical items; the current file is
+                // unchanged (an inline module's items live in the enclosing file). Its
+                // file-children (if any) live under `<child_dir>/x/`.
                 Some((_, inner)) => {
                     return descend(
                         inner.clone(),
                         child_dir.join(seg),
+                        current_file,
                         &segments[1..],
                         module,
                         crate_package,
                     );
                 }
-                // File `mod x;`: `<child_dir>/x.rs` or `<child_dir>/x/mod.rs`; x's children
-                // live under `<child_dir>/x/`.
+                // File `mod x;`: `<child_dir>/x.rs` or `<child_dir>/x/mod.rs` becomes the current
+                // file; x's children live under `<child_dir>/x/`.
                 None => {
                     let file = locate_module_file(&child_dir, seg)
                         .ok_or_else(|| missing_module_file_error(module, crate_package))?;
@@ -2475,6 +2131,7 @@ fn descend(
                     return descend(
                         parsed.items,
                         child_dir.join(seg),
+                        file,
                         &segments[1..],
                         module,
                         crate_package,
@@ -2513,18 +2170,14 @@ fn read_parse(file: &Path) -> Result<syn::File, String> {
 /// entry or sits beneath it (so `crate::infra` matches `crate::infra::db::Pool` but never
 /// the sibling `crate::infrastructure`).
 fn matches_forbidden(canonical: &str, forbidden: &[String]) -> bool {
-    forbidden
-        .iter()
-        .any(|entry| canonical == entry || canonical.starts_with(&format!("{entry}::")))
+    forbidden.iter().any(|entry| path_within(canonical, entry))
 }
 
 /// `::`-delimited containment at allowed-vs-location polarity: a module location is
 /// allowed when it equals an allowed entry or sits beneath it (so `crate::commands`
 /// allows `crate::commands::greet` but never the sibling `crate::commandeer`).
 fn matches_allowed(location: &str, allowed: &[String]) -> bool {
-    allowed
-        .iter()
-        .any(|entry| location == entry || location.starts_with(&format!("{entry}::")))
+    allowed.iter().any(|entry| path_within(location, entry))
 }
 
 // --- Exposure collection -----------------------------------------------------
@@ -2576,6 +2229,78 @@ fn dyns_in_generics(generics: &syn::Generics) -> Vec<ShapeExposure> {
 struct PathExposure {
     seam: String,
     path: syn::Path,
+    /// A named public re-export (`pub use`) position vs. a signature/field/type position.
+    /// A bare `pub use` head is an external crate by edition-2018+ grammar, so it is resolved
+    /// against the raw external-crate set; a bare **type-position** head, by contrast, may be
+    /// a local child module of the governed module, so it is resolved against the set with the
+    /// module's own child modules excluded (the shadow) — the two need different oracle inputs.
+    is_reexport: bool,
+}
+
+/// The finding vocabulary of the semantic dimension, rendered in one place.
+///
+/// A semantic violation's `finding` is the third component of its `(target, rule, finding)`
+/// baseline identity, so every format literal that can become a `finding` lives here and only
+/// here: a reviewer sees the whole vocabulary at once, and a new finding shape must add a variant
+/// rather than sprout an inline `format!`. Behavior-preserving — each variant's `Display` renders
+/// byte-identically to the inline format it replaced, and the `*_findings` functions still return
+/// `Vec<String>` / `Vec<(String, String)>`, so baseline identity and the injectivity tests are
+/// unchanged. Visibility findings are deliberately *not* here: they are a heterogeneous
+/// `pub {kind} {name}` item descriptor, already cohesive in `pub_item_description`, not one
+/// canonical relation line.
+enum SemanticFinding {
+    /// `{subject} exposed by {seam}` — signature-coupling and its re-export / trait-impl depths,
+    /// plus the dyn-/impl-trait shapes (`subject` is a canonical type path or a `dyn …`/`impl …`
+    /// shape; both render identically). The one exposure literal, formerly written twice
+    /// (path pipeline + shape pipeline).
+    Exposed { subject: String, seam: String },
+    /// `{module} (impl for {owner})` — trait-impl-locality: a trait impl outside its allowed site.
+    MisplacedImpl { module: String, owner: String },
+    /// `derive {marker} on {canonical}` — forbidden-marker: a forbidden `#[derive]` on a type.
+    ForbiddenDerive { marker: String, canonical: String },
+    /// `async fn {module}::{name}{tail}` — a public free `async fn` (implicit-existential exposure).
+    AsyncFreeFn {
+        module: String,
+        name: String,
+        tail: String,
+    },
+    /// `async fn trait {module}::{trait_name}::{name}{tail}` — a public trait's `async fn` method.
+    AsyncTraitMethod {
+        module: String,
+        trait_name: String,
+        name: String,
+        tail: String,
+    },
+    /// `async fn <{owner}>::{name}{tail}` — a public inherent `async fn` method, owner-qualified.
+    AsyncInherentMethod {
+        owner: String,
+        name: String,
+        tail: String,
+    },
+}
+
+impl std::fmt::Display for SemanticFinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Exposed { subject, seam } => write!(f, "{subject} exposed by {seam}"),
+            Self::MisplacedImpl { module, owner } => write!(f, "{module} (impl for {owner})"),
+            Self::ForbiddenDerive { marker, canonical } => {
+                write!(f, "derive {marker} on {canonical}")
+            }
+            Self::AsyncFreeFn { module, name, tail } => {
+                write!(f, "async fn {module}::{name}{tail}")
+            }
+            Self::AsyncTraitMethod {
+                module,
+                trait_name,
+                name,
+                tail,
+            } => write!(f, "async fn trait {module}::{trait_name}::{name}{tail}"),
+            Self::AsyncInherentMethod { owner, name, tail } => {
+                write!(f, "async fn <{owner}>::{name}{tail}")
+            }
+        }
+    }
 }
 
 /// Render a shape exposure (`dyn …` / `impl …`) as its seam-qualified finding string — the
@@ -2583,7 +2308,11 @@ struct PathExposure {
 /// seams exposing the same shape stay distinct findings (the one forbidden bug), so a baselined
 /// exposure never masks a new one at another seam.
 fn shape_finding(exposure: ShapeExposure) -> String {
-    format!("{} exposed by {}", exposure.shape, exposure.seam)
+    SemanticFinding::Exposed {
+        subject: exposure.shape,
+        seam: exposure.seam,
+    }
+    .to_string()
 }
 
 /// Attach `seam` to every path a position-walker produced (the signature-coupling analogue of
@@ -2594,6 +2323,7 @@ fn tag_paths(paths: Vec<syn::Path>, seam: &str) -> Vec<PathExposure> {
         .map(|path| PathExposure {
             seam: seam.to_string(),
             path,
+            is_reexport: false,
         })
         .collect()
 }
@@ -2679,15 +2409,14 @@ fn collect_item_exposures(
                 paths_in_generics(&item.generics),
                 &item_seam("enum", module, &item.ident),
             ));
-            // Enum variants and their fields are as public as the enum itself.
+            // Enum variants and their fields are as public as the enum itself. Each field
+            // carries a per-member seam (`variant {Enum}::{Variant}::{index|name}`), mirroring
+            // struct/union fields, so two forbidden fields of one variant stay distinct findings
+            // — never collapsing to one `(target, rule, finding)` and masking a new leak.
             for variant in &item.variants {
-                let seam = field_seam(
-                    "variant",
-                    module,
-                    &name,
-                    &strip_raw(&variant.ident.to_string()),
-                );
-                for field in &variant.fields {
+                let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
+                for (index, field) in variant.fields.iter().enumerate() {
+                    let seam = field_seam("variant", module, &owner, &member_label(index, field));
                     out.extend(tag_paths(paths_in_type(&field.ty), &seam));
                 }
             }
@@ -2732,6 +2461,7 @@ fn collect_item_exposures(
                     out.push(PathExposure {
                         seam: trait_seam.clone(),
                         path: trait_bound.path.clone(),
+                        is_reexport: false,
                     });
                 }
             }
@@ -2748,6 +2478,7 @@ fn collect_item_exposures(
                                 out.push(PathExposure {
                                     seam: seam.clone(),
                                     path: trait_bound.path.clone(),
+                                    is_reexport: false,
                                 });
                             }
                         }
@@ -2779,6 +2510,18 @@ fn collect_item_exposures(
         // canonicalize → match pipeline as any exposed type.
         syn::Item::Use(item) if is_public(&item.vis) => {
             walk_reexport_tree(&item.tree, Vec::new(), module, out);
+        }
+        // A `pub extern crate X [as Y];` republishes the external crate root `X` on the module's
+        // public surface — like `pub use ::X;`. The exposure names the **real** crate `X` (not the
+        // `as`-rename), a bare extern head (raw external set, `is_reexport`). `extern crate self`
+        // renames the current crate, not an external exposure.
+        syn::Item::ExternCrate(item) if is_public(&item.vis) && item.ident != "self" => {
+            let name = strip_raw(&item.ident.to_string());
+            out.push(PathExposure {
+                seam: format!("pub extern crate {name}"),
+                path: syn::Path::from(item.ident.clone()),
+                is_reexport: true,
+            });
         }
         _ => {}
     }
@@ -2882,6 +2625,7 @@ fn push_reexport(
             segments,
         },
         seam: format!("pub use {module}::{exported}"),
+        is_reexport: true,
     });
 }
 
@@ -3062,15 +2806,12 @@ fn collect_item_dyn_exposures(
                 dyns_in_generics(&item.generics),
                 &item_seam("enum", module, &item.ident),
             ));
-            // Enum variants and their fields are as public as the enum itself.
+            // Enum variants and their fields are as public as the enum itself; per-member seam
+            // for the same injectivity guarantee as the type-exposure collector above.
             for variant in &item.variants {
-                let seam = field_seam(
-                    "variant",
-                    module,
-                    &name,
-                    &strip_raw(&variant.ident.to_string()),
-                );
-                for field in &variant.fields {
+                let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
+                for (index, field) in variant.fields.iter().enumerate() {
+                    let seam = field_seam("variant", module, &owner, &member_label(index, field));
                     out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
                 }
             }
@@ -3179,3001 +2920,4 @@ fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Write `files` (each `(relative path, contents)`) under a unique temp `src` dir, then
-    /// return the findings for `module` against `forbidden`. Exercises the whole evaluator
-    /// (module resolution → exposure → use-resolution → match) without spawning `cargo`.
-    fn findings(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-        forbidden: &[&str],
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-        let root = src.join("lib.rs");
-        let result = module_findings(&src, &root, module, &forbidden, "x", false);
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
-    /// `impl` block's impl-site-authored positions are also observed.
-    fn findings_including_trait_impls(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-        forbidden: &[&str],
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-        let root = src.join("lib.rs");
-        let result = module_findings(&src, &root, module, &forbidden, "x", true);
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    // --- semantic-trait-impl-exposure (opt-in depth) --------------------------
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_the_trait_arg_position() {
-        let out = findings_including_trait_impls(
-            "ti-trait-arg",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl From<crate::infra::DbPool> for Service {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::DbPool exposed by impl From<crate::infra::DbPool> for crate::domain::Service (trait-arg)"
-            ]
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_the_self_position_bare() {
-        // F3a: the Self type IS the forbidden type — exposure, like a `pub fn` parameter.
-        let out = findings_including_trait_impls(
-            "ti-self-bare",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub trait Loc {}\nimpl Loc for crate::infra::Forbidden {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::Forbidden exposed by impl Loc for crate::infra::Forbidden (self)"]
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_the_self_position_nested() {
-        // A forbidden type nested inside the Self type (`impl T for Vec<Forbidden>`).
-        let out = findings_including_trait_impls(
-            "ti-self-nested",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub trait Loc {}\nimpl Loc for Vec<crate::infra::DbPool> {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(out.len(), 1, "one self-position finding expected: {out:?}");
-        assert!(
-            out[0].starts_with("crate::infra::DbPool exposed by impl Loc for")
-                && out[0].ends_with("(self)"),
-            "nested Self finding shape: {out:?}"
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_the_assoc_position() {
-        let out = findings_including_trait_impls(
-            "ti-assoc",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl Iterator for Service { type Item = crate::infra::Secret; }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::Secret exposed by impl Iterator for crate::domain::Service (assoc Item)"
-            ]
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_the_where_position() {
-        let out = findings_including_trait_impls(
-            "ti-where",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl<T: crate::infra::Secret> Loc for Service {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::Secret exposed by impl Loc for crate::domain::Service (where T)"]
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_an_associated_const_type() {
-        // Parity with the v1 trait-def walk (which observes assoc-const types): an impl-authored
-        // associated const's type is impl-site-authored and must react.
-        let out = findings_including_trait_impls(
-            "ti-assoc-const",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl Marker for Service { const MAX: crate::infra::Limit = 0; }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::Limit exposed by impl Marker for crate::domain::Service (assoc MAX)"]
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_a_where_clause_bounded_type() {
-        // The forbidden type on the LHS of a where-predicate (`where crate::infra::X: Clone`) is
-        // impl-site-authored — must react, not just the RHS bound.
-        let out = findings_including_trait_impls(
-            "ti-where-lhs",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl Loc for Service where crate::infra::Assoc: Clone {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::Assoc exposed by impl Loc for crate::domain::Service (where crate::infra::Assoc)"
-            ]
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_a_const_generic_param_type() {
-        // The const-param's *type* annotation is impl-site-authored (position 4). The struct's own
-        // param uses a plain `usize`, so the forbidden path appears ONLY on the impl block — a
-        // signature-coupling finding cannot mask the trait-impl one.
-        let out = findings_including_trait_impls(
-            "ti-const-param",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service<const N: usize>;\nimpl<const N: crate::infra::Forbidden> Loc for Service<N> {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::Forbidden exposed by impl Loc for crate::domain::Service<N> (where N)"]
-        );
-    }
-
-    #[test]
-    fn trait_impl_exposure_reacts_at_a_refined_rpitit_return() {
-        // The blocking review finding: a trait declares an opaque return, the impl refines it to a
-        // concrete forbidden type at the impl site — must react (else the one forbidden bug).
-        let out = findings_including_trait_impls(
-            "ti-rpitit",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl Port for Service { fn items(&self) -> crate::infra::Iter { todo!() } }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::Iter exposed by impl Port for crate::domain::Service (method items return)"
-            ]
-        );
-    }
-
-    #[test]
-    fn trait_impl_method_parameter_is_not_observed_but_the_return_is() {
-        // Params/receiver are trait-dictated (invariant), so the parameter `crate::infra::DbPool`
-        // does NOT react; the impl-refined return `crate::infra::Iter` DOES.
-        let out = findings_including_trait_impls(
-            "ti-param-vs-return",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl Sink for Service { fn put(&self, x: crate::infra::DbPool) -> crate::infra::Iter { todo!() } }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::Iter exposed by impl Sink for crate::domain::Service (method put return)"
-            ]
-        );
-    }
-
-    #[test]
-    fn implementing_a_forbidden_trait_is_a_non_goal() {
-        // F3b: the forbidden path is the trait being IMPLEMENTED, not a type it exposes —
-        // that is `must_not_acquire`/locality's concern, not exposure. No finding.
-        let out = findings_including_trait_impls(
-            "ti-forbidden-trait",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl crate::infra::Sealed for Service {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "implementing a forbidden trait must not react: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_bare_boundary_ignores_trait_impls() {
-        // Without `.including_trait_impls()`, the v1 signature-coupling surface is preserved.
-        let out = findings(
-            "ti-bare-off",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl From<crate::infra::DbPool> for Service {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a bare boundary must not observe trait impls: {out:?}"
-        );
-    }
-
-    #[test]
-    fn two_where_bounds_exposing_the_same_type_stay_distinct() {
-        // F2 false-negative guard: distinct bounds keyed by their bounded type never collapse.
-        let out = findings_including_trait_impls(
-            "ti-where-distinct",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl<T, U> Loc for Service where T: crate::infra::Secret, U: crate::infra::Secret {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::Secret exposed by impl Loc for crate::domain::Service (where T)",
-                "crate::infra::Secret exposed by impl Loc for crate::domain::Service (where U)",
-            ]
-        );
-    }
-
-    #[test]
-    fn two_positions_exposing_the_same_type_stay_distinct() {
-        // The one forbidden bug: same type at trait-arg and self must be two findings.
-        let out = findings_including_trait_impls(
-            "ti-two-positions",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "impl From<crate::infra::DbPool> for crate::infra::DbPool {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::DbPool exposed by impl From<crate::infra::DbPool> for crate::infra::DbPool (self)",
-                "crate::infra::DbPool exposed by impl From<crate::infra::DbPool> for crate::infra::DbPool (trait-arg)",
-            ]
-        );
-    }
-
-    #[test]
-    fn a_reexported_type_in_a_trait_impl_position_resolves_and_reacts() {
-        // Resolver reuse: a `pub use` facade path canonicalizes to its defining path before matching.
-        let out = findings_including_trait_impls(
-            "ti-reexport",
-            &[
-                ("lib.rs", "pub mod domain;\npub mod facade;\n"),
-                ("facade.rs", "pub use crate::infra::DbPool;\n"),
-                (
-                    "domain.rs",
-                    "use crate::facade::DbPool;\npub struct Service;\nimpl From<DbPool> for Service {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::DbPool exposed by impl From<DbPool> for crate::domain::Service (trait-arg)"
-            ]
-        );
-    }
-
-    #[test]
-    fn a_bare_name_in_a_trait_impl_position_is_not_a_false_positive() {
-        // F6: BareFallback::Ignore parity — a bare local name is not resolved against the current
-        // module, so a boundary forbidding the module's own path does not fire on it.
-        let out = findings_including_trait_impls(
-            "ti-bare-name",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service;\nimpl From<DbPool> for Service {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::domain"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a bare name must not resolve against the current module: {out:?}"
-        );
-    }
-
-    // --- semantic-reexport-exposure (default-on) ------------------------------
-
-    #[test]
-    fn reexport_of_a_forbidden_type_reacts_by_default() {
-        let out = findings(
-            "rx-named",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::DbPool;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by pub use crate::domain::DbPool"]
-        );
-    }
-
-    #[test]
-    fn aliased_reexport_is_keyed_by_the_alias() {
-        let out = findings(
-            "rx-alias",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::DbPool as Pool;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by pub use crate::domain::Pool"]
-        );
-    }
-
-    #[test]
-    fn two_aliases_of_the_same_type_stay_distinct_findings() {
-        let out = findings(
-            "rx-two-alias",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub use crate::infra::DbPool;\npub use crate::infra::DbPool as Pool;\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::DbPool exposed by pub use crate::domain::DbPool",
-                "crate::infra::DbPool exposed by pub use crate::domain::Pool",
-            ]
-        );
-    }
-
-    #[test]
-    fn grouped_reexport_reacts_per_leaf() {
-        let out = findings(
-            "rx-group",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::{DbPool, Config};\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::Config exposed by pub use crate::domain::Config",
-                "crate::infra::DbPool exposed by pub use crate::domain::DbPool",
-            ]
-        );
-    }
-
-    #[test]
-    fn reexport_through_a_facade_chain_reacts() {
-        let out = findings(
-            "rx-facade",
-            &[
-                ("lib.rs", "pub mod domain;\npub mod facade;\n"),
-                ("facade.rs", "pub use crate::infra::DbPool;\n"),
-                ("domain.rs", "pub use crate::facade::DbPool;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by pub use crate::domain::DbPool"]
-        );
-    }
-
-    #[test]
-    fn reexport_through_a_self_group_facade_chain_reacts() {
-        // The facade republishes the whole forbidden module via `{self}`; the governed module then
-        // re-exports that republished module. The closure must collapse the facade's trailing
-        // `self` (key it by the prefix's final segment, target the prefix module) or the chain does
-        // not canonicalize back to `crate::infra` and the leak passes silently — a false negative.
-        let out = findings(
-            "rx-self-facade",
-            &[
-                (
-                    "lib.rs",
-                    "pub mod infra;\npub mod facade;\npub mod domain;\n",
-                ),
-                ("infra.rs", "pub struct DbPool;\n"),
-                ("facade.rs", "pub use crate::infra::{self};\n"),
-                ("domain.rs", "pub use crate::facade::infra;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra exposed by pub use crate::domain::infra"]
-        );
-    }
-
-    #[test]
-    fn reexport_through_a_renamed_self_facade_chain_reacts_cleanly() {
-        // The MAJOR companion: `{self as fs}` in the facade. Before the closure collapse this
-        // reacted only by accident, emitting a malformed `crate::infra::self` canonical. It must
-        // now canonicalize to a clean `crate::infra`.
-        let out = findings(
-            "rx-renamed-self-facade",
-            &[
-                (
-                    "lib.rs",
-                    "pub mod infra;\npub mod facade;\npub mod domain;\n",
-                ),
-                ("infra.rs", "pub struct DbPool;\n"),
-                ("facade.rs", "pub use crate::infra::{self as fs};\n"),
-                ("domain.rs", "pub use crate::facade::fs;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::fs"]);
-    }
-
-    #[test]
-    fn named_whole_module_reexport_reacts() {
-        let out = findings(
-            "rx-module",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra as fs;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::fs"]);
-    }
-
-    #[test]
-    fn self_group_module_reexport_reacts_keyed_by_module_name() {
-        let out = findings(
-            "rx-self-group",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::{self, DbPool};\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra exposed by pub use crate::domain::infra",
-                "crate::infra::DbPool exposed by pub use crate::domain::DbPool",
-            ]
-        );
-    }
-
-    #[test]
-    fn reexport_with_raw_identifier_segment_reacts() {
-        // A raw-identifier (keyword) segment must not be dropped — the syn::Path is built from the
-        // idents, not re-parsed from a stripped string, so `r#type` matches forbidden `crate::type`.
-        let out = findings(
-            "rx-raw",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::r#type::DbPool;\n"),
-            ],
-            "crate::domain",
-            &["crate::type"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::type::DbPool exposed by pub use crate::domain::DbPool"]
-        );
-    }
-
-    #[test]
-    fn renamed_self_module_reexport_reacts_with_correct_type() {
-        // `{self as fs}` is a Rename node, not a Name — it must still collapse to the prefix module.
-        let out = findings(
-            "rx-self-rename",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::{self as fs};\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::fs"]);
-    }
-
-    #[test]
-    fn glob_reexport_with_forbidden_root_reacts() {
-        let out = findings(
-            "rx-glob-root",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::*;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::infra exposed by pub use crate::domain::*"]);
-    }
-
-    #[test]
-    fn glob_reexport_with_root_deeper_than_forbidden_prefix_reacts() {
-        let out = findings(
-            "rx-glob-deep",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::db::*;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::db exposed by pub use crate::domain::*"]
-        );
-    }
-
-    #[test]
-    fn sibling_root_glob_does_not_react() {
-        let out = findings(
-            "rx-glob-sibling",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::elsewhere::*;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "sibling-root glob is a stated bound: {out:?}"
-        );
-    }
-
-    #[test]
-    fn ancestor_root_glob_over_a_deeper_forbidden_prefix_does_not_react() {
-        // `pub use crate::infra::*` under a DEEPER forbidden prefix — a stated bound (can't
-        // enumerate whether infra publicly re-exports the forbidden db subtree).
-        let out = findings(
-            "rx-glob-ancestor",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub use crate::infra::*;\n"),
-            ],
-            "crate::domain",
-            &["crate::infra::db"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "ancestor-root glob is a stated bound: {out:?}"
-        );
-    }
-
-    #[test]
-    fn restricted_and_private_and_underscore_reexports_do_not_react() {
-        let out = findings(
-            "rx-nonpublic",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub(crate) use crate::infra::DbPool;\nuse crate::infra::Config;\npub use crate::infra::Trait as _;\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "pub(crate)/private/`as _` re-exports are not public exposure: {out:?}"
-        );
-    }
-
-    #[test]
-    fn forbidden_type_in_a_public_return_is_a_finding() {
-        let out = findings(
-            "return",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub fn pool() -> crate::infra::DbPool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
-        );
-    }
-
-    #[test]
-    fn a_type_used_only_internally_is_not_a_finding() {
-        // Imported and used in a private fn body / private item — never in a public
-        // signature. This is the exposure-vs-import distinction: a static import boundary
-        // would flag the import; semantic correctly says clean.
-        let out = findings(
-            "internal-only",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "use crate::infra::DbPool;\nfn helper() -> DbPool { todo!() }\nstruct Private { p: DbPool }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(out.is_empty(), "internal use is not exposure: {out:?}");
-    }
-
-    #[test]
-    fn forbidden_type_in_a_public_field_is_a_finding() {
-        let out = findings(
-            "field",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service { pub pool: crate::infra::DbPool, secret: u8 }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by field crate::domain::Service::pool"]
-        );
-    }
-
-    #[test]
-    fn a_private_field_does_not_expose() {
-        let out = findings(
-            "private-field",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Service { pool: crate::infra::DbPool }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(out.is_empty(), "a private field is not public API: {out:?}");
-    }
-
-    #[test]
-    fn inherent_impl_public_method_exposes() {
-        let out = findings(
-            "inherent-impl",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct S;\nimpl S { pub fn pool(&self) -> crate::infra::DbPool { todo!() } }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn <crate::domain::S>::pool"]
-        );
-    }
-
-    #[test]
-    fn trait_impl_is_out_of_scope() {
-        let out = findings(
-            "trait-impl",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct S;\nimpl From<crate::infra::DbPool> for S { fn from(_: crate::infra::DbPool) -> S { S } }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "trait impls are a documented bound: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_renamed_import_resolves_and_reacts() {
-        let out = findings(
-            "renamed",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "use crate::infra::DbPool as Pool;\npub fn pool() -> Pool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
-        );
-    }
-
-    #[test]
-    fn a_use_imported_type_resolves_via_its_head() {
-        let out = findings(
-            "use-head",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "use crate::infra;\npub fn pool() -> infra::DbPool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
-        );
-    }
-
-    #[test]
-    fn a_glob_import_is_a_documented_bound() {
-        let out = findings(
-            "glob",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "use crate::infra::*;\npub fn pool() -> DbPool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "glob is out of scope, not silently matched: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_forbidden_trait_in_a_generic_bound_is_a_finding() {
-        let out = findings(
-            "bound",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub fn run<T: crate::infra::Pooled>(_: T) {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::Pooled exposed by fn crate::domain::run"]
-        );
-    }
-
-    #[test]
-    fn a_module_prefix_matches_beneath_but_not_a_sibling() {
-        let out = findings(
-            "prefix",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub fn a() -> crate::infra::db::Pool { todo!() }\npub fn b() -> crate::infrastructure::Helper { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::db::Pool exposed by fn crate::domain::a"],
-            "sibling must not match: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_nested_generic_argument_is_observed() {
-        let out = findings(
-            "nested",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub fn pools() -> Vec<crate::infra::DbPool> { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pools"]
-        );
-    }
-
-    #[test]
-    fn an_unknown_module_is_a_constitution_error() {
-        let err = findings(
-            "unknown",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "// nothing\n"),
-            ],
-            "crate::ghost",
-            &["crate::infra"],
-        )
-        .unwrap_err();
-        assert_eq!(err, unknown_module_error("crate::ghost", "x"));
-    }
-
-    #[test]
-    fn a_mod_rs_backed_module_resolves() {
-        let out = findings(
-            "modrs",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain/mod.rs",
-                    "pub fn pool() -> crate::infra::DbPool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
-        );
-    }
-
-    #[test]
-    fn an_inline_module_resolves() {
-        let out = findings(
-            "inline",
-            &[(
-                "lib.rs",
-                "pub mod domain { pub fn pool() -> crate::infra::DbPool { todo!() } }\n",
-            )],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
-        );
-    }
-
-    // --- signature-coupling re-export back-fill (S1) -------------------------
-
-    #[test]
-    fn a_forbidden_type_via_a_pub_use_facade_resolves_and_reacts() {
-        // The closed false negative: domain imports the type via a facade that re-exports
-        // it; resolution must follow the `pub use` chain to the forbidden defining path.
-        let out = findings(
-            "reexport-exposure",
-            &[
-                ("lib.rs", "pub mod domain;\npub mod facade;\n"),
-                ("facade.rs", "pub use crate::infra::DbPool;\n"),
-                (
-                    "domain.rs",
-                    "use crate::facade::DbPool;\npub fn pool() -> DbPool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pool"],
-            "a forbidden type reached through a pub use facade must react"
-        );
-    }
-
-    #[test]
-    fn a_forbidden_type_via_a_super_relative_use_resolves_and_reacts() {
-        // The same relative-use canonicalization fix applies to exposure-governance: a
-        // forbidden type imported via `use super::infra::DbPool` must resolve to its
-        // canonical path, not be silently passed.
-        let out = findings(
-            "super-exposure",
-            &[
-                ("lib.rs", "pub mod domain;\npub mod infra;\n"),
-                ("infra.rs", "pub struct DbPool;\n"),
-                (
-                    "domain.rs",
-                    "use super::infra::DbPool;\npub fn pool() -> DbPool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::infra::DbPool exposed by fn crate::domain::pool"]
-        );
-    }
-
-    // --- trait-impl-locality ------------------------------------------------
-
-    fn locality_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        trait_path: &str,
-        allowed: &[&str],
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-loc-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let allowed: Vec<String> = allowed.iter().map(|s| s.to_string()).collect();
-        let root = src.join("lib.rs");
-        let result = trait_impl_findings(&src, &root, trait_path, &allowed, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    #[test]
-    fn an_impl_outside_the_allowed_location_is_a_finding() {
-        let out = locality_findings(
-            "outside",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
-    }
-
-    #[test]
-    fn an_impl_inside_the_allowed_location_is_clean() {
-        let out = locality_findings(
-            "inside",
-            &[
-                ("lib.rs", "pub mod command;\npub mod commands;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "commands.rs",
-                    "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "an impl in the allowed location is clean: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_nested_module_beneath_the_allowed_prefix_is_clean() {
-        let out = locality_findings(
-            "nested-allowed",
-            &[
-                ("lib.rs", "pub mod command;\npub mod commands;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                ("commands.rs", "pub mod greet;\n"),
-                (
-                    "commands/greet.rs",
-                    "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "beneath an allowed prefix is clean: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_prefix_colliding_sibling_location_is_not_allowed() {
-        let out = locality_findings(
-            "sibling",
-            &[
-                ("lib.rs", "pub mod command;\npub mod commandeer;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "commandeer.rs",
-                    "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["crate::commandeer (impl for crate::commandeer::Foo)"],
-            "a sibling of the allowed prefix is not allowed"
-        );
-    }
-
-    #[test]
-    fn an_impl_in_any_of_several_allowed_locations_is_clean() {
-        let out = locality_findings(
-            "multi-allowed",
-            &[
-                ("lib.rs", "pub mod command;\npub mod builtins;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "builtins.rs",
-                    "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands", "crate::builtins"],
-        )
-        .unwrap();
-        assert!(out.is_empty(), "any one allowed location suffices: {out:?}");
-    }
-
-    #[test]
-    fn a_bare_same_module_trait_name_reacts() {
-        // B1: the impl is in the trait's own (disallowed) module, with a bare `Command`
-        // and no `use`. Resolving the bare name against the current module is required —
-        // leaving it unresolved would silently pass a real misplaced impl.
-        let out = locality_findings(
-            "bare-same-module",
-            &[
-                ("lib.rs", "pub mod command;\n"),
-                (
-                    "command.rs",
-                    "pub trait Command {}\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::command (impl for crate::command::Foo)"]);
-    }
-
-    #[test]
-    fn a_renamed_trait_import_reacts() {
-        let out = locality_findings(
-            "renamed-trait",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::Command as Cmd;\npub struct Foo;\nimpl Cmd for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
-    }
-
-    #[test]
-    fn a_super_relative_trait_import_reacts() {
-        // The relative-use false negative: `use super::command::Command` populates the
-        // use-map with the relative string; resolution must canonicalize it against the
-        // module before matching the anchor, or a real misplaced impl silently passes.
-        let out = locality_findings(
-            "super-trait",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "domain.rs",
-                    "use super::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
-    }
-
-    #[test]
-    fn a_cfg_gated_module_with_no_file_is_skipped_not_errored() {
-        // A `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off)
-        // is legal Rust; the whole-crate walk must skip it, never fail the gate (exit 2).
-        let out = locality_findings(
-            "cfg-absent-mod",
-            &[
-                (
-                    "lib.rs",
-                    "pub mod command;\n#[cfg(feature = \"never\")]\npub mod optional;\n",
-                ),
-                ("command.rs", "pub trait Command {}\n"),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a cfg-gated absent module is skipped: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_reexported_trait_path_reacts() {
-        // S1: the impl reaches the trait through a facade re-export; resolution must
-        // follow the pub use chain to match the anchor.
-        let out = locality_findings(
-            "reexport-impl",
-            &[
-                (
-                    "lib.rs",
-                    "pub mod command;\npub mod facade;\npub mod domain;\n",
-                ),
-                ("command.rs", "pub trait Command {}\n"),
-                ("facade.rs", "pub use crate::command::Command;\n"),
-                (
-                    "domain.rs",
-                    "use crate::facade::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
-    }
-
-    #[test]
-    fn an_anchor_named_at_a_reexport_path_resolves_not_a_constitution_error() {
-        // B2: the boundary names the trait at its facade path; this must resolve to the
-        // real local trait (not a false exit-2) and still react to misplaced impls.
-        let out = locality_findings(
-            "reexport-anchor",
-            &[
-                (
-                    "lib.rs",
-                    "pub mod command;\npub mod facade;\npub mod domain;\n",
-                ),
-                ("command.rs", "pub trait Command {}\n"),
-                ("facade.rs", "pub use crate::command::Command;\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::facade::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
-    }
-
-    #[test]
-    fn an_unresolvable_trait_anchor_is_a_constitution_error() {
-        let err = locality_findings(
-            "ghost-trait",
-            &[
-                ("lib.rs", "pub mod command;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-            ],
-            "crate::command::Ghost",
-            &["crate::commands"],
-        )
-        .unwrap_err();
-        assert_eq!(err, unknown_trait_error("crate::command::Ghost", "x"));
-    }
-
-    #[test]
-    fn a_non_anchored_traits_impl_is_ignored() {
-        let out = locality_findings(
-            "other-trait",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\npub trait Other {}\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::Other;\npub struct Foo;\nimpl Other for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert!(out.is_empty(), "only the anchored trait reacts: {out:?}");
-    }
-
-    #[test]
-    fn an_inline_module_impl_is_located() {
-        let out = locality_findings(
-            "inline-impl",
-            &[
-                (
-                    "lib.rs",
-                    "pub mod command;\npub mod domain { use crate::command::Command; pub struct Foo; impl Command for Foo {} }\n",
-                ),
-                ("command.rs", "pub trait Command {}\n"),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
-    }
-
-    #[test]
-    fn a_glob_imported_trait_is_a_documented_bound() {
-        let out = locality_findings(
-            "glob-trait",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::*;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a glob-imported trait is out of scope, not silently matched: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_path_remapped_module_is_a_documented_bound() {
-        let out = locality_findings(
-            "path-remapped",
-            &[
-                (
-                    "lib.rs",
-                    "pub mod command;\n#[path = \"weird.rs\"]\npub mod domain;\n",
-                ),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "weird.rs",
-                    "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a #[path]-remapped module is out of scope, not silently matched: {out:?}"
-        );
-    }
-
-    #[test]
-    fn two_impls_in_one_module_are_distinct_findings_by_self_type() {
-        let out = locality_findings(
-            "distinct-self",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::Command;\npub struct A;\npub struct B;\nimpl Command for A {}\nimpl Command for B {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::domain (impl for crate::domain::A)",
-                "crate::domain (impl for crate::domain::B)"
-            ]
-        );
-    }
-
-    #[test]
-    fn const_generic_expr_self_types_stay_distinct_owners() {
-        // Two inherent impls whose self types differ ONLY in a complex const-generic
-        // *expression* argument (`Arr<{ 1 + 1 }>` vs `Arr<{ 2 + 2 }>`). The expression is
-        // unrenderable, so the owner falls back to `{base}<_#{ordinal}>` keyed on the impl
-        // block's position among the module's items — keeping the two blocks INJECTIVE.
-        // Previously both collapsed to `fn <_>::a`, masking one leak behind the other.
-        // Items in `domain`: 0 = `struct Arr`, 1 = first impl, 2 = second impl.
-        let out = findings(
-            "const-generic-expr",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub struct Arr<const N: usize>(u8);\n\
-                     impl Arr<{ 1 + 1 }> { pub fn a(&self) -> crate::infra::T { todo!() } }\n\
-                     impl Arr<{ 2 + 2 }> { pub fn a(&self) -> crate::infra::T { todo!() } }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::T exposed by fn <crate::domain::Arr<_#1>>::a",
-                "crate::infra::T exposed by fn <crate::domain::Arr<_#2>>::a",
-            ],
-            "two const-generic-expr self types yield two distinct positional owners, not one",
-        );
-    }
-
-    #[test]
-    fn owner_is_canonical_across_written_forms() {
-        // The same self type written two ways — a bare `impl Foo` and a fully-qualified
-        // `impl crate::m::Foo` — must render to the IDENTICAL canonical owner
-        // `crate::m::Foo`, so the token form never over-splits a single type into two owners.
-        let out = findings(
-            "canonical-forms",
-            &[
-                ("lib.rs", "pub mod m;\n"),
-                (
-                    "m.rs",
-                    "pub struct Foo;\n\
-                     impl Foo { pub fn a(&self) -> crate::infra::T { todo!() } }\n\
-                     impl crate::m::Foo { pub fn b(&self) -> crate::infra::T { todo!() } }\n",
-                ),
-            ],
-            "crate::m",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::T exposed by fn <crate::m::Foo>::a",
-                "crate::infra::T exposed by fn <crate::m::Foo>::b",
-            ],
-            "both written forms of the same self type render the identical canonical owner",
-        );
-    }
-
-    #[test]
-    fn a_cfg_gated_impl_is_observed_as_written() {
-        // `#[cfg]` is not evaluated: syn parses every branch, so a misplaced impl behind a
-        // disabled feature is still observed (a deliberate, documented over-approximation).
-        let out = locality_findings(
-            "cfg-gated",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::Command;\npub struct Foo;\n#[cfg(feature = \"never\")]\nimpl Command for Foo {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
-    }
-
-    #[test]
-    fn a_macro_generated_impl_is_a_documented_bound() {
-        // A `make_impl!(…)` invocation is an `Item::Macro`, not an `Item::Impl` — syn does
-        // not expand it, so the impl it would generate is out of scope, not silently matched.
-        let out = locality_findings(
-            "macro-impl",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                ("domain.rs", "make_impl!(Foo);\n"),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a macro-generated impl is out of scope, not silently matched: {out:?}"
-        );
-    }
-
-    #[test]
-    fn the_builder_carries_severity() {
-        // Severity (and thus baseline/exit-code parity via the shared 璇璣 model) is plumbed
-        // from the builder into each Violation by `check_trait_impl_boundary`.
-        let warn = TraitImplBoundary::in_crate("app")
-            .trait_("crate::command::Command")
-            .only_implemented_in("crate::commands")
-            .warn()
-            .because("advisory first");
-        assert_eq!(warn.severity(), Severity::Warn);
-
-        let enforce = TraitImplBoundary::in_crate("app")
-            .trait_("crate::command::Command")
-            .only_implemented_in("crate::commands")
-            .because("enforced");
-        assert_eq!(enforce.severity(), Severity::Enforce);
-    }
-
-    // --- visibility boundary -------------------------------------------------
-
-    fn vis_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-vis-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let root = src.join("lib.rs");
-        let result = visibility_findings(&src, &root, module, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    #[test]
-    fn pub_items_react_and_non_pub_items_are_clean() {
-        let out = vis_findings(
-            "pub-mix",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                (
-                    "internal.rs",
-                    "pub fn a() {}\npub struct B;\npub trait C {}\npub(crate) fn d() {}\npub(super) fn e() {}\nfn f() {}\n",
-                ),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["pub fn a", "pub struct B", "pub trait C"],
-            "only bare-pub items react: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_pub_use_and_glob_react() {
-        let out = vis_findings(
-            "pub-use",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                (
-                    "internal.rs",
-                    "pub use crate::db::Handle;\npub use crate::db::*;\npub(crate) use crate::db::Hidden;\n",
-                ),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(out, ["pub use crate::db::*", "pub use crate::db::Handle"]);
-    }
-
-    #[test]
-    fn a_pub_submodule_reacts() {
-        let out = vis_findings(
-            "pub-mod",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                ("internal.rs", "pub mod sub;\nmod hidden;\n"),
-                ("internal/sub.rs", "\n"),
-                ("internal/hidden.rs", "\n"),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(out, ["pub mod sub"]);
-    }
-
-    #[test]
-    fn a_bare_pub_item_in_a_non_pub_module_still_reacts() {
-        let out = vis_findings(
-            "pub-in-crate-mod",
-            &[
-                ("lib.rs", "pub(crate) mod internal;\n"),
-                ("internal.rs", "pub fn helper() {}\n"),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["pub fn helper"],
-            "the rule governs the declared pub keyword, not crate-reachability"
-        );
-    }
-
-    #[test]
-    fn a_pub_extern_crate_and_pub_trait_alias_react() {
-        // Bare-`pub` item kinds beyond the common set: a public crate re-export and a
-        // public trait alias are observable bare-`pub` declarations and must react.
-        let out = vis_findings(
-            "extern-and-alias",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                (
-                    "internal.rs",
-                    "pub extern crate serde;\npub trait Alias = Clone;\n",
-                ),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(out, ["pub extern crate serde", "pub trait Alias (alias)"]);
-    }
-
-    #[test]
-    fn a_leading_colon_pub_use_is_rendered_and_distinct() {
-        // `::external::X` and `external::X` are distinct declarations; the leading colon
-        // must be rendered so they do not collide under dedup.
-        let out = vis_findings(
-            "leading-colon",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                (
-                    "internal.rs",
-                    "pub use ::external::X;\npub use external::X;\n",
-                ),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(out, ["pub use ::external::X", "pub use external::X"]);
-    }
-
-    #[test]
-    fn a_macro_export_macro_is_out_of_scope() {
-        let out = vis_findings(
-            "macro-export",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                (
-                    "internal.rs",
-                    "#[macro_export]\nmacro_rules! m { () => {} }\npub(crate) fn helper() {}\n",
-                ),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a #[macro_export] macro carries no pub keyword — out of declared scope: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_macro_invocation_pub_item_is_a_documented_bound() {
-        let out = vis_findings(
-            "macro-gen",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                ("internal.rs", "make_public!();\n"),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a macro-generated item is out of scope, not silently claimed: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_cfg_gated_pub_item_is_observed_as_written() {
-        let out = vis_findings(
-            "cfg-pub",
-            &[
-                ("lib.rs", "pub mod internal;\n"),
-                (
-                    "internal.rs",
-                    "#[cfg(feature = \"never\")]\npub fn gated() {}\n",
-                ),
-            ],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(out, ["pub fn gated"], "cfg is observed as-written");
-    }
-
-    #[test]
-    fn an_unknown_visibility_module_is_a_constitution_error() {
-        let err = vis_findings(
-            "vis-unknown",
-            &[("lib.rs", "pub mod internal;\n"), ("internal.rs", "\n")],
-            "crate::ghost",
-        )
-        .unwrap_err();
-        assert_eq!(err, unknown_module_error("crate::ghost", "x"));
-    }
-
-    #[test]
-    fn an_inline_visibility_module_is_scanned() {
-        let out = vis_findings(
-            "vis-inline",
-            &[("lib.rs", "pub mod internal { pub fn a() {} fn b() {} }\n")],
-            "crate::internal",
-        )
-        .unwrap();
-        assert_eq!(out, ["pub fn a"]);
-    }
-
-    #[test]
-    fn the_visibility_builder_carries_severity() {
-        let warn = VisibilityBoundary::in_crate("app")
-            .module("crate::internal")
-            .must_not_declare_pub()
-            .warn()
-            .because("advisory first");
-        assert_eq!(warn.severity(), Severity::Warn);
-
-        let enforce = VisibilityBoundary::in_crate("app")
-            .module("crate::internal")
-            .must_not_declare_pub()
-            .because("enforced");
-        assert_eq!(enforce.severity(), Severity::Enforce);
-    }
-
-    #[test]
-    fn a_generic_self_type_is_rendered_distinctly() {
-        let out = locality_findings(
-            "generic-self",
-            &[
-                ("lib.rs", "pub mod command;\npub mod domain;\n"),
-                ("command.rs", "pub trait Command {}\n"),
-                (
-                    "domain.rs",
-                    "use crate::command::Command;\npub struct W<T>(T);\nimpl Command for W<u8> {}\nimpl Command for W<u16> {}\n",
-                ),
-            ],
-            "crate::command::Command",
-            &["crate::commands"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::domain (impl for crate::domain::W<u16>)",
-                "crate::domain (impl for crate::domain::W<u8>)"
-            ]
-        );
-    }
-
-    // --- forbidden-marker ----------------------------------------------------
-
-    fn marker_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        subtree: &str,
-        forbidden: &[&str],
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-mark-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-        let root = src.join("lib.rs");
-        let result = forbidden_marker_findings(&src, &root, subtree, &forbidden, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    #[test]
-    fn a_forbidden_derive_on_a_subtree_type_reacts_and_a_clean_type_does_not() {
-        let out = marker_findings(
-            "derive",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "#[derive(serde::Serialize)]\npub struct Order;\n#[derive(Clone, Debug)]\npub struct Plain;\n",
-                ),
-            ],
-            "crate::domain",
-            &["serde::Serialize"],
-        )
-        .unwrap();
-        assert_eq!(out, ["derive serde::Serialize on crate::domain::Order"]);
-    }
-
-    #[test]
-    fn a_serde_derive_path_and_cfg_attr_derive_react_by_leaf() {
-        let out = marker_findings(
-            "leaf-and-cfgattr",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "#[derive(serde_derive::Serialize)]\npub struct A;\n#[cfg_attr(feature = \"serde\", derive(serde::Serialize))]\npub struct B;\n",
-                ),
-            ],
-            "crate::domain",
-            &["serde::Serialize"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "derive serde::Serialize on crate::domain::A",
-                "derive serde::Serialize on crate::domain::B"
-            ],
-            "serde_derive path (leaf) and cfg_attr-wrapped derive both react: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_hand_impl_outside_the_subtree_reacts_via_the_self_type() {
-        let out = marker_findings(
-            "hand-impl",
-            &[
-                ("lib.rs", "pub mod domain;\npub mod wire;\n"),
-                ("domain.rs", "pub struct Order;\n"),
-                (
-                    "wire.rs",
-                    "impl serde::Serialize for crate::domain::Order {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["serde::Serialize"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["impl serde::Serialize for crate::domain::Order"],
-            "a hand impl written outside the subtree, for a subtree type, reacts: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_submodule_type_is_governed_and_a_sibling_is_not() {
-        let out = marker_findings(
-            "subtree",
-            &[
-                ("lib.rs", "pub mod domain;\npub mod domainx;\n"),
-                ("domain.rs", "pub mod order;\n"),
-                (
-                    "domain/order.rs",
-                    "#[derive(serde::Serialize)]\npub struct Order;\n",
-                ),
-                (
-                    "domainx.rs",
-                    "#[derive(serde::Serialize)]\npub struct Other;\n",
-                ),
-            ],
-            "crate::domain",
-            &["serde::Serialize"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["derive serde::Serialize on crate::domain::order::Order"],
-            "a submodule type is governed; the prefix-colliding sibling crate::domainx is not: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_same_leaf_different_trait_is_a_documented_false_positive() {
-        let out = marker_findings(
-            "leaf-fp",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "#[derive(rkyv::Serialize)]\npub struct Order;\n",
-                ),
-            ],
-            "crate::domain",
-            &["Serialize"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            ["derive Serialize on crate::domain::Order"],
-            "leaf-match reacts (accepted false positive; path-qualify to document intent)"
-        );
-    }
-
-    #[test]
-    fn an_unresolvable_glob_self_type_is_a_documented_bound() {
-        let out = marker_findings(
-            "glob-self",
-            &[
-                ("lib.rs", "pub mod domain;\npub mod wire;\n"),
-                ("domain.rs", "pub struct Order;\n"),
-                (
-                    "wire.rs",
-                    "use crate::domain::*;\nimpl serde::Serialize for Order {}\n",
-                ),
-            ],
-            "crate::domain",
-            &["serde::Serialize"],
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "a glob-imported self-type cannot be placed in the subtree — a stated bound: {out:?}"
-        );
-    }
-
-    #[test]
-    fn a_nested_cfg_attr_derive_reacts() {
-        // The review's blocker: `cfg_attr(a, cfg_attr(b, derive(X)))` must still yield X.
-        let out = marker_findings(
-            "nested-cfgattr",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "#[cfg_attr(all(), cfg_attr(all(), derive(serde::Serialize)))]\npub struct Order;\n",
-                ),
-            ],
-            "crate::domain",
-            &["serde::Serialize"],
-        )
-        .unwrap();
-        assert_eq!(out, ["derive serde::Serialize on crate::domain::Order"]);
-    }
-
-    #[test]
-    fn two_same_named_types_in_different_submodules_stay_distinct() {
-        // The review's baseline-collapse blocker: the finding must use the canonical path so
-        // two `Order`s don't dedup into one (baselining one would else suppress the other).
-        let out = marker_findings(
-            "same-name",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                ("domain.rs", "pub mod a;\npub mod b;\n"),
-                (
-                    "domain/a.rs",
-                    "#[derive(serde::Serialize)]\npub struct Order;\n",
-                ),
-                (
-                    "domain/b.rs",
-                    "#[derive(serde::Serialize)]\npub struct Order;\n",
-                ),
-            ],
-            "crate::domain",
-            &["serde::Serialize"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "derive serde::Serialize on crate::domain::a::Order",
-                "derive serde::Serialize on crate::domain::b::Order"
-            ],
-            "two same-named types must stay distinct findings: {out:?}"
-        );
-    }
-
-    #[test]
-    fn the_forbidden_marker_builder_carries_severity() {
-        let b = ForbiddenMarkerBoundary::in_crate("app")
-            .module("crate::domain")
-            .must_not_acquire("serde::Serialize")
-            .and_not_acquire("serde::Deserialize")
-            .warn()
-            .because("r");
-        assert_eq!(b.forbidden(), &["serde::Serialize", "serde::Deserialize"]);
-        assert_eq!(b.severity(), Severity::Warn);
-    }
-
-    // --- dyn-trait-boundary ---------------------------------------------------
-
-    /// Like [`findings`] but for the dyn-trait capability: write `files`, return the rendered
-    /// `dyn` shapes exposed by `module`. Shape-only, so it takes no forbidden set.
-    fn dyn_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-dyn-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let root = src.join("lib.rs");
-        let result = dyn_module_findings(&src, &root, module, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
-        dyn_findings(
-            name,
-            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
-            "crate::m",
-        )
-    }
-
-    /// Like [`dyn_findings`] but for the operand-scoped rule: write `files`, return the rendered
-    /// `dyn` shapes whose principal trait resolves into `forbidden`.
-    fn dyn_operand_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-        forbidden: &[&str],
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-dynop-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let root = src.join("lib.rs");
-        let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
-        let result = dyn_operand_module_findings(&src, &root, module, &forbidden, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
-        dyn_operand_findings(
-            name,
-            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
-            "crate::m",
-            forbidden,
-        )
-    }
-
-    #[test]
-    fn dyn_operand_flags_a_named_trait_and_passes_others() {
-        // A dyn of the listed trait is flagged; a dyn of an unlisted trait passes.
-        assert_eq!(
-            dyn_operand_mod(
-                "named",
-                "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap(),
-            ["dyn crate::ports::Port exposed by fn crate::m::c"],
-        );
-        assert!(
-            dyn_operand_mod(
-                "other",
-                "pub fn e() -> Box<dyn std::error::Error> { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap()
-            .is_empty(),
-            "a dyn of an unlisted trait passes",
-        );
-    }
-
-    #[test]
-    fn dyn_operand_honors_a_module_prefix() {
-        // A module-prefix operand forbids any dyn of a trait under it (exact-or-`::` prefix).
-        assert_eq!(
-            dyn_operand_mod(
-                "prefix",
-                "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n",
-                &["crate::ports"],
-            )
-            .unwrap(),
-            ["dyn crate::ports::Port exposed by fn crate::m::c"],
-        );
-    }
-
-    #[test]
-    fn dyn_operand_matches_a_reexported_trait_by_its_defining_path() {
-        // The trait is defined at crate::ports::Port and re-exported as crate::Port; the module
-        // exposes `dyn crate::Port`. Forbidding either path matches — both canonicalize through
-        // the re-export closure to the defining path.
-        let files = &[
-            (
-                "lib.rs",
-                "pub mod ports;\npub use crate::ports::Port;\npub mod m;\n",
-            ),
-            ("ports.rs", "pub trait Port {}\n"),
-            ("m.rs", "pub fn c() -> Box<dyn crate::Port> { todo!() }\n"),
-        ];
-        // Forbid by the DEFINING path — the exposed facade `crate::Port` canonicalizes to it.
-        assert_eq!(
-            dyn_operand_findings(
-                "reexport-defining",
-                files,
-                "crate::m",
-                &["crate::ports::Port"]
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn crate::m::c"],
-            "a dyn written through a re-export facade matches the forbidden defining path",
-        );
-    }
-
-    #[test]
-    fn dyn_operand_ignores_auto_trait_markers() {
-        // `dyn Port + Send`: principal is Port (first bound). Forbidding Port flags it; forbidding
-        // only the Send marker flags nothing (Send is not the principal, and a bare Send does not
-        // resolve).
-        assert_eq!(
-            dyn_operand_mod(
-                "marker-port",
-                "pub fn c() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap(),
-            ["dyn crate::ports::Port + Send exposed by fn crate::m::c"],
-        );
-        assert!(
-            dyn_operand_mod(
-                "marker-send",
-                "pub fn c() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
-                &["Send"],
-            )
-            .unwrap()
-            .is_empty(),
-            "the trailing Send marker is not the operand",
-        );
-    }
-
-    #[test]
-    fn dyn_operand_matches_a_dyn_nested_deep() {
-        // Nested inside Vec<Box<dyn …>> — still matched by its principal trait.
-        assert_eq!(
-            dyn_operand_mod(
-                "nested",
-                "pub fn c() -> Vec<Box<dyn crate::ports::Port>> { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap(),
-            ["dyn crate::ports::Port exposed by fn crate::m::c"],
-        );
-    }
-
-    #[test]
-    fn dyn_operand_empty_set_degenerates_to_any() {
-        // An empty forbidden set reacts to any dyn — identical to shape-only, never a no-op.
-        let body = "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n";
-        assert_eq!(
-            dyn_operand_mod("empty", body, &[]).unwrap(),
-            dyn_mod("empty-shape", body).unwrap(),
-            "must_not_expose_dyn_of([]) matches exactly what shape-only must_not_expose_dyn does",
-        );
-        assert_eq!(
-            dyn_operand_mod("empty2", body, &[]).unwrap(),
-            ["dyn crate::ports::Port exposed by fn crate::m::c"],
-        );
-    }
-
-    #[test]
-    fn dyn_operand_boundary_carries_its_operands_and_severity() {
-        let b = DynTraitBoundary::in_crate("core")
-            .module("crate::core")
-            .must_not_expose_dyn_of(["crate::ports::Port"])
-            .warn()
-            .because("the core seam must not leak a dyn Port");
-        assert_eq!(b.forbidden_operands(), ["crate::ports::Port"]);
-        assert_eq!(b.severity(), Severity::Warn);
-        // Shape-only still constructs an empty operand set (regression guard).
-        let shape = DynTraitBoundary::in_crate("core")
-            .module("crate::core")
-            .must_not_expose_dyn()
-            .because("no dyn at all");
-        assert!(shape.forbidden_operands().is_empty());
-    }
-
-    // --- impl-trait-boundary (existential exposure) ---------------------------
-
-    /// Like [`dyn_findings`] but for the impl-trait capability: write `files`, return the rendered
-    /// `impl …` shapes returned by `module`'s public API.
-    fn impl_trait_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-impl-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let root = src.join("lib.rs");
-        let result = impl_trait_module_findings(&src, &root, module, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
-        impl_trait_findings(
-            name,
-            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
-            "crate::m",
-        )
-    }
-
-    #[test]
-    fn impl_trait_flags_a_returned_impl_trait() {
-        assert_eq!(
-            impl_trait_mod("ret", "pub fn make() -> impl crate::Port { todo!() }\n").unwrap(),
-            ["impl crate::Port exposed by fn crate::m::make"],
-        );
-    }
-
-    #[test]
-    fn impl_trait_flags_a_nested_returned_impl_trait() {
-        assert_eq!(
-            impl_trait_mod(
-                "nested",
-                "pub fn maybe() -> Option<impl crate::Port> { todo!() }\n"
-            )
-            .unwrap(),
-            ["impl crate::Port exposed by fn crate::m::maybe"],
-            "an impl Trait at depth in the return type is existential and reacts",
-        );
-    }
-
-    #[test]
-    fn impl_trait_flags_a_trait_method_rpit() {
-        assert_eq!(
-            impl_trait_mod(
-                "rpitit",
-                "pub trait T { fn make(&self) -> impl crate::Port; }\n"
-            )
-            .unwrap(),
-            ["impl crate::Port exposed by fn trait crate::m::T::make"],
-            "a trait method's declared RPIT is the existential, governed at the declaration",
-        );
-    }
-
-    #[test]
-    fn impl_trait_does_not_flag_an_argument_position() {
-        // APIT is universal (a caller-chosen generic), not an existential leak.
-        assert!(
-            impl_trait_mod("apit", "pub fn drive(p: impl crate::Port) { let _ = p; }\n")
-                .unwrap()
-                .is_empty(),
-            "argument-position impl Trait is not governed",
-        );
-    }
-
-    #[test]
-    fn impl_trait_does_not_flag_an_async_fn() {
-        // async fn leaks a compiler-inserted `impl Future`, not a written `impl Trait` — a
-        // distinct, out-of-scope existential form (stated bound).
-        assert!(
-            impl_trait_mod("async", "pub async fn connect() -> u8 { 0 }\n")
-                .unwrap()
-                .is_empty(),
-            "async fn's implicit impl Future is out of scope",
-        );
-    }
-
-    #[test]
-    fn impl_trait_does_not_flag_a_private_fn_or_a_trait_impl_method() {
-        // Private fn: not public API.
-        assert!(
-            impl_trait_mod("priv", "fn make() -> impl crate::Port { todo!() }\n")
-                .unwrap()
-                .is_empty(),
-            "a private fn's RPIT is not public API",
-        );
-        // Trait-impl method: return shape dictated by the trait declaration (governed there).
-        assert!(
-            impl_trait_mod(
-                "traitimpl",
-                "pub struct S; impl crate::T for S { fn make(&self) -> impl crate::Port { todo!() } }\n"
-            )
-            .unwrap()
-            .is_empty(),
-            "a trait-impl method's return is not double-counted",
-        );
-    }
-
-    #[test]
-    fn impl_trait_renders_iterator_and_fn_shapes_distinctly() {
-        assert_eq!(
-            impl_trait_mod(
-                "iter",
-                "pub fn it() -> impl Iterator<Item = u8> { todo!() }\n"
-            )
-            .unwrap(),
-            ["impl Iterator<Item = u8> exposed by fn crate::m::it"],
-        );
-        assert_eq!(
-            impl_trait_mod("clo", "pub fn f() -> impl Fn(i32) -> i32 { todo!() }\n").unwrap(),
-            ["impl Fn(i32) -> i32 exposed by fn crate::m::f"],
-        );
-    }
-
-    #[test]
-    fn impl_trait_boundary_carries_anchor_and_severity() {
-        let b = ImplTraitBoundary::in_crate("core")
-            .module("crate::core")
-            .must_not_expose_impl_trait()
-            .warn()
-            .because("the core seam must return named types");
-        assert_eq!(b.crate_package(), "core");
-        assert_eq!(b.module(), "crate::core");
-        assert_eq!(b.severity(), Severity::Warn);
-    }
-
-    // --- operand-scoped impl-trait --------------------------------------------
-
-    fn impl_trait_operand_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-        forbidden: &[&str],
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-implop-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let root = src.join("lib.rs");
-        let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
-        let result = impl_trait_operand_module_findings(&src, &root, module, &forbidden, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    fn impl_trait_operand_mod(
-        name: &str,
-        body: &str,
-        forbidden: &[&str],
-    ) -> Result<Vec<String>, String> {
-        impl_trait_operand_findings(
-            name,
-            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
-            "crate::m",
-            forbidden,
-        )
-    }
-
-    #[test]
-    fn impl_trait_operand_flags_a_named_trait_and_passes_others() {
-        assert_eq!(
-            impl_trait_operand_mod(
-                "named",
-                "pub fn make() -> impl crate::ports::Port { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap(),
-            ["impl crate::ports::Port exposed by fn crate::m::make"],
-        );
-        // A returned impl Iterator (ergonomic existential) passes when only a domain port is forbidden.
-        assert!(
-            impl_trait_operand_mod(
-                "iter",
-                "pub fn it() -> impl Iterator<Item = u8> { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap()
-            .is_empty(),
-            "a returned impl of an unlisted (and bare-std) trait passes",
-        );
-    }
-
-    #[test]
-    fn impl_trait_operand_honors_a_module_prefix() {
-        assert_eq!(
-            impl_trait_operand_mod(
-                "prefix",
-                "pub fn make() -> impl crate::ports::Port { todo!() }\n",
-                &["crate::ports"],
-            )
-            .unwrap(),
-            ["impl crate::ports::Port exposed by fn crate::m::make"],
-        );
-    }
-
-    #[test]
-    fn impl_trait_operand_matches_a_reexported_trait_by_its_defining_path() {
-        let files = &[
-            (
-                "lib.rs",
-                "pub mod ports;\npub use crate::ports::Port;\npub mod m;\n",
-            ),
-            ("ports.rs", "pub trait Port {}\n"),
-            ("m.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
-        ];
-        assert_eq!(
-            impl_trait_operand_findings("reexport", files, "crate::m", &["crate::ports::Port"])
-                .unwrap(),
-            ["impl crate::Port exposed by fn crate::m::make"],
-        );
-    }
-
-    #[test]
-    fn impl_trait_operand_ignores_auto_trait_markers() {
-        assert_eq!(
-            impl_trait_operand_mod(
-                "marker-port",
-                "pub fn make() -> impl crate::ports::Port + Send { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap(),
-            ["impl crate::ports::Port + Send exposed by fn crate::m::make"],
-        );
-        assert!(
-            impl_trait_operand_mod(
-                "marker-send",
-                "pub fn make() -> impl crate::ports::Port + Send { todo!() }\n",
-                &["Send"],
-            )
-            .unwrap()
-            .is_empty(),
-            "the trailing Send marker is not the operand",
-        );
-    }
-
-    #[test]
-    fn impl_trait_operand_matches_a_nested_returned_impl() {
-        assert_eq!(
-            impl_trait_operand_mod(
-                "nested",
-                "pub fn maybe() -> Option<impl crate::ports::Port> { todo!() }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap(),
-            ["impl crate::ports::Port exposed by fn crate::m::maybe"],
-        );
-    }
-
-    #[test]
-    fn impl_trait_operand_empty_set_degenerates_to_any() {
-        let body = "pub fn make() -> impl crate::ports::Port { todo!() }\n";
-        assert_eq!(
-            impl_trait_operand_mod("empty", body, &[]).unwrap(),
-            impl_trait_mod("empty-shape", body).unwrap(),
-            "must_not_expose_impl_trait_of([]) matches exactly what shape-only does",
-        );
-    }
-
-    #[test]
-    fn impl_trait_operand_inherits_return_position_scoping() {
-        // APIT and async fn stay out of scope under the operand variant too.
-        assert!(
-            impl_trait_operand_mod(
-                "apit",
-                "pub fn drive(p: impl crate::ports::Port) { let _ = p; }\n",
-                &["crate::ports::Port"],
-            )
-            .unwrap()
-            .is_empty(),
-            "argument-position impl Trait is not governed even with a matching operand",
-        );
-        assert!(
-            impl_trait_operand_mod(
-                "async",
-                "pub async fn c() -> u8 { 0 }\n",
-                &["crate::ports::Port"]
-            )
-            .unwrap()
-            .is_empty(),
-        );
-    }
-
-    #[test]
-    fn impl_trait_operand_boundary_carries_operands_and_severity() {
-        let b = ImplTraitBoundary::in_crate("core")
-            .module("crate::core")
-            .must_not_expose_impl_trait_of(["crate::ports::Port"])
-            .warn()
-            .because("the core seam must not return an existential Port");
-        assert_eq!(b.forbidden_operands(), ["crate::ports::Port"]);
-        assert_eq!(b.severity(), Severity::Warn);
-        let shape = ImplTraitBoundary::in_crate("core")
-            .module("crate::core")
-            .must_not_expose_impl_trait()
-            .because("no existential at all");
-        assert!(shape.forbidden_operands().is_empty());
-    }
-
-    // --- async-exposure -------------------------------------------------------
-
-    fn async_findings(
-        name: &str,
-        files: &[(&str, &str)],
-        module: &str,
-    ) -> Result<Vec<String>, String> {
-        let dir = std::env::temp_dir().join(format!("hunyi-async-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        for (rel, contents) in files {
-            let path = src.join(rel);
-            std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-            std::fs::write(&path, contents).expect("write source");
-        }
-        let root = src.join("lib.rs");
-        let result = async_exposure_module_findings(&src, &root, module, "x");
-        let _ = std::fs::remove_dir_all(&dir);
-        result
-    }
-
-    fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
-        async_findings(
-            name,
-            &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
-            "crate::m",
-        )
-    }
-
-    #[test]
-    fn async_exposure_flags_a_public_async_free_fn() {
-        assert_eq!(
-            async_mod("free", "pub async fn connect() -> u8 { 0 }\n").unwrap(),
-            ["async fn crate::m::connect() -> u8"],
-        );
-    }
-
-    #[test]
-    fn async_exposure_flags_a_public_inherent_async_method() {
-        assert_eq!(
-            async_mod(
-                "inherent",
-                "pub struct Service; impl Service { pub async fn run(&self) {} }\n"
-            )
-            .unwrap(),
-            ["async fn <crate::m::Service>::run(&self)"],
-        );
-    }
-
-    #[test]
-    fn async_exposure_flags_a_public_trait_async_method_declaration() {
-        assert_eq!(
-            async_mod("trait", "pub trait Port { async fn fetch(&self) -> u8; }\n").unwrap(),
-            ["async fn trait crate::m::Port::fetch(&self) -> u8"],
-        );
-    }
-
-    #[test]
-    fn async_exposure_does_not_flag_trait_impl_private_or_nonasync() {
-        // Trait-impl async method: dictated by the trait declaration — not double-counted.
-        assert!(
-            async_mod(
-                "traitimpl",
-                "pub struct S; impl crate::T for S { async fn run(&self) {} }\n"
-            )
-            .unwrap()
-            .is_empty(),
-        );
-        // Private async fn: not public API.
-        assert!(
-            async_mod("priv", "async fn helper() {}\n")
-                .unwrap()
-                .is_empty(),
-        );
-        // Non-async public fn: not async.
-        assert!(
-            async_mod("sync", "pub fn ready() -> u8 { 0 }\n")
-                .unwrap()
-                .is_empty(),
-        );
-    }
-
-    #[test]
-    fn async_exposure_finding_is_injective_across_same_named_owners() {
-        // The crux: two same-named async methods across two inherent impls must NOT collide, or a
-        // baselined one would mask the other (a false negative).
-        let two_impls = async_mod(
-            "two-impls",
-            "pub struct A; pub struct B;\n\
-             impl A { pub async fn run(&self) {} }\n\
-             impl B { pub async fn run(&self) {} }\n",
-        )
-        .unwrap();
-        assert_eq!(
-            two_impls,
-            [
-                "async fn <crate::m::A>::run(&self)".to_string(),
-                "async fn <crate::m::B>::run(&self)".to_string(),
-            ],
-            "same-named async methods across two impls yield two distinct owner-qualified findings",
-        );
-        // And two same-named async methods across two traits.
-        let two_traits = async_mod(
-            "two-traits",
-            "pub trait T { async fn run(&self); }\npub trait U { async fn run(&self); }\n",
-        )
-        .unwrap();
-        assert_eq!(
-            two_traits,
-            [
-                "async fn trait crate::m::T::run(&self)".to_string(),
-                "async fn trait crate::m::U::run(&self)".to_string(),
-            ],
-        );
-    }
-
-    #[test]
-    fn async_exposure_boundary_carries_anchor_and_severity() {
-        let b = AsyncExposureBoundary::in_crate("core")
-            .module("crate::core")
-            .must_not_expose_async_fn()
-            .warn()
-            .because("the core seam is synchronous");
-        assert_eq!(b.crate_package(), "core");
-        assert_eq!(b.module(), "crate::core");
-        assert_eq!(b.severity(), Severity::Warn);
-    }
-
-    #[test]
-    fn dyn_in_public_return_param_and_field_react() {
-        assert_eq!(
-            dyn_mod(
-                "ret",
-                "pub fn connect() -> Box<dyn crate::Port> { todo!() }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn crate::m::connect"]
-        );
-        assert_eq!(
-            dyn_mod(
-                "param",
-                "pub fn drive(x: &dyn crate::Port) { let _ = x; }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn crate::m::drive"]
-        );
-        assert_eq!(
-            dyn_mod("field", "pub struct S { pub p: Box<dyn crate::Port> }\n").unwrap(),
-            ["dyn crate::Port exposed by field crate::m::S::p"]
-        );
-    }
-
-    #[test]
-    fn dyn_reacts_at_any_nesting_depth() {
-        assert_eq!(
-            dyn_mod(
-                "vec",
-                "pub fn all() -> Vec<Box<dyn crate::Port>> { todo!() }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn crate::m::all"]
-        );
-        assert_eq!(
-            dyn_mod(
-                "opt",
-                "pub fn maybe(x: Option<&dyn crate::Port>) { let _ = x; }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn crate::m::maybe"]
-        );
-        // Nested inside an otherwise-static `impl Trait` return — still exposed to the caller.
-        assert_eq!(
-            dyn_mod(
-                "impl-iter",
-                "pub fn ports() -> impl Iterator<Item = Box<dyn crate::Port>> { std::iter::empty() }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn crate::m::ports"]
-        );
-    }
-
-    #[test]
-    fn impl_trait_with_no_dyn_node_is_clean() {
-        let out = dyn_mod(
-            "impl-trait",
-            "pub fn port() -> impl crate::Port { todo!() }\n",
-        )
-        .unwrap();
-        assert!(out.is_empty(), "impl Trait carries no dyn node: {out:?}");
-    }
-
-    #[test]
-    fn dyn_in_const_static_trait_method_assoc_default_and_where_react() {
-        assert_eq!(
-            dyn_mod("const", "pub const C: &dyn crate::Port = todo!();\n").unwrap(),
-            ["dyn crate::Port exposed by const crate::m::C"]
-        );
-        assert_eq!(
-            dyn_mod("static", "pub static S: &dyn crate::Port = todo!();\n").unwrap(),
-            ["dyn crate::Port exposed by static crate::m::S"]
-        );
-        assert_eq!(
-            dyn_mod(
-                "trait-method",
-                "pub trait Service { fn port(&self) -> Box<dyn crate::Port>; }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn trait crate::m::Service::port"]
-        );
-        assert_eq!(
-            dyn_mod(
-                "assoc-default",
-                "pub trait Service { type Out = Box<dyn crate::Port>; }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by type trait crate::m::Service::Out"]
-        );
-        assert_eq!(
-            dyn_mod(
-                "where",
-                "pub fn run<T>() where Box<dyn crate::Port>: Into<T> { todo!() }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port exposed by fn crate::m::run"]
-        );
-    }
-
-    #[test]
-    fn public_alias_target_reacts_but_named_alias_is_not_expanded() {
-        // The public alias item's own target exposes dyn → reacts at the alias.
-        assert_eq!(
-            dyn_mod("alias-item", "pub type Handler = Box<dyn crate::Port>;\n").unwrap(),
-            ["dyn crate::Port exposed by type crate::m::Handler"]
-        );
-        // A public fn naming a *private* alias: the alias is not expanded (stated bound), and a
-        // private alias is not itself exposed — so the dyn escapes (the documented bound), the
-        // only finding being none.
-        let out = dyn_mod(
-            "alias-named",
-            "type Handler = Box<dyn crate::Port>;\npub fn make() -> Handler { todo!() }\n",
-        )
-        .unwrap();
-        assert!(
-            out.is_empty(),
-            "named private alias is not expanded: {out:?}"
-        );
-    }
-
-    #[test]
-    fn internal_dyn_is_structurally_clean() {
-        let out = dyn_mod(
-            "internal",
-            "fn helper() -> Box<dyn crate::Port> { todo!() }\nstruct Private { p: Box<dyn crate::Port> }\n",
-        )
-        .unwrap();
-        assert!(out.is_empty(), "internal dyn is never exposed: {out:?}");
-    }
-
-    #[test]
-    fn dyn_with_multiple_bounds_renders_stably() {
-        assert_eq!(
-            dyn_mod(
-                "bounds",
-                "pub fn f() -> Box<dyn crate::Port + Send> { todo!() }\n"
-            )
-            .unwrap(),
-            ["dyn crate::Port + Send exposed by fn crate::m::f"]
-        );
-    }
-
-    #[test]
-    fn distinct_closures_and_nested_dyns_do_not_collide_into_one_finding() {
-        // The boxed-closure family must render its full shape, not a degenerate placeholder —
-        // else two distinct exposed `dyn` collapse to one finding and a new one is masked by a
-        // baselined one (the one forbidden bug). `Fn`/`FnMut` differ, so two findings.
-        let out = dyn_mod(
-            "closures",
-            "pub fn a(cb: Box<dyn Fn(i32) -> i32>) { let _ = cb; }\n\
-             pub fn b(cb: Box<dyn FnMut(String) -> bool>) { let _ = cb; }\n",
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "dyn Fn(i32) -> i32 exposed by fn crate::m::a",
-                "dyn FnMut(String) -> bool exposed by fn crate::m::b"
-            ]
-        );
-        // A dyn nested inside another dyn's generic argument: BOTH are exposed dynamic
-        // dispatch, so both react (any-depth node presence) — distinct, non-colliding findings.
-        assert_eq!(
-            dyn_mod(
-                "nested",
-                "pub fn f() -> Box<dyn crate::Foo<Box<dyn crate::Bar>>> { todo!() }\n"
-            )
-            .unwrap(),
-            [
-                "dyn crate::Bar exposed by fn crate::m::f",
-                "dyn crate::Foo<Box<dyn crate::Bar>> exposed by fn crate::m::f"
-            ]
-        );
-        // Associated-type bindings (`Iterator<Item = …>`, the most common assoc-bound dyn) keep
-        // their payload — distinct item types stay distinct findings, not `dyn Iterator<_>`.
-        let out = dyn_mod(
-            "assoc",
-            "pub fn a(x: Box<dyn Iterator<Item = u8>>) { let _ = x; }\n\
-             pub fn b(x: Box<dyn Iterator<Item = u16>>) { let _ = x; }\n",
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "dyn Iterator<Item = u16> exposed by fn crate::m::b",
-                "dyn Iterator<Item = u8> exposed by fn crate::m::a"
-            ]
-        );
-        // Macro-typed and fn-pointer generic args render by name/shape, not a shared `dyn _`.
-        let out = dyn_mod(
-            "macro-fnptr",
-            "pub fn a(x: Box<dyn crate::Foo<fn(i32)>>) { let _ = x; }\n\
-             pub fn b(x: Box<dyn crate::Foo<fn(u8)>>) { let _ = x; }\n",
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "dyn crate::Foo<fn(i32)> exposed by fn crate::m::a",
-                "dyn crate::Foo<fn(u8)> exposed by fn crate::m::b"
-            ]
-        );
-    }
-
-    #[test]
-    fn same_shape_at_two_seams_stays_two_findings() {
-        // The closed collision false-negative: two distinct public seams exposing the SAME dyn
-        // shape must stay two findings, not collapse to one — else a new leak is masked by a
-        // baselined one. Seam-qualification keeps them distinct.
-        let out = dyn_mod(
-            "two-seams",
-            "pub fn a() -> Box<dyn crate::infra::Port> { todo!() }\n\
-             pub fn b() -> Box<dyn crate::infra::Port> { todo!() }\n",
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "dyn crate::infra::Port exposed by fn crate::m::a",
-                "dyn crate::infra::Port exposed by fn crate::m::b"
-            ],
-            "the same dyn shape at two seams must not collapse to one finding",
-        );
-        // The same guarantee for signature-coupling: two fns exposing the SAME forbidden type
-        // stay two findings, one per seam.
-        let out = findings(
-            "two-seams-sig",
-            &[
-                ("lib.rs", "pub mod domain;\n"),
-                (
-                    "domain.rs",
-                    "pub fn a() -> crate::infra::DbPool { todo!() }\n\
-                     pub fn b() -> crate::infra::DbPool { todo!() }\n",
-                ),
-            ],
-            "crate::domain",
-            &["crate::infra"],
-        )
-        .unwrap();
-        assert_eq!(
-            out,
-            [
-                "crate::infra::DbPool exposed by fn crate::domain::a",
-                "crate::infra::DbPool exposed by fn crate::domain::b"
-            ],
-            "the same forbidden type at two seams must not collapse to one finding",
-        );
-    }
-
-    #[test]
-    fn the_dyn_trait_builder_carries_anchor_and_severity() {
-        let b = DynTraitBoundary::in_crate("app")
-            .module("crate::core")
-            .must_not_expose_dyn()
-            .warn()
-            .because("the core seam is statically dispatched");
-        assert_eq!(b.crate_package(), "app");
-        assert_eq!(b.module(), "crate::core");
-        assert_eq!(b.severity(), Severity::Warn);
-        assert_eq!(b.reason(), "the core seam is statically dispatched");
-    }
-
-    #[test]
-    fn dyn_unknown_module_is_a_constitution_error() {
-        let err = dyn_findings(
-            "unknown",
-            &[("lib.rs", "pub mod m;\n"), ("m.rs", "// nothing\n")],
-            "crate::ghost",
-        )
-        .unwrap_err();
-        assert_eq!(err, unknown_module_error("crate::ghost", "x"));
-    }
-}
+mod tests;

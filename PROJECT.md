@@ -83,8 +83,8 @@ false negative, and only the reaction can foreclose it.
 ## Architecture — a crate family, not a god crate
 
 - **`xuanji` (璇璣) — the 底 (bedrock).** The dimension-agnostic **reaction model** the
-  whole stack turns on: `Severity`, `Violation`, `Report`, `Baseline`, `Outcome`, with the
-  JSON serialization intrinsic to those types. `serde_json`-only; carries no observation
+  whole stack turns on: `Severity`, `BoundaryKind`, `Violation`, `Report`, `Baseline`,
+  `Outcome`, with the JSON serialization intrinsic to those types. `serde_json`-only; carries no observation
   engine, and depends on no workspace member — every dimension sits above it.
 - **`guibiao` (圭表) — the static observation core.** The gnomon: it reads the cast
   shadow — imports and dependencies. The dependency-light static engine, derived from
@@ -345,10 +345,80 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   already required, locked with regression tests. The two capabilities ship as OpenSpec changes
   (they carry specs); the two review-found fixes are conformance bugfixes within those specs,
   recorded in git, not new requirements.
+- **(v0.1.4) External-crate exposure via the external-crate name set — adopter-driven, and the
+  oracle that replaced an edition shortcut.** Signature-coupling reacted to an external type only
+  when it arrived *use-aliased* (`use dep::Foo; … -> Foo` resolves through the `use`-map); an
+  *inline, fully-qualified* extern path — a `pub use dep::spi::Foo;` re-export, a `-> dep::spi::Foo`
+  signature, or a **local facade chain** ending at such a type — was silently dropped
+  (`resolve_path` returns `None` for a bare extern head, and the re-export closure discarded an
+  extern-headed target). All three are false negatives of the flagship, all observable from the
+  local-crate AST — so per the false-negative-first contract the closure is **default-on** and,
+  the DSL unchanged, on the **patch** line (the v0.1.3 re-export precedent), even though it now
+  also touches the v0.1.0 flagship's inline-extern behavior. Driven by a real adopter (a facade
+  whose "facade must not re-export core's spi" invariant lived only in doc prose). The
+  extern-determination **oracle is the crate's external-crate name set** — declared dependencies
+  (from the `cargo metadata --no-deps` already read, `.rename`-aware and `-`→`_` normalized to the
+  path spelling) ∪ the sysroot crates (`std`/`core`/`alloc`/`proc_macro`/`test`, never in
+  `dependencies` yet valid heads). A bare **`pub use`** head resolves against this raw set (extern
+  by edition-2018+ grammar); a bare **type-position** head resolves against it **minus the
+  governed module's own child modules** — a per-module shadow, so a local `mod serde` makes
+  `serde::X` local (no false positive) without suppressing a subtree's real `pub use serde::X`
+  (no false negative). A `PathExposure.is_reexport` bit selects which. The oracle sits in the
+  bare-fallback branch **after** the `use`-map (a local `use … as dep` alias still wins) and is
+  threaded **only** into the exposure resolve and the re-export closure — never `resolve_path`'s
+  other callers, so dyn/impl-trait operand resolution and seam identity are untouched. **Three
+  adversarial review rounds** shaped this: round 1 **refuted an initial edition-2018 grammar
+  shortcut** (the tool reads no edition, so it mis-classifies edition-2015 heads); round 3, on the
+  implementation, **caught a crate-level shadow that was both a false positive (nested local
+  module) and a false negative (a subtree's extern re-export dropped)**, driving the per-position
+  split above; round 2 drove the hardening — sysroot inclusion, hyphen normalization,
+  module-shadow, and the call-site-scoped application. The residual stays a stated bound, never a
+  silent pass: extern glob leaves and foreign-module renames (need the foreign AST), a source-level
+  `extern crate dep as alias;` rename (invisible to `cargo metadata`, unlike the handled manifest
+  `package =` rename), a dependency with a distinct `[lib] name`, a facade hop written as re-export
+  of a privately-`use`d bare name (an inherited v0.1.3 closure bound), the edition-2015 relative
+  local re-export, and `pub extern crate`. Ships as an OpenSpec change modifying
+  `semantic-reexport-exposure` and `semantic-signature-coupling`. *(Retracted in part by the
+  extern-crate-exposure Decision below: a **crate-root** `extern crate … as` rename and
+  `pub extern crate` are now observed from the local AST and react — the residual narrows to a
+  **module-scoped** source rename.)*
+- **(v0.1.4) Declaration integrity — govern the integrity of the declaration itself, not only
+  the governed code.** The 三儀 observe *governed code*; they do not observe the **consistency of
+  the declaration and its artifacts** — the `Constitution` object, its projections
+  (`constitution_markdown`), and hand-written narration that *indexes or asserts a structural
+  property of* the constitution. Three reactions of exactly this shape already existed, each
+  hand-rolled in a different place: the self-law byte-check (`self_law_projection_is_fresh`,
+  projection ↔ constitution), `audit_probe_coverage` (declared seams ↔ probes), and an adopter's
+  reason-drift test (`because` ↔ `AGENTS.md` prose). They are **one pattern**: a reaction whose
+  *observation source is the declaration and its artifacts, not user code*. It is **not a new 儀**
+  (it observes no governed code) and adds no drift in the governed graph; it sits beside 潛移
+  (self-law) and 校讎, and is drift-law-compliant (a real observation source + a real reaction).
+  Its bright line against a lint (the same discipline as the semantic admission test): migrate to a
+  reaction only prose that **asserts a property of the declaration** (an index like "boundaries 2,
+  3, 6", a coverage claim); never migrate prose that **explains a human choice** (rejected
+  alternatives, rationale, perf/impl notes) — that has no observation source and stays prose. The
+  first internal instance, built here: the cross-cutting 三儀 ⊥ 三儀 clause was cited by a
+  hand-maintained index in `self_governance.rs`'s doc comment ("(boundaries 2, 3, 6)"), which had
+  already drifted once (an off-by-one that swapped the `hunyi` dimension for the core⊥shell
+  boundary — the class of bug that survives *because nothing observes it*). The fix is not to
+  correct the numbers but to **delete the index and assert the property**: a test
+  (`dimension_boundaries_declare_the_mutual_independence_law`) walks `constitution.boundaries()`,
+  selects the three dimension allowlists (`restrict_dependencies_to` on `guibiao`/`hunyi`/`louke`),
+  and asserts each `because` carries the clause — tianheng's own `semantic-forbidden-marker`
+  philosophy (replace a prose reference with a reaction) turned on its own constitution narration.
+  A stated bound: the predicate observes the `because` **text** (`contains`), weaker than a
+  structural fact — a reworded clause would slip it — but it still reacts to the real drift a
+  hand-maintained pointer could not. The **adopter-facing** forms are deferred, born when built (no
+  API before a second consumer): (a) a small constitution-assertion helper so a structural-property
+  reaction is not re-hand-rolled per repo, and (b) the 潛移 generator (§5) — though the v0.1.4
+  byte-checked staleness-gate **recipe** already lets an adopter retire a hand-maintained agent-
+  context face with the shipped `constitution_markdown` primitive, so the generator is ergonomic
+  polish, not the enabler. Adopter-surfaced by worklane; see `BACKLOG.md`, 校讎/潛移.
 - **Name resolution is a 渾儀-internal shared layer (`hunyi::resolve`), not 璇璣's and not
   cross-dimension.** Resolution maps a path as written to a canonical item — it is
   *observation*, so it belongs to a dimension, never to 璇璣 (the `serde_json`-only,
-  dimension-agnostic reaction model that "holds no observation engine"). It is also not a
+  dimension-agnostic reaction model that renders no verdict — the measure, not an observing
+  dimension). It is also not a
   cross-dimension facility: 圭表 resolves with a `syn`-free token scanner (to keep the
   dependency-light core) while 渾儀 resolves with the AST, so a shared resolver would force
   `syn` into the core — the very law that quarantines it. The two resolvers are therefore
@@ -436,3 +506,239 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a probe inside one is commented out and must not count) and non-`()` macro delimiters
   (`{}`/`[]`); both are now reacted to, with the lexical-scan `cfg`-blindness recorded as a stated
   bound in `audit_probe_coverage`'s doc and the spec.
+- **(v0.1.4) A semantic violation names its governed module's source file — a 垂象 fidelity
+  closure powered by 渾儀's existing traversal.** A semantic violation reported `file: null` (a
+  spec-stated bound), yet the reaction already descends to the governed module's file to observe
+  its items — the file is a **faithful byproduct**, the same admission the static module-import
+  `file` meets. The gap was only that the file lived inside the observation heart and never
+  reached the reaction layer. Closed by refactoring the one module traversal (`descend`) to return
+  `(items, file)`, keeping `resolve_module_items`' signature (so the pure `*_findings` hearts —
+  the *what* — are untouched, no test churn) and adding `resolve_module_file` (the *where*), which
+  the reaction layer (`check_*_boundary`) attaches via `Violation::with_file`, resolved once per
+  boundary and only when reporting. The `finding` still names the canonicalized forbidden
+  type/shape (which may be *defined* elsewhere); the `file` names the **seam's** location, the
+  actionable one. `file` stays out of the `(target, rule, finding)` baseline identity, so a
+  previously-null violation baselined and then populated never re-baselines nor changes the count;
+  SARIF gains a `physicalLocation` (still no `region` — a file, not a line). **Scope is the five
+  single-module capabilities** whose anchor resolves to one module (signature-coupling exposure
+  incl. its re-export/trait-impl depths, dyn-trait, impl-trait, async-exposure, visibility) — each
+  knows its file at the reaction layer from `boundary.module` alone. The **two whole-crate/subtree
+  scans stay `file: null`**: trait-impl-locality and forbidden-marker name sites (a trait `impl`, a
+  `#[derive]`) scattered across the crate, not one governed-module file; surfacing their per-site
+  file needs the heart to carry the per-finding `site.module` (then the same `resolve_module_file`)
+  — a heart signature change deferred as a born-when-built follow-up, with the `cli-check-runner`
+  null bound **narrowed** to name these two explicitly rather than left blanket (never a silent
+  claim). An adversarial review at propose caught the mis-scoping of forbidden-marker (it *looks*
+  module-anchored — its `boundary.module` is a subtree prefix — but is mechanically a whole-crate
+  scan). Additive / API-compatible (a previously-`null` field is now sometimes populated), so
+  **patch** (0.1.4) per SemVer honesty. Ships as an OpenSpec change modifying `cli-check-runner`.
+- **(v0.1.4) …and then 7/7: the two whole-crate scans name their file too.** The follow-up above
+  was closed immediately: trait-impl-locality and forbidden-marker now carry a `file` as well, so
+  **every semantic violation names its source file** — the single-module ones by their governed
+  module, the whole-crate-scan ones by the *offending element's* module (the `impl` site's module;
+  the defining type's module for a `#[derive]`, carried on `TypeDef`). The two hearts surface a
+  **per-finding module** (already embedded in every finding) and the reaction layer resolves it
+  with the same `resolve_module_file`, memoized per module. Two adversarial-review points shaped
+  it: dedup **by finding** (not the `(finding, module)` pair) so `file` never changes the violation
+  count (the count invariant), and resolve with **`.ok()`** (degrade to `null`) so a resolution
+  failure — the module comes from the whole-crate scan, the file from the single-path resolver —
+  never turns a real violation into an exit-2 error or drops it. Additive/API-compatible (patch);
+  stacked on the change above (its `cli-check-runner` delta is the final 7/7 form, retiring the
+  narrowed null carve-out). Ships as an OpenSpec change modifying `cli-check-runner`.
+- **(v0.1.4) A resolvable type alias in a public seam reacts — narrowing the over-broad "alias =
+  inference" bound.** `semantic-signature-coupling` parked *all* alias chains under "full type
+  inference" as out of scope, but a `type H = crate::infra::Db;` names its target **literally** —
+  resolving `H` needs only substitution. So the representative shape was a genuine **false
+  negative**: a *private* alias used in a public seam (`pub fn f() -> H`) silently passed, as did a
+  cross-module alias reached via `use` (a **public** same-module alias already reacted — its target
+  is a walked exposed position). Closed by mirroring the existing re-export closure: the crate-wide
+  scan collects an **alias map** (`{module}::X → canonical target`, target resolved through the
+  defining module's `use`-scope / `crate`-relative / extern oracle with the same per-module child
+  shadow as type positions), and the signature-coupling exposure pipeline gains a bare-local-alias
+  fallback plus a **combined alias+re-export fixpoint** (`canonicalize_through_aliases`) so an
+  alias→alias / alias→re-export chain resolves to the defining path. **Scoped to the exposure
+  pipeline only** (the extern-oracle precedent) — `resolve_path`'s other callers (dyn/impl-trait/
+  async operands, visibility, anchor) are untouched (their operands are traits; a `dyn`/`impl` of a
+  *type* alias is not stable Rust); the trait-impl-exposure depth shares `module_findings` and so
+  inherits the closure, exactly as its spec's "same resolver" deferral intends. **Bounds kept**
+  (never a silent claim): complex-target aliases (`type H = Vec<Db>`, `&Db`, tuple/`dyn`/`impl` —
+  the *directly*-written form still reacts), generic aliases (`type H<T> = …`), and genuine
+  inference. Expansion can only **add** findings (close FNs), never remove one or change an existing
+  finding's canonical — the finding names the resolved target (`crate::infra::Db`), never the alias
+  spelling (`H`), so identity is spelling-independent and no baseline churns. Adversarial review at
+  propose caught the **alias-before-extern** ordering (a local `type serde = …` shadows a same-named
+  dependency, per Rust's own resolution — `extern_verbatim` is meaningful only for a multi-segment
+  `dep::Foo`, which a type alias cannot prefix). Additive/API-compatible (a previously silently-
+  passing exposure now reacts), so **patch** (0.1.4) per SemVer honesty. Ships as an OpenSpec change
+  modifying `semantic-signature-coupling`.
+- **(v0.1.4) `extern crate` exposures react — two local-observable residuals of external-crate
+  exposure, closed.** `semantic-reexport-exposure` left two stated bounds that were genuine false
+  negatives of an *existing* capability (not speculative new ones), so the "I don't use it" /
+  frequency argument did not excuse them — a downstream adopter governs its own (possibly
+  edition-2015 or crate-renaming) code. **FN-A**: a source-level `extern crate worklane_core as wc;`
+  rename made `wc::spi::Foo` silently pass, because `wc` is absent from `cargo metadata`; but the
+  `extern crate … as …` item is in the **local AST**, so a **crate-root** rename is now collected
+  into an `ExternRenameMap` (`Y → X`) and applied by `extern_verbatim_renamed` — the head is mapped
+  to the real crate before the extern check, in the exposure pipeline (type position + the governed
+  module's own `pub use`). **FN-B**: `pub extern crate worklane_core;` republishes the crate root
+  like `pub use ::worklane_core;`, but `collect_item_exposures` had no `Item::ExternCrate` arm, so
+  an exposure boundary missed it (the visibility dimension caught it only if separately declared —
+  an exposure boundary must not depend on another dimension). Now an `ExternCrate` exposure arm
+  names the **real** crate (`item.ident`, not the `as`-rename). **Bounds kept**: a **module-scoped**
+  rename (binds locally — collecting it crate-wide would false-positive, so crate-root only), a
+  rename reached through a **type alias** or a **multi-hop facade closure** (the map is applied in
+  the exposure pipeline, not threaded into alias-target resolution or the re-export closure), a
+  distinct **`[lib] name`**, and the edition-2015 relative re-export. The finding names the real
+  crate, never the source alias, so identity is spelling-independent and no baseline churns; the
+  existing `..._is_a_stated_bound` test flips to a reacting test. Additive/API-compatible, so
+  **patch** (0.1.4). This decision also records a corrected judgment: when ordering the work I called
+  this "cheaper than the alias closure" — recon showed the opposite (two capabilities, a rename map
+  threaded through two positions), yet the *false-negative-first* law (not frequency) is what
+  governs an existing capability, so it was still right to close. Ships as an OpenSpec change
+  modifying `semantic-reexport-exposure`.
+- **(v0.1.4) Resolver collection↔query parity — a comprehensive pre-release adversarial review
+  caught a genuine false negative and closed the whole alias × extern-rename × re-export family.**
+  The alias-target *collection* ladder (`walk_module`) resolved with a weaker ladder than the
+  query-time exposure pipeline (`module_findings`), so a forbidden type reachable only by the
+  stronger steps was silently dropped from the alias map — never recorded, never followed. **FN1**
+  (the blocker): a **bare** alias-of-an-alias (`type Inner = crate::infra::Db; type Public = Inner;`)
+  silently passed, a real false negative against signature-coupling's own "alias→alias chain
+  resolves / no false negative in the resolved scope" claim (the existing test used the *qualified*
+  intermediate, so the bare form — ordinary Rust — was untested). **FN2** (alias target through a
+  crate-root `extern crate … as` rename) and its **facade-closure sibling**, plus **FN3** (the
+  per-module child-module shadow suppressing a *renamed* head), were stated/contrived bounds closed
+  in the same pass. Fix: pre-collect crate-root renames before the walk (source-order independence);
+  a renamed head resolves to its real crate verbatim (a rename alias is never a local child module);
+  the collection ladder gains `extern_verbatim_renamed` + a **name-gated** bare-local-alias fallback
+  (records a bare target only when it names one of the module's own aliases, so the query fixpoint
+  closes the chain order-independently); renames threaded into the re-export closure. The
+  **apply-stage adversarial review caught a false positive in the first-cut fix** — a blanket
+  `CurrentModule` fallback mis-recorded a bare std-prelude target (`type H = String`) as
+  `crate::domain::String`, which false-positives under a self-forbidding boundary; name-gating
+  removed it (permanent regression guard). Bounds kept (genuinely non-local): foreign-module
+  routing, glob leaves, distinct `[lib] name`, macro/inference/complex/generic alias, module-scoped
+  rename. `crates/hunyi` only; additive false-negative closure, so **patch** (0.1.4). Ships as an
+  OpenSpec change (no spec-requirement change beyond narrowing the reexport residual bound;
+  signature-coupling was already correct — FN1 was a code bug against its claim).
+- **(v0.1.4) 璇璣 understands, never reacts — the charter line is *no verdict*, not *no
+  observation engine*.** The charter said 璇璣 "holds no observation engine"; the load-bearing
+  invariant is narrower and truer. 璇璣 may hold the **measure** and **judgment-neutral
+  mechanism**, but never a **verdict** — the *react* itself: comparing a **declared** boundary
+  against **observed** reality to emit a `Violation`. The measure is the react's **output**
+  (`Violation`/`Report`/`Baseline`/`Outcome`); the declaration is its **input**
+  (`Boundary`/`Rule`/`Constitution`, which stay in the dimensions and the shell). 璇璣 carries the
+  output, never the input — and that asymmetry is **already enforced by the existing
+  `restrict_dependencies_to(["serde_json"])` boundary on 璇璣** in `self_governance.rs`: the
+  declaration types live *above* 璇璣, and 璇璣 depends on no workspace member, so it *structurally
+  cannot name a declared boundary to compare against*. No **new** reaction is needed; the
+  typed-verdict ban falls out of the dependency-direction law already declared. The charter word
+  "observation engine" over-restricted — it banned *mechanism*, when the real invariant bans only
+  *verdict*, and the verdict is already foreclosed.
+  Consequence: a **judgment-neutral parsing primitive** (a std lexer / token scanner) is admissible
+  in 璇璣 — it would be, to the syn-free dimensions (圭表, 漏刻), exactly what `syn` is to 渾儀: a
+  mechanism that *understands Rust source* and produces structure but renders no architectural
+  verdict. It is dimension-agnostic (it knows neither the static `use`/`mod` nor 漏刻's
+  `assert_boundary!` — each dimension matches its own pattern over the shared token stream), so it
+  belongs below the dimensions, in 璇璣's slot; admitting it does not let 璇璣 react. **Born when
+  built, not now:** two hand-rolled scanners (圭表's `module_scan`, 漏刻's audit `scan_source`) work
+  and are green, and the drift law forbids laying shared infrastructure ahead of a forcing function.
+  This entry declares the **direction** (璇璣 = judgment-neutral base), not the build: 圭表/漏刻 keep
+  their local scanners — written *toward* this shape — until a third forcing event (a third syn-free
+  scanner, or a cross-scanner false negative) earns the extraction. When it lands, *where the two
+  scanners already agree* it is behavior-preserving (identical scan results) → **patch** by SemVer
+  honesty; any lexical divergence the unification surfaces (one scanner handling a case the other
+  missed, e.g. 漏刻's nested-comment/non-`()`-delimiter fixes that 圭表 never took) is a separate
+  false-negative closure, still **patch** by the v0.1.4 precedent but never a silent behavior change;
+  漏刻's production weight
+  is held the same way its CI face already is — the primitive sits behind a `cfg` feature that a
+  standalone 漏刻 prod build leaves off (linking zero scanner code), subject to the same
+  feature-unification honesty recorded for the `audit` feature (co-depending on `tianheng`, or on
+  圭表 which needs the lexer for its default scan, unifies the feature back on). **Stated bound**
+  (never a silent claim): the dependency law forecloses the *typed* react (璇璣 cannot name a
+  `Boundary`), not a contrived *stringly-typed* comparison over primitives — that residual stays a
+  charter / human-review invariant, legitimately prose per the "Declaration integrity" line above
+  (verdict-vs-mechanism is a *judgment*, not a structural property, so it is not migrated to a
+  reaction). Architecture/charter, not a capability change — like the 璇璣 extraction and the
+  `SemanticBoundaries` facade, recorded here and kept honest by `self_governance` + the tests,
+  **not** an OpenSpec change.
+- **(v0.1.4) Structure semantic observation facts — ship the containment convergence, defer the
+  seam/subject types to 0.2.0's structured baseline.** A refinement pass structured 渾儀's internals
+  *where a live pain existed and stopped where only prep remained*. **Shipped:** the sibling-safe
+  `::`-path containment rule — hand-copied in `under_subtree` / `matches_forbidden` / `matches_allowed`
+  (`x == entry || x.starts_with("{entry}::")`, the `::` that keeps `crate::commands` from matching the
+  sibling `crate::commandeer`) — converges into one `path_within(path, prefix)`. This is the
+  born-when-built case: the pain is real (one false-positive/false-negative-critical rule in three
+  drift-prone copies), the reaction surface already exists, and the abstraction is a byte-identical
+  convergence of *existing* observation. (Alongside two behavior-preserving tidies not worth their own
+  decisions — the `SemanticFinding` catalog centralizing the finding-string formats, and the split of
+  the ~8k-line `lib.rs` into `lib` / `dsl` / `tests` — recorded in git, not here.) **Deferred:**
+  `PublicSeam` (typing the ~14 seam formats, including the seam stored as `String` in `resolve.rs`'s
+  `ShapeExposure` / `stamp_seam`) and `ExposureSubject` (the `SemanticFinding` subject). No live-risk
+  payoff yet — seam collision is already tested-closed (the v0.1.4 seam-qualification hardening + the
+  injectivity tests) — so typing them now is prep, not convergence, and the drift law forbids laying
+  structure ahead of a forcing function. Their real value is a **structured baseline** (findings as
+  data, not strings), which is **breaking → 0.2.0** and unapproved (in tension with "baseline is a
+  snapshot, not policy"). **Open design question, deliberately unanswered here:** the seam type's
+  ownership crosses layers — the finding vocabulary lives in `lib.rs`, but the seam is stored and
+  stamped in `resolve.rs`, the lower shared resolver; typing it now would either pollute the resolver
+  with presentation vocabulary or force an up-import that inverts the layering. That call belongs
+  *with* the structured-baseline design, when the seam type becomes a data-model necessity rather than
+  tidiness — the honest moment to decide it. So the seam/subject types graduate from *tidiness* to
+  *data-model necessity* exactly when structured baseline is greenlit; until then they wait.
+  Architecture/scope recorded here; the shipped convergence is a behavior-preserving refactor kept
+  honest by the tests, **not** an OpenSpec change.
+- **(v0.1.4) Module-source / module-resolution hardening — observe the compiled source root, and
+  keep `#[path]` remaps out of scope instead of governing the wrong file.** An adversarial review
+  found edge cases against the scanner/resolver decisions above. First, 圭表 module boundaries used
+  the old `manifest_dir/src` shortcut even though Cargo already observes the real lib/bin
+  `src_path`; a custom `[lib] path = "lib.rs"` could therefore make a real module boundary scan the
+  wrong root. Second, a `#[path = "..."] mod foo;` declaration was still admitted into 圭表's
+  reachable module graph; if a same-named conventional `foo.rs` orphan also existed, 圭表 could
+  govern that uncompiled orphan while the real remapped file stayed outside observation. The same
+  wrong-file shape existed in 渾儀's single-module resolver (`resolve_module`), which could resolve
+  a semantic boundary to the conventional orphan. The fix reuses Cargo's target `src_path` for
+  static module boundaries and skips direct `#[path]` module declarations in both the token
+  reachability walk and the semantic single-module descent. It does **not** add `#[path]` support;
+  it preserves the bound honestly. `crates/guibiao` + `crates/hunyi`; false-negative closure, so
+  **patch** (0.1.4), no new capability.
+- **(v0.1.4) The inline twin of the `#[path]` orphan-shadow — an inline-only module's same-named
+  conventional file is an orphan, not its backing file.** A comprehensive pre-release adversarial
+  review found the inline sibling of the hardening above, left open when the `#[path]` half was
+  closed. 圭表's static target is file-based (an inline `mod name { … }` owns no file, so it is a
+  self-describing exit-2 constitution error, a deliberate non-goal), and that error fires when
+  `governed_files(target)` is empty — but `governed_files` selected files by their path-derived
+  identity, so a same-named conventional orphan (`name.rs` / `name/mod.rs`) beside the inline body
+  made the set non-empty, bypassing the guard: 圭表 scanned the orphan (a file rustc never compiles
+  as that module) and missed the inline body's imports — a **silent pass, the one forbidden bug**.
+  The root cause is that 圭表 infers module identity from **filenames** and must correct for each
+  declaration form that decouples a file from its module (`#[path]`, now inline; `#[cfg]`-duplicate
+  is the third, the stated cfg-blind bound); 渾儀 is immune because its AST descent is
+  **declaration-driven** (follows `mod` content), consulting no orphan — the reason the static and
+  semantic dimensions legitimately differ on inline targets (圭表 exit-2, 渾儀 governs), a difference
+  declared per-dimension in the specs, not narrated. The fix classifies each `mod` declaration
+  inline vs file and excludes, at the file-list source, a conventional file whose path is declared
+  **inline-only** (inline AND not also file-form) — so the reachability walk does not read it (no
+  phantom child modules) and `governed_files` does not scan it, restoring the intended exit-2. An
+  **apply-stage** adversarial review sharpened the condition to inline-**only**: a naïve "any
+  inline-declared path" would also fire on a `#[cfg]`-gated dual declaration, which a cfg-blind
+  scanner cannot distinguish — silently changing a case the fix must not touch; gating on inline-only
+  (a dual declaration arises only under `#[cfg]` or already-invalid code) leaves the cfg-blind bound
+  exactly as it was. `crates/guibiao` only; false-negative closure, **patch** (0.1.4), no new
+  capability. Ships as an OpenSpec change modifying `module-boundary`.
+- **(v0.1.4) The published crate must self-test — a packaged-crate CI reaction, and the fixture
+  tests skip when packaged.** `cargo publish` packages only files inside a crate's own directory, so
+  a data file *outside* it — a test fixture (`crates/tianheng/tests/fixtures/*`, each its own
+  `[workspace]`, which `cargo package` excludes as a nested package even under an explicit
+  `include`) or the workspace root — is absent from the tarball. The in-repo `cargo test` never
+  notices (those files exist in the checkout); the failure is **package-only** (three fixture-driven
+  `tianheng` tests failed only from the published crate). Two moves, same family as the
+  license-bundling reaction (release hygiene, a CI reaction — never a Tianheng boundary): (a) the
+  fixture-driven dispatch tests reuse the existing `workspace_manifest` sentinel — present in the
+  repo (they run as a real end-to-end gate), absent in a packaged `.crate` (they **skip**, never
+  fail) — the same repo-vs-packaged discipline `self_governance` already uses, with
+  `TIANHENG_WORKSPACE_TESTS=1` turning a *missing* repo layout into a loud failure so CI never
+  silently skips; (b) a `packaged-selftest` CI job packages every publishable crate, extracts the
+  tarball, patches its workspace-sibling deps back to local source (they are not on crates.io at the
+  in-development version), and runs its tests **from the tarball** — proving the skip is real and
+  catching any future crate whose packaged tests reference an unpackaged file. Docs/tests/CI only;
+  no capability or reaction-behavior change.

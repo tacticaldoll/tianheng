@@ -6,10 +6,11 @@ Depending on a type internally is fine; naming it across the public surface — 
 signature, field, type alias, const/static, trait method, or a named public re-export — is the
 leak. The complement of import-governance, and the case that provably earns the AST (`syn`):
 a type named via a fully-qualified path with no `use` is invisible to a token scanner but caught
-here. Trait-impl positions are out of scope for a bare boundary (see the opt-in
-`semantic-trait-impl-exposure`); named public re-exports are in scope by default (see
-`semantic-reexport-exposure`).
-
+here — including an **inline external-crate path** (`-> dep::spi::Foo`), resolved via the crate's
+external-crate name set (v0.1.4), with the governed module's own child modules excluded so a local
+`mod dep` is not misread as the dependency. Trait-impl positions are out of scope for a bare
+boundary (see the opt-in `semantic-trait-impl-exposure`); named public re-exports are in scope by
+default (see `semantic-reexport-exposure`).
 ## Requirements
 ### Requirement: Semantic boundary declared in Rust
 
@@ -36,7 +37,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 
 ### Requirement: Public-signature observation governs exposure
 
-The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures of **inherent `impl` blocks** for types defined in the module (those methods are public API the module itself authored); and **named public re-exports** — a bare `pub use` that republishes a forbidden type under the module's own path is itself an exposure (the most direct one: a consumer can name it through the module), specified in `semantic-reexport-exposure`. **Trait `impl` blocks SHALL remain out of scope for a bare `must_not_expose`** (the v1 default): a bare boundary does not govern any trait impl. A trait impl's *impl-site-authored* positions — the trait's generic arguments, the `Self` type, associated-type bindings, the impl's own generics / `where`-clause, and the method **return type as written at the impl site** (which return-position `impl Trait` in traits lets the impl author refine to a concrete type) — ARE observable via the opt-in `.including_trait_impls()` depth specified in `semantic-trait-impl-exposure`; without that opt-in they SHALL NOT be a violation. Trait impl method **parameter and receiver** types remain trait-dictated (invariant with the trait declaration, not refinable at the impl site) and are governed at the trait's own definition, not by this opt-in. A forbidden type that is imported or used only in a non-public (internal) position SHALL NOT be a violation — this rule governs exposure, the complement of the static import boundary.
+The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule, finding)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
 
 #### Scenario: A forbidden type in a public return is a violation
 
@@ -48,30 +49,10 @@ The system SHALL observe the **public** API surface of the governed module ancho
 - **WHEN** the governed module imports and uses `crate::infra::DbPool` only inside private function bodies and non-public items, exposing it in no public signature
 - **THEN** the system reports no violation, even though a static import boundary would flag the import
 
-#### Scenario: A forbidden type in a public field is a violation
+#### Scenario: Two forbidden fields of one enum variant stay distinct findings
 
-- **WHEN** the governed module declares `pub struct Service { pub pool: crate::infra::DbPool }` and the boundary forbids exposing `crate::infra`
-- **THEN** the system emits a violation naming the exposed type
-
-#### Scenario: A forbidden type in an inherent impl public method is a violation
-
-- **WHEN** the governed module declares `impl Service { pub fn pool(&self) -> crate::infra::DbPool { … } }` and the boundary forbids exposing `crate::infra`
-- **THEN** the system emits a violation, because an inherent `impl` block's public method is part of the module's authored public API
-
-#### Scenario: A forbidden trait named in a generic bound is a violation
-
-- **WHEN** the governed module declares `pub fn run<T: crate::infra::Pooled>(t: T)` and the boundary forbids exposing `crate::infra`
-- **THEN** the system emits a violation naming `crate::infra::Pooled`, because the bound writes the trait path literally and needs no inference to resolve
-
-#### Scenario: A trait impl is out of scope for a bare boundary, governable via the opt-in depth
-
-- **WHEN** the governed module declares `impl From<crate::infra::DbPool> for Service { … }` and the boundary forbids exposing `crate::infra` with a **bare** `must_not_expose` (no `.including_trait_impls()`)
-- **THEN** the system does not claim to govern the trait impl (the v1 bound is preserved), rather than silently asserting the boundary is clean; adding `.including_trait_impls()` opts into the deeper surface governed by `semantic-trait-impl-exposure`
-
-#### Scenario: A named public re-export of a forbidden type is a violation by default
-
-- **WHEN** the governed module declares `pub use crate::infra::DbPool;` under a bare `must_not_expose("crate::infra")` (no opt-in)
-- **THEN** the system emits a violation naming `crate::infra::DbPool` exposed by the re-export, because a public re-export republishes the forbidden type under the module's own public path — the exposure the boundary always meant to catch
+- **WHEN** the governed module declares `pub enum E { V(crate::infra::Pool, crate::infra::Pool) }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits two distinct findings (`… variant crate::domain::E::V::0` and `… variant crate::domain::E::V::1`), so baselining the first does not mask the second — the same per-member injectivity struct fields already carry
 
 ### Requirement: Forbidden-type matching by path and prefix
 
@@ -89,34 +70,28 @@ The forbidden-type set SHALL match an exposed type either by exact resolved path
 
 ### Requirement: Name resolution scope and no false negative
 
-The system SHALL resolve a type named in a signature to a path using the **shared 渾儀 resolver** (`hunyi::resolve`): the in-scope `use` declarations of the file, including renamed imports (`use … as …`) and fully path-qualified mentions, `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), and **local `pub use` re-export chains** so a forbidden type reached through a re-export (facade) path resolves to its defining path. A type whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated type, a `#[path]`-remapped module, or full type inference (a return-position `impl Trait` that hides a concrete type, or an alias chain) — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. Within the resolved scope there SHALL be no false negative: a forbidden type that *is* resolvable MUST react. The system MUST NOT silently pass an exposed type it was able to resolve to a forbidden path. (Resolution previously stopped at the file's own `use` targets, so a forbidden type re-exported through a facade was an undocumented silent pass; following `pub use` chains closes that false negative — the one bug the core contract forbids.)
+The system SHALL resolve a type named in a signature using the **shared 渾儀 resolver** (`hunyi::resolve`), and within the resolved scope there SHALL be no false negative and no false positive: a forbidden type that *is* resolvable MUST react, and a name that resolves to a **local** item MUST NOT be mis-attributed to a same-named dependency. Resolution SHALL agree with rustc name resolution wherever the answer is observable from the local-crate AST:
 
-#### Scenario: A renamed import resolves and reacts
+- **A leading `::` is an unambiguous extern.** A path written `::serde::Value` resolves to the external crate named by its first segment, bypassing the `use`-map and any local shadow. It SHALL NOT be resolved as a relative path (which would both miss the extern exposure and, via the `use`-map, mis-attribute it to a local path).
+- **A local type-namespace item shadows the extern prelude.** A bare head naming a local `struct`/`enum`/`union`/`trait`/`type`-alias/`mod` in the governed module denotes that local item, and the extern oracle SHALL NOT fire for it.
+- **A bare local-alias chain resolves regardless of collection order.** When a type alias's target is itself a bare local alias whose name shadows a dependency (`type serde = crate::infra::Db; type X = serde;`), the alias-collection ladder SHALL resolve the local alias before the extern oracle (identical to the query ladder), closing the chain to the defining path.
 
-- **WHEN** the governed module declares `use crate::infra::DbPool as Pool;` and exposes `pub fn pool() -> Pool`
-- **THEN** the system resolves `Pool` to `crate::infra::DbPool` and emits a violation
+A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a `#[path]`-remapped module, a complex-target or generic type alias, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
 
-#### Scenario: A forbidden type exposed through a re-export facade resolves and reacts
+#### Scenario: A leading-`::` extern path resolves and reacts through a local shadow
 
-- **WHEN** the governed module declares `use crate::facade::DbPool;` (where `crate::facade` declares `pub use crate::infra::DbPool;`) and exposes `pub fn pool() -> DbPool`, under a boundary forbidding `crate::infra`
-- **THEN** the system follows the `pub use` chain, resolves `DbPool` to `crate::infra::DbPool`, and emits a violation, rather than silently passing it
+- **WHEN** the governed module declares a local `mod serde` (or `use crate::vendor::serde;`) and `pub fn f() -> ::serde::Value`, under `must_not_expose("serde")`
+- **THEN** the system resolves `::serde::Value` to the external crate `serde` and emits a violation, and does NOT mis-attribute it to `crate::vendor` under a boundary forbidding `crate::vendor`
 
-#### Scenario: A glob-imported forbidden type is a documented coverage bound
+#### Scenario: A local type named like a dependency is not a false positive
 
-- **WHEN** the governed module declares `use crate::infra::*;` and exposes `pub fn pool() -> DbPool`
-- **THEN** the system does not claim to observe it (out of scope, consistent with the static scanner's glob bound), rather than silently asserting the boundary is clean
+- **WHEN** the governed module declares `pub struct serde; pub fn f() -> serde`, under `must_not_expose("serde")`
+- **THEN** the system resolves `serde` to the local struct and does NOT react, while a real `use serde::Value; pub fn g() -> Value` under the same boundary still reacts
 
-#### Scenario: An opaque return that hides a forbidden type is a documented inference bound
+#### Scenario: A bare local-alias-of-an-alias shadowing a dependency resolves and reacts
 
-- **WHEN** the governed module exposes `pub fn pool() -> impl std::fmt::Display` whose concrete return is `crate::infra::DbPool`, or returns a type knowable only through an alias chain requiring inference — the forbidden type being hidden behind the opaque signature rather than named in it
-- **THEN** the system treats the hidden type as an out-of-scope inference bound (the semantic dimension's own incidental gap), rather than silently asserting the boundary is clean
-
-(A forbidden trait *named literally* in the opaque bound, e.g. `-> impl crate::infra::Pooled`, is by contrast directly resolvable and reacts — it is not this bound.)
-
-#### Scenario: A resolvable forbidden type is never silently passed
-
-- **WHEN** a forbidden type is exposed in a public signature and is resolvable from an in-scope `use`
-- **THEN** the system emits a violation, never exit 0 for that boundary
+- **WHEN** the governed module declares `type serde = crate::infra::Db; type X = serde; pub fn f() -> X`, under `must_not_expose("crate::infra")` (in either source order)
+- **THEN** the system resolves the local alias `serde` before the extern oracle, closes the chain to `crate::infra::Db`, and emits a violation
 
 ### Requirement: CI reaction
 
@@ -185,4 +160,59 @@ The AST observation SHALL be implemented in the `hunyi` crate, which is the only
 
 - **WHEN** self-governance runs against the workspace
 - **THEN** a boundary asserts `hunyi` does not depend on `tianheng`, and the test passes only while that holds
+
+### Requirement: Inline dependency-rooted paths in signatures are resolved via the dependency-name oracle
+
+The system SHALL resolve an **inline, fully-qualified external-crate path** named directly in
+a public signature, field, or type position (for example a return type `-> worklane_core::spi::Foo`
+or a public field of type `worklane_core::spi::Conn`) to its verbatim extern path, and react
+when it is in/under the forbidden set. This closes the parity gap with the already-reacting
+use-aliased form (`use worklane_core::spi::Foo; … -> Foo`), which resolves through the
+`use`-map today: both spell the same public exposure of the same extern type; only the inline
+spelling was silently dropped.
+
+The external-crate determination SHALL use the external-crate name set (declared dependencies,
+`-`→`_` normalized and `.rename`-aware, ∪ sysroot crates `std`/`core`/`alloc`/`proc_macro`/`test`)
+**with the governed module's own child modules excluded** — a **per-module shadow**: a bare
+type-position head that names a child module of the governed module (a `mod serde` making
+`serde::X` denote `crate::…::serde::X`) is local, not the dependency `serde`, so it MUST NOT be
+read as external. The shadow is scoped to the module being analyzed (a crate-root module never
+shadows a *child* module's bare paths, and vice versa), computed from that module's own items —
+not the whole crate. A bare head **in** the shadowed set resolves to its verbatim extern path; a
+bare head **not** in it (a local module, a shadowed name, or a local single name) keeps its
+existing non-resolving (`Ignore`) behavior — applied in the bare-fallback branch after `use`-map
+and `crate`/`self`/`super` resolution — so it produces **no false positive**. (Re-export
+positions use the *raw* set without this shadow, because a bare `pub use` head is external by
+grammar; see `semantic-reexport-exposure`.) No DSL change; the forbidden operand is the extern
+path as written in the governed source.
+
+#### Scenario: An inline dependency-rooted return type reacts
+
+- **WHEN** the governed module exposes `pub fn make() -> worklane_core::spi::Foo` where `worklane_core` is a declared dependency, under `must_not_expose("worklane_core::spi")`
+- **THEN** the system resolves `worklane_core::spi::Foo` verbatim and emits a violation, matching the already-reacting use-aliased spelling
+
+#### Scenario: An inline dependency-rooted field type reacts
+
+- **WHEN** the governed module exposes `pub struct Handle { pub inner: worklane_core::spi::Conn }` under `must_not_expose("worklane_core::spi")`
+- **THEN** the system emits a violation naming `worklane_core::spi::Conn`
+
+#### Scenario: A bare local child-module path in a signature is not a false positive
+
+- **WHEN** the governed module exposes `pub fn make() -> child::Local` where `child` is a local child module (not a declared dependency), under `must_not_expose("worklane_core::spi")`
+- **THEN** the system does not resolve `child::Local` as an extern type (head is not in the set) and emits no violation — its existing non-resolving behavior is preserved
+
+#### Scenario: A child module shadowing a dependency name is not a false positive
+
+- **WHEN** the governed module declares its own `mod worklane_core { … }` AND the crate depends on `worklane_core`, and exposes `pub fn make() -> worklane_core::Foo` (the local child module), under `must_not_expose("worklane_core")`
+- **THEN** the system does not react — the per-module shadow excludes the governed module's own `worklane_core` child from the type-position set, so the local type is not misread as the dependency (no false positive), even though a *re-export* of the dependency in the same module would still react
+
+#### Scenario: An inline sysroot-crate type in a signature reacts
+
+- **WHEN** the governed module exposes `pub fn lock() -> std::sync::Mutex<()>` under `must_not_expose("std::sync")`
+- **THEN** the system reacts, because `std` is in the external-crate set
+
+#### Scenario: An inline dependency-rooted path outside the forbidden set passes
+
+- **WHEN** the governed module exposes `pub fn make() -> worklane_core::api::Handle` under `must_not_expose("worklane_core::spi")`
+- **THEN** the system reports no violation (`worklane_core::api::Handle` is neither the forbidden path nor beneath `worklane_core::spi::`)
 

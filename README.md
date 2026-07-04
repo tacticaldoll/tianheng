@@ -102,6 +102,35 @@ at, in order,
 The law's per-boundary detail lives in the generated projection, requirement detail in the specs —
 so the entry docs stay short and the agent reads the law where it is densest and most imitable.
 
+**Gate the projection so it cannot drift.** A written-out projection is a *copy* of the law;
+if it is hand-maintained (or generated once and forgotten) it silently rots as the constitution
+changes — and a stale law in the agent's context pulls it the wrong way (潛移 in reverse). Close
+that with a `cargo test` that regenerates the projection and byte-compares it to the committed
+file, so CI fails the moment they diverge — the same staleness gate Tianheng runs on its own
+`AGENTS.self-law.md`:
+
+```rust
+#[test]
+fn agent_law_projection_is_fresh() {
+    let path = "AGENTS.my-project-law.md";
+    let fresh = tianheng::constitution_markdown(&constitution());
+    // `BLESS=1 cargo test` regenerates after a deliberate, reviewed change to the law.
+    if std::env::var("BLESS").is_ok() {
+        std::fs::write(path, &fresh).unwrap();
+        return;
+    }
+    let committed = std::fs::read_to_string(path).unwrap();
+    assert_eq!(committed, fresh, "stale — regenerate with `BLESS=1 cargo test`");
+}
+```
+
+This makes the projection a **byte-checked** artifact rather than prose you must remember to
+update: the reaction (a failed test) keeps the imitable surface honest, so an adopter's own
+agent-context enjoys the same non-bypassable freshness as its declared boundaries. (A full
+adopter-facing generator / a `list-self`-style CLI stays deferred — see `BACKLOG.md`, 潛移 —
+because the shipped primitive plus this gate already close the drift; the CLI form would only
+tangle the demo-vs-self-law story.)
+
 ## The instruments (三儀) — observation dimensions
 
 Tianheng is a **crate family**. You select governance by depending on the dimensions you
@@ -110,8 +139,8 @@ measuring instruments — each reads a different surface of the code.
 
 | 儀 Instrument | Crate | Observes | Observation source | Status |
 |---|---|---|---|---|
-| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.0** (static core, from modou); **v0.1.2** (declared dependency-source boundary) |
-| 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure | AST (`syn`) | **v0.1.0** (signature-coupling, trait-impl-locality, visibility, forbidden-marker); **v0.1.2** (dyn-trait & impl-trait shape-only + operand-scoped; async-exposure); **v0.1.3** (trait-impl exposure opt-in; re-export exposure default-on) |
+| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.0** (static core, from modou); **v0.1.2** (declared dependency-source boundary); **v0.1.4** (module scan source-root / `#[path]` & inline-module orphan-shadow hardening) |
+| 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure | AST (`syn`) | **v0.1.0** (signature-coupling, trait-impl-locality, visibility, forbidden-marker); **v0.1.2** (dyn-trait & impl-trait shape-only + operand-scoped; async-exposure); **v0.1.3** (trait-impl exposure opt-in; re-export exposure default-on); **v0.1.4** (external-crate exposure incl. source `extern crate` renames & `pub extern crate`; resolvable type-alias following; every semantic violation names its source file; `#[path]` module-resolution hardening) |
 | 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.0** (origin-assertion; CI probe-coverage face composed into `tianheng check`) |
 
 **漏刻's two faces, one declared source.** The runtime boundaries you declare in the
@@ -157,10 +186,11 @@ An empty operand set degenerates to shape-only (any `dyn`) — a loud over-react
 silent no-op — so a mis-declared narrowing can never become a false negative.
 
 Beneath the dimensions sits **`xuanji` (璇璣) — the 底**: the dimension-agnostic
-**reaction model** (`Severity`, `Violation`, `Report`, `Baseline`, `Outcome`) every
-dimension reacts in. It is `serde_json`-only, carries no observation engine, and depends
-on no workspace member — so a new dimension reuses the reaction vocabulary without dragging
-in another dimension's engine.
+**reaction model** (`Severity`, `BoundaryKind`, `Violation`, `Report`, `Baseline`, `Outcome`)
+every dimension reacts in. It is `serde_json`-only, renders **no verdict** — it holds the
+*measure* but never the react itself (comparing declared against observed lives in the
+dimensions and the shell) — and depends on no workspace member, so a new dimension reuses the
+reaction vocabulary without dragging in another dimension's engine.
 
 A dimension's crate is **born when it is built** — never pre-created empty. The heavy
 dependencies (AST, runtime) are quarantined to their own crates; the `guibiao` core's only

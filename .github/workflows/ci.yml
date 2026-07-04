@@ -74,6 +74,44 @@ jobs:
           done
           exit "$missing"
 
+  packaged-selftest:
+    name: Packaged crate self-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: every publishable crate's tests pass from its packaged tarball
+        run: |
+          # `cargo publish` ships only crate-local files, so a data file outside a crate's own
+          # directory — a test fixture, the workspace root — is NOT in the tarball, and the in-repo
+          # `cargo test` above never notices (those files exist in the checkout). That is a
+          # package-only bug (a fixture-driven test that fails only from the published crate). This
+          # gate packages each crate, extracts the tarball, and runs its tests FROM the tarball.
+          # TIANHENG_WORKSPACE_TESTS is deliberately UNSET: the packaged tree legitimately has no
+          # workspace root or fixtures, so the workspace-/fixture-dependent tests must SKIP (never
+          # fail) — this gate proves that skip is real, not a silent hole.
+          #
+          # The workspace siblings are not on crates.io at the in-development version, so both the
+          # packaging RESOLVE and the from-tarball test resolve them from local source via `--config
+          # patch` (NOT baked into the tarball — it stays the real publishable form; the patch only
+          # satisfies resolution). This is what lets the gate run at the exact pre-publish version
+          # it must guard, rather than only when the deps happen to already be published.
+          set -euo pipefail
+          ws="$PWD"
+          patch=()
+          for s in xuanji guibiao hunyi louke; do
+            patch+=(--config "patch.crates-io.$s.path=\"$ws/crates/$s\"")
+          done
+          for crate in xuanji guibiao hunyi louke tianheng; do
+            cargo package --no-verify -p "$crate" "${patch[@]}"
+            tarball="$(ls target/package/${crate}-*.crate | head -1)"
+            work="$(mktemp -d)"
+            tar xzf "$tarball" -C "$work"
+            dir="$(ls -d "$work"/${crate}-*/)"
+            echo "::group::packaged self-test: $crate"
+            ( cd "$dir" && cargo test --all-features "${patch[@]}" )
+            echo "::endgroup::"
+          done
+
   supply-chain:
     name: Supply chain (cargo-deny)
     runs-on: ubuntu-latest

@@ -22,9 +22,10 @@
 //!   silently skipped. Declarations come from the objects, never a source scan, so an
 //!   unconventionally spelled declaration cannot hide a seam.
 //!
-//! The hot path is std-only and lock-free (a write-once registry, a fold-hasher — never the
-//! default SipHash); `serde_json` (via 璇璣) is used only on the cold path (emitting an
-//! event). 漏刻 depends on 璇璣 (`xuanji`) alone.
+//! The hot path is std-only and lock-free (a write-once registry); the `TypeId`→origin lookup
+//! uses a fold-hasher rather than the default SipHash, while the tiny fixed seam-name map is an
+//! ordinary `std` map (its cost is negligible against the `TypeId` lookup). `serde_json` (via
+//! 璇璣) is used only on the cold path (emitting an event). 漏刻 depends on 璇璣 (`xuanji`) alone.
 //!
 //! Govern by reaction, not instruction.
 
@@ -328,12 +329,14 @@ where
 /// The pure reaction, testable without process-global state: resolve the seam (an undeclared
 /// seam is a constitution error), resolve the crossing type's origin (an unregistered type
 /// has none), and match the allowlist **fail-closed** — an origin not in the allowlist, or
-/// an unknown origin, reacts. Returns the `Violation` to react with, or `None` when clean.
+/// an unknown origin, reacts. Returns the `Violation` to react with **and the seam's posture**
+/// (already resolved here, so the caller need not look the seam up a second time), or `None` when
+/// clean.
 fn check_crossing(
     seam: &str,
     type_id: TypeId,
     registry: &Registry,
-) -> Result<Option<Violation>, String> {
+) -> Result<Option<(Violation, Posture)>, String> {
     let s = registry.seams.get(seam).ok_or_else(|| {
         // Reason-led, aligned with the CI-audit twin: name the intent (an undeclared seam is
         // never enforced) before the mechanics. Keeps the `undeclared runtime seam '{seam}'`
@@ -366,13 +369,16 @@ fn check_crossing(
         "{RUNTIME_SEAM_RULE} (only origins: {})",
         s.allowed.join(", ")
     );
-    Ok(Some(Violation::new(
-        BoundaryKind::Runtime,
-        seam.to_string(),
-        rule,
-        finding,
-        s.reason.clone(),
-        s.severity,
+    Ok(Some((
+        Violation::new(
+            BoundaryKind::Runtime,
+            seam.to_string(),
+            rule,
+            finding,
+            s.reason.clone(),
+            s.severity,
+        ),
+        s.posture,
     )))
 }
 
@@ -385,13 +391,8 @@ pub fn __react(seam: &'static str, type_id: TypeId) {
     });
     match check_crossing(seam, type_id, registry) {
         Ok(None) => {}
-        Ok(Some(violation)) => {
+        Ok(Some((violation, posture))) => {
             emit(&violation);
-            let posture = registry
-                .seams
-                .get(seam)
-                .map(|s| s.posture)
-                .unwrap_or(Posture::Event);
             // `warn` is always event-only; panic only on an opted-in enforce violation.
             if posture == Posture::Panic && violation.severity == Severity::Enforce {
                 panic!(
@@ -987,7 +988,7 @@ mod tests {
             &[("seam", &["app::domain"], Severity::Enforce)],
             &[(TypeId::of::<Infra>(), "app::infra", "Infra")],
         );
-        let v = check_crossing("seam", TypeId::of::<Infra>(), &reg)
+        let (v, _posture) = check_crossing("seam", TypeId::of::<Infra>(), &reg)
             .unwrap()
             .unwrap();
         assert_eq!(v.kind, BoundaryKind::Runtime);
@@ -1009,7 +1010,7 @@ mod tests {
     #[test]
     fn an_unknown_origin_reacts_fail_closed() {
         let reg = registry(&[("seam", &["app::domain"], Severity::Enforce)], &[]);
-        let v = check_crossing("seam", TypeId::of::<Infra>(), &reg)
+        let (v, _posture) = check_crossing("seam", TypeId::of::<Infra>(), &reg)
             .unwrap()
             .unwrap();
         assert!(v.finding.contains("<unregistered origin>"), "{}", v.finding);

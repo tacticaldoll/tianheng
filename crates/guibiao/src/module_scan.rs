@@ -95,7 +95,13 @@ fn macro_rules_body_end(bytes: &[u8], i: usize) -> Option<usize> {
         return None;
     }
     j = skip_ws(j + 1);
-    // The macro name (one or more identifier bytes).
+    // The macro name — identifier bytes, tolerating a raw-identifier prefix
+    // (`macro_rules! r#try`): `#` is not an identifier byte, so a plain ident scan would stop at
+    // `r`, `balanced_group_end` would then decline at `#`, and the definition body would be left
+    // unstripped — wrongly observing a `use`/`mod` inside a never-invoked macro definition.
+    if bytes[j..].starts_with(b"r#") {
+        j += 2;
+    }
     let name_start = j;
     while j < bytes.len() && is_ident_byte(bytes[j]) {
         j += 1;
@@ -144,9 +150,9 @@ fn balanced_group_end(bytes: &[u8], j: usize) -> Option<usize> {
     Some(bytes.len())
 }
 
-/// Remove comments and string literals — line (`//`), block (`/* */`), normal and
-/// byte strings (`"…"`, `b"…"`, honoring `\"`/`\\`), and raw strings (`r"…"`,
-/// `r#"…"#`, `br#"…"#`, any number of hashes) — so their contents can never be
+/// Remove comments and string literals — line (`//`), block (`/* */`), normal,
+/// byte, and C-strings (`"…"`, `b"…"`, `c"…"`, honoring `\"`/`\\`), and raw strings
+/// (`r"…"`, `r#"…"#`, `br#"…"#`, `cr#"…"#`, any number of hashes) — so their contents can never be
 /// mistaken for a `use` declaration: a `//` or a `use …;` written inside any of them
 /// is ignored. Char literals are recognized minimally so a quote-bearing one (`'"'`)
 /// does not open a spurious string; a lifetime (`'a`) is emitted as ordinary text.
@@ -232,15 +238,23 @@ fn strip_comments_and_strings(source: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// If a raw string literal begins at `i` — `r` or `br` at a token boundary, then any
+/// If a raw string literal begins at `i` — `r`, `br`, or `cr` at a token boundary, then any
 /// number of `#`, then `"` — return `(hash_count, index_of_opening_quote)`. A leading
-/// `r`/`b` that is the tail of an identifier is not a prefix.
+/// `r`/`b`/`c` that is the tail of an identifier is not a prefix. The `cr`/`cr#` form is the raw
+/// **C-string** literal (stable since Rust 1.79): without recognizing it, the `cr#"…"#` body is
+/// scanned as code plus plain strings, and an **odd** number of inner unescaped `"` (raw strings
+/// do not escape) leaves a final `"` that opens an unterminated plain string running to EOF,
+/// swallowing a following `use` — a false negative. A non-raw `c"…"` / `b"…"` needs no handling
+/// here — its `"` opens a plain string with ordinary escaping, which the plain-string branch
+/// already strips correctly (the `c`/`b` prefix byte is emitted as harmless code).
 fn raw_string_prefix(bytes: &[u8], i: usize) -> Option<(usize, usize)> {
     if i > 0 && is_ident_byte(bytes[i - 1]) {
         return None;
     }
     let mut j = i;
-    if bytes.get(j) == Some(&b'b') {
+    // An optional single byte-string (`b`) or C-string (`c`) prefix before the raw `r` — Rust has
+    // no `bc`/`cb` combination, so at most one applies.
+    if matches!(bytes.get(j), Some(&b'b') | Some(&b'c')) {
         j += 1;
     }
     if bytes.get(j) != Some(&b'r') {
@@ -584,23 +598,42 @@ pub(crate) fn governed_files(
     files: &[PathBuf],
     module: &str,
     reachable: &std::collections::BTreeSet<String>,
+    inline_only: &std::collections::BTreeSet<String>,
 ) -> Vec<(PathBuf, String)> {
-    let beneath = format!("{module}::");
     files
         .iter()
         .filter_map(|file| {
             let relative = file.strip_prefix(src_dir).ok()?;
             let module_path = file_module_path(relative);
+            // A conventional file whose path is claimed by an inline-only module is an orphan Rust
+            // never compiles as that module (the inline body is the module), so it is not a
+            // governed source file — the same "not compiled ⇒ not governed" rule as an undeclared
+            // orphan, keyed on the inline shadow rather than mere unreachability.
+            if inline_only.contains(&module_path) {
+                return None;
+            }
             if !reachable.contains(&module_path) {
                 return None;
             }
-            if module_path == module || module_path.starts_with(&beneath) {
+            if path_within(&module_path, module) {
                 Some((file.clone(), module_path))
             } else {
                 None
             }
         })
         .collect()
+}
+
+/// Sibling-safe `::`-delimited path containment: `path` is `prefix` itself or lies strictly
+/// beneath it (`crate::a` contains `crate::a::b`, never the prefix-colliding sibling
+/// `crate::ab`). The single home of the containment rule every module boundary's inbound /
+/// outbound predicate and the file selector share, so no copy can drift to a bare
+/// `starts_with` — which would admit a sibling (a false positive on the allowed side) or,
+/// inverted, miss a subtree (a false negative on the forbidden side). The 圭表 twin of 渾儀's
+/// `path_within`; the two dimensions cannot share code (三儀 ⊥ 三儀), so they agree by using the
+/// same rule, not the same function.
+pub(crate) fn path_within(path: &str, prefix: &str) -> bool {
+    path == prefix || path.starts_with(&format!("{prefix}::"))
 }
 
 /// The set of module paths reachable from the crate root via `mod` declarations — the
@@ -617,14 +650,28 @@ pub(crate) fn governed_files(
 /// tree, not just the crate root. A reachable file that cannot be read is a scan error
 /// ("cannot judge"), never a silent skip.
 ///
-/// File-backed children only: an inline `mod name { … }` adds `crate::…::name` (harmless —
-/// no file maps to it), but its own file-backed sub-`mod`s sit at brace depth > 0 and are
-/// not walked — a documented partial-coverage gap, the safe direction (a missed import,
-/// never a false one).
+/// File-backed children only: an inline `mod name { … }` adds `crate::…::name` to the reachable
+/// set, but its own file-backed sub-`mod`s sit at brace depth > 0 and are not walked — a
+/// documented partial-coverage gap, the safe direction (a missed import, never a false one).
+///
+/// Returns `(reachable, inline_only)`. `inline_only` names every path declared **inline-only** —
+/// declared with an inline body and NOT also declared file-form (`mod name;`) in its parent — so a
+/// same-named conventional file (`name.rs` / `name/mod.rs`) beside it is an orphan Rust never
+/// compiles as that module. The walk does not read such a file (nor mine it for phantom children),
+/// and [`governed_files`] excludes it, so an inline target remains the self-describing inline
+/// constitution error rather than silently governing the orphan. A path declared **both** ways —
+/// which in valid source arises only under mutually-exclusive `#[cfg]` — is not inline-only and
+/// keeps being observed through its conventional file (the existing cfg-blind lexical bound).
 pub(crate) fn reachable_modules(
     src_dir: &Path,
     files: &[PathBuf],
-) -> Result<std::collections::BTreeSet<String>, String> {
+) -> Result<
+    (
+        std::collections::BTreeSet<String>,
+        std::collections::BTreeSet<String>,
+    ),
+    String,
+> {
     // Index files by their path-derived module path so a module's file(s) are found fast.
     let mut by_module: std::collections::BTreeMap<String, Vec<&PathBuf>> = Default::default();
     for file in files {
@@ -637,34 +684,58 @@ pub(crate) fn reachable_modules(
     }
 
     let mut reachable = std::collections::BTreeSet::new();
+    let mut inline_only = std::collections::BTreeSet::new();
     reachable.insert("crate".to_string());
     let mut queue = vec!["crate".to_string()];
     while let Some(module) = queue.pop() {
+        // An inline-only module owns no source file of its own; its same-named conventional file
+        // (if any) is an orphan Rust does not compile, so do not read it — reading it would both
+        // scan the wrong body and mine phantom child modules from a file that is not the module.
+        if inline_only.contains(&module) {
+            continue;
+        }
         let Some(module_files) = by_module.get(&module) else {
             continue; // an inline module owns no file of its own; nothing to read
         };
+        // Classify each child across this module's file(s) before descending: a child seen with an
+        // inline body but never a file declaration is inline-only. (A path seen both ways arises
+        // only under mutually-exclusive `#[cfg]`; it is not inline-only — the cfg-blind bound.)
+        let mut child_kinds: std::collections::BTreeMap<String, (bool, bool)> = Default::default();
         for file in module_files {
             let text = std::fs::read_to_string(file)
                 .map_err(|err| format!("cannot read source file '{}': {err}", file.display()))?;
-            for child in declared_modules(&text) {
-                let child_path = format!("{module}::{child}");
-                if reachable.insert(child_path.clone()) {
-                    queue.push(child_path);
+            for (child, is_inline) in declared_modules_with_kind(&text) {
+                let seen = child_kinds.entry(child).or_default();
+                if is_inline {
+                    seen.0 = true;
+                } else {
+                    seen.1 = true;
                 }
             }
         }
+        for (child, (seen_inline, seen_file)) in child_kinds {
+            let child_path = format!("{module}::{child}");
+            if seen_inline && !seen_file {
+                inline_only.insert(child_path.clone());
+            }
+            if reachable.insert(child_path.clone()) {
+                queue.push(child_path);
+            }
+        }
     }
-    Ok(reachable)
+    Ok((reachable, inline_only))
 }
 
-/// Names of modules declared at the top level (brace depth 0) of `source` via
-/// `mod <ident>;` or `mod <ident> { … }`, at any visibility (`pub mod`, `pub(crate)
-/// mod`, …). Comments, string/char literals, and macro bodies are stripped first, so a
-/// commented-out, quoted, or macro-generated `mod` is not counted; a `mod` nested inside
-/// another item (depth > 0) declares a child module, not a crate-root one, and is
-/// skipped. Names are canonicalized (`r#name` -> `name`). Robust over malformed input:
-/// it never panics (the same tolerance as the `use` scanner).
-fn declared_modules(source: &str) -> Vec<String> {
+/// Names of modules declared at the top level (brace depth 0) of `source`, each paired with
+/// whether it is an **inline** declaration (`mod name { … }`, `true`) or a **file** declaration
+/// (`mod name;`, `false`) — the distinction [`reachable_modules`] needs to tell a real
+/// file-backed module from an inline body whose same-named conventional file is an orphan.
+/// Declared at any visibility (`pub mod`, `pub(crate) mod`, …). Comments, string/char literals,
+/// and macro bodies are stripped first, so a commented-out, quoted, or macro-generated `mod` is
+/// not counted; a `mod` nested inside another item (depth > 0) declares a child module, not a
+/// crate-root one, and is skipped. Names are canonicalized (`r#name` -> `name`). Robust over
+/// malformed input: it never panics (the same tolerance as the `use` scanner).
+fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
     // Strip macro bodies as well as comments/strings, the same hygiene the `use`
     // scanner applies: a `mod` written inside a macro body is macro-generated and out
     // of scope, so it must not be observed as a real declaration. (A `macro_rules!`
@@ -686,6 +757,10 @@ fn declared_modules(source: &str) -> Vec<String> {
                 i += 1;
             }
             b'm' if depth == 0 && is_mod_declaration_keyword(bytes, i) => {
+                if has_path_attr_before_item(bytes, i) {
+                    i += 3;
+                    continue;
+                }
                 // Read the identifier after `mod`, then confirm a `;` or `{` follows so
                 // only real declarations (not a stray `mod` token) are recorded.
                 let mut j = i + 3;
@@ -705,8 +780,14 @@ fn declared_modules(source: &str) -> Vec<String> {
                 while k < bytes.len() && bytes[k].is_ascii_whitespace() {
                     k += 1;
                 }
-                if !ident.is_empty() && matches!(bytes.get(k), Some(b';') | Some(b'{')) {
-                    names.push(canonical_segment(ident).to_string());
+                if !ident.is_empty() {
+                    // The delimiter after the identifier tells inline (`{`) from file (`;`);
+                    // anything else is a stray `mod` token, not a declaration.
+                    match bytes.get(k) {
+                        Some(b'{') => names.push((canonical_segment(ident).to_string(), true)),
+                        Some(b';') => names.push((canonical_segment(ident).to_string(), false)),
+                        _ => {}
+                    }
                 }
                 i += 3;
             }
@@ -714,6 +795,59 @@ fn declared_modules(source: &str) -> Vec<String> {
         }
     }
     names
+}
+
+/// The declared module names only, discarding the inline/file kind — a test-only convenience;
+/// the reachability walk uses [`declared_modules_with_kind`] directly.
+#[cfg(test)]
+fn declared_modules(source: &str) -> Vec<String> {
+    declared_modules_with_kind(source)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect()
+}
+
+/// Whether the top-level item prefix before a `mod` keyword contains a direct
+/// `#[path = "..."]` attribute. The static scanner intentionally does not read
+/// attributes in general, but this one is the stated coverage boundary: a path-remapped
+/// module is not conventionally file-backed, so treating the `mod` token as reachable
+/// would govern the wrong file if a same-named conventional file also exists.
+fn has_path_attr_before_item(bytes: &[u8], mod_index: usize) -> bool {
+    let mut start = 0;
+    for i in (0..mod_index).rev() {
+        if matches!(bytes[i], b';' | b'{' | b'}') {
+            start = i + 1;
+            break;
+        }
+    }
+    attr_prefix_has_path(&bytes[start..mod_index])
+}
+
+fn attr_prefix_has_path(bytes: &[u8]) -> bool {
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'#' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if bytes.get(i) != Some(&b'[') {
+            continue;
+        }
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if bytes[i..].starts_with(b"path")
+            && bytes.get(i + 4).is_none_or(|byte| !is_ident_byte(*byte))
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Whether a standalone `mod` keyword begins at `i` (bounded by non-identifier bytes) —
@@ -1000,6 +1134,51 @@ mod tests {
     }
 
     #[test]
+    fn scanner_ignores_raw_c_strings() {
+        // A `use …;` inside a raw C-string (`cr"…"` / `cr#"…"#`, stable Rust 1.79) is not observed.
+        for src in [
+            r##"let s = cr"use crate::ghost::Z;";"##,
+            r##"let s = cr#"use crate::ghost::Z;"#;"##,
+        ] {
+            assert!(
+                imported_module_paths(src, "crate::kernel", &[]).is_empty(),
+                "a use inside a raw C-string must not be observed: {src}"
+            );
+        }
+
+        // The desync guard: a raw C-string with an **odd** number of inner unescaped `"` (raw
+        // strings do not escape) must not swallow a following `use`. Before the `cr#` prefix was
+        // recognized, the leading `c` made `raw_string_prefix` decline (and the following `r` sat
+        // after an identifier byte, so it declined too), so `#"a"b"#` was scanned as code + plain
+        // strings: `"a"` closed as one plain string, then the `"` before `#` opened an unterminated
+        // one that ran to EOF, silently dropping the import (a false negative in FFI-flavoured
+        // code). An odd inner-quote count is required to leave that final `"` unpaired; an even
+        // count re-pairs into balanced plain strings and does not desync — so the test uses an odd
+        // count (one inner `"` here) to actually fail on unfixed code, not merely pass on it.
+        let tricky = r##"let s = cr#"a"b"#; use crate::real::C;"##;
+        let imports = imported_module_paths(tricky, "crate::kernel", &[]);
+        assert!(
+            imports.contains(&"crate::real::C".to_string()),
+            "a use after a raw C-string with an odd inner-quote count must be observed: {imports:?}"
+        );
+
+        // A non-raw `c"…"` C-string (ordinary escaping) also hides an inner use and does not
+        // desync — handled by the plain-string branch, the `c` prefix byte emitted as code.
+        let cstr = r#"let s = c"use crate::ghost::Z;"; use crate::real::E;"#;
+        assert_eq!(
+            imported_module_paths(cstr, "crate::kernel", &[]),
+            vec!["crate::real::E".to_string()]
+        );
+
+        // `c` as an ordinary identifier (not a C-string prefix) is unaffected.
+        let idents = "let c = 1; use crate::real::D;";
+        assert_eq!(
+            imported_module_paths(idents, "crate::kernel", &[]),
+            vec!["crate::real::D".to_string()]
+        );
+    }
+
+    #[test]
     fn scanner_does_not_panic_on_odd_input() {
         // Truncated / malformed inputs must never panic (robustness over precision).
         for src in [
@@ -1060,6 +1239,31 @@ mod tests {
         assert!(
             imported_module_paths(not_macros, "crate", &[]).contains(&"crate::real::B".to_string()),
             "`!=` / unary `!` must not be treated as a macro invocation"
+        );
+    }
+
+    #[test]
+    fn a_raw_identifier_macro_name_does_not_leak_its_body() {
+        // A `macro_rules!` with a raw-identifier name (`r#try`): `#` is not an identifier byte, so
+        // the name scan must tolerate the `r#` prefix — otherwise it stops at `r`, fails to locate
+        // the body, leaves it unstripped, and wrongly observes the `use`/`mod` inside the
+        // never-invoked definition (a false positive). Both scans share the macro-body stripping.
+        let with_use = r#"
+            macro_rules! r#try {
+                () => { use crate::ghost::Thing; };
+            }
+            use crate::real::A;
+        "#;
+        assert_eq!(
+            imported_module_paths(with_use, "crate", &[]),
+            vec!["crate::real::A".to_string()],
+            "a `use` inside a raw-identifier macro definition is not observed"
+        );
+        let with_mod = "macro_rules! r#try { () => { mod ghost; }; }\nmod real;";
+        assert_eq!(
+            declared_modules(with_mod),
+            vec!["real".to_string()],
+            "a `mod` inside a raw-identifier macro definition is not a declared module"
         );
     }
 
@@ -1128,7 +1332,7 @@ mod tests {
         .expect("write kernel/orphan.rs");
 
         let files = rust_files(&src).expect("list files");
-        let reachable = reachable_modules(&src, &files).expect("walk modules");
+        let (reachable, _inline_only) = reachable_modules(&src, &files).expect("walk modules");
         let _ = std::fs::remove_dir_all(&dir);
 
         assert!(reachable.contains("crate"), "{reachable:?}");
@@ -1143,6 +1347,50 @@ mod tests {
         assert!(
             !reachable.contains("crate::kernel::orphan"),
             "an undeclared subtree orphan is not reachable: {reachable:?}"
+        );
+    }
+
+    #[test]
+    fn path_remapped_modules_are_not_reachable() {
+        let dir = std::env::temp_dir().join(format!("guibiao-path-remap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("create temp src");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[path = \"weird.rs\"]\npub mod kernel;\npub mod normal;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(src.join("weird.rs"), "use crate::projection::Thing;\n")
+            .expect("write remapped file");
+        std::fs::write(
+            src.join("kernel.rs"),
+            "use crate::wrong_file_if_observed::Thing;\n",
+        )
+        .expect("write conventional orphan");
+        std::fs::write(src.join("normal.rs"), "// normal module\n").expect("write normal.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, _inline_only) = reachable_modules(&src, &files).expect("walk modules");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(reachable.contains("crate::normal"), "{reachable:?}");
+        assert!(
+            !reachable.contains("crate::kernel"),
+            "a #[path]-remapped module is out of scope and must not be mapped to a conventional file: {reachable:?}"
+        );
+    }
+
+    #[test]
+    fn path_attribute_detection_is_specific() {
+        assert_eq!(
+            declared_modules("#[pathology]\npub mod kernel;\n"),
+            vec!["kernel".to_string()],
+            "only the real `path` attribute is a remap marker"
+        );
+        assert!(
+            declared_modules("# [ path = \"weird.rs\" ]\npub mod kernel;\n").is_empty(),
+            "Rust permits whitespace in an outer attribute head; the remap still stays out of scope"
         );
     }
 

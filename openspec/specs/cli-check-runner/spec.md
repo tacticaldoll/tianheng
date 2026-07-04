@@ -84,7 +84,7 @@ The runner SHALL accept two mutually exclusive baseline flags: `--baseline <file
 
 The runner SHALL accept `--format json` (and `--format=json`) and emit the outcome as a JSON document on standard output; the default format SHALL remain human-readable text, so existing invocations are unchanged. The runner SHALL additionally accept `--format sarif` as a machine/CI-consumable projection of the same outcome (defined below). An unrecognized format value SHALL be a usage error that exits 2, never a silent fallback. The `markdown` format is a `list`-only projection of the declared law and is NOT a `check` format: `check --format markdown` SHALL be a usage error that exits 2, because `check`'s machine-readable output is the JSON report, not a law summary. The JSON SHALL faithfully project the outcome: an `outcome` discriminant (`clean`, `violations`, or `constitution_error`), the `exit_code` mirroring the process exit, a `violations` array, a `stale_baseline` array (empty outside gate mode), and an `error` message (null unless a constitution error). Each violation SHALL carry its `kind`, `target`, `rule`, `finding`, `reason`, `severity`, and `baselined` flag; the `reason` SHALL serve as the repair hint with no separate invented field.
 
-Each violation SHALL additionally carry a `file` field naming the offending source file, so an agent knows *where* to repair. The `file` SHALL be a string wherever the offending source file is a faithful byproduct of observation: a **module-import violation** names a source file where the forbidden import occurs (the static scan already reads that file to observe the import), and an **un-auditable-probe runtime violation** names the source file holding the non-literal `assert_boundary!` (the probe scan already captured that file). For every other violation kind the `file` SHALL be `null`, a faithful absence rather than an omitted-but-known location: a crate-dependency violation is an edge in the dependency graph with no single source file; a semantic violation does not currently observe a per-element source file (a stated bound — observing it would require new tracking, not yet built); and a seam-level runtime violation (a duplicate, undeclared, or unprobed seam) names a seam, not a source location, so no single file applies. The `file` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding`), so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported (it is metadata attached after identity de-duplication, never a de-duplication key).
+Each violation SHALL additionally carry a `file` field naming the offending source file, so an agent knows *where* to repair. The `file` SHALL be a string wherever the offending source file is a faithful byproduct of observation: a **module-import violation** names a source file where the forbidden import occurs (the static scan already reads that file to observe the import); a **single-module semantic violation** — one whose governed anchor resolves to a single module's items: signature-coupling exposure (including its re-export and trait-impl-exposure depths), dyn-trait and impl-trait (shape and operand), async-exposure, or visibility — names the source file of that **governed module** (the file the semantic scan already descends to in order to observe the module's items, and where the offending seam is written); and an **un-auditable-probe runtime violation** names the source file holding the non-literal `assert_boundary!` (the probe scan already captured that file). a **whole-crate-scan semantic violation** — **trait-impl-locality** and **forbidden-marker**, which observe a whole-crate/subtree scan and name sites scattered across the crate — likewise names a source file: the source file of the **module the offending element sits in** (the `impl` site's module for a trait-impl or a forbidden `impl`; the offending type's defining module for a forbidden `#[derive]`), resolved by the same mechanism as the single-module capabilities but per finding. For any semantic violation the `finding` still names the canonicalized forbidden type/shape or the offending element — which may be *defined* in another file — while the `file` names the module the offending element sits in, the actionable location; the two are distinct. For the remaining violation kinds the `file` SHALL be `null`, a faithful absence rather than an omitted-but-known location: a crate-dependency violation is an edge in the dependency graph with no single source file; and a seam-level runtime violation (a duplicate, undeclared, or unprobed seam) names a seam, not a source location, so no single file applies. The `file` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding`), so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported (it is metadata attached after identity de-duplication, never a de-duplication key).
 
 The `sarif` format is a **CI-consumable projection of the reaction** and, like the JSON document, is `check`-only: `list --format sarif` SHALL be a usage error that exits 2 (symmetric to `markdown` being `list`-only). It is an open, **vendor-neutral** standard (consumed by GitHub code-scanning and other tools); a vendor-specific format such as GitHub's `::error::` workflow command is deliberately NOT provided, as it would couple the tool to one CI vendor — emitting such annotations from the neutral output is a harness/CI-step convention, not a tool format. SARIF projects the **same** measure as the JSON — the same non-baselined violations, the same severities, the same exit code (it changes presentation, never the outcome or the process exit). A baselined violation SHALL NOT appear (it does not fail, consistent with the human report). `--format sarif` SHALL emit a SARIF 2.1.0 document whose `runs[].results[]` carries one result per non-baselined violation: `ruleId` the rule, `level` `error` for an enforced violation and `warning` for an advisory, and `message.text` carrying the reason and the finding (the rule is carried structurally in `ruleId`, not repeated in the message). Because a violation observes a `file` but **not a line**, a SARIF result's location SHALL carry only `physicalLocation.artifactLocation.uri` (the file) with **no `region`**; a violation with no `file` SHALL emit a SARIF result with no `locations` — never a fabricated location. A constitution error SHALL be surfaced as a SARIF tool-execution notification at `error` level under `runs[0].invocations[0]`, whose `executionSuccessful` SHALL be `false`, and SHALL exit 2, never a silent pass; a clean outcome SHALL emit a valid SARIF document with empty `results` and exit 0.
 
@@ -103,10 +103,20 @@ The `sarif` format is a **CI-consumable projection of the reaction** and, like t
 - **WHEN** the runner checks a workspace with a crate-dependency violation under `--format json`
 - **THEN** the offending violation's `file` is `null`, reflecting that a dependency edge has no single source file
 
-#### Scenario: A semantic violation reports a null file under the current bound
+#### Scenario: A single-module semantic violation carries its governed module's source file
 
-- **WHEN** the runner checks a workspace with a semantic violation under `--format json`
-- **THEN** the offending violation's `file` is `null`, the stated bound that a per-element source file is not yet observed for the semantic dimension
+- **WHEN** the runner checks a workspace with a single-module semantic violation (for example a signature-coupling exposure, or a dyn-trait, impl-trait, async-exposure, or visibility violation) under `--format json`
+- **THEN** the offending violation's `file` is a string naming the source file of the boundary's governed module — the file the semantic scan descends to observe that module's items, where the offending seam is written — even when the `finding` names a forbidden type defined in another file
+
+#### Scenario: A whole-crate-scan semantic violation carries the offending element's module file
+
+- **WHEN** the runner checks a workspace with a trait-impl-locality or forbidden-marker semantic violation under `--format json`
+- **THEN** the offending violation's `file` is a string naming the source file of the module the offending element sits in — the `impl` site's module for a trait-impl or a forbidden `impl`, or the offending type's defining module for a forbidden `#[derive]`
+
+#### Scenario: A forbidden-marker derive names its defining type's file, not an impl site
+
+- **WHEN** a forbidden `#[derive]` sits on a type defined in one module while unrelated impls of the marker live in other modules, under `--format json`
+- **THEN** the derive violation's `file` names the defining type's module source file (the derive's own location), independent of any impl site
 
 #### Scenario: An un-auditable-probe runtime violation carries a source file
 
@@ -127,6 +137,11 @@ The `sarif` format is a **CI-consumable projection of the reaction** and, like t
 
 - **WHEN** a workspace has a module violation already recorded in the active baseline, and the report now carries a `file` for it
 - **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding)` is unchanged) and does not fail the gate
+
+#### Scenario: Populating the semantic file does not re-baseline an accepted violation
+
+- **WHEN** a workspace has a single-module semantic violation already recorded in the active baseline (recorded while its `file` was `null`), and the report now carries a governed-module `file` for it
+- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding)` is unchanged, `file` not being part of it) and does not fail the gate
 
 #### Scenario: A clean workspace emits a clean JSON document
 
@@ -163,9 +178,14 @@ The `sarif` format is a **CI-consumable projection of the reaction** and, like t
 - **WHEN** a module-import violation (which carries a `file` but no line) is projected under `--format sarif`
 - **THEN** the SARIF result's location has `physicalLocation.artifactLocation.uri` equal to the file and **no `region`** — the unobserved line is omitted, never fabricated
 
+#### Scenario: A single-module semantic violation projects a file-level SARIF location
+
+- **WHEN** a single-module semantic violation (which now carries a governed-module `file` but no line) is projected under `--format sarif`
+- **THEN** the SARIF result's location has `physicalLocation.artifactLocation.uri` equal to the governed module's file and **no `region`**, exactly as a module-import violation does
+
 #### Scenario: A file-less violation projects no location
 
-- **WHEN** a violation with a `null` file (e.g. a crate-dependency violation) is projected under `--format sarif`
+- **WHEN** a violation with a `null` file (e.g. a crate-dependency or seam-level runtime violation) is projected under `--format sarif`
 - **THEN** the SARIF result carries no `locations` — a faithful absence
 
 #### Scenario: SARIF is check-only
@@ -342,29 +362,33 @@ runner arguments.
 
 ### Requirement: Check composes the runtime CI audit
 
-When the unified constitution carries one or more runtime boundaries, the `check` command SHALL
-compose the runtime dimension's CI audit (probe coverage of the declared seams) into the same
+The `check` command SHALL compose the runtime dimension's CI audit (probe coverage) into the same
 reaction as the static and semantic dimensions, contributing to the one process exit code under the
-existing 0/1/2 contract. The runner SHALL resolve the target workspace's member source directories
-from the same workspace it already reads, and SHALL evaluate probe coverage across that workspace as
-one corpus. A failure to resolve the workspace's sources SHALL be a constitution error (exit 2),
-never a silent pass. When the constitution carries no runtime boundaries, the runner SHALL behave
-exactly as before (no runtime audit performed).
+existing 0/1/2 contract, **whenever the constitution evaluates** (i.e. the run did not already
+produce a constitution error) — **not only when a runtime boundary is declared**. The runner SHALL
+resolve the target workspace's member source directories from the same workspace it already reads,
+and SHALL evaluate probe coverage across that workspace as one corpus. A failure to resolve the
+workspace's sources SHALL be a constitution error (exit 2), never a silent pass. Composing the audit
+against an **empty** declared-boundary set is deliberate: an `assert_boundary!` probe left in source
+after its `RuntimeBoundary` was deleted references an **undeclared** seam and SHALL react at CI
+(enforce), rather than passing green and panicking in production at the first crossing. A workspace
+that declares no runtime boundaries and contains no probes SHALL scan clean (the audit is a no-op on
+it, exit unchanged).
 
 #### Scenario: A declared runtime seam without a probe fails the check
 
 - **WHEN** the constitution declares a runtime boundary whose seam has no `assert_boundary!` probe anywhere in the workspace, and the boundary's severity is enforce
 - **THEN** `check` reports the unprobed seam and contributes a non-zero exit, composed with any static and semantic outcome
 
-#### Scenario: No runtime boundaries means no runtime audit
+#### Scenario: An orphan probe with no declared boundary is caught at CI
 
-- **WHEN** the constitution declares no runtime boundaries
-- **THEN** `check` performs no runtime audit and its exit code and report are identical to a run before the runtime CI face was composed in
+- **WHEN** the constitution declares **no** runtime boundaries, but a member's source still contains an `assert_boundary!("ghost", …)` probe (a boundary that was deleted, leaving the probe behind)
+- **THEN** `check` composes the audit against the empty boundary set, reports `ghost` as an undeclared seam, and contributes a non-zero exit — catching at CI the typo/orphan that would otherwise panic in production, rather than the pre-change behavior of skipping the audit entirely
 
-#### Scenario: Unresolvable workspace sources are a constitution error
+#### Scenario: No boundaries and no probes scans clean
 
-- **WHEN** runtime boundaries are declared but the workspace's member source directories cannot be resolved
-- **THEN** `check` exits `2` with a constitution error, never `0`
+- **WHEN** the constitution declares no runtime boundaries and the workspace contains no `assert_boundary!` probes
+- **THEN** `check` performs the audit as a no-op (no probes, no declared seams) and its exit code is unaffected — a pure static/semantic run is not disturbed
 
 ### Requirement: Human violation report foregrounds the reason
 

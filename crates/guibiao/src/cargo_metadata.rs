@@ -62,7 +62,7 @@ pub(crate) fn workspace_member_names(metadata: &Value) -> Vec<String> {
 /// `bench` target — no `lib`/`bin` — resolves to `None` and is skipped. Such a member's source
 /// is out of the runtime-audit corpus, the same lib/bin-subtree bound the semantic dimension
 /// has; declaring a runtime seam probed only from there is unsupported by design.
-fn crate_root_file(package: &Value) -> Option<PathBuf> {
+pub(crate) fn crate_root_file(package: &Value) -> Option<PathBuf> {
     let targets = package["targets"].as_array()?;
     let has_kind = |target: &Value, wanted: &str| {
         target["kind"]

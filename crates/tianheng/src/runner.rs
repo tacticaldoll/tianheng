@@ -27,18 +27,15 @@ use std::process::ExitCode;
 
 use guibiao::{
     Baseline, Coverage, Outcome, Report, Severity, ViolationId, apply_baseline, check_and_cover,
-    constitution_json, constitution_text, report_json, workspace_member_src_dirs,
+    constitution_text, report_json, workspace_member_src_dirs,
 };
-use hunyi::{
-    ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
-    FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, VISIBILITY_RULE,
-    VisibilityBoundary,
-};
-use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary, audit_probe_coverage};
-use serde_json::Value;
+use louke::audit_probe_coverage;
 
 use crate::Constitution;
+
+mod projection;
+pub use projection::constitution_markdown;
+use projection::*;
 
 /// Which runner command was requested. `check` reacts against a workspace; `list`
 /// projects the declared constitution and never reacts.
@@ -281,9 +278,14 @@ where
     // semantic block — once a dimension errors, the verdict is untrustworthy, so we stop. The
     // src-dir resolution can itself fail (an unreadable workspace) → fold it as a constitution
     // error (`dispatch` returns `u8`, so we cannot use `?`).
-    if !matches!(outcome, Outcome::ConstitutionError(_))
-        && !constitution.runtime_boundaries().is_empty()
-    {
+    //
+    // Run whenever the constitution evaluated — even with an **empty** declared-boundary set:
+    // `audit_probe_coverage(&[], …)` reacts to an `assert_boundary!` probe left in source after its
+    // `RuntimeBoundary` was deleted (an undeclared seam), catching at CI the orphan that would
+    // otherwise panic in production. On a workspace with no probes it is a no-op, so a pure
+    // static/semantic run is undisturbed. (Previously guarded by `!runtime_boundaries().is_empty()`,
+    // which skipped the audit — and the orphan-probe check with it — whenever no boundary was declared.)
+    if !matches!(outcome, Outcome::ConstitutionError(_)) {
         match workspace_member_src_dirs(&manifest_path) {
             Ok(src_dirs) => {
                 outcome = merge_outcomes(
@@ -348,8 +350,16 @@ fn usage(message: &str) -> u8 {
 
 /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so
 /// `check` can default its target like `cargo` does when `--manifest-path` is omitted.
+/// The shell reads the cwd; the walk itself is the pure [`nearest_manifest_from`].
 fn nearest_manifest() -> Option<PathBuf> {
-    let mut dir = std::env::current_dir().ok()?;
+    nearest_manifest_from(std::env::current_dir().ok()?)
+}
+
+/// The pure ascent: from `start`, return the first ancestor (including `start`) that holds a
+/// `Cargo.toml`, or `None` once the root is passed. Split out from [`nearest_manifest`] so the
+/// walk is testable without touching the process-global cwd.
+fn nearest_manifest_from(start: PathBuf) -> Option<PathBuf> {
+    let mut dir = start;
     loop {
         let candidate = dir.join("Cargo.toml");
         if candidate.is_file() {
@@ -533,28 +543,34 @@ fn violations_text(report: &Report) -> String {
 /// uncovered crate as a warn-severity advisory. Coverage is an observation: it is
 /// reported but never changes the exit code.
 fn report_coverage(coverage: &Coverage, warn_uncovered: bool) {
+    eprint!("{}", coverage_report(coverage, warn_uncovered));
+}
+
+/// The pure text of the coverage summary — and, under `--warn-uncovered`, a per-crate advisory
+/// block. Split off [`report_coverage`] (which only prints it to stderr) so the message is
+/// assertable without capturing a subprocess. Every advisory block states its reaction is a
+/// warning that never fails CI: coverage is an observation, not a reaction.
+fn coverage_report(coverage: &Coverage, warn_uncovered: bool) -> String {
     let uncovered = coverage.uncovered.len();
     if uncovered == 0 {
-        eprintln!(
-            "Tianheng: coverage — all {} workspace crate(s) have a boundary",
+        return format!(
+            "Tianheng: coverage — all {} workspace crate(s) have a boundary\n",
             coverage.total
         );
-        return;
     }
-    eprintln!(
-        "Tianheng: coverage — {uncovered} of {} workspace crate(s) have no boundary",
+    let mut out = format!(
+        "Tianheng: coverage — {uncovered} of {} workspace crate(s) have no boundary\n",
         coverage.total
     );
     if warn_uncovered {
         for crate_name in &coverage.uncovered {
-            eprintln!();
-            eprintln!("Tianheng advisory");
-            eprintln!();
-            eprintln!("Uncovered crate:\n  {crate_name}");
-            eprintln!("Reason:\n  no boundary governs this workspace crate");
-            eprintln!("Reaction:\n  warning only — CI not failed.");
+            out.push_str("\nTianheng advisory\n\n");
+            out.push_str(&format!("Uncovered crate:\n  {crate_name}\n"));
+            out.push_str("Reason:\n  no boundary governs this workspace crate\n");
+            out.push_str("Reaction:\n  warning only — CI not failed.\n");
         }
     }
+    out
 }
 
 /// Project the reaction as a **SARIF 2.1.0** document (`--format sarif`) — the CI-consumable
@@ -649,600 +665,13 @@ fn merge_outcomes(static_outcome: Outcome, semantic_outcome: Outcome) -> Outcome
     }
 }
 
-/// The text projection of the semantic boundaries, appended to the `list` output. Empty when
-/// there are none, so a static-only project's `list` output is unchanged.
-fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Semantic {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        // The opt-in deepening changes the reaction, so the projected law must show it.
-        let opt_in = if boundary.including_trait_impls() {
-            " (including trait impls)"
-        } else {
-            ""
-        };
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}: {}{}\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            SIGNATURE_RULE,
-            boundary.forbidden().join(", "),
-            opt_in,
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-/// The JSON projection of one semantic boundary, mirroring a static boundary's shape (`kind`,
-/// `target`, `crate`, `rule`, `severity`, `reason`) plus the `forbidden` set.
-fn semantic_boundary_json(boundary: &SemanticBoundary) -> Value {
-    let mut object = serde_json::json!({
-        "kind": "semantic",
-        "target": boundary.module(),
-        "crate": boundary.crate_package(),
-        "rule": SIGNATURE_RULE,
-        "severity": boundary.severity().as_str(),
-        "forbidden": boundary.forbidden(),
-        "reason": boundary.reason(),
-    });
-    // Emit the opt-in only when set, so a bare boundary's JSON (and the Markdown derived from it via
-    // `boundary_params`) stays byte-unchanged; when set, Markdown surfaces it generically.
-    if boundary.including_trait_impls() {
-        object["including_trait_impls"] = serde_json::json!(true);
-    }
-    object
-}
-
-/// The text projection of the trait-impl-locality boundaries, appended to `list`. Empty when
-/// there are none, so a project not using the dimension sees unchanged output.
-fn trait_impl_text(boundaries: &[TraitImplBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Trait-impl-locality {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] trait {} in {}\n  rule:   {} (declared: {})\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.trait_(),
-            boundary.crate_package(),
-            TRAIT_IMPL_RULE,
-            boundary.allowed_locations().join(", "),
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-/// The JSON projection of one trait-impl-locality boundary, mirroring the others' shape
-/// (`kind`, `target` = the trait, `crate`, `rule`, `severity`, `reason`) plus the
-/// `allowed_locations` set.
-fn trait_impl_boundary_json(boundary: &TraitImplBoundary) -> Value {
-    serde_json::json!({
-        "kind": "semantic",
-        "target": boundary.trait_(),
-        "crate": boundary.crate_package(),
-        "rule": TRAIT_IMPL_RULE,
-        "severity": boundary.severity().as_str(),
-        "allowed_locations": boundary.allowed_locations(),
-        "reason": boundary.reason(),
-    })
-}
-
-/// The text projection of the visibility boundaries, appended to `list`. Empty when there
-/// are none, so a project not using the dimension sees unchanged output.
-fn visibility_text(boundaries: &[VisibilityBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Visibility {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            VISIBILITY_RULE,
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-/// The JSON projection of one visibility boundary, mirroring the others' shape (`kind`,
-/// `target` = the module, `crate`, `rule`, `severity`, `reason`).
-fn visibility_boundary_json(boundary: &VisibilityBoundary) -> Value {
-    serde_json::json!({
-        "kind": "semantic",
-        "target": boundary.module(),
-        "crate": boundary.crate_package(),
-        "rule": VISIBILITY_RULE,
-        "severity": boundary.severity().as_str(),
-        "reason": boundary.reason(),
-    })
-}
-
-/// The text projection of the forbidden-marker boundaries, appended to `list`. Empty when
-/// there are none, so a project not using the dimension sees unchanged output.
-fn forbidden_marker_text(boundaries: &[ForbiddenMarkerBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Forbidden-marker {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] subtree {} in {}\n  rule:   {}: {}\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            FORBIDDEN_MARKER_RULE,
-            boundary.forbidden().join(", "),
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-/// The JSON projection of one forbidden-marker boundary (`kind`, `target` = the subtree,
-/// `crate`, `rule`, `severity`, `reason`) plus the `forbidden` trait set.
-fn forbidden_marker_boundary_json(boundary: &ForbiddenMarkerBoundary) -> Value {
-    serde_json::json!({
-        "kind": "semantic",
-        "target": boundary.module(),
-        "crate": boundary.crate_package(),
-        "rule": FORBIDDEN_MARKER_RULE,
-        "severity": boundary.severity().as_str(),
-        "forbidden": boundary.forbidden(),
-        "reason": boundary.reason(),
-    })
-}
-
-/// The text projection of the dyn-trait boundaries, appended to `list`. Empty when there are
-/// none, so a project not using the dimension sees unchanged output.
-fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Dyn-trait {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            shape_rule_text(DYN_TRAIT_RULE, boundary.forbidden_operands()),
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-/// The text rule line for a shape/existential boundary: the bare shape rule when shape-only, or
-/// `… of: A, B` when operand-scoped — so `list --format text` surfaces the operand set the JSON
-/// and markdown projections already carry (parity across the three `list` formats).
-fn shape_rule_text(rule: &str, operands: &[String]) -> String {
-    if operands.is_empty() {
-        rule.to_string()
-    } else {
-        format!("{rule} of: {}", operands.join(", "))
-    }
-}
-
-fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Impl-trait {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            shape_rule_text(IMPL_TRAIT_RULE, boundary.forbidden_operands()),
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-/// The JSON projection of one dyn-trait boundary, mirroring a semantic boundary's shape (`kind`,
-/// `target`, `crate`, `rule`, `severity`, `reason`). An operand-scoped boundary additionally
-/// carries the `forbidden` operand set; a shape-only boundary (empty set) emits no such field.
-fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
-    let mut object = serde_json::json!({
-        "kind": "semantic",
-        "target": boundary.module(),
-        "crate": boundary.crate_package(),
-        "rule": DYN_TRAIT_RULE,
-        "severity": boundary.severity().as_str(),
-        "reason": boundary.reason(),
-    });
-    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
-    // (empty set) projects unchanged, with no `forbidden` param.
-    let operands = boundary.forbidden_operands();
-    if !operands.is_empty() {
-        object["forbidden"] = serde_json::json!(operands);
-    }
-    object
-}
-
-fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    let mut object = serde_json::json!({
-        "kind": "semantic",
-        "target": boundary.module(),
-        "crate": boundary.crate_package(),
-        "rule": IMPL_TRAIT_RULE,
-        "severity": boundary.severity().as_str(),
-        "reason": boundary.reason(),
-    });
-    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
-    // (empty set) projects unchanged, with no `forbidden` param.
-    let operands = boundary.forbidden_operands();
-    if !operands.is_empty() {
-        object["forbidden"] = serde_json::json!(operands);
-    }
-    object
-}
-
-fn async_exposure_text(boundaries: &[AsyncExposureBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Async-exposure {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            ASYNC_EXPOSURE_RULE,
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
-    serde_json::json!({
-        "kind": "semantic",
-        "target": boundary.module(),
-        "crate": boundary.crate_package(),
-        "rule": ASYNC_EXPOSURE_RULE,
-        "severity": boundary.severity().as_str(),
-        "reason": boundary.reason(),
-    })
-}
-
-/// The `list --format json` document: the static constitution's projection augmented with one
-/// array per non-empty dimension, so the document covers every declared law and never silently
-/// omits one. A dimension with no boundaries adds no key (a static-only project's document is
-/// byte-identical to before the other dimensions existed).
-fn list_document(constitution: &Constitution) -> Value {
-    let semantic = constitution.semantic_boundaries();
-    let runtime = constitution.runtime_boundaries();
-    let mut document: Value =
-        serde_json::from_str(&constitution_json(constitution.static_boundaries()))
-            .expect("constitution_json emits a valid document");
-    if !semantic.signature.is_empty() {
-        document["semantic_boundaries"] = Value::Array(
-            semantic
-                .signature
-                .iter()
-                .map(semantic_boundary_json)
-                .collect(),
-        );
-    }
-    if !semantic.trait_impl.is_empty() {
-        document["trait_impl_boundaries"] = Value::Array(
-            semantic
-                .trait_impl
-                .iter()
-                .map(trait_impl_boundary_json)
-                .collect(),
-        );
-    }
-    if !semantic.visibility.is_empty() {
-        document["visibility_boundaries"] = Value::Array(
-            semantic
-                .visibility
-                .iter()
-                .map(visibility_boundary_json)
-                .collect(),
-        );
-    }
-    if !semantic.forbidden_marker.is_empty() {
-        document["forbidden_marker_boundaries"] = Value::Array(
-            semantic
-                .forbidden_marker
-                .iter()
-                .map(forbidden_marker_boundary_json)
-                .collect(),
-        );
-    }
-    if !semantic.dyn_trait.is_empty() {
-        document["dyn_trait_boundaries"] = Value::Array(
-            semantic
-                .dyn_trait
-                .iter()
-                .map(dyn_trait_boundary_json)
-                .collect(),
-        );
-    }
-    if !semantic.impl_trait.is_empty() {
-        document["impl_trait_boundaries"] = Value::Array(
-            semantic
-                .impl_trait
-                .iter()
-                .map(impl_trait_boundary_json)
-                .collect(),
-        );
-    }
-    if !semantic.async_exposure.is_empty() {
-        document["async_exposure_boundaries"] = Value::Array(
-            semantic
-                .async_exposure
-                .iter()
-                .map(async_exposure_boundary_json)
-                .collect(),
-        );
-    }
-    if !runtime.is_empty() {
-        document["runtime_boundaries"] =
-            Value::Array(runtime.iter().map(runtime_boundary_json).collect());
-    }
-    document
-}
-
-/// The text projection of the runtime (漏刻) boundaries, appended to `list`. Empty when there
-/// are none, so a project not using the dimension sees unchanged output.
-///
-/// #16 doc note: this seam-origin rule reacts at **runtime** (the prod `assert_boundary!` face),
-/// NOT at `check` time. `check`'s runtime face is only the probe-coverage audit (does every
-/// declared seam have a probe?) — it never observes a live crossing. So an agent reading this
-/// `list` entry must not expect `check` to react to an origin crossing the seam; the origin
-/// reaction happens in the running binary. The rule label is the canonical `RUNTIME_SEAM_RULE`
-/// (the same const `check_crossing` renders), with the allowed-origin set as a per-boundary detail.
-fn runtime_text(boundaries: &[RuntimeBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let noun = if boundaries.len() == 1 {
-        "boundary"
-    } else {
-        "boundaries"
-    };
-    let mut out = format!("Runtime {noun} ({}):\n", boundaries.len());
-    for boundary in boundaries {
-        // The rule label is driven from the canonical `RUNTIME_SEAM_RULE` const (shared with the
-        // JSON projection and the prod reaction), so the text and JSON no longer drift; the
-        // allowed-origin set is the per-boundary detail, like the dyn/impl operand set.
-        out.push_str(&format!(
-            "\n[{}] seam {} (reacts at runtime, not at check)\n  rule:    {} (only origins: {})\n  posture: {}\n  reason:  {}\n",
-            boundary.severity().as_str(),
-            boundary.seam(),
-            RUNTIME_SEAM_RULE,
-            boundary.allowed_origins().join(", "),
-            boundary.posture().as_str(),
-            boundary.reason(),
-        ));
-    }
-    out
-}
-
-/// The JSON projection of one runtime boundary (`kind` = runtime, `target` = the seam, `rule`,
-/// `severity`, `posture`, `reason`) plus the `allowed_origins` set. `posture` is projected so a
-/// `panic_on_violation` boundary does not project identically to a default event-only one.
-///
-/// #16 doc note: the projected `rule` reacts at **runtime** (the prod `assert_boundary!` face),
-/// not at `check` — `check`'s runtime face is only probe-coverage. The label is the canonical
-/// `RUNTIME_SEAM_RULE` const, shared with the text projection and the prod `check_crossing`.
-fn runtime_boundary_json(boundary: &RuntimeBoundary) -> Value {
-    serde_json::json!({
-        "kind": "runtime",
-        "target": boundary.seam(),
-        "rule": RUNTIME_SEAM_RULE,
-        "severity": boundary.severity().as_str(),
-        "posture": boundary.posture().as_str(),
-        "allowed_origins": boundary.allowed_origins(),
-        "reason": boundary.reason(),
-    })
-}
-
-/// Render a constitution as the human- and agent-readable Markdown summary of its declared law —
-/// the same projection `list --format markdown` prints, returned as a `String` for library
-/// callers (e.g. to generate an agent-context artifact). It composes the same internal projector,
-/// so it carries no less than the JSON and never reacts; it adds nothing of its own (no preamble,
-/// no trailing newline), so it equals the CLI output byte for byte.
-///
-/// **Format stability.** This Markdown layout is intended for display, review, and LLM context.
-/// It is **not** a machine-stable contract and **may evolve in any compatible release** to improve
-/// readability or imitability (e.g. foregrounding a boundary's `reason`). Consumers that need a
-/// stable, machine-parseable projection MUST use the JSON projection (`list --format json`)
-/// instead — depending on the exact Markdown shape is unsupported.
-///
-/// ```
-/// use tianheng::prelude::*;
-/// let c = Constitution::new("my-project").boundary(
-///     CrateBoundary::crate_("my-core")
-///         .deny_external_dependencies()
-///         .because("my-core stays dependency-light"),
-/// );
-/// let md = tianheng::constitution_markdown(&c);
-/// assert!(md.contains("# Constitution: my-project"));
-/// assert!(md.contains("my-core stays dependency-light"));
-/// // Write it where an agent will read it, e.g.:
-/// // std::fs::write("AGENTS.my-project-law.md", md)?;
-/// ```
-pub fn constitution_markdown(constitution: &Constitution) -> String {
-    list_markdown(&list_document(constitution))
-}
-
-/// The `list --format markdown` projection: an agent-readable summary of the *whole* declared
-/// law. It is rendered from the very [`Value`] [`list_document`] emits, so it provably carries
-/// no information absent from the JSON and covers exactly the same dimensions (the spec's
-/// "no less than the JSON" guarantee holds by construction, not by parallel maintenance). Like
-/// `list` as a whole it observes nothing and never reacts. A dimension with no declared
-/// boundaries contributes no section, mirroring the text and JSON projections.
-fn list_markdown(document: &Value) -> String {
-    let name = document
-        .get("constitution")
-        .and_then(Value::as_str)
-        .unwrap_or("(unnamed)");
-    let mut out = format!("# Constitution: {name}\n");
-    // The dimension sections in projection order; each key matches `list_document`'s, and a
-    // section absent or empty there is skipped here, so the two projections stay in lockstep.
-    for (key, heading) in [
-        ("boundaries", "Static boundaries"),
-        (
-            "semantic_boundaries",
-            "Semantic boundaries (signature-coupling)",
-        ),
-        ("trait_impl_boundaries", "Trait-impl-locality boundaries"),
-        ("visibility_boundaries", "Visibility boundaries"),
-        ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
-        ("dyn_trait_boundaries", "Dyn-trait boundaries"),
-        ("impl_trait_boundaries", "Impl-trait boundaries"),
-        ("async_exposure_boundaries", "Async-exposure boundaries"),
-        ("runtime_boundaries", "Runtime boundaries"),
-    ] {
-        let Some(Value::Array(items)) = document.get(key) else {
-            continue;
-        };
-        if items.is_empty() {
-            continue;
-        }
-        out.push_str(&format!("\n## {heading}\n"));
-        for item in items {
-            out.push_str(&boundary_markdown(item));
-        }
-    }
-    out
-}
-
-/// One boundary as a Markdown block, with the declared `reason` **foregrounded**: the `target`
-/// is the heading; then — when present — the `reason` as a leading blockquote (the block's
-/// principle, set apart from the mechanical metadata); then the `rule` with its parameters (the
-/// reaction's mechanical shape); then the kind/severity classification, and the owning crate for a
-/// module boundary. Every field is read from the JSON projection, so an agent reads the same law
-/// the JSON carries.
-///
-/// The reason leads deliberately (see PROJECT.md, 潛移): it is the gravity-bearing content a model
-/// imitates and the repair hint on a violation. The only layout property pinned is this ordering
-/// (reason → rule → classification); the exact rendering stays free to evolve under Contract B (see
-/// [`constitution_markdown`]). A boundary with no reason emits no blockquote and no orphan blank line.
-fn boundary_markdown(boundary: &Value) -> String {
-    let field = |key: &str| boundary.get(key).and_then(Value::as_str).unwrap_or("");
-    let mut out = format!("\n### `{}`\n", field("target"));
-
-    let reason = field("reason");
-    if !reason.is_empty() {
-        out.push_str(&format!("\n> {reason}\n\n"));
-    }
-
-    out.push_str(&format!("- **rule**: {}", field("rule")));
-    let params = boundary_params(boundary);
-    if !params.is_empty() {
-        out.push_str(&format!(" ({params})"));
-    }
-    out.push('\n');
-
-    let mut context = format!("- **kind**: {}", field("kind"));
-    let severity = field("severity");
-    if !severity.is_empty() {
-        context.push_str(&format!(" · **severity**: {severity}"));
-    }
-    if let Some(krate) = boundary.get("crate").and_then(Value::as_str) {
-        context.push_str(&format!(" · **crate**: {krate}"));
-    }
-    out.push_str(&context);
-    out.push('\n');
-    out
-}
-
-/// The rule parameters of a boundary — every JSON field that is not one of the structural keys
-/// (kind/target/crate/rule/severity/reason) — rendered inline. This generically surfaces each
-/// dimension's specifics (a forbidden set, allowed locations, allowed origins, a posture, a
-/// dependency kind) without hard-coding any dimension, so a new dimension's parameters appear
-/// in the Markdown the moment they appear in the JSON.
-fn boundary_params(boundary: &Value) -> String {
-    const STRUCTURAL: [&str; 6] = ["kind", "target", "crate", "rule", "severity", "reason"];
-    let Some(object) = boundary.as_object() else {
-        return String::new();
-    };
-    object
-        .iter()
-        .filter(|(key, _)| !STRUCTURAL.contains(&key.as_str()))
-        .map(|(key, value)| format!("{key}: {}", inline_value(value)))
-        .collect::<Vec<_>>()
-        .join("; ")
-}
-
-/// Render a JSON value compactly for a Markdown parameter: a string as itself, an array as a
-/// comma-joined list, a scalar via its display, an object via its JSON text. Each rendering is
-/// a pure function of the value, so the projection is stable and diffable; within a boundary,
-/// `boundary_params` walks the object in serde_json's default `Map` order — lexicographic by
-/// key (a `BTreeMap`), not declaration order — which is likewise deterministic.
-fn inline_value(value: &Value) -> String {
-    match value {
-        Value::String(text) => text.clone(),
-        Value::Array(items) => items
-            .iter()
-            .map(inline_value)
-            .collect::<Vec<_>>()
-            .join(", "),
-        Value::Bool(boolean) => boolean.to_string(),
-        Value::Number(number) => number.to_string(),
-        Value::Null => "null".to_string(),
-        Value::Object(_) => value.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        constitution_markdown, dispatch, dyn_trait_text, impl_trait_text, list_document,
-        list_markdown, merge_outcomes, report_json, report_sarif, runtime_text, semantic_text,
-        trait_impl_text, violations_text, visibility_text,
+        Coverage, constitution_markdown, coverage_report, dispatch, dyn_trait_text,
+        impl_trait_text, list_document, list_markdown, merge_outcomes, nearest_manifest_from,
+        report_json, report_sarif, runtime_text, semantic_text, trait_impl_text, violations_text,
+        visibility_text,
     };
     use crate::prelude::*;
     use serde_json::Value;
@@ -1702,12 +1131,55 @@ mod tests {
             code, 1,
             "a declared-but-unprobed runtime seam reaches exit 1 through dispatch"
         );
-        // Causation: with NO runtime boundary the audit is skipped, so the same workspace exits
-        // 0 — proving the exit-1 above is caused by the runtime dimension, not pre-existing drift.
+        // Causation: with NO runtime boundary the audit still runs (it is no longer guarded off an
+        // empty boundary set) but finds no probe in this workspace's in-scope source, so the same
+        // workspace exits 0 — proving the exit-1 above is caused by the declared-unprobed seam, not
+        // pre-existing drift. (The orphan-probe direction — a probe with no declared seam — is
+        // exercised by `an_orphan_probe_reacts_with_no_declared_boundary` below.)
         assert_eq!(
             dispatch(&Constitution::new("wiring"), args()),
             0,
-            "an empty constitution over the same workspace is clean (the audit is skipped)"
+            "an empty constitution over a probe-free workspace is clean (the audit runs, finds nothing)"
+        );
+    }
+
+    #[test]
+    fn an_orphan_probe_reacts_with_no_declared_boundary() {
+        // Fixture-driven: the `orphan_probe`/`clean`/`violating` fixtures are not shipped in the
+        // packaged `.crate`, so skip when absent — the same repo-vs-packaged sentinel the other
+        // dispatch tests use (`TIANHENG_WORKSPACE_TESTS` turns a missing repo layout into a loud
+        // failure, never a silent skip in CI).
+        if workspace_manifest().is_none() {
+            return;
+        }
+        // The change's purpose: a member's source carries an `assert_boundary!("ghost", …)` probe
+        // but the constitution declares NO runtime boundary (a boundary deleted, its probe left
+        // behind). The audit now runs even against an empty boundary set, so the orphan probe
+        // reacts as an undeclared seam (exit 1) — previously the audit was skipped and this passed
+        // green, then panicked in production. The `orphan_probe` fixture is its own workspace.
+        let args = [
+            "tianheng".to_string(),
+            "check".to_string(),
+            "--manifest-path".to_string(),
+            fixture("orphan_probe"),
+        ];
+        assert_eq!(
+            dispatch(&Constitution::new("empty"), args),
+            1,
+            "an orphan `assert_boundary!` probe with no declared boundary reacts at CI"
+        );
+        // Contrast: the `clean` fixture has no probe, so an empty constitution scans clean — the
+        // always-run audit does not disturb a probe-free workspace.
+        let clean_args = [
+            "tianheng".to_string(),
+            "check".to_string(),
+            "--manifest-path".to_string(),
+            fixture("clean"),
+        ];
+        assert_eq!(
+            dispatch(&Constitution::new("empty"), clean_args),
+            0,
+            "a probe-free workspace under an empty constitution stays clean"
         );
     }
 
@@ -1846,6 +1318,115 @@ mod tests {
         // And the text projection of the runtime section is non-empty and names the seam.
         let text = runtime_text(full.runtime_boundaries());
         assert!(text.contains("seam domain-entry"), "{text}");
+    }
+
+    /// The Markdown projection must carry a section for **every** dimension the JSON document emits
+    /// (`constitution-projection`'s "no less than the JSON" guarantee). This reaction replaces the
+    /// hand-maintained capability enumeration the spec once carried — which drifted (4 listed while
+    /// 7 shipped) — so a capability added to `list_document` without a `list_markdown` section fails
+    /// CI here rather than silently under-projecting. The dimension set is enumerated in the test (a
+    /// reaction), not in prose; the final parity count catches a *new* dimension nobody wired in.
+    #[test]
+    fn markdown_projection_covers_every_dimension_the_json_document_emits() {
+        let full = Constitution::new("app")
+            .boundary(
+                CrateBoundary::crate_("app")
+                    .deny_external_dependencies()
+                    .because("the core stays dependency-light"),
+            )
+            .signature_boundary(
+                SemanticBoundary::in_crate("app")
+                    .module("crate::domain")
+                    .must_not_expose("crate::infra")
+                    .because("the domain API must not leak infra"),
+            )
+            .trait_impl_boundary(
+                TraitImplBoundary::in_crate("app")
+                    .trait_("crate::command::Command")
+                    .only_implemented_in("crate::commands")
+                    .because("Command impls live with the registry"),
+            )
+            .visibility_boundary(
+                VisibilityBoundary::in_crate("app")
+                    .module("crate::internal")
+                    .must_not_declare_pub()
+                    .because("internal is private"),
+            )
+            .forbidden_marker_boundary(
+                ForbiddenMarkerBoundary::in_crate("app")
+                    .module("crate::domain")
+                    .must_not_acquire("serde::Serialize")
+                    .because("domain is not wire"),
+            )
+            .dyn_trait_boundary(
+                DynTraitBoundary::in_crate("app")
+                    .module("crate::core")
+                    .must_not_expose_dyn()
+                    .because("the core seam is statically dispatched"),
+            )
+            .impl_trait_boundary(
+                ImplTraitBoundary::in_crate("app")
+                    .module("crate::core")
+                    .must_not_expose_impl_trait()
+                    .because("the core seam returns named types"),
+            )
+            .async_exposure_boundary(
+                AsyncExposureBoundary::in_crate("app")
+                    .module("crate::core")
+                    .must_not_expose_async_fn()
+                    .because("the core seam is synchronous"),
+            )
+            .runtime(
+                RuntimeBoundary::at("domain-entry")
+                    .only_origins(["app::domain"])
+                    .because("only domain crosses"),
+            );
+
+        let doc = list_document(&full);
+        let md = list_markdown(&doc);
+
+        // Each known dimension: the fixture must populate it (a non-empty JSON array), and the
+        // Markdown must carry its section — so the Markdown never carries less than the JSON.
+        for (key, heading) in [
+            ("boundaries", "## Static boundaries"),
+            ("semantic_boundaries", "## Semantic boundaries"),
+            ("trait_impl_boundaries", "## Trait-impl-locality boundaries"),
+            ("visibility_boundaries", "## Visibility boundaries"),
+            (
+                "forbidden_marker_boundaries",
+                "## Forbidden-marker boundaries",
+            ),
+            ("dyn_trait_boundaries", "## Dyn-trait boundaries"),
+            ("impl_trait_boundaries", "## Impl-trait boundaries"),
+            ("async_exposure_boundaries", "## Async-exposure boundaries"),
+            ("runtime_boundaries", "## Runtime boundaries"),
+        ] {
+            assert!(
+                doc.get(key)
+                    .and_then(Value::as_array)
+                    .is_some_and(|a| !a.is_empty()),
+                "fixture must populate {key} so this guard is not vacuous: {doc}"
+            );
+            assert!(
+                md.contains(heading),
+                "Markdown must carry a `{heading}` section for `{key}` — it under-projects:\n{md}"
+            );
+        }
+
+        // Parity: no dimension the JSON emits is left unenumerated above. A NEW dimension added to
+        // `list_document` (and this fixture) that is not wired into `list_markdown` and listed here
+        // trips this count — the drift is CI-caught, never a silent under-projection.
+        let json_dimensions = doc
+            .as_object()
+            .expect("list_document is a JSON object")
+            .keys()
+            .filter(|key| key.ends_with("boundaries"))
+            .count();
+        assert_eq!(
+            json_dimensions, 9,
+            "list_document emits {json_dimensions} dimensions but this coverage guard enumerates 9; \
+             a new dimension must be wired into list_markdown's section table and added here"
+        );
     }
 
     /// A multi-dimension constitution to exercise the Markdown projection across every
@@ -2104,6 +1685,78 @@ mod tests {
     }
 
     #[test]
+    fn semantic_violation_projects_its_file_in_json_and_sarif() {
+        // Every semantic violation now carries a file — a single-module one by its governed
+        // module, a whole-crate-scan one (trait-impl-locality / forbidden-marker) by the
+        // offending element's module. A crate-dependency violation is the genuinely file-less
+        // case. All project faithfully.
+        let single_module = Violation::new(
+            BoundaryKind::Semantic,
+            "crate::domain".to_string(),
+            "must not expose".to_string(),
+            "crate::infra::Db exposed by fn crate::domain::leak".to_string(),
+            "domain must not expose infra".to_string(),
+            Severity::Enforce,
+        )
+        .with_file(Some("src/domain.rs".to_string()));
+        let whole_crate_scan = Violation::new(
+            BoundaryKind::Semantic,
+            "crate::Command".to_string(),
+            "must be implemented only in the allowed locations".to_string(),
+            "crate::plugins (impl for crate::plugins::P)".to_string(),
+            "Command impls live in crate::allowed".to_string(),
+            Severity::Enforce,
+        )
+        .with_file(Some("src/plugins.rs".to_string()));
+        let file_less = Violation::new(
+            BoundaryKind::Crate,
+            "dep-crate".to_string(),
+            "deny external".to_string(),
+            "serde".to_string(),
+            "core must stay dependency-light".to_string(),
+            Severity::Enforce,
+        );
+        let outcome = Outcome::Violations(Report::new(vec![
+            single_module,
+            whole_crate_scan,
+            file_less,
+        ]));
+
+        // JSON: both semantic violations name their file; the crate-dependency one is null.
+        let json: serde_json::Value =
+            serde_json::from_str(&report_json(&outcome, &[], None)).expect("valid JSON");
+        assert_eq!(json["violations"][0]["file"], "src/domain.rs");
+        assert_eq!(json["violations"][1]["file"], "src/plugins.rs");
+        assert!(
+            json["violations"][2]["file"].is_null(),
+            "a crate-dependency violation has no single source file"
+        );
+
+        // SARIF: the file-bearing ones get file-level locations (no region); the null one none.
+        let sarif: serde_json::Value =
+            serde_json::from_str(&report_sarif(&outcome)).expect("valid SARIF");
+        let results = sarif["runs"][0]["results"]
+            .as_array()
+            .expect("results array");
+        assert_eq!(
+            results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            "src/domain.rs"
+        );
+        assert_eq!(
+            results[1]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            "src/plugins.rs"
+        );
+        assert!(
+            results[0]["locations"][0]["physicalLocation"]["region"].is_null(),
+            "no region — the line is not observed for a semantic violation either"
+        );
+        assert!(
+            results[2]["locations"].is_null(),
+            "a file-less violation projects no SARIF location"
+        );
+    }
+
+    #[test]
     fn sarif_clean_is_empty_and_constitution_error_marks_execution_unsuccessful() {
         let clean: serde_json::Value =
             serde_json::from_str(&report_sarif(&Outcome::Clean)).unwrap();
@@ -2129,6 +1782,11 @@ mod tests {
 
     #[test]
     fn sarif_exits_like_json() {
+        // Fixture-driven — skip in a packaged `.crate` where fixtures are absent (see
+        // `an_orphan_probe_reacts_with_no_declared_boundary` / `workspace_manifest`).
+        if workspace_manifest().is_none() {
+            return;
+        }
         // Presentation only: the same outcome exits identically under each machine format.
         for format in ["json", "sarif"] {
             assert_eq!(
@@ -2364,5 +2022,119 @@ mod tests {
                 "a check-only flag supplied to list must exit 2: {args:?}",
             );
         }
+    }
+
+    #[test]
+    fn the_coverage_advisory_names_each_uncovered_crate_only_under_the_flag() {
+        // The advisory content itself (the other half of the flag's contract): without the flag
+        // only the one-line summary prints; with it, every uncovered crate is named and each
+        // block states the reaction is a warning that never fails CI. Asserting the text guards
+        // against the flag silently going inert — a green exit code alone would not catch that.
+        let coverage = Coverage {
+            total: 3,
+            uncovered: vec!["alpha".to_string(), "beta".to_string()],
+        };
+        let quiet = coverage_report(&coverage, false);
+        assert!(
+            quiet.contains("2 of 3 workspace crate(s) have no boundary"),
+            "the summary line always prints: {quiet}"
+        );
+        assert!(
+            !quiet.contains("Tianheng advisory"),
+            "no per-crate advisory without the flag: {quiet}"
+        );
+        let loud = coverage_report(&coverage, true);
+        assert!(loud.contains("Uncovered crate:\n  alpha"), "{loud}");
+        assert!(loud.contains("Uncovered crate:\n  beta"), "{loud}");
+        assert_eq!(
+            loud.matches("warning only — CI not failed.").count(),
+            2,
+            "one warning-only advisory per uncovered crate: {loud}"
+        );
+        // A fully-covered workspace reports the all-clear, never an advisory — regardless of flag.
+        let covered = Coverage {
+            total: 3,
+            uncovered: vec![],
+        };
+        let all_clear = coverage_report(&covered, true);
+        assert!(
+            all_clear.contains("all 3 workspace crate(s) have a boundary"),
+            "{all_clear}"
+        );
+        assert!(
+            !all_clear.contains("Tianheng advisory"),
+            "a covered workspace emits no advisory even under the flag: {all_clear}"
+        );
+    }
+
+    #[test]
+    fn warn_uncovered_never_changes_the_exit_code() {
+        // Fixture-driven — skip in a packaged `.crate` where fixtures are absent (see
+        // `an_orphan_probe_reacts_with_no_declared_boundary` / `workspace_manifest`).
+        if workspace_manifest().is_none() {
+            return;
+        }
+        // Coverage is an observation, not a reaction. An empty constitution leaves the `clean`
+        // fixture's one member (`example-core`) uncovered, yet the run is clean — so with OR
+        // without `--warn-uncovered` the exit stays 0. The flag prints a per-crate advisory to
+        // stderr; it never turns an uncovered crate into a CI failure (that would be a silent
+        // policy the DSL never declared). A non-zero here would mean coverage had leaked into
+        // the exit code.
+        let clean = fixture("clean");
+        let with = [
+            "tianheng",
+            "check",
+            "--manifest-path",
+            clean.as_str(),
+            "--warn-uncovered",
+        ];
+        let without = ["tianheng", "check", "--manifest-path", clean.as_str()];
+        assert_eq!(
+            dispatch(&Constitution::new("empty"), with),
+            0,
+            "an uncovered-but-clean workspace stays exit 0 under --warn-uncovered (advisory only)",
+        );
+        assert_eq!(
+            dispatch(&Constitution::new("empty"), without),
+            0,
+            "…and without the flag too: coverage never decides the exit code",
+        );
+    }
+
+    #[test]
+    fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
+        // `check` defaults its target to the nearest `Cargo.toml`, cargo-style. Drive the pure
+        // ascent over a real temp tree so the walk is proven without touching the process cwd.
+        let root = std::env::temp_dir().join(format!("tianheng-nearest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let outer = root.join("outer");
+        let inner = outer.join("inner");
+        let leaf = inner.join("a").join("b");
+        std::fs::create_dir_all(&leaf).expect("mkdir leaf");
+        std::fs::write(outer.join("Cargo.toml"), "[workspace]\n").expect("write outer manifest");
+
+        // From a deep leaf with a single manifest above it, the walk finds that manifest.
+        assert_eq!(
+            nearest_manifest_from(leaf.clone()),
+            Some(outer.join("Cargo.toml")),
+            "the ascent finds the one Cargo.toml above the leaf",
+        );
+
+        // With a second, nearer manifest, the walk stops at the *nearest* — it does not climb
+        // past the first hit to the outer one.
+        std::fs::write(inner.join("Cargo.toml"), "[workspace]\n").expect("write inner manifest");
+        assert_eq!(
+            nearest_manifest_from(leaf.clone()),
+            Some(inner.join("Cargo.toml")),
+            "the nearest manifest wins over a farther ancestor",
+        );
+
+        // A directory that already holds a Cargo.toml resolves to itself, not an ancestor.
+        assert_eq!(
+            nearest_manifest_from(inner.clone()),
+            Some(inner.join("Cargo.toml")),
+            "the start dir counts as its own nearest manifest",
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -23,7 +23,8 @@ use serde_json::Value;
 
 mod module_scan;
 use module_scan::{
-    canonical_module_path, governed_files, imported_module_paths, reachable_modules, rust_files,
+    canonical_module_path, governed_files, imported_module_paths, path_within, reachable_modules,
+    rust_files,
 };
 mod projection;
 pub use projection::{constitution_json, constitution_text, report_json};
@@ -74,6 +75,21 @@ fn missing_src_error(crate_package: &str) -> String {
         "a module/semantic boundary is observed from source, so with no src it could never react: \
          cannot locate the src for crate '{crate_package}'"
     )
+}
+
+/// The source-root directory for a package's lib/bin target. Prefer Cargo's observed
+/// `targets[].src_path` so custom `[lib] path = "lib.rs"` and bin-only crates are scanned
+/// at the real compiled root; fall back to `manifest_dir/src` only for synthetic unit-test
+/// metadata that omits targets.
+fn package_src_dir(package: &Value) -> Option<PathBuf> {
+    crate_root_file(package)
+        .and_then(|root| root.parent().map(Path::to_path_buf))
+        .or_else(|| {
+            package["manifest_path"]
+                .as_str()
+                .and_then(|manifest| Path::new(manifest).parent())
+                .map(|crate_dir| crate_dir.join("src"))
+        })
 }
 
 /// A module boundary targets an inline `mod name { … }`, which owns no source file
@@ -176,18 +192,25 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
     // Two identical crate boundaries (same target/rule/kind) declared on one constitution would
     // each flag the same dependency, emitting duplicate violations with equal identity. The
     // baseline already dedups by identity, so gating is unaffected, but the report and its count
-    // should not double-count a single architectural fact — dedup by `(target, rule, finding)`,
-    // keeping first occurrence (module rules already dedup per finding).
-    let mut seen = Vec::new();
-    violations.retain(|violation| {
-        let id = violation.id();
-        if seen.contains(&id) {
-            false
-        } else {
-            seen.push(id);
-            true
+    // should not double-count a single architectural fact — dedup by `(target, rule, finding)`.
+    // When duplicates differ in severity (the same rule declared once `warn` and once `enforce`
+    // on one crate — a plausible mid-promotion state), keep the **more severe** reaction: `id()`
+    // excludes severity, so the two collapse, and keeping first-seen would let a `warn` duplicate
+    // mask an `enforce` one — silently dropping an exit-1 to exit-0, the forbidden false negative.
+    // `Enforce` dominates `Warn`; `Severity` is `#[non_exhaustive]` with no `Ord`, so the
+    // domination is spelled out explicitly (module rules already dedup per finding upstream).
+    let mut deduped: Vec<Violation> = Vec::new();
+    for violation in std::mem::take(&mut violations) {
+        match deduped.iter_mut().find(|kept| kept.id() == violation.id()) {
+            Some(kept) => {
+                if kept.severity == Severity::Warn && violation.severity == Severity::Enforce {
+                    *kept = violation;
+                }
+            }
+            None => deduped.push(violation),
         }
-    });
+    }
+    violations = deduped;
 
     if violations.is_empty() {
         Outcome::Clean
@@ -265,14 +288,11 @@ fn check_module_boundary(
 ) -> Result<(), String> {
     let package = find_package(metadata, &boundary.crate_package)
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let src_dir = package["manifest_path"]
-        .as_str()
-        .and_then(|manifest| Path::new(manifest).parent())
-        .map(|crate_dir| crate_dir.join("src"))
-        .ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let src_dir =
+        package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
 
     let files = rust_files(&src_dir)?;
-    let reachable = reachable_modules(&src_dir, &files)?;
+    let (reachable, inline_only) = reachable_modules(&src_dir, &files)?;
     // The crate-root module names (direct children of `crate`) feed bare-`use` resolution
     // (a root-relative `use foo::…` is the local module only if `foo` is one of them).
     let root_modules: Vec<String> = reachable
@@ -289,7 +309,7 @@ fn check_module_boundary(
     // canonicalized at the file, `mod`, and `use` derivations. A boundary may be written
     // with either the raw or plain form and still match.
     let governed_module = canonical_module_path(&boundary.module);
-    let governed = governed_files(&src_dir, &files, &governed_module, &reachable);
+    let governed = governed_files(&src_dir, &files, &governed_module, &reachable, &inline_only);
     if governed.is_empty() {
         // Two distinct misconfigurations, kept apart so the error is self-describing
         // (PROJECT.md): an inline `mod name { … }` is reachable but owns no source file,
@@ -329,11 +349,9 @@ fn check_module_boundary(
             ));
         }
         let forbidden_importer = canonical_module_path(importer);
-        let importer_beneath = format!("{forbidden_importer}::");
-        let protected_beneath = format!("{governed_module}::");
         // `governed_files(.., "crate", ..)` yields every reachable (file, module) pair —
         // the crate-wide scan, reusing the existing selector with no new scanner.
-        let all_files = governed_files(&src_dir, &files, "crate", &reachable);
+        let all_files = governed_files(&src_dir, &files, "crate", &reachable, &inline_only);
         // Collect `(importer module, offending file)` pairs *before* de-duplication: the file
         // is in hand here (the scan reads it to observe the import) but is gone once the list
         // collapses to module identities. The violation count stays per-importer-module; the
@@ -343,20 +361,18 @@ fn check_module_boundary(
             // A file within the protected module's own subtree is never an inbound
             // importer — a module importing itself is not an inbound edge — so it is
             // skipped even when it sits beneath the forbidden importer.
-            if current_module == governed_module || current_module.starts_with(&protected_beneath) {
+            if path_within(&current_module, &governed_module) {
                 continue;
             }
             // Only the forbidden importer (or beneath, `::`-delimited) can violate.
-            if current_module != forbidden_importer
-                && !current_module.starts_with(&importer_beneath)
-            {
+            if !path_within(&current_module, &forbidden_importer) {
                 continue;
             }
             let text = std::fs::read_to_string(&file)
                 .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
             let imports_protected = imported_module_paths(&text, &current_module, &root_modules)
                 .iter()
-                .any(|import| import == &governed_module || import.starts_with(&protected_beneath));
+                .any(|import| path_within(import, &governed_module));
             if imports_protected {
                 // finding = the importing module path; file = where the forbidden import sits.
                 offenders.push((current_module, file.display().to_string()));
@@ -394,8 +410,7 @@ fn check_module_boundary(
     let is_violation: Box<dyn Fn(&str) -> bool> = match &boundary.rule {
         ModuleRule::MustNotImport { module } => {
             let forbidden = canonical_module_path(module);
-            let beneath = format!("{forbidden}::");
-            Box::new(move |import: &str| import == forbidden || import.starts_with(&beneath))
+            Box::new(move |import: &str| path_within(import, &forbidden))
         }
         ModuleRule::RestrictImportsTo { allowed } => {
             // The crate root has no outward internal edge — every import is within its
@@ -410,13 +425,10 @@ fn check_module_boundary(
                 .iter()
                 .map(|entry| canonical_module_path(entry))
                 .collect();
-            let own_beneath = format!("{governed_module}::");
             let governed_self = governed_module.clone();
             Box::new(move |import: &str| {
-                let within_own = import == governed_self || import.starts_with(&own_beneath);
-                let within_allowed = allowed
-                    .iter()
-                    .any(|entry| import == entry || import.starts_with(&format!("{entry}::")));
+                let within_own = path_within(import, &governed_self);
+                let within_allowed = allowed.iter().any(|entry| path_within(import, entry));
                 // A violation is any outward edge: neither within the module's own subtree
                 // nor within an allowlist entry.
                 !(within_own || within_allowed)
@@ -661,6 +673,97 @@ mod tests {
         assert_eq!(violations[0].finding, "crate::mod::Thing");
     }
 
+    #[test]
+    fn module_boundary_uses_the_package_target_src_path() {
+        let dir =
+            std::env::temp_dir().join(format!("guibiao-custom-lib-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create temp crate");
+        let root = dir.join("lib.rs");
+        std::fs::write(&root, "pub mod kernel;\n").expect("write custom lib root");
+        std::fs::write(dir.join("kernel.rs"), "use crate::io::Sink;\n")
+            .expect("write custom module");
+
+        let manifest = dir.join("Cargo.toml");
+        let metadata = serde_json::json!({
+            "packages": [{
+                "name": "x",
+                "manifest_path": manifest.to_string_lossy().into_owned(),
+                "dependencies": [],
+                "targets": [{
+                    "kind": ["lib"],
+                    "src_path": root.to_string_lossy().into_owned()
+                }]
+            }]
+        });
+        let boundary = ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::io")
+            .because("module boundaries must scan the compiled source root");
+
+        let mut violations = Vec::new();
+        let result = check_module_boundary(&metadata, &boundary, &mut violations);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            result.is_ok(),
+            "a custom [lib] path must not be misresolved to manifest_dir/src: {result:?}"
+        );
+        assert_eq!(
+            violations.len(),
+            1,
+            "the forbidden import under the custom source root must be observed"
+        );
+        assert_eq!(violations[0].finding, "crate::io::Sink");
+    }
+
+    #[test]
+    fn path_remapped_module_is_not_governed_via_a_conventional_orphan() {
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-path-remap-boundary-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("create temp src");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[path = \"weird.rs\"]\npub mod kernel;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(src.join("weird.rs"), "use crate::projection::Thing;\n")
+            .expect("write remapped module");
+        std::fs::write(src.join("kernel.rs"), "use crate::projection::Wrong;\n")
+            .expect("write conventional orphan");
+
+        let manifest = dir.join("Cargo.toml");
+        let metadata = serde_json::json!({
+            "packages": [{
+                "name": "x",
+                "manifest_path": manifest.to_string_lossy().into_owned(),
+                "dependencies": [],
+            }]
+        });
+        let boundary = ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::projection")
+            .because("path-remapped modules are outside the token scanner's coverage");
+
+        let mut violations = Vec::new();
+        let result = check_module_boundary(&metadata, &boundary, &mut violations);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(
+            result,
+            Err(unknown_module_error("crate::kernel", "x")),
+            "a #[path]-remapped module must not be governed through a same-named conventional orphan"
+        );
+        assert!(
+            violations.is_empty(),
+            "the conventional orphan is not compiled and must not produce a violation"
+        );
+    }
+
     /// An inline `mod kernel { … }` is reachable but owns no source file, so it cannot
     /// be a governed target (targets are file-based). The reaction must fail loud (exit 2)
     /// with a *self-describing* error that names the inline cause — not the misleading
@@ -711,6 +814,169 @@ mod tests {
             .expect_err("an unknown module is a constitution error");
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(typo_err, unknown_module_error("crate::ghost", "app"));
+    }
+
+    /// The inline-target constitution error must hold **even when a same-named conventional orphan
+    /// file** sits beside the inline body. Rust compiles the inline body and never the orphan, so
+    /// governing the orphan (and silently missing the inline body's imports) is a false negative —
+    /// the one forbidden bug, and the inline twin of the `#[path]` orphan-shadow hazard. The orphan
+    /// must not make the inline target look file-backed.
+    #[test]
+    fn an_inline_target_with_a_same_named_orphan_file_is_still_a_constitution_error() {
+        let (result, _) = run_module_check(
+            "inline-orphan",
+            &[
+                ("lib.rs", "pub mod kernel { use crate::secret::Thing; }\n"),
+                // Orphan: Rust never compiles this as `crate::kernel` (the inline body is it).
+                ("kernel.rs", "// clean — no forbidden import\n"),
+            ],
+            ModuleBoundary::in_crate("x")
+                .module("crate::kernel")
+                .must_not_import("crate::secret")
+                .because("the kernel must not import a secret"),
+        );
+        let err = result.expect_err(
+            "an inline target must stay the inline constitution error even with a same-named \
+             orphan file — governing the orphan and missing the inline body is the forbidden \
+             false negative, never a silent pass",
+        );
+        assert_eq!(
+            err,
+            inline_module_target_error("crate::kernel", "x", "kernel")
+        );
+    }
+
+    /// An orphan beside an inline module contributes **no phantom child module**: the orphan is
+    /// not compiled, so its own `mod` declarations name no reachable module. Governing such a
+    /// phantom child is a not-found constitution error, never a silent pass over the orphan's file.
+    #[test]
+    fn an_orphan_beside_an_inline_module_contributes_no_phantom_child() {
+        let (result, _) = run_module_check(
+            "inline-phantom",
+            &[
+                ("lib.rs", "pub mod kernel { }\n"),
+                ("kernel.rs", "pub mod deep;\n"), // orphan's declaration — phantom
+                ("kernel/deep.rs", "use crate::secret::Thing;\n"),
+            ],
+            ModuleBoundary::in_crate("x")
+                .module("crate::kernel::deep")
+                .must_not_import("crate::secret")
+                .because("deep must not import a secret"),
+        );
+        let err = result.expect_err("a phantom child of an orphan is not a reachable module");
+        assert_eq!(err, unknown_module_error("crate::kernel::deep", "x"));
+    }
+
+    /// Only inline-occupied files are excluded: a genuinely file-backed module (`mod real;` +
+    /// `real.rs`) is still governed, its imports observed — proving the exclusion is not
+    /// over-broad.
+    #[test]
+    fn a_file_backed_module_is_still_governed() {
+        let (result, violations) = run_module_check(
+            "file-backed",
+            &[
+                ("lib.rs", "pub mod real;\n"),
+                ("real.rs", "use crate::secret::Thing;\n"),
+            ],
+            ModuleBoundary::in_crate("x")
+                .module("crate::real")
+                .must_not_import("crate::secret")
+                .because("real must not import a secret"),
+        );
+        result.expect("a file-backed module is a valid, governable target");
+        assert!(
+            !violations.is_empty(),
+            "the file-backed module's forbidden import must still be observed"
+        );
+    }
+
+    /// A path declared **both** file-form (`mod kernel;`) and inline (`mod kernel { … }`) — which in
+    /// valid source arises only under mutually-exclusive `#[cfg]` — is NOT inline-only, so its
+    /// conventional file stays governed. This pins that the inline-only exclusion leaves the
+    /// existing cfg-blind lexical bound exactly as it was (never turning it into an inline error).
+    #[test]
+    fn a_cfg_dual_declared_module_keeps_governing_its_conventional_file() {
+        let (result, violations) = run_module_check(
+            "cfg-dual",
+            &[
+                (
+                    "lib.rs",
+                    "#[cfg(feature = \"k\")]\npub mod kernel;\n\
+                     #[cfg(not(feature = \"k\"))]\npub mod kernel { }\n",
+                ),
+                ("kernel.rs", "use crate::secret::Thing;\n"),
+            ],
+            ModuleBoundary::in_crate("x")
+                .module("crate::kernel")
+                .must_not_import("crate::secret")
+                .because("kernel must not import a secret"),
+        );
+        result.expect("a cfg-dual-declared module keeps its conventional file as a valid target");
+        assert!(
+            !violations.is_empty(),
+            "the conventional file must still be observed — the cfg-blind bound is unchanged"
+        );
+    }
+
+    /// Stated bound (not a fix): a package that builds a lib AND a bin observes its whole `src/`
+    /// under one conventional-path tree, so both roots resolve to `crate` and there are no
+    /// per-target module graphs. A submodule declared inline in one root and file-backed in the
+    /// other governs the file-backed one; the inline body's imports are NOT observed. Closing it
+    /// needs per-target graphs (distinguishing the lib crate's `crate::shared` from the bin's) —
+    /// beyond the conventional-path scanner. Recorded here and in `module-boundary`, never a silent
+    /// claim of cleanliness.
+    #[test]
+    fn a_cross_root_same_named_submodule_is_a_documented_bound() {
+        let (result, violations) = run_module_check(
+            "cross-root-submodule",
+            &[
+                ("lib.rs", "pub mod shared { use crate::forbidden::X; }\n"),
+                ("main.rs", "pub mod shared;\nfn main() {}\n"),
+                ("shared.rs", "// clean — the bin root's shared module\n"),
+            ],
+            ModuleBoundary::in_crate("x")
+                .module("crate::shared")
+                .must_not_import("crate::forbidden")
+                .because("shared must not import forbidden"),
+        );
+        result.expect("a file-backed shared (via the bin root) is a valid target");
+        assert!(
+            violations.is_empty(),
+            "documented lib+bin bound: the lib root's inline `mod shared` body is not observed \
+             (shared.rs is governed instead) — recorded, not silently claimed clean: {violations:?}"
+        );
+    }
+
+    /// Stated bound (not a fix): only a **direct** `#[path]` is recognized as a remap; a
+    /// `#[cfg_attr(cond, path = …)]` is not, so the conventionally-named file is governed as the
+    /// module and its imports are observed. Correct for the configuration in which the `cfg_attr`
+    /// path is inactive; otherwise the scanner's cfg-blindness. Contrast a direct `#[path]`, which
+    /// is out of scope (its conventional file is NOT governed).
+    #[test]
+    fn a_cfg_attr_wrapped_path_is_not_recognized_as_a_remap() {
+        let (result, violations) = run_module_check(
+            "cfg-attr-path",
+            &[
+                (
+                    "lib.rs",
+                    "#[cfg_attr(unix, path = \"weird.rs\")]\npub mod foo;\n",
+                ),
+                ("foo.rs", "use crate::forbidden::Y;\n"),
+                ("weird.rs", "// the cfg(unix) remap target, clean\n"),
+            ],
+            ModuleBoundary::in_crate("x")
+                .module("crate::foo")
+                .must_not_import("crate::forbidden")
+                .because("foo must not import forbidden"),
+        );
+        result.expect("the conventional foo.rs backs crate::foo (cfg_attr path not honored)");
+        assert!(
+            violations
+                .iter()
+                .any(|v| v.finding.contains("crate::forbidden::Y")),
+            "documented bound: a cfg_attr-wrapped #[path] is not recognized, so the conventional \
+             foo.rs is governed and its import observed: {violations:?}"
+        );
     }
 
     /// Run a module boundary against a synthetic one-package workspace whose `src`
@@ -1662,6 +1928,58 @@ mod tests {
             violations[0].file.is_none(),
             "a crate-dependency violation has no single source file"
         );
+    }
+
+    #[test]
+    fn dedup_keeps_the_more_severe_of_duplicate_violations() {
+        // The same crate rule declared once `warn` and once `enforce` on one crate — a plausible
+        // mid-promotion state — flags the same dependency twice with equal `(target, rule, finding)`
+        // identity but different severity. Deduping must keep the ENFORCE reaction: keeping the
+        // first-seen `warn` would collapse to an advisory and drop exit-1 to exit-0 (a false
+        // negative). Verified in both declaration orders (the fix is order-independent).
+        let metadata = serde_json::json!({
+            "packages": [{
+                "name": "core",
+                "dependencies": [
+                    { "name": "serde", "source": "registry+x", "kind": null }
+                ],
+            }]
+        });
+        let warn = || {
+            CrateBoundary::crate_("core")
+                .deny_external_dependencies()
+                .warn()
+                .because("observing before enforcing")
+        };
+        let enforce = || {
+            CrateBoundary::crate_("core")
+                .deny_external_dependencies()
+                .because("core stays dependency-light")
+        };
+        for (first, second) in [(warn(), enforce()), (enforce(), warn())] {
+            let constitution = Constitution::new("mid-promotion")
+                .boundary(first)
+                .boundary(second);
+            let outcome = evaluate(&constitution, &metadata);
+            let Outcome::Violations(report) = &outcome else {
+                panic!("expected violations, got {outcome:?}");
+            };
+            assert_eq!(
+                report.violations.len(),
+                1,
+                "duplicates collapse to one: {report:?}"
+            );
+            assert_eq!(
+                report.violations[0].severity,
+                Severity::Enforce,
+                "the more severe reaction is kept"
+            );
+            assert_eq!(
+                outcome.exit_code(),
+                1,
+                "an enforce violation fails the reaction"
+            );
+        }
     }
 
     #[test]

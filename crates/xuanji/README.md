@@ -5,9 +5,10 @@
 **The shared reaction model of [Tianheng](https://github.com/tacticaldoll/tianheng) — the 底 (bedrock).**
 
 璇璣 (the jade pivot of the armillary sphere) is the **dimension-agnostic measure** every
-Tianheng observation dimension reacts in. It carries no observation engine and depends on no
-other workspace member — every dimension sits *above* it, reusing the reaction vocabulary
-without dragging in another dimension's engine.
+Tianheng observation dimension reacts in. It renders **no verdict** — it holds the measure but
+never the react itself (comparing a declared boundary against observed reality lives in the
+dimensions and the shell) — and depends on no other workspace member; every dimension sits
+*above* it, reusing the reaction vocabulary without dragging in another dimension's engine.
 
 It defines:
 

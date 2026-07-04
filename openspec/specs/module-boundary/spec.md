@@ -259,10 +259,22 @@ The system SHALL NOT observe a `mod` declaration written inside a macro body —
 
 A module boundary's governed target SHALL be a file-based module — one backed by a source file reachable from the crate root via `mod` declarations. An inline module (declared with a body, `mod name { … }`, rather than its own file) is reachable for import attribution but owns no source file, and SHALL NOT be a governable target. When a boundary targets a module path that is reachable but file-less (inline), the system SHALL report a constitution error (exit 2) that is self-describing — naming the inline cause and the file-based-target rule — distinct from the unknown-module error used when the path is not reachable at all (e.g. a typo). Both are constitution errors and exit 2; neither is a silent pass.
 
+A same-named conventional source file (`name.rs` / `name/mod.rs`) that sits beside a module path declared **inline-only** — declared with an inline body `mod name { … }` and NOT also declared file-form (`mod name;`) in the same crate — is an orphan: Rust never compiles it as that module, because the inline body is the module. Such an orphan SHALL NOT make the inline target appear file-backed: the system SHALL treat the file as inline-occupied and SHALL NOT scan it in place of the inline body, nor mine it for child `mod` declarations. The inline target therefore remains the self-describing inline constitution error (exit 2), never a silent pass over the orphan and never governance of a file Rust does not compile. A path declared **both** inline and file-form — which in valid source arises only under mutually-exclusive `#[cfg]` (a same-scope dual declaration is a compile error) — stays within the existing cfg-blind lexical-scanner bound and is unchanged by this rule: it keeps being observed through its conventional file.
+
 #### Scenario: An inline module target is a self-describing constitution error
 
 - **WHEN** a crate-root file declares `mod kernel { use crate::projection::Thing; }` and a boundary governs `crate::kernel` forbidding `crate::projection`
 - **THEN** the system reports a constitution error (exit 2) explaining that `crate::kernel` is declared inline and owns no source file, so module boundaries — which govern file-based modules — cannot target it, rather than reporting it as an unknown module
+
+#### Scenario: An inline target with a same-named orphan file is still a constitution error
+
+- **WHEN** a crate-root file declares `mod kernel { use crate::secret::Thing; }`, an undeclared same-named file `src/kernel.rs` also exists (which Rust does not compile, the inline body being the module), and a boundary governs `crate::kernel` forbidding `crate::secret`
+- **THEN** the system reports the inline-module constitution error (exit 2), rather than treating `src/kernel.rs` as the module's backing file, scanning that orphan in place of the inline body, or silently passing — the orphan does not make the inline target file-backed
+
+#### Scenario: An orphan beside an inline module contributes no phantom child module
+
+- **WHEN** a crate-root file declares `mod kernel { … }` inline, an undeclared `src/kernel.rs` exists declaring `mod deep;`, and a boundary governs `crate::kernel::deep`
+- **THEN** the system reports the module as not found (exit 2), because the orphan `src/kernel.rs` is not compiled as `crate::kernel` and its `mod deep;` therefore declares no reachable module — never a silent pass over a phantom child
 
 #### Scenario: A genuinely unknown module is still reported as not found
 
@@ -271,7 +283,7 @@ A module boundary's governed target SHALL be a file-based module — one backed 
 
 ### Requirement: Path-remapped modules are out of scope
 
-The system SHALL treat a module declared with a `#[path = "…"]` attribute as out of scope: its imports SHALL NOT be observed, and it SHALL NOT be a governable target. Module identity is observed from the conventional file path (`lib.rs`/`main.rs` → `crate`, `kernel/foo.rs` → `crate::kernel::foo`), and a `#[path]` attribute relocates the file away from that path, so a remapped module is not mapped to its declaration — a stated partial-coverage bound of the same family as inline and macro-generated items (see the scanner decision in `PROJECT.md`). The drift law enforces only what is observed; closing this gap would require reading attributes (an AST-class amendment), so it is stated, not silently relied upon.
+The system SHALL treat a module declared with a `#[path = "…"]` attribute as out of scope: its imports SHALL NOT be observed, and it SHALL NOT be a governable target. Module identity is observed from the conventional file path (`lib.rs`/`main.rs` → `crate`, `kernel/foo.rs` → `crate::kernel::foo`), and a `#[path]` attribute relocates the file away from that path, so a remapped module is not mapped to its declaration — a stated partial-coverage bound of the same family as inline and macro-generated items (see the scanner decision in `PROJECT.md`). The drift law enforces only what is observed; closing this gap would require reading attributes (an AST-class amendment), so it is stated, not silently relied upon. Only a **direct** `#[path]` is recognized: a `#[path]` wrapped in `#[cfg_attr(cond, path = "…")]` is **not** detected as a remap, so the conventionally-named file is governed as the module. This is a stated bound — correct for the configuration in which the `cfg_attr` path is inactive, and otherwise the scanner's cfg-blindness (it evaluates no `cfg`) compounded by the attribute-reading bound — never a silent claim.
 
 #### Scenario: A path-remapped module's imports are not observed
 
@@ -282,4 +294,18 @@ The system SHALL treat a module declared with a `#[path = "…"]` attribute as o
 
 - **WHEN** a boundary targets `crate::foo`, declared via `#[path = "weird/place.rs"] mod foo;`
 - **THEN** the system reports a constitution error (exit 2), because no conventionally-pathed source file backs the target — never a silent pass
+
+#### Scenario: A cfg_attr-wrapped path attribute is not recognized as a remap
+
+- **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, a conventional `foo.rs` exists containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
+- **THEN** the system governs the conventional `foo.rs` and observes its import (the `cfg_attr`-wrapped `#[path]` is not detected) — a documented bound, correct where the `cfg_attr` path is inactive and otherwise cfg-blindness, never a silent claim
+
+### Requirement: A multi-target package's cross-root same-named submodule is a stated bound
+
+The system SHALL treat, as a **documented out-of-scope bound** (never a silent claim of cleanliness), the imports written in the **inline** body of a submodule whose name is declared **inline in one crate root and file-backed in the other** of a package that builds both a lib and a bin. Because the system observes a package's source under one conventional-path tree, both crate roots (`lib.rs` and `main.rs`) resolve to `crate` and it maintains no per-target module graphs; so when `lib.rs` declares `mod shared { … }` (inline) and `main.rs` declares `mod shared;` (backed by `shared.rs`), the file-backed `shared.rs` is the governed module and the inline body's imports are NOT observed — the conventional-path model cannot distinguish the lib crate's `crate::shared` from the bin crate's. This is the submodule corollary of the same lib+bin conventional-path conflation the dedup requirement already names; closing it would require per-target module graphs, an amendment beyond the conventional-path scanner.
+
+#### Scenario: A submodule declared inline in the lib root and file-backed in the bin root is a documented bound
+
+- **WHEN** a package's `lib.rs` declares `mod shared { use crate::forbidden::X; }` (inline), its `main.rs` declares `mod shared;` (backed by a clean `shared.rs`), and a boundary governs `crate::shared` forbidding `crate::forbidden`
+- **THEN** the system governs `shared.rs` and does not observe the inline body's `use crate::forbidden::X` — a documented lib+bin conventional-path bound, recorded rather than silently claimed clean
 

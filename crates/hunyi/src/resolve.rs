@@ -3,9 +3,9 @@
 //!
 //! Resolution is *observation*, not reaction: it reads source structure to map a path
 //! as written into a canonical `crate::…` path. It therefore lives **here, in the
-//! semantic dimension** — not in 璇璣 (`xuanji`), which is the dimension-agnostic reaction
-//! model and holds no observation engine; and not shared with 圭表 (`guibiao`), whose
-//! token scanner must stay `syn`-free to keep the dependency-light core. The two
+//! semantic dimension** — not in 璇璣 (`xuanji`), the dimension-agnostic reaction model that
+//! renders no verdict (the measure, not an observing dimension); and not shared with 圭表
+//! (`guibiao`), whose token scanner must stay `syn`-free to keep the dependency-light core. The two
 //! resolvers are intentionally separate (a PROJECT.md decision); this one is `syn`-based.
 //!
 //! It resolves a name three ways and bounds the rest honestly:
@@ -19,7 +19,7 @@
 //! Out of scope (stated bounds, never a silent claim): glob imports, macro-generated
 //! names, and cross-crate re-exports.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use syn::visit::Visit;
 
@@ -30,6 +30,11 @@ pub(crate) type UseMap = HashMap<String, String>;
 /// re-exports. Following it to a fixpoint canonicalizes a facade path to the item it
 /// denotes.
 pub(crate) type ReexportMap = HashMap<String, String>;
+
+/// A type-alias closure: a `type X = <path>;` alias's canonical path (`{module}::X`) → the
+/// canonical path of its nominal target. Followed together with the re-export closure to a
+/// fixpoint, so a forbidden type reached through an alias resolves to its defining path.
+pub(crate) type AliasMap = HashMap<String, String>;
 
 /// Whether a bare/relative name (not in the `use`-map, not `crate`/`self`/`super`)
 /// resolves against the current module, or is left unresolved.
@@ -209,12 +214,62 @@ pub(crate) fn resolve_path(
     }
 }
 
+/// If the first segment of a written path names an **external crate** — a declared
+/// dependency or a sysroot crate, per the `externs` set — the path denotes an external item
+/// and canonicalizes to **itself**, verbatim. This is the exposure pipeline's bounded oracle
+/// for "is this bare head extern?": it is applied only *after* `use`-map and
+/// `crate`/`self`/`super` resolution have declined (so a local `use … as <dep>` alias still
+/// wins), and only by the exposure resolve and the re-export closure — never by
+/// [`resolve_path`]'s other callers. An `externs` that is empty (the non-exposure callers)
+/// makes it inert, so the closure behaves exactly as before.
+pub(crate) fn extern_verbatim_segs(segs: &[String], externs: &HashSet<String>) -> Option<String> {
+    let head = segs.first()?;
+    externs.contains(head).then(|| segs.join("::"))
+}
+
+/// A source-level `extern crate X as Y;` rename closure: a crate-root alias `Y` → the real crate
+/// `X`. Read from the local AST (unlike a Cargo-manifest `package =` rename, which the extern set
+/// already folds in via `.rename`), so a renamed head resolves to the real crate.
+pub(crate) type ExternRenameMap = HashMap<String, String>;
+
+/// [`extern_verbatim`] with a source-level crate-root `extern crate X as Y;` rename applied to the
+/// head. A head `Y` known in `renames` is rewritten to the real crate `X` and returned **verbatim,
+/// without the extern-set membership check**: a rename alias is, by grammar, never also a local
+/// child module (two items named `Y` in one scope do not compile), so the caller's per-module
+/// child-module shadow can never apply to it, and its target `X` is by definition a declared extern
+/// crate. Checking the *renamed* head against a (possibly shadowed) set would wrongly drop it when a
+/// child module happens to share `X`'s name. A head **not** in `renames` keeps the normal membership
+/// check against `externs`, so this is identical to [`extern_verbatim`] when `renames` is empty.
+pub(crate) fn extern_verbatim_renamed(
+    path: &syn::Path,
+    externs: &HashSet<String>,
+    renames: &ExternRenameMap,
+) -> Option<String> {
+    let mut segs: Vec<String> = path
+        .segments
+        .iter()
+        .map(|s| strip_raw(&s.ident.to_string()))
+        .collect();
+    if let Some(real) = segs.first().and_then(|h| renames.get(h)).cloned() {
+        segs[0] = real;
+        return Some(segs.join("::"));
+    }
+    extern_verbatim_segs(&segs, externs)
+}
+
 /// Collect the **local** `pub use` (and `pub(crate)`/`pub(in …)`) re-exports declared in
 /// `items` (which live in `module`) into `out`, keyed by the alias's canonical path. A
-/// re-export of an external crate item, or a glob, contributes no local hop. A private
-/// `use` is not collected — it is invisible from other modules, so it can only be a
-/// same-module name already in that module's [`UseMap`].
-pub(crate) fn collect_reexports(items: &[syn::Item], module: &str, out: &mut ReexportMap) {
+/// glob contributes no local hop; a bare-headed target re-exporting an **external** crate
+/// (head ∈ `externs`) is retained verbatim, so a local facade chain terminating at an
+/// extern type canonicalizes to it. A private `use` is not collected — it is invisible from
+/// other modules, so it can only be a same-module name already in that module's [`UseMap`].
+pub(crate) fn collect_reexports(
+    items: &[syn::Item],
+    module: &str,
+    externs: &HashSet<String>,
+    renames: &ExternRenameMap,
+    out: &mut ReexportMap,
+) {
     for item in items {
         if let syn::Item::Use(use_item) = item {
             if matches!(use_item.vis, syn::Visibility::Inherited) {
@@ -224,7 +279,7 @@ pub(crate) fn collect_reexports(items: &[syn::Item], module: &str, out: &mut Ree
             collect_use_tree(&use_item.tree, String::new(), &mut local);
             for (name, written) in local {
                 let alias = format!("{module}::{name}");
-                if let Some(target) = canonicalize_use_target(&written, module) {
+                if let Some(target) = canonicalize_use_target(&written, module, externs, renames) {
                     if target != alias {
                         out.insert(alias, target);
                     }
@@ -235,11 +290,24 @@ pub(crate) fn collect_reexports(items: &[syn::Item], module: &str, out: &mut Ree
 }
 
 /// Canonicalize a `pub use` target written as `crate::`/`self`/`super`-rooted to an
-/// absolute path; a bare-headed target re-exports an external crate (edition 2018+) and
-/// is out of scope for the local closure.
-fn canonicalize_use_target(written: &str, module: &str) -> Option<String> {
+/// absolute path; a bare-headed target whose head names an external crate (per `externs`), or a
+/// crate-root `extern crate … as` rename alias (per `renames`), canonicalizes to the extern path
+/// verbatim — so a facade chain terminating at an extern type, incl. one reached through a source
+/// rename, canonicalizes to it. Any other bare head (a pre-2018 crate-root-relative local module,
+/// an unknown name) is out of scope for the local closure — a stated bound.
+fn canonicalize_use_target(
+    written: &str,
+    module: &str,
+    externs: &HashSet<String>,
+    renames: &ExternRenameMap,
+) -> Option<String> {
     let segs: Vec<String> = written.split("::").map(strip_raw).collect();
-    resolve_crate_relative(&segs, module)
+    if let Some(real) = segs.first().and_then(|h| renames.get(h)).cloned() {
+        let mut renamed = segs.clone();
+        renamed[0] = real;
+        return Some(renamed.join("::"));
+    }
+    resolve_crate_relative(&segs, module).or_else(|| extern_verbatim_segs(&segs, externs))
 }
 
 /// Follow the re-export closure from `path` to a fixpoint, so a facade path becomes the
@@ -254,6 +322,75 @@ pub(crate) fn canonicalize_through_reexports(path: &str, reexports: &ReexportMap
         }
     }
     current
+}
+
+/// Follow the **alias** and **re-export** closures together from `path` to a fixpoint, so a
+/// name reached through a `type X = <path>;` alias and/or a `pub use` facade resolves to the
+/// defining path. An alias hop is tried before a re-export hop at each step; the two maps are
+/// keyed by canonical path and cannot collide (a `type X` and a `pub use … as X` in one module
+/// is a name clash that does not compile). Cycle-guarded. For a `path` in neither map this is
+/// identical to [`canonicalize_through_reexports`], so a non-alias finding is unchanged.
+pub(crate) fn canonicalize_through_aliases(
+    path: &str,
+    aliases: &AliasMap,
+    reexports: &ReexportMap,
+) -> String {
+    let mut current = path.to_string();
+    let mut seen = std::collections::HashSet::new();
+    while seen.insert(current.clone()) {
+        if let Some(next) = aliases.get(&current) {
+            current = next.clone();
+            continue;
+        }
+        if let Some(next) = reexports.get(&current) {
+            current = next.clone();
+            continue;
+        }
+        break;
+    }
+    current
+}
+
+/// The alias's target as a **bare nominal path** — `Some(path)` iff `ty` is a `Type::Path` with
+/// no `qself` and no generic arguments on any segment (`type X = a::b::C`), the only alias shape
+/// this resolver follows. `None` for a complex target (`Vec<T>`, `&T`, a tuple, `dyn`/`impl`, or
+/// any generic-argument-bearing path) — a stated coverage bound, never a silent claim.
+pub(crate) fn alias_nominal_target(ty: &syn::Type) -> Option<&syn::Path> {
+    if let syn::Type::Path(tp) = ty {
+        if tp.qself.is_none()
+            && tp
+                .path
+                .segments
+                .iter()
+                .all(|s| matches!(s.arguments, syn::PathArguments::None))
+        {
+            return Some(&tp.path);
+        }
+    }
+    None
+}
+
+/// A bare, single-segment exposed path (`H`) that names a local `type` alias in `module`
+/// (`{module}::H` ∈ `aliases`) resolves to that alias's canonical path, so the alias fixpoint
+/// can expand it. `None` for any other shape — a multi-segment path (a type alias cannot be a
+/// path prefix), a leading-`::` or generic-argument-bearing path, or a name that is not a known
+/// alias — leaving the existing extern / re-export resolution unchanged. Ordered **before**
+/// `extern_verbatim` at the call site so a local alias shadows a same-named extern crate (Rust's
+/// own resolution); `extern_verbatim` stays meaningful for a multi-segment `dep::Foo`.
+pub(crate) fn bare_local_alias(
+    path: &syn::Path,
+    module: &str,
+    aliases: &AliasMap,
+) -> Option<String> {
+    if path.leading_colon.is_some() || path.segments.len() != 1 {
+        return None;
+    }
+    let seg = &path.segments[0];
+    if !matches!(seg.arguments, syn::PathArguments::None) {
+        return None;
+    }
+    let key = format!("{module}::{}", strip_raw(&seg.ident.to_string()));
+    aliases.contains_key(&key).then_some(key)
 }
 
 /// A Visitor collecting every type path and trait-bound path within a syntax node, so a

@@ -83,7 +83,8 @@ keeps it out of the constitution.
 Tianheng governs itself: `crates/tianheng/tests/self_governance.rs` runs Tianheng's own
 reaction against the workspace as a `cargo test` gate. Its invariants:
 
-- **Dependency-light core** — `guibiao` depends on `serde_json` only. Heavy
+- **Dependency-light core** — `guibiao`'s only *external* dependency is `serde_json` (it
+  depends internally on `xuanji`). Heavy
   dependencies (AST/runtime) belong in their own future crates, never the core.
 - **Functional core ⊥ imperative shell** (crate-level) — `guibiao` must not depend on
   `tianheng`.

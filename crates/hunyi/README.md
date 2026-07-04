@@ -124,9 +124,11 @@ multi-hop and `as`-aliased ones — *are* followed to the item they name. What `
 view cannot see is **glob** imports (save a re-export glob whose root resolves in/under the
 forbidden set, which reacts), **cross-crate** re-exports, **macro**-generated names, and
 types knowable only through **inference** (e.g. a return-position `impl Trait` hiding a concrete
-type). These gaps are *stated*, not silently passed; an unresolvable anchor is a constitution
-error, never a silent pass. Explicitly **rejected** as false-negative engines: `Send`/`Sync`
-(inferred auto-traits), external trait sealing, and transitive effect-purity.
+type). A `#[path]`-remapped module remains outside single-module resolution; 渾儀 does not govern
+it through a same-named conventional orphan file. These gaps are *stated*, not silently passed; an
+unresolvable anchor is a constitution error, never a silent pass. Explicitly **rejected** as
+false-negative engines: `Send`/`Sync` (inferred auto-traits), external trait sealing, and
+transitive effect-purity.
 
 Most adopters consume the semantic dimension through the
 [`tianheng`](https://crates.io/crates/tianheng) shell, which composes these boundaries into

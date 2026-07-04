@@ -9,9 +9,7 @@ expose `dyn std::error::Error` freely while never leaking `dyn crate::Port`). It
 shape-only public-surface `dyn` walk and signature-coupling's resolver (resolve + re-export
 canonicalization + exact-or-module-prefix match), adding only the operand match; same `syn`
 observation source, no new crate.
-
 ## Requirements
-
 ### Requirement: Operand-scoped dyn boundary declared in Rust
 
 An operand-scoped dyn boundary SHALL be expressed as Rust code on a `DynTraitBoundary`, part of
@@ -36,18 +34,29 @@ principal trait canonicalizes to a member of the forbidden operand set, and SHAL
 violation for a `dyn` whose principal trait is outside the set. The **principal trait** is the
 first trait bound of the trait object — Rust's grammar guarantees the base trait is syntactically
 first, so any auto-trait (`Send`, `Sync`) or lifetime bound can only follow it and is never the
-matched operand. The principal trait path SHALL be canonicalized and matched exactly as
-signature-coupling matches a forbidden type (resolved against the module's `use` map and re-export
-closure via `BareFallback::Ignore`, then compared exact-or-module-prefix), so a re-exported or
-aliased trait facade matches its defining path; a principal trait that does not resolve (a bare
-name with no `use`, a macro-generated or glob/cross-crate re-exported trait) is dropped — the same
-stated resolver-coverage bound signature-coupling carries, never a silent pass of a *resolvable*
-operand. The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule.
+matched operand. The principal trait path SHALL be canonicalized and matched **exactly as
+signature-coupling matches a forbidden type** — through the *same* resolver ladder: the module's
+`use` map, `crate`/`self`/`super`-relative paths, the **external-crate name-set oracle** (declared
+dependencies ∪ sysroot, `.rename`- and `-`→`_`-aware, with a crate-root `extern crate … as` rename
+applied and a leading-`::` head resolved against the raw set), and the `pub use` re-export closure,
+then compared exact-or-module-prefix. So a re-exported or aliased trait facade matches its defining
+path, **and an inline fully-qualified extern or sysroot trait operand reacts** (`dyn
+std::error::Error` under `must_not_expose_dyn_of(["std::error::Error"])`), closing the false
+negative where only the `use`-aliased spelling reacted. A principal trait that is **genuinely
+unresolvable** — a bare single-segment name with no `use` (neither a local item nor an extern head),
+a macro-generated trait, or a glob/foreign-module re-export — is dropped, the same stated
+resolver-coverage bound signature-coupling carries, never a silent pass of a *resolvable* operand.
+The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule.
 
 #### Scenario: A dyn of a named forbidden trait is flagged
 
 - **WHEN** the governed module's public API exposes `Box<dyn crate::ports::Port>` and the boundary forbids `["crate::ports::Port"]`
 - **THEN** the system emits a violation whose finding is the seam-qualified rendered shape (`dyn crate::ports::Port exposed by {seam}`), because the principal trait is in the forbidden operand set
+
+#### Scenario: An inline fully-qualified extern trait operand reacts
+
+- **WHEN** the governed module's public API exposes `Box<dyn std::error::Error>` *inline* (no `use std::error::Error;`) and the boundary forbids `["std::error::Error"]`
+- **THEN** the system resolves the principal trait through the external-crate oracle to `std::error::Error` and emits a violation — the same reaction the `use`-aliased spelling already produced, closing the false negative
 
 #### Scenario: A dyn of an unlisted trait passes
 
@@ -63,6 +72,11 @@ operand. The finding is the **seam-qualified** rendered `dyn …` shape (`{shape
 
 - **WHEN** the module exposes `dyn crate::Port`, a `pub use crate::ports::Port` facade of the trait defined at `crate::ports::Port`, and the boundary forbids the defining path `["crate::ports::Port"]`
 - **THEN** the system emits a violation, because the exposed facade canonicalizes through the re-export closure to the same defining path — closing the re-export false negative
+
+#### Scenario: A genuinely unresolvable bare principal is a documented bound
+
+- **WHEN** the module exposes `dyn Frobnicate` where `Frobnicate` has no `use`, is not a declared dependency or sysroot crate, and is not a local trait resolvable in scope, under any operand set
+- **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound (the oracle does not over-reach a single bare segment), never a silent claim of cleanliness over a resolvable operand
 
 #### Scenario: Auto-trait markers are not operands
 
@@ -113,3 +127,4 @@ dependency) and SHALL NOT change the public-surface walk.
 
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** an operand-scoped boundary appears with its target, module, rule, the forbidden operand set, severity, and reason — through the existing dyn-trait projection, no separate projector; a shape-only boundary appears exactly as before, with no operand parameter
+

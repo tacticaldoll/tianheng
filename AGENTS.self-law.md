@@ -26,7 +26,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `guibiao`
 
-> the 圭表 core stays dependency-light: serde_json is the only external dependency (no syn / proc-macro, no heavy graph or runtime crates); the internal dependency on 璇璣 (the shared reaction model) is the price of the family split — the model carries no engine. 三儀 ⊥ 三儀: this allowlist names no sibling dimension, so 圭表 cannot depend on 渾儀 (nor, when born, 漏刻) — the dimensions are composed only by the 天衡 shell, never by each other
+> the 圭表 core stays dependency-light: serde_json is the only external dependency (no syn / proc-macro, no heavy graph or runtime crates); the internal dependency on 璇璣 (the shared reaction model) is the price of the family split — the model is measure-only: it renders no verdict and drags in no engine. 三儀 ⊥ 三儀: this allowlist names no sibling dimension, so 圭表 cannot depend on 渾儀 (nor, when born, 漏刻) — the dimensions are composed only by the 天衡 shell, never by each other
 
 - **rule**: restrict dependencies to (only: serde_json, xuanji)
 - **kind**: crate · **severity**: enforce

@@ -3,7 +3,8 @@
 //!
 //! The jade pivot of the armillary sphere, the instrument of celestial measure: the
 //! dimension-agnostic vocabulary [`Severity`], [`BoundaryKind`], [`Violation`],
-//! [`Report`], [`ViolationId`], [`Baseline`], and [`Outcome`]. Every observation
+//! [`Report`], [`Baseline`], and [`Outcome`] (each a finding's shape; [`ViolationId`] is
+//! `Violation`'s baseline identity). Every observation
 //! dimension — the static 圭表 (`guibiao`), semantic 渾儀 (`hunyi`), and runtime 漏刻
 //! (`louke`) — expresses its findings in these types, so a dimension may reuse the reaction
 //! vocabulary without depending on another dimension's engine.
@@ -12,7 +13,9 @@
 //! [`Baseline`] *is* a generated JSON snapshot, and a [`Violation`] has a canonical JSON
 //! shape. It does **not** carry the report-document *assembly* (which folds in
 //! dimension-specific data such as the static `Coverage`) — that stays in the consuming
-//! crate. `serde_json` is its only dependency; it holds no observation engine.
+//! crate. `serde_json` is its only dependency; it renders **no verdict** — it holds the
+//! *measure*, never the react itself (comparing a declared boundary against observed reality
+//! lives in the dimensions and the shell, never here).
 //!
 //! Govern by reaction, not instruction.
 
@@ -385,5 +388,70 @@ mod tests {
         let without = sample_violation();
         let with = sample_violation().with_file(Some("src/kernel.rs".to_string()));
         assert_eq!(without.id(), with.id());
+    }
+
+    #[test]
+    fn baseline_round_trips_through_json() {
+        // The `violation-baseline` spec's round-trip scenario: a baseline written to JSON and read
+        // back holds the same `(target, rule, finding)` entries. (Previously code-correct but with
+        // no dedicated test.)
+        let report = Report::new(vec![
+            sample_violation(),
+            Violation::new(
+                BoundaryKind::Crate,
+                "core".to_string(),
+                "deny external dependencies".to_string(),
+                "serde".to_string(),
+                "core stays dependency-light".to_string(),
+                Severity::Enforce,
+            ),
+        ]);
+        let original = Baseline::of(&report);
+        let reparsed = Baseline::from_json(&original.to_json()).expect("round-trips");
+        // Every original violation is still contained; a stale check against the same report is empty.
+        assert!(reparsed.contains(&sample_violation()));
+        assert!(
+            reparsed.stale(&report).is_empty(),
+            "no entry is stale against its own report"
+        );
+        // Serializing the reparsed baseline yields byte-identical JSON (stable + diffable).
+        assert_eq!(reparsed.to_json(), original.to_json());
+    }
+
+    #[test]
+    fn a_malformed_or_unknown_version_baseline_is_an_error_not_empty() {
+        // The spec's "never silently treat a bad baseline as empty" scenario.
+        assert!(
+            Baseline::from_json("{ not json").is_err(),
+            "malformed JSON is an error"
+        );
+        assert!(
+            Baseline::from_json(r#"{"version": 2, "violations": []}"#).is_err(),
+            "an unknown version is an error, not a silently-empty baseline"
+        );
+        assert!(
+            Baseline::from_json(r#"{"violations": []}"#).is_err(),
+            "a missing version is an error"
+        );
+        // A well-formed version-1 empty baseline parses to an empty baseline (the valid empty case).
+        assert!(
+            Baseline::from_json(r#"{"version": 1, "violations": []}"#)
+                .expect("valid empty baseline")
+                .stale(&Report::empty())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_fixed_violation_leaves_a_stale_baseline_entry() {
+        // The spec's stale-reporting scenario: an entry matching no current violation is stale.
+        let baseline = Baseline::of(&Report::new(vec![sample_violation()]));
+        let stale = baseline.stale(&Report::empty());
+        assert_eq!(
+            stale.len(),
+            1,
+            "the fixed violation's entry is reported stale"
+        );
+        assert_eq!(stale[0], &sample_violation().id());
     }
 }

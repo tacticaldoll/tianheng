@@ -9,8 +9,9 @@
 
 use std::path::PathBuf;
 
+use guibiao::check_and_cover;
 use tianheng::prelude::*;
-use tianheng::{GnomonConstitution, constitution_markdown};
+use tianheng::{Boundary, GnomonConstitution, Rule, constitution_markdown};
 
 /// The Tianheng workspace manifest. `None` when it is absent — e.g. inside a published
 /// `.crate` tarball, which has no workspace root — so the self-governance gate SKIPS rather
@@ -36,33 +37,23 @@ fn workspace_manifest() -> Option<PathBuf> {
 ///
 /// Declared in the same Rust DSL adopters use. [`tianheng_governs_itself`] runs it as a
 /// real reaction against the workspace, so the dogfooding is a non-bypassable gate, not
-/// a hope. The boundaries below, plus the cross-cutting law they jointly realize:
-///
-/// 1. **璇璣 is the bedrock** — the shared reaction model (`xuanji`) depends on
-///    `serde_json` only and on no workspace member, so the whole family sits *above* it
-///    and nothing leaks *into* the dimension-agnostic model (no engine, no shell).
-/// 2. **Dependency-light core** — the 圭表 core (`guibiao`) takes `serde_json` plus the
-///    internal `xuanji` only. Heavy AST/runtime dependencies are quarantined to their own
-///    crates, never the core — which is why the static source scanner is hand-rolled,
-///    not `syn`.
-/// 3. **syn is quarantined to 渾儀** — the semantic dimension (`hunyi`) is the only
-///    crate that may depend on `syn`; it takes `xuanji` + `serde_json` + `syn` and never
-///    the 圭表 engine or the 天衡 shell (functional dimension ⊥ imperative shell).
-/// 4. **Functional core ⊥ imperative shell**, at crate granularity — `guibiao` must
-///    not depend on the 天衡 shell (`tianheng`). The core never reaches for the shell.
-/// 5. **Bounded shell** — the 天衡 shell depends only on the dimensions it composes
-///    (圭表 `guibiao` + 渾儀 `hunyi` + 漏刻 `louke`, whose CI probe-coverage face it folds into
-///    `check`) and `serde_json`.
-/// 6. **漏刻 ships light** — the 漏刻 runtime dimension (`louke`) depends on 璇璣 (`xuanji`)
-///    only: no `syn`, no static engine, no sibling dimension, because it ships into the user's
-///    production binary (`serde_json` reaches it only transitively via 璇璣, cold-path only).
+/// a hope. Each boundary below carries its own `because` — its target, allowlist, and reason
+/// — and those project (target · rule · reason) into the generated, byte-checked
+/// `AGENTS.self-law.md` (gated by [`self_law_projection_is_fresh`]). This doc comment therefore
+/// does **not** re-list the boundaries by hand: a per-boundary index restated in prose is the
+/// drift surface the declaration-integrity pattern retires — the same class as the removed
+/// `(boundaries 2, 3, 6)` pointer that once drifted off-by-one. It records only the cross-cutting
+/// law the boundaries jointly realize, which no single `because` owns:
 ///
 /// **Cross-cutting — 三儀 ⊥ 三儀 (the dimensions are mutually independent).** The
 /// observation dimensions — 圭表 (static), 渾儀 (semantic), and 漏刻 (runtime) — never depend
 /// on one another; each sits on 璇璣 and is composed into one reaction *only* by the 天衡 shell
 /// (for the CI dimensions) or reacts independently in prod (漏刻), never via a sibling. This
-/// law is **named here and in each dimension's `because`** (boundaries 2, 4, and 6), so a
-/// constitution reader and the 垂象 report both see the intent. It adds **no separate
+/// law is **named here and in each dimension's `because`**, and a reaction —
+/// [`dimension_boundaries_declare_the_mutual_independence_law`] — asserts that every dimension
+/// boundary carries the clause, so the claim is *self-observed*, not a hand-maintained pointer
+/// that could drift (the declaration-integrity pattern: replace a prose index with a reaction).
+/// A constitution reader and the 垂象 report both see the intent. It adds **no separate
 /// boundary on purpose: a dimension's `restrict_dependencies_to` allowlist names no sibling
 /// dimension, so a cross-dimension dependency already reacts. A `forbid_dependency_on`
 /// between dimensions would be a second reaction for a drift the allowlist already catches
@@ -89,7 +80,8 @@ fn tianheng_constitution() -> GnomonConstitution {
                     "the 圭表 core stays dependency-light: serde_json is the only external \
                      dependency (no syn / proc-macro, no heavy graph or runtime crates); the \
                      internal dependency on 璇璣 (the shared reaction model) is the price of \
-                     the family split — the model carries no engine. 三儀 ⊥ 三儀: this allowlist \
+                     the family split — the model is measure-only: it renders no verdict and \
+                     drags in no engine. 三儀 ⊥ 三儀: this allowlist \
                      names no sibling dimension, so 圭表 cannot depend on 渾儀 (nor, when born, \
                      漏刻) — the dimensions are composed only by the 天衡 shell, never by each \
                      other",
@@ -225,5 +217,107 @@ fn self_law_projection_is_fresh() {
         checked_in, live,
         "AGENTS.self-law.md is stale; regenerate it with \
          `BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`"
+    );
+}
+
+/// Contract C — the **declaration-integrity** reaction (the 潛移/校讎-adjacent shape: its
+/// observation source is the *declaration itself*, not governed code). A structural property of
+/// `tianheng_constitution()` is asserted, so a hand-written pointer to that property can be
+/// *deleted* rather than kept correct by hand. Here: the cross-cutting 三儀 ⊥ 三儀 law is carried
+/// in every dimension boundary's `because`. If a dimension's reason drops the clause — or a
+/// dimension boundary is removed, renamed, or duplicated (the selected targets are compared as a
+/// set, so "duplicate one, drop another" cannot pass on count alone) — this fails; the
+/// `(boundaries 2, 3, 6)` prose index it replaces would instead have silently rotted (the exact
+/// class of the off-by-one it retires).
+///
+/// Stated bound: the predicate observes the `because` **text** (a `contains` check), weaker than a
+/// structural fact — a reworded clause would slip it. It still reacts to the real drift (a
+/// dimension boundary losing the law), which a hand-maintained pointer could not.
+#[test]
+fn dimension_boundaries_declare_the_mutual_independence_law() {
+    const CLAUSE: &str = "三儀 ⊥ 三儀";
+    const DIMENSIONS: [&str; 3] = ["guibiao", "hunyi", "louke"];
+
+    let constitution = tianheng_constitution();
+    let dimension_allowlists: Vec<_> = constitution
+        .boundaries()
+        .iter()
+        .filter_map(|boundary| match boundary {
+            Boundary::Crate(cb)
+                if DIMENSIONS.contains(&cb.target().package.as_str())
+                    && matches!(cb.rule(), Rule::RestrictDependenciesTo { .. }) =>
+            {
+                Some(cb)
+            }
+            _ => None,
+        })
+        .collect();
+
+    // Each dimension must appear **exactly once** — assert set coverage, not a bare count. A
+    // bare `len == 3` would pass a copy-paste drift that duplicates one dimension and drops
+    // another (two `hunyi` allowlists, no `louke`): the count still reads 3 and every selected
+    // reason still carries the clause, yet `louke`'s allowlist has silently vanished — and
+    // `tianheng_governs_itself` cannot backstop it (a dropped `louke` boundary triggers no
+    // dependency reaction, since `louke` really does depend only on `xuanji`). So this test is
+    // the sole guard, and it must compare the selected targets, sorted, to the dimensions.
+    let mut found: Vec<&str> = dimension_allowlists
+        .iter()
+        .map(|cb| cb.target().package.as_str())
+        .collect();
+    found.sort_unstable();
+    let mut expected: Vec<&str> = DIMENSIONS.to_vec();
+    expected.sort_unstable();
+    assert_eq!(
+        found, expected,
+        "each dimension needs exactly one restrict-dependencies allowlist ({DIMENSIONS:?}); \
+         a dimension boundary was renamed, removed, or duplicated"
+    );
+    for cb in dimension_allowlists {
+        assert!(
+            cb.reason().contains(CLAUSE),
+            "dimension boundary for `{}` dropped the `{CLAUSE}` clause from its because — \
+             the cross-cutting law is no longer self-declared at that dimension",
+            cb.target().package
+        );
+    }
+}
+
+/// Contract D — the **declaration-integrity coverage** reaction (again the 潛移/校讎-adjacent
+/// shape: its observation source is the *declaration and the workspace metadata*, not governed
+/// code). Every workspace member must be the target of at least one boundary in
+/// `tianheng_constitution()`.
+///
+/// Without this, a crate added to the family with no self-governance boundary escapes the
+/// dogfood gate **silently**: [`tianheng_governs_itself`] only reacts to crates a boundary
+/// *names*, so an ungoverned member triggers no dependency reaction and could take any
+/// dependency — heavy, cross-dimension, or the shell — undetected. That is a false negative of
+/// the self-law itself (the one forbidden bug), and it is exactly the "all N crates are
+/// governed" coverage claim that today is hand-restated across the docs
+/// (`PROJECT.md`, `README.md`, `AGENTS.md`) rather than observed. Here the property is asserted
+/// on the live `Constitution` + `cargo metadata`, so that claim need not be hand-counted — the
+/// same move as Contract C (a prose index → a reaction), applied to coverage.
+///
+/// The `total > 0` guard forecloses a **vacuous** pass: if the metadata read ever returned zero
+/// members, `uncovered` would be empty and the assertion would hold for the wrong reason. A
+/// count floor is deliberately *not* hardcoded (it would be the very hand-maintained index this
+/// pattern retires) — growth must not require editing this test.
+#[test]
+fn every_workspace_member_is_self_governed() {
+    let Some(manifest) = workspace_manifest() else {
+        return; // outside a checkout — same repo-only discipline as the governance gate
+    };
+    let (_, coverage) = check_and_cover(&tianheng_constitution(), &manifest);
+    let coverage = coverage.expect("workspace metadata is readable in-repo");
+    assert!(
+        coverage.total > 0,
+        "coverage observed zero workspace members — the metadata read is degenerate, so an \
+         empty `uncovered` would pass this gate vacuously"
+    );
+    assert!(
+        coverage.uncovered.is_empty(),
+        "workspace members escape self-governance (no boundary in `tianheng_constitution()` \
+         targets them): {:?} — add a boundary for each, or the dogfood gate silently skips \
+         them (a false negative of the self-law)",
+        coverage.uncovered
     );
 }

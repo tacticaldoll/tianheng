@@ -74,6 +74,12 @@ finding keeps the bare name, so existing baselines do not churn).
 see bare path expressions, macro-generated imports, or `#[path]`-remapped modules — closing
 those would require an AST, an amendment, not a silent trade.
 
+The scanner anchors source discovery to Cargo's observed target `src_path` (the lib target,
+else a bin target), so custom `[lib] path = "lib.rs"` and bin-only crates are scanned from
+the compiled source root rather than the `manifest_dir/src` shortcut. A `#[path]`-remapped
+module remains outside this token scanner's coverage and is not governed through a same-named
+conventional orphan file.
+
 Most adopters consume the static dimension through the [`tianheng`](https://crates.io/crates/tianheng)
 shell (CLI, arg parsing, the composed reaction), which re-exports this crate's surface.
 

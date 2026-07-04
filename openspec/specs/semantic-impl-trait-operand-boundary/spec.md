@@ -9,9 +9,7 @@ return an ergonomic `impl Iterator` yet never leak an existential `impl crate::p
 reuses the return-position walk and signature-coupling's resolver (resolve + re-export
 canonicalization + exact-or-module-prefix match), the same machinery operand-scoped dyn uses; same
 `syn` observation source, no new crate.
-
 ## Requirements
-
 ### Requirement: Operand-scoped impl-trait boundary declared in Rust
 
 An operand-scoped impl-trait boundary SHALL be expressed as Rust code on an `ImplTraitBoundary`,
@@ -35,19 +33,30 @@ The system SHALL emit a violation for each returned `impl Trait` in the governed
 surface whose principal trait — the first trait bound of the `impl Trait` — canonicalizes to a
 member of the forbidden operand set, and SHALL report no violation for a returned `impl Trait`
 whose principal trait is outside the set. The principal trait path SHALL be canonicalized and
-matched exactly as signature-coupling matches a forbidden type (resolved against the module's
-`use` map and re-export closure via `BareFallback::Ignore`, then compared exact-or-module-prefix),
-so a re-exported or aliased trait facade matches its defining path; a principal trait that does not
-resolve (a bare name with no `use`, a macro-generated or glob/cross-crate re-exported trait) is
-dropped — the stated resolver-coverage bound, never a silent pass of a *resolvable* operand.
-Auto-trait and lifetime bounds are never operands. The finding is the **seam-qualified** rendered
-`impl …` shape (`{shape} exposed by {seam}`), and the return-position scoping is inherited
-unchanged (argument-position `impl Trait` and `async fn` are not governed).
+matched **exactly as signature-coupling matches a forbidden type** — through the *same* resolver
+ladder: the module's `use` map, `crate`/`self`/`super`-relative paths, the **external-crate
+name-set oracle** (declared dependencies ∪ sysroot, `.rename`- and `-`→`_`-aware, with a crate-root
+`extern crate … as` rename applied and a leading-`::` head resolved against the raw set), and the
+`pub use` re-export closure, then compared exact-or-module-prefix. So a re-exported or aliased trait
+facade matches its defining path, **and an inline fully-qualified extern or sysroot trait operand
+reacts** (`impl std::error::Error` under `must_not_expose_impl_trait_of(["std::error::Error"])`),
+closing the false negative where only the `use`-aliased spelling reacted. A principal trait that is
+**genuinely unresolvable** — a bare single-segment name with no `use` (neither a local item nor an
+extern head), a macro-generated trait, or a glob/foreign-module re-export — is dropped, the stated
+resolver-coverage bound, never a silent pass of a *resolvable* operand. Auto-trait and lifetime
+bounds are never operands. The finding is the **seam-qualified** rendered `impl …` shape (`{shape}
+exposed by {seam}`), and the return-position scoping is inherited unchanged (argument-position `impl
+Trait` and `async fn` are not governed).
 
 #### Scenario: A returned impl Trait of a named forbidden trait is flagged
 
 - **WHEN** the governed module declares `pub fn make() -> impl crate::ports::Port` and the boundary forbids `["crate::ports::Port"]`
 - **THEN** the system emits a violation whose finding is the seam-qualified rendered shape (`impl crate::ports::Port exposed by {seam}`)
+
+#### Scenario: An inline fully-qualified extern trait operand reacts
+
+- **WHEN** the governed module declares `pub fn make() -> impl std::error::Error` *inline* (no `use std::error::Error;`) and the boundary forbids `["std::error::Error"]`
+- **THEN** the system resolves the principal trait through the external-crate oracle to `std::error::Error` and emits a violation — the same reaction the `use`-aliased spelling already produced
 
 #### Scenario: A returned impl Trait of an unlisted trait passes
 
@@ -63,6 +72,11 @@ unchanged (argument-position `impl Trait` and `async fn` are not governed).
 
 - **WHEN** the module returns `impl crate::Port`, a `pub use crate::ports::Port` facade of the trait defined at `crate::ports::Port`, and the boundary forbids the defining path `["crate::ports::Port"]`
 - **THEN** the system emits a violation, because the returned principal canonicalizes through the re-export closure to the same defining path
+
+#### Scenario: A genuinely unresolvable bare principal is a documented bound
+
+- **WHEN** the module returns `impl Frobnicate` where `Frobnicate` has no `use`, is not a declared dependency or sysroot crate, and is not a local trait resolvable in scope, under any operand set
+- **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound, never a silent claim over a resolvable operand
 
 ### Requirement: Empty operand set degenerates to shape-only, never a silent no-op
 
@@ -108,3 +122,4 @@ projects unchanged). The implementation SHALL keep the `syn` dependency quaranti
 
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** an operand-scoped boundary appears with its target, module, rule, the forbidden operand set, severity, and reason; a shape-only boundary appears exactly as before, with no operand parameter
+
