@@ -20,7 +20,7 @@ A module boundary SHALL be declared in Rust, targeting a crate and a module path
 
 ### Requirement: Module imports observed from source use declarations
 
-The system SHALL observe module imports by scanning the target crate's source `use` declarations. It SHALL resolve `crate`, `self`, and `super` paths to absolute `crate::…` module paths, expand grouped (`{a, b}`) and glob (`::*`) forms, and ignore paths whose first segment is an external crate. A first segment that names a crate-root module SHALL be resolved to `crate::…` **only when the importing file is the crate root**: there a sibling `mod` is in scope and shadows the extern prelude, so a bare `use foo::…` is the local module. In a submodule a bare first segment reaches only the extern prelude — it is an external crate, or a compile error — and SHALL be treated as external, even when a crate-root module of that name exists. The crate-root module names used for this resolution SHALL be observed from the crate's own source as **declared modules** — a `mod name;` or `mod name { … }` declaration in the crate-root file(s) — not from the mere existence of a like-named source file: an undeclared orphan source file (e.g. a stray `src/foo.rs` that no `mod foo;` declares) does NOT make its name a crate-root module, because Rust does not bring an undeclared file into scope and a bare `use foo::…` then resolves through the extern prelude. A path written with a leading `::` (`use ::name::…`) is the explicit external/global form and SHALL be treated as external even when its first segment matches a crate-root module. Text inside comments and string literals SHALL NOT be treated as a `use` (or `mod`) declaration: it is removed before scanning, so neither a `//` inside a string nor a `use …;` written inside a string affects the result. Bare path expressions and macro-generated imports SHALL be out of scope (see the scanner decision in `PROJECT.md`); the rule enforces only what real `use` declarations observe. In particular, a `use` written inside a macro body — a `macro_rules!` definition OR a macro invocation (`ident! {…}` / `(…)` / `[…]`) — is a macro-generated import: the `macro_rules!` definition (its name and balanced body) and any macro invocation's balanced `{}`/`()`/`[]` body are removed before scanning, so such a `use` SHALL NOT be observed. Comments and string literals — normal, byte, and raw — SHALL be removed before scanning. Modules SHALL be file-based **and reachable from the crate root via `mod` declarations**: a source file that no `mod` declaration brings into scope — an undeclared orphan, at the crate root or anywhere in a subtree — is not a module of the crate, is not governed, and its imports SHALL NOT be observed, matching the compiler (which never compiles it). A governed module path that matches no reachable source file SHALL be a constitution error (exit 2), never a silent pass. A governed source file that exists but cannot be read SHALL likewise be a scan error (exit 2), never silently skipped — an unreadable file is "cannot judge", not "nothing to judge", and skipping it could hide a real violation. A governed source directory that cannot be traversed SHALL likewise be a scan error (exit 2), naming the directory, never silently skipped — the same "cannot judge, not nothing to judge" rule, because a skipped subtree could hide a real violation.
+The system SHALL observe module imports by scanning the target crate's source `use` declarations. It SHALL resolve `crate`, `self`, and `super` paths to absolute `crate::…` module paths, expand grouped (`{a, b}`) and glob (`::*`) forms, and ignore paths whose first segment is an external crate. A first segment that names a crate-root module SHALL be resolved to `crate::…` **only when the importing file is the crate root**: there a sibling `mod` is in scope and shadows the extern prelude, so a bare `use foo::…` is the local module. In a submodule a bare first segment reaches only the extern prelude — it is an external crate, or a compile error — and SHALL be treated as external, even when a crate-root module of that name exists. The crate-root module names used for this resolution SHALL be observed from the crate's own source as **declared modules** — a `mod name;` or `mod name { … }` declaration in the crate-root file(s) — not from the mere existence of a like-named source file: an undeclared orphan source file (e.g. a stray `src/foo.rs` that no `mod foo;` declares) does NOT make its name a crate-root module, because Rust does not bring an undeclared file into scope and a bare `use foo::…` then resolves through the extern prelude. A path written with a leading `::` (`use ::name::…`) is the explicit external/global form and SHALL be treated as external even when its first segment matches a crate-root module. Text inside comments and string literals SHALL NOT be treated as a `use` (or `mod`) declaration: it is removed before scanning, so neither a `//` inside a string nor a `use …;` written inside a string affects the result. Bare path expressions and macro-generated imports SHALL be out of scope (see the scanner decision in `PROJECT.md`); the rule enforces only what real `use` declarations observe. In particular, a `use` written inside a macro body — a `macro_rules!` definition OR a macro invocation (`ident! {…}` / `(…)` / `[…]`) — is a macro-generated import: the `macro_rules!` definition (its name and balanced body) and any macro invocation's balanced `{}`/`()`/`[]` body are removed before scanning, so such a `use` SHALL NOT be observed. A `use` token that is **not an import statement** — specifically a **precise-capturing bound** (`-> impl Trait + use<'a, T>`, stable Rust), where the `use` token is immediately followed (after optional whitespace) by `<` — SHALL NOT be treated as an import and SHALL NOT consume a following real `use` declaration; a `use` *statement* is always followed by a path (an identifier, `{`, `*`, `::`, or `crate`/`self`/`super`), never `<`, so the following-token `<` is the discriminator, and skipping the bound keeps the next real `use` observable (never a silent drop). Comments and string literals — normal, byte, and raw — SHALL be removed before scanning. Modules SHALL be file-based **and reachable from the crate root via `mod` declarations**: a source file that no `mod` declaration brings into scope — an undeclared orphan, at the crate root or anywhere in a subtree — is not a module of the crate, is not governed, and its imports SHALL NOT be observed, matching the compiler (which never compiles it). A governed module path that matches no reachable source file SHALL be a constitution error (exit 2), never a silent pass. A governed source file that exists but cannot be read SHALL likewise be a scan error (exit 2), never silently skipped — an unreadable file is "cannot judge", not "nothing to judge", and skipping it could hide a real violation. A governed source directory that cannot be traversed SHALL likewise be a scan error (exit 2), naming the directory, never silently skipped — the same "cannot judge, not nothing to judge" rule, because a skipped subtree could hide a real violation.
 
 #### Scenario: A grouped use of crate paths is observed
 
@@ -71,6 +71,11 @@ The system SHALL observe module imports by scanning the target crate's source `u
 
 - **WHEN** a file declares `some_macro! { use crate::projection::Thing; }` and no real `use` of that path outside the macro
 - **THEN** the system does not observe an import of `crate::projection`, because a macro invocation body is a macro-generated import and is removed before scanning
+
+#### Scenario: A precise-capturing use bound is not an import and does not swallow the next use
+
+- **WHEN** a file declares `fn iter() -> impl Iterator<Item = u8> + use<> { … }` (a precise-capturing bound) immediately followed by a real `use crate::projection::Thing;`
+- **THEN** the system does not treat the `use<>` bound as an import and still observes `crate::projection::Thing`, because the bound (a `use` followed by `<`) is skipped rather than consumed to the next `;`
 
 #### Scenario: A string containing `//` does not hide a real use
 
@@ -308,4 +313,57 @@ The system SHALL treat, as a **documented out-of-scope bound** (never a silent c
 
 - **WHEN** a package's `lib.rs` declares `mod shared { use crate::forbidden::X; }` (inline), its `main.rs` declares `mod shared;` (backed by a clean `shared.rs`), and a boundary governs `crate::shared` forbidding `crate::forbidden`
 - **THEN** the system governs `shared.rs` and does not observe the inline body's `use crate::forbidden::X` — a documented lib+bin conventional-path bound, recorded rather than silently claimed clean
+
+### Requirement: A module may restrict who imports it to a closed allowlist
+
+A module boundary SHALL support an inbound **closed-allowlist** rule: `ModuleBoundary::in_crate(p).module(m).must_only_be_imported_by([x, …]).because(...)` declares that the protected module `m` may be imported only by a listed importer `x` (or anything beneath it) or by `m`'s own subtree; any **other** module that imports `m` (or anything beneath `m`) SHALL be a violation. This is the inbound dual of `restrict_imports_to` (the outbound closed allowlist), exactly as `must_not_be_imported_by` is the inbound dual of `must_not_import`. An **empty** allowlist permits only `m`'s own subtree (every outside importer reacts).
+
+The system SHALL observe this from the crate's source `use` declarations across all reachable files (the same crate-wide inbound scan `must_not_be_imported_by` uses): a file whose enclosing module imports `m` or anything beneath `m`, and whose enclosing module is neither within `m`'s own subtree nor within any allowlisted importer's subtree, SHALL be a violation — naming `m` as the target and the offending importing module as the finding. The "or beneath" test SHALL be `::`-delimited on both sides (an exact match OR an `x::` prefix), so an allowlisted importer `crate::facade` does not admit a sibling `crate::facadex`, and a protected `crate::internal` is not matched by a sibling `crate::internal_util`. Allowlist entries SHALL be canonicalized (raw-identifier `r#name` → `name`) like the governed path. A file whose enclosing module is `m` or beneath `m` SHALL NOT be treated as an importer — a module importing its own subtree is not an inbound edge. External imports SHALL remain out of scope.
+
+The finding SHALL be the importing module path, deduplicated so one offending importer yields one violation per protected target; the rule SHALL carry severity (default enforce, `warn` available), an `AllowlistGap` repair polarity (an importer outside the allowed set — repair by removing the import or widening the allowlist), and flow through the baseline like the other module rules. The protected module `m` SHALL be a reachable file-based module, with the same inline/unknown constitution-error handling as other module targets. Declaring the rule with `m` = `crate` (the crate root) SHALL be a constitution error (exit 2), self-describing and distinct from a violation, because every internal import is then "m or beneath" and the rule could never react as an inbound rule.
+
+#### Scenario: An import from outside the allowlist violates
+
+- **WHEN** `crate::internal` is protected by `must_only_be_imported_by(["crate::facade"])` and a file in `crate::consumer` declares `use crate::internal::Secret;`
+- **THEN** the system emits a violation naming `crate::internal` as the target and the offending importer `crate::consumer`, and exits 1 at enforce severity
+
+#### Scenario: An import from an allowlisted importer is clean
+
+- **WHEN** the same boundary holds and a file in `crate::facade` declares `use crate::internal::Secret;`
+- **THEN** the system reports no violation, because `crate::facade` is an allowlisted importer
+
+#### Scenario: The allowlist admits the importer's subtree
+
+- **WHEN** a file in `crate::facade::v1` declares `use crate::internal::Secret;` under `must_only_be_imported_by(["crate::facade"])`
+- **THEN** the system reports no violation, because `crate::facade::v1` is beneath the allowlisted importer `crate::facade`
+
+#### Scenario: A prefix-colliding importer sibling is not admitted
+
+- **WHEN** a file in `crate::facadex` declares `use crate::internal::Secret;` under `must_only_be_imported_by(["crate::facade"])`
+- **THEN** the system emits a violation, because `crate::facadex` is neither `crate::facade` nor beneath `crate::facade::` — a sibling is not admitted by the allowlist
+
+#### Scenario: The protected module's own subtree is always allowed
+
+- **WHEN** `crate::internal` is protected by `must_only_be_imported_by(["crate::facade"])` and a file in `crate::internal::deep` declares `use crate::internal::Secret;`
+- **THEN** the system reports no violation, because a module within the protected module's own subtree is never an inbound importer
+
+#### Scenario: An empty allowlist forbids every outside importer
+
+- **WHEN** `crate::internal` is protected by `must_only_be_imported_by([])` and any module outside `crate::internal`'s own subtree imports it
+- **THEN** the system emits a violation for that importer, because an empty allowlist permits only the protected module's own subtree
+
+#### Scenario: An external import is ignored
+
+- **WHEN** a file in `crate::consumer` declares `use serde::Deserialize;` under `must_only_be_imported_by(["crate::facade"])` protecting `crate::internal`
+- **THEN** the system reports no violation, because external imports are out of scope
+
+#### Scenario: Multiple allowlisted importers are all admitted
+
+- **WHEN** `crate::internal` is protected by `must_only_be_imported_by(["crate::facade", "crate::api"])` and files in both `crate::facade` and `crate::api` import it, while `crate::consumer` also imports it
+- **THEN** the system reports no violation for `crate::facade` or `crate::api`, and one violation naming `crate::consumer`
+
+#### Scenario: Restricting importers of the crate root is a constitution error
+
+- **WHEN** a boundary declares `must_only_be_imported_by([x])` on `crate` (the crate root)
+- **THEN** the system emits a self-describing constitution error and exits 2 — distinct from a boundary violation, never a silent pass — because every internal import would be within the protected subtree and the rule could never react as an inbound rule
 

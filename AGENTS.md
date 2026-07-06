@@ -81,13 +81,9 @@ keeps it out of the constitution.
 ## Self-governance — don't weaken the law to make CI pass
 
 Tianheng governs itself: `crates/tianheng/tests/self_governance.rs` runs Tianheng's own
-reaction against the workspace as a `cargo test` gate. Its invariants:
-
-- **Dependency-light core** — `guibiao`'s only *external* dependency is `serde_json` (it
-  depends internally on `xuanji`). Heavy
-  dependencies (AST/runtime) belong in their own future crates, never the core.
-- **Functional core ⊥ imperative shell** (crate-level) — `guibiao` must not depend on
-  `tianheng`.
+reaction against the workspace as a `cargo test` gate. Its live invariants are declared in
+`self_governance.rs` and projected into [`AGENTS.self-law.md`](AGENTS.self-law.md); do not
+hand-maintain a second list here.
 
 If a change makes this test fail, **fix the change**, not the test. A boundary is altered
 only by a deliberate, human-reviewed amendment to `self_governance.rs` — never by quietly

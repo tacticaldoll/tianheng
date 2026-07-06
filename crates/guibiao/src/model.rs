@@ -123,6 +123,7 @@ pub struct CrateBoundary {
     pub(crate) reason: String,
     pub(crate) severity: Severity,
     pub(crate) kind: DependencyKind,
+    pub(crate) anchor: Option<String>,
 }
 
 impl CrateBoundary {
@@ -158,6 +159,19 @@ impl CrateBoundary {
     /// The dependency table this boundary observes (`Normal` by default).
     pub fn dependency_kind(&self) -> DependencyKind {
         self.kind
+    }
+
+    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
+    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
+    /// none projects and reacts exactly as before. Chained after [`because`](CrateBoundaryDraft::because).
+    pub fn with_anchor(mut self, anchor: &str) -> Self {
+        self.anchor = Some(anchor.to_string());
+        self
+    }
+
+    /// The durable governance anchor recorded with the boundary, if any.
+    pub fn anchor(&self) -> Option<&str> {
+        self.anchor.as_deref()
     }
 }
 
@@ -228,6 +242,21 @@ impl Rule {
             Rule::RestrictDependenciesTo { .. } => "restrict dependencies to",
             Rule::RestrictWorkspaceDependenciesTo { .. } => "restrict workspace dependencies to",
             Rule::RestrictDependencySourcesTo { .. } => "restrict dependency sources to",
+        }
+    }
+
+    /// The repair-direction [`Polarity`] of a violation of this rule. `ForbidDependencyOn` names
+    /// specific forbidden crates (repair: remove) → `DenyBreach`; the rest permit a set and react
+    /// to a member outside it (repair: remove or declare) → `AllowlistGap`. `DenyExternalDependencies`
+    /// is `AllowlistGap` **by repair direction, not name**: its `allow_external` exceptions are an
+    /// in-boundary declaration path, so a new external dep is either removed or excepted.
+    pub(crate) fn polarity(&self) -> Polarity {
+        match self {
+            Rule::ForbidDependencyOn { .. } => Polarity::DenyBreach,
+            Rule::DenyExternalDependencies { .. }
+            | Rule::RestrictDependenciesTo { .. }
+            | Rule::RestrictWorkspaceDependenciesTo { .. }
+            | Rule::RestrictDependencySourcesTo { .. } => Polarity::AllowlistGap,
         }
     }
 
@@ -499,6 +528,7 @@ impl DenyExternalDraft {
             reason: reason.to_string(),
             severity: self.severity,
             kind: self.kind,
+            anchor: None,
         }
     }
 }
@@ -532,6 +562,7 @@ impl CrateBoundaryDraft {
             reason: reason.to_string(),
             severity: self.severity,
             kind: self.kind,
+            anchor: None,
         }
     }
 }
@@ -545,6 +576,7 @@ pub struct ModuleBoundary {
     pub(crate) rule: ModuleRule,
     pub(crate) reason: String,
     pub(crate) severity: Severity,
+    pub(crate) anchor: Option<String>,
 }
 
 impl ModuleBoundary {
@@ -553,6 +585,19 @@ impl ModuleBoundary {
         ModuleBoundaryBuilder {
             crate_package: package.to_string(),
         }
+    }
+
+    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
+    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
+    /// none projects and reacts exactly as before. Chained after [`because`](ModuleBoundaryDraft::because).
+    pub fn with_anchor(mut self, anchor: &str) -> Self {
+        self.anchor = Some(anchor.to_string());
+        self
+    }
+
+    /// The durable governance anchor recorded with the boundary, if any.
+    pub fn anchor(&self) -> Option<&str> {
+        self.anchor.as_deref()
     }
 }
 
@@ -579,6 +624,14 @@ pub enum ModuleRule {
         /// The forbidden importer module path (e.g. `"crate::http"`).
         importer: String,
     },
+    /// The governed (protected) module may be imported only by these importers (each "or
+    /// beneath") or by its own subtree; any other module that imports it (or anything beneath
+    /// it) is a violation — the inbound dual of `RestrictImportsTo`. An empty allowlist permits
+    /// only the protected module's own subtree.
+    MustOnlyBeImportedBy {
+        /// The closed allowlist of importer module paths (e.g. `["crate::facade"]`).
+        allowed: Vec<String>,
+    },
 }
 
 impl ModuleRule {
@@ -588,6 +641,22 @@ impl ModuleRule {
             ModuleRule::MustNotImport { .. } => "module must not import",
             ModuleRule::RestrictImportsTo { .. } => "restrict imports to",
             ModuleRule::MustNotBeImportedBy { .. } => "module must not be imported by",
+            ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
+        }
+    }
+
+    /// The repair-direction [`Polarity`] of a violation of this rule. The two `MustNot*` rules
+    /// forbid a specific module edge (repair: remove the import) → `DenyBreach`; `RestrictImportsTo`
+    /// and `MustOnlyBeImportedBy` permit a set and react to an edge outside it (repair: remove or
+    /// widen) → `AllowlistGap`.
+    pub(crate) fn polarity(&self) -> Polarity {
+        match self {
+            ModuleRule::MustNotImport { .. } | ModuleRule::MustNotBeImportedBy { .. } => {
+                Polarity::DenyBreach
+            }
+            ModuleRule::RestrictImportsTo { .. } | ModuleRule::MustOnlyBeImportedBy { .. } => {
+                Polarity::AllowlistGap
+            }
         }
     }
 
@@ -603,6 +672,12 @@ impl ModuleRule {
             }
             ModuleRule::MustNotBeImportedBy { importer } => {
                 format!("must not be imported by {importer}")
+            }
+            ModuleRule::MustOnlyBeImportedBy { allowed } if allowed.is_empty() => {
+                "may only be imported by nothing".to_string()
+            }
+            ModuleRule::MustOnlyBeImportedBy { allowed } => {
+                format!("may only be imported by: {}", allowed.join(", "))
             }
         }
     }
@@ -621,6 +696,13 @@ impl ModuleRule {
             }
             ModuleRule::MustNotBeImportedBy { importer } => {
                 vec![("importer", serde_json::json!(importer))]
+            }
+            // `only_importers` (not bare `only`): this rule governs the inbound *importer*
+            // surface, distinct from `restrict_imports_to`'s outbound `only` — the same
+            // surface-qualified-key precedent `only_workspace` sets, so the projection is
+            // self-describing without reading the `rule` label.
+            ModuleRule::MustOnlyBeImportedBy { allowed } => {
+                vec![("only_importers", serde_json::json!(allowed))]
             }
         }
     }
@@ -681,6 +763,21 @@ impl ModuleTargetDraft {
         })
     }
 
+    /// Restrict who may import the governed (protected) module to a closed allowlist: only a
+    /// listed importer (each "or beneath") or the protected module's own subtree may import it;
+    /// any other importer is a violation — the inbound dual of
+    /// [`restrict_imports_to`](Self::restrict_imports_to). An empty allowlist permits only the
+    /// module's own subtree.
+    pub fn must_only_be_imported_by<I, S>(self, allowed: I) -> ModuleBoundaryDraft
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.with_rule(ModuleRule::MustOnlyBeImportedBy {
+            allowed: allowed.into_iter().map(Into::into).collect(),
+        })
+    }
+
     fn with_rule(self, rule: ModuleRule) -> ModuleBoundaryDraft {
         ModuleBoundaryDraft {
             crate_package: self.crate_package,
@@ -714,6 +811,7 @@ impl ModuleBoundaryDraft {
             rule: self.rule,
             reason: reason.to_string(),
             severity: self.severity,
+            anchor: None,
         }
     }
 }

@@ -202,22 +202,18 @@ fn self_law_projection_is_fresh() {
     let path = root.join("AGENTS.self-law.md");
     let live = render_self_law_doc();
 
-    if std::env::var_os("BLESS").is_some() {
-        std::fs::write(&path, &live).expect("write AGENTS.self-law.md");
-        return;
-    }
-
-    let checked_in = std::fs::read_to_string(&path).unwrap_or_else(|e| {
-        panic!(
-            "read {}: {e} — generate it with `BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`",
-            path.display()
-        )
-    });
-    assert_eq!(
-        checked_in, live,
-        "AGENTS.self-law.md is stale; regenerate it with \
-         `BLESS=1 cargo test -p tianheng self_law_projection_is_fresh`"
-    );
+    // Delegate the read/bless/compare to the reusable `projection_gate` helper — the same gate
+    // adopters call for their own projection. The test owns the workspace-only early return above
+    // and reads its own `BLESS` (the helper reads no environment); the helper's `Err` names the
+    // artifact path, preserving the "names the artifact" staleness contract.
+    let bless = std::env::var_os("BLESS").is_some();
+    tianheng::projection_gate(
+        &live,
+        &path,
+        "BLESS=1 cargo test -p tianheng self_law_projection_is_fresh",
+        bless,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
 }
 
 /// Contract C — the **declaration-integrity** reaction (the 潛移/校讎-adjacent shape: its

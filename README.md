@@ -60,7 +60,11 @@ emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other
 onto a PR. In every machine projection a violation's **`reason` is the repair direction** an agent
 fixes toward — the declared intent the boundary protects — *not* the `rule` label (the rule names
 what tripped; the reason says why, and so where to go). Repair toward the reason; never weaken the
-boundary to pass. There is deliberately no GitHub-specific `--format`: turning the reaction into one CI
+boundary to pass. Each violation also carries a structured **`polarity`** — the repair *kind*:
+`deny_breach` (remove the offending edge) or `allowlist_gap` (remove it, or widen/declare the
+intent) — and, when the boundary declares one, an **`anchor`** pointing at the durable decision it
+protects; a baseline entry may likewise carry `owner` / `tracker` metadata, preserved across
+re-baselining. There is deliberately no GitHub-specific `--format`: turning the reaction into one CI
 vendor's annotations is a harness step, not a tool format. For GitHub `::error::` inline
 annotations without SARIF upload, convert the JSON report in a CI step — but **preserve the
 reaction's exit code** (a naïve `check | jq` pipeline would exit with `jq`'s status and let a
@@ -112,24 +116,28 @@ file, so CI fails the moment they diverge — the same staleness gate Tianheng r
 ```rust
 #[test]
 fn agent_law_projection_is_fresh() {
-    let path = "AGENTS.my-project-law.md";
     let fresh = tianheng::constitution_markdown(&constitution());
+    // The caller reads `BLESS`; the helper is a pure function of its arguments.
     // `BLESS=1 cargo test` regenerates after a deliberate, reviewed change to the law.
-    if std::env::var("BLESS").is_ok() {
-        std::fs::write(path, &fresh).unwrap();
-        return;
-    }
-    let committed = std::fs::read_to_string(path).unwrap();
-    assert_eq!(committed, fresh, "stale — regenerate with `BLESS=1 cargo test`");
+    tianheng::projection_gate(
+        &fresh,
+        std::path::Path::new("AGENTS.my-project-law.md"),
+        "BLESS=1 cargo test",
+        std::env::var_os("BLESS").is_some(),
+    )
+    .unwrap();
 }
 ```
 
-This makes the projection a **byte-checked** artifact rather than prose you must remember to
-update: the reaction (a failed test) keeps the imitable surface honest, so an adopter's own
-agent-context enjoys the same non-bypassable freshness as its declared boundaries. (A full
-adopter-facing generator / a `list-self`-style CLI stays deferred — see `BACKLOG.md`, 潛移 —
-because the shipped primitive plus this gate already close the drift; the CLI form would only
-tangle the demo-vs-self-law story.)
+`projection_gate` is the same byte-check reaction Tianheng runs on its own `AGENTS.self-law.md`:
+under bless it rewrites the artifact (creating parent dirs); otherwise it fails — naming the path
+and the regenerate command — when the file drifts, is missing, or is unreadable. This makes the
+projection a **byte-checked** artifact rather than prose you must remember to update: the reaction
+(a failed test) keeps the imitable surface honest, so an adopter's own agent-context enjoys the same
+non-bypassable freshness as its declared boundaries. (The **full adopter-facing generator** and a
+`list-self`-style **CLI** both stay deferred — see `BACKLOG.md`, 潛移 — because the projection
+primitive plus this reusable gate already close the drift; a generator/CLI would only add
+adopter-workflow weight and tangle the demo-vs-self-law story.)
 
 ## The instruments (三儀) — observation dimensions
 
@@ -139,9 +147,9 @@ measuring instruments — each reads a different surface of the code.
 
 | 儀 Instrument | Crate | Observes | Observation source | Status |
 |---|---|---|---|---|
-| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.0** (static core, from modou); **v0.1.2** (declared dependency-source boundary); **v0.1.4** (module scan source-root / `#[path]` & inline-module orphan-shadow hardening) |
-| 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure | AST (`syn`) | **v0.1.0** (signature-coupling, trait-impl-locality, visibility, forbidden-marker); **v0.1.2** (dyn-trait & impl-trait shape-only + operand-scoped; async-exposure); **v0.1.3** (trait-impl exposure opt-in; re-export exposure default-on); **v0.1.4** (external-crate exposure incl. source `extern crate` renames & `pub extern crate`; resolvable type-alias following; every semantic violation names its source file; `#[path]` module-resolution hardening) |
-| 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.0** (origin-assertion; CI probe-coverage face composed into `tianheng check`) |
+| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.x:** static core, declared dependency-source boundaries, module-source hardening, inbound allowlist depth |
+| 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure | AST (`syn`) | **v0.1.x:** semantic boundary family plus external-crate/re-export/alias hardening |
+| 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.x:** origin-assertion, CI probe coverage, escaped-literal and macro-body audit hardening |
 
 **漏刻's two faces, one declared source.** The runtime boundaries you declare in the
 constitution are projected two ways. At CI, `tianheng check` audits that every declared seam
@@ -186,8 +194,8 @@ An empty operand set degenerates to shape-only (any `dyn`) — a loud over-react
 silent no-op — so a mis-declared narrowing can never become a false negative.
 
 Beneath the dimensions sits **`xuanji` (璇璣) — the 底**: the dimension-agnostic
-**reaction model** (`Severity`, `BoundaryKind`, `Violation`, `Report`, `Baseline`, `Outcome`)
-every dimension reacts in. It is `serde_json`-only, renders **no verdict** — it holds the
+**reaction model** (`Severity`, `BoundaryKind`, `Polarity`, `Violation`, `Report`, `Baseline`,
+`Outcome`) every dimension reacts in. It is `serde_json`-only, renders **no verdict** — it holds the
 *measure* but never the react itself (comparing declared against observed lives in the
 dimensions and the shell) — and depends on no workspace member, so a new dimension reuses the
 reaction vocabulary without dragging in another dimension's engine.
@@ -198,10 +206,9 @@ dependencies (AST, runtime) are quarantined to their own crates; the `guibiao` c
 [`BACKLOG.md`](BACKLOG.md) for the deferred phases (their observation sources and open
 design questions) and the governance/observability layer.
 
-Tianheng governs **itself** with its own reaction: the core (`guibiao`) must not depend on
-the shell (`tianheng`), `syn` is quarantined to `hunyi`, `xuanji` stays beneath every
-dimension, and the core stays dependency-light — enforced as a `cargo test` gate
-(`crates/tianheng/tests/self_governance.rs`).
+Tianheng governs **itself** with its own reaction: the live self-law is declared in
+`crates/tianheng/tests/self_governance.rs`, projected into `AGENTS.self-law.md`, and enforced as
+a `cargo test` gate.
 
 ## Non-goals
 
@@ -210,13 +217,9 @@ schema crate, not a lint, not a universal graph API, not a supply-chain policy e
 TOML/Markdown for the constitution. Each dimension keeps its own observation source; nothing
 is named before its reaction exists.
 
-**Relationship to cargo-deny.** Resolved, whole-graph supply-chain policy — advisories,
-dependency licenses, bans/duplicates, resolved source allowlists — is [cargo-deny](https://github.com/EmbarkStudios/cargo-deny)'s
-job; Tianheng governs the complementary *declared, per-target, architectural* layer. For
-dependency **sources** the split is concrete: cargo-deny's `[sources]` governs what your
-*resolved* build pulls from (catching `[patch]`→git redirects); Tianheng's crate-source-boundary
-governs each crate's *declared* manifest source kind (manifest hygiene / publishability, seeing
-optional-git, blind to `[patch]` by design). They complement, they do not overlap.
+**Relationship to cargo-deny.** cargo-deny owns resolved, whole-graph supply-chain policy.
+Tianheng owns the complementary declared, per-target architectural layer; see `PROJECT.md` for the
+dependency-source split.
 
 ## License
 

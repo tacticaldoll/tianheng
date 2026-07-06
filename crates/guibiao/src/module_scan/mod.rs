@@ -3,9 +3,14 @@
 //! module graph reachable from the crate root, and extracts the `crate::…` module
 //! paths a file imports via `use` — comments, string literals, and macro bodies
 //! stripped, so only real, file-based, reachable imports are observed (PROJECT.md).
-//! Pure string and path processing: it depends on no model type, only `std`.
+//! Pure string and path processing: it depends on no model type, only `std`. Its lexical
+//! hygiene (comment/string/macro stripping and token-boundary primitives) lives in the
+//! [`lexer`] submodule.
 
 use std::path::{Path, PathBuf};
+
+mod lexer;
+use lexer::{is_ident_byte, keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
 
 /// Internal module paths imported by `source`, normalized to absolute `crate::…`
 /// form. `current_module` is the importing file's module; a `use` inside an inline
@@ -21,262 +26,39 @@ pub(crate) fn imported_module_paths(
     current_module: &str,
     root_modules: &[String],
 ) -> Vec<String> {
-    let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
-    let mut paths = Vec::new();
-    for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
-        for leaf in expand_use_tree(&tree) {
-            if let Some(absolute) = normalize_module_path(&leaf, &module, root_modules) {
-                paths.push(absolute);
-            }
-        }
-    }
+    let mut paths: Vec<String> = imports_with_importers(source, current_module, root_modules)
+        .into_iter()
+        .map(|(_importer, import)| import)
+        .collect();
     paths.sort();
     paths.dedup();
     paths
 }
 
-/// Remove macro bodies so a `use` written inside a macro — a macro-generated import,
-/// out of scope per the module-boundary spec — is not mistaken for a real import. Two
-/// forms are stripped: a `macro_rules! name <delim>…<delim>` **definition** (name and
-/// balanced body), and a macro **invocation** `ident! <delim>…<delim>` (the balanced
-/// body; the `ident!` head is kept, harmlessly). Runs on already comment/string-stripped
-/// text, so every delimiter is structural and a `macro`/`!` inside a comment or string is
-/// not matched. A real `use` is never inside a macro body, so nothing real is dropped.
-/// The body delimiter may be `{}`, `()`, or `[]`. Never panics on malformed input.
-fn strip_macro_bodies(source: &str) -> String {
-    let bytes = source.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if let Some(end) = macro_rules_body_end(bytes, i) {
-            // `macro_rules! name <delim>…<delim>` — drop the name and the body.
-            out.push(b' ');
-            i = end;
-        } else if bytes[i] == b'!' && i > 0 && is_ident_byte(bytes[i - 1]) {
-            // A macro invocation `ident! <delim>…<delim>`: keep the `!`, drop the body.
-            // The `!` of `macro_rules!` is never reached here — the definition arm above
-            // consumes it. `!=` / unary `!expr` are not invocations: the byte after `!`
-            // is not an opening delimiter, so `macro_invocation_body_end` returns `None`.
-            match macro_invocation_body_end(bytes, i) {
-                Some(end) => {
-                    out.push(b'!');
-                    out.push(b' ');
-                    i = end;
-                }
-                None => {
-                    out.push(bytes[i]);
-                    i += 1;
-                }
-            }
-        } else {
-            out.push(bytes[i]);
-            i += 1;
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// If a `macro_rules! name <delim>…<delim>` definition begins at `i`, return the index
-/// just past its balanced closing delimiter; otherwise `None`. `macro_rules` must be a
-/// standalone word, followed by `!`, a macro name, and an opening `{`/`(`/`[`.
-fn macro_rules_body_end(bytes: &[u8], i: usize) -> Option<usize> {
-    const KW: &[u8] = b"macro_rules";
-    if !bytes[i..].starts_with(KW) || (i > 0 && is_ident_byte(bytes[i - 1])) {
-        return None;
-    }
-    let skip_ws = |mut j: usize| {
-        while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-            j += 1;
-        }
-        j
-    };
-    let mut j = skip_ws(i + KW.len());
-    if bytes.get(j) != Some(&b'!') {
-        return None;
-    }
-    j = skip_ws(j + 1);
-    // The macro name — identifier bytes, tolerating a raw-identifier prefix
-    // (`macro_rules! r#try`): `#` is not an identifier byte, so a plain ident scan would stop at
-    // `r`, `balanced_group_end` would then decline at `#`, and the definition body would be left
-    // unstripped — wrongly observing a `use`/`mod` inside a never-invoked macro definition.
-    if bytes[j..].starts_with(b"r#") {
-        j += 2;
-    }
-    let name_start = j;
-    while j < bytes.len() && is_ident_byte(bytes[j]) {
-        j += 1;
-    }
-    if j == name_start {
-        return None;
-    }
-    balanced_group_end(bytes, skip_ws(j))
-}
-
-/// If `bytes[i]` is the `!` of a macro invocation `ident! <delim>…<delim>` (the caller
-/// has checked an identifier byte immediately precedes), return the index past the
-/// balanced body; otherwise `None`. The opening delimiter may follow whitespace.
-fn macro_invocation_body_end(bytes: &[u8], i: usize) -> Option<usize> {
-    let mut j = i + 1;
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
-    balanced_group_end(bytes, j)
-}
-
-/// Index just past the balanced delimiter group opening at `j` (which must be `{`, `(`,
-/// or `[`), or `None` if `j` is not an opening delimiter. Strings and comments are
-/// already stripped, so every delimiter is structural and same-delimiter groups nest
-/// correctly. An unterminated group (malformed input) ends at end of input, not a panic.
-fn balanced_group_end(bytes: &[u8], j: usize) -> Option<usize> {
-    let (open, close) = match bytes.get(j) {
-        Some(b'{') => (b'{', b'}'),
-        Some(b'(') => (b'(', b')'),
-        Some(b'[') => (b'[', b']'),
-        _ => return None,
-    };
-    let mut depth = 0usize;
-    let mut k = j;
-    while k < bytes.len() {
-        if bytes[k] == open {
-            depth += 1;
-        } else if bytes[k] == close {
-            depth -= 1;
-            if depth == 0 {
-                return Some(k + 1);
+/// Each internal import paired with the **module that actually declares it** — inline-aware, so a
+/// `use` inside an inline `mod inner { … }` is attributed to `{current_module}::inner`, not the
+/// file's module. The inbound rules (`MustNotBeImportedBy` / `MustOnlyBeImportedBy`) test the
+/// *importer's* identity, so they need this pair; [`imported_module_paths`] keeps only the absolute
+/// import path (right for the outbound rules, which test the import), discarding the importer an
+/// inbound rule would otherwise mis-attribute to the file's module. Sorted + deduped by
+/// `(importer, import)`.
+pub(crate) fn imports_with_importers(
+    source: &str,
+    current_module: &str,
+    root_modules: &[String],
+) -> Vec<(String, String)> {
+    let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
+    let mut pairs = Vec::new();
+    for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
+        for leaf in expand_use_tree(&tree) {
+            if let Some(absolute) = normalize_module_path(&leaf, &module, root_modules) {
+                pairs.push((module.clone(), absolute));
             }
         }
-        k += 1;
     }
-    Some(bytes.len())
-}
-
-/// Remove comments and string literals — line (`//`), block (`/* */`), normal,
-/// byte, and C-strings (`"…"`, `b"…"`, `c"…"`, honoring `\"`/`\\`), and raw strings
-/// (`r"…"`, `r#"…"#`, `br#"…"#`, `cr#"…"#`, any number of hashes) — so their contents can never be
-/// mistaken for a `use` declaration: a `//` or a `use …;` written inside any of them
-/// is ignored. Char literals are recognized minimally so a quote-bearing one (`'"'`)
-/// does not open a spurious string; a lifetime (`'a`) is emitted as ordinary text.
-/// Bare path expressions and macro-generated imports remain out of scope (PROJECT.md).
-/// UTF-8 is preserved: kept bytes are decoded once and never split, because every
-/// region boundary cut on is ASCII.
-fn strip_comments_and_strings(source: &str) -> String {
-    let bytes = source.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
-            // Line comment: drop to end of line.
-            while i < bytes.len() && bytes[i] != b'\n' {
-                i += 1;
-            }
-        } else if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'*' {
-            // Block comment: Rust nests these, so track depth and drop through to the
-            // `*/` that closes the outermost one — otherwise commented-out code that
-            // itself contains a `/* */` would re-expose a `use` after the inner close.
-            i += 2;
-            let mut depth = 1usize;
-            while i + 1 < bytes.len() && depth > 0 {
-                if bytes[i] == b'/' && bytes[i + 1] == b'*' {
-                    depth += 1;
-                    i += 2;
-                } else if bytes[i] == b'*' && bytes[i + 1] == b'/' {
-                    depth -= 1;
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-        } else if let Some((hashes, quote)) = raw_string_prefix(bytes, i) {
-            // Raw string `r#*"…"#*`: no escapes; closed by `"` plus the same number
-            // of `#`. Drop the whole literal so its text is never scanned.
-            i = quote + 1;
-            while i < bytes.len() {
-                if bytes[i] == b'"' && raw_closing_matches(bytes, i + 1, hashes) {
-                    i += 1 + hashes;
-                    break;
-                }
-                i += 1;
-            }
-        } else if bytes[i] == b'"' {
-            // String (or byte-string) literal: drop it, honoring `\"` and `\\`.
-            i += 1;
-            while i < bytes.len() && bytes[i] != b'"' {
-                i += if bytes[i] == b'\\' { 2 } else { 1 };
-            }
-            i += 1;
-        } else if bytes[i] == b'\'' {
-            // A char literal must be skipped whole so a quote it contains (`'"'`)
-            // cannot open a spurious string. A lifetime (`'a`) has no closing quote
-            // and is emitted as ordinary text.
-            if i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
-                // Escaped char literal (`'\n'`, `'\''`, `'\u{…}'`): skip the opening
-                // quote and the backslash, then the escaped character itself (which may
-                // be a `'`, as in `'\''`), then scan to the closing quote. Skipping the
-                // escaped character first is what keeps `'\''` from ending on its own
-                // escaped quote and leaking the real closing quote.
-                i += 2;
-                if i < bytes.len() {
-                    i += 1;
-                }
-                while i < bytes.len() && bytes[i] != b'\'' {
-                    i += 1;
-                }
-                i += 1;
-            } else if i + 2 < bytes.len() && bytes[i + 2] == b'\'' {
-                // Simple char literal (`'x'`, `'"'`).
-                i += 3;
-            } else {
-                // A lifetime or stray quote.
-                out.push(bytes[i]);
-                i += 1;
-            }
-        } else {
-            out.push(bytes[i]);
-            i += 1;
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// If a raw string literal begins at `i` — `r`, `br`, or `cr` at a token boundary, then any
-/// number of `#`, then `"` — return `(hash_count, index_of_opening_quote)`. A leading
-/// `r`/`b`/`c` that is the tail of an identifier is not a prefix. The `cr`/`cr#` form is the raw
-/// **C-string** literal (stable since Rust 1.79): without recognizing it, the `cr#"…"#` body is
-/// scanned as code plus plain strings, and an **odd** number of inner unescaped `"` (raw strings
-/// do not escape) leaves a final `"` that opens an unterminated plain string running to EOF,
-/// swallowing a following `use` — a false negative. A non-raw `c"…"` / `b"…"` needs no handling
-/// here — its `"` opens a plain string with ordinary escaping, which the plain-string branch
-/// already strips correctly (the `c`/`b` prefix byte is emitted as harmless code).
-fn raw_string_prefix(bytes: &[u8], i: usize) -> Option<(usize, usize)> {
-    if i > 0 && is_ident_byte(bytes[i - 1]) {
-        return None;
-    }
-    let mut j = i;
-    // An optional single byte-string (`b`) or C-string (`c`) prefix before the raw `r` — Rust has
-    // no `bc`/`cb` combination, so at most one applies.
-    if matches!(bytes.get(j), Some(&b'b') | Some(&b'c')) {
-        j += 1;
-    }
-    if bytes.get(j) != Some(&b'r') {
-        return None;
-    }
-    j += 1;
-    let mut hashes = 0;
-    while bytes.get(j) == Some(&b'#') {
-        hashes += 1;
-        j += 1;
-    }
-    if bytes.get(j) == Some(&b'"') {
-        Some((hashes, j))
-    } else {
-        None
-    }
-}
-
-/// Whether `hashes` `#` characters start at `at` — the closing delimiter that, with
-/// the preceding `"`, terminates a raw string opened with the same number of hashes.
-fn raw_closing_matches(bytes: &[u8], at: usize, hashes: usize) -> bool {
-    (0..hashes).all(|k| bytes.get(at + k) == Some(&b'#'))
+    pairs.sort();
+    pairs.dedup();
+    pairs
 }
 
 /// Each `use … ;` statement paired with the module that lexically encloses it. The
@@ -298,6 +80,21 @@ fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, Strin
     while i < bytes.len() {
         if keyword_starts_at(bytes, i, b"use") {
             let start = i + 3;
+            // A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use`
+            // token inside a type bound: it is followed by `<`, whereas a `use` *statement* is
+            // always followed by a path (ident / `{` / `*` / `::` / `crate`/`self`/`super`).
+            // So a `<` here means this is a bound, not an import — skip past the `use` token and
+            // continue (letting the `<…>` be walked as ordinary bytes) rather than scanning to the
+            // next `;`, which would swallow the following real `use` (a false negative). A comment
+            // between `use` and `<` is already removed by the upstream comment/string strip.
+            let mut p = start;
+            while p < bytes.len() && bytes[p].is_ascii_whitespace() {
+                p += 1;
+            }
+            if bytes.get(p) == Some(&b'<') {
+                i = start;
+                continue;
+            }
             match source[start..].find(';') {
                 Some(rel) => {
                     trees.push((
@@ -342,18 +139,6 @@ fn effective_module(base: &str, mod_stack: &[(String, usize)]) -> String {
         module.push_str(name);
     }
     module
-}
-
-/// Whether `keyword` appears as a standalone word starting exactly at `i` (bounded by
-/// non-identifier bytes on both sides).
-fn keyword_starts_at(bytes: &[u8], i: usize, keyword: &[u8]) -> bool {
-    if !bytes[i..].starts_with(keyword) {
-        return false;
-    }
-    let before_ok = i == 0 || !is_ident_byte(bytes[i - 1]);
-    let after = i + keyword.len();
-    let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
-    before_ok && after_ok
 }
 
 /// If an inline module declaration `mod <ident> {` begins at `i` (a standalone `mod`
@@ -406,18 +191,22 @@ pub(crate) fn canonical_module_path(path: &str) -> String {
         .join("::")
 }
 
-fn is_ident_byte(byte: u8) -> bool {
-    // Any non-ASCII byte (>= 0x80) is a UTF-8 lead/continuation byte of a Unicode
-    // identifier character (Rust allows non-ASCII identifiers, e.g. `use貓`). Treating
-    // it as an identifier byte keeps keyword detection (`use`, `mod`) from firing inside
-    // a Unicode identifier: `keyword_at("use貓;", …, "use")` must be `None`, since `use貓`
-    // is one identifier, not the `use` keyword.
-    byte == b'_' || byte.is_ascii_alphanumeric() || byte >= 0x80
-}
-
 /// Expand a use tree into leaf paths: `a::{b, c::d}` -> `a::b`, `a::c::d`; drop
 /// `::*` and ` as alias`; `{self}` resolves to the prefix module.
 fn expand_use_tree(tree: &str) -> Vec<String> {
+    expand_use_tree_depth(tree, 0)
+}
+
+/// A brace-nesting depth cap so a pathologically nested `use a::{b::{c::{ … }}}` cannot overflow the
+/// stack — a DoS backstop set far beyond any real or lint-clean source (rustfmt-formatted `use`s
+/// nest a handful of levels). Past the cap the sub-tree is not expanded; this is the only place the
+/// scanner bounds coverage, so it is logged as a stated limit, not a silent hole for real code.
+const MAX_USE_NEST_DEPTH: usize = 128;
+
+fn expand_use_tree_depth(tree: &str, depth: usize) -> Vec<String> {
+    if depth >= MAX_USE_NEST_DEPTH {
+        return Vec::new();
+    }
     let tree = tree.trim();
     match tree.find('{') {
         Some(open) => {
@@ -435,7 +224,7 @@ fn expand_use_tree(tree: &str) -> Vec<String> {
                         out.push(module.to_string());
                     }
                 } else {
-                    out.extend(expand_use_tree(&format!("{prefix}{part}")));
+                    out.extend(expand_use_tree_depth(&format!("{prefix}{part}"), depth + 1));
                 }
             }
             out
@@ -869,7 +658,15 @@ fn file_module_path(relative: &Path) -> String {
     for (index, component) in components.iter().enumerate() {
         if index == last {
             let stem = component.strip_suffix(".rs").unwrap_or(component);
-            if !matches!(stem, "mod" | "lib" | "main") {
+            // `mod.rs` names its directory at any depth. `lib.rs`/`main.rs` are segment-less ONLY at
+            // the crate root — they are the cargo *target* roots there, not module names. A declared
+            // submodule file literally named `lib.rs`/`main.rs` (`mod lib;` inside a subdir →
+            // `foo/lib.rs` = `crate::foo::lib`) contributes its stem like any other file; stripping
+            // it at depth would mis-map it to its parent and drift from 渾儀's declaration-driven
+            // descent (which resolves it correctly).
+            let segmentless =
+                stem == "mod" || (components.len() == 1 && matches!(stem, "lib" | "main"));
+            if !segmentless {
                 segments.push(canonical_segment(stem).to_string());
             }
         } else {
@@ -898,10 +695,24 @@ pub(crate) fn rust_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
                 dir.display()
             )
         })?;
+        // Recurse only into a real directory: `file_type()` does NOT follow symlinks (unlike
+        // `path.is_dir()`, which stats the target), so a symlinked directory (a cyclic
+        // `src/loop -> .`) is not entered — avoiding an unbounded recursion → stack overflow.
+        // Matches louke's probe scanner, which guards the same hazard the same way.
+        let file_type = entry.file_type().map_err(|err| {
+            format!(
+                "cannot stat an entry in governed source directory '{}': {err}",
+                dir.display()
+            )
+        })?;
         let path = entry.path();
-        if path.is_dir() {
+        if file_type.is_dir() {
             found.extend(rust_files(&path)?);
         } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+            // A `.rs` file — including a symlink whose target is a real file: rustc compiles such a
+            // `mod`-declared source (and `read_to_string` follows the symlink to it), so it is
+            // governed. Not gated on `file_type.is_file()`, which would drop a symlinked source and
+            // silently miss its imports; a symlinked *directory* is already excluded above.
             found.push(path);
         }
     }
@@ -1280,6 +1091,48 @@ mod tests {
         // And nothing is observed as an import or a declared module from the identifier.
         assert!(imported_module_paths("fn use貓() {}", "crate", &[]).is_empty());
         assert!(declared_modules("fn mod貓() {}").is_empty());
+    }
+
+    #[test]
+    fn a_precise_capturing_use_bound_does_not_swallow_the_following_use() {
+        // `-> impl Trait + use<…>` (stable Rust) is a precise-capturing bound, not an import.
+        // The scanner must not treat it as a `use` statement and consume to the next `;`, which
+        // would swallow the real `use` that follows — a false negative that silently disables the
+        // module boundary. Cover the empty, parameterized, whitespace, and comment forms.
+        for header in [
+            "fn iter() -> impl Iterator<Item = u8> + use<> { std::iter::empty() }",
+            "fn iter<'a, T>() -> impl Iterator<Item = &'a T> + use<'a, T> { loop {} }",
+            "fn iter() -> impl Iterator<Item = u8> + use <> { std::iter::empty() }",
+            "fn iter() -> impl Iterator<Item = u8> + use /*c*/ <> { std::iter::empty() }",
+        ] {
+            let src = format!("{header}\nuse crate::forbidden::Thing;");
+            assert_eq!(
+                imported_module_paths(&src, "crate", &[]),
+                vec!["crate::forbidden::Thing".to_string()],
+                "the `use<…>` bound must be skipped so the following real use is observed: {header:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_use_bound_as_the_last_token_neither_panics_nor_drops_a_preceding_use() {
+        // Control: a plain `use` is unaffected. And a `use<>` bound as the file's final token
+        // (no trailing `;`) must not panic (bounds-safe peek) and must not drop the real `use`
+        // that precedes it.
+        assert_eq!(
+            imported_module_paths("use crate::x::Y;", "crate", &[]),
+            vec!["crate::x::Y".to_string()],
+            "a plain use is unaffected by the bound-skip"
+        );
+        assert_eq!(
+            imported_module_paths(
+                "use crate::x::Y;\nfn f() -> impl Sized + use<>",
+                "crate",
+                &[],
+            ),
+            vec!["crate::x::Y".to_string()],
+            "a trailing use<> bound must not drop the preceding real use or panic"
+        );
     }
 
     #[test]

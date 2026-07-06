@@ -1,5 +1,10 @@
 use super::*;
 
+use std::path::PathBuf;
+
+use crate::errors::unknown_module_error;
+use crate::module_resolve::resolve_module_file;
+
 /// Write `files` (each `(relative path, contents)`) under a unique temp `src` dir, then
 /// return the findings for `module` against `forbidden`. Exercises the whole evaluator
 /// (module resolution → exposure → use-resolution → match) without spawning `cargo`.
@@ -85,6 +90,59 @@ fn hyphenated_dependency_name_is_normalized() {
     let mut names = dependency_names(&package);
     names.sort();
     assert_eq!(names, vec!["async_trait".to_string(), "pkg".to_string()]);
+}
+
+#[test]
+fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
+    // Two boundaries of one capability on one module can emit the same ViolationId; the outcome
+    // fold collapses them by id and keeps the more-severe reaction, so a warn duplicate never masks
+    // an enforce one and the fact is reported once (parity with the 圭表 static dimension's dedup).
+    let mk = |sev| {
+        Violation::new(
+            BoundaryKind::Semantic,
+            "crate::m".to_string(),
+            SIGNATURE_RULE.to_string(),
+            "crate::infra::Db exposed by fn crate::m::f".to_string(),
+            "reason".to_string(),
+            sev,
+        )
+    };
+    match outcome_from(vec![mk(Severity::Warn), mk(Severity::Enforce)]) {
+        Outcome::Violations(report) => {
+            assert_eq!(
+                report.violations.len(),
+                1,
+                "the duplicate id collapses to one: {:?}",
+                report.violations
+            );
+            assert_eq!(
+                report.violations[0].severity,
+                Severity::Enforce,
+                "the more-severe reaction is kept"
+            );
+        }
+        other => panic!("expected Violations, got {other:?}"),
+    }
+}
+
+#[test]
+fn crate_root_file_resolves_a_proc_macro_target() {
+    // A proc-macro crate's target kind is `["proc-macro"]` (never lib/bin); it must still resolve
+    // its root file so the semantic dimension governs it, not raise a false missing-src exit-2.
+    let package = serde_json::json!({
+        "targets": [{ "kind": ["proc-macro"], "src_path": "/w/src/lib.rs" }]
+    });
+    assert_eq!(
+        crate::metadata::crate_root_file(&package),
+        Some(std::path::PathBuf::from("/w/src/lib.rs"))
+    );
+}
+
+#[test]
+fn leaf_of_strips_a_raw_identifier() {
+    // Declared marker leaf compares raw-canonicalized, symmetric with the observed `path_leaf`.
+    assert_eq!(leaf_of("crate::a::r#Trait"), "Trait");
+    assert_eq!(leaf_of("Plain"), "Plain");
 }
 
 #[test]
@@ -354,6 +412,109 @@ fn facade_hop_reexporting_a_privately_used_bare_name_is_a_stated_bound() {
     )
     .unwrap();
     assert_eq!(out, Vec::<String>::new());
+}
+
+// --- facade-closure re-export head-shadow (the sibling of the direct-head FP) -
+
+#[test]
+fn facade_reaching_a_child_shadowed_extern_head_does_not_react() {
+    // FP closed (extern-set variant): `crate::a` re-exports `dep::spi::Foo` but declares a child
+    // `mod dep`, so rustc resolves the bare head to the local module — the target is local, not the
+    // dependency. A facade `crate::b`'s `pub use crate::a::Foo;` must NOT react: the crate-wide
+    // re-export closure now excludes `crate::a`'s own child modules when collecting its re-exports,
+    // so it no longer records `crate::a::Foo → dep::spi::Foo`.
+    let out = findings_with_deps(
+        "facade-child-shadow-extern",
+        &[
+            ("lib.rs", "pub mod a;\npub mod b;\n"),
+            (
+                "a.rs",
+                "pub mod dep { pub mod spi { pub struct Foo; } }\npub use dep::spi::Foo;\n",
+            ),
+            ("b.rs", "pub use crate::a::Foo;\n"),
+        ],
+        "crate::b",
+        &["dep::spi"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, Vec::<String>::new());
+}
+
+#[test]
+fn facade_reaching_a_child_shadowed_rename_alias_head_does_not_react() {
+    // FP closed (rename-alias variant): a crate-root `extern crate worklane_core as wc;`, but
+    // `crate::a` declares a child `mod wc` that shadows the bare alias head within `crate::a` (a
+    // submodule `mod wc` does not conflict with the crate-root rename), so `pub use wc::spi::Foo;`
+    // is local. A facade `crate::b` must NOT react — the closure's rename map is child-excluded for
+    // `crate::a`'s bare heads, so it no longer rewrites `wc` to `worklane_core`.
+    let out = findings_with_deps(
+        "facade-child-shadow-rename",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod a;\npub mod b;\n",
+            ),
+            (
+                "a.rs",
+                "pub mod wc { pub mod spi { pub struct Foo; } }\npub use wc::spi::Foo;\n",
+            ),
+            ("b.rs", "pub use crate::a::Foo;\n"),
+        ],
+        "crate::b",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(out, Vec::<String>::new());
+}
+
+#[test]
+fn leading_colon_facade_hop_reacts_through_the_closure_despite_a_child_module() {
+    // No FN (the escape hatch through a facade): `crate::a`'s `pub use ::dep::spi::Foo;` is an
+    // unambiguous extern (leading `::`), unshadowed by the child `mod dep`. A facade `crate::b`
+    // must STILL react — the closure honors the `use` item's leading colon and keeps the raw extern
+    // set for that head, so it records `crate::a::Foo → dep::spi::Foo`.
+    let out = findings_with_deps(
+        "facade-leading-colon",
+        &[
+            ("lib.rs", "pub mod a;\npub mod b;\n"),
+            (
+                "a.rs",
+                "pub mod dep { pub mod spi { pub struct Foo; } }\npub use ::dep::spi::Foo;\n",
+            ),
+            ("b.rs", "pub use crate::a::Foo;\n"),
+        ],
+        "crate::b",
+        &["dep::spi"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, ["dep::spi::Foo exposed by pub use crate::b::Foo"]);
+}
+
+#[test]
+fn crate_root_mod_does_not_suppress_a_child_facade_reexport_through_the_closure() {
+    // No FN (per-defining-module scope): a crate-root `mod dep` does not shadow a bare
+    // `pub use dep::Foo;` in a *child* module `crate::a` (there bare `dep` reaches only the extern
+    // prelude — the crate-root module is `crate::dep`), so the closure still records the extern hop
+    // and a facade `crate::b` reacts. The subtraction is scoped to each defining module's own items.
+    let out = findings_with_deps(
+        "facade-crate-root-mod",
+        &[
+            (
+                "lib.rs",
+                "pub mod dep { pub struct Foo; }\npub mod a;\npub mod b;\n",
+            ),
+            ("a.rs", "pub use dep::Foo;\n"),
+            ("b.rs", "pub use crate::a::Foo;\n"),
+        ],
+        "crate::b",
+        &["dep"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, ["dep::Foo exposed by pub use crate::b::Foo"]);
 }
 
 // --- type-alias exposure (P1.1: resolvable-nominal-path aliases) -------------
@@ -756,6 +917,61 @@ fn source_level_extern_crate_rename_in_a_type_position_reacts() {
         out,
         ["worklane_core::spi::Foo exposed by fn crate::domain::make"]
     );
+}
+
+#[test]
+fn private_use_of_a_crate_root_extern_rename_reacts() {
+    // FN closed: a forbidden type imported by a PRIVATE `use wc::spi::Foo;` (wc = a crate-root
+    // `extern crate worklane_core as wc;` rename) resolves through the use-map to `wc::spi::Foo`
+    // verbatim — the use-map never consults the rename map. `apply_bare_alias_rename` rewrites the
+    // bare alias head to the real crate, so it now matches the forbidden real name, exactly as the
+    // direct `-> wc::spi::Foo` type-position spelling already did.
+    let out = findings_with_deps(
+        "ext-private-use-rename",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod domain;\n",
+            ),
+            (
+                "domain.rs",
+                "use wc::spi::Foo;\npub fn make() -> Foo { unimplemented!() }\n",
+            ),
+        ],
+        "crate::domain",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["worklane_core::spi::Foo exposed by fn crate::domain::make"]
+    );
+}
+
+#[test]
+fn private_use_of_a_child_shadowed_rename_alias_does_not_react() {
+    // FP guard on the #2 fix: a governed module with its own child `mod wc` shadows the crate-root
+    // alias, so `renames_bare` excludes `wc` and the bare-head rewrite does not fire — the imported
+    // `Foo` stays local (`crate::domain::wc::spi::Foo`) and is not mistaken for the forbidden dep.
+    let out = findings_with_deps(
+        "ext-private-use-shadowed",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod domain;\n",
+            ),
+            (
+                "domain.rs",
+                "pub mod wc { pub mod spi { pub struct Foo; } }\nuse wc::spi::Foo;\npub fn make() -> Foo { unimplemented!() }\n",
+            ),
+        ],
+        "crate::domain",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(out, Vec::<String>::new());
 }
 
 #[test]
@@ -3858,6 +4074,21 @@ fn dyn_in_const_static_trait_method_assoc_default_and_where_react() {
 }
 
 #[test]
+fn dyn_in_an_inherent_impl_public_assoc_const_reacts() {
+    // FN closed: the dyn collector's inherent-impl arm now observes public associated `const`/`type`
+    // positions (parity with the signature-coupling collector, which gained them this release), so a
+    // `dyn` written in an inherent-impl `pub const` type reacts — it did not before.
+    assert_eq!(
+        dyn_mod(
+            "inherent-assoc-const",
+            "pub struct Config;\nimpl Config { pub const DEFAULT: &dyn crate::Port = todo!(); }\n",
+        )
+        .unwrap(),
+        ["dyn crate::Port exposed by const <crate::m::Config>::DEFAULT"]
+    );
+}
+
+#[test]
 fn public_alias_target_reacts_but_named_alias_is_not_expanded() {
     // The public alias item's own target exposes dyn → reacts at the alias.
     assert_eq!(
@@ -4807,6 +5038,75 @@ fn dyn_operand_inline_dependency_and_crate_root_rename_react() {
 }
 
 #[test]
+fn dyn_operand_crate_relative_extern_rename_reacts() {
+    // FN closed: the crate-relative spelling `crate::d::T` of a crate-root `extern crate dep as d;`
+    // rename is rewritten (apply_crate_root_rename) exactly as the exposure resolver does, so it
+    // reacts alike the bare `d::T` head — the specs' "same resolver ladder … with a crate-root
+    // rename applied". Before, the operand resolver skipped this rewrite and this leak was silent.
+    let out = dyn_operand_findings(
+        "op-crate-rel-rename",
+        &[
+            ("lib.rs", "extern crate dep as d;\npub mod m;\n"),
+            (
+                "m.rs",
+                "pub fn f() -> Box<dyn crate::d::Port> { todo!() }\n",
+            ),
+        ],
+        "crate::m",
+        &["dep::Port"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, ["dyn crate::d::Port exposed by fn crate::m::f"]);
+}
+
+#[test]
+fn dyn_operand_child_shadowed_rename_head_does_not_react() {
+    // FP closed: the governed module declares its own child `mod d`, which shadows the crate-root
+    // `extern crate dep as d;` alias within it (rustc resolves bare `d::Port` to the local module,
+    // not the dep). The operand resolver's bare-head rewrite uses the child-shadowed rename map
+    // (renames_bare), so it no longer rewrites `d` to `dep` and does not react. Before, it used the
+    // full rename map and over-reacted on the local trait.
+    let out = dyn_operand_findings(
+        "op-child-shadow-rename",
+        &[
+            ("lib.rs", "extern crate dep as d;\npub mod m;\n"),
+            (
+                "m.rs",
+                "pub mod d { pub trait Port {} }\npub fn f() -> Box<dyn d::Port> { todo!() }\n",
+            ),
+        ],
+        "crate::m",
+        &["dep::Port"],
+        &["dep"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a child-shadowed bare rename head must not react: {out:?}"
+    );
+}
+
+#[test]
+fn impl_trait_operand_crate_relative_extern_rename_reacts() {
+    // The crate-root-rename fix lives in the shared `resolve_principal`, so the impl-trait operand
+    // path gets it too: `impl crate::d::Port` under `extern crate dep as d;` reacts alike the bare
+    // head, closing the same FN on the existential-exposure rule.
+    let out = impl_trait_operand_findings(
+        "op-impl-crate-rel-rename",
+        &[
+            ("lib.rs", "extern crate dep as d;\npub mod m;\n"),
+            ("m.rs", "pub fn f() -> impl crate::d::Port { todo!() }\n"),
+        ],
+        "crate::m",
+        &["dep::Port"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl crate::d::Port exposed by fn crate::m::f"]);
+}
+
+#[test]
 fn dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound() {
     // A bare single-segment principal that is neither in scope nor a declared/sysroot crate stays
     // dropped (the stated resolver bound) — the oracle does not over-reach (crate != trait anyway).
@@ -4857,5 +5157,238 @@ fn impl_trait_operand_inline_sysroot_trait_reacts() {
     assert!(
         unlisted.is_empty(),
         "unlisted impl-trait operand must pass: {unlisted:?}"
+    );
+}
+
+// --- re-export head shadowed by a same-named child module (FP closure) -----
+
+#[test]
+fn reexport_head_shadowed_by_a_child_module_does_not_react() {
+    // FP closed: `pub use dep::spi::Foo;` in a module that also declares a child `mod dep`
+    // resolves (per rustc) to the local module, not the dependency, so it must NOT react under a
+    // boundary forbidding the dependency. The child `mod dep` is subtracted from the re-export set.
+    let out = findings_with_deps(
+        "reexport-child-shadow",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub mod dep { pub mod spi { pub struct Foo; } }\npub use dep::spi::Foo;\n",
+            ),
+        ],
+        "crate::domain",
+        &["dep::spi"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        Vec::<String>::new(),
+        "the child-module shadow closes the FP: {out:?}"
+    );
+}
+
+#[test]
+fn reexport_head_with_crate_root_module_in_a_child_still_reacts() {
+    // No FN: a crate-root `mod dep` does NOT shadow a bare `pub use dep::Foo;` in a CHILD module
+    // (there `dep` reaches only the extern prelude). The child declares no `mod dep`, so `dep`
+    // stays in its re-export extern set and the re-export still reacts.
+    let out = findings_with_deps(
+        "reexport-crateroot-mod",
+        &[
+            (
+                "lib.rs",
+                "pub mod dep { pub struct Foo; }\npub mod domain;\n",
+            ),
+            ("domain.rs", "pub use dep::Foo;\n"),
+        ],
+        "crate::domain",
+        &["dep"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, ["dep::Foo exposed by pub use crate::domain::Foo"]);
+}
+
+#[test]
+fn reexport_head_is_not_suppressed_by_a_same_named_local_struct() {
+    // Discriminating guard: only child MODULES are subtracted, not the full type namespace. A local
+    // `struct dep;` (not a module) must NOT suppress the re-export — it still resolves to the
+    // dependency. (If this ever reused `local_type_namespace_names`, the struct would wrongly
+    // suppress it and this would return empty — a false negative.)
+    let out = findings_with_deps(
+        "reexport-struct-not-module",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            ("domain.rs", "pub struct dep;\npub use dep::spi::Foo;\n"),
+        ],
+        "crate::domain",
+        &["dep::spi"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, ["dep::spi::Foo exposed by pub use crate::domain::Foo"]);
+}
+
+#[test]
+fn reexport_leading_colon_reacts_despite_a_child_module_shadow() {
+    // Escape hatch: `pub use ::dep::spi::Foo;` bypasses the shadow (leading-`::` uses the raw
+    // extern set) and reacts even with a same-module child `mod dep`.
+    let out = findings_with_deps(
+        "reexport-leading-colon",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub mod dep { pub mod spi { pub struct Foo; } }\npub use ::dep::spi::Foo;\n",
+            ),
+        ],
+        "crate::domain",
+        &["dep::spi"],
+        &["dep"],
+    )
+    .unwrap();
+    assert_eq!(out, ["dep::spi::Foo exposed by pub use crate::domain::Foo"]);
+}
+
+// --- crate-root extern rename: crate-relative FN + submodule-shadow FP ------
+
+#[test]
+fn crate_relative_spelling_of_a_crate_root_rename_reacts() {
+    // FN closed: `crate::wc::spi::Foo` (the crate-relative spelling of a crate-root
+    // `extern crate worklane_core as wc;`) is rewritten to the real crate and reacts.
+    let out = findings_with_deps(
+        "crate-alias-crate-relative",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod domain;\n",
+            ),
+            (
+                "domain.rs",
+                "pub fn make() -> crate::wc::spi::Foo { unimplemented!() }\n",
+            ),
+        ],
+        "crate::domain",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["worklane_core::spi::Foo exposed by fn crate::domain::make"]
+    );
+}
+
+#[test]
+fn crate_relative_rename_behind_a_type_alias_and_reexport_reacts() {
+    // The crate-relative rewrite is applied AFTER the alias/re-export closure, so `crate::wc::…`
+    // reached through a `type` alias or a `pub use` target reacts too (not only when written
+    // directly in a signature).
+    let out = findings_with_deps(
+        "crate-alias-through-alias",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod domain;\n",
+            ),
+            (
+                "domain.rs",
+                "type H = crate::wc::spi::Foo;\npub fn make() -> H { unimplemented!() }\npub use crate::wc::spi::Bar;\n",
+            ),
+        ],
+        "crate::domain",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "worklane_core::spi::Bar exposed by pub use crate::domain::Bar",
+            "worklane_core::spi::Foo exposed by fn crate::domain::make",
+        ]
+    );
+}
+
+#[test]
+fn bare_rename_head_shadowed_by_a_submodule_child_mod_does_not_react() {
+    // FP closed: the governed submodule declares its own child `mod wc`, which rustc lets shadow the
+    // crate-root extern alias, so bare `wc::spi::Foo` is the local module — not the dependency.
+    let out = findings_with_deps(
+        "crate-alias-submodule-shadow",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod domain;\n",
+            ),
+            (
+                "domain.rs",
+                "pub mod wc { pub mod spi { pub struct Foo; } }\npub fn make() -> wc::spi::Foo { unimplemented!() }\n",
+            ),
+        ],
+        "crate::domain",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        Vec::<String>::new(),
+        "the child mod wc shadow closes the FP: {out:?}"
+    );
+}
+
+#[test]
+fn bare_rename_head_with_no_local_shadow_still_reacts() {
+    // No FN: with no local `mod wc`, the crate-wide bare rewrite is preserved and reacts.
+    let out = findings_with_deps(
+        "crate-alias-no-shadow",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod domain;\n",
+            ),
+            (
+                "domain.rs",
+                "pub fn make() -> wc::spi::Foo { unimplemented!() }\n",
+            ),
+        ],
+        "crate::domain",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["worklane_core::spi::Foo exposed by fn crate::domain::make"]
+    );
+}
+
+#[test]
+fn a_deeper_crate_relative_alias_segment_is_not_rewritten() {
+    // Guard: only the segment immediately after `crate` is the crate-root rename alias. A deeper
+    // `crate::m::wc::…` is a local submodule item and must NOT be rewritten to the dependency.
+    let out = findings_with_deps(
+        "crate-alias-deeper-segment",
+        &[
+            (
+                "lib.rs",
+                "extern crate worklane_core as wc;\npub mod domain;\n",
+            ),
+            (
+                "domain.rs",
+                "pub mod m { pub mod wc { pub mod spi { pub struct Foo; } } }\npub fn make() -> crate::m::wc::spi::Foo { unimplemented!() }\n",
+            ),
+        ],
+        "crate::domain",
+        &["worklane_core::spi"],
+        &["worklane_core"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        Vec::<String>::new(),
+        "a deeper crate::m::wc is local, not the rename: {out:?}"
     );
 }

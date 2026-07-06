@@ -1,0 +1,2551 @@
+//! White-box unit tests for the crate-private machinery — the baseline, the JSON
+//! and text projections, and the source scanner. Black-box behavior (running
+//! `check` against fixture workspaces) lives in `tests/dogfood.rs`.
+use super::*;
+
+fn one_enforce_violation() -> Report {
+    Report::new(vec![Violation::new(
+        BoundaryKind::Crate,
+        "core".to_string(),
+        "deny external dependencies".to_string(),
+        "serde".to_string(),
+        "core must stay dependency-light".to_string(),
+        Severity::Enforce,
+    )])
+}
+
+#[cfg(unix)]
+#[test]
+fn rust_files_does_not_recurse_into_a_symlinked_directory_cycle() {
+    // A directory symlink pointing back at an ancestor would make a symlink-following walk recurse
+    // forever (stack overflow). `rust_files` decides recursion from `file_type()` (no symlink
+    // follow), so the cycle is not entered and the real source file is still found.
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("guibiao-symlink-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("mkdir src");
+    std::fs::write(src.join("lib.rs"), "// root\n").expect("write lib.rs");
+    symlink(&src, src.join("loop")).expect("create a directory symlink cycle");
+    let files = crate::module_scan::rust_files(&src);
+    let _ = std::fs::remove_dir_all(&dir);
+    let files = files.expect("rust_files must not error on a symlink cycle");
+    assert_eq!(
+        files.len(),
+        1,
+        "only the real source file; the symlinked directory must not be followed: {files:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn rust_files_governs_a_symlinked_source_file() {
+    // A symlink whose target is a real `.rs` file is compiled by rustc (once `mod`-declared) and
+    // must be governed — it must NOT be dropped as a non-`is_file()` symlink, which would silently
+    // miss its imports. Only the directory branch is symlink-blind (for cycle safety).
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("guibiao-symlink-file-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    let ext = dir.join("external");
+    std::fs::create_dir_all(&src).expect("mkdir src");
+    std::fs::create_dir_all(&ext).expect("mkdir external");
+    std::fs::write(src.join("lib.rs"), "// root\n").expect("write lib.rs");
+    std::fs::write(ext.join("shared.rs"), "// shared\n").expect("write symlink target");
+    symlink(ext.join("shared.rs"), src.join("shared.rs")).expect("symlink a source file in");
+    let files = crate::module_scan::rust_files(&src);
+    let _ = std::fs::remove_dir_all(&dir);
+    let files = files.expect("rust_files must not error");
+    assert_eq!(
+        files.len(),
+        2,
+        "both the real file and the symlinked-in source file are governed: {files:?}"
+    );
+}
+
+#[test]
+fn expand_use_tree_does_not_overflow_on_pathological_nesting() {
+    // A pathologically brace-nested `use` must not overflow the stack. The depth cap bounds the
+    // recursion and returns (truncated past the cap — the safe direction for adversarial input no
+    // real, rustfmt-clean source reaches). The point of the test is that it terminates.
+    let deep = format!("use {}b{};", "a::{".repeat(20_000), "}".repeat(20_000));
+    let out = crate::module_scan::imported_module_paths(&deep, "crate::m", &[]);
+    assert!(
+        out.is_empty(),
+        "past the depth cap the sub-tree is not expanded: {out:?}"
+    );
+}
+
+#[test]
+fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
+    // `lib.rs`/`main.rs` are segment-less only at the crate root. A declared submodule file
+    // `foo/lib.rs` is `crate::foo::lib` (matching rustc and 渾儀's descent), so a boundary on it
+    // resolves and reacts instead of raising a false inline-module exit-2 or scanning the wrong
+    // module.
+    let (result, violations) = run_module_check(
+        "submodule-named-lib",
+        &[
+            ("lib.rs", "pub mod foo;\npub mod sink;\n"),
+            ("foo.rs", "pub mod lib;\n"),
+            ("foo/lib.rs", "use crate::sink;\n"),
+            ("sink.rs", "// target\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::foo::lib")
+            .must_not_import("crate::sink")
+            .because("foo::lib must not touch sink"),
+    );
+    assert!(
+        result.is_ok(),
+        "the submodule file must resolve, not raise a false exit-2: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::foo::lib");
+    assert_eq!(violations[0].finding, "crate::sink");
+}
+
+/// An unreadable governed source file must surface as a scan error (exit 2),
+/// not a silent skip that could hide a real module-boundary violation. Unix
+/// only (permission-based) and self-calibrating: it skips under a privileged
+/// user (e.g. root in CI), where mode 0 is still readable, rather than
+/// false-passing.
+#[cfg(unix)]
+#[test]
+fn unreadable_governed_file_is_a_scan_error() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join(format!("guibiao-unreadable-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("create temp src");
+    let file = src.join("lib.rs");
+    std::fs::write(&file, "use crate::forbidden::Thing;\n").expect("write governed file");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000))
+        .expect("drop read permission");
+
+    // Self-calibrating root guard: if mode 0 is still readable, permissions do
+    // not bite here, so the premise cannot hold — skip rather than false-pass.
+    if std::fs::read_to_string(&file).is_ok() {
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate")
+        .must_not_import("crate::forbidden")
+        .because("the test module must not import the forbidden module");
+
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+
+    let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(
+        result.is_err(),
+        "an unreadable governed file must be a scan error, not a silent skip"
+    );
+}
+
+/// An unreadable governed *directory* must surface as a scan error (exit 2), the
+/// same "cannot judge, not nothing to judge" rule as an unreadable file: a skipped
+/// subtree could hide a real module-boundary violation. Unix only and
+/// self-calibrating (skips under a privileged user where mode 0 is still readable).
+#[cfg(unix)]
+#[test]
+fn unreadable_governed_directory_is_a_scan_error() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join(format!("guibiao-unreadable-dir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("create temp src");
+    std::fs::write(src.join("lib.rs"), "// nothing\n").expect("write lib.rs");
+    let sub = src.join("sub");
+    std::fs::create_dir_all(&sub).expect("create sub dir");
+    std::fs::write(sub.join("inner.rs"), "use crate::forbidden::Thing;\n").expect("write inner");
+    std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000))
+        .expect("drop dir read/exec permission");
+
+    // Self-calibrating root guard: if the directory is still traversable, the
+    // premise cannot hold — skip rather than false-pass.
+    if std::fs::read_dir(&sub).is_ok() {
+        let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate")
+        .must_not_import("crate::forbidden")
+        .because("the test module must not import the forbidden module");
+
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+
+    let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(
+        result.is_err(),
+        "an unreadable governed directory must be a scan error, not a silent skip"
+    );
+}
+
+/// A module whose name is a raw identifier (`mod r#type;`, file `type.rs`) must be
+/// governable and its forbidden imports observed — exercising the canonicalization
+/// in `check_module_boundary` end to end. The boundary is declared with the *plain*
+/// form (`crate::type`) and still matches the raw-identifier source.
+#[test]
+fn a_raw_identifier_module_is_governed_and_its_import_observed() {
+    let dir = std::env::temp_dir().join(format!("guibiao-rawid-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("create temp src");
+    std::fs::write(src.join("lib.rs"), "pub mod r#type;\n").expect("write lib.rs");
+    std::fs::write(src.join("type.rs"), "use crate::r#mod::Thing;\n").expect("write type.rs");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::type")
+        .must_not_import("crate::mod")
+        .because("a raw-identifier module must be governable");
+
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(
+        result.is_ok(),
+        "a raw-identifier module must be found, not an unknown-module error: {result:?}"
+    );
+    assert_eq!(
+        violations.len(),
+        1,
+        "the forbidden import from inside the raw-identifier module must be observed: {violations:?}"
+    );
+    assert_eq!(violations[0].target, "crate::type");
+    assert_eq!(violations[0].finding, "crate::mod::Thing");
+}
+
+#[test]
+fn module_boundary_uses_the_package_target_src_path() {
+    let dir = std::env::temp_dir().join(format!("guibiao-custom-lib-path-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp crate");
+    let root = dir.join("lib.rs");
+    std::fs::write(&root, "pub mod kernel;\n").expect("write custom lib root");
+    std::fs::write(dir.join("kernel.rs"), "use crate::io::Sink;\n").expect("write custom module");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+            "targets": [{
+                "kind": ["lib"],
+                "src_path": root.to_string_lossy().into_owned()
+            }]
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::io")
+        .because("module boundaries must scan the compiled source root");
+
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(
+        result.is_ok(),
+        "a custom [lib] path must not be misresolved to manifest_dir/src: {result:?}"
+    );
+    assert_eq!(
+        violations.len(),
+        1,
+        "the forbidden import under the custom source root must be observed"
+    );
+    assert_eq!(violations[0].finding, "crate::io::Sink");
+}
+
+#[test]
+fn path_remapped_module_is_not_governed_via_a_conventional_orphan() {
+    let dir = std::env::temp_dir().join(format!(
+        "guibiao-path-remap-boundary-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("create temp src");
+    std::fs::write(
+        src.join("lib.rs"),
+        "#[path = \"weird.rs\"]\npub mod kernel;\n",
+    )
+    .expect("write lib.rs");
+    std::fs::write(src.join("weird.rs"), "use crate::projection::Thing;\n")
+        .expect("write remapped module");
+    std::fs::write(src.join("kernel.rs"), "use crate::projection::Wrong;\n")
+        .expect("write conventional orphan");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::projection")
+        .because("path-remapped modules are outside the token scanner's coverage");
+
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        result,
+        Err(unknown_module_error("crate::kernel", "x")),
+        "a #[path]-remapped module must not be governed through a same-named conventional orphan"
+    );
+    assert!(
+        violations.is_empty(),
+        "the conventional orphan is not compiled and must not produce a violation"
+    );
+}
+
+/// An inline `mod kernel { … }` is reachable but owns no source file, so it cannot
+/// be a governed target (targets are file-based). The reaction must fail loud (exit 2)
+/// with a *self-describing* error that names the inline cause — not the misleading
+/// "not found among the reachable modules", which would suggest a typo. A genuinely
+/// unknown module still gets the "not found" message.
+#[test]
+fn an_inline_module_target_is_a_self_describing_constitution_error() {
+    let dir = std::env::temp_dir().join(format!("guibiao-inline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("create temp src");
+    std::fs::write(
+            src.join("lib.rs"),
+            "pub mod kernel { use crate::projection::Thing; }\npub mod projection { pub struct Thing; }\n",
+        )
+        .expect("write lib.rs");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "app",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+
+    let inline = ModuleBoundary::in_crate("app")
+        .module("crate::kernel")
+        .must_not_import("crate::projection")
+        .because("the kernel must not import a projection");
+    let mut violations = Vec::new();
+    let inline_err = check_module_boundary(&metadata, &inline, &mut violations)
+        .expect_err("an inline target must be a constitution error");
+    // Assert against the single-source constructor, not a brittle substring: the
+    // inline target reports the inline cause, never the unknown-module message.
+    assert_eq!(
+        inline_err,
+        inline_module_target_error("crate::kernel", "app", "kernel")
+    );
+    assert_ne!(inline_err, unknown_module_error("crate::kernel", "app"));
+
+    // A genuinely unknown module path still gets the unknown-module message.
+    let typo = ModuleBoundary::in_crate("app")
+        .module("crate::ghost")
+        .must_not_import("crate::projection")
+        .because("typo");
+    let typo_err = check_module_boundary(&metadata, &typo, &mut violations)
+        .expect_err("an unknown module is a constitution error");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(typo_err, unknown_module_error("crate::ghost", "app"));
+}
+
+/// The inline-target constitution error must hold **even when a same-named conventional orphan
+/// file** sits beside the inline body. Rust compiles the inline body and never the orphan, so
+/// governing the orphan (and silently missing the inline body's imports) is a false negative —
+/// the one forbidden bug, and the inline twin of the `#[path]` orphan-shadow hazard. The orphan
+/// must not make the inline target look file-backed.
+#[test]
+fn an_inline_target_with_a_same_named_orphan_file_is_still_a_constitution_error() {
+    let (result, _) = run_module_check(
+        "inline-orphan",
+        &[
+            ("lib.rs", "pub mod kernel { use crate::secret::Thing; }\n"),
+            // Orphan: Rust never compiles this as `crate::kernel` (the inline body is it).
+            ("kernel.rs", "// clean — no forbidden import\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::secret")
+            .because("the kernel must not import a secret"),
+    );
+    let err = result.expect_err(
+        "an inline target must stay the inline constitution error even with a same-named \
+             orphan file — governing the orphan and missing the inline body is the forbidden \
+             false negative, never a silent pass",
+    );
+    assert_eq!(
+        err,
+        inline_module_target_error("crate::kernel", "x", "kernel")
+    );
+}
+
+/// An orphan beside an inline module contributes **no phantom child module**: the orphan is
+/// not compiled, so its own `mod` declarations name no reachable module. Governing such a
+/// phantom child is a not-found constitution error, never a silent pass over the orphan's file.
+#[test]
+fn an_orphan_beside_an_inline_module_contributes_no_phantom_child() {
+    let (result, _) = run_module_check(
+        "inline-phantom",
+        &[
+            ("lib.rs", "pub mod kernel { }\n"),
+            ("kernel.rs", "pub mod deep;\n"), // orphan's declaration — phantom
+            ("kernel/deep.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel::deep")
+            .must_not_import("crate::secret")
+            .because("deep must not import a secret"),
+    );
+    let err = result.expect_err("a phantom child of an orphan is not a reachable module");
+    assert_eq!(err, unknown_module_error("crate::kernel::deep", "x"));
+}
+
+/// Only inline-occupied files are excluded: a genuinely file-backed module (`mod real;` +
+/// `real.rs`) is still governed, its imports observed — proving the exclusion is not
+/// over-broad.
+#[test]
+fn a_file_backed_module_is_still_governed() {
+    let (result, violations) = run_module_check(
+        "file-backed",
+        &[
+            ("lib.rs", "pub mod real;\n"),
+            ("real.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::real")
+            .must_not_import("crate::secret")
+            .because("real must not import a secret"),
+    );
+    result.expect("a file-backed module is a valid, governable target");
+    assert!(
+        !violations.is_empty(),
+        "the file-backed module's forbidden import must still be observed"
+    );
+}
+
+/// A path declared **both** file-form (`mod kernel;`) and inline (`mod kernel { … }`) — which in
+/// valid source arises only under mutually-exclusive `#[cfg]` — is NOT inline-only, so its
+/// conventional file stays governed. This pins that the inline-only exclusion leaves the
+/// existing cfg-blind lexical bound exactly as it was (never turning it into an inline error).
+#[test]
+fn a_cfg_dual_declared_module_keeps_governing_its_conventional_file() {
+    let (result, violations) = run_module_check(
+        "cfg-dual",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(feature = \"k\")]\npub mod kernel;\n\
+                     #[cfg(not(feature = \"k\"))]\npub mod kernel { }\n",
+            ),
+            ("kernel.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::secret")
+            .because("kernel must not import a secret"),
+    );
+    result.expect("a cfg-dual-declared module keeps its conventional file as a valid target");
+    assert!(
+        !violations.is_empty(),
+        "the conventional file must still be observed — the cfg-blind bound is unchanged"
+    );
+}
+
+/// Stated bound (not a fix): a package that builds a lib AND a bin observes its whole `src/`
+/// under one conventional-path tree, so both roots resolve to `crate` and there are no
+/// per-target module graphs. A submodule declared inline in one root and file-backed in the
+/// other governs the file-backed one; the inline body's imports are NOT observed. Closing it
+/// needs per-target graphs (distinguishing the lib crate's `crate::shared` from the bin's) —
+/// beyond the conventional-path scanner. Recorded here and in `module-boundary`, never a silent
+/// claim of cleanliness.
+#[test]
+fn a_cross_root_same_named_submodule_is_a_documented_bound() {
+    let (result, violations) = run_module_check(
+        "cross-root-submodule",
+        &[
+            ("lib.rs", "pub mod shared { use crate::forbidden::X; }\n"),
+            ("main.rs", "pub mod shared;\nfn main() {}\n"),
+            ("shared.rs", "// clean — the bin root's shared module\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::shared")
+            .must_not_import("crate::forbidden")
+            .because("shared must not import forbidden"),
+    );
+    result.expect("a file-backed shared (via the bin root) is a valid target");
+    assert!(
+        violations.is_empty(),
+        "documented lib+bin bound: the lib root's inline `mod shared` body is not observed \
+             (shared.rs is governed instead) — recorded, not silently claimed clean: {violations:?}"
+    );
+}
+
+/// Stated bound (not a fix): only a **direct** `#[path]` is recognized as a remap; a
+/// `#[cfg_attr(cond, path = …)]` is not, so the conventionally-named file is governed as the
+/// module and its imports are observed. Correct for the configuration in which the `cfg_attr`
+/// path is inactive; otherwise the scanner's cfg-blindness. Contrast a direct `#[path]`, which
+/// is out of scope (its conventional file is NOT governed).
+#[test]
+fn a_cfg_attr_wrapped_path_is_not_recognized_as_a_remap() {
+    let (result, violations) = run_module_check(
+        "cfg-attr-path",
+        &[
+            (
+                "lib.rs",
+                "#[cfg_attr(unix, path = \"weird.rs\")]\npub mod foo;\n",
+            ),
+            ("foo.rs", "use crate::forbidden::Y;\n"),
+            ("weird.rs", "// the cfg(unix) remap target, clean\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::foo")
+            .must_not_import("crate::forbidden")
+            .because("foo must not import forbidden"),
+    );
+    result.expect("the conventional foo.rs backs crate::foo (cfg_attr path not honored)");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.finding.contains("crate::forbidden::Y")),
+        "documented bound: a cfg_attr-wrapped #[path] is not recognized, so the conventional \
+             foo.rs is governed and its import observed: {violations:?}"
+    );
+}
+
+/// Run a module boundary against a synthetic one-package workspace whose `src`
+/// holds `files` (each `(relative path, contents)`), under a unique temp dir keyed
+/// by `name`. Returns the check result and the collected violations.
+fn run_module_check(
+    name: &str,
+    files: &[(&str, &str)],
+    boundary: ModuleBoundary,
+) -> (Result<(), String>, Vec<Violation>) {
+    let dir = std::env::temp_dir().join(format!("guibiao-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    for (rel, contents) in files {
+        let path = src.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent"))
+            .expect("create src dirs");
+        std::fs::write(&path, contents).expect("write source file");
+    }
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+    (result, violations)
+}
+
+fn restrict_kernel_to_types(governed: &str, allowed: &[&str]) -> ModuleBoundary {
+    ModuleBoundary::in_crate("x")
+        .module(governed)
+        .restrict_imports_to(allowed.to_vec())
+        .because("the kernel may import only the allowed modules")
+}
+
+#[test]
+fn restrict_imports_to_flags_an_import_outside_the_allowlist() {
+    let (result, violations) = run_module_check(
+        "restrict-outside",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::io::Sink;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(violations[0].finding, "crate::io::Sink");
+}
+
+#[test]
+fn a_module_violation_carries_its_offending_file() {
+    // The offending import sits in kernel.rs; the violation names that source file so an
+    // agent knows where to repair — a faithful byproduct of the scan, not a new observation.
+    let (result, violations) = run_module_check(
+        "module-file",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::io::Sink;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a module-import violation carries its source file");
+    assert!(
+        file.ends_with("kernel.rs"),
+        "file names the offending source: {file}"
+    );
+}
+
+#[test]
+fn a_module_backed_by_two_files_yields_one_violation_with_a_file() {
+    // `crate` is backed by both lib.rs and main.rs (a lib+bin package); the same forbidden
+    // import in each must still collapse to exactly one violation (the file is attached
+    // after collapsing by identity, never a de-dup key), and that one carries a file.
+    let (result, violations) = run_module_check(
+        "module-two-files",
+        &[
+            ("lib.rs", "use crate::forbidden::Thing;\n"),
+            ("main.rs", "use crate::forbidden::Thing;\nfn main() {}\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("crate must not import forbidden"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "two files of one module collapse to one violation: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+    assert!(
+        violations[0].file.is_some(),
+        "the surviving violation carries a representative file"
+    );
+}
+
+#[test]
+fn restrict_imports_to_is_clean_within_the_allowlist() {
+    let (result, violations) = run_module_check(
+        "restrict-within",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::types::Id;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(violations.is_empty(), "{violations:?}");
+}
+
+#[test]
+fn restrict_imports_to_allows_the_governed_modules_own_subtree() {
+    // The exact module (`crate::kernel`), a descendant, and a `self::` import all
+    // resolve within the governed subtree and are not outward edges — so none need
+    // to be listed in the allowlist.
+    let (result, violations) = run_module_check(
+        "restrict-ownsubtree",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            (
+                "kernel.rs",
+                "use crate::kernel;\nuse crate::kernel::detail::Thing;\nuse self::other::Thing2;\n",
+            ),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(violations.is_empty(), "own-subtree imports: {violations:?}");
+}
+
+#[test]
+fn restrict_imports_to_with_an_empty_allowlist_forbids_outward_imports() {
+    let (result, violations) = run_module_check(
+        "restrict-empty",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::types::Id;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &[]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::types::Id");
+}
+
+#[test]
+fn restrict_imports_to_does_not_treat_a_prefix_colliding_sibling_as_allowed() {
+    // The `::`-delimited containment must not let `crate::types_extra` ride in on the
+    // `crate::types` allowlist entry — the headline regression guard.
+    let (result, violations) = run_module_check(
+        "restrict-sibling",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            (
+                "kernel.rs",
+                "use crate::types::Id;\nuse crate::types_extra::Y;\n",
+            ),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "only the sibling violates: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::types_extra::Y");
+}
+
+#[test]
+fn restrict_imports_to_never_flags_an_external_import() {
+    let (result, violations) = run_module_check(
+        "restrict-external",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use serde::Deserialize;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &[]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "externals are out of scope: {violations:?}"
+    );
+}
+
+#[test]
+fn restrict_imports_to_governs_a_super_reaching_outward_import() {
+    let (result, violations) = run_module_check(
+        "restrict-super",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use super::other::Thing;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(
+        violations[0].finding, "crate::other::Thing",
+        "super:: resolves to an absolute outward path that is governed"
+    );
+}
+
+#[test]
+fn restrict_imports_to_canonicalizes_a_raw_identifier_allowlist_entry() {
+    let (result, violations) = run_module_check(
+        "restrict-rawid",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::r#type::Thing;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::r#type"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "the raw-id entry canonicalizes to match the import: {violations:?}"
+    );
+}
+
+#[test]
+fn restrict_imports_to_on_the_crate_root_is_a_constitution_error() {
+    // The crate root has no outward internal edge, so the rule could never react —
+    // fail loud (exit 2), never silently pass.
+    let (result, _violations) = run_module_check(
+        "restrict-crate",
+        &[("lib.rs", "use crate::anything::X;\n")],
+        restrict_kernel_to_types("crate", &["crate::types"]),
+    );
+    let err = result.expect_err("governing `crate` must be a constitution error");
+    assert_eq!(err, restrict_imports_to_on_crate_error("x"));
+}
+
+#[test]
+fn restrict_imports_to_honors_warn_severity_and_its_distinct_label() {
+    let (result, violations) = run_module_check(
+        "restrict-warn",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::io::Sink;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .restrict_imports_to(["crate::types"])
+            .warn()
+            .because("the kernel should import only types"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].severity, Severity::Warn);
+    // A label distinct from `must not import`, so baseline identity does not collide.
+    assert_eq!(violations[0].rule, "restrict imports to");
+}
+
+fn protect_internal_from(importer: &str) -> ModuleBoundary {
+    ModuleBoundary::in_crate("x")
+        .module("crate::internal")
+        .must_not_be_imported_by(importer)
+        .because("internal is private to its layer")
+}
+
+#[test]
+fn must_not_be_imported_by_flags_the_forbidden_importer_only() {
+    let (result, violations) = run_module_check(
+        "inbound-basic",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\npub mod api;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use crate::internal::Secret;\n"),
+            ("api.rs", "use crate::internal::Secret;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    // Only crate::http is beneath the forbidden importer; crate::api imports internal
+    // too but is outside crate::http, so it is clean.
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].finding, "crate::http");
+    assert_eq!(violations[0].rule, "module must not be imported by");
+}
+
+#[test]
+fn must_not_be_imported_by_flags_an_inline_module_importer() {
+    // FN closed: `crate::http` is an INLINE module in lib.rs, not a file. Its `use crate::internal`
+    // is attributed to the inline importer `crate::http`, not the file's module `crate`, so the
+    // forbidden inbound edge reacts. Before, the file-granular attribution tested `crate` against
+    // the forbidden importer, pre-filtered the file out, and silently missed the edge.
+    let (result, violations) = run_module_check(
+        "inbound-inline-importer",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\nmod http { use crate::internal::Secret; }\n",
+            ),
+            ("internal.rs", "// protected\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
+fn must_not_be_imported_by_applies_beneath_the_importer() {
+    let (result, violations) = run_module_check(
+        "inbound-beneath-importer",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "pub mod v1;\n"),
+            ("http/v1.rs", "use crate::internal::Secret;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(
+        violations[0].finding, "crate::http::v1",
+        "the importer beneath crate::http is named"
+    );
+}
+
+#[test]
+fn must_not_be_imported_by_applies_beneath_the_protected_module() {
+    let (result, violations) = run_module_check(
+        "inbound-beneath-protected",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use crate::internal::deep::Thing;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "an import beneath the protected module violates: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
+fn must_not_be_imported_by_ignores_prefix_colliding_siblings_on_both_sides() {
+    let (result, violations) = run_module_check(
+        "inbound-collision",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\npub mod http;\npub mod httpx;\n",
+            ),
+            ("internal.rs", "// protected\n"),
+            // forbidden importer is crate::http; crate::http imports a sibling of the
+            // protected module (internal_util), which is clean.
+            ("http.rs", "use crate::internal_util::X;\n"),
+            // crate::httpx is a sibling of the forbidden importer; importing internal
+            // is clean.
+            ("httpx.rs", "use crate::internal::Secret;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "::-delimited containment must not match siblings on either side: {violations:?}"
+    );
+}
+
+#[test]
+fn must_not_be_imported_by_does_not_flag_the_protected_modules_own_subtree() {
+    let (result, violations) = run_module_check(
+        "inbound-own-subtree",
+        &[
+            ("lib.rs", "pub mod a;\n"),
+            ("a.rs", "pub mod b;\n"),
+            // crate::a::b is the protected module; it imports its own subtree and sits
+            // beneath the forbidden importer crate::a — but a module importing itself
+            // is not an inbound edge, so it is clean.
+            ("a/b.rs", "use crate::a::b::detail::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::a::b")
+            .must_not_be_imported_by("crate::a")
+            .because("a::b is private"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "the protected module's own subtree is not an importer: {violations:?}"
+    );
+}
+
+#[test]
+fn must_not_be_imported_by_ignores_external_imports() {
+    let (result, violations) = run_module_check(
+        "inbound-external",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use serde::Deserialize;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "externals are out of scope: {violations:?}"
+    );
+}
+
+#[test]
+fn must_not_be_imported_by_crate_forbids_every_outside_importer() {
+    let (result, violations) = run_module_check(
+        "inbound-x-crate",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use crate::internal::Secret;\n"),
+        ],
+        protect_internal_from("crate"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    // Forbidding importer `crate` means nobody outside internal's own subtree may
+    // import it; crate::http violates, internal's own files stay clean.
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
+fn must_not_be_imported_by_on_the_crate_root_is_a_constitution_error() {
+    let (result, _violations) = run_module_check(
+        "inbound-m-crate",
+        &[("lib.rs", "pub mod http;\n"), ("http.rs", "// nothing\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_be_imported_by("crate::http")
+            .because("the crate root cannot be protected this way"),
+    );
+    let err = result.expect_err("protecting `crate` must be a constitution error");
+    assert_eq!(err, must_not_be_imported_by_on_crate_error("x"));
+}
+
+#[test]
+fn must_not_be_imported_by_dedups_multiple_imports_from_one_importer() {
+    let (result, violations) = run_module_check(
+        "inbound-dedup",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            (
+                "http.rs",
+                "use crate::internal::A;\nuse crate::internal::B;\n",
+            ),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "one offending importer module yields one violation: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
+fn must_not_be_imported_by_honors_warn_severity() {
+    let (result, violations) = run_module_check(
+        "inbound-warn",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use crate::internal::Secret;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::internal")
+            .must_not_be_imported_by("crate::http")
+            .warn()
+            .because("internal should be private"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].severity, Severity::Warn);
+}
+
+#[test]
+fn must_not_be_imported_by_projects_its_importer() {
+    let constitution = Constitution::new("p").boundary(
+        ModuleBoundary::in_crate("app")
+            .module("crate::internal")
+            .must_not_be_imported_by("crate::http")
+            .because("internal is private to its layer"),
+    );
+
+    let text = constitution_text(&constitution);
+    assert!(
+        text.contains("must not be imported by crate::http"),
+        "{text}"
+    );
+
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(
+        doc["boundaries"][0]["rule"],
+        "module must not be imported by"
+    );
+    assert_eq!(doc["boundaries"][0]["target"], "crate::internal");
+    // The declared forbidden importer projects as `importer`; no `forbidden`/`only`.
+    assert_eq!(doc["boundaries"][0]["importer"], "crate::http");
+    assert!(doc["boundaries"][0]["forbidden"].is_null());
+    assert!(doc["boundaries"][0]["only"].is_null());
+}
+
+#[test]
+fn must_not_be_imported_by_unknown_protected_module_is_a_constitution_error() {
+    // The protected-module validation must fire for the inbound rule too: an unknown
+    // `m` is exit 2 before any scan, never a silent clean.
+    let (result, _violations) = run_module_check(
+        "inbound-unknown-m",
+        &[("lib.rs", "pub mod http;\n"), ("http.rs", "// nothing\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::nope")
+            .must_not_be_imported_by("crate::http")
+            .because("typo target"),
+    );
+    let err = result.expect_err("an unknown protected module is a constitution error");
+    assert_eq!(err, unknown_module_error("crate::nope", "x"));
+}
+
+#[test]
+fn must_not_be_imported_by_inline_protected_module_is_a_constitution_error() {
+    let (result, _violations) = run_module_check(
+        "inbound-inline-m",
+        &[
+            (
+                "lib.rs",
+                "pub mod kernel { pub struct K; }\npub mod http;\n",
+            ),
+            ("http.rs", "// nothing\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_be_imported_by("crate::http")
+            .because("inline target"),
+    );
+    let err = result.expect_err("an inline protected module is a constitution error");
+    assert_eq!(
+        err,
+        inline_module_target_error("crate::kernel", "x", "kernel")
+    );
+}
+
+#[test]
+fn must_not_be_imported_by_matches_a_raw_identifier_importer() {
+    // The forbidden importer is declared with a raw identifier; the importing file's
+    // module canonicalizes to the same path, so the violation still fires (guards the
+    // canonicalization lockstep against a false negative).
+    let (result, violations) = run_module_check(
+        "inbound-rawid-importer",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod r#async;\n"),
+            ("internal.rs", "// protected\n"),
+            ("async.rs", "use crate::internal::Secret;\n"),
+        ],
+        protect_internal_from("crate::r#async"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::async");
+}
+
+#[test]
+fn must_not_be_imported_by_protects_a_raw_identifier_module() {
+    let (result, violations) = run_module_check(
+        "inbound-rawid-protected",
+        &[
+            ("lib.rs", "pub mod r#type;\npub mod http;\n"),
+            ("type.rs", "// protected\n"),
+            ("http.rs", "use crate::r#type::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::r#type")
+            .must_not_be_imported_by("crate::http")
+            .because("type is private"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::type");
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
+fn must_not_be_imported_by_flags_a_mod_rs_backed_importer() {
+    let (result, violations) = run_module_check(
+        "inbound-modrs",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http/mod.rs", "use crate::internal::Secret;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
+fn must_not_be_imported_by_orders_multiple_offenders_deterministically() {
+    let (result, violations) = run_module_check(
+        "inbound-multi",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\npub mod zeta;\npub mod alpha;\n",
+            ),
+            ("internal.rs", "// protected\n"),
+            ("zeta.rs", "use crate::internal::Secret;\n"),
+            ("alpha.rs", "use crate::internal::Secret;\n"),
+        ],
+        protect_internal_from("crate"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    let findings: Vec<&str> = violations.iter().map(|v| v.finding.as_str()).collect();
+    assert_eq!(
+        findings,
+        ["crate::alpha", "crate::zeta"],
+        "multiple offenders are sorted deterministically"
+    );
+}
+
+#[test]
+fn must_not_be_imported_by_dedups_an_importer_backed_by_lib_and_main() {
+    // A lib+bin package has both `lib.rs` and `main.rs` at module `crate`. With
+    // `must_not_be_imported_by("crate")`, both root files importing the protected
+    // module would push `crate` twice — the spec's dedup must collapse it to one.
+    let (result, violations) = run_module_check(
+        "inbound-lib-and-main",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\nuse crate::internal::Secret;\n",
+            ),
+            ("main.rs", "use crate::internal::Secret;\n"),
+            ("internal.rs", "// protected\n"),
+        ],
+        protect_internal_from("crate"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "one offending importer module, even when backed by two root files: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate");
+    // The collapsed inbound violation still carries a representative file (the inbound path
+    // also collects (key, file) before de-duplication), so the two-file case is locked on
+    // the inbound rule, not only the outbound one.
+    assert!(
+        violations[0].file.is_some(),
+        "the surviving inbound violation carries a representative file"
+    );
+}
+
+#[test]
+fn must_not_import_dedups_a_finding_across_subtree_files() {
+    // crate::kernel spans kernel.rs + kernel/sub.rs; both import the forbidden module.
+    // The same finding must be reported once, not once per file.
+    let (result, violations) = run_module_check(
+        "dedup-mni-subtree",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "pub mod sub;\nuse crate::forbidden::X;\n"),
+            ("kernel/sub.rs", "use crate::forbidden::X;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::forbidden")
+            .because("kernel must not import forbidden"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "one violation per distinct finding: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::forbidden::X");
+}
+
+#[test]
+fn restrict_imports_to_dedups_a_finding_across_subtree_files() {
+    let (result, violations) = run_module_check(
+        "dedup-rit-subtree",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "pub mod sub;\nuse crate::io::Sink;\n"),
+            ("kernel/sub.rs", "use crate::io::Sink;\n"),
+        ],
+        restrict_kernel_to_types("crate::kernel", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "one violation per distinct finding: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::io::Sink");
+}
+
+#[test]
+fn outbound_dedup_collapses_identical_findings_but_keeps_distinct_ones() {
+    // Two subtree files: one imports X, the other imports X (duplicate) and Y.
+    // Result must be {X, Y} — the identical finding collapsed, the distinct one kept.
+    let (result, violations) = run_module_check(
+        "dedup-distinct",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "pub mod sub;\nuse crate::forbidden::X;\n"),
+            (
+                "kernel/sub.rs",
+                "use crate::forbidden::X;\nuse crate::forbidden::Y;\n",
+            ),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::forbidden")
+            .because("kernel must not import forbidden"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    let findings: Vec<&str> = violations.iter().map(|v| v.finding.as_str()).collect();
+    assert_eq!(
+        findings,
+        ["crate::forbidden::X", "crate::forbidden::Y"],
+        "{violations:?}"
+    );
+    // And no two violations share an identity (target, rule, finding).
+    let mut ids: Vec<_> = violations
+        .iter()
+        .map(|v| (&v.target, &v.rule, &v.finding))
+        .collect();
+    let before = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), before, "no duplicate violation identities");
+}
+
+#[test]
+fn restrict_imports_to_does_not_flag_an_over_popped_super() {
+    // `crate::a` over-pops with `super::super`; the path names no internal module, so
+    // it must not be observed — and must not be mistaken for an outward edge that the
+    // allowlist would flag (the regression this guards).
+    let (result, violations) = run_module_check(
+        "restrict-super-overflow",
+        &[
+            ("lib.rs", "pub mod a;\n"),
+            ("a.rs", "use super::super::other::X;\n"),
+        ],
+        restrict_kernel_to_types("crate::a", &["crate::types"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "an over-popped super is not an outward edge: {violations:?}"
+    );
+}
+
+#[test]
+fn baseline_round_trips_through_json() {
+    let report = one_enforce_violation();
+    let json = Baseline::of(&report).to_json();
+    let parsed = Baseline::from_json(&json).expect("a written baseline parses");
+    assert!(
+        parsed.contains(&report.violations[0]),
+        "round-trip must preserve the violation identity"
+    );
+}
+
+#[test]
+fn from_json_rejects_malformed_and_unknown_version() {
+    assert!(Baseline::from_json("not json").is_err());
+    assert!(Baseline::from_json(r#"{"version":2,"violations":[]}"#).is_err());
+    assert!(
+        Baseline::from_json(r#"{"violations":[]}"#).is_err(),
+        "a missing version must be an error, not a silent empty baseline"
+    );
+}
+
+#[test]
+fn a_baselined_enforce_violation_does_not_fail() {
+    let mut report = one_enforce_violation();
+    let baseline = Baseline::of(&report);
+    apply_baseline(&mut report, &baseline);
+    assert!(report.violations[0].baselined);
+    assert_eq!(
+        Outcome::Violations(report).exit_code(),
+        0,
+        "a fully baselined run must not fail"
+    );
+}
+
+#[test]
+fn a_new_enforce_violation_fails_against_a_baseline() {
+    let baseline = Baseline::from_json(
+            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"other"}]}"#,
+        )
+        .unwrap();
+    let mut report = one_enforce_violation();
+    apply_baseline(&mut report, &baseline);
+    assert!(
+        !report.violations[0].baselined,
+        "serde is not in the baseline"
+    );
+    assert_eq!(Outcome::Violations(report).exit_code(), 1);
+}
+
+#[test]
+fn stale_finds_entries_with_no_current_match() {
+    let report = one_enforce_violation();
+    let baseline = Baseline::from_json(
+            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"gone"}]}"#,
+        )
+        .unwrap();
+    let stale = baseline.stale(&report);
+    assert_eq!(stale.len(), 1);
+    assert_eq!(stale[0].finding, "gone");
+}
+
+#[test]
+fn report_json_projects_a_violation_with_its_kind() {
+    let json = report_json(&Outcome::Violations(one_enforce_violation()), &[], None);
+    let doc: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+    assert_eq!(doc["outcome"], "violations");
+    assert_eq!(doc["exit_code"], 1);
+    let violation = &doc["violations"][0];
+    assert_eq!(violation["kind"], "crate");
+    assert_eq!(violation["finding"], "serde");
+    assert_eq!(violation["severity"], "enforce");
+    assert_eq!(violation["baselined"], false);
+    // `reason` is the repair hint; there is no separate field.
+    assert!(violation["reason"].as_str().is_some_and(|r| !r.is_empty()));
+    assert!(doc.get("repair_hint").is_none());
+}
+
+#[test]
+fn report_json_renders_clean_and_constitution_error() {
+    let clean: serde_json::Value =
+        serde_json::from_str(&report_json(&Outcome::Clean, &[], None)).unwrap();
+    assert_eq!(clean["outcome"], "clean");
+    assert_eq!(clean["exit_code"], 0);
+    assert_eq!(clean["violations"].as_array().unwrap().len(), 0);
+    assert!(clean.get("coverage").is_none(), "no coverage when None");
+
+    let error: serde_json::Value = serde_json::from_str(&report_json(
+        &Outcome::ConstitutionError("boom".into()),
+        &[],
+        None,
+    ))
+    .unwrap();
+    assert_eq!(error["outcome"], "constitution_error");
+    assert_eq!(error["exit_code"], 2);
+    assert_eq!(error["error"], "boom");
+}
+
+#[test]
+fn report_json_reflects_baseline_and_stale_in_gate() {
+    let mut report = one_enforce_violation();
+    let baseline = Baseline::of(&report);
+    apply_baseline(&mut report, &baseline);
+    // A baseline entry that no current violation matches is stale.
+    let stale = vec![ViolationId {
+        target: "core".to_string(),
+        rule: "deny external dependencies".to_string(),
+        finding: "gone".to_string(),
+    }];
+    let doc: serde_json::Value =
+        serde_json::from_str(&report_json(&Outcome::Violations(report), &stale, None)).unwrap();
+    assert_eq!(doc["exit_code"], 0, "a fully baselined run does not fail");
+    assert_eq!(doc["violations"][0]["baselined"], true);
+    assert_eq!(doc["stale_baseline"][0]["finding"], "gone");
+}
+
+#[test]
+fn report_json_includes_coverage_when_present() {
+    let coverage = Coverage {
+        total: 3,
+        uncovered: vec!["memory".to_string()],
+    };
+    let doc: serde_json::Value =
+        serde_json::from_str(&report_json(&Outcome::Clean, &[], Some(&coverage))).unwrap();
+    assert_eq!(doc["coverage"]["workspace_crates"], 3);
+    assert_eq!(doc["coverage"]["uncovered"][0], "memory");
+}
+
+#[test]
+fn external_classification_treats_any_non_null_source_as_external() {
+    // A path/internal dep has a null `source`; registry, git, and alternative
+    // (sparse) registry deps all have a non-null source and must be classified
+    // external. The sparse case is the regression guard: a fixed `registry+`/
+    // `git+` prefix list would silently pass an alternative `sparse+` registry.
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "internal", "source": null, "kind": null },
+            {
+                "name": "crates_io",
+                "source": "registry+https://github.com/rust-lang/crates.io-index",
+                "kind": null
+            },
+            { "name": "git_dep", "source": "git+https://example.com/x", "kind": null },
+            { "name": "alt_sparse", "source": "sparse+https://my.registry/index/", "kind": null },
+            {
+                "name": "a_dev",
+                "source": "registry+https://github.com/rust-lang/crates.io-index",
+                "kind": "dev"
+            },
+        ]
+    });
+    assert_eq!(
+        external_dependencies(&package, DependencyKind::Normal),
+        vec![
+            "alt_sparse".to_string(),
+            "crates_io".to_string(),
+            "git_dep".to_string(),
+        ],
+        "every non-null-source normal dep is external (incl. a sparse alt \
+             registry); the null-source internal dep and the dev dep are excluded",
+    );
+}
+
+#[test]
+fn a_crate_violation_reports_no_file() {
+    // A crate-dependency violation is an edge in the dependency graph (a manifest
+    // relation), not a source line, so its `file` is a faithful `None`.
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "core",
+            "dependencies": [
+                {
+                    "name": "serde",
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    "kind": null
+                }
+            ],
+        }]
+    });
+    let boundary = CrateBoundary::crate_("core")
+        .deny_external_dependencies()
+        .because("core stays dependency-light");
+    let mut violations = Vec::new();
+    let result = check_crate_boundary(&metadata, &[], &boundary, &mut violations);
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].kind, BoundaryKind::Crate);
+    assert_eq!(violations[0].finding, "serde");
+    assert!(
+        violations[0].file.is_none(),
+        "a crate-dependency violation has no single source file"
+    );
+}
+
+#[test]
+fn dedup_keeps_the_more_severe_of_duplicate_violations() {
+    // The same crate rule declared once `warn` and once `enforce` on one crate — a plausible
+    // mid-promotion state — flags the same dependency twice with equal `(target, rule, finding)`
+    // identity but different severity. Deduping must keep the ENFORCE reaction: keeping the
+    // first-seen `warn` would collapse to an advisory and drop exit-1 to exit-0 (a false
+    // negative). Verified in both declaration orders (the fix is order-independent).
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "core",
+            "dependencies": [
+                { "name": "serde", "source": "registry+x", "kind": null }
+            ],
+        }]
+    });
+    let warn = || {
+        CrateBoundary::crate_("core")
+            .deny_external_dependencies()
+            .warn()
+            .because("observing before enforcing")
+    };
+    let enforce = || {
+        CrateBoundary::crate_("core")
+            .deny_external_dependencies()
+            .because("core stays dependency-light")
+    };
+    for (first, second) in [(warn(), enforce()), (enforce(), warn())] {
+        let constitution = Constitution::new("mid-promotion")
+            .boundary(first)
+            .boundary(second);
+        let outcome = evaluate(&constitution, &metadata);
+        let Outcome::Violations(report) = &outcome else {
+            panic!("expected violations, got {outcome:?}");
+        };
+        assert_eq!(
+            report.violations.len(),
+            1,
+            "duplicates collapse to one: {report:?}"
+        );
+        assert_eq!(
+            report.violations[0].severity,
+            Severity::Enforce,
+            "the more severe reaction is kept"
+        );
+        assert_eq!(
+            outcome.exit_code(),
+            1,
+            "an enforce violation fails the reaction"
+        );
+    }
+}
+
+#[test]
+fn dependency_kind_selects_which_table_is_observed() {
+    // `serde` is a normal dep; `proptest` is a dev-dep; `cc` is a build-dep.
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "serde", "source": "registry+x", "kind": null },
+            { "name": "proptest", "source": "registry+x", "kind": "dev" },
+            { "name": "cc", "source": "registry+x", "kind": "build" },
+        ]
+    });
+    let deny = Rule::DenyExternalDependencies { allowed: vec![] };
+    // Default (normal) sees only serde; dev sees only proptest; build only cc. The dev/build
+    // findings carry a kind suffix so the same dep name in two tables stays a distinct finding.
+    assert_eq!(
+        deny.findings(&package, &[], DependencyKind::Normal),
+        vec!["serde".to_string()]
+    );
+    assert_eq!(
+        deny.findings(&package, &[], DependencyKind::Dev),
+        vec!["proptest (dev)".to_string()]
+    );
+    assert_eq!(
+        deny.findings(&package, &[], DependencyKind::Build),
+        vec!["cc (build)".to_string()]
+    );
+}
+
+#[test]
+fn the_same_dep_in_two_tables_yields_distinct_findings() {
+    // The one forbidden bug for the dependency family: `serde` from a git source in BOTH the
+    // normal and the dev table, governed by same-rule boundaries differing only by kind, must
+    // not collapse to one `(target, rule, finding)` — else baselining the normal violation
+    // masks a new dev one. The kind suffix keeps them distinct.
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "serde", "source": "git+https://x", "kind": null },
+            { "name": "serde", "source": "git+https://x", "kind": "dev" },
+        ]
+    });
+    let rule = Rule::RestrictDependencySourcesTo {
+        allowed: vec![SourceKind::Registry],
+    };
+    let normal = rule.findings(&package, &[], DependencyKind::Normal);
+    let dev = rule.findings(&package, &[], DependencyKind::Dev);
+    assert_eq!(normal, vec!["serde".to_string()]);
+    assert_eq!(dev, vec!["serde (dev)".to_string()]);
+    assert_ne!(normal, dev, "same dep in two tables must not collide");
+}
+
+#[test]
+fn workspace_member_names_are_the_no_deps_packages() {
+    // With `--no-deps`, `packages` is exactly the workspace members.
+    let metadata = serde_json::json!({
+        "packages": [ { "name": "core" }, { "name": "adapters" } ]
+    });
+    assert_eq!(
+        workspace_member_names(&metadata),
+        vec!["adapters".to_string(), "core".to_string()],
+    );
+}
+
+#[test]
+fn workspace_rule_flags_only_unlisted_workspace_members() {
+    // Deps: two workspace members (core, adapters), one external (serde), and one
+    // path dependency that is NOT a workspace member (outside).
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "core", "source": null, "kind": null },
+            { "name": "adapters", "source": null, "kind": null },
+            {
+                "name": "serde",
+                "source": "registry+https://github.com/rust-lang/crates.io-index",
+                "kind": null
+            },
+            { "name": "outside", "source": null, "kind": null },
+        ]
+    });
+    let workspace = vec!["core".to_string(), "adapters".to_string()];
+
+    // Restrict to [core]: adapters is an unlisted workspace member → flagged;
+    // serde (external) and outside (path, non-member) are ignored.
+    let restrict = Rule::RestrictWorkspaceDependenciesTo {
+        allowed: vec!["core".to_string()],
+    };
+    assert_eq!(
+        restrict.findings(&package, &workspace, DependencyKind::Normal),
+        vec!["adapters".to_string()],
+    );
+
+    // Empty allowlist forbids every workspace member, still ignoring external and
+    // the non-member path dependency.
+    let forbid_all = Rule::RestrictWorkspaceDependenciesTo { allowed: vec![] };
+    assert_eq!(
+        forbid_all.findings(&package, &workspace, DependencyKind::Normal),
+        vec!["adapters".to_string(), "core".to_string()],
+    );
+}
+
+#[test]
+fn coverage_counts_a_module_only_covered_crate_as_covered() {
+    let members = vec!["app".to_string(), "core".to_string(), "memory".to_string()];
+    let constitution = Constitution::new("c")
+        .boundary(
+            CrateBoundary::crate_("core")
+                .forbid_all_workspace_dependencies()
+                .because("core is independent"),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("app")
+                .module("crate::kernel")
+                .must_not_import("crate::projection")
+                .because("layering"),
+        );
+    let coverage = coverage_from(members, &constitution);
+    assert_eq!(coverage.total, 3);
+    // `app` is covered by the module boundary, `core` by the crate boundary;
+    // only `memory` has no boundary at all.
+    assert_eq!(coverage.uncovered, vec!["memory".to_string()]);
+}
+
+fn mixed_constitution() -> Constitution {
+    Constitution::new("my-project")
+        .boundary(
+            CrateBoundary::crate_("my-core")
+                .deny_external_dependencies()
+                .allow_external(["serde"])
+                .because("my-core must stay dependency-light"),
+        )
+        .boundary(
+            CrateBoundary::crate_("my-core")
+                .forbid_dependency_on(["my-adapters"])
+                .because("the core must not depend on adapters"),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("my-app")
+                .module("crate::domain")
+                .must_not_import("crate::http")
+                .warn()
+                .because("the domain must not import the HTTP layer"),
+        )
+}
+
+#[test]
+fn constitution_text_projects_every_boundary_with_its_parameters() {
+    let text = constitution_text(&mixed_constitution());
+    assert!(
+        text.contains("Constitution: my-project  (3 boundaries)"),
+        "{text}"
+    );
+    assert!(text.contains("crate my-core"), "{text}");
+    assert!(
+        text.contains("deny external dependencies (allow: serde)"),
+        "{text}"
+    );
+    assert!(text.contains("forbid dependency on: my-adapters"), "{text}");
+    assert!(text.contains("module crate::domain in my-app"), "{text}");
+    assert!(text.contains("must not import crate::http"), "{text}");
+    // Severity and reason both surface.
+    assert!(
+        text.contains("[warn]") && text.contains("[enforce]"),
+        "{text}"
+    );
+    assert!(
+        text.contains("the domain must not import the HTTP layer"),
+        "{text}"
+    );
+}
+
+#[test]
+fn constitution_json_projects_boundaries_with_kinds_and_parameters() {
+    let json = constitution_json(&mixed_constitution());
+    let doc: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+    assert_eq!(doc["constitution"], "my-project");
+    let boundaries = doc["boundaries"].as_array().expect("array");
+    assert_eq!(boundaries.len(), 3);
+
+    // Crate boundary with an allowlist.
+    assert_eq!(boundaries[0]["kind"], "crate");
+    assert_eq!(boundaries[0]["target"], "my-core");
+    assert_eq!(boundaries[0]["rule"], "deny external dependencies");
+    assert_eq!(boundaries[0]["severity"], "enforce");
+    assert_eq!(boundaries[0]["allowed"][0], "serde");
+
+    // Forbid-dependency-on carries its crate list.
+    assert_eq!(boundaries[1]["rule"], "forbid dependency on");
+    assert_eq!(boundaries[1]["crates"][0], "my-adapters");
+
+    // Module boundary: target is the module path (report convention), plus crate
+    // and forbidden import.
+    assert_eq!(boundaries[2]["kind"], "module");
+    assert_eq!(boundaries[2]["target"], "crate::domain");
+    assert_eq!(boundaries[2]["crate"], "my-app");
+    assert_eq!(boundaries[2]["forbidden"], "crate::http");
+    assert_eq!(boundaries[2]["severity"], "warn");
+}
+
+#[test]
+fn an_empty_constitution_projects_cleanly() {
+    let constitution = Constitution::new("fresh");
+    let text = constitution_text(&constitution);
+    assert!(
+        text.contains("Constitution: fresh  (0 boundaries)"),
+        "{text}"
+    );
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["boundaries"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn restrict_to_projects_its_allowlist() {
+    let constitution = Constitution::new("p")
+        .boundary(
+            CrateBoundary::crate_("a")
+                .restrict_dependencies_to(["serde", "types"])
+                .because("a may depend on only serde and types"),
+        )
+        .boundary(
+            CrateBoundary::crate_("b")
+                .restrict_dependencies_to::<[&str; 0], &str>([])
+                .because("b must depend on nothing"),
+        );
+
+    let text = constitution_text(&constitution);
+    assert!(
+        text.contains("restrict dependencies to: serde, types"),
+        "{text}"
+    );
+    assert!(text.contains("restrict dependencies to nothing"), "{text}");
+
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["boundaries"][0]["rule"], "restrict dependencies to");
+    // A distinct key (`only`, not deny-external's `allowed`) for the closed set.
+    assert_eq!(doc["boundaries"][0]["only"][0], "serde");
+    assert!(doc["boundaries"][0]["allowed"].is_null());
+    // The empty allowlist is still emitted, as `[]`.
+    assert_eq!(doc["boundaries"][1]["only"].as_array().unwrap().len(), 0);
+}
+
+// A synthesized `cargo metadata --no-deps` package mirroring the source-kind probe:
+// a registry dep, a path dep, a plain git dep, an optional git dep, a renamed git dep
+// (real name `serde`, local alias `mydep`), a `{ git, version }` dep, an inherited
+// workspace git dep (cargo flattens the source into the member as `git+…`), and a git
+// dev-dependency. Every `source` string is exactly what cargo emits (verified).
+fn source_package() -> Value {
+    serde_json::json!({
+        "dependencies": [
+            {
+                "name": "crates_io",
+                "source": "registry+https://github.com/rust-lang/crates.io-index",
+                "kind": null
+            },
+            { "name": "localdep", "source": null, "kind": null },
+            { "name": "gitdep", "source": "git+https://example.invalid/a.git", "kind": null },
+            {
+                "name": "optgit",
+                "source": "git+https://example.invalid/b.git",
+                "kind": null,
+                "optional": true
+            },
+            {
+                "name": "serde",
+                "rename": "mydep",
+                "source": "git+https://example.invalid/c.git",
+                "kind": null
+            },
+            { "name": "gitver", "source": "git+https://example.invalid/d.git", "kind": null },
+            {
+                "name": "inherited",
+                "source": "git+https://example.invalid/e.git",
+                "kind": null
+            },
+            { "name": "devgit", "source": "git+https://example.invalid/f.git", "kind": "dev" },
+        ]
+    })
+}
+
+#[test]
+fn source_rule_flags_every_git_source_outside_a_registry_or_path_allowlist() {
+    let package = source_package();
+    // Permit [Registry, Path]: every git-sourced normal dep is flagged — the plain
+    // git dep, the OPTIONAL git dep (declared regardless of feature state), the
+    // `{ git, version }` dep (a stated hygiene bound — it would publish, yet its
+    // declared source is git), and the INHERITED workspace git dep (cargo flattens
+    // the git source into the member). A RENAMED git dep is reported by its REAL
+    // package name `serde`, not its alias `mydep`. The registry and path deps pass;
+    // the git DEV-dep is not in the Normal-scoped surface.
+    let rule = Rule::RestrictDependencySourcesTo {
+        allowed: vec![SourceKind::Registry, SourceKind::Path],
+    };
+    assert_eq!(
+        rule.findings(&package, &[], DependencyKind::Normal),
+        vec![
+            "gitdep".to_string(),
+            "gitver".to_string(),
+            "inherited".to_string(),
+            "optgit".to_string(),
+            "serde".to_string(),
+        ],
+        "every declared git source is flagged (optional/version/inherited included), \
+             by real package name, while registry+path pass and the dev git dep is unscoped",
+    );
+}
+
+#[test]
+fn source_rule_registry_only_flags_a_path_dependency() {
+    // Permit only [Registry]: the path dep is now flagged too (alongside every git
+    // dep), documenting that Path is a governed source, not a silent exemption.
+    let package = source_package();
+    let rule = Rule::RestrictDependencySourcesTo {
+        allowed: vec![SourceKind::Registry],
+    };
+    let findings = rule.findings(&package, &[], DependencyKind::Normal);
+    assert!(findings.contains(&"localdep".to_string()), "{findings:?}");
+    assert!(!findings.contains(&"crates_io".to_string()), "{findings:?}");
+}
+
+#[test]
+fn source_rule_is_clean_when_every_governed_source_is_allowed() {
+    // A package whose only normal deps are registry + path, under [Registry, Path].
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "crates_io", "source": "registry+https://x", "kind": null },
+            { "name": "localdep", "source": null, "kind": null },
+        ]
+    });
+    let rule = Rule::RestrictDependencySourcesTo {
+        allowed: vec![SourceKind::Registry, SourceKind::Path],
+    };
+    assert!(
+        rule.findings(&package, &[], DependencyKind::Normal)
+            .is_empty(),
+        "all-registry-or-path is clean under a [Registry, Path] allowlist",
+    );
+}
+
+#[test]
+fn source_rule_does_not_observe_a_patch_redirect_declared_as_registry() {
+    // The declared-vs-resolved bound: a registry dep that `[patch]` would redirect to
+    // git still declares `source = registry+…` in `--no-deps` metadata, so it
+    // classifies Registry and does NOT violate a [Registry] allowlist. Observing the
+    // resolved git source is cargo-deny's `[sources]` lane, not a Tianheng capability.
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "patched", "source": "registry+https://x", "kind": null },
+        ]
+    });
+    let rule = Rule::RestrictDependencySourcesTo {
+        allowed: vec![SourceKind::Registry],
+    };
+    assert!(
+        rule.findings(&package, &[], DependencyKind::Normal)
+            .is_empty(),
+        "the declared layer does not observe [patch]; correct — [patch] never blocks publish",
+    );
+}
+
+#[test]
+fn source_rule_scopes_to_the_dependency_kind() {
+    // Only the git dev-dep exists; a Normal-scoped boundary does not observe it, a
+    // Dev-scoped one does.
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "devgit", "source": "git+https://x", "kind": "dev" },
+        ]
+    });
+    let rule = Rule::RestrictDependencySourcesTo {
+        allowed: vec![SourceKind::Registry],
+    };
+    assert!(
+        rule.findings(&package, &[], DependencyKind::Normal)
+            .is_empty(),
+        "a dev git dep is outside a Normal-scoped surface",
+    );
+    assert_eq!(
+        rule.findings(&package, &[], DependencyKind::Dev),
+        vec!["devgit (dev)".to_string()],
+        "a Dev-scoped boundary governs the dev table",
+    );
+}
+
+#[test]
+fn source_rule_empty_allowlist_forbids_every_dependency_by_source() {
+    let package = serde_json::json!({
+        "dependencies": [
+            { "name": "crates_io", "source": "registry+https://x", "kind": null },
+            { "name": "localdep", "source": null, "kind": null },
+            { "name": "gitdep", "source": "git+https://x", "kind": null },
+        ]
+    });
+    let rule = Rule::RestrictDependencySourcesTo { allowed: vec![] };
+    assert_eq!(
+        rule.findings(&package, &[], DependencyKind::Normal),
+        vec![
+            "crates_io".to_string(),
+            "gitdep".to_string(),
+            "localdep".to_string(),
+        ],
+        "an empty source allowlist forbids every dependency regardless of source",
+    );
+}
+
+#[test]
+fn source_boundary_absent_target_is_a_constitution_error() {
+    // Parity with the other crate rules: a boundary on a crate not in the workspace is
+    // a constitution error (→ exit 2), never a silent pass.
+    let metadata = serde_json::json!({ "packages": [{ "name": "present" }] });
+    let boundary = CrateBoundary::crate_("absent")
+        .restrict_dependency_sources_to([SourceKind::Registry])
+        .because("absent must publish to crates.io");
+    let mut violations = Vec::new();
+    let result = check_crate_boundary(&metadata, &[], &boundary, &mut violations);
+    assert!(
+        result.is_err(),
+        "an absent target crate must be a constitution error, not exit 0/1",
+    );
+}
+
+#[test]
+fn source_boundary_carries_its_severity_and_gates_against_the_baseline() {
+    // A source violation folds into the shared report identity (target, rule,
+    // finding) and honors severity + baseline exactly as the sibling rules do.
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "infra",
+            "dependencies": [
+                { "name": "gitdep", "source": "git+https://x", "kind": null },
+            ],
+        }]
+    });
+    // Warn severity: the violation is recorded but must not fail the reaction.
+    let warn = CrateBoundary::crate_("infra")
+        .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+        .warn()
+        .because("infra should publish; a git source is advisory here");
+    let mut violations = Vec::new();
+    check_crate_boundary(&metadata, &[], &warn, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].severity, Severity::Warn);
+    assert_eq!(violations[0].rule, "restrict dependency sources to");
+    assert_eq!(violations[0].finding, "gitdep");
+    assert!(
+        violations[0].file.is_none(),
+        "a source violation is a manifest relation, not a source line",
+    );
+
+    // Enforce + baseline parity: the same violation, once baselined, does not fail.
+    let enforce = CrateBoundary::crate_("infra")
+        .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+        .because("infra must publish to crates.io, so no git source");
+    let mut v = Vec::new();
+    check_crate_boundary(&metadata, &[], &enforce, &mut v).unwrap();
+    let mut report = Report::new(v);
+    let baseline = Baseline::of(&report);
+    apply_baseline(&mut report, &baseline);
+    assert_eq!(
+        Outcome::Violations(report).exit_code(),
+        0,
+        "a fully baselined source violation does not fail the reaction",
+    );
+}
+
+#[test]
+fn source_boundary_projects_its_allowed_sources() {
+    let constitution = Constitution::new("p")
+        .boundary(
+            CrateBoundary::crate_("infra")
+                .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
+                .because("infra must publish to crates.io, so its manifest declares no git"),
+        )
+        .boundary(
+            CrateBoundary::crate_("locked")
+                .restrict_dependency_sources_to([])
+                .because("locked must declare no dependencies at all"),
+        );
+
+    let text = constitution_text(&constitution);
+    assert!(
+        text.contains("restrict dependency sources to: registry, path"),
+        "{text}"
+    );
+    assert!(
+        text.contains("forbid all dependencies (by source)"),
+        "{text}"
+    );
+
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(
+        doc["boundaries"][0]["rule"],
+        "restrict dependency sources to"
+    );
+    assert_eq!(doc["boundaries"][0]["allowed_sources"][0], "registry");
+    assert_eq!(doc["boundaries"][0]["allowed_sources"][1], "path");
+    // The empty allowlist is still emitted, as `[]`.
+    assert_eq!(
+        doc["boundaries"][1]["allowed_sources"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+#[test]
+fn module_restrict_imports_to_projects_its_allowlist() {
+    let constitution = Constitution::new("p")
+        .boundary(
+            ModuleBoundary::in_crate("app")
+                .module("crate::kernel")
+                .restrict_imports_to(["crate::types"])
+                .because("the kernel may import only types"),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("app")
+                .module("crate::leaf")
+                .restrict_imports_to::<[&str; 0], &str>([])
+                .because("the leaf may import only its own subtree"),
+        );
+
+    let text = constitution_text(&constitution);
+    assert!(text.contains("restrict imports to: crate::types"), "{text}");
+    assert!(text.contains("restrict imports to nothing"), "{text}");
+
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["boundaries"][0]["rule"], "restrict imports to");
+    assert_eq!(doc["boundaries"][0]["kind"], "module");
+    assert_eq!(doc["boundaries"][0]["target"], "crate::kernel");
+    // The closed set uses `only` (the crate-level vocabulary), never `forbidden`.
+    assert_eq!(doc["boundaries"][0]["only"][0], "crate::types");
+    assert!(doc["boundaries"][0]["forbidden"].is_null());
+    // The empty allowlist is still emitted, as `[]`.
+    assert_eq!(doc["boundaries"][1]["only"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn an_unreadable_utf8_governed_source_file_is_a_scan_error() {
+    // Deterministic on every platform and euid (unlike the permission-based tests,
+    // which skip under a privileged user): invalid UTF-8 makes `read_to_string` fail,
+    // so a reachable governed-crate source file that cannot be read is a scan error
+    // (exit 2), never a silent skip — the core-contract "cannot judge" rule.
+    let dir = std::env::temp_dir().join(format!("guibiao-utf8-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("create temp src");
+    std::fs::write(src.join("lib.rs"), "pub mod kernel;\n").expect("write lib.rs");
+    // 0xFF / 0xFE are not valid UTF-8; read_to_string returns Err on all platforms.
+    std::fs::write(src.join("kernel.rs"), [0xFF, 0xFE, 0x00, 0x80]).expect("write kernel.rs");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::forbidden")
+        .because("kernel must not import forbidden");
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        result.is_err(),
+        "an unreadable (invalid-UTF-8) governed source file must be a scan error"
+    );
+}
+
+#[test]
+fn dependency_kind_appears_in_the_projection() {
+    let constitution = Constitution::new("p")
+        .boundary(
+            CrateBoundary::crate_("a")
+                .deny_external_dependencies()
+                .dependency_kind(DependencyKind::Dev)
+                .because("a's dev dependencies stay light"),
+        )
+        .boundary(
+            CrateBoundary::crate_("b")
+                .deny_external_dependencies()
+                .because("b stays light"),
+        );
+    let text = constitution_text(&constitution);
+    assert!(text.contains("(dev dependencies)"), "{text}");
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["boundaries"][0]["dependency_kind"], "dev");
+    // A Normal-kind boundary omits the field entirely (the common projection).
+    assert!(doc["boundaries"][1]["dependency_kind"].is_null(), "{doc}");
+}
+
+#[test]
+fn restrict_workspace_dependencies_to_projects_only_workspace() {
+    let constitution = Constitution::new("p")
+        .boundary(
+            CrateBoundary::crate_("a")
+                .restrict_workspace_dependencies_to(["b"])
+                .because("a may depend on only workspace member b"),
+        )
+        .boundary(
+            CrateBoundary::crate_("c")
+                .forbid_all_workspace_dependencies()
+                .because("c must not depend on any workspace member"),
+        );
+    let text = constitution_text(&constitution);
+    assert!(
+        text.contains("restrict workspace dependencies to: b"),
+        "{text}"
+    );
+    assert!(text.contains("forbid all workspace dependencies"), "{text}");
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(
+        doc["boundaries"][0]["rule"],
+        "restrict workspace dependencies to"
+    );
+    // The distinct key (`only_workspace`, not `only`) says which dependency surface
+    // is governed — the self-describing distinction with no coverage before now.
+    assert_eq!(doc["boundaries"][0]["only_workspace"][0], "b");
+    assert!(doc["boundaries"][0]["only"].is_null());
+    // The empty allowlist (forbid-all) still emits `only_workspace: []`.
+    assert_eq!(
+        doc["boundaries"][1]["only_workspace"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+}
+
+/// A boundary's `.with_anchor(...)` rides through the reaction onto the produced violation and
+/// into its JSON — the durable governance pointer reaches the CI-consumable surface.
+#[test]
+fn an_anchored_boundary_stamps_its_violations_with_the_anchor() {
+    let (result, violations) = run_module_check(
+        "anchored",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::secret")
+            .because("the kernel must not import a secret")
+            .with_anchor("ADR-014"),
+    );
+    result.expect("a valid module boundary");
+    assert!(!violations.is_empty(), "the forbidden import must react");
+    assert_eq!(violations[0].anchor.as_deref(), Some("ADR-014"));
+    assert_eq!(violations[0].to_json()["anchor"], "ADR-014");
+}
+
+/// The mirror: a boundary that declares no anchor produces `None` on its violations — the anchor
+/// is opt-in and never fabricated.
+#[test]
+fn an_anchorless_boundary_leaves_its_violations_unanchored() {
+    let (result, violations) = run_module_check(
+        "unanchored",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::secret")
+            .because("the kernel must not import a secret"),
+    );
+    result.expect("a valid module boundary");
+    assert!(!violations.is_empty());
+    assert_eq!(violations[0].anchor, None);
+}
+
+/// The reaction stamps a module violation with the rule's repair-direction polarity: a deny rule
+/// (`must_not_import`) → `DenyBreach`, an allowlist rule (`restrict_imports_to`) → `AllowlistGap`.
+#[test]
+fn a_module_violation_carries_its_rule_repair_polarity() {
+    let (_r, deny) = run_module_check(
+        "polarity-deny",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::secret")
+            .because("deny"),
+    );
+    assert_eq!(deny[0].polarity, Some(Polarity::DenyBreach));
+
+    let (_r, allow) = run_module_check(
+        "polarity-allow",
+        &[
+            ("lib.rs", "pub mod kernel;\n"),
+            ("kernel.rs", "use crate::infra::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .restrict_imports_to(["crate::types"])
+            .because("allow"),
+    );
+    assert_eq!(allow[0].polarity, Some(Polarity::AllowlistGap));
+}
+
+/// The rule → polarity classification, incl. the deliberate call that `deny_external_dependencies`
+/// is `AllowlistGap` (its `allow_external` is an in-boundary declaration path — by repair direction,
+/// not rule name), while `forbid_dependency_on` names a specific forbidden crate → `DenyBreach`.
+#[test]
+fn crate_rule_polarity_classifies_by_repair_direction() {
+    let deny_external = CrateBoundary::crate_("x")
+        .deny_external_dependencies()
+        .because("r");
+    assert_eq!(deny_external.rule().polarity(), Polarity::AllowlistGap);
+
+    let forbid = CrateBoundary::crate_("x")
+        .forbid_dependency_on(["openssl"])
+        .because("r");
+    assert_eq!(forbid.rule().polarity(), Polarity::DenyBreach);
+
+    let restrict = CrateBoundary::crate_("x")
+        .restrict_dependencies_to(["serde"])
+        .because("r");
+    assert_eq!(restrict.rule().polarity(), Polarity::AllowlistGap);
+}
+
+/// The constitution projection surfaces a boundary's anchor **only when set**, so an anchor-less
+/// boundary keeps byte-identical JSON (the Some-only discipline that protects the self-law
+/// projection's staleness byte-check).
+#[test]
+fn constitution_json_emits_anchor_only_when_set() {
+    let constitution = Constitution::new("anchors")
+        .boundary(
+            CrateBoundary::crate_("a")
+                .forbid_all_workspace_dependencies()
+                .because("anchored")
+                .with_anchor("ADR-014"),
+        )
+        .boundary(
+            CrateBoundary::crate_("b")
+                .forbid_all_workspace_dependencies()
+                .because("unanchored"),
+        );
+    let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["boundaries"][0]["anchor"], "ADR-014");
+    assert!(
+        doc["boundaries"][1].get("anchor").is_none(),
+        "an anchor-less boundary must emit no `anchor` key"
+    );
+}
+
+// --- must_only_be_imported_by (the inbound closed allowlist) ----------------
+
+fn only_importers(allowed: &[&str]) -> ModuleBoundary {
+    ModuleBoundary::in_crate("x")
+        .module("crate::internal")
+        .must_only_be_imported_by(allowed.iter().copied())
+        .because("internal is imported only through its facade")
+}
+
+#[test]
+fn must_only_be_imported_by_flags_an_importer_outside_the_allowlist() {
+    let (result, violations) = run_module_check(
+        "only-basic",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\npub mod facade;\npub mod consumer;\n",
+            ),
+            ("internal.rs", "// protected\n"),
+            ("facade.rs", "use crate::internal::Secret;\n"),
+            ("consumer.rs", "use crate::internal::Secret;\n"),
+        ],
+        only_importers(&["crate::facade"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    // facade is allowlisted (clean); consumer is not (violates).
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].finding, "crate::consumer");
+    assert_eq!(violations[0].rule, "module may only be imported by");
+}
+
+#[test]
+fn must_only_be_imported_by_authorizes_an_allowed_inline_importer() {
+    // FP closed: `crate::facade` is an INLINE module and IS allow-listed. Its import is attributed
+    // to `crate::facade` (not the file's `crate`), so it is correctly authorized. Before, the file
+    // module `crate` was tested against the allowlist and the allowed inline importer was wrongly
+    // flagged.
+    let (result, violations) = run_module_check(
+        "only-inline-allowed",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\nmod facade { use crate::internal::Secret; }\n",
+            ),
+            ("internal.rs", "// protected\n"),
+        ],
+        only_importers(&["crate::facade"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "an allow-listed inline importer must not be flagged: {violations:?}"
+    );
+}
+
+#[test]
+fn must_only_be_imported_by_flags_a_disallowed_inline_importer_by_its_true_identity() {
+    // A disallowed INLINE importer is flagged with its true identity `crate::rogue` (not the file's
+    // `crate`), so the finding — and thus the baseline identity `(target, rule, finding)` — is
+    // correct rather than shifted onto the file module.
+    let (result, violations) = run_module_check(
+        "only-inline-disallowed",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\npub mod facade;\nmod rogue { use crate::internal::Secret; }\n",
+            ),
+            ("internal.rs", "// protected\n"),
+            (
+                "facade.rs",
+                "// the allow-listed importer declares no import here\n",
+            ),
+        ],
+        only_importers(&["crate::facade"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::rogue");
+}
+
+#[test]
+fn must_only_be_imported_by_admits_the_allowlisted_importer_subtree() {
+    let (result, violations) = run_module_check(
+        "only-subtree",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod facade;\n"),
+            ("internal.rs", "// protected\n"),
+            ("facade.rs", "pub mod v1;\n"),
+            ("facade/v1.rs", "use crate::internal::Secret;\n"),
+        ],
+        only_importers(&["crate::facade"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "crate::facade::v1 is beneath the allowlisted importer: {violations:?}"
+    );
+}
+
+#[test]
+fn must_only_be_imported_by_does_not_admit_a_prefix_colliding_sibling() {
+    let (result, violations) = run_module_check(
+        "only-prefix",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod facadex;\n"),
+            ("internal.rs", "// protected\n"),
+            ("facadex.rs", "use crate::internal::Secret;\n"),
+        ],
+        only_importers(&["crate::facade"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(
+        violations[0].finding, "crate::facadex",
+        "a sibling of the allowlisted importer is not admitted"
+    );
+}
+
+#[test]
+fn must_only_be_imported_by_never_flags_the_protected_subtree() {
+    let (result, violations) = run_module_check(
+        "only-own-subtree",
+        &[
+            ("lib.rs", "pub mod internal;\n"),
+            ("internal.rs", "pub mod deep;\n"),
+            ("internal/deep.rs", "use crate::internal::Secret;\n"),
+        ],
+        only_importers(&["crate::facade"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a module within the protected subtree is not an inbound importer: {violations:?}"
+    );
+}
+
+#[test]
+fn must_only_be_imported_by_empty_allowlist_forbids_every_outside_importer() {
+    let (result, violations) = run_module_check(
+        "only-empty",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod consumer;\n"),
+            ("internal.rs", "// protected\n"),
+            ("consumer.rs", "use crate::internal::Secret;\n"),
+        ],
+        only_importers(&[]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::consumer");
+}
+
+#[test]
+fn must_only_be_imported_by_admits_multiple_allowlisted_importers() {
+    let (result, violations) = run_module_check(
+        "only-multiple",
+        &[
+            (
+                "lib.rs",
+                "pub mod internal;\npub mod facade;\npub mod api;\npub mod consumer;\n",
+            ),
+            ("internal.rs", "// protected\n"),
+            ("facade.rs", "use crate::internal::Secret;\n"),
+            ("api.rs", "use crate::internal::Secret;\n"),
+            ("consumer.rs", "use crate::internal::Secret;\n"),
+        ],
+        only_importers(&["crate::facade", "crate::api"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::consumer");
+}
+
+#[test]
+fn must_only_be_imported_by_ignores_external_imports() {
+    let (result, violations) = run_module_check(
+        "only-external",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod consumer;\n"),
+            ("internal.rs", "// protected\n"),
+            ("consumer.rs", "use serde::Deserialize;\n"),
+        ],
+        only_importers(&["crate::facade"]),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "an external import is out of scope: {violations:?}"
+    );
+}
+
+#[test]
+fn must_only_be_imported_by_on_the_crate_root_is_a_constitution_error() {
+    let (result, _violations) = run_module_check(
+        "only-m-crate",
+        &[("lib.rs", "pub mod http;\n"), ("http.rs", "// nothing\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_only_be_imported_by(["crate::facade"])
+            .because("the crate root cannot be protected this way"),
+    );
+    let err = result.expect_err("protecting `crate` must be a constitution error");
+    assert_eq!(err, must_only_be_imported_by_on_crate_error("x"));
+}
+
+#[test]
+fn must_only_be_imported_by_rule_text_and_json_params() {
+    // Projection surface: distinct label/text and the surface-qualified `only_importers` key.
+    let rule = ModuleRule::MustOnlyBeImportedBy {
+        allowed: vec!["crate::facade".to_string()],
+    };
+    assert_eq!(rule.label(), "module may only be imported by");
+    assert_eq!(rule.polarity(), Polarity::AllowlistGap);
+    assert_eq!(rule.text(), "may only be imported by: crate::facade");
+    assert_eq!(
+        rule.json_params(),
+        vec![("only_importers", serde_json::json!(["crate::facade"]))]
+    );
+    let empty = ModuleRule::MustOnlyBeImportedBy { allowed: vec![] };
+    assert_eq!(empty.text(), "may only be imported by nothing");
+}

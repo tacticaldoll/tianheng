@@ -88,6 +88,10 @@ Each violation SHALL additionally carry a `file` field naming the offending sour
 
 The `sarif` format is a **CI-consumable projection of the reaction** and, like the JSON document, is `check`-only: `list --format sarif` SHALL be a usage error that exits 2 (symmetric to `markdown` being `list`-only). It is an open, **vendor-neutral** standard (consumed by GitHub code-scanning and other tools); a vendor-specific format such as GitHub's `::error::` workflow command is deliberately NOT provided, as it would couple the tool to one CI vendor — emitting such annotations from the neutral output is a harness/CI-step convention, not a tool format. SARIF projects the **same** measure as the JSON — the same non-baselined violations, the same severities, the same exit code (it changes presentation, never the outcome or the process exit). A baselined violation SHALL NOT appear (it does not fail, consistent with the human report). `--format sarif` SHALL emit a SARIF 2.1.0 document whose `runs[].results[]` carries one result per non-baselined violation: `ruleId` the rule, `level` `error` for an enforced violation and `warning` for an advisory, and `message.text` carrying the reason and the finding (the rule is carried structurally in `ruleId`, not repeated in the message). Because a violation observes a `file` but **not a line**, a SARIF result's location SHALL carry only `physicalLocation.artifactLocation.uri` (the file) with **no `region`**; a violation with no `file` SHALL emit a SARIF result with no `locations` — never a fabricated location. A constitution error SHALL be surfaced as a SARIF tool-execution notification at `error` level under `runs[0].invocations[0]`, whose `executionSuccessful` SHALL be `false`, and SHALL exit 2, never a silent pass; a clean outcome SHALL emit a valid SARIF document with empty `results` and exit 0.
 
+Each violation SHALL additionally carry a durable governance `anchor` — a stable pointer (e.g. `"ADR-014"`) declared on the producing boundary via `.with_anchor(...)`, distinct from the free-text `reason`: the `reason` stays the human repair-hint sentence, the `anchor` is the durable coordinate into the project's governance a tool or agent keys on. In the JSON report the `anchor` SHALL be present on each violation — a string when the producing boundary declared one, and `null` otherwise, the same faithful-absence shape as `file`. In SARIF an anchored violation's result SHALL carry the anchor in the result property bag (`properties.anchor`); that bag is **shared** with the repair-direction `polarity` (defined below), so a result omits the `properties` key only when the violation has **neither** an anchor nor an on-axis polarity, and the two fields SHALL be merged into one bag, never overwriting each other. The `anchor` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding`) — so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported — and it SHALL never be a reaction input (it never affects whether a violation is produced, its severity, or the count). Like `file`, it is metadata attached after identity de-duplication, never a de-duplication key.
+
+Each violation SHALL additionally carry a **repair-direction `polarity`** — a machine-readable classification of *which way to repair*, distinct from `kind` (which names the *dimension*). The polarity is derived from the producing rule's type (known at the reaction site), never observed from code and never declared by the adopter. It takes one of two values on a **boundary-drift** violation: `deny_breach` when the rule forbids a specific target or shape (repair: remove the offending code — `forbid_dependency_on`, `must_not_import`, `must_not_be_imported_by`, the signature-coupling `must_not_expose` and its `dyn`/`impl-trait`/`async` sibling exposure rules, `must_not_declare_pub`, `must_not_acquire`), or `allowlist_gap` when the rule permits a set and reacts to a member outside it (repair: remove the code **or** declare the intent by widening the set — `restrict_dependencies_to`, `restrict_workspace_dependencies_to`, `restrict_dependency_sources_to`, `restrict_imports_to`, `only_implemented_in`, `only_origins`, and `deny_external_dependencies` whose `allow_external` exceptions are an in-boundary declaration path). `only_origins` is an allowlist rule, but its origin-crossing violation is emitted by the runtime **prod** face via `Violation::to_json`, not by `check` (whose runtime face is only the probe-coverage audit), so its polarity rides the runtime event JSON rather than the check report. A violation **not on the boundary-drift axis** — the runtime CI-audit coverage/consistency violations (a declared-but-unprobed seam, a probed-but-undeclared seam, a duplicate seam, an un-auditable probe) — SHALL carry a `null` polarity: `null` means "not on this axis, read the `reason`/`finding` for the repair direction," never a fabricated classification. In the JSON report the `polarity` SHALL be present on every violation — the snake-case string (`"deny_breach"` / `"allowlist_gap"`) when on the boundary-drift axis, and `null` otherwise — always present, the same faithful-absence shape as `file`. In SARIF an on-axis violation's result SHALL carry the polarity in the shared result property bag (`properties.polarity`); a `null`-polarity violation SHALL emit no `polarity` property. The `polarity` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding`) — being a pure function of the rule it is constant for a given identity, so it can never re-baseline an accepted violation nor change the violation count — and it SHALL never be a reaction input.
+
 #### Scenario: JSON format emits a parseable violations document
 
 - **WHEN** the runner checks a workspace with an enforced crate violation under `--format json`
@@ -202,6 +206,51 @@ The `sarif` format is a **CI-consumable projection of the reaction** and, like t
 
 - **WHEN** the constitution cannot be evaluated (a constitution error) under `--format sarif`
 - **THEN** the SARIF document carries `runs[0].invocations[0].executionSuccessful = false` with a tool-execution notification at `error` level carrying the message, and the process exits 2 — never a silent pass
+
+#### Scenario: An anchored boundary's violation carries the anchor in JSON
+
+- **WHEN** the runner checks a workspace under `--format json` and an enforced violation is produced by a boundary that declared `.with_anchor("ADR-014")`
+- **THEN** that violation's `anchor` is the string `"ADR-014"`
+
+#### Scenario: An anchor-less boundary's violation reports a null anchor
+
+- **WHEN** the runner checks a workspace under `--format json` and a violation is produced by a boundary that declared no anchor
+- **THEN** that violation's `anchor` is `null`, a faithful absence rather than an omitted key
+
+#### Scenario: SARIF carries the anchor in the result property bag
+
+- **WHEN** the runner checks a workspace under `--format sarif` and an anchored boundary is violated
+- **THEN** the corresponding `runs[].results[]` entry carries `properties.anchor` equal to the declared anchor, and a violation with **neither** an anchor nor an on-axis polarity emits no `properties` key (the bag is shared with `polarity`)
+
+#### Scenario: The anchor does not re-baseline an accepted violation
+
+- **WHEN** a workspace has a violation already recorded in the active baseline, and the producing boundary now declares an anchor
+- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding)` is unchanged, the anchor not being part of it), does not fail the gate, and the violation count is unchanged
+
+#### Scenario: A deny boundary's violation is classified deny_breach
+
+- **WHEN** the runner checks a workspace under `--format json` and a `must_not_import` (or any forbid/must-not) boundary is violated
+- **THEN** that violation's `polarity` is the string `"deny_breach"`
+
+#### Scenario: An allowlist boundary's violation is classified allowlist_gap
+
+- **WHEN** the runner checks a workspace under `--format json` and a `restrict_dependencies_to`, `restrict_imports_to`, `only_implemented_in`, or `deny_external_dependencies` boundary is violated
+- **THEN** that violation's `polarity` is the string `"allowlist_gap"`, because the repair may be either removing the member or declaring it in the allowlist (the runtime `only_origins` rule is also `allowlist_gap`, but its violation is emitted by the prod face, not `check`)
+
+#### Scenario: An audit-coverage violation carries a null polarity
+
+- **WHEN** the runner checks a workspace under `--format json` and a runtime CI-audit violation is produced (a declared seam with no probe, a probe of an undeclared seam, a duplicate seam, or an un-auditable probe)
+- **THEN** that violation's `polarity` is `null` — it is not on the boundary-drift axis, and its repair direction is read from the `reason`/`finding`
+
+#### Scenario: SARIF carries the polarity in the shared result property bag
+
+- **WHEN** the runner checks a workspace under `--format sarif` and an on-axis boundary is violated
+- **THEN** the corresponding `runs[].results[]` entry carries `properties.polarity` equal to the snake-case value (merged into the same bag as `anchor`, never overwriting), and a `null`-polarity violation emits no `polarity` property
+
+#### Scenario: The polarity does not change baseline identity or the violation count
+
+- **WHEN** a workspace has a violation already recorded in the active baseline
+- **THEN** its `polarity` (a pure function of the rule) does not enter the identity `(target, rule, finding)`, so the violation is still recognized as baselined, does not fail the gate, and the violation count is unchanged
 
 ### Requirement: Runner exposed as a reusable library entry point
 
@@ -392,7 +441,7 @@ it, exit unchanged).
 
 ### Requirement: Human violation report foregrounds the reason
 
-In the human-readable (text) report that `check` prints for an enforced or advisory violation, the runner SHALL **foreground the `reason`**: the reason SHALL be rendered before the mechanical fields (the boundary target, the rule, and the finding), so the agent reading the reaction leads with the principle and repair direction rather than the mechanical detail. The report SHALL surface the offending `file` when the violation carries one (the "where to repair"), and SHALL omit the file element when the violation has none (a faithful absence, never a fabricated location). The runner SHALL group violations by boundary — ordering the text report's violations by `(target, rule)` — so that multiple findings under one boundary appear together and the reason is read once per boundary.
+In the human-readable (text) report that `check` prints for an enforced or advisory violation, the runner SHALL **foreground the `reason`**: the reason SHALL be rendered before the mechanical fields (the boundary target, the rule, and the finding), so the agent reading the reaction leads with the principle and repair direction rather than the mechanical detail. The report SHALL surface the offending `file` when the violation carries one (the "where to repair"), and SHALL omit the file element when the violation has none (a faithful absence, never a fabricated location). The report SHALL likewise surface the violation's `anchor` **after** the located facts (the target, rule, finding, and file) when the violation carries one, and SHALL omit the anchor element when it has none — so the durable governance pointer is shown without displacing the reason-led opening. The report SHALL likewise surface the violation's repair-direction `polarity` when it is on the boundary-drift axis (`deny_breach` / `allowlist_gap`), among the mechanical fields, and SHALL omit the polarity element when it is `null` (an audit-coverage violation) — so the report never prints an unhelpful "polarity: none" line. The runner SHALL group violations by boundary — ordering the text report's violations by `(target, rule)` — so that multiple findings under one boundary appear together and the reason is read once per boundary.
 
 This governs the **human text report only** — an ordering/grouping/presence invariant over already-observed fields. It does NOT change the JSON projection (the machine contract under "Machine-readable report format"), and it introduces no derived or invented field (no `repair_hint`): the reason is shown as declared, the file as observed.
 
@@ -405,6 +454,16 @@ This governs the **human text report only** — an ordering/grouping/presence in
 
 - **WHEN** a reported violation carries an offending `file`
 - **THEN** the text report shows that file as the repair location; and **WHEN** a violation carries no file, **THEN** the report shows no file element rather than a fabricated one
+
+#### Scenario: The anchor is shown after the located facts when present
+
+- **WHEN** `check` reports as text an enforced violation whose boundary declared an anchor
+- **THEN** the violation's block shows the anchor after the target, rule, finding, and file elements; and **WHEN** a violation's boundary declared no anchor, **THEN** the block shows no anchor element
+
+#### Scenario: The repair-direction polarity is shown for an on-axis violation
+
+- **WHEN** `check` reports as text a violation whose boundary is on the deny/allowlist axis
+- **THEN** the violation's block shows its repair-direction polarity among the mechanical fields; and **WHEN** the violation is an audit-coverage violation (null polarity), **THEN** the block shows no polarity element
 
 #### Scenario: Violations are grouped by boundary
 

@@ -3,9 +3,7 @@
 ## Purpose
 
 The 漏刻 (runtime) dimension's first capability: declare which concrete-type **origins** may cross a named runtime **seam**, and probe live `dyn` objects in production to catch a forbidden-origin type slipping through a `dyn Trait` into a layer it must not reach — what static and semantic analysis structurally cannot see. It has two faces: a **prod face** (the probe reacts fail-closed, emitting a `Violation` event by default, panic opt-in) and a **CI face** (`audit_probe_coverage` verifies every declared seam is probed and every probe references a declared seam). Origin is **observed** (`module_path!()` at the registration site), not self-asserted; the hot path is std-only and lock-free; the crate depends on 璇璣 (`xuanji`) only.
-
 ## Requirements
-
 ### Requirement: Runtime boundary declared in Rust and installed write-once
 
 A runtime boundary SHALL be expressed as Rust code and is part of the single source of truth. A `RuntimeBoundary` SHALL name a runtime **seam** (a string), an **allowlist of origins**, and a reaction posture. Boundaries SHALL be installed once at startup into a process-global **write-once** registry; a second install SHALL be a constitution error (the registry is read-only after startup so the hot path needs no lock). A probe references a seam **by name**, so policy lives in the declaration, not at the call site. The system MUST NOT require TOML, YAML, Markdown, or any generated policy file. Within a single install, a **duplicate seam declaration** or a **duplicate origin registration** (the same type registered twice) SHALL fail loud, never silently overwrite — a silent overwrite would let the last declaration shadow an earlier law (a declared boundary that never enforces, the forbidden false negative).
@@ -126,15 +124,34 @@ is out of scope — the same stated bound as the semantic dimension.
 The probe scan SHALL be build/CI-time only (std-only source scan, never on the runtime hot path),
 comment- and string-literal-aware (including raw and byte strings), tracking **nested** block
 comments (a probe inside a nested comment is commented out and SHALL NOT count as coverage) and
-recognizing all three macro delimiters (`()`, `{}`, `[]`). The scan is lexical and does not
+recognizing all three macro delimiters (`()`, `{}`, `[]`). A probe lexically inside a **macro body**
+— a `macro_rules!` definition body, or the body of any macro invocation `ident! (…)/{…}/[…]` other
+than the `assert_boundary!` probe itself — is macro-generated or dead code and SHALL NOT count as
+coverage: the scanner skips such a body (the same macro-body exclusion the static and semantic
+dimensions apply, reimplemented louke-locally because 三儀 ⊥ 三儀 forbids importing 圭表's scanner).
+Otherwise a probe in a never-invoked macro body would report its seam covered while the seam never
+enforces at runtime — the audit's forbidden false negative. The scan is lexical and does not
 evaluate `cfg`: a probe behind a non-production `#[cfg(...)]` is still counted, so a seam's
 production probe must not live behind a non-production `cfg` — a stated bound, not a silent pass.
-A probe whose seam argument is
-a **string literal** (plain or raw) is auditable; a probe whose seam argument is **not** a string
-literal (a constant or other expression) cannot be traced to a declared seam, and the system SHALL
-react to it (an enforce `Violation` naming the un-auditable probe site) rather than silently skip
-it — a silent skip would be a false negative, and erring toward a loud reaction is the project's
-forbidden-bug trade.
+A probe whose seam argument is a **string literal** (plain or raw) is auditable, and a **plain**-string
+seam SHALL be compared to the declared seams by its **decoded** value — the exact `&str` the Rust
+compiler produces from that literal, resolving the standard string escapes (`\n`, `\r`, `\t`, `\\`,
+`\0`, `\'`, `\"`, `\xHH` byte escapes with value `<= 0x7F`, and `\u{…}` unicode escapes with
+underscores permitted as digit separators) — so it matches the compiler-decoded declared seam
+(`RuntimeBoundary::seam()`), NOT the raw source bytes between the quotes. Comparing the un-decoded
+bytes would let an escape-bearing seam diverge between the two faces (reporting a probed seam as
+unprobed and its probe as undeclared) and, when a declaration and a probe decode to the same bytes
+by different spellings, silently count a seam as covered whose runtime probe would panic on an
+undeclared seam — the forbidden false negative. A raw-string seam (`r"…"` / `r#"…"#`) keeps its
+verbatim value (raw strings have no escapes, so their bytes already equal the compiler value). A
+plain-string seam whose escape the std-only scanner cannot decode — including a backslash-newline
+**line continuation**, which is routed here rather than decoded so a mis-stripped continuation can
+never produce a wrong non-matching value — SHALL react as an un-auditable probe rather than a
+silently mismatched literal. A probe whose seam argument is
+**not** a string literal (a constant or other expression) cannot be traced to a declared seam, and
+the system SHALL react to it (an enforce `Violation` naming the un-auditable probe site) rather than
+silently skip it — a silent skip would be a false negative, and erring toward a loud reaction is the
+project's forbidden-bug trade.
 
 The CI face verifies coverage against the **declared** seams and the **source**; it does NOT
 observe the live, process-global install registry (which exists only in the adopter's running
@@ -198,3 +215,29 @@ NOT claim to verify installation.
 
 - **WHEN** every declared `RuntimeBoundary` seam has at least one string-literal `assert_boundary!` probe in the workspace, and every probe references a declared seam
 - **THEN** `audit_probe_coverage` reports clean (exit 0)
+
+#### Scenario: A probe inside a macro body is not counted as coverage
+
+- **WHEN** a declared seam's only `assert_boundary!("s", o)` probe appears inside a `macro_rules!` body (or another macro invocation's body, e.g. `some_macro! { assert_boundary!("s", o) }`), and a real probe for a different declared seam `t` follows the macro body
+- **THEN** `audit_probe_coverage` reports seam `s` unprobed (the macro body is skipped, so its probe does not count) while still capturing the real probe for `t` after the body — the forbidden false negative (a "covered" seam that never enforces) is avoided
+
+#### Scenario: An escaped plain-string probe matches its escaped declared seam
+
+- **WHEN** a `RuntimeBoundary::at("a\n")` seam is declared and its only probe in the workspace is `assert_boundary!("a\n", obj)`
+- **THEN** `audit_probe_coverage` counts the seam covered and reports clean (the probe's decoded seam `a`+newline equals the declared seam), never the false pair of "declared seam unprobed" and "probe references undeclared seam" the raw-byte comparison produced
+
+#### Scenario: A declaration and a probe that decode differently are caught, not counted as covered
+
+- **WHEN** a seam is declared `RuntimeBoundary::at("a\\n")` (decoded: `a`, backslash, `n`) but the only probe is `assert_boundary!("a\n", obj)` (decoded: `a`, newline)
+- **THEN** `audit_probe_coverage` reacts (the declared seam is reported unprobed and the probe references an undeclared seam), so the runtime mismatch is caught at CI rather than silently counted as coverage — the forbidden false negative is avoided
+
+#### Scenario: An un-decodable escape or line continuation reacts as un-auditable
+
+- **WHEN** a probe's plain-string seam literal carries an escape the std-only scanner cannot decode, or a backslash-newline line continuation
+- **THEN** `audit_probe_coverage` emits an enforce un-auditable violation naming the probe site, never recording a silently mismatched literal (erring toward a loud reaction, the project's forbidden-bug trade)
+
+#### Scenario: An escape-free or raw-string seam is unaffected
+
+- **WHEN** a seam and its probe are escape-free (e.g. `"domain-entry"`) or the seam is written as a raw string (`r"…"`)
+- **THEN** `audit_probe_coverage` behaves exactly as before (the decoded value equals the raw value), so no existing adopter's coverage result or baseline identity changes
+

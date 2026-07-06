@@ -37,7 +37,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 
 ### Requirement: Public-signature observation governs exposure
 
-The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule, finding)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
+The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule, finding)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
 
 #### Scenario: A forbidden type in a public return is a violation
 
@@ -53,6 +53,36 @@ The system SHALL observe the **public** API surface of the governed module ancho
 
 - **WHEN** the governed module declares `pub enum E { V(crate::infra::Pool, crate::infra::Pool) }` under `must_not_expose("crate::infra")`
 - **THEN** the system emits two distinct findings (`… variant crate::domain::E::V::0` and `… variant crate::domain::E::V::1`), so baselining the first does not mask the second — the same per-member injectivity struct fields already carry
+
+#### Scenario: A forbidden type in a trait supertrait's generic argument is a violation
+
+- **WHEN** the governed module declares `pub trait Facade: AsRef<crate::infra::Secret> {}` under `must_not_expose("crate::infra")`
+- **THEN** the system emits a violation naming the exposed type `crate::infra::Secret`, because a supertrait bound's generic argument is walked with full recursion, not only the bound's head trait `AsRef`
+
+#### Scenario: A forbidden type in an associated-type bound or GAT parameter is a violation
+
+- **WHEN** the governed module declares `pub trait Facade { type Bar: Into<crate::infra::Secret>; type Gat<T: crate::infra::Marker>; }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits violations naming `crate::infra::Secret` (the associated-type bound's generic argument) and `crate::infra::Marker` (the GAT generic-parameter bound), the same full-recursion coverage other positions carry
+
+#### Scenario: A forbidden type in an associated-type default is a violation
+
+- **WHEN** the governed module declares `pub trait Facade { type Bar = crate::infra::Secret; }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits a violation naming `crate::infra::Secret`, because a public associated type's default target is an observed type position
+
+#### Scenario: A forbidden type in an inherent-impl public associated const is a violation
+
+- **WHEN** the governed module declares `impl Foo { pub const K: crate::infra::Secret = …; }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits a violation naming `crate::infra::Secret`, seam-qualified to `Foo`'s associated const — an inherent-`impl` public associated `const`'s type is an observed position, not only its method signatures
+
+#### Scenario: A forbidden type in an inherent-impl public associated type target is a violation
+
+- **WHEN** the governed module declares `impl Foo { pub type T = crate::infra::Secret; }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits a violation naming `crate::infra::Secret`, because an inherent-`impl` public associated `type`'s target is an observed position
+
+#### Scenario: A non-public inherent-impl associated item is not exposed
+
+- **WHEN** the governed module declares `impl Foo { const K: crate::infra::Secret = …; type T = crate::infra::Secret; }` (both private) under `must_not_expose("crate::infra")`
+- **THEN** the system reports no violation, because only `pub` associated items of an inherent `impl` are exposed
 
 ### Requirement: Forbidden-type matching by path and prefix
 

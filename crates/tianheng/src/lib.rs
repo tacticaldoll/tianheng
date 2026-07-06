@@ -23,10 +23,10 @@
 mod runner;
 
 pub use guibiao::{
-    Boundary, BoundaryKind, CrateBoundary, CrateBoundaryBuilder, CrateBoundaryDraft, CrateTarget,
-    DenyExternalDraft, DependencyKind, ModuleBoundary, ModuleBoundaryBuilder, ModuleBoundaryDraft,
-    ModuleRule, ModuleTargetDraft, Outcome, Report, Rule, Severity, SourceKind, Violation,
-    ViolationId, check, workspace_member_src_dirs,
+    Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateBoundaryBuilder,
+    CrateBoundaryDraft, CrateTarget, DenyExternalDraft, DependencyKind, ModuleBoundary,
+    ModuleBoundaryBuilder, ModuleBoundaryDraft, ModuleRule, ModuleTargetDraft, Outcome, Polarity,
+    Report, Rule, Severity, SourceKind, Violation, ViolationId, check, workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
@@ -55,7 +55,7 @@ pub use louke::{
     audit_probe_coverage,
 };
 
-pub use runner::{constitution_markdown, run};
+pub use runner::{constitution_markdown, projection_gate, run};
 
 /// A declared constitution composing every observation dimension's boundaries — the single
 /// source of truth, in Rust. The static (圭表) boundaries, the semantic (渾儀) bundle, and the
@@ -176,9 +176,10 @@ impl From<GnomonConstitution> for Constitution {
 /// `Constitution` / `run` (and `check` for the pure static core).
 pub mod prelude {
     pub use super::{
-        AsyncExposureBoundary, Boundary, BoundaryKind, Constitution, CrateBoundary, DependencyKind,
-        DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, Outcome,
-        Report, Rule, RuntimeBoundary, SemanticBoundary, Severity, SourceKind, TraitImplBoundary,
-        Violation, ViolationId, VisibilityBoundary, check, run,
+        AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
+        CrateBoundary, DependencyKind, DynTraitBoundary, ForbiddenMarkerBoundary,
+        ImplTraitBoundary, ModuleBoundary, Outcome, Polarity, Report, Rule, RuntimeBoundary,
+        SemanticBoundary, Severity, SourceKind, TraitImplBoundary, Violation, ViolationId,
+        VisibilityBoundary, check, run,
     };
 }

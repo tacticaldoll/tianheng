@@ -188,12 +188,40 @@ set**, composed from local-crate AST and declared-manifest data only:
 - **plus the sysroot crates** `std`, `core`, `alloc`, `proc_macro`, `test`, which never appear
   in `dependencies` yet are valid extern path heads.
 
-A bare **re-export** (`pub use`) head is resolved against this set directly: a bare `pub use`
-head is an external crate by edition-2018+ grammar (a local module must be reached via
-`crate::`/`self::`/`super::`), so a same-named local module does NOT suppress it. (A bare
-type-position head, by contrast, may denote a local child module, so `semantic-signature-coupling`
-resolves those against the set with the governed module's own child modules excluded — a
-per-module shadow. The two positions therefore use different oracle inputs.)
+A bare **re-export** (`pub use`) head is resolved against this set **with the governed module's own
+child modules excluded** (`externs − child_module_names`): a `pub use dep::X;` head that names a
+child `mod dep` **of the re-exporting module** is shadowed by that local module (rustc resolves it to
+the local module — E0432 if the path is absent there — not the dependency), so attributing it to the
+dependency would be a false positive. The shadow is **per-module**: a same-named module at another
+level (e.g. a crate-root `mod dep` while the `pub use dep::X;` lives in a *child* module, where bare
+`dep` reaches only the extern prelude) does NOT suppress the re-export — it still reacts (no false
+negative). Only child **modules** are excluded, not the whole local type namespace: a same-named
+child `mod` is the only shadow that arises in **compiling** code. A local `struct`/`enum`/`trait`/type
+named `HEAD` also shadows the `use` head, but makes the re-export itself fail to compile (`HEAD::X` is
+then "not a module" — E0433/E0432), so it never occurs in a buildable crate; on compiling code,
+subtracting child modules and subtracting the whole type namespace therefore agree, and module-only
+is the minimal, most-conservative choice (it also degrades most safely on mid-edit source). A bare
+**type-position** head, by contrast, excludes the governed module's whole child-item type namespace
+(`semantic-signature-coupling`), since a type-position head may denote any local type-namespace item.
+A leading `::` (`pub use ::dep::X;`) bypasses the shadow entirely and resolves to the crate.
+
+This same per-module child-module exclusion SHALL be applied **both** to the direct re-export head
+resolution **and** inside the crate-wide re-export **closure** (`collect_reexports`, whose map
+`canonicalize_through_reexports` / `canonicalize_through_aliases` follow), keyed by each collected
+re-export's own **defining** module, and applied to **both** the external-crate set
+(`externs − child_module_names`) **and** the crate-root rename map (`renames − child_module_names`),
+exactly as the direct head does. A `pub use dep::X;` (extern-set variant) or `pub use wc::X;`
+(crate-root-rename-alias variant) collected in a module `crate::a` that declares a child `mod dep` /
+`mod wc` is not recorded as the dependency / renamed crate in the closure, so a **cross-module
+facade** that re-exports it onward (`crate::b`'s `pub use crate::a::X;`) does not mis-canonicalize to
+the dependency through the closure. A **leading-`::`** re-export (`pub use ::dep::X;`) SHALL bypass
+the shadow inside the closure too: the closure honors the `use` item's leading colon and resolves
+such a head against the **raw** sets — so the extern escape hatch still reacts through a facade even
+under a same-named child `mod dep` (suppressing it would be a false negative). A genuine extern
+facade chain — whose defining module declares no same-named child module — still records the extern
+hop and reacts. The subtraction is scoped to each module's own declared children during the crate
+walk, so the crate-root-vs-child distinction holds inside the closure exactly as it does for the
+direct head.
 
 The system SHALL additionally apply a **source-level crate-root `extern crate X as Y;` rename**:
 a crate-root `extern crate` item with an `as`-rename binds `Y` crate-wide (the extern prelude),
@@ -204,6 +232,23 @@ pipeline, covering a renamed head in a **type position** and in the **governed m
 `pub use`**. Only a **crate-root** rename is collected — a module-scoped `extern crate … as …`
 binds only within its module, so collecting it crate-wide would be a false positive (a stated bound
 below).
+
+The rename SHALL be resolved rustc-correctly in three positions of the head:
+
+- **Bare head `Y::…`** — rewritten to `X::…`, **unless** the governed module declares its own child
+  `mod Y`, which rustc lets shadow the extern alias within that module (bare `Y::…` is then the local
+  module, not the crate). The rewrite is therefore applied with the governed module's own
+  child-module names removed from the rename map. A bare `Y::…` in a module with **no** local `mod Y`
+  still rewrites and reacts (suppressing it there would be a false negative). Only child **modules**
+  shadow a `Y::…` path head — the sole shadow that arises in compiling code (a non-module local `Y`
+  makes `Y::…` uncompilable).
+- **Crate-relative spelling `crate::Y::…`** — rewritten to `X::…`. `crate::Y` unambiguously names the
+  crate-root extern rename (a crate-root `mod Y` cannot coexist with `extern crate … as Y`), so no
+  shadow applies and the rewrite is unconditional; only the segment **immediately** after `crate` is
+  treated as the alias (a deeper `crate::m::Y` is a submodule item, not the rename). The rewrite is
+  applied to the **final** resolved path (after the alias/re-export closure), so a `crate::Y::…`
+  reached directly, through a `type` alias, or through a `pub use` target reacts alike.
+- **Leading-`::` `::Y::…`** — an unambiguous extern, rewritten to `X::…` regardless of any local `mod Y`.
 
 A bare head in this set resolves to its **verbatim** path; a bare head not in it keeps its
 existing non-resolving behavior. The determination SHALL be applied in the bare-fallback branch
@@ -246,7 +291,27 @@ governed source** (for a renamed dependency, the in-source name); **no DSL chang
 #### Scenario: A same-named local module does not suppress a subtree's extern re-export
 
 - **WHEN** the governed crate declares a crate-root `mod worklane_core { … }` AND also depends on a crate `worklane_core`, and a **child** module `crate::domain` declares `pub use worklane_core::Foo;`
-- **THEN** the system reacts, because a bare `pub use` head is an external crate by edition-2018+ grammar (a crate-root module shadows the extern prelude only in the root module itself, not in a child), so the re-export is resolved against the raw external-crate set — not suppressed by the same-named local module, which would be a false negative
+- **THEN** the system reacts, because the shadow is per-module: `crate::domain` (the re-exporting module) declares no child `mod worklane_core`, so `worklane_core` is not excluded from its re-export extern set — the crate-root module shadows only in the root module itself, not in a child, and suppressing here would be a false negative
+
+#### Scenario: A cross-module facade reaching a child-shadowed head does not react
+
+- **WHEN** `crate::a` declares both `pub use worklane_core::spi::Foo;` and a child `mod worklane_core { … }` (rustc resolves the bare head to the local module — E0432 if the path is absent there), and the governed facade module `crate::b` re-exports it onward with `pub use crate::a::Foo;`, under `must_not_expose("worklane_core::spi")` (the dependency)
+- **THEN** the system does not misattribute the facade to the dependency: `crate::a`'s own child module `worklane_core` is excluded from its re-export extern set when the crate-wide closure collects `crate::a`'s re-exports, so the closure does not record `crate::a::Foo → worklane_core::spi::Foo`, and canonicalizing `crate::b::Foo` through the closure does not reach the dependency — no violation is emitted
+
+#### Scenario: A cross-module facade reaching a rename-alias child-shadowed head does not react
+
+- **WHEN** a crate-root `extern crate worklane_core as wc;` is declared, `crate::a` declares both `pub use wc::spi::Foo;` and a child `mod wc { … }` (which rustc lets shadow the bare alias head within `crate::a`; a submodule `mod wc` does not conflict with the crate-root rename), and the governed facade module `crate::b` re-exports it onward with `pub use crate::a::Foo;`, under `must_not_expose("worklane_core::spi")`
+- **THEN** the system does not misattribute the facade to the renamed crate: `crate::a`'s own child module `wc` is removed from the rename map for `crate::a`'s bare re-export heads when the crate-wide closure collects `crate::a`'s re-exports, so the closure does not record `crate::a::Foo → worklane_core::spi::Foo`, and canonicalizing `crate::b::Foo` through the closure does not reach the renamed crate — no violation is emitted
+
+#### Scenario: A leading-colon facade hop reacts through the closure despite a child module
+
+- **WHEN** `crate::a` declares both `pub use ::worklane_core::spi::Foo;` (a leading-`::` extern head, which a same-named child module does not shadow) and a child `mod worklane_core { … }`, and the governed module `crate::b` re-exports it onward with `pub use crate::a::Foo;`, under `must_not_expose("worklane_core::spi")`
+- **THEN** the system reacts: the closure honors the `use` item's leading colon and resolves the `::worklane_core` head against the raw external-crate set (unshadowed by the child `mod worklane_core`), so it records `crate::a::Foo → worklane_core::spi::Foo` and canonicalizes `crate::b::Foo` through the closure to the dependency
+
+#### Scenario: A genuine extern facade chain still reacts through the closure
+
+- **WHEN** `crate::facade` declares `pub use worklane_core::spi::Foo;` and declares **no** child `mod worklane_core`, and the governed module `crate::domain` declares `pub use crate::facade::Foo;`, under `must_not_expose("worklane_core::spi")`
+- **THEN** the system reacts: `crate::facade`'s re-export extern set retains `worklane_core` (no same-named child module), so the closure records the extern hop and canonicalizes `crate::domain::Foo` to `worklane_core::spi::Foo` — the child-module exclusion is per defining module and does not suppress a genuine extern facade (no false negative)
 
 #### Scenario: A source-level crate-root extern-crate rename resolves and reacts
 
@@ -308,20 +373,10 @@ AST + declared manifest:
   prelude and is resolved wherever it is reached **as a bare head** (`wc::…`) — directly in a
   signature or re-export, **through a type alias** (`type H = wc::Foo;`), and **through a `pub use`
   facade closure** — because the (pre-collected) rename map is threaded into the exposure query, the
-  alias-target resolution, and the re-export closure alike. Its residual bounds are the two below;
-  the *module-scoped* rename remains a bound.
-- The crate-root rename's **crate-relative spelling** `crate::<alias>::…` (`crate::wc::spi::Foo`)
-  is **not** rewritten to the real crate — a **false negative** — and the bare-`<alias>` rewrite is
-  **not suppressed** when a submodule declares its own `mod <alias>` that rustc lets shadow the
-  extern alias — a **false positive**. The rustc-correct model (keep the crate-wide bare rewrite,
-  suppress it under a local type-namespace shadow, add a `crate::<alias>` rewrite) is a deferred,
-  design-bearing follow-up, born when built; it is recorded, never silently claimed clean.
-- A **`pub use dep::X;` re-export head in a module that also declares a local `mod dep`**: rustc
-  shadows the extern head with the local module (E0432), but the re-export branch resolves a bare
-  `pub use` head against the raw external-crate set without subtracting the module's own child
-  modules, so it is misattributed to the dependency `dep` — a **false positive**. Narrowing the
-  re-export head oracle to `externs − child_module_names` (as the type-position oracle already does)
-  would close it; deferred with the rename family above, FP-not-FN.
+  alias-target resolution, and the re-export closure alike. Its bare head, crate-relative spelling
+  (`crate::wc::…`), and submodule-shadow suppression are all resolved rustc-correctly (see the
+  crate-root-rename clause of "External-crate re-exports are observed by default"); only the
+  *module-scoped* rename remains a bound.
 - A dependency that renames its **`[lib] name`** to a spelling not derivable from its package
   name (e.g. package `foo-thing` with `[lib] name = "foobar"`, imported as `foobar`): the
   foreign crate's target name lives in *its* manifest, absent from this crate's
@@ -362,13 +417,22 @@ AST + declared manifest:
 - **WHEN** the governed crate declares `extern crate worklane_core as wc;` **inside** a module `mod m { … }` (not at the crate root) and `m` declares `pub fn make() -> wc::spi::Foo`, under `must_not_expose("worklane_core::spi")`
 - **THEN** the system does not resolve `wc` to `worklane_core` (only crate-root renames are collected, since a module-scoped alias binds only locally) and this is a documented bound, distinct from the handled crate-root rename
 
-#### Scenario: A crate-root rename reached by its crate-relative spelling is a documented bound
+#### Scenario: A crate-root rename reached by its crate-relative spelling reacts
 
 - **WHEN** a crate-root `extern crate worklane_core as wc;` is declared and the governed module exposes `worklane_core::spi::Foo` written as `crate::wc::spi::Foo` (the crate-relative spelling of the alias), under `must_not_expose("worklane_core::spi")`
-- **THEN** the system does not rewrite the `crate::wc` spelling to the real crate — a documented false negative recorded as a deferred follow-up, never silently claimed clean
+- **THEN** the system rewrites `crate::wc::…` to `worklane_core::…` (the segment immediately after `crate` is the crate-root rename alias) and emits a violation
 
-#### Scenario: A re-export head shadowed by a same-named local module is a documented bound
+#### Scenario: A bare alias head shadowed by a submodule's own child module does not react
 
-- **WHEN** the governed module declares both `pub use worklane_core::spi::Foo;` and a local `mod worklane_core { … }` (which rustc lets shadow the extern head), under `must_not_expose("worklane_core::spi")`
-- **THEN** the system may misattribute the `worklane_core` head to the dependency rather than the local module — a documented false positive recorded as a deferred narrowing, never silently claimed correct
+- **WHEN** a crate-root `extern crate worklane_core as wc;` is declared and a governed submodule that also declares a child `mod wc { … }` exposes `wc::spi::Foo` (which rustc resolves to the local `mod wc`, not the crate), under `must_not_expose("worklane_core::spi")`
+- **THEN** the system does not rewrite the bare `wc` head to `worklane_core` (the alias is removed from the rename map for that module's bare heads under its child-module shadow), so it does not misattribute the local path to the dependency
 
+#### Scenario: A bare alias head with no local shadow still reacts
+
+- **WHEN** a crate-root `extern crate worklane_core as wc;` is declared and a governed submodule with **no** local `mod wc` exposes `wc::spi::Foo`, under `must_not_expose("worklane_core::spi")`
+- **THEN** the system rewrites the bare `wc` head to `worklane_core::spi::Foo` and emits a violation — the crate-wide bare rewrite is preserved (suppressing it here would be a false negative)
+
+#### Scenario: A re-export head shadowed by a same-named local module does not react
+
+- **WHEN** the governed module declares both `pub use worklane_core::spi::Foo;` and a local child `mod worklane_core { … }` (which rustc lets shadow the extern head — E0432 if the path is absent there), under `must_not_expose("worklane_core::spi")`
+- **THEN** the system does not misattribute the `worklane_core` head to the dependency: the re-exporting module's own child module `worklane_core` is excluded from its re-export extern set, so the head is not resolved as the dependency and no violation is emitted (a genuine extern re-export coexisting with the local module is still reachable via `pub use ::worklane_core::spi::Foo;`)

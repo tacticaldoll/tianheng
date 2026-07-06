@@ -742,3 +742,44 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   in-development version), and runs its tests **from the tarball** — proving the skip is real and
   catching any future crate whose packaged tests reference an unpackaged file. Docs/tests/CI only;
   no capability or reaction-behavior change.
+- **(v0.1.5) A durable governance anchor on boundaries and their violations.** `because(...)` stays
+  the human repair hint; `.with_anchor("ADR-014")` gives tools and agents a stable governance
+  coordinate. The anchor is metadata, not a reaction input or baseline key, so this is additive and
+  keeps anchor-less projections byte-identical.
+- **(v0.1.5) A repair-direction polarity on violations.** `Polarity` is derived from the rule type:
+  deny rules point toward removing the offending code, allowlist rules toward removing or declaring
+  intent. Runtime CI-audit consistency findings stay off this axis (`None`); this is violation
+  metadata, not constitution data.
+- **(v0.1.5) `owner`/`tracker` metadata on baseline entries.** Baselines can point accepted debt at
+  people or trackers without changing the match identity `(target, rule, finding)`. This is the
+  additive 實錄 step, deliberately not the future 0.2.0 structured-baseline break.
+- **(v0.1.5) 漏刻 decodes escaped seam literals in the CI probe-coverage face.** The CI audit now
+  compares probe literals to the compiler-decoded declaration value, so escaped seam names cannot be
+  falsely treated as covered or uncovered. Unreproducible escapes stay loud as un-auditable probes.
+- **(v0.1.5) 圭表 skips precise-capturing `use<...>` bounds in the import scanner.** A Rust type
+  bound spelled `use<...>` is not an import and must not consume the next real `use` declaration.
+  This closes a scanner false negative without changing the observed source class.
+- **(v0.1.5) 渾儀 signature-coupling walks trait-bound generic arguments recursively.** Supertraits,
+  associated-type bounds, and GAT/default positions now use the same nested-path collection as the
+  rest of the public surface, closing a same-source false negative.
+- **(v0.1.5) 漏刻 skips foreign macro bodies in probe-coverage scanning.** A probe inside an
+  unexpanded macro body no longer counts as runtime coverage. The scanner remains louke-local to
+  preserve 三儀 independence.
+- **(v0.1.5) 渾儀 re-export head resolution honors child-module shadowing.** A bare `pub use dep::X`
+  is not attributed to an external crate when the re-exporting module's own child `mod dep` shadows
+  that head; leading-`::` remains the explicit extern escape hatch.
+- **(v0.1.5) 渾儀 crate-root extern renames resolve rustc-correctly.** `crate::<alias>::...` rewrites
+  to the real crate, while bare alias heads are suppressed only under a same-module child-module
+  shadow. This closes the paired extern-rename FN/FP without broadening the observation source.
+- **(v0.1.5) 圭表 gains `must_only_be_imported_by`.** The inbound closed allowlist is the dual of
+  `restrict_imports_to`: it expresses thin-facade ownership that forbid-one rules cannot. It reuses
+  the existing crate-wide `use` scan and is an additive module-rule variant.
+- **(v0.1.5) `projection_gate` makes 潛移 projection freshness reusable.** Adopters can byte-check a
+  checked-in Markdown law projection against the live constitution with a pure helper; full
+  generator / `list-self` product work stays deferred.
+- **(v0.1.5) 渾儀 observes public inherent associated `const`/`type` items.** Inherent impls already
+  exposed public method signatures; their public associated items are the same public surface and now
+  react when they leak forbidden types.
+- **(v0.1.5) 渾儀 re-export closure applies child-module shadowing per defining module.** Facade
+  chains now inherit the same rustc-correct head-shadow rule as direct re-exports, including the
+  leading-`::` escape hatch and crate-root rename aliases.

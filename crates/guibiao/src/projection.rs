@@ -138,6 +138,11 @@ fn boundary_json(boundary: &Boundary) -> Value {
             if let Some(kind) = dependency_kind_label(b.dependency_kind()) {
                 object["dependency_kind"] = serde_json::json!(kind);
             }
+            // Emit the anchor only when set, so a boundary without one keeps byte-identical JSON
+            // (and the Markdown derived from it) — the same discipline as `dependency_kind`.
+            if let Some(anchor) = b.anchor() {
+                object["anchor"] = serde_json::json!(anchor);
+            }
             object
         }
         Boundary::Module(b) => {
@@ -151,6 +156,9 @@ fn boundary_json(boundary: &Boundary) -> Value {
             });
             for (key, value) in b.rule.json_params() {
                 object[key] = value;
+            }
+            if let Some(anchor) = b.anchor() {
+                object["anchor"] = serde_json::json!(anchor);
             }
             object
         }

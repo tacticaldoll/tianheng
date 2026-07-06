@@ -20,7 +20,8 @@
 //!   so every declared seam has a probe (and every probe a declared seam) — closing the
 //!   "declared but never enforced" gap at CI time. A non-literal probe seam is reacted to, not
 //!   silently skipped. Declarations come from the objects, never a source scan, so an
-//!   unconventionally spelled declaration cannot hide a seam.
+//!   unconventionally spelled declaration cannot hide a seam. It lives in a dedicated `audit`
+//!   module, compiled only under the feature.
 //!
 //! The hot path is std-only and lock-free (a write-once registry); the `TypeId`→origin lookup
 //! uses a fold-hasher rather than the default SipHash, while the tiny fixed seam-name map is an
@@ -33,15 +34,18 @@
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-// HashSet / std::path are CI-scanner-only; gated so the default build has no unused imports.
-#[cfg(feature = "audit")]
-use std::collections::HashSet;
 use std::hash::{BuildHasherDefault, Hasher};
-#[cfg(feature = "audit")]
-use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-pub use xuanji::{BoundaryKind, Outcome, Report, Severity, Violation};
+pub use xuanji::{BoundaryKind, Outcome, Polarity, Report, Severity, Violation};
+
+// CI face (the non-default `audit` feature): the probe-coverage audit + source scanner, in its
+// own module so a prod dependency on louke compiles none of it. The prod face (the declaration
+// DSL, the write-once registry, and the fail-closed probe reaction) stays in this root module.
+#[cfg(feature = "audit")]
+mod audit;
+#[cfg(feature = "audit")]
+pub use audit::audit_probe_coverage;
 
 /// The canonical runtime seam-origin rule label — written **once** here and referenced by
 /// both the prod reaction (the crate's internal `check_crossing`) and the 天衡 shell's `list`
@@ -128,6 +132,7 @@ pub struct RuntimeBoundary {
     reason: String,
     severity: Severity,
     posture: Posture,
+    anchor: Option<String>,
 }
 
 impl RuntimeBoundary {
@@ -149,6 +154,19 @@ impl RuntimeBoundary {
     /// The human-readable reason (the repair hint).
     pub fn reason(&self) -> &str {
         &self.reason
+    }
+
+    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
+    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
+    /// none projects and reacts exactly as before.
+    pub fn with_anchor(mut self, anchor: &str) -> Self {
+        self.anchor = Some(anchor.to_string());
+        self
+    }
+
+    /// The durable governance anchor recorded with the boundary, if any.
+    pub fn anchor(&self) -> Option<&str> {
+        self.anchor.as_deref()
     }
 
     /// The declared severity. The CI face reacts to a declared-but-unprobed seam at this
@@ -216,6 +234,7 @@ impl RuntimeBoundaryDraft {
             reason: reason.to_string(),
             severity: self.severity,
             posture: self.posture,
+            anchor: None,
         }
     }
 }
@@ -249,6 +268,7 @@ struct Seam {
     reason: String,
     severity: Severity,
     posture: Posture,
+    anchor: Option<String>,
 }
 
 struct OriginInfo {
@@ -291,6 +311,7 @@ where
                 reason: b.reason,
                 severity: b.severity,
                 posture: b.posture,
+                anchor: b.anchor,
             },
         );
     }
@@ -377,7 +398,9 @@ fn check_crossing(
             finding,
             s.reason.clone(),
             s.severity,
-        ),
+        )
+        .with_anchor(s.anchor.clone())
+        .with_polarity(Polarity::AllowlistGap),
         s.posture,
     )))
 }
@@ -462,472 +485,6 @@ macro_rules! assert_boundary {
     };
 }
 
-// --- CI face: probe-coverage audit ------------------------------------------
-//
-// Everything below (the `Probe` enum, `audit_probe_coverage`, and the source scanner) is the
-// CI face, gated behind the non-default `audit` feature so a prod dependency on louke compiles
-// none of it; the `tianheng` shell enables it. Why a feature, not a 5th crate: PROJECT.md.
-
-/// What the source scan found for a probe occurrence (`assert_boundary!`).
-#[cfg(feature = "audit")]
-#[derive(Debug)]
-enum Probe {
-    /// A probe whose seam is a string literal (auditable, plain or raw): the seam value.
-    Literal(String),
-    /// A probe whose seam argument is NOT a string literal (a const or expression): the CI
-    /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
-    /// source file so the reaction is actionable (and the baseline identity stable).
-    Unauditable { file: String },
-}
-
-/// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** (the
-/// authoritative seam set — the constitution, not a source scan for declarations) by scanning
-/// the workspace's `src_dirs` for `assert_boundary!` probes. Reacts, with the static
-/// dimensions' exit-code contract, in both directions plus an un-auditable case:
-///
-/// - **declared-but-unprobed** — a declared seam with no literal probe → a `Violation` at the
-///   declaring boundary's severity (a `warn` boundary yields an advisory). Closes the
-///   otherwise-essential "declared but never enforced" gap.
-/// - **probed-but-undeclared** — a literal probe whose seam is not in the declared set → an
-///   enforce `Violation` (a typo against the declared seams).
-/// - **un-auditable probe** — an `assert_boundary!` whose seam argument is not a string literal
-///   (e.g. a `const`) cannot be traced to a declared seam → an enforce `Violation` naming the
-///   site, never a silent skip (a silent skip would be a false negative).
-///
-/// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
-/// can no longer hide a seam. The probe scan is build/CI-time only (std-only, comment- and
-/// string-literal-aware including raw/byte strings); source outside a member's lib/bin target
-/// subtree is out of scope (the same bound as the semantic dimension). It does NOT observe the
-/// live install registry — install-vs-constitution consistency is the prod face's runtime
-/// fail-closed concern; this verifies coverage against the declared seams and the source.
-///
-/// **Stated bound (lexical, not semantic):** the scan is textual and does not evaluate `cfg`.
-/// A probe behind a non-production `#[cfg(...)]` (e.g. `#[cfg(test)]`) is still counted as
-/// covering its seam, so a seam whose *only* probe is compiled out of the production binary
-/// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
-///
-/// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
-#[cfg(feature = "audit")]
-pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) -> Outcome {
-    let mut probes = Vec::new();
-    for dir in src_dirs {
-        if let Err(message) = collect_probes(dir, &mut probes) {
-            return Outcome::ConstitutionError(message);
-        }
-    }
-    let probed_set: HashSet<&str> = probes
-        .iter()
-        .filter_map(|p| match p {
-            Probe::Literal(seam) => Some(seam.as_str()),
-            Probe::Unauditable { .. } => None,
-        })
-        .collect();
-    let declared_set: HashSet<&str> = declared.iter().map(RuntimeBoundary::seam).collect();
-    let mut violations = Vec::new();
-
-    // Duplicate declared seam: the prod `install` fails loud on it (a duplicate would silently
-    // shadow the earlier boundary); catch it at CI too — one enforce violation per duplicated
-    // seam — so the misconfiguration surfaces before it reaches a running binary.
-    let mut seen_decl = HashSet::new();
-    let mut dup_reported = HashSet::new();
-    for boundary in declared {
-        let seam = boundary.seam();
-        if !seen_decl.insert(seam) && dup_reported.insert(seam) {
-            violations.push(Violation::new(
-                BoundaryKind::Runtime,
-                seam.to_string(),
-                "each runtime seam must be declared exactly once".to_string(),
-                format!("seam '{seam}' is declared more than once"),
-                "a duplicate declaration would silently shadow the earlier boundary at install"
-                    .to_string(),
-                Severity::Enforce,
-            ));
-        }
-    }
-
-    // Declared but never probed: the boundary is never enforced at runtime. Reacts at the
-    // declaring boundary's severity (a warn boundary is advisory, not a CI failure).
-    let mut seen = HashSet::new();
-    for boundary in declared {
-        let seam = boundary.seam();
-        if !probed_set.contains(seam) && seen.insert(seam) {
-            violations.push(Violation::new(
-                BoundaryKind::Runtime,
-                seam.to_string(),
-                "every declared runtime seam must be probed".to_string(),
-                format!("declared seam '{seam}' has no assert_boundary! probe"),
-                "a RuntimeBoundary with no probe is never enforced at runtime".to_string(),
-                boundary.severity,
-            ));
-        }
-    }
-    // Probed but never declared: the probe references an undeclared seam, which panics at
-    // runtime — catch the typo at CI instead of crashing production.
-    let mut seen_probe = HashSet::new();
-    for probe in &probes {
-        if let Probe::Literal(seam) = probe {
-            if !declared_set.contains(seam.as_str()) && seen_probe.insert(seam.as_str()) {
-                violations.push(Violation::new(
-                    BoundaryKind::Runtime,
-                    seam.clone(),
-                    "every probe must reference a declared seam".to_string(),
-                    format!("probe references undeclared seam '{seam}'"),
-                    "an undeclared seam panics at runtime — declare the RuntimeBoundary or fix the probe's seam name".to_string(),
-                    Severity::Enforce,
-                ));
-            }
-        }
-    }
-    // Un-auditable probes: a non-literal seam argument cannot be traced to a declared seam.
-    // React rather than silently skip (a silent skip is a false negative). One reaction per
-    // file (deduped, sorted) so the finding names where to look and the baseline id is stable.
-    let mut unauditable_files: Vec<&str> = probes
-        .iter()
-        .filter_map(|p| match p {
-            Probe::Unauditable { file } => Some(file.as_str()),
-            Probe::Literal(_) => None,
-        })
-        .collect();
-    unauditable_files.sort_unstable();
-    unauditable_files.dedup();
-    for file in unauditable_files {
-        // The offending source file is in hand here (the probe scan captured it). Project it
-        // into the `file` field as well as the finding text: it is a genuine observation, so
-        // reporting `null` would be a dishonest null. This is the one runtime violation with a
-        // source location — the seam-level ones below/above name a seam, not a file.
-        violations.push(
-            Violation::new(
-                BoundaryKind::Runtime,
-                "<un-auditable probe>".to_string(),
-                "an assert_boundary! seam must be a string literal to be auditable".to_string(),
-                format!(
-                    "{file} has an assert_boundary! probe with a non-literal seam (const or \
-                     expression), which the CI face cannot trace to a declared seam"
-                ),
-                "spell the seam as a string literal so probe coverage can be verified".to_string(),
-                Severity::Enforce,
-            )
-            .with_file(Some(file.to_string())),
-        );
-    }
-    if violations.is_empty() {
-        Outcome::Clean
-    } else {
-        Outcome::Violations(Report::new(violations))
-    }
-}
-
-#[cfg(feature = "audit")]
-fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
-    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    // Sort entries so the scan order — and thus the violation order in the report — is
-    // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
-    let mut paths = Vec::new();
-    for entry in read {
-        let entry =
-            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
-        // file_type() does NOT follow symlinks, so a symlinked directory does not recurse —
-        // avoiding an infinite loop on a cyclic symlink (fail safe, not stack-overflow loud).
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
-        paths.push((file_type.is_dir(), entry.path()));
-    }
-    paths.sort();
-    for (is_dir, path) in paths {
-        if is_dir {
-            collect_probes(&path, probes)?;
-        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-            let source = std::fs::read_to_string(&path)
-                .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
-            scan_source(&source, &path.display().to_string(), probes);
-        }
-    }
-    Ok(())
-}
-
-/// Walk source skipping comments / string & char literals, and when the `assert_boundary!`
-/// probe marker appears in code, record whether its seam argument is a string literal
-/// (auditable) or not (un-auditable). The declaration marker is no longer scanned —
-/// declarations come from the passed `RuntimeBoundary` objects. `file` labels an un-auditable
-/// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just
-/// past its outermost `*/`. Rust block comments nest, so depth is tracked; an unterminated comment
-/// runs to EOF. Shared by [`scan_source`] and [`skip_trivia`] so the two cannot drift — the
-/// original non-nested bug existed in *both* precisely because they were independent copies.
-#[cfg(feature = "audit")]
-fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
-    let mut depth = 1usize;
-    i += 2; // past the opening `/*`
-    while i + 1 < b.len() && depth > 0 {
-        if b[i] == b'/' && b[i + 1] == b'*' {
-            depth += 1;
-            i += 2;
-        } else if b[i] == b'*' && b[i + 1] == b'/' {
-            depth -= 1;
-            i += 2;
-        } else {
-            i += 1;
-        }
-    }
-    if depth > 0 { b.len() } else { i }
-}
-
-/// probe so the reaction is actionable.
-#[cfg(feature = "audit")]
-fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
-    let b = source.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        // line comment
-        if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
-            while i < b.len() && b[i] != b'\n' {
-                i += 1;
-            }
-            continue;
-        }
-        // block comment (nesting + drift rationale in `skip_block_comment`). The string/raw
-        // checks below run only when this branch does not, so a `/*` inside a literal never
-        // opens one — keeping the depth count uncorrupted.
-        if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
-            i = skip_block_comment(b, i);
-            continue;
-        }
-        // raw / byte string literal (r"…", r#"…"#, b"…", br#"…"#) — must be handled
-        // before the plain-string case, or an inner `"` desyncs the scanner.
-        if let Some(end) = raw_or_byte_string_end(b, i) {
-            i = end;
-            continue;
-        }
-        // plain string literal
-        if b[i] == b'"' {
-            i += 1;
-            while i < b.len() && b[i] != b'"' {
-                if b[i] == b'\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-            i += 1;
-            continue;
-        }
-        // char literal vs lifetime: only skip when it is clearly a char ('x' or '\n'),
-        // leaving a lifetime ('a) to be walked as code.
-        if b[i] == b'\'' {
-            let is_char =
-                (i + 1 < b.len() && b[i + 1] == b'\\') || (i + 2 < b.len() && b[i + 2] == b'\'');
-            if is_char {
-                i += 1;
-                while i < b.len() && b[i] != b'\'' {
-                    if b[i] == b'\\' {
-                        i += 1;
-                    }
-                    i += 1;
-                }
-                i += 1;
-                continue;
-            }
-        }
-        // A left word boundary: `my_assert_boundary!` / `xassert_boundary!` are unrelated user
-        // macros, not our probe. Require the preceding byte to be a non-identifier char so a
-        // marker embedded in a longer identifier is not mis-counted as a probe.
-        let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
-        if left_boundary {
-            if let Some(rest) = match_marker(b, i, b"assert_boundary!") {
-                let (probe, next) = capture_probe(b, rest, file);
-                if let Some(probe) = probe {
-                    probes.push(probe);
-                }
-                i = next;
-                continue;
-            }
-        }
-        i += 1;
-    }
-}
-
-/// Detect a raw or byte string literal starting at `i` (`r"…"`, `r#"…"#`, `b"…"`,
-/// `br"…"`, `br#"…"#`) and return the index past its end, or `None` if `i` is not such a
-/// literal. Rust syntax guarantees `r`/`b` immediately before `"`/`#` is a literal prefix
-/// (no identifier can precede a string), so no token-boundary check is needed.
-#[cfg(feature = "audit")]
-fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
-    let mut j = i;
-    let byte = j < b.len() && b[j] == b'b';
-    if byte {
-        j += 1;
-    }
-    let raw = j < b.len() && b[j] == b'r';
-    if raw {
-        j += 1;
-        let mut hashes = 0;
-        while j < b.len() && b[j] == b'#' {
-            hashes += 1;
-            j += 1;
-        }
-        if j >= b.len() || b[j] != b'"' {
-            return None;
-        }
-        j += 1;
-        // scan to the closing `"` followed by `hashes` `#`s
-        while j < b.len() {
-            if b[j] == b'"' {
-                let mut k = j + 1;
-                let mut h = 0;
-                while k < b.len() && h < hashes && b[k] == b'#' {
-                    k += 1;
-                    h += 1;
-                }
-                if h == hashes {
-                    return Some(k);
-                }
-            }
-            j += 1;
-        }
-        return Some(b.len());
-    }
-    // a `b"…"` byte string (escaped like a normal string) — only when a `b` prefix was
-    // consumed and a quote immediately follows.
-    if byte && j < b.len() && b[j] == b'"' {
-        j += 1;
-        while j < b.len() && b[j] != b'"' {
-            if b[j] == b'\\' {
-                j += 1;
-            }
-            j += 1;
-        }
-        return Some((j + 1).min(b.len()));
-    }
-    None
-}
-
-#[cfg(feature = "audit")]
-fn match_marker(b: &[u8], i: usize, marker: &[u8]) -> Option<usize> {
-    if i + marker.len() <= b.len() && &b[i..i + marker.len()] == marker {
-        Some(i + marker.len())
-    } else {
-        None
-    }
-}
-
-/// An identifier byte (`[A-Za-z0-9_]`) — used for the marker's left word boundary.
-#[cfg(feature = "audit")]
-fn is_ident_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
-}
-
-/// Skip ASCII whitespace and `//` / `/* */` comments, returning the next code index. Mirrors
-/// the comment handling in [`scan_source`] so a comment between the `!` and `(`, or before the
-/// seam argument, does not desync probe capture (which would silently drop a real probe).
-#[cfg(feature = "audit")]
-fn skip_trivia(b: &[u8], mut i: usize) -> usize {
-    loop {
-        while i < b.len() && b[i].is_ascii_whitespace() {
-            i += 1;
-        }
-        if b.get(i) == Some(&b'/') && b.get(i + 1) == Some(&b'/') {
-            while i < b.len() && b[i] != b'\n' {
-                i += 1;
-            }
-            continue;
-        }
-        if b.get(i) == Some(&b'/') && b.get(i + 1) == Some(&b'*') {
-            i = skip_block_comment(b, i);
-            continue;
-        }
-        return i;
-    }
-}
-
-/// After the `assert_boundary!` marker, classify the probe by its first argument and return
-/// `(probe, next_index)`. Skip trivia, expect a macro opening delimiter (`(`, `{`, or `[`),
-/// skip trivia; a plain or raw string first argument is an auditable [`Probe::Literal`] (its
-/// value); any other first token (a `const`, an expression, a byte string) is
-/// [`Probe::Unauditable`] — never a silent skip. `None` (with `next` past the marker) only when
-/// the marker is not actually a probe call (no opening delimiter follows).
-#[cfg(feature = "audit")]
-fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
-    let i = skip_trivia(b, i);
-    // Rust macros accept `( )`, `{ }`, or `[ ]` interchangeably; a probe written
-    // `assert_boundary!{"s", o}` or `["s", o]` is a real probe. Accept any of the three
-    // opening delimiters so a non-`()` probe is not silently dropped — a silent drop would let
-    // a typo'd seam escape the undeclared-seam check, a false negative.
-    if !matches!(b.get(i), Some(&b'(') | Some(&b'{') | Some(&b'[')) {
-        return (None, i);
-    }
-    let i = skip_trivia(b, i + 1);
-    if i >= b.len() {
-        return (None, i);
-    }
-    // A raw string `r"…"` / `r#"…"#` is a traceable literal — parse its value rather than
-    // rejecting it as un-auditable (which would mis-flag a legitimate probe and double-report).
-    if b[i] == b'r' && matches!(b.get(i + 1), Some(b'"') | Some(b'#')) {
-        if let Some((seam, next)) = raw_string_value(b, i) {
-            return (Some(Probe::Literal(seam)), next);
-        }
-        return (
-            Some(Probe::Unauditable {
-                file: file.to_string(),
-            }),
-            i,
-        );
-    }
-    // A plain string literal.
-    if b[i] == b'"' {
-        let mut j = i + 1;
-        let start = j;
-        while j < b.len() && b[j] != b'"' {
-            if b[j] == b'\\' {
-                j += 1;
-            }
-            j += 1;
-        }
-        if j >= b.len() {
-            return (None, j);
-        }
-        let seam = String::from_utf8_lossy(&b[start..j]).into_owned();
-        return (Some(Probe::Literal(seam)), j + 1);
-    }
-    // Anything else (a const, an expression, a byte string) cannot be traced to a declared seam.
-    (
-        Some(Probe::Unauditable {
-            file: file.to_string(),
-        }),
-        i,
-    )
-}
-
-/// Parse a raw string literal `r"…"` / `r#…"…"#…` starting at `i`, returning `(value, next)`.
-/// `None` if it is not a well-formed raw string.
-#[cfg(feature = "audit")]
-fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
-    let mut j = i + 1; // past `r`
-    let mut hashes = 0;
-    while b.get(j) == Some(&b'#') {
-        hashes += 1;
-        j += 1;
-    }
-    if b.get(j) != Some(&b'"') {
-        return None;
-    }
-    j += 1;
-    let start = j;
-    while j < b.len() {
-        if b[j] == b'"' {
-            let mut k = j + 1;
-            let mut h = 0;
-            while h < hashes && b.get(k) == Some(&b'#') {
-                k += 1;
-                h += 1;
-            }
-            if h == hashes {
-                return Some((String::from_utf8_lossy(&b[start..j]).into_owned(), k));
-            }
-        }
-        j += 1;
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -947,6 +504,7 @@ mod tests {
                     reason: "r".to_string(),
                     severity: *severity,
                     posture: Posture::Event,
+                    anchor: None,
                 },
             );
         }
@@ -1042,417 +600,5 @@ mod tests {
         assert_eq!(m.get(&TypeId::of::<Domain>()), Some(&1));
         assert_eq!(m.get(&TypeId::of::<Infra>()), Some(&2));
         assert_eq!(m.len(), 2);
-    }
-
-    // A declared boundary for a seam, severity-parameterized (declarations are now objects,
-    // not source-scanned — so the audit tests construct them directly).
-    #[cfg(feature = "audit")]
-    fn boundary(seam: &'static str, severity: Severity) -> RuntimeBoundary {
-        let draft = RuntimeBoundary::at(seam).only_origins(["o"]);
-        let draft = if severity == Severity::Warn {
-            draft.warn()
-        } else {
-            draft
-        };
-        draft.because("r")
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn scan_collects_only_literal_probes_skipping_comments_and_strings() {
-        let src = r#"
-            fn setup() { louke::install([RuntimeBoundary::at("domain-entry").only_origins(["app::domain"]).because("x")], []); }
-            fn used() { assert_boundary!("domain-entry", obj); }
-            // a comment mentioning assert_boundary!("ignored-comment") must not count
-            let s = "assert_boundary!(\"ignored-string\", x)";
-        "#;
-        let mut probes = Vec::new();
-        scan_source(src, "test.rs", &mut probes);
-        let literals: Vec<&str> = probes
-            .iter()
-            .filter_map(|p| match p {
-                Probe::Literal(s) => Some(s.as_str()),
-                Probe::Unauditable { .. } => None,
-            })
-            .collect();
-        // The `RuntimeBoundary::at` declaration is no longer scanned (declarations are objects).
-        assert_eq!(
-            literals,
-            vec!["domain-entry"],
-            "{probes:?} should hold only the real probe"
-        );
-        assert!(
-            !literals.contains(&"ignored-comment") && !literals.contains(&"ignored-string"),
-            "markers in comments/strings must not count: {literals:?}"
-        );
-        assert!(
-            !probes
-                .iter()
-                .any(|p| matches!(p, Probe::Unauditable { .. })),
-            "no un-auditable probe in this fixture"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn scan_flags_a_non_literal_seam_probe_as_unauditable() {
-        let src = r#"
-            const SEAM: &str = "domain-entry";
-            fn used() { assert_boundary!(SEAM, obj); }
-            fn ok() { assert_boundary!("explicit", obj); }
-        "#;
-        let mut probes = Vec::new();
-        scan_source(src, "test.rs", &mut probes);
-        assert!(
-            probes
-                .iter()
-                .any(|p| matches!(p, Probe::Unauditable { .. })),
-            "a const-seam probe must be flagged un-auditable: {probes:?}"
-        );
-        assert!(
-            probes
-                .iter()
-                .any(|p| matches!(p, Probe::Literal(s) if s == "explicit")),
-            "the literal probe is still captured: {probes:?}"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn a_comment_between_bang_and_paren_does_not_drop_the_probe() {
-        // The dangerous false negative: a probe must still be seen with a comment between `!`
-        // and `(`, else an undeclared/typo seam there would escape Direction B and panic in prod.
-        for src in [
-            "fn f() { assert_boundary! /* x */ (\"c-seam\", o); }",
-            "fn f() { assert_boundary! // c\n (\"c-seam\", o); }",
-        ] {
-            let mut probes = Vec::new();
-            scan_source(src, "test.rs", &mut probes);
-            assert!(
-                probes
-                    .iter()
-                    .any(|p| matches!(p, Probe::Literal(s) if s == "c-seam")),
-                "a comment between ! and ( must not drop the probe: {probes:?}"
-            );
-        }
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn an_identifier_ending_in_the_marker_is_not_a_probe() {
-        // `my_assert_boundary!` / `xassert_boundary!` are unrelated user macros — a left word
-        // boundary keeps them from being mis-counted (a false probe that could mask coverage).
-        let src = "fn f() { my_assert_boundary!(\"prefixed\", o); xassert_boundary!(\"fp\", o); }";
-        let mut probes = Vec::new();
-        scan_source(src, "test.rs", &mut probes);
-        assert!(
-            probes.is_empty(),
-            "an embedded marker must not count as a probe: {probes:?}"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn a_raw_string_seam_is_an_auditable_literal() {
-        // A raw-string seam is a traceable literal — parse its value, do not mis-flag it.
-        let src =
-            "fn f() { assert_boundary!(r#\"raw-seam\"#, o); assert_boundary!(r\"plain-raw\", o); }";
-        let mut probes = Vec::new();
-        scan_source(src, "test.rs", &mut probes);
-        assert!(
-            probes
-                .iter()
-                .any(|p| matches!(p, Probe::Literal(s) if s == "raw-seam")),
-            "r#\"…\"# seam value must be captured: {probes:?}"
-        );
-        assert!(
-            probes
-                .iter()
-                .any(|p| matches!(p, Probe::Literal(s) if s == "plain-raw")),
-            "r\"…\" seam value must be captured: {probes:?}"
-        );
-        assert!(
-            !probes
-                .iter()
-                .any(|p| matches!(p, Probe::Unauditable { .. })),
-            "a raw-string seam is auditable, not un-auditable: {probes:?}"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn a_raw_or_byte_string_does_not_desync_the_scanner() {
-        // A raw string with an inner `"` must not swallow a later real probe, and a probe
-        // marker inside a byte string must not be counted.
-        let src = r####"
-            let x = r#"he said "hi""#;
-            fn f() { assert_boundary!("real-seam", o); }
-            let y = b"assert_boundary!(\"bytestr\", z)";
-        "####;
-        let mut probes = Vec::new();
-        scan_source(src, "test.rs", &mut probes);
-        let literals: Vec<&str> = probes
-            .iter()
-            .filter_map(|p| match p {
-                Probe::Literal(s) => Some(s.as_str()),
-                Probe::Unauditable { .. } => None,
-            })
-            .collect();
-        assert!(
-            literals.contains(&"real-seam"),
-            "a raw string must not desync and swallow a later probe: {literals:?}"
-        );
-        assert!(
-            !literals.contains(&"bytestr"),
-            "a marker inside a byte string must not count: {literals:?}"
-        );
-    }
-
-    // Write a one-file crate dir under a unique base and return it.
-    #[cfg(feature = "audit")]
-    fn literal_seams(probes: &[Probe]) -> Vec<String> {
-        probes
-            .iter()
-            .filter_map(|p| match p {
-                Probe::Literal(s) => Some(s.clone()),
-                Probe::Unauditable { .. } => None,
-            })
-            .collect()
-    }
-
-    #[cfg(feature = "audit")]
-    #[test]
-    fn a_probe_inside_a_nested_block_comment_is_not_counted() {
-        // Rust block comments nest, so this entire span is ONE comment and the probe is
-        // commented out. A non-depth-aware scan would leave comment mode at the inner `*/`
-        // and wrongly count "s" as probed — the forbidden false negative (the seam would be
-        // reported covered while never enforced).
-        let mut probes = Vec::new();
-        scan_source(
-            r#"/* outer /* inner */ assert_boundary!("s", o); */"#,
-            "t.rs",
-            &mut probes,
-        );
-        assert!(
-            probes.is_empty(),
-            "a probe inside a nested block comment must not count: {probes:?}"
-        );
-    }
-
-    #[cfg(feature = "audit")]
-    #[test]
-    fn a_real_probe_after_a_nested_block_comment_is_still_counted() {
-        // The depth fix must not over-eat: `/* a /* b */ c */` is a complete (nested) comment,
-        // and the probe that follows is real code and MUST count.
-        let mut probes = Vec::new();
-        scan_source(
-            r#"/* a /* b */ c */ assert_boundary!("real", o);"#,
-            "t.rs",
-            &mut probes,
-        );
-        assert_eq!(
-            literal_seams(&probes),
-            ["real"],
-            "a real probe after a closed nested comment must count: {probes:?}"
-        );
-    }
-
-    #[cfg(feature = "audit")]
-    #[test]
-    fn a_brace_or_bracket_delimited_probe_is_captured() {
-        // Rust macros accept `{ }` and `[ ]` identically to `( )`; such a probe is real and
-        // must be audited, not silently dropped (a drop would let a typo'd seam escape the
-        // undeclared-seam check — a false negative).
-        let mut probes = Vec::new();
-        scan_source(
-            "fn f() { assert_boundary!{\"brace\", o}; assert_boundary![\"bracket\", o]; }",
-            "t.rs",
-            &mut probes,
-        );
-        let mut seams = literal_seams(&probes);
-        seams.sort_unstable();
-        assert_eq!(
-            seams,
-            ["brace", "bracket"],
-            "brace/bracket-delimited probes must be captured: {probes:?}"
-        );
-    }
-
-    #[cfg(feature = "audit")]
-    #[test]
-    fn audit_reacts_to_a_duplicate_declared_seam() {
-        // A seam declared twice is a constitution error: prod `install` fails loud on it, and the
-        // CI face must react too (enforce) so it surfaces before a running binary. Probe the seam
-        // so the ONLY finding is the duplicate, not a declared-unprobed gap.
-        let base = std::env::temp_dir().join(format!("louke-audit-dup-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        let dir = write_dir(&base, "m", "fn f() { assert_boundary!(\"twice\", o); }");
-        let outcome = audit_probe_coverage(
-            &[
-                boundary("twice", Severity::Enforce),
-                boundary("twice", Severity::Enforce),
-            ],
-            &[dir],
-        );
-        let _ = std::fs::remove_dir_all(&base);
-        match outcome {
-            Outcome::Violations(report) => assert!(
-                report
-                    .violations
-                    .iter()
-                    .any(|v| v.target == "twice" && v.finding.contains("declared more than once")),
-                "a duplicate declared seam must react: {:?}",
-                report.violations
-            ),
-            other => panic!("expected a duplicate-seam violation, got {other:?}"),
-        }
-    }
-
-    #[cfg(feature = "audit")]
-    #[test]
-    fn a_nested_comment_between_bang_and_paren_does_not_drop_the_probe() {
-        // skip_trivia shares the depth-aware skip with scan_source, so a NESTED comment between
-        // `!` and `(` must be skipped whole; otherwise it desyncs and misses the real probe.
-        let mut probes = Vec::new();
-        scan_source(
-            r#"fn f() { assert_boundary! /* a /* b */ c */ ("nested-trivia", o); }"#,
-            "t.rs",
-            &mut probes,
-        );
-        assert_eq!(
-            literal_seams(&probes),
-            ["nested-trivia"],
-            "a probe after a nested comment between ! and ( must be captured: {probes:?}"
-        );
-    }
-
-    #[cfg(feature = "audit")]
-    fn write_dir(base: &Path, name: &str, body: &str) -> PathBuf {
-        let dir = base.join(name);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.rs"), body).unwrap();
-        dir
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn audit_probe_coverage_reacts_both_directions() {
-        let base = std::env::temp_dir().join(format!("louke-audit-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-
-        // declared + probed match → clean (exit 0)
-        let clean = write_dir(&base, "clean", "fn f() { assert_boundary!(\"s\", o); }");
-        assert_eq!(
-            audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[clean]).exit_code(),
-            0
-        );
-
-        // declared but unprobed (enforce) → react (exit 1)
-        let unprobed = write_dir(&base, "unprobed", "fn f() {}");
-        assert_eq!(
-            audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[unprobed]).exit_code(),
-            1
-        );
-
-        // probed but undeclared (a typo) → react at CI, not a prod panic (exit 1)
-        let typo = write_dir(&base, "typo", "fn f() { assert_boundary!(\"ghost\", o); }");
-        assert_eq!(audit_probe_coverage(&[], &[typo]).exit_code(), 1);
-
-        let _ = std::fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn a_warn_severity_unprobed_seam_is_advisory_not_a_failure() {
-        let base = std::env::temp_dir().join(format!("louke-audit-warn-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        let dir = write_dir(&base, "warn", "fn f() {}");
-        // A warn boundary with no probe reacts (a Violation) but does not by itself fail CI.
-        let outcome = audit_probe_coverage(&[boundary("soft", Severity::Warn)], &[dir]);
-        assert_eq!(outcome.exit_code(), 0, "warn-only is advisory: {outcome:?}");
-        assert!(
-            matches!(outcome, Outcome::Violations(_)),
-            "it still reports the advisory: {outcome:?}"
-        );
-        let _ = std::fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn coverage_spans_the_workspace_corpus() {
-        let base = std::env::temp_dir().join(format!("louke-audit-corpus-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        // Declared once; its only probe lives in a *different* member dir.
-        let decl_only = write_dir(&base, "crate_a", "fn f() {}");
-        let probe_only = write_dir(
-            &base,
-            "crate_b",
-            "fn g() { assert_boundary!(\"shared\", o); }",
-        );
-        let outcome = audit_probe_coverage(
-            &[boundary("shared", Severity::Enforce)],
-            &[decl_only, probe_only],
-        );
-        assert_eq!(
-            outcome.exit_code(),
-            0,
-            "the corpus is the union of all dirs: {outcome:?}"
-        );
-        let _ = std::fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn an_unauditable_probe_reacts() {
-        let base = std::env::temp_dir().join(format!("louke-audit-unaud-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        let dir = write_dir(
-            &base,
-            "unaud",
-            "const SEAM: &str = \"s\"; fn f() { assert_boundary!(SEAM, o); }",
-        );
-        // Even though a boundary "s" is declared, the probe is non-literal → un-auditable → react.
-        let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
-        assert_eq!(
-            outcome.exit_code(),
-            1,
-            "an un-auditable probe must react: {outcome:?}"
-        );
-        // The un-auditable violation carries the offending source file (the probe scan
-        // captured it): a genuine observation, not a dishonest null.
-        let violations = match &outcome {
-            Outcome::Violations(report) => &report.violations,
-            other => panic!("expected violations, got {other:?}"),
-        };
-        let file = violations
-            .iter()
-            .find_map(|v| v.file.as_deref())
-            .expect("the un-auditable-probe violation carries its source file");
-        assert!(
-            file.ends_with("a.rs"),
-            "file names the probe's source: {file}"
-        );
-        let _ = std::fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    #[cfg(feature = "audit")]
-    fn a_seam_level_runtime_violation_has_no_file() {
-        // A declared-but-never-probed seam names a seam, not a source location, so its `file`
-        // is a faithful `None` — distinct from the un-auditable case, which does have a file.
-        let base =
-            std::env::temp_dir().join(format!("louke-audit-seamnull-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        let dir = write_dir(&base, "unprobed", "fn f() {}");
-        let outcome = audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[dir]);
-        let violations = match &outcome {
-            Outcome::Violations(report) => &report.violations,
-            other => panic!("expected violations, got {other:?}"),
-        };
-        assert!(
-            violations.iter().all(|v| v.file.is_none()),
-            "a seam-level runtime violation has no source file: {violations:?}"
-        );
-        let _ = std::fs::remove_dir_all(&base);
     }
 }

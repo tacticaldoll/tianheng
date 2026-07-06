@@ -81,13 +81,45 @@ pub enum BoundaryKind {
 }
 
 impl BoundaryKind {
-    /// The projection label (`"crate"` / `"module"` / `"semantic"`).
+    /// The projection label (`"crate"` / `"module"` / `"semantic"` / `"runtime"`).
     pub fn as_str(&self) -> &'static str {
         match self {
             BoundaryKind::Crate => "crate",
             BoundaryKind::Module => "module",
             BoundaryKind::Semantic => "semantic",
             BoundaryKind::Runtime => "runtime",
+        }
+    }
+}
+
+/// The **repair direction** a boundary-drift violation points to — a different axis from
+/// [`BoundaryKind`], which names *which dimension* saw it. Derived from the producing rule's
+/// type (known at the reaction site), never observed from code and never declared by the adopter.
+/// `#[non_exhaustive]`: the axis is deliberately two-valued, but a future rung stays additive.
+///
+/// A violation not on this axis carries no polarity (`Violation::polarity` is `None`) — the runtime
+/// CI-audit coverage/consistency violations are on a declaration/probe axis, not this one, and their
+/// repair direction is read from the `reason`/`finding`. `None` means "off this axis", not "unknown".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Polarity {
+    /// The rule forbids a specific target or shape; the repair is to **remove** the offending code
+    /// (`forbid_*` / `must_not_*`).
+    DenyBreach,
+    /// The rule permits a set and reacts to a member outside it; the repair is to remove the code
+    /// **or** declare the intent by widening the set (`restrict_*_to` / `only_*` /
+    /// `deny_external_dependencies`, whose `allow_external` exceptions are an in-boundary
+    /// declaration path).
+    AllowlistGap,
+}
+
+impl Polarity {
+    /// The projection label (`"deny_breach"` / `"allowlist_gap"`), the single source for the
+    /// report and SARIF renderings.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Polarity::DenyBreach => "deny_breach",
+            Polarity::AllowlistGap => "allowlist_gap",
         }
     }
 }
@@ -120,6 +152,22 @@ pub struct Violation {
     /// the constructor, so adding it leaves [`Violation::new`] non-breaking; it is **not** part
     /// of the baseline identity ([`Violation::id`]), so it never affects baseline matching.
     pub file: Option<String>,
+    /// The producing boundary's durable governance anchor — a stable pointer (e.g. `"ADR-014"`)
+    /// into the project's governance, distinct from the free-text `reason` sentence, which accretes
+    /// ephemeral refs (PR numbers, handles, "recently") that rot faster than the invariant they
+    /// justify. `None` when the boundary declared none. Set via [`Violation::with_anchor`], not the
+    /// constructor, so adding it leaves [`Violation::new`] non-breaking; like `file`, it is metadata,
+    /// **not** part of the baseline identity ([`Violation::id`]), so it never affects baseline
+    /// matching, and it is never a reaction input — a pure durable pointer.
+    pub anchor: Option<String>,
+    /// The **repair direction** of a boundary-drift violation ([`Polarity`]) — `DenyBreach` (remove
+    /// the offending code) or `AllowlistGap` (remove, or declare the intent). Derived from the
+    /// producing rule's type at the reaction site, set via [`Violation::with_polarity`], not the
+    /// constructor. `None` for a violation off the boundary-drift axis (the runtime CI-audit
+    /// coverage violations), whose repair is read from the `reason`/`finding`. Like `file`/`anchor`,
+    /// it is metadata: **not** part of the baseline identity ([`Violation::id`]) — being a pure
+    /// function of the rule it is constant for a given identity anyway — and never a reaction input.
+    pub polarity: Option<Polarity>,
 }
 
 impl Violation {
@@ -144,6 +192,8 @@ impl Violation {
             severity,
             baselined: false,
             file: None,
+            anchor: None,
+            polarity: None,
         }
     }
 
@@ -154,6 +204,26 @@ impl Violation {
     /// part of the baseline identity ([`Violation::id`]).
     pub fn with_file(mut self, file: Option<String>) -> Self {
         self.file = file;
+        self
+    }
+
+    /// Attach the producing boundary's durable governance anchor, consuming and returning `self`
+    /// so a dimension can fold it into construction: `Violation::new(…).with_anchor(boundary…)`.
+    /// Kept off [`Violation::new`] on purpose — the constructor's signature stays stable
+    /// (non-breaking), and a boundary that declared no anchor simply never calls this (or passes
+    /// `None`). The anchor is metadata, never part of the baseline identity ([`Violation::id`]).
+    pub fn with_anchor(mut self, anchor: Option<String>) -> Self {
+        self.anchor = anchor;
+        self
+    }
+
+    /// Stamp the violation's repair-direction [`Polarity`], consuming and returning `self` so a
+    /// dimension can fold it into construction: `Violation::new(…).with_polarity(rule.polarity())`.
+    /// Takes a concrete `Polarity` (not an `Option`) because a reaction site that stamps one always
+    /// knows it; a violation off the boundary-drift axis simply never calls this, leaving `None`.
+    /// The polarity is metadata, never part of the baseline identity ([`Violation::id`]).
+    pub fn with_polarity(mut self, polarity: Polarity) -> Self {
+        self.polarity = Some(polarity);
         self
     }
 
@@ -179,6 +249,8 @@ impl Violation {
             "severity": self.severity.as_str(),
             "baselined": self.baselined,
             "file": self.file,
+            "anchor": self.anchor,
+            "polarity": self.polarity.map(|p| p.as_str()),
         })
     }
 }
@@ -220,26 +292,87 @@ pub struct ViolationId {
     pub finding: String,
 }
 
+/// One recorded baseline entry: an accepted violation's identity plus optional
+/// governance-tracking metadata. `owner` (who owns this accepted debt) and `tracker` (the external
+/// issue tracking its fix) describe *how the accepted violation is tracked after acceptance*, not
+/// the basis of the law — so they are **metadata only**, never part of the [`ViolationId`] match
+/// key. There is deliberately no `anchor` here: the governance anchor already rides the live
+/// boundary→violation ([`Violation::anchor`]), so a baseline copy would duplicate and drift from it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BaselineEntry {
+    /// The accepted violation's identity — the match key.
+    pub id: ViolationId,
+    /// Who owns this accepted debt (optional; set by hand-annotating the baseline).
+    pub owner: Option<String>,
+    /// The external issue tracking this debt's fix (optional).
+    pub tracker: Option<String>,
+}
+
+/// Sort and de-duplicate baseline entries **by identity** (a stable sort keeps input order among
+/// equal ids, so `dedup_by` on the id keeps the first — the recorded tie-break for a hand-edited
+/// duplicate). The `owner`/`tracker` metadata is never part of the sort or de-dup key, so the file
+/// stays stable and diffable exactly as when entries were bare identities.
+fn sort_dedup_by_id(entries: &mut Vec<BaselineEntry>) {
+    entries.sort_by(|a, b| a.id.cmp(&b.id));
+    entries.dedup_by(|a, b| a.id == b.id);
+}
+
 /// A recorded set of accepted violations — a generated observation snapshot, not
 /// policy. The gate fails only on violations absent from it.
 #[derive(Debug, Default)]
 pub struct Baseline {
-    entries: Vec<ViolationId>,
+    entries: Vec<BaselineEntry>,
 }
 
 impl Baseline {
-    /// Build a baseline from the current report's violations.
+    /// Build a baseline from the current report's violations, with no metadata. Entries are
+    /// sorted and de-duplicated by identity, so the file stays stable and diffable.
     pub fn of(report: &Report) -> Self {
-        let mut entries: Vec<ViolationId> = report.violations.iter().map(Violation::id).collect();
-        entries.sort();
-        entries.dedup();
+        let mut entries: Vec<BaselineEntry> = report
+            .violations
+            .iter()
+            .map(|violation| BaselineEntry {
+                id: violation.id(),
+                owner: None,
+                tracker: None,
+            })
+            .collect();
+        sort_dedup_by_id(&mut entries);
         Baseline { entries }
+    }
+
+    /// Build the next baseline snapshot from the current report, **preserving** each surviving
+    /// entry's `owner`/`tracker` by identity: a violation still present carries its previous
+    /// metadata forward, a newly-appearing one gets none, and a violation no longer present drops
+    /// (its metadata with it). This keeps `--write-baseline` from silently discarding hand-added
+    /// governance records while staying a snapshot of the currently-present accepted violations.
+    pub fn of_preserving(report: &Report, previous: &Baseline) -> Self {
+        let mut entries: Vec<BaselineEntry> = report
+            .violations
+            .iter()
+            .map(|violation| {
+                let id = violation.id();
+                let prior = previous.entries.iter().find(|entry| entry.id == id);
+                BaselineEntry {
+                    owner: prior.and_then(|entry| entry.owner.clone()),
+                    tracker: prior.and_then(|entry| entry.tracker.clone()),
+                    id,
+                }
+            })
+            .collect();
+        sort_dedup_by_id(&mut entries);
+        Baseline { entries }
+    }
+
+    /// The recorded entries, for reading their identity and metadata.
+    pub fn entries(&self) -> impl Iterator<Item = &BaselineEntry> {
+        self.entries.iter()
     }
 
     /// Whether this baseline records the given violation's identity.
     pub fn contains(&self, violation: &Violation) -> bool {
         let id = violation.id();
-        self.entries.iter().any(|entry| entry == &id)
+        self.entries.iter().any(|entry| entry.id == id)
     }
 
     /// Baseline entries that match no current violation — stale, safe to remove.
@@ -247,7 +380,8 @@ impl Baseline {
         let current: Vec<ViolationId> = report.violations.iter().map(Violation::id).collect();
         self.entries
             .iter()
-            .filter(|entry| !current.iter().any(|id| id == *entry))
+            .filter(|entry| !current.iter().any(|id| id == &entry.id))
+            .map(|entry| &entry.id)
             .collect()
     }
 
@@ -257,11 +391,20 @@ impl Baseline {
             .entries
             .iter()
             .map(|entry| {
-                serde_json::json!({
-                    "target": entry.target,
-                    "rule": entry.rule,
-                    "finding": entry.finding,
-                })
+                let mut object = serde_json::json!({
+                    "target": entry.id.target,
+                    "rule": entry.id.rule,
+                    "finding": entry.id.finding,
+                });
+                // owner/tracker emitted only when set, so an un-annotated entry is byte-identical
+                // to the pre-metadata form (the same Some-only discipline as `file`/`anchor`).
+                if let Some(owner) = &entry.owner {
+                    object["owner"] = serde_json::json!(owner);
+                }
+                if let Some(tracker) = &entry.tracker {
+                    object["tracker"] = serde_json::json!(tracker);
+                }
+                object
             })
             .collect();
         let doc = serde_json::json!({ "version": 1, "violations": violations });
@@ -288,14 +431,20 @@ impl Baseline {
                     .map(str::to_string)
                     .ok_or_else(|| format!("baseline entry is missing string `{name}`"))
             };
-            entries.push(ViolationId {
-                target: field("target")?,
-                rule: field("rule")?,
-                finding: field("finding")?,
+            // owner/tracker are optional metadata — absent (or, tolerant of the lenient parse
+            // style, non-string) reads as None; an older baseline without them parses unchanged.
+            let optional = |name: &str| item[name].as_str().map(str::to_string);
+            entries.push(BaselineEntry {
+                id: ViolationId {
+                    target: field("target")?,
+                    rule: field("rule")?,
+                    finding: field("finding")?,
+                },
+                owner: optional("owner"),
+                tracker: optional("tracker"),
             });
         }
-        entries.sort();
-        entries.dedup();
+        sort_dedup_by_id(&mut entries);
         Ok(Baseline { entries })
     }
 }
@@ -391,6 +540,56 @@ mod tests {
     }
 
     #[test]
+    fn to_json_emits_the_anchor_key_in_both_states() {
+        // Absent → explicit null (a faithful absence, distinguishable from an unknown schema).
+        let without = sample_violation();
+        assert_eq!(without.to_json()["anchor"], Value::Null);
+        // Present → the string.
+        let with = sample_violation().with_anchor(Some("ADR-014".to_string()));
+        assert_eq!(
+            with.to_json()["anchor"],
+            Value::String("ADR-014".to_string())
+        );
+    }
+
+    #[test]
+    fn anchor_is_not_part_of_the_baseline_identity() {
+        // Like `file`, the anchor is metadata: attaching it must not change the
+        // (target, rule, finding) identity, so an anchored violation still matches a baseline
+        // entry recorded without one and never churns an existing baseline.
+        let without = sample_violation();
+        let with = sample_violation().with_anchor(Some("ADR-014".to_string()));
+        assert_eq!(without.id(), with.id());
+    }
+
+    #[test]
+    fn to_json_emits_the_polarity_key_in_both_states() {
+        // Off-axis (no polarity stamped) → explicit null, a faithful absence.
+        let without = sample_violation();
+        assert_eq!(without.to_json()["polarity"], Value::Null);
+        // On-axis → the snake-case label.
+        let deny = sample_violation().with_polarity(Polarity::DenyBreach);
+        assert_eq!(
+            deny.to_json()["polarity"],
+            Value::String("deny_breach".to_string())
+        );
+        let allow = sample_violation().with_polarity(Polarity::AllowlistGap);
+        assert_eq!(
+            allow.to_json()["polarity"],
+            Value::String("allowlist_gap".to_string())
+        );
+    }
+
+    #[test]
+    fn polarity_is_not_part_of_the_baseline_identity() {
+        // Like `file`/`anchor`, the polarity is metadata: stamping it must not change the
+        // (target, rule, finding) identity, so it never re-baselines or churns a count.
+        let without = sample_violation();
+        let with = sample_violation().with_polarity(Polarity::AllowlistGap);
+        assert_eq!(without.id(), with.id());
+    }
+
+    #[test]
     fn baseline_round_trips_through_json() {
         // The `violation-baseline` spec's round-trip scenario: a baseline written to JSON and read
         // back holds the same `(target, rule, finding)` entries. (Previously code-correct but with
@@ -416,6 +615,86 @@ mod tests {
         );
         // Serializing the reparsed baseline yields byte-identical JSON (stable + diffable).
         assert_eq!(reparsed.to_json(), original.to_json());
+    }
+
+    #[test]
+    fn owner_and_tracker_round_trip_and_are_some_only() {
+        // A hand-annotated baseline: metadata on one entry, none on the other (a pre-metadata form).
+        let json = r#"{"version":1,"violations":[
+            {"target":"core","rule":"r","finding":"serde","owner":"team-core","tracker":"ISSUE-7"},
+            {"target":"zeta","rule":"r","finding":"tokio"}
+        ]}"#;
+        let baseline = Baseline::from_json(json).expect("parses (old + annotated entries)");
+        let entries: Vec<&BaselineEntry> = baseline.entries().collect();
+        // Sorted by identity: "core" precedes "zeta".
+        assert_eq!(entries[0].id.target, "core");
+        assert_eq!(entries[0].owner.as_deref(), Some("team-core"));
+        assert_eq!(entries[0].tracker.as_deref(), Some("ISSUE-7"));
+        assert_eq!(entries[1].owner, None);
+        assert_eq!(entries[1].tracker, None);
+        // Round-trip preserves metadata and is byte-stable.
+        let out = baseline.to_json();
+        assert_eq!(Baseline::from_json(&out).unwrap().to_json(), out);
+        // Some-only: the un-annotated entry carries only the three identity keys.
+        let doc: Value = serde_json::from_str(&out).unwrap();
+        let zeta = &doc["violations"][1];
+        assert_eq!(zeta["target"], "zeta");
+        assert!(zeta.get("owner").is_none() && zeta.get("tracker").is_none());
+    }
+
+    #[test]
+    fn of_preserving_carries_surviving_metadata_drops_stale_and_none_for_new() {
+        let previous = Baseline::from_json(
+            r#"{"version":1,"violations":[
+                {"target":"core","rule":"r","finding":"serde","owner":"team-core","tracker":"ISSUE-7"},
+                {"target":"gone","rule":"r","finding":"old","owner":"team-x"}
+            ]}"#,
+        )
+        .unwrap();
+        // "core" survives, "gone" is resolved, "new" appears.
+        let mk = |t: &str, f: &str| {
+            Violation::new(
+                BoundaryKind::Crate,
+                t.to_string(),
+                "r".to_string(),
+                f.to_string(),
+                "x".to_string(),
+                Severity::Enforce,
+            )
+        };
+        let report = Report::new(vec![mk("core", "serde"), mk("new", "reqwest")]);
+        let next = Baseline::of_preserving(&report, &previous);
+        let entries: Vec<&BaselineEntry> = next.entries().collect();
+        assert_eq!(entries.len(), 2);
+        let core = entries.iter().find(|e| e.id.target == "core").unwrap();
+        assert_eq!(core.owner.as_deref(), Some("team-core"));
+        assert_eq!(core.tracker.as_deref(), Some("ISSUE-7"));
+        let new = entries.iter().find(|e| e.id.target == "new").unwrap();
+        assert_eq!(new.owner, None);
+        assert!(
+            entries.iter().all(|e| e.id.target != "gone"),
+            "a resolved violation's entry (and metadata) drops"
+        );
+    }
+
+    #[test]
+    fn a_duplicate_identity_keeps_the_first_entry() {
+        // A hand-edited baseline with the same identity twice, different owners — de-dup by id,
+        // keeping the first (the recorded tie-break), never two entries for one identity.
+        let baseline = Baseline::from_json(
+            r#"{"version":1,"violations":[
+                {"target":"core","rule":"r","finding":"serde","owner":"first"},
+                {"target":"core","rule":"r","finding":"serde","owner":"second"}
+            ]}"#,
+        )
+        .unwrap();
+        let entries: Vec<&BaselineEntry> = baseline.entries().collect();
+        assert_eq!(entries.len(), 1, "de-duplicated by identity");
+        assert_eq!(
+            entries[0].owner.as_deref(),
+            Some("first"),
+            "keep-first tie-break"
+        );
     }
 
     #[test]

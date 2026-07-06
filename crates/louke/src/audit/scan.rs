@@ -1,0 +1,594 @@
+use std::path::Path;
+
+/// What the source scan found for a probe occurrence (`assert_boundary!`).
+#[derive(Debug)]
+pub(super) enum Probe {
+    /// A probe whose seam is a string literal (auditable, plain or raw): the seam value.
+    Literal(String),
+    /// A probe whose seam argument is NOT a string literal (a const or expression): the CI
+    /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
+    /// source file so the reaction is actionable (and the baseline identity stable).
+    Unauditable { file: String },
+}
+
+pub(super) fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    // Sort entries so the scan order — and thus the violation order in the report — is
+    // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
+    let mut paths = Vec::new();
+    for entry in read {
+        let entry =
+            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
+        // file_type() does NOT follow symlinks, so a symlinked directory does not recurse —
+        // avoiding an infinite loop on a cyclic symlink (fail safe, not stack-overflow loud).
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
+        paths.push((file_type.is_dir(), entry.path()));
+    }
+    paths.sort();
+    for (is_dir, path) in paths {
+        if is_dir {
+            collect_probes(&path, probes)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+            let source = std::fs::read_to_string(&path)
+                .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
+            scan_source(&source, &path.display().to_string(), probes);
+        }
+    }
+    Ok(())
+}
+
+/// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just
+/// past its outermost `*/`. Rust block comments nest, so depth is tracked; an unterminated comment
+/// runs to EOF. Shared by [`scan_source`] and [`skip_trivia`] so the two cannot drift — the
+/// original non-nested bug existed in *both* precisely because they were independent copies.
+fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
+    let mut depth = 1usize;
+    i += 2; // past the opening `/*`
+    while i + 1 < b.len() && depth > 0 {
+        if b[i] == b'/' && b[i + 1] == b'*' {
+            depth += 1;
+            i += 2;
+        } else if b[i] == b'*' && b[i + 1] == b'/' {
+            depth -= 1;
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    if depth > 0 { b.len() } else { i }
+}
+
+/// Walk source skipping comments / string & char literals, and when the `assert_boundary!`
+/// probe marker appears in code, record whether its seam argument is a string literal
+/// (auditable) or not (un-auditable). The declaration marker is no longer scanned —
+/// declarations come from the passed `RuntimeBoundary` objects. `file` labels an un-auditable
+/// probe so the reaction is actionable.
+pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
+    let b = source.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        // Comments and string/char literals are skipped whole (one shared definition below), so
+        // a marker or delimiter inside them is never mis-read.
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        // A left word boundary: `my_assert_boundary!` / `xassert_boundary!` are unrelated user
+        // macros, not our probe. Require the preceding byte to be a non-identifier char so a
+        // marker embedded in a longer identifier is not mis-counted as a probe.
+        let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
+        if left_boundary {
+            if let Some(rest) = match_probe_marker(b, i) {
+                let (probe, next) = capture_probe(b, rest, file);
+                if let Some(probe) = probe {
+                    probes.push(probe);
+                }
+                i = next;
+                continue;
+            }
+        }
+        // A foreign macro invocation / `macro_rules!` definition body is macro-generated or dead
+        // code: a probe lexically inside it must not count as coverage (the 圭表 strip_macro_bodies
+        // rule, reimplemented louke-locally — 三儀 ⊥ 三儀 forbids importing it). `assert_boundary!`'s
+        // own `!` is consumed by the marker branch above (and `capture_probe` advances past it), so
+        // a `!`-preceded-by-identifier reached here is always a FOREIGN macro; skip its balanced
+        // body (and any probe nested in it) in one jump.
+        if b[i] == b'!' {
+            // A foreign macro's `!` may be separated from its name by whitespace (`some_macro !(…)`
+            // is valid Rust), mirroring the probe marker's own gap tolerance — so look back past
+            // whitespace for the name's last identifier byte before deciding this opens a macro
+            // body. (A comment between the name and `!` stays a documented bound: rustfmt removes
+            // it, and scanning back over a block comment is not worth the cost.)
+            let mut name_end = i;
+            while name_end > 0 && b[name_end - 1].is_ascii_whitespace() {
+                name_end -= 1;
+            }
+            let mut name_start = name_end;
+            while name_start > 0 && is_ident_byte(b[name_start - 1]) {
+                name_start -= 1;
+            }
+            // A raw identifier `r#keyword` (e.g. a macro named `r#async`) escapes the keyword and IS
+            // a valid macro name — its body must still be skipped. The ident-run stops at the `#`
+            // (not an ident byte), so detect a preceding `r#` at a word boundary and exempt it from
+            // the keyword test below.
+            let is_raw_ident = name_start >= 2
+                && b[name_start - 1] == b'#'
+                && b[name_start - 2] == b'r'
+                && (name_start == 2 || !is_ident_byte(b[name_start - 3]));
+            // Otherwise the name before `!` must be a real identifier that is NOT a keyword. A
+            // keyword there is unary negation in expression position (`return !(x)`, `if !(cond) {…}`,
+            // `match !(x)`), never a macro — treating its parenthesized operand as a macro body would
+            // skip real code (and drop any probe inside it). `macro_rules` is not a keyword, so it
+            // still reaches `foreign_macro_body_end`'s name-skip.
+            if name_start < name_end && (is_raw_ident || !is_rust_keyword(&b[name_start..name_end]))
+            {
+                if let Some(end) = foreign_macro_body_end(b, i) {
+                    i = end;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+}
+
+/// If `i` begins a comment or a string/char literal, return the index just past it; else `None`.
+/// One shared definition for the main scan and the macro-body skip, so their literal/comment
+/// handling can never drift apart (the independent-copy drift `skip_block_comment` warns about).
+/// Raw/byte strings are tested before plain strings (an inner `"` would otherwise desync), and a
+/// lifetime (`'a`) is deliberately NOT a literal (left to be walked as code).
+fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
+    // line comment
+    if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
+        let mut j = i;
+        while j < b.len() && b[j] != b'\n' {
+            j += 1;
+        }
+        return Some(j);
+    }
+    // block comment (nesting + drift rationale in `skip_block_comment`)
+    if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
+        return Some(skip_block_comment(b, i));
+    }
+    // raw / byte string literal (r"…", r#"…"#, b"…", br#"…"#) — before the plain-string case
+    if let Some(end) = raw_or_byte_string_end(b, i) {
+        return Some(end);
+    }
+    // plain string literal
+    if b[i] == b'"' {
+        let mut j = i + 1;
+        while j < b.len() && b[j] != b'"' {
+            if b[j] == b'\\' {
+                j += 1;
+            }
+            j += 1;
+        }
+        return Some((j + 1).min(b.len()));
+    }
+    // char literal vs lifetime: only a clear char ('x' or '\n'); a lifetime ('a) is not a literal.
+    if b[i] == b'\'' {
+        let is_char =
+            (i + 1 < b.len() && b[i + 1] == b'\\') || (i + 2 < b.len() && b[i + 2] == b'\'');
+        if is_char {
+            let mut j = i + 1;
+            while j < b.len() && b[j] != b'\'' {
+                if b[j] == b'\\' {
+                    j += 1;
+                }
+                j += 1;
+            }
+            return Some((j + 1).min(b.len()));
+        }
+    }
+    None
+}
+
+/// The identifier run ending immediately before `end` equals `target`. Used to recognize a
+/// `macro_rules` keyword before its `!` (the only stable form taking a `name` between `!` and the
+/// body delimiter) without a false match on `my_macro_rules` (the maximal run differs).
+fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
+    let mut start = end;
+    while start > 0 && is_ident_byte(b[start - 1]) {
+        start -= 1;
+    }
+    &b[start..end] == target
+}
+
+/// Given `bang` where `b[bang] == b'!'` and the preceding byte is an identifier byte, return the
+/// index past a foreign macro's balanced body, or `None` when this `!` does not open one — `!=`,
+/// unary `!expr`, or a keyword glued to `!` (`if!cond {…}` / `while!x {…}` / `match!x {…}`), none of
+/// which is a macro. `macro_rules! name {…}` is the sole form with an identifier between `!` and the
+/// delimiter, so the name-skip is gated on the preceding identifier being exactly `macro_rules`;
+/// treating any `ident! ident {` as a macro would swallow a real `if`/`while`/`match` block and drop
+/// a probe inside it (a reintroduced false negative). The balanced walk reuses
+/// `skip_literal_or_comment`, so a delimiter inside a string/char/comment never closes early; an
+/// unterminated body at EOF returns `Some(len)`.
+fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
+    let mut i = skip_trivia(b, bang + 1);
+    if preceding_ident_is(b, bang, b"macro_rules") {
+        let name_start = i;
+        while i < b.len() && (is_ident_byte(b[i]) || b[i] == b'#') {
+            i += 1;
+        }
+        if i == name_start {
+            return None; // `macro_rules!` with no name — malformed, not a body to skip
+        }
+        i = skip_trivia(b, i);
+    }
+    if !matches!(b.get(i), Some(b'{') | Some(b'(') | Some(b'[')) {
+        return None;
+    }
+    // One depth counter over all three delimiter kinds: correct because the audit scans compilable
+    // Rust, whose token trees are properly nested (a `)` never closes a `{`). Literals/comments are
+    // skipped first each iteration, so a delimiter inside a string/char never perturbs the count.
+    let mut depth = 0usize;
+    while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        match b[i] {
+            b'{' | b'(' | b'[' => depth += 1,
+            b'}' | b')' | b']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(i + 1);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    Some(b.len())
+}
+
+/// Detect a raw or byte string literal starting at `i` (`r"…"`, `r#"…"#`, `b"…"`,
+/// `br"…"`, `br#"…"#`) and return the index past its end, or `None` if `i` is not such a
+/// literal. Rust syntax guarantees `r`/`b` immediately before `"`/`#` is a literal prefix
+/// (no identifier can precede a string), so no token-boundary check is needed.
+fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
+    let mut j = i;
+    let byte = j < b.len() && b[j] == b'b';
+    if byte {
+        j += 1;
+    }
+    let raw = j < b.len() && b[j] == b'r';
+    if raw {
+        j += 1;
+        let mut hashes = 0;
+        while j < b.len() && b[j] == b'#' {
+            hashes += 1;
+            j += 1;
+        }
+        if j >= b.len() || b[j] != b'"' {
+            return None;
+        }
+        j += 1;
+        // scan to the closing `"` followed by `hashes` `#`s
+        while j < b.len() {
+            if b[j] == b'"' {
+                let mut k = j + 1;
+                let mut h = 0;
+                while k < b.len() && h < hashes && b[k] == b'#' {
+                    k += 1;
+                    h += 1;
+                }
+                if h == hashes {
+                    return Some(k);
+                }
+            }
+            j += 1;
+        }
+        return Some(b.len());
+    }
+    // a `b"…"` byte string (escaped like a normal string) — only when a `b` prefix was
+    // consumed and a quote immediately follows.
+    if byte && j < b.len() && b[j] == b'"' {
+        j += 1;
+        while j < b.len() && b[j] != b'"' {
+            if b[j] == b'\\' {
+                j += 1;
+            }
+            j += 1;
+        }
+        return Some((j + 1).min(b.len()));
+    }
+    None
+}
+
+/// Match the probe marker at `i`: the identifier `assert_boundary` at a word boundary, then — as
+/// `ident ! (…)` with whitespace/comments between the name and `!` is valid Rust (`println !("x")`
+/// compiles) — its `!`. Returns the index just past the `!`, whence [`capture_probe`] skips trivia
+/// to the opening delimiter; `None` otherwise. The right word boundary rejects a longer identifier
+/// like `assert_boundaryx`; the caller checks the left boundary. Tolerating the gap closes a false
+/// negative: a probe written `assert_boundary !("seam")` was silently dropped by a contiguous match.
+fn match_probe_marker(b: &[u8], i: usize) -> Option<usize> {
+    const NAME: &[u8] = b"assert_boundary";
+    if i + NAME.len() > b.len() || &b[i..i + NAME.len()] != NAME {
+        return None;
+    }
+    let after_name = i + NAME.len();
+    // Right word boundary: `assert_boundaryx` / `assert_boundary_probe` is a different identifier.
+    if b.get(after_name).is_some_and(|&c| is_ident_byte(c)) {
+        return None;
+    }
+    let bang = skip_trivia(b, after_name);
+    if b.get(bang) != Some(&b'!') {
+        return None;
+    }
+    Some(bang + 1)
+}
+
+/// An identifier byte — ASCII `[A-Za-z0-9_]` or any UTF-8 non-ASCII byte (`>= 0x80`). Used for the
+/// marker's word boundary: a multi-byte Unicode identifier char (`Ω` in `Ωassert_boundary`) is XID
+/// and must keep the boundary, so a foreign macro whose name merely *ends* in `assert_boundary` is
+/// not mis-read as our probe. ASCII-only would treat the `Ω` continuation bytes as a boundary and
+/// falsely match (a false coverage / fabricated probed-but-undeclared reaction).
+fn is_ident_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
+}
+
+/// Whether the identifier run `word` is a Rust keyword (strict or reserved). A macro name is a real
+/// identifier and never a keyword, so a keyword immediately before `!` is unary negation
+/// (`return !(x)`, `if !(cond) {…}`), not a macro invocation — its operand must not be skipped as a
+/// macro body. `macro_rules` is deliberately absent (it is not a keyword and must reach the
+/// name-skip). A non-ASCII / non-UTF-8 run is never a keyword.
+fn is_rust_keyword(word: &[u8]) -> bool {
+    let Ok(word) = std::str::from_utf8(word) else {
+        return false;
+    };
+    matches!(
+        word,
+        "as" | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "dyn"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "fn"
+            | "for"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "pub"
+            | "ref"
+            | "return"
+            | "self"
+            | "Self"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "type"
+            | "unsafe"
+            | "use"
+            | "where"
+            | "while"
+            | "async"
+            | "await"
+            // reserved / edition keywords
+            | "abstract"
+            | "become"
+            | "box"
+            | "do"
+            | "final"
+            | "macro"
+            | "override"
+            | "priv"
+            | "typeof"
+            | "unsized"
+            | "virtual"
+            | "yield"
+            | "try"
+            | "gen"
+    )
+}
+
+/// Skip ASCII whitespace and `//` / `/* */` comments, returning the next code index. Mirrors
+/// the comment handling in [`scan_source`] so a comment between the `!` and `(`, or before the
+/// seam argument, does not desync probe capture (which would silently drop a real probe).
+fn skip_trivia(b: &[u8], mut i: usize) -> usize {
+    loop {
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if b.get(i) == Some(&b'/') && b.get(i + 1) == Some(&b'/') {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if b.get(i) == Some(&b'/') && b.get(i + 1) == Some(&b'*') {
+            i = skip_block_comment(b, i);
+            continue;
+        }
+        return i;
+    }
+}
+
+/// After the `assert_boundary!` marker, classify the probe by its first argument and return
+/// `(probe, next_index)`. Skip trivia, expect a macro opening delimiter (`(`, `{`, or `[`),
+/// skip trivia; a plain or raw string first argument is an auditable [`Probe::Literal`] (its
+/// value); any other first token (a `const`, an expression, a byte string) is
+/// [`Probe::Unauditable`] — never a silent skip. `None` (with `next` past the marker) only when
+/// the marker is not actually a probe call (no opening delimiter follows).
+fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
+    let i = skip_trivia(b, i);
+    // Rust macros accept `( )`, `{ }`, or `[ ]` interchangeably; a probe written
+    // `assert_boundary!{"s", o}` or `["s", o]` is a real probe. Accept any of the three
+    // opening delimiters so a non-`()` probe is not silently dropped — a silent drop would let
+    // a typo'd seam escape the undeclared-seam check, a false negative.
+    if !matches!(b.get(i), Some(&b'(') | Some(&b'{') | Some(&b'[')) {
+        return (None, i);
+    }
+    let i = skip_trivia(b, i + 1);
+    if i >= b.len() {
+        return (None, i);
+    }
+    // A raw string `r"…"` / `r#"…"#` is a traceable literal — parse its value rather than
+    // rejecting it as un-auditable (which would mis-flag a legitimate probe and double-report).
+    if b[i] == b'r' && matches!(b.get(i + 1), Some(b'"') | Some(b'#')) {
+        if let Some((seam, next)) = raw_string_value(b, i) {
+            return (Some(Probe::Literal(seam)), next);
+        }
+        return (
+            Some(Probe::Unauditable {
+                file: file.to_string(),
+            }),
+            i,
+        );
+    }
+    // A plain string literal. Find its end (the `\\`-skip only keeps a `\"` from ending the
+    // string early), then DECODE its escapes to the value the compiler produces — the declared
+    // seam set is compiler-decoded (`RuntimeBoundary::seam()`), so comparing the raw source bytes
+    // would let an escape-bearing seam diverge between the two faces (a false pair of reactions,
+    // and a false negative when two spellings decode to the same bytes). An escape the decoder
+    // cannot reproduce exactly reacts as un-auditable (loud), never a silently mismatched literal.
+    if b[i] == b'"' {
+        let mut j = i + 1;
+        let start = j;
+        while j < b.len() && b[j] != b'"' {
+            if b[j] == b'\\' {
+                j += 1;
+            }
+            j += 1;
+        }
+        if j >= b.len() {
+            return (None, j);
+        }
+        return match decode_str_escapes(&b[start..j]) {
+            Some(seam) => (Some(Probe::Literal(seam)), j + 1),
+            None => (
+                Some(Probe::Unauditable {
+                    file: file.to_string(),
+                }),
+                j + 1,
+            ),
+        };
+    }
+    // Anything else (a const, an expression, a byte string) cannot be traced to a declared seam.
+    (
+        Some(Probe::Unauditable {
+            file: file.to_string(),
+        }),
+        i,
+    )
+}
+
+/// Parse a raw string literal `r"…"` / `r#…"…"#…` starting at `i`, returning `(value, next)`.
+/// `None` if it is not a well-formed raw string.
+fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
+    let mut j = i + 1; // past `r`
+    let mut hashes = 0;
+    while b.get(j) == Some(&b'#') {
+        hashes += 1;
+        j += 1;
+    }
+    if b.get(j) != Some(&b'"') {
+        return None;
+    }
+    j += 1;
+    let start = j;
+    while j < b.len() {
+        if b[j] == b'"' {
+            let mut k = j + 1;
+            let mut h = 0;
+            while h < hashes && b.get(k) == Some(&b'#') {
+                k += 1;
+                h += 1;
+            }
+            if h == hashes {
+                return Some((String::from_utf8_lossy(&b[start..j]).into_owned(), k));
+            }
+        }
+        j += 1;
+    }
+    None
+}
+
+/// Decode a plain-string literal's inner bytes (between the quotes, escapes still present) to the
+/// exact `&str` value the Rust compiler produces, so a probe seam matches the compiler-decoded
+/// declared seam (`RuntimeBoundary::seam()`) rather than the raw source bytes. Returns `None` on any
+/// escape the decoder does not reproduce exactly — a malformed or unrecognized escape, an
+/// out-of-range `\x`, an invalid `\u{…}`, or a backslash-newline **line continuation** (deliberately
+/// not decoded: it *strips* characters, the one escape class that could yield a wrong non-`None`
+/// value and reintroduce a false negative, and no real seam name spans lines). The caller routes
+/// `None` to an un-auditable probe (a loud reaction), never a silent mismatch. The escape set is the
+/// `&str` string-literal set only; byte-string-only escapes never reach here (byte strings are
+/// already un-auditable).
+fn decode_str_escapes(inner: &[u8]) -> Option<String> {
+    // The surrounding source compiled, so it is valid UTF-8; escapes are all ASCII, so iterating
+    // by `char` reconstructs any multi-byte content faithfully.
+    let s = std::str::from_utf8(inner).ok()?;
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next()? {
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            't' => out.push('\t'),
+            '\\' => out.push('\\'),
+            '0' => out.push('\0'),
+            '\'' => out.push('\''),
+            '"' => out.push('"'),
+            // `\xHH`: exactly two hex digits, and (for a `&str`) a value in `0x00..=0x7F`.
+            'x' => {
+                let hi = chars.next()?.to_digit(16)?;
+                let lo = chars.next()?.to_digit(16)?;
+                let v = hi * 16 + lo;
+                if v > 0x7F {
+                    return None;
+                }
+                out.push(char::from_u32(v)?);
+            }
+            // `\u{ H..H }`: 1..=6 hex digits (`_` permitted as separators), a valid `char`.
+            'u' => {
+                if chars.next()? != '{' {
+                    return None;
+                }
+                let mut value: u32 = 0;
+                let mut digits = 0;
+                loop {
+                    match chars.next()? {
+                        '}' => break,
+                        // A leading `_` is "invalid start of unicode escape" in rustc; only
+                        // internal/trailing separators are legal, so match rustc exactly here.
+                        '_' if digits == 0 => return None,
+                        '_' => continue,
+                        d => {
+                            let hd = d.to_digit(16)?;
+                            digits += 1;
+                            if digits > 6 {
+                                return None;
+                            }
+                            value = value * 16 + hd;
+                        }
+                    }
+                }
+                if digits == 0 {
+                    return None;
+                }
+                out.push(char::from_u32(value)?);
+            }
+            // An unrecognized escape or a backslash-newline line continuation: react loud.
+            _ => return None,
+        }
+    }
+    Some(out)
+}
