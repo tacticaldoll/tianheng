@@ -37,10 +37,27 @@ pub(crate) enum SemanticFinding {
     /// shape; both render identically). The one exposure literal, formerly written twice
     /// (path pipeline + shape pipeline).
     Exposed { subject: String, seam: String },
-    /// `{module} (impl for {owner})` — trait-impl-locality: a trait impl outside its allowed site.
-    MisplacedImpl { module: String, owner: String },
+    /// `{module} (impl {trait} for {owner})` — trait-impl-locality: a trait impl outside its
+    /// allowed site. `trait` is the impl's written trait path **with generic arguments** so two
+    /// distinct instantiations for the same self type (`impl Convert<u8> for Foo` /
+    /// `impl Convert<u16> for Foo`) stay distinct findings and a baseline cannot mask a new one.
+    MisplacedImpl {
+        module: String,
+        trait_ref: String,
+        owner: String,
+    },
     /// `derive {marker} on {canonical}` — forbidden-marker: a forbidden `#[derive]` on a type.
     ForbiddenDerive { marker: String, canonical: String },
+    /// `impl {marker} for {owner} in {module}` — forbidden-marker: a forbidden trait acquired via a
+    /// hand-written `impl`. `marker` is the written trait path (with generic args), `owner` the self
+    /// type (with generic args), and `module` the impl site — together injective, so two distinct
+    /// acquisitions (`impl Marker<u8>`/`impl Marker<u16>`, or the same leaf from different modules)
+    /// never collapse to one `(target, rule, finding)` and mask a new one.
+    ForbiddenImpl {
+        marker: String,
+        owner: String,
+        module: String,
+    },
     /// `async fn {module}::{name}{tail}` — a public free `async fn` (implicit-existential exposure).
     AsyncFreeFn {
         module: String,
@@ -66,10 +83,19 @@ impl std::fmt::Display for SemanticFinding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Exposed { subject, seam } => write!(f, "{subject} exposed by {seam}"),
-            Self::MisplacedImpl { module, owner } => write!(f, "{module} (impl for {owner})"),
+            Self::MisplacedImpl {
+                module,
+                trait_ref,
+                owner,
+            } => write!(f, "{module} (impl {trait_ref} for {owner})"),
             Self::ForbiddenDerive { marker, canonical } => {
                 write!(f, "derive {marker} on {canonical}")
             }
+            Self::ForbiddenImpl {
+                marker,
+                owner,
+                module,
+            } => write!(f, "impl {marker} for {owner} in {module}"),
             Self::AsyncFreeFn { module, name, tail } => {
                 write!(f, "async fn {module}::{name}{tail}")
             }

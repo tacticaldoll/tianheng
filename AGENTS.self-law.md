@@ -24,11 +24,18 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: restrict dependencies to (only: serde_json)
 - **kind**: crate · **severity**: enforce
 
+### `xingbiao`
+
+> 星表 is the shared declared-workspace-data substrate: serde_json only, and below every dimension like 璇璣 — it reads `cargo metadata` and must not depend on any workspace member, so the static and semantic dimensions read the workspace through one source of truth, not two hand-copied twins that drift apart. Not 璇璣: it does IO (spawns cargo) and observes, so it is not the measure-only reaction model — a substrate beneath the dimensions, not the measure they react in
+
+- **rule**: restrict dependencies to (only: serde_json)
+- **kind**: crate · **severity**: enforce
+
 ### `guibiao`
 
-> the 圭表 core stays dependency-light: serde_json is the only external dependency (no syn / proc-macro, no heavy graph or runtime crates); the internal dependency on 璇璣 (the shared reaction model) is the price of the family split — the model is measure-only: it renders no verdict and drags in no engine. 三儀 ⊥ 三儀: this allowlist names no sibling dimension, so 圭表 cannot depend on 渾儀 (nor, when born, 漏刻) — the dimensions are composed only by the 天衡 shell, never by each other
+> the 圭表 core stays dependency-light: serde_json is the only external dependency (no syn / proc-macro, no heavy graph or runtime crates); the internal dependencies on 璇璣 (the shared reaction model) and 星表 (the shared metadata substrate) are the price of the family split — both are serde_json-only bases below the dimensions: the model renders no verdict and the substrate only reads the workspace, neither drags in an engine. 三儀 ⊥ 三儀: this allowlist names no sibling dimension, so 圭表 cannot depend on 渾儀 (nor, when born, 漏刻) — the dimensions are composed only by the 天衡 shell, never by each other
 
-- **rule**: restrict dependencies to (only: serde_json, xuanji)
+- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce
 
 ### `guibiao`
@@ -40,9 +47,9 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `hunyi`
 
-> 渾儀 is the semantic dimension and the sole holder of the heavy syn AST dependency — quarantined here, never the core or the model; it depends on 璇璣 (the reaction model), serde_json, and syn only. 三儀 ⊥ 三儀: it never depends on the sibling 圭表 dimension (nor, when born, 漏刻), and never on the 天衡 shell — the dimensions are composed only by the shell, never by each other (functional dimension ⊥ imperative shell)
+> 渾儀 is the semantic dimension and the sole holder of the heavy syn AST dependency — quarantined here, never the core or the model; it depends on 璇璣 (the reaction model), 星表 (the shared metadata substrate), serde_json, and syn only. 三儀 ⊥ 三儀: it never depends on the sibling 圭表 dimension (nor, when born, 漏刻), and never on the 天衡 shell — the dimensions are composed only by the shell, never by each other (functional dimension ⊥ imperative shell)
 
-- **rule**: restrict dependencies to (only: xuanji, serde_json, syn)
+- **rule**: restrict dependencies to (only: xuanji, xingbiao, serde_json, syn)
 - **kind**: crate · **severity**: enforce
 
 ### `louke`

@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::errors::{crate_not_found_error, missing_src_error};
-use crate::metadata::{crate_root_file, find_package};
 use crate::module_resolve::resolve_module_file;
+use xingbiao::{crate_root_file, find_package};
 
 /// The governed module's source file rendered for a single-module semantic violation's `file`
 /// (`display()`-rendered to match the static dimension). Resolved **only when there is

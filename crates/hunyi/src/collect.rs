@@ -131,8 +131,36 @@ pub(crate) fn collect_item_async_exposures(
     }
 }
 
+/// The generic **type-parameter** names declared by `generics` — the names that, used bare, are
+/// parameters rather than nominal types (so a same-named `type` alias must not resolve them).
+fn type_param_names(generics: &syn::Generics) -> std::collections::HashSet<String> {
+    generics
+        .params
+        .iter()
+        .filter_map(|p| match p {
+            syn::GenericParam::Type(tp) => Some(strip_raw(&tp.ident.to_string())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Paths in a signature, shadowing the signature's OWN generic type parameters (`fn f<T>(x: T)` —
+/// `T` is a param use, not a nominal type). A signature always carries its own generics, so this is
+/// the base every fn/method exposure walk uses.
 fn paths_in_signature(sig: &syn::Signature) -> Vec<syn::Path> {
-    let mut c = PathCollector::default();
+    paths_in_signature_scoped(sig, &std::collections::HashSet::new())
+}
+
+/// Like [`paths_in_signature`] but also shadowing the **enclosing** item's generic type parameters
+/// (an inherent-impl / trait's `<T>` is in scope inside its methods), so a method parameter named
+/// like an enclosing param — or a same-module alias — is not misresolved.
+fn paths_in_signature_scoped(
+    sig: &syn::Signature,
+    enclosing: &std::collections::HashSet<String>,
+) -> Vec<syn::Path> {
+    let mut shadowed = enclosing.clone();
+    shadowed.extend(type_param_names(&sig.generics));
+    let mut c = PathCollector::shadowing(shadowed);
     c.visit_signature(sig);
     c.paths
 }
@@ -143,8 +171,30 @@ fn paths_in_type(ty: &syn::Type) -> Vec<syn::Path> {
     c.paths
 }
 
-fn paths_in_generics(generics: &syn::Generics) -> Vec<syn::Path> {
-    let mut c = PathCollector::default();
+/// Paths in a type, shadowing the given in-scope generic type parameters — used where a type
+/// position (a field, an alias target, an assoc item) sits inside a generic item whose params must
+/// not be mistaken for nominal types.
+fn paths_in_type_scoped(
+    ty: &syn::Type,
+    params: &std::collections::HashSet<String>,
+) -> Vec<syn::Path> {
+    let mut c = PathCollector::shadowing(params.clone());
+    c.visit_type(ty);
+    c.paths
+}
+
+/// Paths in an item's generics (its param bounds and where-clause), shadowing the given in-scope
+/// generic type parameters. A def/impl generic param used bare inside its own bounds
+/// (`struct S<T, U> where U: AsRef<T>` — `T` is a parameter, not a nominal type) must be shadowed;
+/// otherwise a same-named module use-alias (`use crate::infra::Secret as T;`) misresolves the bare
+/// `T` to the aliased type and emits a spurious exposure — the exact false positive the
+/// [`PathCollector`] shadowing was built to prevent. A multi-segment forbidden path is never
+/// shadowed, so real leaks in bounds are still observed.
+fn paths_in_generics_scoped(
+    generics: &syn::Generics,
+    params: &std::collections::HashSet<String>,
+) -> Vec<syn::Path> {
+    let mut c = PathCollector::shadowing(params.clone());
     c.visit_generics(generics);
     c.paths
 }
@@ -167,6 +217,20 @@ fn dyns_in_generics(generics: &syn::Generics) -> Vec<ShapeExposure> {
     c.exposures
 }
 
+/// The `dyn` trait-object shapes within a bound list (a trait's supertraits, or a public
+/// associated type's `: Bound`s). The bound HEAD is a trait position (never a `dyn`), but a `dyn`
+/// legally appears inside a bound's **generic argument** (`Facade: AsRef<Box<dyn crate::Port>>`),
+/// so the walk must descend the bounds — the dyn-shape analogue of [`paths_in_bounds`].
+fn dyns_in_bounds(
+    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
+) -> Vec<ShapeExposure> {
+    let mut c = DynCollector::default();
+    for bound in bounds {
+        c.visit_type_param_bound(bound);
+    }
+    c.exposures
+}
+
 /// Collect the type paths exposed by one item's public surface. Only `pub` items
 /// contribute; `pub(crate)`/`pub(in …)`/private are internal, not exposed. Trait `impl`
 /// blocks are skipped (out of scope — their shape is the trait's, not the impl site's).
@@ -184,21 +248,23 @@ pub(crate) fn collect_item_exposures(
         }
         syn::Item::Struct(item) if is_public(&item.vis) => {
             let name = strip_raw(&item.ident.to_string());
+            let params = type_param_names(&item.generics);
             out.extend(tag_paths(
-                paths_in_generics(&item.generics),
+                paths_in_generics_scoped(&item.generics, &params),
                 &item_seam("struct", module, &item.ident),
             ));
             for (index, field) in item.fields.iter().enumerate() {
                 if is_public(&field.vis) {
                     let seam = field_seam("field", module, &name, &member_label(index, field));
-                    out.extend(tag_paths(paths_in_type(&field.ty), &seam));
+                    out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
                 }
             }
         }
         syn::Item::Enum(item) if is_public(&item.vis) => {
             let name = strip_raw(&item.ident.to_string());
+            let params = type_param_names(&item.generics);
             out.extend(tag_paths(
-                paths_in_generics(&item.generics),
+                paths_in_generics_scoped(&item.generics, &params),
                 &item_seam("enum", module, &item.ident),
             ));
             // Enum variants and their fields are as public as the enum itself. Each field
@@ -209,27 +275,32 @@ pub(crate) fn collect_item_exposures(
                 let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
                 for (index, field) in variant.fields.iter().enumerate() {
                     let seam = field_seam("variant", module, &owner, &member_label(index, field));
-                    out.extend(tag_paths(paths_in_type(&field.ty), &seam));
+                    out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
                 }
             }
         }
         syn::Item::Union(item) if is_public(&item.vis) => {
             let name = strip_raw(&item.ident.to_string());
+            let params = type_param_names(&item.generics);
             out.extend(tag_paths(
-                paths_in_generics(&item.generics),
+                paths_in_generics_scoped(&item.generics, &params),
                 &item_seam("union", module, &item.ident),
             ));
             for (index, field) in item.fields.named.iter().enumerate() {
                 if is_public(&field.vis) {
                     let seam = field_seam("field", module, &name, &member_label(index, field));
-                    out.extend(tag_paths(paths_in_type(&field.ty), &seam));
+                    out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
                 }
             }
         }
         syn::Item::Type(item) if is_public(&item.vis) => {
             let seam = item_seam("type", module, &item.ident);
-            out.extend(tag_paths(paths_in_generics(&item.generics), &seam));
-            out.extend(tag_paths(paths_in_type(&item.ty), &seam));
+            let params = type_param_names(&item.generics);
+            out.extend(tag_paths(
+                paths_in_generics_scoped(&item.generics, &params),
+                &seam,
+            ));
+            out.extend(tag_paths(paths_in_type_scoped(&item.ty, &params), &seam));
         }
         syn::Item::Const(item) if is_public(&item.vis) => {
             out.extend(tag_paths(
@@ -246,7 +317,11 @@ pub(crate) fn collect_item_exposures(
         syn::Item::Trait(item) if is_public(&item.vis) => {
             let trait_name = strip_raw(&item.ident.to_string());
             let trait_seam = item_seam("trait", module, &item.ident);
-            out.extend(tag_paths(paths_in_generics(&item.generics), &trait_seam));
+            let trait_params = type_param_names(&item.generics);
+            out.extend(tag_paths(
+                paths_in_generics_scoped(&item.generics, &trait_params),
+                &trait_seam,
+            ));
             // Supertraits are part of the trait's public contract; walk them with the same
             // full recursion (paths_in_bounds → PathCollector) every other position uses, so a
             // forbidden type in a bound's generic argument (`Facade: AsRef<crate::infra::Secret>`)
@@ -257,7 +332,10 @@ pub(crate) fn collect_item_exposures(
                 match trait_item {
                     syn::TraitItem::Fn(method) => {
                         let seam = trait_method_seam(module, &trait_name, &method.sig.ident);
-                        out.extend(tag_paths(paths_in_signature(&method.sig), &seam));
+                        out.extend(tag_paths(
+                            paths_in_signature_scoped(&method.sig, &trait_params),
+                            &seam,
+                        ));
                     }
                     syn::TraitItem::Type(assoc) => {
                         let seam = trait_assoc_seam("type", module, &trait_name, &assoc.ident);
@@ -267,15 +345,30 @@ pub(crate) fn collect_item_exposures(
                         // default target (`= crate::infra::Secret`, an observed type position the
                         // `dyn` collector already walks) — so a forbidden generic argument here is
                         // not silently dropped as the raw-path push once did.
-                        out.extend(tag_paths(paths_in_bounds(&assoc.bounds), &seam));
-                        out.extend(tag_paths(paths_in_generics(&assoc.generics), &seam));
+                        // The trait's params AND the GAT's own params are in scope inside the GAT's
+                        // bounds/where-clause, so shadow both — a bare param there is a parameter,
+                        // not a nominal type reachable through a same-named alias.
+                        let mut assoc_params = trait_params.clone();
+                        assoc_params.extend(type_param_names(&assoc.generics));
+                        out.extend(tag_paths(
+                            paths_in_bounds_scoped(&assoc.bounds, &assoc_params),
+                            &seam,
+                        ));
+                        out.extend(tag_paths(
+                            paths_in_generics_scoped(&assoc.generics, &assoc_params),
+                            &seam,
+                        ));
                         if let Some((_, ty)) = &assoc.default {
-                            out.extend(tag_paths(paths_in_type(ty), &seam));
+                            // The trait's and the GAT's own type params are in scope in the default.
+                            out.extend(tag_paths(paths_in_type_scoped(ty, &assoc_params), &seam));
                         }
                     }
                     syn::TraitItem::Const(assoc) => {
                         let seam = trait_assoc_seam("const", module, &trait_name, &assoc.ident);
-                        out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+                        out.extend(tag_paths(
+                            paths_in_type_scoped(&assoc.ty, &trait_params),
+                            &seam,
+                        ));
                     }
                     _ => {}
                 }
@@ -285,22 +378,43 @@ pub(crate) fn collect_item_exposures(
         // authored. Trait impls (`impl Trait for Type`) carry `trait_` and are out of scope.
         syn::Item::Impl(item) if item.trait_.is_none() => {
             let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
+            let impl_params = type_param_names(&item.generics);
+            // The impl block's own generic-param bounds and where-clause are impl-site-authored
+            // public contract for the inherent API (`impl<T: crate::infra::Secret> Foo<T> { … }`),
+            // observed like a struct/enum/type def's generics (paths_in_generics) and the trait-impl
+            // collector's where-walk. Owner-qualified so it stays distinct from the block's methods /
+            // assoc items and from another block's generics; previously dropped here entirely.
+            out.extend(tag_paths(
+                paths_in_generics_scoped(&item.generics, &impl_params),
+                &format!("impl <{owner}> (generics)"),
+            ));
             for impl_item in &item.items {
                 match impl_item {
-                    // A public method's signature (unchanged).
+                    // A public method's signature. The impl's own `<T>` is in scope inside it, so
+                    // shadow it (plus the method's own params) to keep a param use from resolving
+                    // through a same-named alias.
                     syn::ImplItem::Fn(method) if is_public(&method.vis) => {
                         let seam = inherent_method_seam(&owner, &method.sig.ident);
-                        out.extend(tag_paths(paths_in_signature(&method.sig), &seam));
+                        out.extend(tag_paths(
+                            paths_in_signature_scoped(&method.sig, &impl_params),
+                            &seam,
+                        ));
                     }
                     // A public associated `const`'s declared type is public API (`Foo::K`).
                     syn::ImplItem::Const(assoc) if is_public(&assoc.vis) => {
                         let seam = inherent_assoc_seam("const", &owner, &assoc.ident);
-                        out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+                        out.extend(tag_paths(
+                            paths_in_type_scoped(&assoc.ty, &impl_params),
+                            &seam,
+                        ));
                     }
                     // A public associated `type`'s target is public API (`Foo::T`).
                     syn::ImplItem::Type(assoc) if is_public(&assoc.vis) => {
                         let seam = inherent_assoc_seam("type", &owner, &assoc.ident);
-                        out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+                        out.extend(tag_paths(
+                            paths_in_type_scoped(&assoc.ty, &impl_params),
+                            &seam,
+                        ));
                     }
                     _ => {}
                 }
@@ -443,29 +557,41 @@ fn push_reexport(
     });
 }
 
-/// The type paths in a signature's **return type** only (`sig.output`) — never `sig.inputs`.
-/// A trait impl method's parameters/receiver are invariant with the trait declaration (not
-/// refinable at the impl site), but its return MAY be refined (return-position `impl Trait` in
-/// traits / async fn in traits), so a concretely-written return can expose an impl-site-authored
-/// type. Observed without classifying refined-vs-dictated (that would need the possibly-foreign
-/// trait definition — an essential gap), so a concrete return is observed either way.
-fn paths_in_return(sig: &syn::Signature) -> Vec<syn::Path> {
-    let mut c = PathCollector::default();
-    if let syn::ReturnType::Type(_, ty) = &sig.output {
-        c.visit_type(ty);
-    }
-    c.paths
-}
-
 /// The paths named across a set of trait-bounds — each bound's trait path *and* any type nested
 /// in its generic arguments (`T: From<crate::infra::Secret>` yields both `From` and
 /// `crate::infra::Secret`). Used for the impl-site `where` position.
 fn paths_in_bounds(
     bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
 ) -> Vec<syn::Path> {
-    let mut c = PathCollector::default();
+    paths_in_bounds_scoped(bounds, &std::collections::HashSet::new())
+}
+
+/// Like [`paths_in_bounds`] but shadowing in-scope generic type parameters (see [`paths_in_type_scoped`]).
+fn paths_in_bounds_scoped(
+    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
+    params: &std::collections::HashSet<String>,
+) -> Vec<syn::Path> {
+    let mut c = PathCollector::shadowing(params.clone());
     for bound in bounds {
         c.visit_type_param_bound(bound);
+    }
+    c.paths
+}
+
+/// The type paths in a signature's **return type** only (`sig.output`, never `sig.inputs`),
+/// shadowing the enclosing item's + the signature's own generic type parameters so a bare return of
+/// a parameter (`-> T`) is not misresolved through a same-named `use … as T` alias to a forbidden
+/// type. A trait-impl method's params/receiver are trait-dictated (not refinable), but its return
+/// MAY be refined at the impl site, so a concretely-written return can expose an impl-authored type.
+fn paths_in_return_scoped(
+    sig: &syn::Signature,
+    enclosing: &std::collections::HashSet<String>,
+) -> Vec<syn::Path> {
+    let mut shadowed = enclosing.clone();
+    shadowed.extend(type_param_names(&sig.generics));
+    let mut c = PathCollector::shadowing(shadowed);
+    if let syn::ReturnType::Type(_, ty) = &sig.output {
+        c.visit_type(ty);
     }
     c.paths
 }
@@ -498,6 +624,10 @@ pub(crate) fn collect_trait_impl_exposures(
     let trait_label = path_to_string(trait_path).unwrap_or_else(|| format!("trait_#{ordinal}"));
     let self_label = canonical_self_owner(&item.self_ty, uses, module, ordinal);
     let prefix = format!("impl {trait_label} for {self_label}");
+    // The impl block's own generic type parameters are in scope in every position below; shadow
+    // them so a bare parameter use is not misresolved through a same-named `use … as <param>` alias
+    // to a forbidden type (parity with the inherent-impl / signature-coupling collector).
+    let params = type_param_names(&item.generics);
 
     // 1. trait-arg — the trait ref's generic arguments (not the trait base path).
     if let Some(syn::PathArguments::AngleBracketed(args)) =
@@ -506,9 +636,11 @@ pub(crate) fn collect_trait_impl_exposures(
         let seam = format!("{prefix} (trait-arg)");
         for arg in &args.args {
             match arg {
-                syn::GenericArgument::Type(ty) => out.extend(tag_paths(paths_in_type(ty), &seam)),
+                syn::GenericArgument::Type(ty) => {
+                    out.extend(tag_paths(paths_in_type_scoped(ty, &params), &seam))
+                }
                 syn::GenericArgument::AssocType(at) => {
-                    out.extend(tag_paths(paths_in_type(&at.ty), &seam))
+                    out.extend(tag_paths(paths_in_type_scoped(&at.ty, &params), &seam))
                 }
                 _ => {}
             }
@@ -519,7 +651,7 @@ pub(crate) fn collect_trait_impl_exposures(
     //    (`impl T for Vec<infra::Forbidden>`). A bare `Self`/`Self::X` in a return (position 5)
     //    does not resolve and cannot double-fire here.
     out.extend(tag_paths(
-        paths_in_type(&item.self_ty),
+        paths_in_type_scoped(&item.self_ty, &params),
         &format!("{prefix} (self)"),
     ));
 
@@ -530,14 +662,17 @@ pub(crate) fn collect_trait_impl_exposures(
             syn::GenericParam::Type(tp) => {
                 let key = strip_raw(&tp.ident.to_string());
                 let seam = format!("{prefix} (where {key})");
-                out.extend(tag_paths(paths_in_bounds(&tp.bounds), &seam));
+                out.extend(tag_paths(
+                    paths_in_bounds_scoped(&tp.bounds, &params),
+                    &seam,
+                ));
             }
             // A const-param's *type* annotation (`impl<const N: crate::infra::X>`) is impl-site-
             // authored — v1's `paths_in_generics` observes it, so the hand-rolled walk must too.
             syn::GenericParam::Const(cp) => {
                 let key = strip_raw(&cp.ident.to_string());
                 let seam = format!("{prefix} (where {key})");
-                out.extend(tag_paths(paths_in_type(&cp.ty), &seam));
+                out.extend(tag_paths(paths_in_type_scoped(&cp.ty, &params), &seam));
             }
             syn::GenericParam::Lifetime(_) => {}
         }
@@ -550,8 +685,14 @@ pub(crate) fn collect_trait_impl_exposures(
                 // Both sides are impl-site-authored: a forbidden type in the bounded (LHS) type
                 // (`where crate::infra::X: Clone`) leaks as surely as one in the bound (RHS). v1's
                 // `paths_in_generics` observes both; the hand-rolled walk must not lose that.
-                out.extend(tag_paths(paths_in_type(&pt.bounded_ty), &seam));
-                out.extend(tag_paths(paths_in_bounds(&pt.bounds), &seam));
+                out.extend(tag_paths(
+                    paths_in_type_scoped(&pt.bounded_ty, &params),
+                    &seam,
+                ));
+                out.extend(tag_paths(
+                    paths_in_bounds_scoped(&pt.bounds, &params),
+                    &seam,
+                ));
             }
         }
     }
@@ -563,19 +704,23 @@ pub(crate) fn collect_trait_impl_exposures(
             //    (parity with v1's trait-def walk, which observes both).
             syn::ImplItem::Type(assoc) => {
                 let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));
-                out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+                out.extend(tag_paths(paths_in_type_scoped(&assoc.ty, &params), &seam));
             }
             syn::ImplItem::Const(assoc) => {
                 let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));
-                out.extend(tag_paths(paths_in_type(&assoc.ty), &seam));
+                out.extend(tag_paths(paths_in_type_scoped(&assoc.ty, &params), &seam));
             }
             // 5. method {name} return — the written return type only (never params/receiver).
+            //    Shadow the impl's params AND the method's own generics (`fn f<U>() -> U`).
             syn::ImplItem::Fn(method) => {
                 let seam = format!(
                     "{prefix} (method {} return)",
                     strip_raw(&method.sig.ident.to_string())
                 );
-                out.extend(tag_paths(paths_in_return(&method.sig), &seam));
+                out.extend(tag_paths(
+                    paths_in_return_scoped(&method.sig, &params),
+                    &seam,
+                ));
             }
             _ => {}
         }
@@ -587,8 +732,10 @@ pub(crate) fn collect_trait_impl_exposures(
 /// Kept **deliberately parallel, not merged**: signature-coupling pushes bare supertrait /
 /// associated-bound *paths* (whose collected paths a shared visitor would change), and this
 /// walk additionally observes associated-type **defaults** (`type T = Box<dyn …>;`), a
-/// position exposure-governance does not cover. A `dyn` cannot appear in a supertrait or a
-/// `: Bound` (those are trait, not type, positions), so they are skipped here.
+/// position exposure-governance does not cover. A bound's HEAD is a trait position (never a
+/// `dyn`), but a `dyn` legally appears inside a bound's generic argument
+/// (`Facade: AsRef<Box<dyn crate::Port>>`), so supertraits and associated-type bounds ARE walked
+/// (via [`dyns_in_bounds`]), matching the sibling path collector.
 pub(crate) fn collect_item_dyn_exposures(
     item: &syn::Item,
     module: &str,
@@ -665,21 +812,28 @@ pub(crate) fn collect_item_dyn_exposures(
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
             let trait_name = strip_raw(&item.ident.to_string());
-            out.extend(stamp_seam(
-                dyns_in_generics(&item.generics),
-                &item_seam("trait", module, &item.ident),
-            ));
+            let trait_seam = item_seam("trait", module, &item.ident);
+            out.extend(stamp_seam(dyns_in_generics(&item.generics), &trait_seam));
+            // Supertraits are part of the trait's public contract. Their bound HEAD is a trait
+            // position (never a `dyn`), but a `dyn` legally appears inside a supertrait bound's
+            // generic argument (`Facade: AsRef<Box<dyn crate::Port>>`) — a real exposed trait-object
+            // the sibling path collector already walks via paths_in_bounds. Match it here.
+            out.extend(stamp_seam(dyns_in_bounds(&item.supertraits), &trait_seam));
             for trait_item in &item.items {
                 match trait_item {
                     syn::TraitItem::Fn(method) => {
                         let seam = trait_method_seam(module, &trait_name, &method.sig.ident);
                         out.extend(stamp_seam(dyns_in_signature(&method.sig), &seam));
                     }
-                    // The associated-type **default** (`type T = Box<dyn …>;`) is an exposed
-                    // type position; the `: Bound`s are trait positions and cannot be `dyn`.
                     syn::TraitItem::Type(assoc) => {
+                        let seam = trait_assoc_seam("type", module, &trait_name, &assoc.ident);
+                        // A public associated type's `: Bound`s and GAT generics carry the same
+                        // dyn-in-generic-argument exposure as a supertrait; its **default**
+                        // (`type T = Box<dyn …>;`) is a plain exposed type position. All three are
+                        // walked by the sibling path collector, so the dyn rule must not lag them.
+                        out.extend(stamp_seam(dyns_in_bounds(&assoc.bounds), &seam));
+                        out.extend(stamp_seam(dyns_in_generics(&assoc.generics), &seam));
                         if let Some((_, default)) = &assoc.default {
-                            let seam = trait_assoc_seam("type", module, &trait_name, &assoc.ident);
                             out.extend(stamp_seam(dyns_in_type(default), &seam));
                         }
                     }
@@ -693,6 +847,14 @@ pub(crate) fn collect_item_dyn_exposures(
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
             let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
+            // A `dyn` written in the impl block's own generic-param bound or where-clause
+            // (`impl<T: AsRef<Box<dyn crate::Port>>> Foo<T>`) is exposed on the inherent API — the
+            // sibling path collector observes this position (via paths_in_generics), so the dyn rule
+            // must not lag it. Parallel to the struct/enum/trait arms, which already walk generics.
+            out.extend(stamp_seam(
+                dyns_in_generics(&item.generics),
+                &format!("impl <{owner}> (generics)"),
+            ));
             for impl_item in &item.items {
                 match impl_item {
                     syn::ImplItem::Fn(method) if is_public(&method.vis) => {
@@ -781,6 +943,27 @@ mod tests {
                 "crate::infra::Secret"
             ),
             "a pub inherent method signature is still observed"
+        );
+    }
+
+    #[test]
+    fn an_inherent_impl_generic_bound_is_observed() {
+        // FN closed: a forbidden type appearing only on the inherent impl's own generic-param bound
+        // or where-clause is now observed — parity with the trait-impl collector's where-walk and
+        // the struct/enum/type defs' `paths_in_generics` (both already observe this position).
+        assert!(
+            exposes(
+                "impl<T: crate::infra::Secret> Foo<T> { pub fn m(&self) {} }",
+                "crate::infra::Secret"
+            ),
+            "an inherent-impl generic-param bound must expose crate::infra::Secret"
+        );
+        assert!(
+            exposes(
+                "impl<T> Foo<T> where T: crate::infra::Secret { pub fn m(&self) {} }",
+                "crate::infra::Secret"
+            ),
+            "an inherent-impl where-clause bound must expose crate::infra::Secret"
         );
     }
 

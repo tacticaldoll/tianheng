@@ -98,10 +98,10 @@ jobs:
           set -euo pipefail
           ws="$PWD"
           patch=()
-          for s in xuanji guibiao hunyi louke; do
+          for s in xuanji xingbiao guibiao hunyi louke; do
             patch+=(--config "patch.crates-io.$s.path=\"$ws/crates/$s\"")
           done
-          for crate in xuanji guibiao hunyi louke tianheng; do
+          for crate in xuanji xingbiao guibiao hunyi louke tianheng; do
             cargo package --no-verify -p "$crate" "${patch[@]}"
             tarball="$(ls target/package/${crate}-*.crate | head -1)"
             work="$(mktemp -d)"

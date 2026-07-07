@@ -381,7 +381,14 @@ fn check_crossing(
 
     let finding = match info {
         Some(i) => format!("{} ({})", i.origin, i.type_name),
-        None => "<unregistered origin>".to_string(),
+        // An unregistered type recorded neither an origin nor a name, so the only per-type datum a
+        // crossing carries is its `TypeId` (from `Any`; a concrete type NAME is unrecoverable from a
+        // `&dyn Any` on stable Rust). Append it so two DISTINCT unregistered types crossing the same
+        // seam produce distinct `(target, rule, finding)` identities — otherwise baselining one
+        // silently masks the other (a false negative). The `<unregistered origin>` prefix is kept so
+        // the substring the prod contract/tests depend on still holds; the TypeId is stable within a
+        // build (a hash of the type's identity).
+        None => format!("<unregistered origin> {type_id:?}"),
     };
     // The rule family is the canonical `RUNTIME_SEAM_RULE` label; the allowed-origin set is the
     // per-boundary detail appended here, so the prod reaction and the `list` projection share one
@@ -572,6 +579,31 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(v.finding.contains("<unregistered origin>"), "{}", v.finding);
+    }
+
+    #[test]
+    fn distinct_unregistered_types_stay_distinct_findings() {
+        // Identity-collision closed (bughunt round 2): two DIFFERENT unregistered types crossing the
+        // same seam must not share one Violation identity — otherwise baselining one silently masks
+        // the other's later crossing (a false negative). The TypeId discriminant keeps them distinct.
+        let reg = registry(&[("seam", &["app::domain"], Severity::Enforce)], &[]);
+        let a = check_crossing("seam", TypeId::of::<Infra>(), &reg)
+            .unwrap()
+            .unwrap()
+            .0;
+        let b = check_crossing("seam", TypeId::of::<Domain>(), &reg)
+            .unwrap()
+            .unwrap()
+            .0;
+        assert!(a.finding.contains("<unregistered origin>"));
+        assert!(b.finding.contains("<unregistered origin>"));
+        assert_ne!(
+            a.id(),
+            b.id(),
+            "distinct unregistered types must have distinct Violation ids: {} vs {}",
+            a.finding,
+            b.finding
+        );
     }
 
     #[test]

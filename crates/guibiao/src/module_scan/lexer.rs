@@ -20,11 +20,16 @@ pub(super) fn strip_macro_bodies(source: &str) -> String {
             // `macro_rules! name <delim>…<delim>` — drop the name and the body.
             out.push(b' ');
             i = end;
-        } else if bytes[i] == b'!' && i > 0 && is_ident_byte(bytes[i - 1]) {
-            // A macro invocation `ident! <delim>…<delim>`: keep the `!`, drop the body.
-            // The `!` of `macro_rules!` is never reached here — the definition arm above
-            // consumes it. `!=` / unary `!expr` are not invocations: the byte after `!`
-            // is not an opening delimiter, so `macro_invocation_body_end` returns `None`.
+        } else if bytes[i] == b'!' && preceding_macro_name(bytes, i) {
+            // A macro invocation `path ! <delim>…<delim>`: keep the `!`, drop the body. Rust allows
+            // whitespace between the macro path and its `!` (`cfg_if ! { … }`), so the macro name is
+            // found across whitespace by `preceding_macro_name`. The `!` of `macro_rules!` never
+            // reaches here — the definition arm above consumes it. `!=` / unary `!expr` are not
+            // invocations: the byte after `!` is not an opening delimiter, so
+            // `macro_invocation_body_end` returns `None`; and a unary `!` on a parenthesized or block
+            // expression after a keyword (`return !(x)`, `break !{ … }`) is excluded by
+            // `preceding_macro_name` (a keyword is not a macro name), so a governed `use` inside such
+            // a real block is never wrongly stripped.
             match macro_invocation_body_end(bytes, i) {
                 Some(end) => {
                     out.push(b'!');
@@ -80,8 +85,8 @@ fn macro_rules_body_end(bytes: &[u8], i: usize) -> Option<usize> {
     balanced_group_end(bytes, skip_ws(j))
 }
 
-/// If `bytes[i]` is the `!` of a macro invocation `ident! <delim>…<delim>` (the caller
-/// has checked an identifier byte immediately precedes), return the index past the
+/// If `bytes[i]` is the `!` of a macro invocation `path ! <delim>…<delim>` (the caller
+/// has checked a macro name precedes via [`preceding_macro_name`]), return the index past the
 /// balanced body; otherwise `None`. The opening delimiter may follow whitespace.
 fn macro_invocation_body_end(bytes: &[u8], i: usize) -> Option<usize> {
     let mut j = i + 1;
@@ -89,6 +94,99 @@ fn macro_invocation_body_end(bytes: &[u8], i: usize) -> Option<usize> {
         j += 1;
     }
     balanced_group_end(bytes, j)
+}
+
+/// Whether the `!` at `bang` is preceded — across optional whitespace — by a **macro name**: a
+/// non-keyword identifier, tolerating a raw-identifier prefix (`r#foo ! { … }`). Rust permits
+/// whitespace between a macro path and its `!` (`cfg_if ! { … }`), so the name is found by skipping
+/// whitespace back to the identifier word. A **keyword** before the `!` (`return !(x)`,
+/// `break !{ … }`, `in !(y)`) means the `!` is a unary negation of the following expression/block —
+/// not a macro invocation — so that `(…)`/`{…}`/`[…]` is real code (which may contain a governed
+/// `use`) and must not be stripped. No preceding identifier (`!x`, a leading `!`) is likewise not an
+/// invocation. A raw identifier is always a name (never a keyword), so `r#try ! { … }` strips.
+fn preceding_macro_name(bytes: &[u8], bang: usize) -> bool {
+    let mut end = bang;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let mut start = end;
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    if start == end {
+        return false; // no identifier word precedes the `!`
+    }
+    let raw_ident = start >= 2
+        && bytes[start - 1] == b'#'
+        && bytes[start - 2] == b'r'
+        && (start == 2 || !is_ident_byte(bytes[start - 3]));
+    raw_ident || !is_rust_keyword(&bytes[start..end])
+}
+
+/// Whether `word` is a Rust keyword — a word that, before a `!`, marks a unary negation rather than
+/// a macro name (see [`preceding_macro_name`]). Mirrors the 漏刻 audit scanner's own keyword guard;
+/// 三儀 ⊥ 三儀 forbids sharing it, so the two scanners keep parallel copies until the deferred
+/// judgment-neutral-scanner extraction unifies them. `macro_rules` is deliberately absent (its
+/// definition is consumed by [`macro_rules_body_end`] before this is reached).
+fn is_rust_keyword(word: &[u8]) -> bool {
+    let Ok(word) = std::str::from_utf8(word) else {
+        return false;
+    };
+    matches!(
+        word,
+        "as" | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "dyn"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "fn"
+            | "for"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "pub"
+            | "ref"
+            | "return"
+            | "self"
+            | "Self"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "type"
+            | "unsafe"
+            | "use"
+            | "where"
+            | "while"
+            | "async"
+            | "await"
+            // reserved / edition keywords
+            | "abstract"
+            | "become"
+            | "box"
+            | "do"
+            | "final"
+            | "macro"
+            | "override"
+            | "priv"
+            | "typeof"
+            | "unsized"
+            | "virtual"
+            | "yield"
+            | "try"
+            | "gen"
+    )
 }
 
 /// Index just past the balanced delimiter group opening at `j` (which must be `{`, `(`,
@@ -154,6 +252,12 @@ pub(super) fn strip_comments_and_strings(source: &str) -> String {
                     i += 1;
                 }
             }
+            // Emit a separator so a comment wedged between two tokens does not fuse them: without
+            // it, `use/*c*/crate::X;` becomes `usecrate::X;` and the `use` keyword is no longer
+            // recognized (its following byte is an identifier byte), silently dropping the import.
+            // (A line comment leaves its `\n`, which already separates; `strip_macro_bodies` emits
+            // the same separator space for the same reason.)
+            out.push(b' ');
         } else if let Some((hashes, quote)) = raw_string_prefix(bytes, i) {
             // Raw string `r#*"…"#*`: no escapes; closed by `"` plus the same number
             // of `#`. Drop the whole literal so its text is never scanned.
@@ -248,12 +352,24 @@ fn raw_closing_matches(bytes: &[u8], at: usize, hashes: usize) -> bool {
 }
 
 /// Whether `keyword` appears as a standalone word starting exactly at `i` (bounded by
-/// non-identifier bytes on both sides).
+/// non-identifier bytes on both sides), and is **not** a raw identifier `r#keyword`.
+///
+/// The raw-identifier guard matters: `#` is not an identifier byte, so a bare
+/// "preceding byte is not an ident byte" test would treat the `use` inside `r#use` (a valid raw
+/// identifier — e.g. a field `r#use: bool`) as the `use` keyword, and the `use`-walk would then scan
+/// to the next `;` and swallow the following real `use` declaration (a false negative that silently
+/// disables the import boundary). So a `keyword` immediately preceded by `r#` (with a word boundary
+/// before the `r`) is a raw identifier, not the keyword — the same raw-ident handling
+/// `macro_rules_body_end` already applies to a macro name.
 pub(super) fn keyword_starts_at(bytes: &[u8], i: usize, keyword: &[u8]) -> bool {
     if !bytes[i..].starts_with(keyword) {
         return false;
     }
-    let before_ok = i == 0 || !is_ident_byte(bytes[i - 1]);
+    let raw_ident_prefixed = i >= 2
+        && bytes[i - 1] == b'#'
+        && bytes[i - 2] == b'r'
+        && (i == 2 || !is_ident_byte(bytes[i - 3]));
+    let before_ok = !raw_ident_prefixed && (i == 0 || !is_ident_byte(bytes[i - 1]));
     let after = i + keyword.len();
     let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
     before_ok && after_ok

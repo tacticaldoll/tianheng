@@ -149,8 +149,8 @@ pub fn check_and_cover(
 /// Resolve every workspace member's source-root directory from the target workspace at
 /// `manifest_path`, so a caller (the 天衡 shell, composing the 漏刻 runtime CI audit) can
 /// hand resolved `&Path`s to a dimension that must stay std-only and never read `cargo
-/// metadata` itself. Each root is the parent of the member's `lib` (else `bin`) target
-/// `src_path` — the same resolution the semantic dimension uses, not the `manifest_dir/src`
+/// metadata` itself. Each root is the parent of the member's `lib` (else `proc-macro`, else `bin`)
+/// target `src_path` — the same resolution the semantic dimension uses (both through 星表), not the `manifest_dir/src`
 /// shortcut (which would silently miss a custom layout). An unreadable workspace is a
 /// constitution error, never a silent empty set.
 pub fn workspace_member_src_dirs(manifest_path: &Path) -> Result<Vec<PathBuf>, String> {

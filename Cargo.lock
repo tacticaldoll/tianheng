@@ -4,18 +4,20 @@ version = 4
 
 [[package]]
 name = "guibiao"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde_json",
+ "xingbiao",
  "xuanji",
 ]
 
 [[package]]
 name = "hunyi"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde_json",
  "syn",
+ "xingbiao",
  "xuanji",
 ]
 
@@ -27,7 +29,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "louke"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "xuanji",
 ]
@@ -111,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "tianheng"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "guibiao",
  "hunyi",
@@ -126,8 +128,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
+name = "xingbiao"
+version = "0.1.6"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "xuanji"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "serde_json",
 ]

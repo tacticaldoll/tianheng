@@ -12,14 +12,44 @@ use super::{BareFallback, UseMap, resolve_path, strip_raw};
 /// A Visitor collecting every type path and trait-bound path within a syntax node, so a
 /// forbidden type nested in a generic argument (`Vec<crate::infra::Pool>`) or named in a
 /// bound (`T: crate::infra::Pooled`) is observed too.
+///
+/// `shadowed` names the generic **type parameters** in scope. A bare single-segment path equal to
+/// one of them is a *parameter use* (`x: T`), not a nominal type, so it is NOT collected: were it
+/// collected, a parameter named identically to a same-module `type` alias (`fn f<Secret>(x: Secret)`
+/// beside `type Secret = crate::infra::Real;`) would be misresolved through that alias to its
+/// forbidden target — a false positive. A param's *bounds* (`T: crate::infra::X`) are multi-segment
+/// paths and stay collected; only the bare param-as-type use is skipped.
 #[derive(Default)]
 pub(crate) struct PathCollector {
     pub(crate) paths: Vec<syn::Path>,
+    shadowed: std::collections::HashSet<String>,
+}
+
+impl PathCollector {
+    /// A collector that skips bare single-segment uses of the given in-scope generic type
+    /// parameters (see the type-level doc).
+    pub(crate) fn shadowing(shadowed: std::collections::HashSet<String>) -> Self {
+        Self {
+            paths: Vec::new(),
+            shadowed,
+        }
+    }
+
+    fn is_shadowed_param(&self, path: &syn::Path) -> bool {
+        path.leading_colon.is_none()
+            && path.segments.len() == 1
+            && matches!(path.segments[0].arguments, syn::PathArguments::None)
+            && self
+                .shadowed
+                .contains(&strip_raw(&path.segments[0].ident.to_string()))
+    }
 }
 
 impl<'ast> Visit<'ast> for PathCollector {
     fn visit_type_path(&mut self, node: &'ast syn::TypePath) {
-        self.paths.push(node.path.clone());
+        if node.qself.is_some() || !self.is_shadowed_param(&node.path) {
+            self.paths.push(node.path.clone());
+        }
         syn::visit::visit_type_path(self, node);
     }
 
@@ -30,13 +60,15 @@ impl<'ast> Visit<'ast> for PathCollector {
 }
 
 /// One observed shape node — a `dyn Trait` or a returned `impl Trait` — as its rendered shape
-/// (the stable finding string) plus its **principal trait** path as written (for operand-scoped
-/// matching). Shape-only governance reads `shape`; operand-scoped governance resolves `principal`
-/// (via [`resolve_path`], which reads the path's segment idents and ignores any generic/
-/// parenthesized args) against the forbidden set. Shared by the `dyn` and `impl Trait` collectors.
+/// (the stable finding string) plus its **non-auto trait** paths as written (for operand-scoped
+/// matching). Shape-only governance reads `shape`; operand-scoped governance resolves each entry of
+/// `principals` (via [`resolve_path`], which reads the path's segment idents and ignores any
+/// generic/parenthesized args) against the forbidden set, matching if **any** resolves into it. A
+/// `dyn` object has exactly one non-auto trait; a returned `impl Trait` may name several
+/// (`impl Foo + Bar`), so this is a list. Shared by the `dyn` and `impl Trait` collectors.
 pub(crate) struct ShapeExposure {
     pub(crate) shape: String,
-    pub(crate) principal: Option<syn::Path>,
+    pub(crate) principals: Vec<syn::Path>,
     /// The public **seam** (the owning item / sub-element) this shape is exposed at, e.g.
     /// `fn crate::api::make` or `field crate::api::Cfg::sink`. Empty as pushed by the visitor
     /// (which sees only the shape node, not its owner); the `collect_item_*` walker stamps it
@@ -74,29 +106,43 @@ impl<'ast> Visit<'ast> for DynCollector {
     fn visit_type_trait_object(&mut self, node: &'ast syn::TypeTraitObject) {
         self.exposures.push(ShapeExposure {
             shape: trait_object_to_string(node),
-            principal: principal_trait_path(&node.bounds),
+            principals: principal_trait_paths(&node.bounds),
             seam: String::new(),
         });
         syn::visit::visit_type_trait_object(self, node);
     }
 }
 
-/// The **principal (base) trait** path of a shape node's bounds: the path of the **first**
-/// `TypeParamBound::Trait`. Rust's grammar guarantees the base trait is syntactically first, so
-/// any auto-trait (`Send`, `Sync`) or lifetime bound can only follow it and is never the
-/// principal — hence "first trait bound", not a name-skip (`dyn Send` / `impl Send` correctly
-/// yields `Send`, its own principal). `None` if there is no trait bound at all (only lifetimes).
-/// Returned as the `syn::Path` as written; the caller resolves and canonicalizes it exactly as an
-/// exposed type path (segment idents only; generic/parenthesized args on `Iterator<…>` / `Fn(…)`
-/// are ignored by [`resolve_path`]). A `dyn` and an `impl Trait` share this — their `bounds` are
-/// the same `Punctuated<TypeParamBound>`.
-fn principal_trait_path(
+/// The **non-auto trait** paths among a shape node's bounds — the operands an operand-scoped rule
+/// matches against. A `dyn` object has exactly one non-auto (principal) trait; a returned
+/// `impl Trait` may name several (`impl Foo + Bar`), so every non-auto trait is returned, not just
+/// the first. Auto traits and lifetime bounds are excluded: they are never a forbiddable operand,
+/// and — contrary to a "first trait bound" assumption — **an auto trait may be written *before* the
+/// principal** (`dyn Send + crate::Port`, `impl Send + Foo`; both valid Rust, only lifetimes are
+/// order-constrained), so taking the first trait bound would resolve `Send` and silently pass a
+/// forbidden operand (a false negative). Empty when the bounds carry no non-auto trait
+/// (`dyn Send`, or lifetimes only) — correctly matching no operand.
+///
+/// Stated bound: auto traits are recognized by their std leaf name
+/// (`Send`/`Sync`/`Unpin`/`UnwindSafe`/`RefUnwindSafe`); a user-defined `auto trait` (unstable) or a
+/// local trait shadowing one of those names is out of scope. Each path is returned as written; the
+/// caller resolves and canonicalizes it exactly as an exposed type path (segment idents only;
+/// generic/parenthesized args on `Iterator<…>` / `Fn(…)` are ignored by [`resolve_path`]). A `dyn`
+/// and an `impl Trait` share this — their `bounds` are the same `Punctuated<TypeParamBound>`.
+fn principal_trait_paths(
     bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
-) -> Option<syn::Path> {
-    bounds.iter().find_map(|bound| match bound {
-        syn::TypeParamBound::Trait(trait_bound) => Some(trait_bound.path.clone()),
-        _ => None,
-    })
+) -> Vec<syn::Path> {
+    const AUTO_TRAITS: [&str; 5] = ["Send", "Sync", "Unpin", "UnwindSafe", "RefUnwindSafe"];
+    bounds
+        .iter()
+        .filter_map(|bound| match bound {
+            syn::TypeParamBound::Trait(trait_bound) => {
+                let leaf = strip_raw(&trait_bound.path.segments.last()?.ident.to_string());
+                (!AUTO_TRAITS.contains(&leaf.as_str())).then(|| trait_bound.path.clone())
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// Render a `dyn` trait-object to a stable finding string (`dyn crate::Port`,
@@ -110,7 +156,7 @@ fn principal_trait_path(
 /// different arguments, a `verbatim` type — is a **stated rendering bound** (it contributes a
 /// `_` and may share a finding with another equally-exotic dyn); this is the same
 /// `(target, rule, finding)` render-granularity bound `semantic-trait-impl-locality`'s
-/// `(impl for <self_ty>)` finding already carries, never a silent claim of cleanliness.
+/// `(impl <trait> for <self_ty>)` finding already carries, never a silent claim of cleanliness.
 fn trait_object_to_string(node: &syn::TypeTraitObject) -> String {
     let parts: Vec<String> = node.bounds.iter().map(bound_to_string).collect();
     format!("dyn {}", parts.join(" + "))
@@ -137,7 +183,7 @@ impl<'ast> Visit<'ast> for ImplTraitCollector {
     fn visit_type_impl_trait(&mut self, node: &'ast syn::TypeImplTrait) {
         self.exposures.push(ShapeExposure {
             shape: impl_trait_to_string(node),
-            principal: principal_trait_path(&node.bounds),
+            principals: principal_trait_paths(&node.bounds),
             seam: String::new(),
         });
         syn::visit::visit_type_impl_trait(self, node);
@@ -242,7 +288,21 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
             Some(format!("({})", parts?.join(", ")))
         }
         syn::Type::Slice(s) => Some(format!("[{}]", type_to_string(&s.elem)?)),
-        syn::Type::Array(a) => Some(format!("[{}; _]", type_to_string(&a.elem)?)),
+        // Render the length too (`[u8; 4]` vs `[u8; 8]`) so literal-length-differing arrays stay
+        // distinct findings. A complex const length (`N + 1`) is unrenderable: keep the ELEMENT type
+        // and mark only the length `_` — never propagate `None` for the whole array. Propagating
+        // `None` would route the array into the caller's single shared `_` seam bucket, colliding
+        // `[u8; N+1]` with `[u16; N*2]` (losing even the element-type distinction) so a baseline
+        // masks a second forbidden exposure. `[elem; _]` keeps distinct element types distinct; two
+        // complex-length arrays of the SAME element type still share it — the documented
+        // render-granularity bound (one finding, never zero), matching the `dyn` `_` bound.
+        syn::Type::Array(a) => {
+            let elem = type_to_string(&a.elem)?;
+            match expr_to_string(&a.len) {
+                Some(len) => Some(format!("[{elem}; {len}]")),
+                None => Some(format!("[{elem}; _]")),
+            }
+        }
         syn::Type::Group(g) => type_to_string(&g.elem),
         syn::Type::Paren(p) => type_to_string(&p.elem),
         // A nested trait-object renders through the same `dyn …` form, so a `dyn` hidden inside
@@ -318,7 +378,7 @@ pub(crate) fn canonical_self_owner(
 /// has none, or `None` when any argument is unrenderable (a complex const-generic expression) or
 /// the segment is parenthesized (`Fn(..)`). Used to append a self type's generics to its resolved
 /// base path in [`canonical_self_owner`].
-fn render_last_segment_args(path: &syn::Path) -> Option<String> {
+pub(crate) fn render_last_segment_args(path: &syn::Path) -> Option<String> {
     match &path.segments.last()?.arguments {
         syn::PathArguments::None => Some(String::new()),
         syn::PathArguments::AngleBracketed(args) => {

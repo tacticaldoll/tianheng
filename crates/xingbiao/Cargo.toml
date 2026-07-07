@@ -1,0 +1,20 @@
+[package]
+name = "xingbiao"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/xingbiao"
+readme = "README.md"
+# 星表 (Xīngbiǎo) — the star catalogue: the tabulated register of declared workspace data
+# every instrument references. A coined / narrative name in the 璿璣玉衡 celestial register
+# (like 璇璣, 圭表, 渾儀, 漏刻), no role-prefix: meaning lives here in the SSOT, not in a
+# self-describing name. It is the shared declared-workspace-data substrate below the 三儀 —
+# sibling to 璇璣 (the reaction model), but for observation rather than measure.
+description = "星表 (Xingbiao) — Tianheng's shared declared-workspace-data substrate: reads `cargo metadata --no-deps` and looks up packages and their crate-root source files, the tabulated catalog every observation dimension references before it observes. serde_json-only, below all dimensions like 璇璣 — a single source of truth so the static and semantic dimensions read the workspace through one reader instead of two drifting twins."
+keywords = ["governance", "architecture", "cargo-metadata", "workspace", "ci"]
+categories = ["development-tools"]
+
+[dependencies]
+serde_json = { workspace = true }

@@ -209,6 +209,55 @@ fn report_sarif_merges_anchor_and_polarity_into_one_property_bag() {
 }
 
 #[test]
+fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
+    // FN closed (bughunt round 3): a violation's identity is (target, rule, finding), but SARIF's
+    // ruleId/message carry only rule and finding. For a file-less violation `target` is the sole
+    // discriminator, so two violations differing ONLY in target rendered byte-identical and a
+    // fingerprint-deduping ingester (GitHub code scanning) collapsed them. Each now carries a
+    // partialFingerprint over the full identity, keeping distinct violations distinct.
+    let same_rule = "deny external dependencies";
+    let same_finding = "serde";
+    let same_reason = "keep the graph lean";
+    let mk = |target: &str| {
+        Violation::new(
+            BoundaryKind::Crate,
+            target.to_string(),
+            same_rule.to_string(),
+            same_finding.to_string(),
+            same_reason.to_string(),
+            Severity::Enforce,
+        )
+    };
+    let outcome = Outcome::Violations(Report::new(vec![mk("web"), mk("cli")]));
+    let sarif: Value = serde_json::from_str(&report_sarif(&outcome)).expect("valid SARIF");
+    let results = sarif["runs"][0]["results"]
+        .as_array()
+        .expect("results array");
+    assert_eq!(
+        results.len(),
+        2,
+        "two violations differing only in target are two results: {results:?}"
+    );
+    let fp = |r: &Value| {
+        r["partialFingerprints"]["tianhengViolationId/v1"]
+            .as_str()
+            .expect("a fingerprint string")
+            .to_string()
+    };
+    let (fp0, fp1) = (fp(&results[0]), fp(&results[1]));
+    assert_ne!(
+        fp0, fp1,
+        "target-differing violations must get distinct fingerprints: {fp0} vs {fp1}"
+    );
+    // Both targets appear across the fingerprints (message alone could not distinguish them).
+    let joined = format!("{fp0}{fp1}");
+    assert!(
+        joined.contains("web") && joined.contains("cli"),
+        "the fingerprint carries the discriminating target: {joined}"
+    );
+}
+
+#[test]
 fn dyn_trait_text_lists_each_boundary() {
     let boundary = DynTraitBoundary::in_crate("app")
         .module("crate::core")

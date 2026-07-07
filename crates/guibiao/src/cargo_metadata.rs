@@ -1,34 +1,12 @@
 use super::*;
 use serde_json::Value;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
-pub(crate) fn cargo_metadata(manifest_path: &Path) -> Result<Value, String> {
-    let output = Command::new("cargo")
-        .args([
-            "metadata",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--manifest-path",
-        ])
-        .arg(manifest_path)
-        .output()
-        .map_err(|err| err.to_string())?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-
-    serde_json::from_slice(&output.stdout).map_err(|err| err.to_string())
-}
-
-pub(crate) fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value> {
-    metadata["packages"]
-        .as_array()?
-        .iter()
-        .find(|candidate| candidate["name"].as_str() == Some(package))
-}
+// The dimension-agnostic cargo-metadata reads (`cargo_metadata`, `find_package`, `crate_root_file`,
+// and `member_src_dirs`, a pure derivation of the latter) live in 星表 (`xingbiao`), the shared
+// substrate below the 三儀 — one reader, so the static and semantic dimensions cannot drift apart on
+// how they read the workspace. 圭表 keeps only its own *observation semantics* below (dependency
+// source/kind, workspace membership), which are not neutral infrastructure.
+pub(crate) use xingbiao::{cargo_metadata, crate_root_file, find_package, member_src_dirs};
 
 /// The names of the workspace's member crates. Because Modou runs
 /// `cargo metadata --no-deps`, the `packages` array contains exactly the workspace
@@ -48,52 +26,6 @@ pub(crate) fn workspace_member_names(metadata: &Value) -> Vec<String> {
     names.sort();
     names.dedup();
     names
-}
-
-/// A crate's root source file: the `lib` target's `src_path`, else a `bin` target's,
-/// observed from `cargo metadata`. This is the same resolution the 渾儀 (semantic)
-/// dimension uses — the dimensions cannot share code (三儀 ⊥ 三儀 forbids a cross-dimension
-/// dependency), so they agree by using the same algorithm, not the same function. It is NOT
-/// the `manifest_dir/src` shortcut, which is wrong for a custom `[lib] path` or a bin-only
-/// crate — a member whose real source root is missed would let a probe there escape the
-/// runtime CI audit (a false negative).
-///
-/// Bound (stated, not silent): a member with **only** a `proc-macro`, `test`, `example`, or
-/// `bench` target — no `lib`/`bin` — resolves to `None` and is skipped. Such a member's source
-/// is out of the runtime-audit corpus, the same lib/bin-subtree bound the semantic dimension
-/// has; declaring a runtime seam probed only from there is unsupported by design.
-pub(crate) fn crate_root_file(package: &Value) -> Option<PathBuf> {
-    let targets = package["targets"].as_array()?;
-    let has_kind = |target: &Value, wanted: &str| {
-        target["kind"]
-            .as_array()
-            .map(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
-            .unwrap_or(false)
-    };
-    let pick = targets
-        .iter()
-        .find(|t| has_kind(t, "lib"))
-        .or_else(|| targets.iter().find(|t| has_kind(t, "bin")))?;
-    pick["src_path"].as_str().map(PathBuf::from)
-}
-
-/// Each workspace member's source-root directory (the parent of its [`crate_root_file`]).
-/// Members whose root cannot be resolved are skipped (they carry no lib/bin source to scan).
-/// Deduped and sorted for a deterministic corpus.
-pub(crate) fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = metadata["packages"]
-        .as_array()
-        .map(|packages| {
-            packages
-                .iter()
-                .filter_map(crate_root_file)
-                .filter_map(|root| root.parent().map(Path::to_path_buf))
-                .collect()
-        })
-        .unwrap_or_default();
-    dirs.sort();
-    dirs.dedup();
-    dirs
 }
 
 /// Whether a `cargo metadata` dependency belongs to the selected table. `kind` is
@@ -229,50 +161,6 @@ pub(crate) fn dependencies_with_disallowed_source(
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn member_src_dirs_resolves_from_src_path_including_a_custom_layout() {
-        // crate_a: conventional src/lib.rs → src dir is .../crate_a/src
-        // crate_b: a custom [lib] path = "lib.rs" (root at the manifest dir, NOT under src/)
-        //          → resolving via manifest_dir/src would WRONGLY miss it; src_path is right.
-        // crate_c: bin-only with src/main.rs.
-        let metadata = json!({
-            "packages": [
-                { "name": "crate_a", "targets": [
-                    { "kind": ["lib"], "src_path": "/ws/crate_a/src/lib.rs" }
-                ]},
-                { "name": "crate_b", "targets": [
-                    { "kind": ["lib"], "src_path": "/ws/crate_b/lib.rs" }
-                ]},
-                { "name": "crate_c", "targets": [
-                    { "kind": ["bin"], "src_path": "/ws/crate_c/src/main.rs" }
-                ]},
-            ]
-        });
-        let dirs = member_src_dirs(&metadata);
-        assert!(dirs.contains(&PathBuf::from("/ws/crate_a/src")), "{dirs:?}");
-        assert!(
-            dirs.contains(&PathBuf::from("/ws/crate_b")),
-            "a custom [lib] path must resolve to its real root, not manifest_dir/src: {dirs:?}"
-        );
-        assert!(dirs.contains(&PathBuf::from("/ws/crate_c/src")), "{dirs:?}");
-    }
-
-    #[test]
-    fn member_src_dirs_prefers_lib_over_bin_and_skips_rootless_members() {
-        let metadata = json!({
-            "packages": [
-                { "name": "both", "targets": [
-                    { "kind": ["bin"], "src_path": "/ws/both/src/main.rs" },
-                    { "kind": ["lib"], "src_path": "/ws/both/src/lib.rs" }
-                ]},
-                { "name": "rootless", "targets": [] },
-            ]
-        });
-        let dirs = member_src_dirs(&metadata);
-        // The lib target wins; both targets share the same src dir here, so one entry.
-        assert_eq!(dirs, vec![PathBuf::from("/ws/both/src")], "{dirs:?}");
-    }
 
     #[test]
     fn classify_source_reads_the_declared_source_field() {

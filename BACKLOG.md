@@ -43,66 +43,37 @@ complete, so the near-term line is **0.1.x, a patch line**:
 dimension / 三司 sections below; the remaining forward work stays there as forward depth. The 0.2.0
 bundle above remains the only currently named breaking line.
 
-### 0.1.6 — metadata SSOT extraction (dissolve the "don't share" prose into an enforced boundary)
+### 0.1.6 — metadata SSOT extraction + forbidden-marker re-export/rename hardening · **SHIPPED**
 
-The three dimensions reimplement parallel logic (三儀 ⊥ 三儀 forbids sharing code), and the
-adversarial-review rounds surfaced this as a recurring **twin-drift** bug class: one dimension's
-copy is hardened or corrected while its sibling's is not (symlink recursion, `file_module_path`'s
-`lib`/`main` depth, cross-boundary dedup, keyword handling — and the **proc-macro `crate_root_file`
-false negative**, a pure metadata-layer drift). `find_package` / `crate_root_file` /
-`dependency_names` are written **twice** — `guibiao/src/cargo_metadata.rs` and
-`hunyi/src/metadata.rs` — both `serde_json`-only and dimension-agnostic.
+The `serde_json`-only cargo-metadata substrate (`cargo_metadata` / `find_package` /
+`crate_root_file`), written twice and drifted (the proc-macro `crate_root_file` false negative),
+extracted into **星表 (`xingbiao`)** below the 三儀 — sibling to 璇璣, enforced by
+`restrict_dependencies_to(["serde_json"])` and the 圭表/渾儀 downward allowlist edges. The metadata
+twin-drift class is now structurally impossible. Recorded in `PROJECT.md` Decisions (the 星表 entry);
+the internal refactor followed the `xuanji` precedent (no OpenSpec capability change).
 
-The current "intentionally not shared" stance (`PROJECT.md`, Name-resolution decision) is **prose,
-not a reaction**, and its "a shared resolver would force `syn` into the core" reasoning is about the
-*resolver*, not `serde_json`-only metadata parsing. Since Tianheng governs its own dependency graph,
-the safe, non-proliferating, one-way dependency is itself **enforceable** — as 璇璣 already proves. So:
+The **渾儀 forbidden-marker** capability closed two false negatives inside its observed scope — the
+same class as the v0.1.3 re-export-exposure closure below, in the sibling capability. (1) A hand impl
+whose self-type is spelled through a `pub use` re-export (`impl Marker for crate::facade::Order`) was
+not followed to the definition: the impl form chased only the type-alias map, never the re-export
+closure its siblings (trait-impl, exposure) already close. (2) Leaf-matching compared the *written*
+trait/derive leaf, so a local `use … as` rename (`impl Ser for …` / `#[derive(Ser)]`) evaded it.
+Both are closed by folding the self-type canonicalization into `resolve_self_type` — canonical **by
+construction**, the re-export and type-alias closures interleaved to a fixpoint, so no caller can
+resolve a self-type without closing them (the structural-convergence固化 discipline); it keeps the
+`CurrentModule`-fallback alias-target map, not the `Ignore`-built exposure alias map, so an alias to
+a bare local struct (`type Bar = Real`) still lands — and by resolving the trait/derive leaf through
+the site's `use`-map before matching, falling back to the written leaf so leaf-matching stays
+cross-crate-blind. Spec-conforming bugfix (semantic-forbidden-marker already forbade a false negative
+in the observed scope); its scenarios were aligned to the fixed behavior. Additive/patch, no OpenSpec
+capability change.
 
-- **Extract** the dimension-agnostic cargo-metadata substrate (`find_package`, `crate_root_file`,
-  `dependency_names`, the neutral package/target/dep-name lookup) into a **new low crate**, sibling
-  to 璇璣, **below the 三儀**. Each dimension depends on it one-way (downward); its own self-law is
-  `restrict_dependencies_to(["serde_json"])`. **This is the new dogfood**: Tianheng enforcing, on its
-  own graph, the very (non-)proliferation it exists to catch — a single SSOT makes the metadata
-  twin-drift class *structurally impossible*.
-- **Scope — what moves vs not.** Only the dimension-agnostic substrate moves. `classify_source`
-  (registry/git/path) and dep-kind (normal/dev/build) **stay in 圭表** — they are its *observation
-  semantics* (crate-source-boundary), not neutral infrastructure. The `syn`-AST **resolver** and the
-  byte-scan-vs-AST **module reachability** (`file_module_path`/`reachable_modules` vs
-  `resolve_module_items`) do **not** move: sharing them genuinely forces `syn` into the light core, a
-  real constraint — so that half of the prose is **kept but narrowed** to "the resolution *engines*
-  differ", not a blanket "nothing is shared".
-- **Not 璇璣.** Metadata parsing is *observation* and spawns `cargo` (IO), so it must not sit in the
-  measure-only, verdict-free model. The prose's "dimension vs 璇璣" dichotomy missed the third home: a
-  shared observation **substrate** crate, which is neither dimension nor measure.
-- **Mechanics.** Behavior-preserving; the moved symbols are `pub(crate)` (not public API), so this is
-  the **璇璣-extraction precedent** — an internal refactor, *not* an OpenSpec capability change: a
-  steward-gated `self_governance.rs` amendment (the new crate's boundary + each dimension's allowlist
-  gains the one downward path), a `PROJECT.md` Decisions update, and **retiring the metadata half of
-  the Name-resolution prose** (prose → reaction; run `dissolve` to classify it).
-- **Naming (a seed, not yet bound).** The substrate is neither a fourth 儀 nor 璇璣: it is the
-  shared *declared-workspace-data* base (it reads `cargo metadata`), sibling to 璇璣's shared
-  *reaction-model* base — so the name wants the 璿璣玉衡 / astronomical-artifact register. Two
-  finalists: **星表** (`xingbiao`) — the tabulated declared catalog every instrument references;
-  best semantic fit and in-scheme, but its `-biao` echoes 圭表 (`guibiao`); and **圖籍** (`tuji`) —
-  the authoritative register of what a domain contains (most literal for the workspace inventory,
-  distinct sound, governance-resonant), but off the celestial-instrument scheme (輿圖/版籍 register).
-  Trade-off: scheme purity → **星表**; semantic precision / avoiding the `-biao` echo → **圖籍**.
-  **Avoid 基準** (`jizhun`) — it collides with the model's existing `Baseline`. Runners-up carried
-  real strikes: 星圖 (`xingtu`) risks a "graph/map" misread against the universal-graph-API non-goal;
-  曆表 (`libiao`) connotes a time-series ephemeris where the metadata is a snapshot (and repeats the
-  `-biao` echo); 經緯 (`jingwei`) is an evocative reference-frame but a loose fit for "reads the
-  manifest"; 候簿 (`houbu`) uniquely encodes *observation* but 簿 drags it toward an event log.
-  **Bind the name at build time**, after `dissolve` locks exactly which symbols move (name follows
-  the settled scope), not now.
-- **Version: 0.1.6 patch.** Non-breaking (zero adopter-facing API change; moved symbols are internal),
-  so patch is the honest bump — a minor would be a forbidden vanity bump. It rides **its own** release,
-  separate from 0.1.5's polish/bug-fixes, so the constitution amendment lands as one clean,
-  steward-reviewable change, not a rider on unrelated diffs.
-- **Considered alternative (kept in reserve):** a cross-dimension **conformance reaction** — a
-  `cargo test` gate feeding identical inputs to each dimension's parallel logic and asserting they
-  agree on the overlapping contracts. It catches drift *without* moving code, and remains the answer
-  for the Tier-B logic that genuinely cannot share (the resolver); it complements, not replaces, the
-  metadata SSOT.
+- **Reserve (still future): a cross-dimension conformance reaction** for the logic that genuinely
+  cannot share — the `syn`-vs-token-scan **resolvers** and byte-scan-vs-AST **module reachability**,
+  which stay per-dimension because sharing them forces `syn` into the light core. A `cargo test` gate
+  feeding identical inputs to each dimension's parallel logic and asserting agreement would catch
+  drift *without* moving code. Deferred until a resolver twin-drift actually bites; 星表 does not
+  address it.
 
 ## Reaction phases — the 三儀 (observation dimensions)
 
@@ -308,14 +279,14 @@ never silent — the FN-first contract requires a known gap be recorded, not hid
   `ImplItem::Type` (its target), seam-qualified by `inherent_assoc_seam(kind, owner, name)` →
   `{const|type} <{owner}>::{name}`, so a forbidden type in a public inherent assoc const/type reacts
   (was skipped — only methods). Shipped as an OpenSpec change modifying `semantic-signature-coupling`.
-- **`dyn`/`impl Trait` shape collectors share the inherent-impl assoc blind spot — residual, deferred
-  (v0.1.5 sweep).** `collect_item_dyn_exposures` and the returned-`impl-Trait` collector also iterate
-  `ImplItem::Fn` only, so `impl Foo { pub type T = Box<dyn crate::infra::Secret>; }` still silently
-  passes the **shape** reaction (`must_not_expose_dyn` / `must_not_expose_impl_trait`) — a sibling FN
-  in a different capability (shape exposure, not signature-coupling; the latter now catches the
-  nested `crate::infra::Secret`). Fix: give those collectors the same public `ImplItem::Const`/`Type`
-  arms. Additive FN closure; its own change, not mixed with the signature-coupling fix. Born when
-  built.
+- **`dyn` shape collector's inherent-impl assoc blind spot — CLOSED (v0.1.5).**
+  `collect_item_dyn_exposures` now observes public `ImplItem::Const`/`Type` (its arms at
+  `collect.rs:705`/`709`), so `impl Foo { pub type T = Box<dyn crate::infra::Secret>; }` reacts to
+  `must_not_expose_dyn`. The `impl Trait` shape collector (`collect_item_return_impl_traits`) stays
+  `ImplItem::Fn`-only **by correctness, not omission**: return-position `impl Trait` is the only
+  stable-Rust existential leak, and an associated `const`/`type` has no return type (`const: impl
+  Trait` is invalid, `type = impl Trait` is unstable TAIT), so there is nothing for it to observe
+  there. No residual FN remains in this pair.
 
 Forward depths (born when built, same `syn` source):
 - **`must_not_expose_existential` (unifier)** — a possible future capability folding impl-trait

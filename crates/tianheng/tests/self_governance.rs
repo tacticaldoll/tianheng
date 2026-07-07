@@ -47,8 +47,11 @@ fn workspace_manifest() -> Option<PathBuf> {
 ///
 /// **Cross-cutting — 三儀 ⊥ 三儀 (the dimensions are mutually independent).** The
 /// observation dimensions — 圭表 (static), 渾儀 (semantic), and 漏刻 (runtime) — never depend
-/// on one another; each sits on 璇璣 and is composed into one reaction *only* by the 天衡 shell
-/// (for the CI dimensions) or reacts independently in prod (漏刻), never via a sibling. This
+/// on one another; each sits on the shared bases below them (璇璣 the reaction model, and — for
+/// the dimensions that read the workspace — 星表 the metadata substrate) and is composed into one
+/// reaction *only* by the 天衡 shell (for the CI dimensions) or reacts independently in prod
+/// (漏刻), never via a sibling. Depending on a shared base beneath the dimensions is not a
+/// cross-dimension edge; 三儀 ⊥ 三儀 forbids only dimension-to-dimension dependence. This
 /// law is **named here and in each dimension's `because`**, and a reaction —
 /// [`dimension_boundaries_declare_the_mutual_independence_law`] — asserts that every dimension
 /// boundary carries the clause, so the claim is *self-observed*, not a hand-maintained pointer
@@ -74,14 +77,29 @@ fn tianheng_constitution() -> GnomonConstitution {
                 ),
         )
         .boundary(
+            CrateBoundary::crate_("xingbiao")
+                .restrict_dependencies_to(["serde_json"])
+                .because(
+                    "星表 is the shared declared-workspace-data substrate: serde_json only, and \
+                     below every dimension like 璇璣 — it reads `cargo metadata` and must not \
+                     depend on any workspace member, so the static and semantic dimensions read \
+                     the workspace through one source of truth, not two hand-copied twins that \
+                     drift apart. Not 璇璣: it does IO (spawns cargo) and observes, so it is not \
+                     the measure-only reaction model — a substrate beneath the dimensions, not \
+                     the measure they react in",
+                ),
+        )
+        .boundary(
             CrateBoundary::crate_("guibiao")
-                .restrict_dependencies_to(["serde_json", "xuanji"])
+                .restrict_dependencies_to(["serde_json", "xuanji", "xingbiao"])
                 .because(
                     "the 圭表 core stays dependency-light: serde_json is the only external \
                      dependency (no syn / proc-macro, no heavy graph or runtime crates); the \
-                     internal dependency on 璇璣 (the shared reaction model) is the price of \
-                     the family split — the model is measure-only: it renders no verdict and \
-                     drags in no engine. 三儀 ⊥ 三儀: this allowlist \
+                     internal dependencies on 璇璣 (the shared reaction model) and 星表 (the \
+                     shared metadata substrate) are the price of the family split — both are \
+                     serde_json-only bases below the dimensions: the model renders no verdict \
+                     and the substrate only reads the workspace, neither drags in an engine. \
+                     三儀 ⊥ 三儀: this allowlist \
                      names no sibling dimension, so 圭表 cannot depend on 渾儀 (nor, when born, \
                      漏刻) — the dimensions are composed only by the 天衡 shell, never by each \
                      other",
@@ -97,11 +115,12 @@ fn tianheng_constitution() -> GnomonConstitution {
         )
         .boundary(
             CrateBoundary::crate_("hunyi")
-                .restrict_dependencies_to(["xuanji", "serde_json", "syn"])
+                .restrict_dependencies_to(["xuanji", "xingbiao", "serde_json", "syn"])
                 .because(
                     "渾儀 is the semantic dimension and the sole holder of the heavy syn AST \
                      dependency — quarantined here, never the core or the model; it depends on \
-                     璇璣 (the reaction model), serde_json, and syn only. 三儀 ⊥ 三儀: it never \
+                     璇璣 (the reaction model), 星表 (the shared metadata substrate), serde_json, \
+                     and syn only. 三儀 ⊥ 三儀: it never \
                      depends on the sibling 圭表 dimension (nor, when born, 漏刻), and never on \
                      the 天衡 shell — the dimensions are composed only by the shell, never by \
                      each other (functional dimension ⊥ imperative shell)",

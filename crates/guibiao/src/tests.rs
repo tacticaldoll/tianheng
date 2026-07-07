@@ -77,6 +77,49 @@ fn expand_use_tree_does_not_overflow_on_pathological_nesting() {
 }
 
 #[test]
+fn a_raw_identifier_use_does_not_swallow_the_following_real_use() {
+    use crate::module_scan::imported_module_paths;
+    // `r#use` is a valid raw identifier (a field here). `#` is not an identifier byte, so a naive
+    // "the byte before `use` is not an ident byte" test would treat the `use` inside `r#use` as the
+    // keyword, scan to the next `;`, and swallow the following real `use` — a false negative that
+    // silently disables the import boundary. The observed imports must be identical to the same
+    // source without the raw-identifier field, and must include the real import.
+    let with_raw = "struct Config { r#use: bool }\nuse crate::secret::Thing;\n";
+    let without = "struct Config { flag: bool }\nuse crate::secret::Thing;\n";
+    let observed = imported_module_paths(with_raw, "crate::m", &[]);
+    assert_eq!(
+        observed,
+        imported_module_paths(without, "crate::m", &[]),
+        "an r#use field must not change which imports are observed"
+    );
+    assert!(
+        !observed.is_empty(),
+        "the real `use crate::secret::Thing` after an r#use field must still be observed: {observed:?}"
+    );
+}
+
+#[test]
+fn a_use_in_a_whitespace_spaced_macro_body_is_not_a_real_import() {
+    use crate::module_scan::imported_module_paths;
+    // Rust allows whitespace between a macro path and its `!` (`cfg_if ! { … }`). The body is a
+    // macro-generated context, out of scope per the module-boundary spec, so its `use` must be
+    // stripped — not observed as a real import (a false positive).
+    let spaced = "cfg_if ! { use crate::secret::X; }\n";
+    assert!(
+        imported_module_paths(spaced, "crate::m", &[]).is_empty(),
+        "a use inside a whitespace-spaced macro invocation body is macro-generated, not a real import"
+    );
+    // But a unary `!` on a real block after a keyword (`return !{ … }`) is NOT a macro — its block
+    // is real code, and a `use` inside it must still be observed (guarding against a false negative
+    // if the whitespace tolerance forgot the keyword check).
+    let keyword_not = "pub fn f() -> bool { return !{ use crate::real::Y; true }; }\n";
+    assert!(
+        !imported_module_paths(keyword_not, "crate::m", &[]).is_empty(),
+        "a use in a real block after `return !` must still be observed — a keyword is not a macro name"
+    );
+}
+
+#[test]
 fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
     // `lib.rs`/`main.rs` are segment-less only at the crate root. A declared submodule file
     // `foo/lib.rs` is `crate::foo::lib` (matching rustc and 渾儀's descent), so a boundary on it

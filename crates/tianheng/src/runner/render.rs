@@ -150,6 +150,16 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
                     "level": level,
                     "message": { "text": format!("{} (found: {})", v.reason, v.finding) },
                 });
+                // A violation's identity is (target, rule, finding) — but SARIF's `ruleId`/message
+                // carry only rule and finding. For a file-less violation (a dependency edge, a
+                // runtime seam) `target` is the SOLE discriminator, so two violations differing only
+                // in target would otherwise render byte-identical and a fingerprint-deduping ingester
+                // (GitHub code scanning) would collapse them — masking the second in the SARIF surface
+                // even though exit/JSON/text keep both. Emit the full identity as a partialFingerprint
+                // so distinct violations stay distinct alerts.
+                result["partialFingerprints"] = json!({
+                    "tianhengViolationId/v1": format!("{}\u{1f}{}\u{1f}{}", v.target, v.rule, v.finding),
+                });
                 if let Some(file) = &v.file {
                     // File-level only: artifactLocation.uri, no `region` (line is not observed).
                     result["locations"] = json!([{

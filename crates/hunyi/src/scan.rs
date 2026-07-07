@@ -6,11 +6,12 @@
 //! `module_resolve` (which does not fit a "nowhere except here" property), reusing only the leaf
 //! primitives and the shared resolver.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use syn::parse::Parser;
 
+use crate::crate_scope::{child_module_names, local_type_namespace_names};
 use crate::errors::missing_module_file_error;
 use crate::module_resolve::{locate_module_file, read_parse};
 use crate::resolve::{
@@ -18,7 +19,6 @@ use crate::resolve::{
     collect_reexports, collect_uses, extern_verbatim_renamed, resolve_path, strip_raw,
 };
 use crate::syn_util::has_path_attr;
-use crate::{child_module_names, local_type_namespace_names};
 
 /// One impl site observed in the crate: its enclosing module path, the written trait
 /// path, the implemented-for type, and that module's `use`-map (for resolution).
@@ -30,12 +30,14 @@ pub(crate) struct ImplSite {
 }
 
 /// One type definition observed in the crate: its canonical path (`module::Name`), the module
-/// it is defined in (for a forbidden-`derive` finding's source file), and the paths in its
-/// `#[derive(...)]`/`#[cfg_attr(_, derive(...))]`.
+/// it is defined in (for a forbidden-`derive` finding's source file), the paths in its
+/// `#[derive(...)]`/`#[cfg_attr(_, derive(...))]`, and that module's `use`-map (so a renamed
+/// derive macro, `use serde::Serialize as Ser; #[derive(Ser)]`, resolves to its true leaf).
 pub(crate) struct TypeDef {
     pub(crate) canonical: String,
     pub(crate) module: String,
     pub(crate) derives: Vec<syn::Path>,
+    pub(crate) uses: UseMap,
 }
 
 /// One crate-wide scan: the `pub use` re-export closure, the set of locally-defined trait
@@ -47,6 +49,17 @@ pub(crate) struct CrateScan {
     pub(crate) trait_defs: HashSet<String>,
     pub(crate) impls: Vec<ImplSite>,
     pub(crate) type_defs: Vec<TypeDef>,
+    /// For each non-generic `type X = <path>;` whose target is a nominal path, the alias's canonical
+    /// key (`{module}::X`) mapped to the **landing type** its target resolves to under the same
+    /// bare-head `CurrentModule` fallback the impl-self check uses (`type Bar = Real` in `crate::dom`
+    /// → `crate::dom::Real`; `type Baz = Vec<u8>` / `= String` → `crate::dom::Vec` / `crate::dom::String`,
+    /// neither crate-defined). A `type` alias defines no new type — coherence sees through it — so a
+    /// marker impl'd on `Bar` governs a subtree type IFF this landing type is itself a crate-defined
+    /// subtree type. The forbidden-marker check consults this to react on `type Bar = Real` while NOT
+    /// firing on an alias to a foreign/prelude type (whose marker lands off the governed subtree).
+    /// (This is distinct from `aliases`, the exposure closure's resolvable-target map, which does not
+    /// record a bare-local-struct target.)
+    pub(crate) alias_targets: HashMap<String, String>,
 }
 
 /// Collect crate-root `extern crate X as Y;` renames (`Y → X`) into `out`. Crate-root only: such a
@@ -110,6 +123,7 @@ pub(crate) fn scan_crate(
         trait_defs: HashSet::new(),
         impls: Vec::new(),
         type_defs: Vec::new(),
+        alias_targets: HashMap::new(),
     };
     // Pre-collect crate-root `extern crate X as Y;` renames BEFORE the walk, so the rename map is
     // complete before any alias-target or re-export-closure resolution — every source-order
@@ -117,15 +131,36 @@ pub(crate) fn scan_crate(
     // in root source order still resolves). Renames are crate-root-only (they bind crate-wide via
     // the extern prelude; a module-scoped one is a stated bound), so one root scan suffices.
     collect_crate_root_extern_renames(&root.items, &mut scan.extern_renames);
+    // Every source file read during the walk, by its canonicalized (symlink-resolved) path. A
+    // file-backed `mod x;` is located through the live filesystem, which follows symlinks, so a
+    // cyclic symlinked module directory (`src/foo/foo -> src/foo`) would otherwise recurse forever
+    // and stack-overflow (SIGABRT) — neither exit 0/1 nor the contract's exit 2. Re-reaching an
+    // already-visited canonical file is that cycle: "cannot judge" (exit 2), never a crash. The
+    // louke probe scanner guards the same hazard; the two dimensions keep parallel copies (三儀 ⊥
+    // 三儀). Seeded with the crate root so a submodule symlinking back to it is caught too.
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    visited.insert(canonicalize_source(root_file)?);
     walk_module(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
         crate_package,
         externs,
+        &mut visited,
         &mut scan,
     )?;
     Ok(scan)
+}
+
+/// Canonicalize a source file path (resolving symlinks) for the visited-set cycle guard; an
+/// unresolvable path is a scan error ("cannot judge"), never a silent skip.
+fn canonicalize_source(file: &Path) -> Result<PathBuf, String> {
+    std::fs::canonicalize(file).map_err(|err| {
+        format!(
+            "cannot canonicalize source file '{}': {err}",
+            file.display()
+        )
+    })
 }
 
 fn walk_module(
@@ -134,6 +169,7 @@ fn walk_module(
     child_dir: PathBuf,
     crate_package: &str,
     externs: &HashSet<String>,
+    visited: &mut HashSet<PathBuf>,
     scan: &mut CrateScan,
 ) -> Result<(), String> {
     let uses = collect_uses(&items);
@@ -192,13 +228,13 @@ fn walk_module(
                 });
             }
             syn::Item::Struct(i) => {
-                push_type_def(&i.attrs, &i.ident, &module, scan)?;
+                push_type_def(&i.attrs, &i.ident, &module, &uses, scan)?;
             }
             syn::Item::Enum(i) => {
-                push_type_def(&i.attrs, &i.ident, &module, scan)?;
+                push_type_def(&i.attrs, &i.ident, &module, &uses, scan)?;
             }
             syn::Item::Union(i) => {
-                push_type_def(&i.attrs, &i.ident, &module, scan)?;
+                push_type_def(&i.attrs, &i.ident, &module, &uses, scan)?;
             }
             // A non-generic `type X = <nominal path>;` alias: record `{module}::X → target`
             // so the exposure pipeline can follow it to the defining path. The target-resolution
@@ -220,6 +256,21 @@ fn walk_module(
             // A generic alias (`type X<T> = …`) or a complex target (`Vec<T>`, `&T`, a
             // tuple/`dyn`/`impl`) is skipped — a stated coverage bound, never a silent claim.
             syn::Item::Type(type_item) if type_item.generics.params.is_empty() => {
+                // Record the alias's LANDING type — where its target resolves under the same bare-head
+                // `CurrentModule` fallback the impl-self check uses — so the forbidden-marker check can
+                // react on an alias to a crate-defined subtree type (`type Bar = Real`) yet stay silent
+                // on one to a foreign/prelude type (`type Baz = Vec<u8>` / `= String`), whose marker
+                // lands off the governed subtree. Only a nominal `Type::Path` target has a single
+                // landing type; a tuple/ref/`dyn` target has none and is skipped (never governed here).
+                if let syn::Type::Path(tp) = &*type_item.ty {
+                    if let Some(landing) =
+                        resolve_path(&tp.path, &uses, &module, BareFallback::CurrentModule)
+                    {
+                        let alias =
+                            format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
+                        scan.alias_targets.insert(alias, landing);
+                    }
+                }
                 if let Some(target) = alias_nominal_target(&type_item.ty) {
                     let alias = format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
                     let resolved = if target.leading_colon.is_some() {
@@ -262,12 +313,24 @@ fn walk_module(
                         child_dir.join(&name),
                         crate_package,
                         externs,
+                        visited,
                         scan,
                     )?;
                 }
                 // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`.
                 None => match locate_module_file(&child_dir, &name) {
                     Some(file) => {
+                        // A file already visited (by canonical, symlink-resolved path) is a module
+                        // cycle — a symlinked directory looping the `mod` graph back on itself.
+                        // Stop with a scan error (exit 2 "cannot judge") rather than recursing
+                        // forever into a stack overflow.
+                        if !visited.insert(canonicalize_source(&file)?) {
+                            return Err(format!(
+                                "cannot judge module '{child_module}' in package '{crate_package}': \
+                                 its source file '{}' forms a module cycle (a symlink loop)",
+                                file.display()
+                            ));
+                        }
                         let parsed = read_parse(&file)?;
                         walk_module(
                             parsed.items,
@@ -275,6 +338,7 @@ fn walk_module(
                             child_dir.join(&name),
                             crate_package,
                             externs,
+                            visited,
                             scan,
                         )?;
                     }
@@ -299,6 +363,7 @@ fn push_type_def(
     attrs: &[syn::Attribute],
     ident: &syn::Ident,
     module: &str,
+    uses: &UseMap,
     scan: &mut CrateScan,
 ) -> Result<(), String> {
     let name = strip_raw(&ident.to_string());
@@ -307,6 +372,7 @@ fn push_type_def(
         canonical: format!("{module}::{name}"),
         module: module.to_string(),
         derives,
+        uses: uses.clone(),
     });
     Ok(())
 }

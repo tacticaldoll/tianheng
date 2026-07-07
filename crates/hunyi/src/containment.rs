@@ -4,7 +4,11 @@
 //! side, a false negative on the forbidden side). Name resolution itself lives in
 //! [`crate::resolve`].
 
-use crate::resolve::{BareFallback, UseMap, resolve_path, strip_raw};
+use std::collections::{HashMap, HashSet};
+
+use crate::resolve::{
+    BareFallback, ReexportMap, UseMap, canonicalize_through_reexports, resolve_path, strip_raw,
+};
 
 /// Sibling-safe `::`-path containment: `path` equals `prefix` or sits strictly beneath it
 /// (`crate::a` contains `crate::a::b`, never the sibling `crate::ab`). The single home of the
@@ -37,19 +41,51 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
         .unwrap_or_default()
 }
 
-/// Resolve an `impl`'s self-type to the canonical path of its definition, or `None` when it
-/// is not a placeable nominal path (a reference/tuple/complex shape — a stated bound). For a
-/// `Type::Path` (incl. a generic `Wrapper<T>`, governed by the outer `Wrapper`), the leading
-/// path resolves via the impl module's `use`s / current-module / re-exports.
+/// Resolve an `impl`'s self-type to the canonical path of the type it **lands on** — its
+/// definition — or `None` when it is not a placeable nominal path (a reference/tuple/complex
+/// shape — a stated bound). For a `Type::Path` (incl. a generic `Wrapper<T>`, governed by the
+/// outer `Wrapper`), the leading path resolves via the impl module's `use`s / current-module,
+/// then is followed through the re-export (`pub use` facade) and type-alias closures to the
+/// definition it denotes: `impl M for crate::facade::T` where `crate::facade` re-exports `T`, and
+/// `impl M for Bar` where `type Bar = Real`, both land on the real definition (to coherence a
+/// re-export/alias denotes the same type, so the marker genuinely lands there).
+///
+/// The canonicalization is folded in **here** so a self-type is canonical *by construction*: a
+/// caller cannot resolve a self-type and forget to close the re-export/alias hop (the sibling
+/// capabilities' shared-canonicalizer discipline, made structural at the one self-type resolver).
+/// The two maps are interleaved to a fixpoint — a re-export of an alias, or an alias of a
+/// re-export, both terminate (each distinct path is visited once). `alias_targets` carries the
+/// `CurrentModule`-fallback landing, so an alias to a bare local struct (`type Bar = Real`) is
+/// caught — which the `Ignore`-built exposure alias map deliberately does not, the reason this is
+/// not the exposure canonicalizer. A defining path is never a key in either map (an alias/re-export
+/// name cannot clash with a definition in its module), so the fixpoint never over-follows past a
+/// definition — dropping the old inline `defined`-stop changes no landing.
 pub(crate) fn resolve_self_type(
     self_ty: &syn::Type,
     uses: &UseMap,
     module: &str,
+    alias_targets: &HashMap<String, String>,
+    reexports: &ReexportMap,
 ) -> Option<String> {
-    match self_ty {
-        syn::Type::Path(tp) => resolve_path(&tp.path, uses, module, BareFallback::CurrentModule),
-        _ => None,
+    let base = match self_ty {
+        syn::Type::Path(tp) => resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?,
+        _ => return None,
+    };
+    let mut landing = base;
+    let mut seen = HashSet::new();
+    while seen.insert(landing.clone()) {
+        let via_reexport = canonicalize_through_reexports(&landing, reexports);
+        if via_reexport != landing {
+            landing = via_reexport;
+            continue;
+        }
+        if let Some(next) = alias_targets.get(&landing) {
+            landing = next.clone();
+            continue;
+        }
+        break;
     }
+    Some(landing)
 }
 
 /// `::`-delimited containment: a canonical path is forbidden when it equals a forbidden

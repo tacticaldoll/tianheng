@@ -428,8 +428,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   needs it; exposure declines it), and local `pub use` re-export chains. This sharing closed
   a re-export false negative in signature-coupling (the contract's one forbidden bug) when
   the second capability was built. Findings are rendered by hand-rolled path/type
-  stringification, never `quote`/`syn`'s `printing` feature, so the 渾儀 dependency allowlist
-  (`{serde_json, syn, xuanji}`) is untouched.
+  stringification, never `quote`/`syn`'s `printing` feature, so the syn quarantine is untouched.
+  **What is intentionally separate is the resolution *engine*, not reading the workspace.** The
+  `serde_json`-only cargo-metadata reads (`cargo_metadata` / `find_package` / `crate_root_file`)
+  carry no syn-forcing constraint — they are dimension-agnostic manifest observation — so, unlike
+  the resolver, they are *not* reimplemented per dimension: they are shared through 星表 (`xingbiao`),
+  the substrate below the 三儀 (see the 星表 extraction decision below). The two syn-vs-token-scan
+  resolvers stay separate; the metadata reader is one.
 - **漏刻 (runtime) is identity-coherent; its design gate is resolved on identity, pending
   only an overhead spike.** A design-gate exploration found that the runtime dimension does
   *not* require amending the project's principles — two apparent amendments dissolve:
@@ -783,3 +788,24 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **(v0.1.5) 渾儀 re-export closure applies child-module shadowing per defining module.** Facade
   chains now inherit the same rustc-correct head-shadow rule as direct re-exports, including the
   leading-`::` escape hatch and crate-root rename aliases.
+- **(v0.1.6) 星表 (`xingbiao`) — the shared declared-workspace-data substrate.** The
+  `serde_json`-only cargo-metadata reads (`cargo_metadata` / `find_package` / `crate_root_file`)
+  were written twice — once in 圭表, once in 渾儀 — and drifted: 圭表's `crate_root_file` never
+  learned the `proc-macro` arm its 渾儀 twin gained, a live cross-dimension false negative (a
+  proc-macro crate silently dropped from 圭表's module-boundary resolution and, via
+  `member_src_dirs`, from 漏刻's CI-audit corpus — which `runtime-origin-assertion` already
+  requires be "the same source root the semantic dimension uses"). This is the **twin-drift bug
+  class** the 0.1.5 review rounds surfaced repeatedly. Following the **`xuanji` precedent** (an
+  internal refactor, not a spec'd capability), the neutral substrate extracts into a new crate
+  below the 三儀, sibling to 璇璣: `serde_json`-only, spawns `cargo`, observes but renders no
+  verdict (so it is **not** 璇璣, the measure-only model). Each dependent dimension names it in its
+  `restrict_dependencies_to` allowlist (圭表, 渾儀; 漏刻 reads no metadata, so its allowlist is
+  unchanged), a one-way downward edge that **is not** a cross-dimension dependency — 三儀 ⊥ 三儀
+  forbids only dimension-to-dimension. A single reader makes the metadata twin-drift class
+  structurally impossible; unifying `crate_root_file` on the `proc-macro`-aware body is a
+  false-negative closure that brings 圭表 into conformance with the existing runtime-audit spec, so
+  it is **patch** (0.1.6) per SemVer honesty. What stays per-dimension: 圭表's dependency
+  source/kind semantics (`classify_source`, `dependencies*`) — its own observation, not neutral
+  infrastructure — and the syn-vs-token-scan **resolvers** (sharing them would force `syn` into the
+  light core; see the Name-resolution decision above). The remaining `xuanji`-slot judgment-neutral
+  *scanner* extraction stays deferred, awaiting its own forcing function.

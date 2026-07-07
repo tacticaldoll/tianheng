@@ -363,7 +363,15 @@ pub(crate) fn collect_reexports(
                 if let Some(target) =
                     canonicalize_use_target(&written, module, head_externs, head_renames)
                 {
-                    if target != alias {
+                    // Skip a self-referential entry (`target == alias`) and — critically — one whose
+                    // alias key is a strict `::`-prefix of its own target (`pub use self::x::x;` →
+                    // `crate::x -> crate::x::x`, a same-name value re-export nested under a same-named
+                    // module). The latter is meaningless for type-path canonicalization (the module
+                    // path `crate::x` still denotes the module; rewriting would fabricate a nonexistent
+                    // `crate::x::x::…`) and, left in the map, makes `rewrite_longest_prefix` re-fire on
+                    // its own monotonically-growing output forever — the exact-repeat `seen` guard
+                    // cannot catch a never-repeating sequence.
+                    if target != alias && !is_strict_path_prefix(&alias, &target) {
                         out.insert(alias, target);
                     }
                 }
@@ -393,14 +401,55 @@ fn canonicalize_use_target(
     resolve_crate_relative(&segs, module).or_else(|| extern_verbatim_segs(&segs, externs))
 }
 
+/// Rewrite the **longest `::`-boundary prefix** of `path` that is a key in `map`, keeping the
+/// remaining tail, or `None` if no prefix matches. A whole-path match is the longest prefix (so
+/// this subsumes an exact-key lookup); a shorter prefix match rewrites a member reached *through* a
+/// re-exported module or aliased prefix — `crate::facade::sub::Foo` via the module re-export
+/// `crate::facade::sub -> crate::real::sub` becomes `crate::real::sub::Foo`, which a whole-key-only
+/// lookup would miss (a silent false negative). The most specific (longest) key wins, so a type
+/// re-export of `…::sub::Foo` still takes precedence over a module re-export of `…::sub`.
+/// Whether `prefix` is a strict `::`-boundary prefix of `path` — `crate::a` of `crate::a::b`, but
+/// not of the unrelated `crate::ab` (segment-boundary aware) nor of itself. Used to refuse a
+/// re-export map entry that would let `rewrite_longest_prefix` re-fire on its own growing output.
+fn is_strict_path_prefix(prefix: &str, path: &str) -> bool {
+    path.len() > prefix.len() && path.starts_with(prefix) && path[prefix.len()..].starts_with("::")
+}
+
+fn rewrite_longest_prefix(
+    path: &str,
+    map: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let segments: Vec<&str> = path.split("::").collect();
+    for end in (1..=segments.len()).rev() {
+        let prefix = segments[..end].join("::");
+        if let Some(target) = map.get(&prefix) {
+            if end == segments.len() {
+                return Some(target.clone());
+            }
+            return Some(format!("{target}::{}", segments[end..].join("::")));
+        }
+    }
+    None
+}
+
 /// Follow the re-export closure from `path` to a fixpoint, so a facade path becomes the
 /// canonical path of the item it denotes. Cycle-guarded.
 pub(crate) fn canonicalize_through_reexports(path: &str, reexports: &ReexportMap) -> String {
     let mut current = path.to_string();
     let mut seen = std::collections::HashSet::new();
+    // A terminating chain rewrites through each map edge at most once (after a key fires, the
+    // rewritten head no longer carries it — `collect_reexports` refuses the one entry shape,
+    // key ⊂ target, that would re-present it), so it visits at most `len() + 1` distinct paths.
+    // The exact-repeat `seen` guard alone cannot bound a divergent (monotonically growing,
+    // never-repeating) rewrite; this hop cap hard-guarantees termination on any syn-parseable
+    // input — the tool must exit, never hang, even on non-compiling source.
+    let cap = reexports.len() + 1;
     while seen.insert(current.clone()) {
-        match reexports.get(&current) {
-            Some(next) => current = next.clone(),
+        if seen.len() > cap {
+            break;
+        }
+        match rewrite_longest_prefix(&current, reexports) {
+            Some(next) => current = next,
             None => break,
         }
     }
@@ -420,13 +469,21 @@ pub(crate) fn canonicalize_through_aliases(
 ) -> String {
     let mut current = path.to_string();
     let mut seen = std::collections::HashSet::new();
+    // Same hop cap as [`canonicalize_through_reexports`], summed over both maps: a terminating
+    // interleaved chain traverses each map's edges at most once, so `aliases.len() +
+    // reexports.len() + 1` distinct paths bounds it. The cap hard-guarantees termination against
+    // a divergent rewrite the exact-repeat `seen` set cannot catch.
+    let cap = aliases.len() + reexports.len() + 1;
     while seen.insert(current.clone()) {
-        if let Some(next) = aliases.get(&current) {
-            current = next.clone();
+        if seen.len() > cap {
+            break;
+        }
+        if let Some(next) = rewrite_longest_prefix(&current, aliases) {
+            current = next;
             continue;
         }
-        if let Some(next) = reexports.get(&current) {
-            current = next.clone();
+        if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+            current = next;
             continue;
         }
         break;

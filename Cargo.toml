@@ -11,7 +11,7 @@
 # WHEN built (drift law: no name without a reaction).
 [workspace]
 resolver = "2"
-members = ["crates/xuanji", "crates/hunyi", "crates/guibiao", "crates/louke", "crates/tianheng"]
+members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao", "crates/louke", "crates/tianheng"]
 # Test fixtures are their own workspaces (each carries `[workspace]`); exclude them so
 # this workspace does not try to absorb the intentionally-violating ones.
 exclude = [
@@ -21,7 +21,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -29,10 +29,11 @@ repository = "https://github.com/tacticaldoll/tianheng"
 homepage = "https://github.com/tacticaldoll/tianheng"
 
 [workspace.dependencies]
-xuanji = { path = "crates/xuanji", version = "0.1.5" }
-hunyi = { path = "crates/hunyi", version = "0.1.5" }
-guibiao = { path = "crates/guibiao", version = "0.1.5" }
-louke = { path = "crates/louke", version = "0.1.5" }
+xuanji = { path = "crates/xuanji", version = "0.1.6" }
+xingbiao = { path = "crates/xingbiao", version = "0.1.6" }
+hunyi = { path = "crates/hunyi", version = "0.1.6" }
+guibiao = { path = "crates/guibiao", version = "0.1.6" }
+louke = { path = "crates/louke", version = "0.1.6" }
 serde_json = "1"
 # syn is the heavy AST dependency, quarantined to 渾儀 (hunyi) alone — never the
 # 圭表 core or 璇璣 model (enforced by self_governance.rs).

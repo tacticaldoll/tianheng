@@ -2,7 +2,9 @@ use super::*;
 
 use std::path::PathBuf;
 
-use crate::errors::unknown_module_error;
+use crate::containment::leaf_of;
+use crate::crate_scope::dependency_names;
+use crate::errors::{unknown_module_error, unknown_trait_error};
 use crate::module_resolve::resolve_module_file;
 
 /// Write `files` (each `(relative path, contents)`) under a unique temp `src` dir, then
@@ -123,19 +125,6 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
         }
         other => panic!("expected Violations, got {other:?}"),
     }
-}
-
-#[test]
-fn crate_root_file_resolves_a_proc_macro_target() {
-    // A proc-macro crate's target kind is `["proc-macro"]` (never lib/bin); it must still resolve
-    // its root file so the semantic dimension governs it, not raise a false missing-src exit-2.
-    let package = serde_json::json!({
-        "targets": [{ "kind": ["proc-macro"], "src_path": "/w/src/lib.rs" }]
-    });
-    assert_eq!(
-        crate::metadata::crate_root_file(&package),
-        Some(std::path::PathBuf::from("/w/src/lib.rs"))
-    );
 }
 
 #[test]
@@ -540,6 +529,97 @@ fn private_alias_in_a_public_seam_reacts() {
 }
 
 #[test]
+fn a_generic_param_shadowing_a_same_module_alias_is_not_a_finding() {
+    // FP closed (bughunt round 2): a generic type parameter named identically to a same-module
+    // `type` alias is a parameter *use*, not the alias, so it must not resolve through the alias to
+    // its forbidden target. (Rust lets the param shadow the alias inside the item.)
+    let out = findings(
+        "param-shadows-alias",
+        &[
+            ("lib.rs", "pub mod api;\n"),
+            (
+                "api.rs",
+                "type Secret = crate::infra::Real;\npub fn f<Secret>(x: Secret) {}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a generic param shadowing a same-module alias must not react: {out:?}"
+    );
+    // Control: WITHOUT the shadowing param, the same bare `Secret` IS the alias — it resolves to the
+    // forbidden target and reacts. (Proves the fix only suppresses the param use, not the alias.)
+    let out = findings(
+        "alias-used-as-type",
+        &[
+            ("lib.rs", "pub mod api;\n"),
+            (
+                "api.rs",
+                "type Secret = crate::infra::Real;\npub fn g(x: Secret) {}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::infra::Real exposed by fn crate::api::g"],
+        "the alias used as a real type still reacts: {out:?}"
+    );
+}
+
+#[test]
+fn a_def_site_generic_param_shadowing_a_use_alias_is_not_a_finding() {
+    // FP closed (bughunt round 3): a struct's own generic parameter used bare inside its own
+    // where-clause (`struct S<T, U> where U: AsRef<T>`) is a parameter, not a nominal type, so it
+    // must not resolve through a same-named `use … as T` alias to a forbidden type. The def-site
+    // generics walk previously ran UNSHADOWED (unlike every sibling member walk); it now shadows the
+    // item's own params.
+    let out = findings(
+        "def-generics-param-shadows-alias",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "use crate::infra::Secret as T;\npub struct S<T, U> where U: AsRef<T> { pub f: U }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a def-site generic param shadowing a use-alias must not react: {out:?}"
+    );
+    // Control: a genuine multi-segment forbidden path in the where-clause is never shadowed and
+    // still reacts — proving the fix suppresses only the bare param use, not real leaks.
+    let out = findings(
+        "def-generics-real-leak",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "pub struct S<U> where U: AsRef<crate::infra::Secret> { pub f: U }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.iter().any(|f| f.contains("crate::infra::Secret")),
+        "a real forbidden bound in the def-site where-clause still reacts: {out:?}"
+    );
+}
+
+#[test]
 fn cross_module_alias_reached_via_use_reacts() {
     // The alias lives in another module and is reached via `use`; crate-wide collection
     // keys it by `crate::other::H`, which the exposure's resolved path canonicalizes through.
@@ -579,6 +659,83 @@ fn alias_through_a_reexport_chain_reacts() {
     )
     .unwrap();
     assert_eq!(out, ["crate::infra::Db exposed by fn crate::domain::make"]);
+}
+
+#[test]
+fn a_type_reached_through_a_reexported_module_facade_reacts() {
+    // FN closed (bughunt round 2): a `pub use crate::real::sub;` re-exports a MODULE; a member
+    // reached through it (`crate::facade::sub::Foo`) must canonicalize (longest-prefix) to its
+    // defining path `crate::real::sub::Foo` and react. Whole-key-only canonicalization missed it.
+    let out = findings(
+        "module-facade",
+        &[
+            (
+                "lib.rs",
+                "pub mod real;\npub mod facade;\npub mod domain;\n",
+            ),
+            ("real.rs", "pub mod sub { pub struct Foo; }\n"),
+            ("facade.rs", "pub use crate::real::sub;\n"),
+            (
+                "domain.rs",
+                "use crate::facade::sub;\npub fn f() -> sub::Foo { unimplemented!() }\n",
+            ),
+        ],
+        "crate::domain",
+        &["crate::real::sub"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::real::sub::Foo exposed by fn crate::domain::f"],
+        "a type reached through a re-exported module facade must canonicalize and react: {out:?}"
+    );
+}
+
+#[test]
+fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
+    // Termination guaranteed (bughunt round 3): a reexport map entry whose alias key is a strict
+    // `::`-prefix of its own value — the shape a same-name nested re-export (`pub use self::x::x;`)
+    // yields — made `rewrite_longest_prefix` re-fire on its own monotonically-growing output; the
+    // exact-repeat `seen` guard never fires on a never-repeating sequence, so the tool hung / OOMed.
+    // The hop cap now bounds the fixpoint regardless of map contents (this exercises the cap
+    // directly, bypassing the build-time guard).
+    use crate::resolve::{ReexportMap, canonicalize_through_reexports};
+    let mut map = ReexportMap::new();
+    map.insert("crate::a".to_string(), "crate::a::b".to_string());
+    // Before the fix this never returned; the assertion is simply that it TERMINATES.
+    let out = canonicalize_through_reexports("crate::a::foo", &map);
+    assert!(
+        !out.is_empty(),
+        "canonicalization must terminate on a key⊂value reexport entry: {out:?}"
+    );
+}
+
+#[test]
+fn a_self_similar_reexport_is_dropped_and_the_real_type_still_reacts() {
+    // Build-time guard (bughunt round 3): `pub use self::sub::sub;` re-exports the value `sub` from
+    // a same-named child module, yielding a `crate::sub -> crate::sub::sub` map entry (key ⊂ value).
+    // `collect_reexports` now refuses it — it is meaningless for type-path canonicalization and would
+    // hang the fixpoint. The real type under `crate::sub` must still canonicalize to its own path
+    // (never a fabricated `crate::sub::sub::Thing`) and react.
+    let out = findings(
+        "self-similar-reexport",
+        &[
+            (
+                "lib.rs",
+                "pub mod sub;\npub mod domain;\npub use self::sub::sub;\n",
+            ),
+            ("sub.rs", "pub fn sub() {}\npub struct Thing;\n"),
+            ("domain.rs", "pub fn f(_x: crate::sub::Thing) {}\n"),
+        ],
+        "crate::domain",
+        &["crate::sub"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::sub::Thing exposed by fn crate::domain::f"],
+        "the real type under crate::sub reacts at its own path, never a fabricated one: {out:?}"
+    );
 }
 
 #[test]
@@ -1493,6 +1650,31 @@ fn trait_impl_exposure_reacts_at_a_refined_rpitit_return() {
 }
 
 #[test]
+fn a_trait_impl_generic_param_shadowing_an_alias_is_not_exposed() {
+    // Round-2 fix (parallel to fix #6): an impl generic parameter named identically to a same-module
+    // `use … as <param>` alias is a parameter use, not the aliased type — the trait-impl-exposure
+    // collector now shadows the impl's params, so it must NOT resolve `T` through `as T` to the
+    // forbidden type (a false positive the inherent-impl collector already avoids).
+    let out = findings_including_trait_impls(
+        "ti-param-shadow",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use crate::infra::Forbidden as T;\npub struct Local;\npub trait SomeTrait<X> {}\nimpl<T> SomeTrait<T> for Local {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "an impl generic param must not resolve through a same-named `use … as` alias: {out:?}"
+    );
+}
+
+#[test]
 fn trait_impl_method_parameter_is_not_observed_but_the_return_is() {
     // Params/receiver are trait-dictated (invariant), so the parameter `crate::infra::DbPool`
     // does NOT react; the impl-refined return `crate::infra::Iter` DOES.
@@ -2370,7 +2552,10 @@ fn an_impl_outside_the_allowed_location_is_a_finding() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -2436,7 +2621,7 @@ fn a_prefix_colliding_sibling_location_is_not_allowed() {
     .unwrap();
     assert_eq!(
         out,
-        ["crate::commandeer (impl for crate::commandeer::Foo)"],
+        ["crate::commandeer (impl crate::command::Command for crate::commandeer::Foo)"],
         "a sibling of the allowed prefix is not allowed"
     );
 }
@@ -2478,7 +2663,10 @@ fn a_bare_same_module_trait_name_reacts() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::command (impl for crate::command::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::command (impl crate::command::Command for crate::command::Foo)"]
+    );
 }
 
 #[test]
@@ -2497,7 +2685,10 @@ fn a_renamed_trait_import_reacts() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -2519,7 +2710,10 @@ fn a_super_relative_trait_import_reacts() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -2567,7 +2761,10 @@ fn a_reexported_trait_path_reacts() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -2592,7 +2789,10 @@ fn an_anchor_named_at_a_reexport_path_resolves_not_a_constitution_error() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -2644,7 +2844,10 @@ fn an_inline_module_impl_is_located() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -2713,8 +2916,8 @@ fn two_impls_in_one_module_are_distinct_findings_by_self_type() {
     assert_eq!(
         out,
         [
-            "crate::domain (impl for crate::domain::A)",
-            "crate::domain (impl for crate::domain::B)"
+            "crate::domain (impl crate::command::Command for crate::domain::A)",
+            "crate::domain (impl crate::command::Command for crate::domain::B)"
         ]
     );
 }
@@ -2800,7 +3003,10 @@ fn a_cfg_gated_impl_is_observed_as_written() {
         &["crate::commands"],
     )
     .unwrap();
-    assert_eq!(out, ["crate::domain (impl for crate::domain::Foo)"]);
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -3080,9 +3286,99 @@ fn a_generic_self_type_is_rendered_distinctly() {
     assert_eq!(
         out,
         [
-            "crate::domain (impl for crate::domain::W<u16>)",
-            "crate::domain (impl for crate::domain::W<u8>)"
+            "crate::domain (impl crate::command::Command for crate::domain::W<u16>)",
+            "crate::domain (impl crate::command::Command for crate::domain::W<u8>)"
         ]
+    );
+}
+
+#[test]
+fn distinct_trait_instantiations_for_one_self_type_stay_distinct_findings() {
+    // Identity-collision closed (bughunt round 2): `impl Convert<u8> for Foo` and
+    // `impl Convert<u16> for Foo` are two distinct, coherent misplaced impls. The finding now
+    // carries the anchor WITH its written generic args, so they stay two findings — previously both
+    // collapsed to `crate::domain (impl for crate::domain::Foo)` and a baseline masked the second.
+    let out = locality_findings(
+        "generic-trait",
+        &[
+            ("lib.rs", "pub mod command;\npub mod domain;\n"),
+            ("command.rs", "pub trait Convert<T> {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Convert;\npub struct Foo;\nimpl Convert<u8> for Foo {}\nimpl Convert<u16> for Foo {}\n",
+            ),
+        ],
+        "crate::command::Convert",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "crate::domain (impl crate::command::Convert<u16> for crate::domain::Foo)",
+            "crate::domain (impl crate::command::Convert<u8> for crate::domain::Foo)"
+        ],
+        "two distinct trait instantiations for one self type must stay distinct: {out:?}"
+    );
+}
+
+#[test]
+fn array_length_differing_trait_instantiations_stay_distinct() {
+    // Round-2 fix: the type renderer now includes an array length (`[u8; 4]` vs `[u8; 8]`), so
+    // instantiations differing only in a const array length stay distinct findings (the renderer
+    // previously emitted `[u8; _]`, collapsing them).
+    let out = locality_findings(
+        "array-arg",
+        &[
+            ("lib.rs", "pub mod command;\npub mod domain;\n"),
+            ("command.rs", "pub trait Convert<T> {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Convert;\npub struct Foo;\nimpl Convert<[u8; 4]> for Foo {}\nimpl Convert<[u8; 8]> for Foo {}\n",
+            ),
+        ],
+        "crate::command::Convert",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "crate::domain (impl crate::command::Convert<[u8; 4]> for crate::domain::Foo)",
+            "crate::domain (impl crate::command::Convert<[u8; 8]> for crate::domain::Foo)"
+        ],
+        "array-length-differing instantiations must stay distinct: {out:?}"
+    );
+}
+
+#[test]
+fn complex_length_arrays_of_different_element_types_stay_distinct() {
+    // Identity-collision closed (bughunt round 3): when an array length is an unrenderable const
+    // expression (`N + 1`), the renderer must keep the ELEMENT type and mark only the length `_`
+    // (`[u8; _]` / `[u16; _]`), never propagate `None` for the whole array. Round 2's Array arm
+    // propagated `None`, routing both arrays into the caller's single shared `_` bucket — collapsing
+    // even distinct element types into one finding so a baseline could mask the second exposure.
+    let out = locality_findings(
+        "complex-array-arg",
+        &[
+            ("lib.rs", "pub mod command;\npub mod domain;\n"),
+            ("command.rs", "pub trait Convert<T> {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Convert;\npub struct Foo;\nimpl<const N: usize> Convert<[u8; N + 1]> for Foo {}\nimpl<const N: usize> Convert<[u16; N + 1]> for Foo {}\n",
+            ),
+        ],
+        "crate::command::Convert",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "crate::domain (impl crate::command::Convert<[u16; _]> for crate::domain::Foo)",
+            "crate::domain (impl crate::command::Convert<[u8; _]> for crate::domain::Foo)"
+        ],
+        "complex-length arrays of different element types must stay distinct, not collapse to one `_`: {out:?}"
     );
 }
 
@@ -3146,10 +3442,11 @@ fn a_serde_derive_path_and_cfg_attr_derive_react_by_leaf() {
     assert_eq!(
         out,
         [
-            "derive serde::Serialize on crate::domain::A",
-            "derive serde::Serialize on crate::domain::B"
+            "derive serde::Serialize on crate::domain::B",
+            "derive serde_derive::Serialize on crate::domain::A"
         ],
-        "serde_derive path (leaf) and cfg_attr-wrapped derive both react: {out:?}"
+        "serde_derive path (leaf) and cfg_attr-wrapped derive both react, each rendered by its own \
+         written derive path (so two same-leaf derives stay distinct): {out:?}"
     );
 }
 
@@ -3171,8 +3468,211 @@ fn a_hand_impl_outside_the_subtree_reacts_via_the_self_type() {
     .unwrap();
     assert_eq!(
         out,
-        ["impl serde::Serialize for crate::domain::Order"],
+        ["impl serde::Serialize for crate::domain::Order in crate::wire"],
         "a hand impl written outside the subtree, for a subtree type, reacts: {out:?}"
+    );
+}
+
+#[test]
+fn a_foreign_or_prelude_self_type_is_not_a_governed_subtree_type() {
+    // FP closed (bughunt round 2): `impl Marker for Vec<u8>` (a local trait on a std type, orphan-
+    // legal) must NOT react — Vec is not a type the crate defines, even though the bare `Vec` head
+    // would fabricate `crate::domain::Vec` via the CurrentModule fallback. Cross-checking the self
+    // type against the crate's actual type definitions rejects the fabrication.
+    let out = marker_findings(
+        "foreign-self",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Order;\npub trait Marker {}\nimpl Marker for Vec<u8> {}\nimpl Marker for Box<Order> {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a marker acquired by a foreign/prelude self type (Vec/Box) is not a subtree type: {out:?}"
+    );
+    // Control: the SAME marker on the real subtree type still reacts.
+    let out = marker_findings(
+        "foreign-self-control",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Order;\npub trait Marker {}\nimpl Marker for Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl Marker for crate::domain::Order in crate::domain"]
+    );
+}
+
+#[test]
+fn distinct_generic_marker_instantiations_stay_distinct_findings() {
+    // Identity-collision closed (bughunt round 2): `impl Marker<u8> for Order` and
+    // `impl Marker<u16> for Order` are two distinct, coherent acquisitions. The finding now carries
+    // the written trait path WITH its generic args (and the impl-site module), so they stay two
+    // findings — a baseline accepting one cannot mask the other (previously both collapsed to
+    // `impl Marker for crate::domain::Order`).
+    let out = marker_findings(
+        "generic-marker",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Order;\npub trait Marker<T> {}\nimpl Marker<u8> for Order {}\nimpl Marker<u16> for Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "impl Marker<u16> for crate::domain::Order in crate::domain",
+            "impl Marker<u8> for crate::domain::Order in crate::domain",
+        ],
+        "two distinct generic instantiations must stay distinct findings: {out:?}"
+    );
+}
+
+#[test]
+fn unrenderable_generic_marker_instantiations_stay_distinct() {
+    // Round-2 fix: even when the trait's generic arg is an unrenderable const expression, two
+    // distinct impls on one type must stay distinct (positional fallback), not collapse to the
+    // config leaf `Marker` (which had no ordinal, so both rendered identically).
+    let out = marker_findings(
+        "const-marker",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Foo;\npub trait Marker<const M: usize> {}\nimpl Marker<{ 1 + 1 }> for Foo {}\nimpl Marker<{ 2 + 2 }> for Foo {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        2,
+        "two unrenderable-const-arg acquisitions must stay distinct: {out:?}"
+    );
+}
+
+#[test]
+fn a_forbidden_marker_on_a_local_type_alias_reacts() {
+    // Round-2 fix (regression closed): a marker impl'd on a local type alias resolves through the
+    // alias closure to the underlying defined subtree type, so it still reacts — the round-1
+    // type-defs cross-check alone (aliases are not in type_defs) had silently dropped it.
+    let out = marker_findings(
+        "alias-self",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Real;\ntype Bar = Real;\npub trait Marker {}\nimpl Marker for Bar {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl Marker for crate::domain::Bar in crate::domain"]);
+    // Chain: `type Bar = A; type A = Real` — the marker on `Bar` lands on the struct `Real` through
+    // two alias hops, so it must still react (the landing check chases the alias chain to a defined
+    // type). Guards against under-reacting on an alias-of-an-alias to a real subtree type.
+    let out = marker_findings(
+        "alias-of-alias-self",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Real;\ntype A = Real;\ntype Bar = A;\npub trait Marker {}\nimpl Marker for Bar {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl Marker for crate::domain::Bar in crate::domain"]);
+}
+
+#[test]
+fn a_forbidden_marker_on_an_alias_to_a_foreign_type_is_clean() {
+    // FP closed (bughunt round 3): a `type` alias defines no new type — coherence sees through it —
+    // so a marker impl'd on an alias to a FOREIGN/prelude type governs no subtree type and must NOT
+    // react, exactly like the byte-identical impl on the target itself. Round 2 over-broadened the
+    // acceptance to every local alias name; the landing-type check restores the foreign-self principle.
+    let out = marker_findings(
+        "foreign-alias-self",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "type Baz = Vec<u8>;\ntype Named = String;\npub trait Marker {}\nimpl Marker for Baz {}\nimpl Marker for Named {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a marker on an alias to a foreign type (Vec<u8>/String) lands off the subtree — no finding: {out:?}"
+    );
+    // Control: an alias to a real subtree struct still reacts (the round-2 behavior preserved).
+    let out = marker_findings(
+        "local-alias-self-control",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Real;\ntype Bar = Real;\npub trait Marker {}\nimpl Marker for Bar {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl Marker for crate::domain::Bar in crate::domain"]);
+}
+
+#[test]
+fn two_same_leaf_derives_on_one_type_stay_distinct() {
+    // Round-2 fix (derive-form identity): `#[derive(a::Marker, b::Marker)]` — two distinct forbidden
+    // derives sharing a leaf on one type — stay distinct findings, rendered by their written paths.
+    let out = marker_findings(
+        "dual-derive",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "#[derive(a::Marker, b::Marker)]\npub struct T;\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "derive a::Marker on crate::domain::T",
+            "derive b::Marker on crate::domain::T"
+        ],
+        "two same-leaf derives must stay distinct findings: {out:?}"
     );
 }
 
@@ -3220,8 +3720,9 @@ fn a_same_leaf_different_trait_is_a_documented_false_positive() {
     .unwrap();
     assert_eq!(
         out,
-        ["derive Serialize on crate::domain::Order"],
-        "leaf-match reacts (accepted false positive; path-qualify to document intent)"
+        ["derive rkyv::Serialize on crate::domain::Order"],
+        "leaf-match reacts (accepted false positive; the finding now shows the written derive path, \
+         rkyv::Serialize, making the leaf-only match visible)"
     );
 }
 
@@ -3287,6 +3788,34 @@ fn a_malformed_derive_is_a_scan_error_not_a_silent_pass() {
     assert!(
         err.contains("cannot parse derive"),
         "the error must name the parse failure it could not judge: {err}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlinked_module_cycle_is_a_scan_error_not_a_stack_overflow() {
+    // Panic-safety closed (bughunt round 2): a cyclic symlinked module directory
+    // (`src/foo/foo -> src/foo`) makes the file-backed `mod` walk revisit the same canonical file
+    // forever. The scan must stop with a scan error ("cannot judge", exit 2), never recurse into a
+    // stack overflow (SIGABRT). Driven through `forbidden_marker_findings`, which runs `scan_crate`
+    // (the whole-crate walk) first.
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("hunyi-symcycle-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(src.join("foo")).expect("mkdir src/foo");
+    std::fs::write(src.join("lib.rs"), "pub mod foo;\n").expect("write lib.rs");
+    std::fs::write(src.join("foo").join("mod.rs"), "pub mod foo;\n").expect("write foo/mod.rs");
+    // src/foo/foo -> src/foo : crate::foo::foo resolves back through the symlink to foo/mod.rs.
+    symlink("../foo", src.join("foo").join("foo")).expect("symlink");
+    let root = src.join("lib.rs");
+    let result = forbidden_marker_findings(&src, &root, "crate", &[], "x");
+    let _ = std::fs::remove_dir_all(&dir);
+    let err =
+        result.expect_err("a symlinked module cycle must be a scan error, not a hang/overflow");
+    assert!(
+        err.contains("module cycle") || err.contains("symlink"),
+        "the error must name the cycle it could not judge: {err}"
     );
 }
 
@@ -3397,6 +3926,50 @@ fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<Str
 }
 
 #[test]
+fn a_dyn_in_a_supertrait_or_assoc_type_bound_is_observed() {
+    // FN closed (bughunt round 2): a `dyn` inside a supertrait's generic argument, or inside a
+    // public associated type's `: Bound`, is a real exposed trait-object in the trait's public
+    // contract. The sibling signature-coupling collector already walks these bound positions
+    // (paths_in_bounds); the dyn collector now matches it — previously it skipped supertraits and
+    // associated-type bounds entirely, silently dropping the dyn (a false negative → exit 0).
+    assert!(
+        dyn_mod(
+            "supertrait-dyn",
+            "pub trait Facade: AsRef<Box<dyn crate::ports::Port>> {}\n",
+        )
+        .unwrap()
+        .contains(&"dyn crate::ports::Port exposed by trait crate::m::Facade".to_string()),
+        "a dyn in a supertrait generic argument must be observed",
+    );
+    assert!(
+        dyn_mod(
+            "assoc-bound-dyn",
+            "pub trait F { type Bar: AsRef<Box<dyn crate::ports::Port>>; }\n",
+        )
+        .unwrap()
+        .contains(&"dyn crate::ports::Port exposed by type trait crate::m::F::Bar".to_string()),
+        "a dyn in an associated-type bound must be observed",
+    );
+}
+
+#[test]
+fn a_dyn_in_an_inherent_impl_generic_bound_is_observed() {
+    // Round-2 fix: a `dyn` in an inherent impl's own generic-param bound is exposed on the inherent
+    // API; the dyn collector's inherent-impl arm now walks the impl generics (parity with the path
+    // collector's fix #9 and with the struct/enum/trait arms).
+    let out = dyn_mod(
+        "dyn-impl-generics",
+        "pub struct Foo<T>(T);\nimpl<T: AsRef<Box<dyn crate::ports::Port>>> Foo<T> { pub fn m(&self) {} }\n",
+    )
+    .unwrap();
+    assert!(
+        out.iter()
+            .any(|f| f.contains("dyn crate::ports::Port") && f.contains("(generics)")),
+        "a dyn in an inherent-impl generic bound must be observed: {out:?}"
+    );
+}
+
+#[test]
 fn dyn_operand_flags_a_named_trait_and_passes_others() {
     // A dyn of the listed trait is flagged; a dyn of an unlisted trait passes.
     assert_eq!(
@@ -3464,9 +4037,9 @@ fn dyn_operand_matches_a_reexported_trait_by_its_defining_path() {
 
 #[test]
 fn dyn_operand_ignores_auto_trait_markers() {
-    // `dyn Port + Send`: principal is Port (first bound). Forbidding Port flags it; forbidding
-    // only the Send marker flags nothing (Send is not the principal, and a bare Send does not
-    // resolve).
+    // `dyn Port + Send`: the sole non-auto trait is Port. Forbidding Port flags it; forbidding
+    // only the Send marker flags nothing (Send is an auto trait, never an operand, and a bare Send
+    // does not resolve).
     assert_eq!(
         dyn_operand_mod(
             "marker-port",
@@ -3485,6 +4058,33 @@ fn dyn_operand_ignores_auto_trait_markers() {
         .unwrap()
         .is_empty(),
         "the trailing Send marker is not the operand",
+    );
+}
+
+#[test]
+fn dyn_operand_matches_when_an_auto_trait_is_written_before_the_principal() {
+    // `dyn Send + crate::ports::Port` — the auto trait is written FIRST. Rust allows this (only
+    // lifetimes are order-constrained), so the principal is not "the first trait bound"; skipping
+    // auto traits, Port is the operand and forbidding it must flag the exposure. Taking the first
+    // trait bound (Send) would silently pass a forbidden operand — a false negative.
+    assert_eq!(
+        dyn_operand_mod(
+            "auto-first",
+            "pub fn c() -> Box<dyn Send + crate::ports::Port> { todo!() }\n",
+            &["crate::ports::Port"],
+        )
+        .unwrap(),
+        ["dyn Send + crate::ports::Port exposed by fn crate::m::c"],
+    );
+    // Two auto traits before the principal is still resolved.
+    assert_eq!(
+        dyn_operand_mod(
+            "auto-first-2",
+            "pub fn c() -> Box<dyn Send + Sync + crate::ports::Port> { todo!() }\n",
+            &["crate::ports::Port"],
+        )
+        .unwrap(),
+        ["dyn Send + Sync + crate::ports::Port exposed by fn crate::m::c"],
     );
 }
 
@@ -3784,6 +4384,37 @@ fn impl_trait_operand_ignores_auto_trait_markers() {
         .unwrap()
         .is_empty(),
         "the trailing Send marker is not the operand",
+    );
+}
+
+#[test]
+fn impl_trait_operand_matches_an_auto_trait_written_before_the_principal() {
+    // `impl Send + crate::ports::Port` — auto trait first (valid Rust; impl-Trait bounds are an
+    // unordered set). Skipping auto traits, Port is the operand and forbidding it must flag it.
+    assert_eq!(
+        impl_trait_operand_mod(
+            "auto-first",
+            "pub fn make() -> impl Send + crate::ports::Port { todo!() }\n",
+            &["crate::ports::Port"],
+        )
+        .unwrap(),
+        ["impl Send + crate::ports::Port exposed by fn crate::m::make"],
+    );
+}
+
+#[test]
+fn impl_trait_operand_matches_a_second_non_auto_trait() {
+    // `impl crate::ports::Port + crate::ports::Sink` — a returned `impl Trait` may name several
+    // non-auto traits. Forbidding the SECOND one must flag it: the returned type genuinely is a
+    // Sink. Matching only the first non-auto trait would silently pass it (a false negative).
+    assert_eq!(
+        impl_trait_operand_mod(
+            "second-trait",
+            "pub fn make() -> impl crate::ports::Port + crate::ports::Sink { todo!() }\n",
+            &["crate::ports::Sink"],
+        )
+        .unwrap(),
+        ["impl crate::ports::Port + crate::ports::Sink exposed by fn crate::m::make"],
     );
 }
 
@@ -5391,4 +6022,191 @@ fn a_deeper_crate_relative_alias_segment_is_not_rewritten() {
         Vec::<String>::new(),
         "a deeper crate::m::wc is local, not the rename: {out:?}"
     );
+}
+
+// --- forbidden-marker: re-export / alias / rename canonicalization (0.1.6 polish) ----------
+// This battery pins the self-type canonicalization (folded into `resolve_self_type`) and the
+// use-map leaf resolution against re-drift: a self-type written through a `pub use` facade or a
+// `type` alias lands on its definition, a locally renamed trait/derive reacts by its true leaf,
+// and the foreign/alias-to-foreign cases stay clean (no false positive).
+
+#[test]
+fn impl_self_type_spelled_through_a_reexport_reacts() {
+    // `crate::wire` re-exports `crate::domain::Order`; a hand impl written against the RE-EXPORT
+    // spelling still acquires the marker on the real def (coherence sees through the facade).
+    let out = marker_findings(
+        "mark-reexport-selftype",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "pub use crate::domain::Order;\nimpl serde::Serialize for crate::wire::Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::wire::Order in crate::wire"]
+    );
+}
+
+#[test]
+fn impl_self_type_use_imported_from_a_reexport_reacts() {
+    // The impl lives in a third module and `use`s the re-exported spelling — the common form.
+    let out = marker_findings(
+        "mark-reexport-use-selftype",
+        &[
+            (
+                "lib.rs",
+                "pub mod domain;\npub mod wire;\npub mod client;\n",
+            ),
+            ("domain.rs", "pub struct Order;\n"),
+            ("wire.rs", "pub use crate::domain::Order;\n"),
+            (
+                "client.rs",
+                "use crate::wire::Order;\nimpl serde::Serialize for Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::wire::Order in crate::client"]
+    );
+}
+
+#[test]
+fn impl_self_type_through_an_alias_to_a_local_struct_still_reacts() {
+    // Regression guard for the map change: the self-type resolver must keep catching a `type` alias
+    // to a bare local struct (`type Bar = Real`) — the `CurrentModule`-landing map the exposure
+    // (`Ignore`-built) alias map deliberately does not carry.
+    let out = marker_findings(
+        "mark-alias-local-struct",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Real;\ntype Bar = Real;\nimpl serde::Serialize for Bar {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::domain::Bar in crate::domain"]
+    );
+}
+
+#[test]
+fn impl_self_type_interleaved_alias_then_reexport_reacts() {
+    // `type Alias = crate::wire::Reexp` (an alias hop) where `crate::wire` re-exports the real def
+    // (a re-export hop): the interleaved fixpoint follows both to the definition.
+    let out = marker_findings(
+        "mark-alias-then-reexport",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\npub mod mid;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            ("wire.rs", "pub use crate::domain::Order as Reexp;\n"),
+            (
+                "mid.rs",
+                "type Alias = crate::wire::Reexp;\nimpl serde::Serialize for Alias {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::mid::Alias in crate::mid"]
+    );
+}
+
+#[test]
+fn impl_self_type_alias_to_a_foreign_type_stays_clean() {
+    // An alias to a foreign/prelude type lands off the governed subtree — no false positive.
+    let out = marker_findings(
+        "mark-alias-foreign",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "pub struct Real;\ntype Baz = String;\nimpl serde::Serialize for Baz {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(out, Vec::<String>::new());
+}
+
+#[test]
+fn impl_of_a_locally_renamed_trait_reacts_by_true_leaf() {
+    // `use serde::Serialize as Ser; impl Ser for …` — leaf-matching now resolves the written trait
+    // through the site's `use`-map, so the rename no longer evades the boundary.
+    let out = marker_findings(
+        "mark-rename-impl",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "use serde::Serialize as Ser;\nimpl Ser for crate::domain::Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl Ser for crate::domain::Order in crate::wire"]);
+}
+
+#[test]
+fn derive_of_a_locally_renamed_macro_reacts_by_true_leaf() {
+    // `use serde::Serialize as Ser; #[derive(Ser)]` — the derive form resolves through the defining
+    // module's `use`-map too, symmetric with the impl form.
+    let out = marker_findings(
+        "mark-rename-derive",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use serde::Serialize as Ser;\n#[derive(Ser)]\npub struct Order;\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(out, ["derive Ser on crate::domain::Order"]);
+}
+
+#[test]
+fn derive_renamed_to_a_nonforbidden_local_trait_stays_clean() {
+    // The dual: `use crate::other::Bar as Serialize; #[derive(Serialize)]` resolves to the local
+    // `Bar` (leaf `Bar`), not serde — the leaf-collision false positive is closed by resolution.
+    let out = marker_findings(
+        "mark-rename-collision",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod other;\n"),
+            ("other.rs", "pub struct Bar;\n"),
+            (
+                "domain.rs",
+                "use crate::other::Bar as Serialize;\n#[derive(Serialize)]\npub struct Order;\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(out, Vec::<String>::new());
 }

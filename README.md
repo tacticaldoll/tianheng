@@ -200,9 +200,17 @@ Beneath the dimensions sits **`xuanji` (璇璣) — the 底**: the dimension-agn
 dimensions and the shell) — and depends on no workspace member, so a new dimension reuses the
 reaction vocabulary without dragging in another dimension's engine.
 
+Beside it sits **`xingbiao` (星表)** — the shared *declared-workspace-data* substrate: it reads
+`cargo metadata` (`serde_json`-only) so the static and semantic dimensions observe the workspace
+through **one** reader, not two hand-copied twins that drift apart. Like `xuanji` it is below the
+dimensions and depends on no other workspace member; **unlike** `xuanji` it *observes* (does IO) —
+so it is a substrate, not the measure-only model. A dimension depending on either shared base is a
+downward edge, never a cross-dimension one.
+
 A dimension's crate is **born when it is built** — never pre-created empty. The heavy
 dependencies (AST, runtime) are quarantined to their own crates; the `guibiao` core's only
-*external* dependency stays `serde_json` (it depends internally on `xuanji`). See
+*external* dependency stays `serde_json` (internally it depends only on the shared `serde_json`-only
+bases `xuanji` and `xingbiao`). See
 [`BACKLOG.md`](BACKLOG.md) for the deferred phases (their observation sources and open
 design questions) and the governance/observability layer.
 

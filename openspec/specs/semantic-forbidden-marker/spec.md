@@ -41,7 +41,12 @@ The system SHALL react when a governed type acquires a forbidden trait by **eith
 #### Scenario: A forbidden hand-impl for a subtree type reacts
 
 - **WHEN** `crate::wire` declares `impl serde::Serialize for crate::domain::Order { … }` (a hand impl, no derive) under a boundary forbidding `serde::Serialize` on `crate::domain`
-- **THEN** the system emits a violation identifying `impl serde::Serialize for crate::domain::Order`, because `Order`'s definition is under the subtree — even though the impl is written outside it
+- **THEN** the system emits a violation identifying `impl serde::Serialize for crate::domain::Order in crate::wire` (the impl form names the impl-site module), because `Order`'s definition is under the subtree — even though the impl is written outside it
+
+#### Scenario: A hand-impl through a re-export or type-alias spelling reacts
+
+- **WHEN** `crate::wire` re-exports the governed type (`pub use crate::domain::Order;`) and declares `impl serde::Serialize for crate::wire::Order { … }`, or a `type Bar = crate::domain::Order;` alias is written `impl serde::Serialize for Bar`, under a boundary forbidding `serde::Serialize` on `crate::domain`
+- **THEN** the system follows the re-export and type-alias closures to the definition `crate::domain::Order` (a re-export/alias denotes the same type — to coherence the marker lands on the definition) and reacts, identifying the impl by its written self-type spelling and impl-site module (`impl serde::Serialize for crate::wire::Order in crate::wire`), rather than silently passing the facade/alias spelling
 
 #### Scenario: A cfg_attr-wrapped derive reacts
 
@@ -60,7 +65,7 @@ The system SHALL react when a governed type acquires a forbidden trait by **eith
 
 ### Requirement: Trait matching by leaf identifier
 
-A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug.
+A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). The compared leaf is taken from the path **resolved through the acquisition site's `use`-map**, so a locally renamed trait or derive — `use serde::Serialize as Ser; impl Ser for …` or `#[derive(Ser)]` — resolves to its true leaf `Serialize` and reacts (a local rename is observable, so a missed one would be a false negative); a path that does not resolve locally — a bare/prelude name or a cross-crate path — falls back to its **written** leaf, keeping the match cross-crate-blind (the derive-macro-crate path `serde_derive::Serialize` still matches by the leaf `Serialize`). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug.
 
 #### Scenario: A derive-macro-crate path still reacts
 
@@ -72,6 +77,11 @@ A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so 
 - **WHEN** a governed type derives `rkyv::Serialize` under a boundary forbidding the bare `Serialize`
 - **THEN** the system reacts (a leaf match); the user may path-qualify the forbidden entry to tighten — a reportable false positive is accepted, never a silent false negative
 
+#### Scenario: A locally renamed trait or derive reacts by its true leaf
+
+- **WHEN** `crate::domain::order` declares `use serde::Serialize as Ser; #[derive(Ser)] pub struct Order;` (or a hand impl `impl Ser for crate::domain::Order`) under a boundary forbidding `serde::Serialize` on `crate::domain`
+- **THEN** the system resolves `Ser` through the module's `use`-map to `serde::Serialize` and reacts by the leaf `Serialize` (the finding renders the written spelling, `derive Ser on crate::domain::order::Order`), rather than silently passing the rename
+
 ### Requirement: Anchor resolution and observation bounds
 
 If the boundary's target crate is absent from the workspace, the system SHALL treat it as a constitution error (exit 2). An acquisition the syntactic scan cannot observe — a derive/impl produced by a macro, a `#[path]`-remapped module, or a hand-impl whose self-type cannot be resolved to a subtree definition (a glob/external/complex-generic self-type) — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction; `#[cfg]`-gated code is observed as written. A `#[derive(...)]` whose arguments fail to parse SHALL be a scan error (exit 2), never a silent skip. Within the observed scope there SHALL be no false negative.
@@ -79,7 +89,7 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 #### Scenario: An unresolvable hand-impl self-type is a documented bound
 
 - **WHEN** a hand-impl's self-type is brought in by a glob import (`use crate::domain::*; impl serde::Serialize for Order`) so the scan cannot resolve `Order` to its definition
-- **THEN** the system does not claim to observe it (a stated coverage bound), rather than silently asserting cleanliness — the co-located and `use`-imported cases (the common ones) do resolve and react
+- **THEN** the system does not claim to observe it (a stated coverage bound), rather than silently asserting cleanliness — the co-located, `use`-imported, re-export-spelled, and type-alias cases (the common ones) do resolve and react
 
 ### Requirement: CI reaction, severity, and baseline parity
 
@@ -97,7 +107,7 @@ The system SHALL fold forbidden-marker findings into the same exit-code contract
 
 ### Requirement: Human-readable violation report
 
-A forbidden-marker violation report SHALL identify the governed subtree anchor, the rule (that the subtree's types must not acquire the forbidden trait), the offending acquisition and the type (the finding — `derive <T> on <Type>` or `impl <T> for <Type>`), and the human-readable reason, and SHALL state that the reaction failed — the same report contract as the other boundaries.
+A forbidden-marker violation report SHALL identify the governed subtree anchor, the rule (that the subtree's types must not acquire the forbidden trait), the offending acquisition and the type (the finding — `derive <T> on <Type>` or `impl <T> for <Type> in <module>`, the impl form naming the impl-site module), and the human-readable reason, and SHALL state that the reaction failed — the same report contract as the other boundaries.
 
 #### Scenario: Report explains the acquisition
 

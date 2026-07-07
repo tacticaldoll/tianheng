@@ -14,10 +14,10 @@ use crate::module_scan::{
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation};
 
-/// The source-root directory for a package's lib/bin target. Prefer Cargo's observed
-/// `targets[].src_path` so custom `[lib] path = "lib.rs"` and bin-only crates are scanned
-/// at the real compiled root; fall back to `manifest_dir/src` only for synthetic unit-test
-/// metadata that omits targets.
+/// The source-root directory for a package's lib/proc-macro/bin target (resolved by 星表's
+/// `crate_root_file`). Prefer Cargo's observed `targets[].src_path` so custom `[lib] path =
+/// "lib.rs"`, proc-macro, and bin-only crates are scanned at the real compiled root; fall back to
+/// `manifest_dir/src` only for synthetic unit-test metadata that omits targets.
 fn package_src_dir(package: &Value) -> Option<PathBuf> {
     crate_root_file(package)
         .and_then(|root| root.parent().map(Path::to_path_buf))
@@ -62,8 +62,12 @@ pub(crate) fn check_module_boundary(
     let src_dir =
         package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
 
+    // The crate's real root file relative to `src_dir` — usually `lib.rs`/`main.rs`, but Cargo
+    // permits a custom target root (`[lib] path = "src/core.rs"`), which must still map to `crate`.
+    let root_relative = crate_root_file(package)
+        .and_then(|rf| rf.strip_prefix(&src_dir).ok().map(|p| p.to_path_buf()));
     let files = rust_files(&src_dir)?;
-    let (reachable, inline_only) = reachable_modules(&src_dir, &files)?;
+    let (reachable, inline_only) = reachable_modules(&src_dir, &files, root_relative.as_deref())?;
     // The crate-root module names (direct children of `crate`) feed bare-`use` resolution
     // (a root-relative `use foo::…` is the local module only if `foo` is one of them).
     let root_modules: Vec<String> = reachable
@@ -80,7 +84,14 @@ pub(crate) fn check_module_boundary(
     // canonicalized at the file, `mod`, and `use` derivations. A boundary may be written
     // with either the raw or plain form and still match.
     let governed_module = canonical_module_path(&boundary.module);
-    let governed = governed_files(&src_dir, &files, &governed_module, &reachable, &inline_only);
+    let governed = governed_files(
+        &src_dir,
+        &files,
+        &governed_module,
+        &reachable,
+        &inline_only,
+        root_relative.as_deref(),
+    );
     if governed.is_empty() {
         // Two distinct misconfigurations, kept apart so the error is self-describing
         // (PROJECT.md): an inline `mod name { … }` is reachable but owns no source file,
@@ -142,7 +153,14 @@ pub(crate) fn check_module_boundary(
         };
         // `governed_files(.., "crate", ..)` yields every reachable (file, file-module) pair —
         // the crate-wide scan, reusing the existing selector with no new scanner.
-        let all_files = governed_files(&src_dir, &files, "crate", &reachable, &inline_only);
+        let all_files = governed_files(
+            &src_dir,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            root_relative.as_deref(),
+        );
         // Collect `(importer module, offending file)` pairs *before* de-duplication: the file
         // is in hand here (the scan reads it to observe the import) but is gone once the list
         // collapses to module identities. The violation count stays per-importer-module; the

@@ -16,4 +16,5 @@ categories = ["development-tools"]
 
 [dependencies]
 xuanji = { workspace = true }
+xingbiao = { workspace = true }
 serde_json = { workspace = true }
