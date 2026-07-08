@@ -35,9 +35,9 @@ mod errors;
 use errors::unreadable_workspace_error;
 #[cfg(test)]
 use errors::{
-    inline_module_target_error, must_not_be_imported_by_on_crate_error,
-    must_only_be_imported_by_on_crate_error, restrict_imports_to_on_crate_error,
-    unknown_module_error,
+    confine_external_crate_on_crate_error, inline_module_target_error,
+    must_not_be_imported_by_on_crate_error, must_only_be_imported_by_on_crate_error,
+    restrict_imports_to_on_crate_error, unknown_module_error,
 };
 mod module_check;
 use module_check::check_module_boundary;

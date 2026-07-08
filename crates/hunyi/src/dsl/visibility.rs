@@ -61,6 +61,7 @@ impl VisibilityBoundary {
 }
 
 /// A visibility boundary awaiting its module anchor.
+#[doc(hidden)]
 pub struct VisibilityCrateDraft {
     crate_package: String,
 }
@@ -76,6 +77,7 @@ impl VisibilityCrateDraft {
 }
 
 /// A module-anchored boundary awaiting the rule.
+#[doc(hidden)]
 pub struct VisibilityModuleDraft {
     crate_package: String,
     module: String,
@@ -93,6 +95,7 @@ impl VisibilityModuleDraft {
 }
 
 /// A boundary awaiting severity (optional) and its reason.
+#[doc(hidden)]
 pub struct VisibilityBoundaryDraft {
     crate_package: String,
     module: String,

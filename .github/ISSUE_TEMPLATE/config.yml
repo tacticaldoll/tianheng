@@ -1,0 +1,8 @@
+# The three instruments have distinct audiences, so issues are routed per-儀 (each template also
+# carries a "standalone vs via tianheng" field — the demand signal that tells us whether a 儀 is
+# being adopted on its own). A blank issue is still allowed as an escape hatch for anything else.
+blank_issues_enabled: true
+contact_links:
+  - name: What Tianheng is (and is not)
+    url: https://github.com/tacticaldoll/tianheng#readme
+    about: Experimental / pre-1.0. Read the README first — Tianheng governs by reaction against a declared constitution; it is not a lint or a framework.

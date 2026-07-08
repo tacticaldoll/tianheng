@@ -18,7 +18,9 @@ mod use_scan;
 pub(crate) use fs_walk::rust_files;
 pub(crate) use path_vocab::{canonical_module_path, path_within};
 pub(crate) use reachability::{governed_files, reachable_modules};
-pub(crate) use use_scan::{imported_module_paths, imports_with_importers};
+pub(crate) use use_scan::{
+    external_imports_with_importers, imported_module_paths, imports_with_importers,
+};
 
 // Cross-cutting tests assert invariants that span the dimensions the scanner is split into:
 // the `use`-scan ([`use_scan`]) and the declaration walk ([`reachability`]) must share exactly

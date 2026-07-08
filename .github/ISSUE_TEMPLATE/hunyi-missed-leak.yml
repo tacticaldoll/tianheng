@@ -1,0 +1,54 @@
+name: "渾儀 (hunyi) — missed API leak / exposure typing"
+description: A public-API exposure that should have reacted but did not, or a request for structured exposure typing.
+labels: ["hunyi", "semantic"]
+title: "[渾儀] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        渾儀 is the **semantic** dimension — it reads the AST (`syn`) and reacts when a module's
+        **public API exposes** a forbidden type. A type imported for internal use is fine; a type
+        named in a `pub` signature is a leak. Use this for a leak that was missed, or to request
+        richer exposure typing (`PublicSeam` / `ExposureSubject`).
+  - type: dropdown
+    id: adoption
+    attributes:
+      label: How are you using 渾儀?
+      description: This tells us whether the semantic dimension is being adopted on its own — a signal we weigh when deciding what graduates to a stable 0.2.0.
+      options:
+        - "hunyi standalone (I depend on the hunyi crate directly)"
+        - "via tianheng (the composed shell)"
+        - "just evaluating"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The `hunyi` (or `tianheng`) version.
+      placeholder: "0.1.6"
+    validations:
+      required: true
+  - type: textarea
+    id: constitution
+    attributes:
+      label: The declared boundary
+      description: The `SemanticBoundary` (or sibling exposure rule) you declared, with its `.because(...)`.
+      render: rust
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: The public signature that leaks
+      description: The `pub` item whose signature exposes the forbidden type but was not caught.
+      render: rust
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observed vs expected
+      description: What reaction you got (paste `check --format json` if you can) and what you expected.
+    validations:
+      required: true

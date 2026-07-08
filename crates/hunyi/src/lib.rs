@@ -72,6 +72,7 @@ mod finding;
 mod module_resolve;
 mod resolve;
 mod scan;
+mod shape_scan;
 mod syn_util;
 
 // The seven semantic capabilities, each a self-contained reaction (check → check_boundary →

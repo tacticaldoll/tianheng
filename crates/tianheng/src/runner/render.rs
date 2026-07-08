@@ -6,6 +6,8 @@
 
 use guibiao::{Coverage, Outcome, Report, Severity};
 
+use super::term_color::Style;
+
 /// The human-readable `check` report goes to **stderr** as a single stream — clean
 /// line, violation/advisory blocks, the baseline summary, coverage, and stale entries
 /// alike — so a CI log shows them in a deterministic order rather than interleaving a
@@ -17,7 +19,12 @@ pub(crate) fn report(outcome: &Outcome) {
         Outcome::Clean => eprintln!("Tianheng: clean — no boundary violated"),
         Outcome::Violations(report) => report_violations(report),
         Outcome::ConstitutionError(message) => {
-            eprintln!("Tianheng constitution error: {message}");
+            // The exit-2 diagnostic voice, distinct from a violation (exit 1). Presentation only.
+            let style = Style::detect();
+            eprintln!(
+                "{}",
+                style.error(&format!("Tianheng constitution error: {message}"))
+            );
         }
         // `Outcome` is non-exhaustive; the exit code (in guibiao) stays authoritative.
         _ => {}
@@ -27,7 +34,7 @@ pub(crate) fn report(outcome: &Outcome) {
 /// Print each non-baselined violation as a failure (enforce) or advisory (warn),
 /// and summarize how many were suppressed by a baseline.
 pub(crate) fn report_violations(report: &Report) {
-    eprint!("{}", violations_text(report));
+    eprint!("{}", violations_text_styled(report, Style::detect()));
 }
 
 /// The human-readable violation report `check` prints, as a pure function so the foregrounding,
@@ -40,7 +47,20 @@ pub(crate) fn report_violations(report: &Report) {
 /// local view by `(target, rule)`, so multiple findings under one boundary read consecutively and
 /// the reason is read once. This borrows `&Report` immutably and never reorders the underlying vec,
 /// so the JSON projection (the machine contract) is untouched.
+///
+/// The production path always styles by detection ([`report_violations`]); this un-styled form is
+/// the byte-stable contract the unit tests assert against, so it is compiled only under `test`.
+#[cfg(test)]
 pub(crate) fn violations_text(report: &Report) -> String {
+    violations_text_styled(report, Style::PLAIN)
+}
+
+/// The styled implementation. With [`Style::PLAIN`] the output is byte-identical to the un-styled
+/// report (so [`violations_text`] and its unit tests stay stable); with [`Style::ACTIVE`] the
+/// header carries a severity colour and the reason is emphasised — colour is layered *around* the
+/// existing text, never reordering or removing a field, so the machine JSON projection and the
+/// reason → boundary → rule → found → file → reaction order are untouched.
+pub(crate) fn violations_text_styled(report: &Report, style: Style) -> String {
     use std::fmt::Write as _;
     if report.violations.is_empty() {
         return "Tianheng: clean — no boundary violated\n".to_string();
@@ -53,16 +73,21 @@ pub(crate) fn violations_text(report: &Report) -> String {
 
     let mut out = String::new();
     for violation in shown {
-        let (header, reaction) = match violation.severity {
+        let (raw_header, reaction) = match violation.severity {
             Severity::Enforce => ("Tianheng violation", "CI failed."),
             Severity::Warn => ("Tianheng advisory", "warning only — CI not failed."),
             // `Severity` is non-exhaustive; an unknown future rung reports as advisory.
             _ => ("Tianheng advisory", "warning only — CI not failed."),
         };
+        let header = if violation.severity == Severity::Enforce {
+            style.enforce(raw_header)
+        } else {
+            style.warn(raw_header)
+        };
         writeln!(out).unwrap();
         writeln!(out, "{header}").unwrap();
         writeln!(out).unwrap();
-        writeln!(out, "Reason:\n  {}", violation.reason).unwrap();
+        writeln!(out, "Reason:\n  {}", style.reason(&violation.reason)).unwrap();
         writeln!(out, "Boundary:\n  {}", violation.target).unwrap();
         writeln!(out, "Rule:\n  {}", violation.rule).unwrap();
         writeln!(out, "Found:\n  {}", violation.finding).unwrap();

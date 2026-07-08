@@ -4,13 +4,14 @@ use serde_json::Value;
 
 use crate::cargo_metadata::{crate_root_file, find_package};
 use crate::errors::{
-    crate_not_found_error, inline_module_target_error, missing_src_error,
-    must_not_be_imported_by_on_crate_error, must_only_be_imported_by_on_crate_error,
-    restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
+    confine_external_crate_on_crate_error, crate_not_found_error, inline_module_target_error,
+    missing_src_error, must_not_be_imported_by_on_crate_error,
+    must_only_be_imported_by_on_crate_error, restrict_imports_to_on_crate_error,
+    unknown_module_error, unreadable_governed_file_error,
 };
 use crate::module_scan::{
-    canonical_module_path, governed_files, imported_module_paths, imports_with_importers,
-    path_within, reachable_modules, rust_files,
+    canonical_module_path, external_imports_with_importers, governed_files, imported_module_paths,
+    imports_with_importers, path_within, reachable_modules, rust_files,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation};
 
@@ -239,6 +240,76 @@ pub(crate) fn check_module_boundary(
         return Ok(());
     }
 
+    // External-crate confinement is the one rule that observes *external* imports. It scans
+    // every reachable file (like the inbound rules), but a `use <crate>::…` from a module
+    // outside the permitted subtree (the governed module's own subtree) offends. The confined
+    // crate is the violation *target* — so two confinements of different crates on one module
+    // stay injective — and the offending importer module is the finding.
+    if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
+        // Confining to the crate root permits the crate everywhere (its subtree is the whole
+        // crate), so the rule could never react. Fail loud (exit 2), never a silent pass.
+        if governed_module == "crate" {
+            return Err(confine_external_crate_on_crate_error(
+                &boundary.crate_package,
+            ));
+        }
+        // Canonicalize the confined crate name into the same vocabulary as the observed external
+        // heads: strip a raw-identifier `r#`, and fold a package-name `-` to `_` — Cargo maps a
+        // hyphenated package (`windows-sys`) to an underscore import identifier (`windows_sys`),
+        // and the scanner only ever sees the identifier (a `use` path cannot contain `-`). Without
+        // the fold, confining the hyphenated FFI/platform crates this rule targets would silently
+        // never react. A boundary may thus be written with either the package or identifier form.
+        let confined = canonical_module_path(crate_name).replace('-', "_");
+        let all_files = governed_files(
+            &src_dir,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            root_relative.as_deref(),
+        );
+        // `(offending importer module, file)` collected before de-dup, for the same reason as
+        // the inbound rule: the file is in hand during the scan but lost once the list
+        // collapses to importer identities.
+        let mut offenders: Vec<(String, String)> = Vec::new();
+        for (file, file_module) in all_files {
+            // A file whose module is within the permitted subtree hosts only permitted imports
+            // (its inline descendants are within it too) — skip the read.
+            if path_within(&file_module, &governed_module) {
+                continue;
+            }
+            let text = std::fs::read_to_string(&file)
+                .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
+            for (importer, external) in
+                external_imports_with_importers(&text, &file_module, &root_modules)
+            {
+                // Only the confined crate, imported from outside the permitted subtree.
+                if external != confined {
+                    continue;
+                }
+                if path_within(&importer, &governed_module) {
+                    continue;
+                }
+                offenders.push((importer, file.display().to_string()));
+            }
+        }
+        // One violation per offending importer module (the dedup guarantee). The target is the
+        // confined crate (`confined`), constant for this boundary; the finding is the importer.
+        offenders.sort();
+        offenders.dedup_by(|a, b| a.0 == b.0);
+        for (importer_module, file) in offenders {
+            push_module_violation(
+                violations,
+                &confined,
+                &rule,
+                importer_module,
+                file,
+                boundary,
+            );
+        }
+        return Ok(());
+    }
+
     // Each outbound rule reduces to one predicate over the governed module's observed
     // internal imports — all `crate::…` (the scanner already filters externals). The
     // file/import loop and the Violation it produces are shared; only the predicate (and,
@@ -272,8 +343,10 @@ pub(crate) fn check_module_boundary(
                 !(within_own || within_allowed)
             })
         }
-        ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. } => {
-            unreachable!("the inbound rules are evaluated above and return early")
+        ModuleRule::MustNotBeImportedBy { .. }
+        | ModuleRule::MustOnlyBeImportedBy { .. }
+        | ModuleRule::ConfineExternalCrate { .. } => {
+            unreachable!("the inbound / confinement rules are evaluated above and return early")
         }
     };
     // `(finding, offending file)` pairs collected before de-duplication, for the same

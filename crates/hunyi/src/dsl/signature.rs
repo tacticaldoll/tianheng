@@ -73,6 +73,7 @@ impl SemanticBoundary {
 }
 
 /// A semantic boundary awaiting its module anchor.
+#[doc(hidden)]
 pub struct SemanticCrateDraft {
     crate_package: String,
 }
@@ -88,6 +89,7 @@ impl SemanticCrateDraft {
 }
 
 /// A module-anchored boundary awaiting the forbidden set.
+#[doc(hidden)]
 pub struct SemanticModuleDraft {
     crate_package: String,
     module: String,
@@ -108,6 +110,7 @@ impl SemanticModuleDraft {
 }
 
 /// A boundary awaiting severity (optional) and its reason.
+#[doc(hidden)]
 pub struct SemanticBoundaryDraft {
     crate_package: String,
     module: String,

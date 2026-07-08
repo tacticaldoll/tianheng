@@ -39,6 +39,8 @@ pub use projection::{constitution_markdown, projection_gate};
 
 mod render;
 use render::{report, report_coverage, report_sarif, report_violations};
+mod term_color;
+use term_color::Style;
 
 /// Which runner command was requested. `check` reacts against a workspace; `list`
 /// projects the declared constitution and never reacts.
@@ -231,6 +233,13 @@ where
         }
     };
 
+    // A contradictory flag pair is a pure usage error, independent of any workspace — check it
+    // before resolving the manifest, so an also-absent `--manifest-path` (whose "no Cargo.toml
+    // found" diagnostic would otherwise fire first) cannot mask the real misconfiguration.
+    if baseline_path.is_some() && write_baseline_path.is_some() {
+        return usage("--baseline and --write-baseline are mutually exclusive");
+    }
+
     // From here on the command is `check`: it requires a workspace to observe.
     // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
     // Defaulting the target location is not a silent pass: if none is found the run
@@ -251,9 +260,6 @@ where
             }
         },
     };
-    if baseline_path.is_some() && write_baseline_path.is_some() {
-        return usage("--baseline and --write-baseline are mutually exclusive");
-    }
 
     // One `cargo metadata` read feeds both the static reaction outcome and coverage; the
     // semantic dimension reads its own (it has no coverage notion). The two outcomes compose
@@ -378,7 +384,10 @@ fn nearest_manifest_from(start: PathBuf) -> Option<PathBuf> {
 /// returns 0; but a constitution that could not be evaluated cannot be pinned.
 fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     if let Outcome::ConstitutionError(message) = outcome {
-        eprintln!("Tianheng constitution error: {message}");
+        eprintln!(
+            "{}",
+            Style::detect().error(&format!("Tianheng constitution error: {message}"))
+        );
         eprintln!("refusing to write a baseline from a constitution that could not be evaluated");
         return 2;
     }
@@ -442,7 +451,10 @@ fn gate(
         match format {
             ReportFormat::Json => println!("{}", report_json(outcome, &[], None)),
             ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
-            ReportFormat::Text => eprintln!("Tianheng constitution error: {message}"),
+            ReportFormat::Text => eprintln!(
+                "{}",
+                Style::detect().error(&format!("Tianheng constitution error: {message}"))
+            ),
         }
         return 2;
     }

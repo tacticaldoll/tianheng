@@ -64,6 +64,7 @@ impl AsyncExposureBoundary {
 }
 
 /// An async-exposure boundary awaiting its module anchor.
+#[doc(hidden)]
 pub struct AsyncExposureCrateDraft {
     crate_package: String,
 }
@@ -79,6 +80,7 @@ impl AsyncExposureCrateDraft {
 }
 
 /// A module-anchored boundary awaiting the rule.
+#[doc(hidden)]
 pub struct AsyncExposureModuleDraft {
     crate_package: String,
     module: String,
@@ -101,6 +103,7 @@ impl AsyncExposureModuleDraft {
 }
 
 /// A boundary awaiting severity (optional) and its reason.
+#[doc(hidden)]
 pub struct AsyncExposureBoundaryDraft {
     crate_package: String,
     module: String,

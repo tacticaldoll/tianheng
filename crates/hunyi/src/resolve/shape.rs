@@ -13,12 +13,15 @@ use super::{BareFallback, UseMap, resolve_path, strip_raw};
 /// forbidden type nested in a generic argument (`Vec<crate::infra::Pool>`) or named in a
 /// bound (`T: crate::infra::Pooled`) is observed too.
 ///
-/// `shadowed` names the generic **type parameters** in scope. A bare single-segment path equal to
-/// one of them is a *parameter use* (`x: T`), not a nominal type, so it is NOT collected: were it
-/// collected, a parameter named identically to a same-module `type` alias (`fn f<Secret>(x: Secret)`
-/// beside `type Secret = crate::infra::Real;`) would be misresolved through that alias to its
-/// forbidden target — a false positive. A param's *bounds* (`T: crate::infra::X`) are multi-segment
-/// paths and stay collected; only the bare param-as-type use is skipped.
+/// `shadowed` names the generic **type parameters** in scope. A path whose **leading** segment
+/// (non-`::`-rooted, no generic args) equals one of them is a *parameter use* — the bare form
+/// (`x: T`) or an associated-type projection off it (`T::Item`) — not a nominal type, so it is NOT
+/// collected: were it collected, a parameter named identically to a same-module `type` alias
+/// (`fn f<Secret>(x: Secret)` beside `type Secret = crate::infra::Real;`) or a `use … as Secret`
+/// import would be misresolved through that alias to its forbidden target — a false positive. A
+/// param's *bounds* (`T: crate::infra::X`) name the forbidden type in a segment that is not the
+/// param head, so they are multi-segment paths whose head is not a param and stay collected; only a
+/// path headed by the param itself is skipped.
 #[derive(Default)]
 pub(crate) struct PathCollector {
     pub(crate) paths: Vec<syn::Path>,
@@ -26,8 +29,8 @@ pub(crate) struct PathCollector {
 }
 
 impl PathCollector {
-    /// A collector that skips bare single-segment uses of the given in-scope generic type
-    /// parameters (see the type-level doc).
+    /// A collector that skips uses (bare or associated-type projections) of the given in-scope
+    /// generic type parameters (see the type-level doc).
     pub(crate) fn shadowing(shadowed: std::collections::HashSet<String>) -> Self {
         Self {
             paths: Vec::new(),
@@ -36,12 +39,20 @@ impl PathCollector {
     }
 
     fn is_shadowed_param(&self, path: &syn::Path) -> bool {
+        let Some(head) = path.segments.first() else {
+            return false;
+        };
+        // A path is a *use* of a shadowed param when its leading (non-`::`-rooted) segment names one
+        // and carries no generic args — true for the bare form (`T`) AND an associated-type
+        // projection off it (`T::Item`, `T::Item::Sub`). A projection off a type parameter can never
+        // denote a nominal forbidden type, so it must not be collected and resolved: were the module
+        // to also declare a same-named import alias (`use crate::infra::Secret as T;`, legal since the
+        // fn's `<T>` only lexically shadows it), collecting `T::Item` would misresolve it through the
+        // alias to `crate::infra::Secret::Item` — a false positive on code exposing nothing. A
+        // genuine multi-segment leak (`crate::infra::X`) has a non-param head and stays collected.
         path.leading_colon.is_none()
-            && path.segments.len() == 1
-            && matches!(path.segments[0].arguments, syn::PathArguments::None)
-            && self
-                .shadowed
-                .contains(&strip_raw(&path.segments[0].ident.to_string()))
+            && matches!(head.arguments, syn::PathArguments::None)
+            && self.shadowed.contains(&strip_raw(&head.ident.to_string()))
     }
 }
 

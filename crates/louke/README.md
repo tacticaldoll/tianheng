@@ -50,6 +50,17 @@ label. Explicitly **rejected** as a non-goal: runtime capability/effect drift ("
 reachable") — a runtime policy engine. The registry holds static label allowlists only, never
 predicates.
 
+## Adoption & status
+
+**Experimental — pre-1.0.** Public faces may change until adoption settles them; within `0.1.x` no
+release intentionally breaks the adopter-written builder.
+
+漏刻 is usually reached **top-down**, through the composed
+[`tianheng`](https://crates.io/crates/tianheng) constitution — runtime origin governance is a
+*depth* you add once the static and semantic instruments are in place, not a standalone on-ramp.
+The prod reaction is an **event by default** (`panic` is opt-in), so it never crashes production on
+a false positive. See the runtime mode of the `composed` example under the workspace `examples/`.
+
 ## License
 
 Licensed under either of Apache-2.0 or MIT, at your option.

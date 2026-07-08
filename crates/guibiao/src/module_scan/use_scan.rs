@@ -58,6 +58,31 @@ pub(crate) fn imports_with_importers(
     pairs
 }
 
+/// Each importer module paired with the **external** crate it imports — the mirror of
+/// [`imports_with_importers`] for the one rule that observes external imports (confinement),
+/// instead of dropping them. Same lexical pipeline (comment/string/macro strip, inline-`mod`
+/// attribution, group/glob expansion); the only difference is [`external_crate_head`] in place
+/// of `normalize_module_path`, so an external head is captured **exactly when** the internal
+/// scan would have discarded it as external. Sorted + deduped by `(importer, external crate)`.
+pub(crate) fn external_imports_with_importers(
+    source: &str,
+    current_module: &str,
+    root_modules: &[String],
+) -> Vec<(String, String)> {
+    let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
+    let mut pairs = Vec::new();
+    for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
+        for leaf in expand_use_tree(&tree) {
+            if let Some(head) = external_crate_head(&leaf, &module, root_modules) {
+                pairs.push((module.clone(), head));
+            }
+        }
+    }
+    pairs.sort();
+    pairs.dedup();
+    pairs
+}
+
 /// Each `use … ;` statement paired with the module that lexically encloses it. The
 /// walk tracks inline `mod name { … }` nesting by brace depth, so a `use` inside an
 /// inline submodule is attributed to that submodule (e.g. `crate::a::inner`) rather
@@ -357,6 +382,51 @@ fn normalize_module_path(
                 Some(out.join("::"))
             } else {
                 None
+            }
+        }
+    }
+}
+
+/// The **external** crate a use path names, or `None` if the path is internal or degenerate.
+/// The precise inverse of [`normalize_module_path`]'s external branch: it returns `Some(name)`
+/// exactly when that function returns `None` *because the head is an external crate* — and
+/// `None` for the non-external cases (`crate`/`self`/`super`, a crate-root module reached bare
+/// at the crate root, an empty path, an over-popped `super`). It reuses the identical
+/// leading-`::`, `crate`/`self`/`super`, and crate-root-module-shadowing resolution, so
+/// "external" has one definition shared with the internal scan, never a divergent one.
+fn external_crate_head(
+    path: &str,
+    current_module: &str,
+    root_modules: &[String],
+) -> Option<String> {
+    // A leading `::` is the explicit external/global form (`use ::libc::…`): the head is the
+    // first real segment, external even when a crate-root module shares the name — the exact
+    // mirror of the early-return `normalize_module_path` makes for the same marker.
+    if path.trim_start().starts_with("::") {
+        return path
+            .split("::")
+            .map(|segment| canonical_segment(segment.trim()))
+            .find(|segment| !segment.is_empty())
+            .map(str::to_string);
+    }
+    let segments: Vec<&str> = path
+        .split("::")
+        .map(|segment| canonical_segment(segment.trim()))
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let (first, _rest) = segments.split_first()?;
+    match *first {
+        // Internal roots (or a degenerate/over-popped `super`) — never an external crate.
+        "crate" | "self" | "super" => None,
+        other => {
+            // A bare first segment naming a crate-root module, at the crate root, is the
+            // internal module (the sibling `mod` shadows the extern prelude) — not external,
+            // exactly as `normalize_module_path` resolves it to `crate::…`. Everywhere else a
+            // bare first segment reaches the extern prelude: it is the external crate.
+            if current_module == "crate" && root_modules.iter().any(|module| module == other) {
+                None
+            } else {
+                Some(other.to_string())
             }
         }
     }
@@ -790,6 +860,55 @@ mod tests {
             imported_module_paths(src, "crate::kernel", &[]),
             vec!["crate::real::A".to_string()],
             "an escaped-quote char literal must not leak and expose a fake use"
+        );
+    }
+
+    #[test]
+    fn external_scan_captures_external_heads_with_the_shared_resolution() {
+        // The external scan is the exact mirror of the internal one: it captures a head
+        // precisely when the internal scan would drop it as external, using one resolution.
+        // A submodule's bare first segment is external; a leading `::` is explicitly external.
+        let pairs = external_imports_with_importers(
+            "use libc::c_int;\nuse ::winapi::HANDLE;\nuse crate::domain::Thing;",
+            "crate::service",
+            &[],
+        );
+        assert_eq!(
+            pairs,
+            vec![
+                ("crate::service".to_string(), "libc".to_string()),
+                ("crate::service".to_string(), "winapi".to_string()),
+            ],
+            "external heads captured, the internal `crate::…` import dropped: {pairs:?}"
+        );
+        // A bare first segment naming a crate-root module, at the crate root, is the internal
+        // module (the sibling `mod` shadows the extern prelude) — NOT external. This is the
+        // no-false-positive guarantee: the external scan must not observe it either.
+        let shadowed =
+            external_imports_with_importers("use libc::helper;", "crate", &["libc".to_string()]);
+        assert!(
+            shadowed.is_empty(),
+            "a shadowed crate-root module is internal, not an external head: {shadowed:?}"
+        );
+        // `crate`/`self`/`super` are internal roots, never external heads.
+        let internal = external_imports_with_importers(
+            "use crate::a::B;\nuse self::x::Y;\nuse super::z::W;",
+            "crate::m",
+            &[],
+        );
+        assert!(
+            internal.is_empty(),
+            "internal roots yield no external heads: {internal:?}"
+        );
+        // A `use` inside a string literal or a macro body is stripped before scanning.
+        let masked = external_imports_with_importers(
+            "fn f() { let _s = \"use libc::c_int;\"; }\nmacro_rules! m { () => { use libc::c_void; }; }",
+            "crate::service",
+            &[],
+        );
+        assert!(
+            masked.is_empty(),
+            "a use inside a string or macro body is not an observed external head: {masked:?}"
         );
     }
 }

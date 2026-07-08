@@ -449,6 +449,13 @@ pub(crate) fn collect_item_exposures(
     }
 }
 
+/// Whether an ident is the `self` keyword-segment of a `use` tree (`{self, X}` / `self as alias`),
+/// meaning "the prefix module itself". `self` is a keyword and never a raw identifier, so a string
+/// compare is exact.
+fn is_self_segment(ident: &syn::Ident) -> bool {
+    ident == "self"
+}
+
 /// Walk a `pub use` tree, pushing one [`PathExposure`] per re-exported leaf (and the root of a
 /// glob), seam-qualified by the **exported** path so two aliases of the same forbidden type stay
 /// distinct findings. Handles: named/renamed leaves; grouped re-exports (per leaf); a whole-module
@@ -456,12 +463,8 @@ pub(crate) fn collect_item_exposures(
 /// `self` group member (`{self, X}` — re-exports the prefix module, keyed by the prefix's final
 /// segment, never the literal `self`); a glob (the root prefix, which reacts iff it resolves
 /// in/under the forbidden set). `as _` binds no nameable path — a stated non-observed bound.
-/// `self` group member and a renamed `self` both mean "the prefix module itself" — collapse to
-/// the prefix, keyed by the prefix's final segment (or the alias). Recognised on the raw `Ident`
-/// (`self` is a keyword and never a raw identifier, so a string compare is exact).
-fn is_self_segment(ident: &syn::Ident) -> bool {
-    ident == "self"
-}
+/// A `self` group member and a renamed `self` both mean "the prefix module itself" — collapse to
+/// the prefix, keyed by the prefix's final segment (or the alias).
 fn walk_reexport_tree(
     tree: &syn::UseTree,
     prefix: Vec<syn::Ident>,

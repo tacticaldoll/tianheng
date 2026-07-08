@@ -12,9 +12,8 @@ use crate::driver::run_boundaries;
 use crate::dsl::AsyncExposureBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::module_resolve::resolve_module_items;
-use crate::resolve::collect_uses;
 use crate::rules::ASYNC_EXPOSURE_RULE;
+use crate::shape_scan::shape_module_findings;
 
 /// Run the async-exposure boundaries against the Cargo workspace at `manifest_path`.
 ///
@@ -68,14 +67,14 @@ pub(crate) fn async_exposure_module_findings(
     module: &str,
     crate_package: &str,
 ) -> Result<Vec<String>, String> {
-    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
-    // `uses` canonicalizes an inherent impl's self-type owner in the seam (see the dyn path).
-    let uses = collect_uses(&items);
-    let mut found = Vec::new();
-    for (ordinal, item) in items.iter().enumerate() {
-        collect_item_async_exposures(item, module, &uses, ordinal, &mut found);
-    }
-    found.sort();
-    found.dedup();
-    Ok(found)
+    // async collectors emit owner-qualified `String` identities directly, so the shared shape heart
+    // renders with the identity function (no `shape_finding` map, unlike the dyn / impl-trait path).
+    shape_module_findings(
+        src_dir,
+        root_file,
+        module,
+        crate_package,
+        collect_item_async_exposures,
+        |identity| identity,
+    )
 }

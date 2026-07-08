@@ -1,4 +1,5 @@
-use super::render::{coverage_report, report_sarif, violations_text};
+use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
+use super::term_color::Style;
 use super::{
     Coverage, constitution_markdown, dispatch, dyn_trait_text, impl_trait_text, list_document,
     list_markdown, merge_outcomes, nearest_manifest_from, projection_gate, report_json,
@@ -1055,6 +1056,84 @@ fn report_text_leads_with_reason_and_shows_the_offending_file() {
 }
 
 #[test]
+fn plain_render_carries_no_ansi_escapes() {
+    // The un-styled report — what a pipe, a CI log, and every unit test see — must stay a clean
+    // byte stream: presentation colour never leaks into the machine-facing default output.
+    let report = Report::new(vec![violation("crate::core", "rule", "finding", None)]);
+    let text = violations_text(&report);
+    assert!(
+        !text.contains('\u{1b}'),
+        "plain render must contain no ANSI escape:\n{text:?}"
+    );
+}
+
+#[test]
+fn constitution_error_machine_output_carries_no_ansi() {
+    // 0.1.7 coloured the exit-2 constitution-error voice on the human text path. The machine
+    // projections must stay a clean byte stream regardless — presentation never leaks into the
+    // JSON/SARIF a tool parses, the same presentation⊥verdict contract the violation paths hold.
+    let outcome = Outcome::ConstitutionError("module 'crate::ghost' not found".into());
+    let json = report_json(&outcome, &[], None);
+    let sarif = report_sarif(&outcome);
+    assert!(
+        !json.contains('\u{1b}'),
+        "the JSON projection of a constitution error must carry no ANSI escape:\n{json}"
+    );
+    assert!(
+        !sarif.contains('\u{1b}'),
+        "the SARIF projection of a constitution error must carry no ANSI escape:\n{sarif}"
+    );
+}
+
+#[test]
+fn style_error_is_plain_identity_and_active_wraps() {
+    // The exit-2 error voice follows the same rule as the severity headers: PLAIN is byte-identical
+    // (what a pipe/CI/redirect sees), ACTIVE wraps the identical text in escapes. So the newly
+    // coloured error path cannot change what a non-terminal consumer reads.
+    let msg = "Tianheng constitution error: module 'crate::ghost' not found";
+    assert_eq!(Style::PLAIN.error(msg), msg, "PLAIN error is the identity");
+    let active = Style::ACTIVE.error(msg);
+    assert!(
+        active.contains('\u{1b}'),
+        "ACTIVE error carries ANSI escapes"
+    );
+    assert!(
+        active.contains(msg),
+        "ACTIVE error wraps the identical text"
+    );
+}
+
+#[test]
+fn active_render_colours_around_the_text_without_changing_it() {
+    // With colour active the escape codes appear, but the reason text and the field order are
+    // unchanged — colour wraps the fields, it never reorders or removes them.
+    let report = Report::new(vec![violation("crate::core", "rule", "finding", None)]);
+    let styled = violations_text_styled(&report, Style::ACTIVE);
+    assert!(
+        styled.contains('\u{1b}'),
+        "active render must carry ANSI escapes"
+    );
+    assert!(
+        styled.contains("reason-for-crate::core"),
+        "the reason text survives styling"
+    );
+    // Same field order as the plain render — colour is layered around, not through, the structure.
+    let plain = violations_text(&report);
+    let strip = |s: &str| {
+        s.replace('\u{1b}', "")
+            .replace("[0m", "")
+            .replace("[1m", "")
+            .replace("[1;31m", "")
+            .replace("[1;33m", "")
+    };
+    assert_eq!(
+        strip(&styled),
+        strip(&plain),
+        "stripping the escapes yields the plain report byte-for-byte"
+    );
+}
+
+#[test]
 fn report_text_omits_the_file_element_when_absent() {
     let report = Report::new(vec![violation("crate::x", "rule", "finding", None)]);
     let text = violations_text(&report);
@@ -1384,6 +1463,9 @@ fn the_runtime_projection_distinguishes_posture() {
 
 #[test]
 fn both_baseline_flags_exit_2() {
+    // The contradictory pair is a pure usage error (exit 2), and its check runs BEFORE manifest
+    // resolution — so with an also-absent `--manifest-path` the flag conflict is still what gets
+    // reported, not a masking "no Cargo.toml found" diagnostic (assay round 3).
     assert_eq!(
         run_args(&[
             "tianheng",

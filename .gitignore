@@ -1,4 +1,8 @@
 /target/
+# Each example is its own workspace; its build artifacts and resolved lockfile are local only
+# (the examples commit the adopter's `= "0.1"` form, like the in-repo fixtures, and carry no lock).
+/examples/*/target/
+/examples/*/Cargo.lock
 /.agent/
 /.agents/
 /.amazonq/

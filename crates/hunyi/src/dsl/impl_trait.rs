@@ -80,6 +80,7 @@ impl ImplTraitBoundary {
 }
 
 /// An impl-trait boundary awaiting its module anchor.
+#[doc(hidden)]
 pub struct ImplTraitCrateDraft {
     crate_package: String,
 }
@@ -95,6 +96,7 @@ impl ImplTraitCrateDraft {
 }
 
 /// A module-anchored boundary awaiting the rule.
+#[doc(hidden)]
 pub struct ImplTraitModuleDraft {
     crate_package: String,
     module: String,
@@ -144,6 +146,7 @@ impl ImplTraitModuleDraft {
 }
 
 /// A boundary awaiting severity (optional) and its reason.
+#[doc(hidden)]
 pub struct ImplTraitBoundaryDraft {
     crate_package: String,
     module: String,

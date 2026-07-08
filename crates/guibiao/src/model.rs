@@ -632,6 +632,15 @@ pub enum ModuleRule {
         /// The closed allowlist of importer module paths (e.g. `["crate::facade"]`).
         allowed: Vec<String>,
     },
+    /// An **external** crate may be imported only within the governed module's own subtree
+    /// (the permitted subtree, or beneath it); any `use <crate_name>::…` from a module
+    /// outside that subtree is a violation. The first module rule that observes external
+    /// imports — every other rule ignores them. The confined crate is the violation target,
+    /// so identity stays injective across different confined crates on the same subtree.
+    ConfineExternalCrate {
+        /// The confined external crate name (e.g. `"libc"`).
+        crate_name: String,
+    },
 }
 
 impl ModuleRule {
@@ -642,21 +651,22 @@ impl ModuleRule {
             ModuleRule::RestrictImportsTo { .. } => "restrict imports to",
             ModuleRule::MustNotBeImportedBy { .. } => "module must not be imported by",
             ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
+            ModuleRule::ConfineExternalCrate { .. } => "external crate confined to module",
         }
     }
 
     /// The repair-direction [`Polarity`] of a violation of this rule. The two `MustNot*` rules
-    /// forbid a specific module edge (repair: remove the import) → `DenyBreach`; `RestrictImportsTo`
-    /// and `MustOnlyBeImportedBy` permit a set and react to an edge outside it (repair: remove or
-    /// widen) → `AllowlistGap`.
+    /// forbid a specific module edge (repair: remove the import) → `DenyBreach`; `RestrictImportsTo`,
+    /// `MustOnlyBeImportedBy`, and `ConfineExternalCrate` permit a region and react to an edge
+    /// outside it (repair: move the import into the permitted subtree, or widen) → `AllowlistGap`.
     pub(crate) fn polarity(&self) -> Polarity {
         match self {
             ModuleRule::MustNotImport { .. } | ModuleRule::MustNotBeImportedBy { .. } => {
                 Polarity::DenyBreach
             }
-            ModuleRule::RestrictImportsTo { .. } | ModuleRule::MustOnlyBeImportedBy { .. } => {
-                Polarity::AllowlistGap
-            }
+            ModuleRule::RestrictImportsTo { .. }
+            | ModuleRule::MustOnlyBeImportedBy { .. }
+            | ModuleRule::ConfineExternalCrate { .. } => Polarity::AllowlistGap,
         }
     }
 
@@ -679,13 +689,17 @@ impl ModuleRule {
             ModuleRule::MustOnlyBeImportedBy { allowed } => {
                 format!("may only be imported by: {}", allowed.join(", "))
             }
+            ModuleRule::ConfineExternalCrate { crate_name } => {
+                format!("confines external crate {crate_name} to this module's subtree")
+            }
         }
     }
 
     /// The JSON parameter fields for the projection. `must_not_import` names its single
     /// `forbidden` path; `restrict_imports_to` emits its closed set as `only` (always,
     /// as `[]` when empty), matching the crate-level restrict-to vocabulary;
-    /// `must_not_be_imported_by` names its declared forbidden `importer`.
+    /// `must_not_be_imported_by` names its declared forbidden `importer`;
+    /// `confine_external_crate` names the confined `external_crate`.
     pub(crate) fn json_params(&self) -> Vec<(&'static str, Value)> {
         match self {
             ModuleRule::MustNotImport { module } => {
@@ -703,6 +717,11 @@ impl ModuleRule {
             // self-describing without reading the `rule` label.
             ModuleRule::MustOnlyBeImportedBy { allowed } => {
                 vec![("only_importers", serde_json::json!(allowed))]
+            }
+            // `external_crate` (self-describing): this rule confines a named external crate to
+            // the governed module's subtree, a surface distinct from every internal-edge rule.
+            ModuleRule::ConfineExternalCrate { crate_name } => {
+                vec![("external_crate", serde_json::json!(crate_name))]
             }
         }
     }
@@ -775,6 +794,25 @@ impl ModuleTargetDraft {
     {
         self.with_rule(ModuleRule::MustOnlyBeImportedBy {
             allowed: allowed.into_iter().map(Into::into).collect(),
+        })
+    }
+
+    /// Confine an **external** crate's imports to the governed module's own subtree: any
+    /// `use <crate_name>::…` written from a module outside this module (or beneath it) is a
+    /// violation. This is the first module rule that observes external-crate imports — every
+    /// other rule ignores them. Only the named crate is observed (a `cargo metadata`
+    /// cross-check is deliberately *not* performed: confining a crate the target never imports
+    /// is simply clean). The confined crate is the violation target, so declaring two
+    /// confinements of different crates on the same module stays injective. Confining on
+    /// `crate` (the root) is a constitution error, since it would permit the crate everywhere.
+    ///
+    /// The crate name may be written in either **package** form (`"windows-sys"`) or **import
+    /// identifier** form (`"windows_sys"`): the rule observes the source `use` identifier, in
+    /// which Cargo maps a package's `-` to `_`, so the confined name is matched with that same
+    /// fold. A raw identifier (`r#name`) is canonicalized as elsewhere.
+    pub fn confine_external_crate(self, crate_name: &str) -> ModuleBoundaryDraft {
+        self.with_rule(ModuleRule::ConfineExternalCrate {
+            crate_name: crate_name.to_string(),
         })
     }
 

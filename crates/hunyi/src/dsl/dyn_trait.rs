@@ -78,6 +78,7 @@ impl DynTraitBoundary {
 }
 
 /// A dyn-trait boundary awaiting its module anchor.
+#[doc(hidden)]
 pub struct DynTraitCrateDraft {
     crate_package: String,
 }
@@ -93,6 +94,7 @@ impl DynTraitCrateDraft {
 }
 
 /// A module-anchored boundary awaiting the rule.
+#[doc(hidden)]
 pub struct DynTraitModuleDraft {
     crate_package: String,
     module: String,
@@ -140,6 +142,7 @@ impl DynTraitModuleDraft {
 }
 
 /// A boundary awaiting severity (optional) and its reason.
+#[doc(hidden)]
 pub struct DynTraitBoundaryDraft {
     crate_package: String,
     module: String,

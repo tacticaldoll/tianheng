@@ -401,13 +401,6 @@ fn canonicalize_use_target(
     resolve_crate_relative(&segs, module).or_else(|| extern_verbatim_segs(&segs, externs))
 }
 
-/// Rewrite the **longest `::`-boundary prefix** of `path` that is a key in `map`, keeping the
-/// remaining tail, or `None` if no prefix matches. A whole-path match is the longest prefix (so
-/// this subsumes an exact-key lookup); a shorter prefix match rewrites a member reached *through* a
-/// re-exported module or aliased prefix — `crate::facade::sub::Foo` via the module re-export
-/// `crate::facade::sub -> crate::real::sub` becomes `crate::real::sub::Foo`, which a whole-key-only
-/// lookup would miss (a silent false negative). The most specific (longest) key wins, so a type
-/// re-export of `…::sub::Foo` still takes precedence over a module re-export of `…::sub`.
 /// Whether `prefix` is a strict `::`-boundary prefix of `path` — `crate::a` of `crate::a::b`, but
 /// not of the unrelated `crate::ab` (segment-boundary aware) nor of itself. Used to refuse a
 /// re-export map entry that would let `rewrite_longest_prefix` re-fire on its own growing output.
@@ -415,6 +408,13 @@ fn is_strict_path_prefix(prefix: &str, path: &str) -> bool {
     path.len() > prefix.len() && path.starts_with(prefix) && path[prefix.len()..].starts_with("::")
 }
 
+/// Rewrite the **longest `::`-boundary prefix** of `path` that is a key in `map`, keeping the
+/// remaining tail, or `None` if no prefix matches. A whole-path match is the longest prefix (so
+/// this subsumes an exact-key lookup); a shorter prefix match rewrites a member reached *through* a
+/// re-exported module or aliased prefix — `crate::facade::sub::Foo` via the module re-export
+/// `crate::facade::sub -> crate::real::sub` becomes `crate::real::sub::Foo`, which a whole-key-only
+/// lookup would miss (a silent false negative). The most specific (longest) key wins, so a type
+/// re-export of `…::sub::Foo` still takes precedence over a module re-export of `…::sub`.
 fn rewrite_longest_prefix(
     path: &str,
     map: &std::collections::HashMap<String, String>,

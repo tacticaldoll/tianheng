@@ -27,7 +27,16 @@ complete, so the near-term line is **0.1.x, a patch line**:
   *same* minor rather than each forcing its own: the `Violation::new` newtype (retiring the
   4-positional-`String` footgun) and a **structured baseline** (findings as data, not strings — which
   is what unblocks the deferred 渾儀 `PublicSeam` / `ExposureSubject` typing). Bundle them into one
-  honest 0.2.0, not three. Additive adopter-facing work (the LSP crate, the
+  honest 0.2.0, not three. **The `guibiao` item is now demand-gated, not automatic** (see the
+  product-identity note below): whether its widened surface is *narrowed* (treated as internal) or
+  *deliberately kept and shaped* (as the standalone static-linter product) is decided by whether
+  guibiao draws standalone adopters — narrowing a face someone relies on would cut a product's
+  potential. A further **breaking** candidate rides the same window *only if the 三儀-as-products
+  reaction arrives*: sinking the run / projection (SARIF) machinery from `tianheng` into `xuanji` —
+  the reaction runtime beneath the model — so a single 儀 + `xuanji` is a complete standalone check,
+  possibly generalizing `xuanji`'s Tianheng-specific vocabulary (`BoundaryKind` / `Polarity`). It is
+  0.2.0-windowed because it is breaking, but it does not fire without the product reaction.
+  Additive adopter-facing work (the LSP crate, the
   adopter-facing 潛移 generator) does **not** force a minor: it rides whatever release is
   current, a patch unless bundled with that breaking refinement. **Guardrail (reference-consumer
   steer):** the 0.2.0 break is quarantined to the *internal* surfaces — the `Baseline` data model,
@@ -37,11 +46,260 @@ complete, so the near-term line is **0.1.x, a patch line**:
   promise and damages Tianheng's own adoption curve. A stable builder face is the *price* of the
   0.2.0 cleanup, not a casualty of it.
 
-### 0.1.5 — known-depth consolidation (the current patch line)
+### The crate family as products — identity now, product weight on reaction
 
-0.1.5 has converged from scope map to shipped state. Its built items are recorded once in the
-dimension / 三司 sections below; the remaining forward work stays there as forward depth. The 0.2.0
-bundle above remains the only currently named breaking line.
+The six published crates carry deliberate roles, not just a workspace split:
+
+- **三儀 = public products** — 圭表 (static import / dependency boundaries, syn-free), 渾儀 (public-API
+  exposure), 漏刻 (runtime origin governance). Three **orthogonal** instruments (different observation
+  sources, different audiences), not redundant crates — the strongest answer to any "why so many
+  crates" read.
+- **璇璣 / 星表 = the public substrate** the instruments stand on (public because the instruments
+  depend on them, not products in their own right).
+- **天衡 = the composer** — batteries-included, the funnel target: adopt one 儀 as an on-ramp,
+  graduate to the composed constitution. Single 儀 → suite is the adoption funnel, not a dilution.
+
+Productization is **demand-driven, in Tianheng's own form** — the drift law applied to go-to-market:
+*no name without a reaction → no commitment without a reaction.* Identity can be declared now (it is
+reversible narrative); irreversible / breaking / high-maintenance weight waits for a real reaction.
+
+- **Establish now (reversible):** the product identities above; family positioning in each crate's
+  README / docs.rs; that most adopters want `tianheng`. Always co-stated with the honest tier
+  (**experimental / pre-1.0**) — a claimed-but-unsupported product identity is worse than none.
+- **0.1.x, non-breaking (signal, don't cut):** `#[doc(hidden)]` + `#[deprecated]` on the split-cost
+  accidental public surface — pre-manage the 0.2.0 narrowing without breaking anyone.
+- **Defer to a reaction:** per-儀 standalone CLIs, docs / cookbooks, per-crate 1.0 / long-term
+  stability promises, and the standalone 漏刻 product story (a legitimate category, but the
+  least-proven — its standalone demand is the most speculative of the three).
+
+**Stability posture: 0.1.x late-stage pre-stability.** Not immaturity — concept and function are
+saturated (三儀 all born, a complete world-view); the 0.1.x line is the *honest pre-1.0 window* that
+keeps API lock-in right until real adoption pressure says which public faces become long-term
+contracts. A category-creating project cannot pull demand for a category nobody knows exists, so the
+sequence is **push then pull**: push the honestly-labelled (experimental) narrative to bootstrap
+awareness; let demand deepen it.
+
+**Exit trigger from the 0.1.x hold → 0.2.0 deliberate definition** (any one):
+
+- a first serious external adopter needing a compatibility promise;
+- a 儀 actually adopted standalone, or an API that actually hurts in use;
+- API convergence (no churn across several patch releases).
+
+Until a trigger fires, staying 0.1.x is a **deliberate hold** (waiting for reaction), not drift.
+
+### Product maturity in the 0.1.x hold — DX and trust, all convention / CI-reaction
+
+Reading as a **mature product** during the deliberate hold above is not new capability — it is
+**lower friction (DX) and higher trust**. This is the drift law applied to go-to-market: build no
+shell without a reaction, but polish the packaging and on-ramp of the observation mechanisms that
+already react. Everything here is **convention / CI-reaction hygiene — zero constitution boundaries,
+zero pre-built empty shells** (the class of the branching ritual and license-bundling in
+`AGENTS.md`). Three tracks, each with the guardrail that keeps it inside Tianheng's own law.
+
+**1 — Onboarding: examples that dogfood, mirroring the funnel.**
+
+- **Role split (the invariant).** A live-red `tianheng check` target and a green `cargo test`
+  citizen are different roles; compiling both into one workspace member is the trap. So the
+  **violating subject** is a check *target* — its own excluded sub-workspace (self-`[workspace]`),
+  like `crates/tianheng/tests/fixtures/{clean,violating}`. Intentionally-"wrong" code lives there as
+  **data**: invisible to `cargo build/clippy/fmt/doc --workspace` (the real enemy is
+  `clippy -D warnings` on deliberately-ugly demo code, not self-governance) and to self-governance,
+  which declares no boundary over it — self-governance governs only the family's *crate-dependency*
+  edges (confirmed in `self_governance.rs`: all `CrateBoundary`, no module/semantic rule), so an
+  example's internal import-direction / API-leak fault is never scanned by it. The **driver** — the
+  harness that runs the reaction and asserts the outcome — is a `publish = false` member under a
+  top-level `examples/` (added to `[workspace] members`, kept **out of `crates/`** so the `crates/*`
+  CI globs never see it), clean code that passes every gate, green *because* the reaction fired. It
+  need not `deny(missing_docs)` (a demo, not an API), so it does not fight `cargo doc -D warnings`.
+- **The composed example demos 天衡 as funnel target, in two modes** — because the 三儀 react in two
+  places:
+  - *check-mode* (CI-time, against source): one target carrying a static fault (a `domain` →
+    `infra` import) and a semantic fault (an `api` `pub` signature exposing `infra::DbPool`), with
+    the declared runtime seam **probed** so 漏刻's CI face (`audit_probe_coverage`) *passes* —
+    coverage is satisfied, because the honest steady state at CI time is a well-covered seam, and
+    漏刻's actual reaction is a runtime event shown in run-mode (below), not a check-time verdict.
+    Checked against **incrementally-scoped constitutions** — static-only = the 圭表 dimension's
+    view, +semantic = +渾儀, full = 天衡 all-open. Single 儀 → suite made literal from one body of
+    code. This is the funnel, **not** standalone-crate adoption (the README's job, below). Assert
+    `exit 1` + the expected `reason`/`rule` via `--format json` — never the ANSI render (track 2
+    makes it a moving target). A tiny `missing-probe` variant (the same seam with its
+    `assert_boundary!` removed) demonstrates 漏刻's CI-face *reaction* — the "declared but never
+    enforced" gap — as a side branch, so the main target need not choose between a passing coverage
+    check and a probed seam that run-mode requires.
+  - *run-mode* (runtime, in a binary): 漏刻's prod face **cannot** be shown by `check` — `check`
+    runs only louke's *CI face* (the `audit_probe_coverage` source scan). The runtime reaction fires
+    against live objects in a running binary, so a small runnable binary `install`s a
+    `RuntimeBoundary`, crosses a seam with a disallowed-origin object, and the CI script asserts the
+    **emitted `Violation` event** (default reaction; `panic` stays opt-in). This is intrinsically
+    top-down — you wire louke into your binary — reconfirming that 漏刻 belongs in the *composed*
+    example, never a standalone on-ramp.
+- **Standalone dependency-footprint pitch → shown by the standalone examples; 漏刻's stays a README
+  snippet.** A footprint *is* the product claim (圭表 syn-free and light; 渾儀 the one that *carries*
+  the quarantined `syn` — honest, not "light"; 漏刻 `xuanji`-only), and a composed member's
+  `Cargo.toml` (whole family + `syn`) cannot show any of them. The `guibiao`-standalone example
+  commits `[dependencies] guibiao = "0.1"` alone (syn-free, light); the `hunyi`-standalone commits
+  `hunyi = "0.1"` (which honestly pulls `syn` — the point is that the semantic instrument is *where
+  syn lives*, not that it is light) — each footprint *demonstrated, not asserted*. 漏刻 has no
+  standalone example (a top-down depth), so its `xuanji`-only footprint stays a copy-paste
+  README/docs.rs snippet. Every crate's README still carries a ~10-line Constitution + a copy-paste
+  GitHub Actions snippet (`tianheng check` on PRs) as prose — a snippet, not a published composite
+  action (more weight; defer to a reaction).
+- **Committed-honest, CI-local (one resolution, not two forms in tension).** Every example commits
+  the adopter's real form — `guibiao = "0.1"` — so its `Cargo.toml` is copy-paste-honest and, for the
+  standalone examples, *is* the footprint demo. To also track HEAD in CI (catch a local regression
+  before it publishes), the CI script injects the `--config patch.crates-io.<crate>.path=` resolution
+  the `packaged-selftest` job already uses — committed file honest, resolution local. A raw `path =`
+  dep is **not** used for the standalone examples: it would falsify the footprint demo (an adopter
+  writes `= "0.1"`, never `path =`). The composed example, whose footprint is not the pitch, may use
+  `path =` freely.
+- **Decided — three examples: `composed` + `guibiao`-standalone + `hunyi`-standalone.** The two
+  CI-time instruments each get their own runnable standalone demo (check-against-source, no runtime),
+  so 圭表 (the strongest standalone product) and 渾儀 each show a real light `Cargo.toml` and an
+  on-ramp, not just a README snippet. 漏刻 has **no** standalone example — it is a top-down *depth*,
+  so it appears only inside `composed` (run-mode). The accepted cost is the largest example-set to
+  maintain; the "dogfood does not rot" CI candidate below is what keeps that cost bounded.
+- **Worked shape (for imitation — the DSL is real).** `composed` grows its constitution by one
+  `.boundary()` per stage: `ModuleBoundary::in_crate("app").module("crate::domain")
+  .must_not_import("crate::infra")` (圭表) → `SemanticBoundary::in_crate("app").module("crate::api")
+  .must_not_expose("crate::infra::DbPool")` (渾儀) → `RuntimeBoundary::at("adapter-seam")
+  .only_origins(["crate::adapters::blessed"])` (漏刻). run-mode is a hexagonal port/adapter seam: a
+  `trait Adapter: louke::Tracked`, a blessed adapter that `register_origin!`s **inside** its own
+  module (the origin is the registration site's `module_path!()`) and a rogue one whose origin is
+  not in `only_origins`; `install` the boundary, cross the seam with the rogue via
+  `assert_boundary!("adapter-seam", &*obj)`, and the fail-closed probe emits the `Violation` event
+  the CI script asserts (an unregistered type fails closed too). This is the same port/adapter shape
+  whose *static* layering 圭表 governs — the audience that enforces "domain depends inward only" is
+  the one that wants "only the blessed adapter crosses the seam," which is why they compose.
+- **Contract demonstrations (absorbs the upstream-review points — show, don't tell).** These need
+  only one boundary + one violation, so they ride the simplest example — the `guibiao`-standalone one
+  — **not** the already-loaded `composed` target (which stays focused on funnel + runtime; piling the
+  severity/baseline axis onto its enforce-scoped funnel would collide expected exit codes). The
+  examples *demonstrate* the public-contract invariants a reviewer otherwise has to infer from
+  source, turning them into runnable proof (dogfood / 潛移):
+  - *Presentation ⊥ verdict* — run the same check in default / `--format json` / `--format sarif`
+    and assert an **identical exit code** across all three; only the rendering differs, so
+    formatting never moves the verdict.
+  - *Adoption ladder, lived* — the same target run through the two-axis ramp: `warn` severity → the
+    violation is reported but `check` exits 0 (signal without gating); a generated `Baseline`
+    grandfathers the existing violations → exit 0, while a newly-added one → exit 1; then `enforce`
+    with no baseline → exit 1. The real `Baseline` JSON is `xuanji`'s versioned wire contract in
+    action.
+  - *Identity ⊥ metadata* — baseline a violation, **move the offending code to another file**
+    (changing `Violation.file`), re-check: the baseline still matches and the violation stays
+    grandfathered, because `ViolationId = { target, rule, finding }` excludes `file`. Refactoring
+    file layout does not churn your baseline — the stability contract made tangible.
+
+**2 — Output: reaction-voice render polish, never fix-instruction.**
+
+- The actionability goal is right and half-built: `AGENTS.md`'s read order is **reason → file →
+  finding**. Polish the terminal render to make that visual (reason foregrounded, file secondary,
+  finding concrete) so the first glance lands on *why* — pulling out the linter's scolding tone.
+- **Hard guard — keep the reaction voice, give no fix command.** `Fix: remove the import at
+  db.rs:12` is a lint's prescriptive-remediation voice, and Tianheng is explicitly *not a lint*
+  (see the non-goals); worse, the "fix" is often wrong (move the type / invert the dep / add a port,
+  not "remove"). Emit *what · where · why*; *how* is the adopter's, repaired toward the `reason`.
+- **Placement: `tianheng` (shell) only, hand-rolled ANSI.** 璇璣 renders no verdict and is
+  `serde_json`-only, so color/layout cannot live there; and any color crate would trip `tianheng`'s
+  own `restrict_dependencies_to(guibiao, hunyi, louke, serde_json)` self-law. So it is a small
+  hand-rolled ANSI module in `tianheng` — zero new dependency, no self-law amendment.
+- **Three things that make hand-rolled color read as mature (all still zero-dep):** (a) TTY-gate via
+  `std::io::IsTerminal` (in std since 1.70; MSRV 1.85, so free) and honor `NO_COLOR`, so a
+  redirected / CI log gets no escape bytes; (b) color only the human/default format — `--format
+  json` / `sarif` stay uncolored and TTY-agnostic (CI greps the SARIF `"version": "2.1.0"`; no
+  machine consumer may eat color bytes); (c) distinguish the voices — exit 1 (violation) vs exit 2
+  (constitution/usage error) — by prefix/color. **Width-agnostic:** no wrap-to-terminal-width (width
+  detection needs a dep or ioctl); a fixed prefix + indented lines reads at any width and stays
+  zero-dep.
+
+**3 — Repository hygiene: the demand-signal funnel.**
+
+- **Per-儀 issue templates, routed to the spectrum** (not flat), doubling as the 0.2.0-trigger
+  collection funnel: 圭表 "report a static import/dependency false-negative / request a layer rule"
+  (bottom-up); 渾儀 "report a missed API leak / request structured exposure typing" (bottom-up); 漏刻
+  "**discuss** a runtime origin pattern" (top-down — "discuss," not "report," because 漏刻's signal is
+  a 天衡 adopter leaning on the runtime dimension as a primary reason, not standalone adoption).
+  Every template carries one shared field that *is* the funnel instrument — **"using `<crate>`
+  standalone, or via `tianheng`?"** — so each bug report becomes a demand-signal datapoint feeding
+  the 0.2.0 "a 儀 adopted standalone" trigger; plus version, a minimal repro (Constitution snippet +
+  code), observed-vs-expected reaction, and the `--format json` output.
+- **User-facing `CHANGELOG.md`** — an adopter-facing projection (a *different reader* than the git
+  history, which is why it earns its keep despite the self-describing-commit rule): record every
+  false-negative closure / depth extension — trust for conservative adopters even though 0.1.x
+  promises no breaking. **Drift guard** (the declaration-integrity / prose-drift class): a
+  hand-maintained CHANGELOG mirrors releases and will drift from the `release: X.Y.Z` spine, so
+  anchor its maintenance into the release SOP — the entry written **on the release branch before its
+  squash to `main`**, never independently.
+
+**Future — may graduate to CI reactions (defer; do not pre-build).** Two hygiene invariants become
+gates only when their drift actually bites, the way license-bundling became the "License texts
+bundled" job: (i) every example still passes its expected reaction (the dogfood does not rot); (ii)
+every `release: X.Y.Z` carries a matching CHANGELOG entry. Named as candidates, not built — no
+reaction without the pain.
+
+**Rests on the spectrum + triggers** (the product-identity note above): 圭表 genuinely standalone ·
+渾儀 semi-product (a distinct, only partly-overlapping library-author audience) · 漏刻 a *depth* of
+the composed product, not an on-ramp (its adoption path is top-down via 天衡). The demand-signal
+triggers differ in **direction** — bottom-up ×2, top-down ×1 — which is why the issue-template
+routing and the standalone-pitch placement differ per 儀.
+
+### Public-contract legibility & convergence (upstream-review-surfaced)
+
+An external reviewer reading only the **published 0.1.6 crates** (no `PROJECT.md` / `self_governance.rs`)
+proposed public-contract refinements. Triaged against the enforced architecture, **most are already
+true and self-governed — the gap the reviewer hit is legibility, not architecture**: the contract
+reads correctly from outside but is not stated in adopter-facing docs. So the payoff here is a
+docs/contract pass (0.1.x, non-breaking), one surface audit, and one considered decline — not new
+architecture. The primary vehicle is the **examples** (track 1): these invariants are *demonstrated*
+there as runnable proof (the "Contract demonstrations" bullet above), with written docs as the
+complement — show, then tell.
+
+- **Already enforced; make legible (doc, do not build).**
+  - *Three-layer split — declaration (`Constitution`) ⊥ reaction (`check`, pure) ⊥ shell (`run`).*
+    Already a **self-law** (functional-core ⊥ imperative-shell: `guibiao` must not depend on
+    `tianheng`). Actionable: state the layering in adopter docs and name the **presentation ⊥
+    verdict** invariant — `--format json`/`sarif` and the ANSI render change presentation only,
+    never the outcome (already CI-reacted: the `reaction` job asserts a SARIF projection still exits
+    1). This is also track 2's render guardrail.
+  - *`xuanji` = the sole cross-crate wire contract.* Already so (the shared reaction model,
+    `serde_json`-only, below every dimension, self-law-enforced). Actionable: elevate its JSON /
+    `Baseline` schema to an **explicitly versioned, migration-disciplined** contract in docs — ties
+    to the 0.2.0 structured-baseline item (findings as data).
+  - *Violation identity ⊥ metadata.* Already so and documented in rustdoc: `ViolationId = { target,
+    rule, finding }` is the baseline match key; `file` is explicitly *not* identity (set via
+    `with_file`, non-breaking, never affects matching); `BaselineEntry.owner/tracker` are
+    metadata-only; the baseline carries no `anchor` (it rides the live `Violation`). This is the
+    injective-identity principle realized. Actionable: surface it in the **adopter-facing README** as
+    a stability contract, not only in rustdoc.
+- **Adoption ladder → README (track-1 pitch), enriched.** The reviewer's warn → enforce ramp is
+  real but one-dimensional; the actual ladder is **two axes**: severity (`warn` first → `enforce`
+  gate) *and* baseline (grandfather existing violations → enforce new). An existing codebase adopts
+  via baseline, a greenfield one via warn-first — document both as the on-ramp.
+- **Prelude / stable-surface audit (0.2.0-adjacent).** `tianheng::prelude` reexports ~26 names — a
+  large surface the 0.2.0 guardrail has already promised **never to break** (the adopter builder).
+  Bigger prelude = bigger never-break liability. Audit: classify each name as *committed-stable
+  builder* (must-not-break) vs *convenience reexport* (demotable / `#[doc(hidden)]`), and document
+  the tiers — the same family as the split-cost accidental-surface signal (`#[doc(hidden)]` +
+  `#[deprecated]`) in the product-identity note. Not necessarily a trim (a batteries-included funnel
+  target wants a full prelude); the deliverable is a **scoped** never-break promise, not a smaller
+  prelude by default. The three examples' actual import set is empirical evidence for the audit — the
+  names they touch are the real committed-stable builder; the rest are convenience.
+- **Considered decline — a mechanical "policy adapter" importing an existing rule source into a
+  `Constitution`.** The *goal* (low-friction adoption, do not reinvent governance syntax) is
+  legitimate and is served by the **cookbook / examples** (track 1) that translate common governance
+  intents into boundaries. The *mechanism* — an importer that generates a Constitution from an
+  external / prose rule source — is **declined for now**: it bypasses the 潛移 authoring surface (the
+  human/agent *writing* the boundary and its forward-voice `because` is the point, not a generated
+  artifact), risks a `because` that asserts structure the law does not react to, and has no concrete
+  machine-readable source format or adopter demanding it (drift law: no capability without a
+  reaction). Tianheng keeps the *declared, per-target* layer; it is not a policy-translation engine.
+  Reconsider only if a concrete machine-readable source **and** a real adopter appear together.
+
+### 0.1.5 — known-depth consolidation · **SHIPPED**
+
+0.1.5 has converged from scope map to shipped state (0.1.6 and 0.1.7 have since shipped on top of
+it; 0.1.7 is the current line). Its built items are recorded once in the dimension / 三司 sections
+below; the remaining forward work stays there as forward depth. The 0.2.0 bundle above remains the
+only currently named breaking line.
 
 ### 0.1.6 — metadata SSOT extraction + forbidden-marker re-export/rename hardening · **SHIPPED**
 
@@ -122,19 +380,28 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   inbound dual of `RestrictImportsTo`, mirroring how it is distinct from `MustNotImport`); polarity
   `AllowlistGap`, projected under the surface-qualified `only_importers` key, crate-root protection a
   constitution error. Shipped as an OpenSpec change modifying `module-boundary` (ADDED requirement).
+- **Module-scoped external-crate confinement — `confine_external_crate(C)` — BUILT (v0.1.7).** The
+  middle cell between crate-granularity (`restrict_dependencies_to`, whole-crate) and intra-crate
+  module direction (`restrict_imports_to`, which by design **never flags an external import**): "crate
+  Y *may* depend on C, but C may be imported only under subtree S" — the FFI/platform-vocabulary
+  confinement pattern. Declared as
+  `ModuleBoundary::in_crate(p).module(S).confine_external_crate(C).because(…)`; the confined crate is
+  the violation `target` and the offending importer the `finding`, so `(target, rule, finding)` is
+  injective by structure. This is the **first 圭表 rule that observes external-crate imports** — it
+  inverts, for this one rule only, the module scanner's long-standing "external imports are out of
+  scope" stance; every other rule keeps ignoring them. This is **layer (a), import confinement**
+  (`use C::…` only under S), reusing the existing `use` scan directly — the in-scope core. No new
+  builder-intermediate type (one method on the existing `ModuleTargetDraft`); additive/patch,
+  semver-safe within 0.1.x. Not `cargo-deny`'s lane (declared/per-module, not resolved/whole-graph).
+  Shipped as the OpenSpec change `external-crate-confinement`, whose synced spec is now the SSOT
+  under `openspec/specs/external-crate-confinement/`.
 
 **Forward depth — potential, not active (adopter-surfaced):**
-- **Module-scoped external-crate confinement — `restrict_dependency(C).to_module_subtree(S)`**:
-  *not built.* The middle cell between crate-granularity (`restrict_dependencies_to`, whole-crate)
-  and intra-crate module direction (`restrict_imports_to`, which by design **never flags an external
-  import** — see its test): "crate Y *may* depend on C, but C may be imported only under subtree S" —
-  the FFI/platform-vocabulary confinement pattern. Observable on the existing static `use` scan (it
-  already sees external imports; the reaction just does not yet fire on them at module granularity),
-  so it obeys the drift law; additive/patch. **Adopter-surfaced.** Two layers: (a) **import
-  confinement** (`use C::…` only under S) reuses the scan directly — the in-scope core; (b)
-  **inline-symbol-path confinement** (`C::foo()` / `C::CONST` written in bodies with no `use`) needs
-  an all-body path scan deeper than any current pass — a later phase / stated bound, not the core.
-  Not `cargo-deny`'s lane (declared/per-module, not resolved/whole-graph).
+- **Inline-symbol-path external-crate confinement — layer (b)**: *not built.* The sibling of the
+  shipped `confine_external_crate` (layer (a), above): confine not only `use C::…` but inline symbol
+  paths (`C::foo()` / `C::CONST` written in bodies with no `use`). This needs an all-body path scan
+  deeper than any current pass — a later phase / stated bound, not the core. Same drift-law footing
+  (observable on source) and the same non-`cargo-deny` lane as layer (a). Fires only on adopter demand.
 
 **Declined — externally covered (not a forward depth):**
 - **Resolved dependency-source / build-provenance** — *declined.* Cargo-deny owns the resolved,

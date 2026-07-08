@@ -86,12 +86,18 @@ false negative, and only the reaction can foreclose it.
   whole stack turns on: `Severity`, `BoundaryKind`, `Violation`, `Report`, `Baseline`,
   `Outcome`, with the JSON serialization intrinsic to those types. `serde_json`-only; carries no observation
   engine, and depends on no workspace member — every dimension sits above it.
+- **`xingbiao` (星表) — the workspace-data substrate.** The star-table: the shared,
+  `serde_json`-only reader of `cargo metadata` (`cargo_metadata` / `find_package` /
+  `crate_root_file`), sitting below every dimension like 璇璣 and depending on no workspace
+  member. It is *not* 璇璣 — it does IO (it spawns cargo) and observes — but a substrate beneath
+  the dimensions, so the static and semantic dimensions read the workspace through **one** source
+  of truth, not two hand-copied twins that drift apart (the v0.1.6 SSOT extraction — see Decisions).
 - **`guibiao` (圭表) — the static observation core.** The gnomon: it reads the cast
   shadow — imports and dependencies. The dependency-light static engine, derived from
-  modou: declare crate- and module-import boundaries, observe from `cargo metadata` and
-  source `use` scans, compare, react. Pure functional core — no shell. Depends on `xuanji`
-  (the reaction model) and `serde_json` only; the report/constitution *assembly* (which
-  folds in the static `Coverage`) lives here, not in the model.
+  modou: declare crate- and module-import boundaries, observe from `cargo metadata` (read
+  through 星表) and source `use` scans, compare, react. Pure functional core — no shell. Depends on `xuanji`
+  (the reaction model), `xingbiao` (the metadata substrate), and `serde_json` only; the
+  report/constitution *assembly* (which folds in the static `Coverage`) lives here, not in the model.
 - **`tianheng` (天衡) — the shell.** The celestial balance that weighs declared against
   observed: the imperative shell + facade — CLI (arg parsing, filesystem, stdout/stderr),
   the `run` reaction that composes every dimension into one, and the re-exported public
@@ -809,3 +815,23 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   infrastructure — and the syn-vs-token-scan **resolvers** (sharing them would force `syn` into the
   light core; see the Name-resolution decision above). The remaining `xuanji`-slot judgment-neutral
   *scanner* extraction stays deferred, awaiting its own forcing function.
+- **The crate family carries product identities; productization is demand-driven.** The six
+  published crates are not merely a workspace split. The **三儀 are public products** — 圭表 (static
+  import / dependency boundaries, syn-free), 渾儀 (public-API exposure), 漏刻 (runtime origin) — three
+  *orthogonal* instruments with distinct observation sources and audiences, not redundant crates.
+  **璇璣 / 星表 are the public substrate** they stand on (public because the instruments depend on
+  them, not products in their own right). **天衡 is the composer** and the funnel target: adopt one
+  儀 as an on-ramp, graduate to the composed constitution. Which face becomes a long-term contract is
+  decided by *reaction*, not ambition — the drift law applied to go-to-market: **no name without a
+  reaction, so no commitment without a reaction.** The **product identity** is declared now (a
+  reversible narrative); the **product weight** — per-儀 standalone CLIs, cookbooks, per-crate 1.0 /
+  stability promises, and the standalone 漏刻 story (a legitimate category, but the least-proven as a
+  product) — waits for an adoption signal. Posture: **0.1.x late-stage pre-stability** — concept and
+  function are saturated (三儀 all born, a complete world-view), so the patch line is not immaturity
+  but the honest pre-1.0 window that withholds API lock-in until real use says which public surfaces
+  to freeze. A category-creating project cannot pull demand for a category nobody knows exists, so the
+  order is **push then pull**: push the honestly-labelled (experimental) narrative to bootstrap
+  awareness; let demand deepen it. The exit trigger to a deliberate breaking 0.2.0 is a real
+  reaction — a first adopter needing a compatibility promise, a 儀 adopted standalone, an API that
+  hurts in use, or API convergence — never the calendar. See BACKLOG "Version horizons" for the
+  operational split.

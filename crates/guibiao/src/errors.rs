@@ -80,6 +80,18 @@ pub(crate) fn must_only_be_imported_by_on_crate_error(crate_package: &str) -> St
     )
 }
 
+/// A `confine_external_crate` boundary confines a crate to the crate root `crate`, whose
+/// subtree is the whole crate — the confined crate would be permitted everywhere and the
+/// rule could never react.
+pub(crate) fn confine_external_crate_on_crate_error(crate_package: &str) -> String {
+    format!(
+        "the `confine_external_crate` rule cannot confine a crate to `crate` (the crate root) of \
+         crate '{crate_package}': the root's subtree is the whole crate, so the confined crate \
+         would be permitted everywhere and the rule could never react; confine it to a submodule \
+         (e.g. `crate::ffi`) instead"
+    )
+}
+
 /// A governed source file could not be read. Failing loud rather than skipping it,
 /// which could hide a real violation.
 pub(crate) fn unreadable_governed_file_error(file: &Path, err: &str) -> String {

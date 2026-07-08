@@ -207,7 +207,15 @@ fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
 /// unterminated body at EOF returns `Some(len)`.
 fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
     let mut i = skip_trivia(b, bang + 1);
-    if preceding_ident_is(b, bang, b"macro_rules") {
+    // The name may be separated from `!` by whitespace (`macro_rules ! foo {…}` is valid Rust),
+    // exactly as the caller tolerates when deciding this `!` opens a macro. Skip back over that
+    // whitespace before the keyword test — anchoring at `bang` would miss the spaced form, leaving
+    // the body (and any probe inside it) unskipped and wrongly counted as coverage (a false negative).
+    let mut name_end = bang;
+    while name_end > 0 && b[name_end - 1].is_ascii_whitespace() {
+        name_end -= 1;
+    }
+    if preceding_ident_is(b, name_end, b"macro_rules") {
         let name_start = i;
         while i < b.len() && (is_ident_byte(b[i]) || b[i] == b'#') {
             i += 1;

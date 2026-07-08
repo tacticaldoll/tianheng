@@ -34,7 +34,14 @@ pub fn cargo_metadata(manifest_path: &Path) -> Result<Value, String> {
         .output()
         .map_err(|err| err.to_string())?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        // Prefer cargo's own stderr, but fall back to the exit status when it is empty — a signal
+        // kill (OOM) or a silent non-zero exit would otherwise yield an unactionable empty error.
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            format!("cargo metadata failed: {}", output.status)
+        } else {
+            stderr
+        });
     }
     serde_json::from_slice(&output.stdout).map_err(|err| err.to_string())
 }

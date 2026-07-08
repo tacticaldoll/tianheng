@@ -8,16 +8,14 @@ use serde_json::Value;
 use xuanji::{Outcome, Violation};
 
 use crate::collect::collect_item_dyn_exposures;
-use crate::containment::matches_forbidden;
-use crate::crate_scope::{dependency_names, extern_resolution, resolve_principal};
+use crate::crate_scope::dependency_names;
 use crate::driver::run_boundaries;
 use crate::dsl::DynTraitBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
 use crate::finding::shape_finding;
-use crate::module_resolve::resolve_module_items;
-use crate::resolve::{canonical_path_str, collect_uses};
 use crate::rules::DYN_TRAIT_RULE;
+use crate::shape_scan::{operand_module_findings, shape_module_findings};
 
 /// Run the dyn-trait boundaries against the Cargo workspace at `manifest_path`.
 ///
@@ -87,19 +85,14 @@ pub(crate) fn dyn_module_findings(
     module: &str,
     crate_package: &str,
 ) -> Result<Vec<String>, String> {
-    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
-    // `uses` is not needed to *detect* a `dyn` (shape-only), but it canonicalizes an inherent
-    // impl's self-type owner in the seam — cheap (reads the already-parsed items' `use` decls),
-    // and it needs no re-export closure (the owner identity does not resolve through facades).
-    let uses = collect_uses(&items);
-    let mut exposures = Vec::new();
-    for (ordinal, item) in items.iter().enumerate() {
-        collect_item_dyn_exposures(item, module, &uses, ordinal, &mut exposures);
-    }
-    let mut findings: Vec<String> = exposures.into_iter().map(shape_finding).collect();
-    findings.sort();
-    findings.dedup();
-    Ok(findings)
+    shape_module_findings(
+        src_dir,
+        root_file,
+        module,
+        crate_package,
+        collect_item_dyn_exposures,
+        shape_finding,
+    )
 }
 
 /// The pure heart of the **operand-scoped** dyn-trait boundary: like [`dyn_module_findings`]
@@ -121,31 +114,13 @@ pub(crate) fn dyn_operand_module_findings(
     crate_package: &str,
     dep_names: &[String],
 ) -> Result<Vec<String>, String> {
-    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
-    let uses = collect_uses(&items);
-    let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names, &items)?;
-    let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
-
-    let mut exposures = Vec::new();
-    for (ordinal, item) in items.iter().enumerate() {
-        collect_item_dyn_exposures(item, module, &uses, ordinal, &mut exposures);
-    }
-
-    let mut findings: Vec<String> = exposures
-        .into_iter()
-        .filter(|exposure| {
-            // Empty forbidden set ⇒ any dyn (the shape-only semantic), never a silent no-op —
-            // safe even if a future caller routes an empty set here (check routes it to the
-            // cheaper resolution-free path, but the invariant must not depend on that).
-            forbidden.is_empty()
-                || exposure.principals.iter().any(|path| {
-                    resolve_principal(path, &uses, module, &resolution)
-                        .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
-                })
-        })
-        .map(shape_finding)
-        .collect();
-    findings.sort();
-    findings.dedup();
-    Ok(findings)
+    operand_module_findings(
+        src_dir,
+        root_file,
+        module,
+        forbidden,
+        crate_package,
+        dep_names,
+        collect_item_dyn_exposures,
+    )
 }

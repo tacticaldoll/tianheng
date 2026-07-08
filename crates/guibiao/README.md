@@ -62,7 +62,9 @@ optional `.warn()` severity): `deny_external_dependencies` (allow a named except
 `forbid_dependency_on([…])`, `restrict_dependencies_to([…])` (a closed allowlist),
 `restrict_workspace_dependencies_to([…])` / `forbid_all_workspace_dependencies` (the
 crate-to-crate layering surface), and `restrict_dependency_sources_to([…])` (above). **The
-module-boundary rules**: `must_not_import`, `restrict_imports_to([…])`, `must_not_be_imported_by`.
+module-boundary rules**: `must_not_import`, `restrict_imports_to([…])`, `must_not_be_imported_by`,
+`must_only_be_imported_by([…])` (the closed inbound allowlist), and `confine_external_crate` (confine
+an external crate's `use` imports to one module subtree — FFI / platform-vocabulary confinement).
 
 By default a crate rule observes the normal `[dependencies]` table; `.dependency_kind(DependencyKind::Dev)`
 (or `Build`) targets `[dev-dependencies]` / `[build-dependencies]` instead — a boundary governs
@@ -80,8 +82,16 @@ the compiled source root rather than the `manifest_dir/src` shortcut. A `#[path]
 module remains outside this token scanner's coverage and is not governed through a same-named
 conventional orphan file.
 
-Most adopters consume the static dimension through the [`tianheng`](https://crates.io/crates/tianheng)
-shell (CLI, arg parsing, the composed reaction), which re-exports this crate's surface.
+## Adoption & status
+
+**Experimental — pre-1.0.** Public faces may change until adoption settles them; within `0.1.x` no
+release intentionally breaks the adopter-written builder.
+
+Adopt 圭表 on its own — the footprint is just `guibiao` (+ `serde_json`), no `syn` — or graduate to
+the composed constitution through the [`tianheng`](https://crates.io/crates/tianheng) shell (which
+re-exports this crate's surface): a single 儀 is an on-ramp, the suite is the destination. Onboard
+without a red wall — declare at `.warn()`, `Baseline::of(...)` to grandfather an existing codebase,
+then enforce. A runnable `guibiao`-standalone example lives under the workspace `examples/`.
 
 ## License
 

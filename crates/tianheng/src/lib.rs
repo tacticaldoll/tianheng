@@ -23,10 +23,9 @@
 mod runner;
 
 pub use guibiao::{
-    Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateBoundaryBuilder,
-    CrateBoundaryDraft, CrateTarget, DenyExternalDraft, DependencyKind, ModuleBoundary,
-    ModuleBoundaryBuilder, ModuleBoundaryDraft, ModuleRule, ModuleTargetDraft, Outcome, Polarity,
-    Report, Rule, Severity, SourceKind, Violation, ViolationId, check, workspace_member_src_dirs,
+    Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
+    ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, Severity, SourceKind, Violation,
+    ViolationId, check, workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
@@ -36,24 +35,49 @@ pub use guibiao::Constitution as GnomonConstitution;
 // boundaries the same way as static ones, then folds them into the unified [`Constitution`].
 // `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
 pub use hunyi::{
-    AsyncExposureBoundary, AsyncExposureBoundaryDraft, AsyncExposureCrateDraft,
-    AsyncExposureModuleDraft, DynTraitBoundary, DynTraitBoundaryDraft, DynTraitCrateDraft,
-    DynTraitModuleDraft, ForbiddenMarkerBoundary, ForbiddenMarkerBoundaryDraft,
-    ForbiddenMarkerCrateDraft, ForbiddenMarkerModuleDraft, ImplTraitBoundary,
-    ImplTraitBoundaryDraft, ImplTraitCrateDraft, ImplTraitModuleDraft, SemanticBoundaries,
-    SemanticBoundary, SemanticBoundaryDraft, SemanticCrateDraft, SemanticModuleDraft,
-    TraitImplBoundary, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
-    VisibilityBoundary, VisibilityBoundaryDraft, VisibilityCrateDraft, VisibilityModuleDraft,
-    check as check_semantic, check_all, check_async_exposure, check_dyn_trait,
-    check_forbidden_marker, check_impl_trait, check_trait_impl_locality, check_visibility,
+    AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
+    SemanticBoundaries, SemanticBoundary, TraitImplBoundary, VisibilityBoundary,
+    check as check_semantic,
+};
+// The seven granular per-capability `check_*` entries are hunyi's own public API (a direct caller
+// may run one capability in isolation), but not something the shell's composed surface needs: the
+// adopter runs the whole semantic bundle through [`check_semantic`], and [`run`] reaches the full
+// set via the `hunyi::` path. So they are re-exported for direct callers but hidden from the shell's
+// *documented* surface — the 天衡 face an adopter reads is the composed one, not the per-capability
+// menu. Same intent as the intermediate-type hiding below; reversible, and commits no narrowing.
+#[doc(hidden)]
+pub use hunyi::{
+    check_all, check_async_exposure, check_dyn_trait, check_forbidden_marker, check_impl_trait,
+    check_trait_impl_locality, check_visibility,
 };
 // 漏刻 (runtime) dimension DSL: declared here, then projected two ways — the CI probe-coverage
 // audit (composed by [`run`]) and the prod face (the adopter calls [`louke::install`] /
 // `assert_boundary!` directly; the `#[macro_export]` macros live at the `louke` root).
-pub use louke::{
-    OriginEntry, Posture, RuntimeBoundary, RuntimeBoundaryDraft, RuntimeSeamDraft, Tracked,
-    audit_probe_coverage,
+pub use louke::{OriginEntry, Posture, RuntimeBoundary, Tracked, audit_probe_coverage};
+
+// The fluent-builder **intermediate** types (`*Draft` / `*Builder`) are `pub` only because the
+// DSL's method chain returns them — an adopter writes `CrateBoundary::crate_(…).because(…)` and
+// never names them. Removing them would be breaking, so this does not remove them; it only hides
+// them from the *documented* surface, so the API an adopter reads is the terminal builder types,
+// not the ~28 intermediates. Reversible, and it commits no narrowing (the demand-gated guibiao
+// pub-surface decision stays open — see BACKLOG). The `SemanticBoundaries` collection stays
+// visible because the runner reads it and an adopter composing semantic boundaries touches it.
+#[doc(hidden)]
+pub use guibiao::{
+    CrateBoundaryBuilder, CrateBoundaryDraft, DenyExternalDraft, ModuleBoundaryBuilder,
+    ModuleBoundaryDraft, ModuleTargetDraft,
 };
+#[doc(hidden)]
+pub use hunyi::{
+    AsyncExposureBoundaryDraft, AsyncExposureCrateDraft, AsyncExposureModuleDraft,
+    DynTraitBoundaryDraft, DynTraitCrateDraft, DynTraitModuleDraft, ForbiddenMarkerBoundaryDraft,
+    ForbiddenMarkerCrateDraft, ForbiddenMarkerModuleDraft, ImplTraitBoundaryDraft,
+    ImplTraitCrateDraft, ImplTraitModuleDraft, SemanticBoundaryDraft, SemanticCrateDraft,
+    SemanticModuleDraft, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
+    VisibilityBoundaryDraft, VisibilityCrateDraft, VisibilityModuleDraft,
+};
+#[doc(hidden)]
+pub use louke::{RuntimeBoundaryDraft, RuntimeSeamDraft};
 
 pub use runner::{constitution_markdown, projection_gate, run};
 

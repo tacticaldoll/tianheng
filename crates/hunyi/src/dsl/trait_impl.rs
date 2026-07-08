@@ -69,6 +69,7 @@ impl TraitImplBoundary {
 }
 
 /// A trait-impl-locality boundary awaiting its trait anchor.
+#[doc(hidden)]
 pub struct TraitImplCrateDraft {
     crate_package: String,
 }
@@ -86,6 +87,7 @@ impl TraitImplCrateDraft {
 }
 
 /// A trait-anchored boundary awaiting its first allowed location.
+#[doc(hidden)]
 pub struct TraitImplTraitDraft {
     crate_package: String,
     trait_path: String,
@@ -106,6 +108,7 @@ impl TraitImplTraitDraft {
 }
 
 /// A boundary awaiting more allowed locations (optional), severity (optional), and reason.
+#[doc(hidden)]
 pub struct TraitImplBoundaryDraft {
     crate_package: String,
     trait_path: String,

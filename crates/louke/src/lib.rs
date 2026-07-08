@@ -184,6 +184,7 @@ impl RuntimeBoundary {
 }
 
 /// A boundary awaiting its allowed-origin set.
+#[doc(hidden)]
 pub struct RuntimeSeamDraft {
     seam: &'static str,
 }
@@ -205,6 +206,7 @@ impl RuntimeSeamDraft {
 }
 
 /// A boundary awaiting severity/posture (optional) and a reason.
+#[doc(hidden)]
 pub struct RuntimeBoundaryDraft {
     seam: &'static str,
     allowed: Vec<&'static str>,
@@ -457,10 +459,19 @@ where
 fn emit(violation: &Violation) {
     match SINK.get() {
         Some(sink) => sink(violation),
-        None => eprintln!(
-            "louke: runtime boundary violated\n{}",
-            xuanji::pretty_json(&violation.to_json())
-        ),
+        // The default sink runs on every violation under the default `Event` posture, *before*
+        // the opt-in panic gate — so it must never itself panic. `eprintln!` panics if the stderr
+        // write fails (a closed/broken pipe, `… 2>&1 | consumer` after the consumer exits), which
+        // would crash the production process on a reaction — the exact failure the crate's
+        // no-panic-on-false-positive invariant forbids. Write directly and ignore a write error.
+        None => {
+            use std::io::Write;
+            let _ = writeln!(
+                std::io::stderr(),
+                "louke: runtime boundary violated\n{}",
+                xuanji::pretty_json(&violation.to_json())
+            );
+        }
     }
 }
 

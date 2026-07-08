@@ -130,9 +130,17 @@ unresolvable anchor is a constitution error, never a silent pass. Explicitly **r
 false-negative engines: `Send`/`Sync` (inferred auto-traits), external trait sealing, and
 transitive effect-purity.
 
-Most adopters consume the semantic dimension through the
-[`tianheng`](https://crates.io/crates/tianheng) shell, which composes these boundaries into
-one reaction.
+## Adoption & status
+
+**Experimental — pre-1.0.** Public faces may change until adoption settles them; within `0.1.x` no
+release intentionally breaks the adopter-written builder.
+
+Adopt 渾儀 on its own — it carries the quarantined `syn`, the one place the AST dependency lives —
+or graduate to the composed constitution through the
+[`tianheng`](https://crates.io/crates/tianheng) shell, which composes these boundaries into one
+reaction: a single 儀 is an on-ramp, the suite is the destination. Onboard without a red wall —
+declare at `.warn()`, `Baseline::of(...)` to grandfather an existing codebase, then enforce. A
+runnable `hunyi`-standalone example lives under the workspace `examples/`.
 
 ## License
 

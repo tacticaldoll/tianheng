@@ -414,6 +414,10 @@ fn a_probe_inside_a_macro_body_is_not_counted() {
     for src in [
         "macro_rules! m { () => { assert_boundary!(\"dead\", o); }; }\n\
              fn f() { assert_boundary!(\"live\", o); }",
+        // whitespace between `macro_rules` and `!` (valid, if unformatted, Rust): the name-skip
+        // must still recognise the keyword or the body is walked and its probe wrongly counted.
+        "macro_rules ! spaced { () => { assert_boundary!(\"dead\", o); }; }\n\
+             fn f() { assert_boundary!(\"live\", o); }",
         "fn f() { some_macro! { let _ = 1; assert_boundary!(\"dead\", o) }; assert_boundary!(\"live\", o); }",
         // nested + mixed delimiters, with a `}` inside a string and a `}` inside a char
         "fn f() { wrap!( [ { let s = \"}}}\"; let c = '}'; assert_boundary!(\"dead\", o) } ] ); assert_boundary!(\"live\", o); }",

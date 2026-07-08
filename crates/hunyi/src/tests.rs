@@ -620,6 +620,54 @@ fn a_def_site_generic_param_shadowing_a_use_alias_is_not_a_finding() {
 }
 
 #[test]
+fn an_assoc_type_projection_off_a_shadowing_param_is_not_a_finding() {
+    // FP closed (bughunt round 3, assay): an associated-type projection off a generic parameter
+    // (`T::Item`) is a *parameter* projection, not a nominal type. When the module also declares a
+    // same-named import alias (`use crate::infra::Secret as T;` — legal, the fn's `<T>` only
+    // lexically shadows it), the projection previously escaped the param shadow (two segments, while
+    // the shadow only covered the bare single-segment form) and was misresolved through the alias to
+    // `crate::infra::Secret::Item`, reacting on code exposing nothing.
+    let out = findings(
+        "assoc-projection-shadows-alias",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "use crate::infra::Secret as T;\npub fn f<T: Iterator>() -> T::Item { unimplemented!() }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "an assoc-type projection off a shadowing param must not react: {out:?}"
+    );
+    // Control: a genuine multi-segment forbidden path in the same return position (head is NOT a
+    // param) still reacts — proving the fix suppresses only the param projection, not real leaks.
+    let out = findings(
+        "assoc-projection-real-leak",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "pub fn g() -> crate::infra::Secret { unimplemented!() }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.iter().any(|f| f.contains("crate::infra::Secret")),
+        "a real forbidden return type still reacts: {out:?}"
+    );
+}
+
+#[test]
 fn cross_module_alias_reached_via_use_reacts() {
     // The alias lives in another module and is reached via `use`; crate-wide collection
     // keys it by `crate::other::H`, which the exposure's resolved path canonicalizes through.

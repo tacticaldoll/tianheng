@@ -106,9 +106,12 @@ pub fn constitution_text(constitution: &Constitution) -> String {
 
 /// Render the declared constitution as a JSON projection: a `constitution` name and
 /// a `boundaries` array. Each entry carries `kind`, `target` (the crate name, or the
-/// module path for a module boundary — the same convention as a violation's
-/// `target`), `severity`, `reason`, and the rule with its parameters. No field is
-/// invented for data the constitution does not hold.
+/// module path for a module boundary), `severity`, `reason`, and the rule with its
+/// parameters. The module-boundary `target` is the governed module path, which equals a
+/// violation's `target` for every module rule **except** `confine_external_crate`, whose
+/// violation `target` is the confined crate name (the declaration names the module it is
+/// confined *to*, the reaction names the crate confined). No field is invented for data the
+/// constitution does not hold.
 pub fn constitution_json(constitution: &Constitution) -> String {
     let boundaries: Vec<Value> = constitution
         .boundaries()

@@ -11,6 +11,11 @@ to [`modou`](https://github.com/tacticaldoll/modou). It does not run your app an
 not instruct your agent. Developers and agents propose change; Tianheng uses compiler/CI
 and runtime *reactions* to keep architectural shape from drifting.
 
+> **Status: experimental — pre-1.0.** The public faces are still settling; the family is held at
+> `0.1.x` deliberately (see [`CHANGELOG.md`](CHANGELOG.md)) until real adoption pressure says which
+> become long-term contracts. Within `0.1.x` no release intentionally breaks the adopter-written
+> builder (`Constitution` / the boundary DSL / `run`).
+
 ## Why reaction, not instruction
 
 Architectural intent — "the core must not depend on adapters" — used to live in human
@@ -147,7 +152,7 @@ measuring instruments — each reads a different surface of the code.
 
 | 儀 Instrument | Crate | Observes | Observation source | Status |
 |---|---|---|---|---|
-| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.x:** static core, declared dependency-source boundaries, module-source hardening, inbound allowlist depth |
+| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.x:** static core, declared dependency-source boundaries, module-source hardening, inbound allowlist depth, external-crate (FFI/platform-vocabulary) confinement |
 | 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure | AST (`syn`) | **v0.1.x:** semantic boundary family plus external-crate/re-export/alias hardening |
 | 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.x:** origin-assertion, CI probe coverage, escaped-literal and macro-body audit hardening |
 
@@ -217,6 +222,30 @@ design questions) and the governance/observability layer.
 Tianheng governs **itself** with its own reaction: the live self-law is declared in
 `crates/tianheng/tests/self_governance.rs`, projected into `AGENTS.self-law.md`, and enforced as
 a `cargo test` gate.
+
+## Adoption & stability
+
+**A ladder, not a wall.** Adopt one instrument as an on-ramp and graduate to the composed
+constitution — a single 儀 → the suite is the funnel, not a dilution. Onboarding an existing
+codebase never starts red: declare a boundary at `.warn()` (reported, never gating — exit `0`),
+`Baseline::of(&report)` to grandfather the violations already there (they stay green while *new*
+drift reacts), then tighten to `enforce`. Two axes — severity and baseline — either of which lands
+the law before you land the fixes. See the runnable [`examples/`](examples/): 圭表 and 渾儀
+standalone, plus the composed all-three funnel — and [`COOKBOOK.md`](COOKBOOK.md) for common
+governance intents translated into boundaries.
+
+**What stays stable across the pre-1.0 line.**
+
+- **The wire contract is `xuanji`.** Every dimension reacts in one shared model, and its JSON — the
+  `--format json` report and the `Baseline` snapshot — is the versioned, machine-facing contract (a
+  `Baseline` *is* a JSON snapshot). Presentation changes — a coloured terminal render, the SARIF
+  projection — never change the verdict or the exit code.
+- **A violation's identity is `(target, rule, finding)`.** Its `file`, `anchor`, and `polarity` are
+  *metadata*, not identity — so relocating the offending code to another file, or attaching an
+  `anchor`, never turns a baselined violation new and never churns your baseline. Refactor freely;
+  the baseline tracks the drift, not the byte offset.
+- **The adopter-written builder does not break in `0.1.x`.** `Constitution`, the boundary DSL, and
+  `run` are the surface you write against; the pre-1.0 churn is quarantined to internal faces.
 
 ## Non-goals
 

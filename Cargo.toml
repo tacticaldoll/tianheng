@@ -2,6 +2,9 @@
 #
 # A reactive architectural-governance crate family. The real crates (no stubs — see below):
 #   - xuanji  (璇璣): the dimension-agnostic reaction model — the 底.
+#   - xingbiao(星表): the shared declared-workspace-data substrate — reads `cargo metadata`;
+#                     serde_json-only and below every dimension like 璇璣, so the static and
+#                     semantic dimensions read the workspace through one source of truth.
 #   - guibiao (圭表): the gnomon — dependency-light static observation core, derived from modou.
 #   - hunyi   (渾儀): the armillary — semantic (AST/syn) observation; the syn dependency lives here.
 #   - louke   (漏刻): the clepsydra — runtime observation; ships into prod, depends on 璇璣 only.
@@ -18,10 +21,16 @@ exclude = [
     "crates/tianheng/tests/fixtures/clean",
     "crates/tianheng/tests/fixtures/violating",
     "crates/tianheng/tests/fixtures/orphan_probe",
+    # Each example is its own workspace (it carries a deliberate fault and the adopter's real
+    # `= "0.1"` dependency form); excluded so this workspace never absorbs it. CI exercises them
+    # in isolation via scripts/test_examples.sh.
+    "examples/guibiao-standalone",
+    "examples/hunyi-standalone",
+    "examples/composed",
 ]
 
 [workspace.package]
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -29,11 +38,11 @@ repository = "https://github.com/tacticaldoll/tianheng"
 homepage = "https://github.com/tacticaldoll/tianheng"
 
 [workspace.dependencies]
-xuanji = { path = "crates/xuanji", version = "0.1.6" }
-xingbiao = { path = "crates/xingbiao", version = "0.1.6" }
-hunyi = { path = "crates/hunyi", version = "0.1.6" }
-guibiao = { path = "crates/guibiao", version = "0.1.6" }
-louke = { path = "crates/louke", version = "0.1.6" }
+xuanji = { path = "crates/xuanji", version = "0.1.7" }
+xingbiao = { path = "crates/xingbiao", version = "0.1.7" }
+hunyi = { path = "crates/hunyi", version = "0.1.7" }
+guibiao = { path = "crates/guibiao", version = "0.1.7" }
+louke = { path = "crates/louke", version = "0.1.7" }
 serde_json = "1"
 # syn is the heavy AST dependency, quarantined to 渾儀 (hunyi) alone — never the
 # 圭表 core or 璇璣 model (enforced by self_governance.rs).

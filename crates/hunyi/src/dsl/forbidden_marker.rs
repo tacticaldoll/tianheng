@@ -64,6 +64,7 @@ impl ForbiddenMarkerBoundary {
 }
 
 /// A forbidden-marker boundary awaiting its module-subtree anchor.
+#[doc(hidden)]
 pub struct ForbiddenMarkerCrateDraft {
     crate_package: String,
 }
@@ -79,6 +80,7 @@ impl ForbiddenMarkerCrateDraft {
 }
 
 /// A subtree-anchored boundary awaiting its first forbidden trait.
+#[doc(hidden)]
 pub struct ForbiddenMarkerModuleDraft {
     crate_package: String,
     module: String,
@@ -99,6 +101,7 @@ impl ForbiddenMarkerModuleDraft {
 }
 
 /// A boundary awaiting more forbidden traits (optional), severity (optional), and a reason.
+#[doc(hidden)]
 pub struct ForbiddenMarkerBoundaryDraft {
     crate_package: String,
     module: String,
