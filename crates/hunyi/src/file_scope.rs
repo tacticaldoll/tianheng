@@ -18,9 +18,9 @@ use xingbiao::{crate_root_file, find_package};
 /// something to report**, so a clean module never pays the second traversal and no error path
 /// opens on an empty result; `None` when there are no findings. Shared by the five
 /// single-module semantic capabilities (exposure, dyn-trait, impl-trait, async-exposure,
-/// visibility). The two whole-crate-scan capabilities (trait-impl-locality, forbidden-marker)
-/// do NOT use this — their violations sit at per-site files across the crate, a stated `null`
-/// bound narrowed to them.
+/// visibility). The three whole-crate-scan capabilities (trait-impl-locality, forbidden-marker,
+/// unsafe-confinement) do NOT use this — their violations sit at per-site files across the crate,
+/// a stated `null` bound narrowed to them.
 pub(crate) fn seam_file(
     findings: &[String],
     src_dir: &Path,
@@ -65,7 +65,7 @@ pub(crate) fn per_finding_file(
 /// Resolve a semantic boundary's target crate to `(package, crate-root file, source dir)` — the
 /// shared preamble every single-crate `check_*_boundary` opens with. One home for the three
 /// constitution errors (crate-not-found, and missing-src for a target with no crate-root file or a
-/// root file with no parent dir) so the seven capabilities cannot drift apart on resolution. The
+/// root file with no parent dir) so the eight capabilities cannot drift apart on resolution. The
 /// `src_dir` is returned owned (it would otherwise borrow the root file), so callers hold both.
 pub(crate) fn resolve_crate<'m>(
     metadata: &'m Value,

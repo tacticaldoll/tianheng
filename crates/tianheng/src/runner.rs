@@ -33,6 +33,15 @@ use louke::audit_probe_coverage;
 
 use crate::Constitution;
 
+/// The non-`Outcome` CLI exit codes. They mirror [`Outcome::exit_code`]'s contract — `0` clean,
+/// `1` violation, `2` cannot-judge (constitution/scan/usage error) — for the CLI paths that never
+/// build an `Outcome`: a usage error, a missing manifest, a baseline-write failure. A violation
+/// always flows through an `Outcome`, so `1` never appears as a bare return here. Named so every
+/// runner path speaks the one 0/1/2 contract rather than a bare literal that could silently drift
+/// from `exit_code()`.
+const EXIT_OK: u8 = 0;
+const EXIT_CANNOT_JUDGE: u8 = 2;
+
 mod projection;
 use projection::*;
 pub use projection::{constitution_markdown, projection_gate};
@@ -204,6 +213,7 @@ where
                 print!("{}", dyn_trait_text(&semantic.dyn_trait));
                 print!("{}", impl_trait_text(&semantic.impl_trait));
                 print!("{}", async_exposure_text(&semantic.async_exposure));
+                print!("{}", unsafe_text(&semantic.unsafe_confinement));
                 print!("{}", runtime_text(runtime));
             }
             // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
@@ -215,7 +225,7 @@ where
                 );
             }
         }
-        return 0;
+        return EXIT_OK;
     }
 
     // The command is `check`. `markdown` is a `list`-only projection of the declared law;
@@ -256,7 +266,7 @@ where
                     "Tianheng: no Cargo.toml found from {from} up to the root; \
                      pass --manifest-path <path>"
                 );
-                return 2;
+                return EXIT_CANNOT_JUDGE;
             }
         },
     };
@@ -292,8 +302,7 @@ where
     // `audit_probe_coverage(&[], …)` reacts to an `assert_boundary!` probe left in source after its
     // `RuntimeBoundary` was deleted (an undeclared seam), catching at CI the orphan that would
     // otherwise panic in production. On a workspace with no probes it is a no-op, so a pure
-    // static/semantic run is undisturbed. (Previously guarded by `!runtime_boundaries().is_empty()`,
-    // which skipped the audit — and the orphan-probe check with it — whenever no boundary was declared.)
+    // static/semantic run is undisturbed.
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
         match workspace_member_src_dirs(&manifest_path) {
             Ok(src_dirs) => {
@@ -354,7 +363,7 @@ fn usage(message: &str) -> u8 {
          tianheng list [--format text|json|markdown]"
     );
     eprintln!("error: {message}");
-    2
+    EXIT_CANNOT_JUDGE
 }
 
 /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so
@@ -389,7 +398,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
             Style::detect().error(&format!("Tianheng constitution error: {message}"))
         );
         eprintln!("refusing to write a baseline from a constitution that could not be evaluated");
-        return 2;
+        return EXIT_CANNOT_JUDGE;
     }
     let empty = Report::empty();
     let report = match outcome {
@@ -456,7 +465,7 @@ fn gate(
                 Style::detect().error(&format!("Tianheng constitution error: {message}"))
             ),
         }
-        return 2;
+        return EXIT_CANNOT_JUDGE;
     }
 
     let baseline = match std::fs::read_to_string(path) {
@@ -464,12 +473,12 @@ fn gate(
             Ok(baseline) => baseline,
             Err(err) => {
                 eprintln!("Tianheng: invalid baseline {path}: {err}");
-                return 2;
+                return EXIT_CANNOT_JUDGE;
             }
         },
         Err(err) => {
             eprintln!("Tianheng: cannot read baseline {path}: {err}");
-            return 2;
+            return EXIT_CANNOT_JUDGE;
         }
     };
 

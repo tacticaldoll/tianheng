@@ -7,7 +7,9 @@
 //! canonicalization, the `mod`-keyword test); pure string processing, no model type.
 
 use super::lexer::{keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
-use super::path_vocab::{canonical_segment, is_mod_declaration_keyword};
+use super::path_vocab::{
+    canonical_segment, is_crate_root_shadow, is_mod_declaration_keyword, resolve_self_super,
+};
 
 /// Internal module paths imported by `source`, normalized to absolute `crate::…`
 /// form. `current_module` is the importing file's module; a `use` inside an inline
@@ -333,40 +335,12 @@ fn normalize_module_path(
         .map(|segment| canonical_segment(segment.trim()))
         .filter(|segment| !segment.is_empty())
         .collect();
-    let (first, rest) = segments.split_first()?;
+    let (first, _rest) = segments.split_first()?;
     match *first {
         "crate" => Some(segments.join("::")),
-        "self" => {
-            let mut out: Vec<&str> = current_module
-                .split("::")
-                .filter(|s| !s.is_empty())
-                .collect();
-            out.extend(rest);
-            Some(out.join("::"))
-        }
-        "super" => {
-            let mut out: Vec<&str> = current_module
-                .split("::")
-                .filter(|s| !s.is_empty())
-                .collect();
-            let mut tail = &segments[..];
-            while let Some((segment, next)) = tail.split_first() {
-                if *segment != "super" {
-                    break;
-                }
-                out.pop();
-                tail = next;
-            }
-            // An over-popped `super` (more `super`s than ancestors) drops the `crate`
-            // root, leaving a path that is not crate-rooted — it names no internal module
-            // (and the source does not compile). Return `None` rather than a malformed
-            // root-less path, which would otherwise be mistaken for an outward edge.
-            if out.first() != Some(&"crate") {
-                return None;
-            }
-            out.extend(tail.iter().copied());
-            Some(out.join("::"))
-        }
+        // `self`/`super` relative resolution — incl. the `super` over-pop guard — lives once in
+        // `path_vocab::resolve_self_super`, shared with the symbol-scan resolvers.
+        "self" | "super" => resolve_self_super(current_module, &segments),
         other => {
             // A bare first segment names a crate-root module only at the crate root,
             // where a sibling `mod` is in scope and shadows the extern prelude — there a
@@ -376,7 +350,7 @@ fn normalize_module_path(
             // `current_module == "crate"` keeps a submodule's `use serde::…` external
             // even when a `mod serde;` exists at the crate root. (Explicit external is
             // written `::name`, handled above.)
-            if current_module == "crate" && root_modules.iter().any(|module| module == other) {
+            if is_crate_root_shadow(current_module, other, root_modules) {
                 let mut out = vec!["crate"];
                 out.extend(segments.iter().copied());
                 Some(out.join("::"))
@@ -423,7 +397,7 @@ fn external_crate_head(
             // internal module (the sibling `mod` shadows the extern prelude) — not external,
             // exactly as `normalize_module_path` resolves it to `crate::…`. Everywhere else a
             // bare first segment reaches the extern prelude: it is the external crate.
-            if current_module == "crate" && root_modules.iter().any(|module| module == other) {
+            if is_crate_root_shadow(current_module, other, root_modules) {
                 None
             } else {
                 Some(other.to_string())
@@ -474,9 +448,9 @@ mod tests {
 
     #[test]
     fn a_block_comment_between_use_and_its_path_does_not_fuse_the_keyword() {
-        // FN closed (bughunt round 2): a block comment wedged between the `use` keyword and its
-        // path must not fuse them — `use/*re-export*/crate::secret::Thing;` was stripped to
-        // `usecrate::secret::Thing;`, so `use` was no longer recognized and the import was dropped.
+        // A block comment wedged between the `use` keyword and its path must not fuse them —
+        // `use/*re-export*/crate::secret::Thing;` stripped to `usecrate::secret::Thing;` would
+        // leave `use` unrecognized and the import dropped.
         assert_eq!(
             imported_module_paths("use/*re-export*/crate::secret::Thing;", "crate", &[]),
             vec!["crate::secret::Thing".to_string()],
@@ -486,7 +460,7 @@ mod tests {
 
     #[test]
     fn a_self_alias_in_a_use_group_resolves_to_the_prefix_module() {
-        // FP closed (bughunt round 2): `use crate::config::{self as cfg, Setting};` imports the
+        // `use crate::config::{self as cfg, Setting};` imports the
         // module `crate::config` (under the alias) plus `crate::config::Setting`. The `self as cfg`
         // form must resolve to the prefix module, not leave a phantom `crate::config::self` segment.
         let source = "use crate::config::{self as cfg, Setting};";
@@ -587,7 +561,7 @@ mod tests {
         // A root-relative bare `use kernel::…` (legal only at the crate root) names a
         // crate-root module, not an external crate, so it resolves to `crate::kernel::…`.
         // An unknown first segment is still external. With no root modules known, the
-        // bare path stays external (the conservative pre-fix behavior).
+        // bare path stays external (the conservative behavior).
         let source = "use kernel::Thing; use serde::Deserialize;";
         let roots = vec!["kernel".to_string()];
         let imports = imported_module_paths(source, "crate", &roots);
@@ -611,8 +585,8 @@ mod tests {
     fn scanner_treats_leading_colon_path_as_external() {
         // `use ::serde::…` is an explicit external/global path: the leading `::` bypasses
         // the local-module shadow, so it is external even when a crate-root module shares
-        // the name. (Before the fix the leading `::` was dropped and the path was
-        // mis-resolved as the internal `crate::serde::…`.)
+        // the name. (Dropping the leading `::` would mis-resolve it as the internal
+        // `crate::serde::…`.)
         let roots = vec!["serde".to_string()];
         assert!(
             imported_module_paths("use ::serde::Deserialize;", "crate", &roots).is_empty(),
@@ -854,7 +828,7 @@ mod tests {
     fn escaped_quote_char_literal_is_consumed_whole() {
         // `'\''` must be skipped as a whole so the following string's fake `use` is still
         // stripped and the real `use` after it is observed (a regression guard for the
-        // escaped-char skip that used to leak the closing quote).
+        // escaped-char skip against leaking the closing quote).
         let src = r#"let _q = '\''; let _s = "use crate::ghost::Z;"; use crate::real::A;"#;
         assert_eq!(
             imported_module_paths(src, "crate::kernel", &[]),

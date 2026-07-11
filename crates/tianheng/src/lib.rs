@@ -18,9 +18,11 @@
 //! The runtime boundaries declared here are the same objects the adopter hands to
 //! [`louke::install`] at startup — the single source of truth, two faces.
 
+#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 mod runner;
+mod sans_io;
 
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
@@ -36,8 +38,8 @@ pub use guibiao::Constitution as GnomonConstitution;
 // `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
 pub use hunyi::{
     AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
-    SemanticBoundaries, SemanticBoundary, TraitImplBoundary, VisibilityBoundary,
-    check as check_semantic,
+    SemanticBoundaries, SemanticBoundary, TraitImplBoundary, UnsafeBoundary, VisibilityBoundary,
+    VisibilityCeiling, check as check_semantic,
 };
 // The seven granular per-capability `check_*` entries are hunyi's own public API (a direct caller
 // may run one capability in isolation), but not something the shell's composed surface needs: the
@@ -48,7 +50,7 @@ pub use hunyi::{
 #[doc(hidden)]
 pub use hunyi::{
     check_all, check_async_exposure, check_dyn_trait, check_forbidden_marker, check_impl_trait,
-    check_trait_impl_locality, check_visibility,
+    check_trait_impl_locality, check_unsafe_confinement, check_visibility,
 };
 // 漏刻 (runtime) dimension DSL: declared here, then projected two ways — the CI probe-coverage
 // audit (composed by [`run`]) and the prod face (the adopter calls [`louke::install`] /
@@ -74,10 +76,18 @@ pub use hunyi::{
     ForbiddenMarkerCrateDraft, ForbiddenMarkerModuleDraft, ImplTraitBoundaryDraft,
     ImplTraitCrateDraft, ImplTraitModuleDraft, SemanticBoundaryDraft, SemanticCrateDraft,
     SemanticModuleDraft, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
-    VisibilityBoundaryDraft, VisibilityCrateDraft, VisibilityModuleDraft,
+    UnsafeBoundaryDraft, UnsafeCrateDraft, VisibilityBoundaryDraft, VisibilityCrateDraft,
+    VisibilityModuleDraft,
 };
 #[doc(hidden)]
 pub use louke::{RuntimeBoundaryDraft, RuntimeSeamDraft};
+
+// The shell's own composed profile: a convenience that folds two dimensions' boundaries into one
+// declaration (see [`Constitution::sans_io_pure`]). The terminal `SansIoPure` is the documented
+// surface; its builder intermediates are hidden like every other `*Draft`.
+pub use sans_io::SansIoPure;
+#[doc(hidden)]
+pub use sans_io::{SansIoPureCrateDraft, SansIoPureDraft, SansIoPureModuleDraft};
 
 pub use runner::{constitution_markdown, projection_gate, run};
 
@@ -156,6 +166,12 @@ impl Constitution {
         self
     }
 
+    /// Add a 渾儀 unsafe-confinement boundary (`unsafe` may appear only under the declared subtree).
+    pub fn unsafe_boundary(mut self, boundary: UnsafeBoundary) -> Self {
+        self.semantic.unsafe_confinement.push(boundary);
+        self
+    }
+
     /// Add a 漏刻 runtime boundary. The CI face audits its probe coverage (via [`run`]); the same
     /// object is what the adopter hands to [`louke::install`] for the prod face.
     pub fn runtime(mut self, boundary: RuntimeBoundary) -> Self {
@@ -203,7 +219,7 @@ pub mod prelude {
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
         CrateBoundary, DependencyKind, DynTraitBoundary, ForbiddenMarkerBoundary,
         ImplTraitBoundary, ModuleBoundary, Outcome, Polarity, Report, Rule, RuntimeBoundary,
-        SemanticBoundary, Severity, SourceKind, TraitImplBoundary, Violation, ViolationId,
-        VisibilityBoundary, check, run,
+        SansIoPure, SemanticBoundary, Severity, SourceKind, TraitImplBoundary, UnsafeBoundary,
+        Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, run,
     };
 }

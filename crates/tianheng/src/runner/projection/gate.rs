@@ -43,32 +43,44 @@ pub fn projection_gate(
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent).map_err(|e| {
                     format!(
-                        "cannot create {}: {e} — regenerate with `{regenerate}`",
-                        parent.display()
+                        "cannot create {}: {e} — {}",
+                        parent.display(),
+                        regenerate_hint(regenerate)
                     )
                 })?;
             }
         }
         return std::fs::write(path, live).map_err(|e| {
             format!(
-                "cannot write {}: {e} — regenerate with `{regenerate}`",
-                path.display()
+                "cannot write {}: {e} — {}",
+                path.display(),
+                regenerate_hint(regenerate)
             )
         });
     }
     // "Cannot confirm fresh" (missing/unreadable) is a reaction, never a silent pass.
     let checked_in = std::fs::read_to_string(path).map_err(|e| {
         format!(
-            "cannot read {}: {e} — regenerate it with `{regenerate}`",
-            path.display()
+            "cannot read {}: {e} — {}",
+            path.display(),
+            regenerate_hint(regenerate)
         )
     })?;
     if checked_in == live {
         Ok(())
     } else {
         Err(format!(
-            "{} is stale; regenerate it with `{regenerate}`",
-            path.display()
+            "{} is stale; {}",
+            path.display(),
+            regenerate_hint(regenerate)
         ))
     }
+}
+
+/// The shared repair hint every gate error ends with, so the "regenerate it with `…`" wording lives
+/// **once** rather than hand-copied at each failure site (the twin-drift the project retires
+/// everywhere). Each caller supplies its own prefix/separator (an error *cause* joins with ` — `,
+/// the stale case with `; `); only the hint is shared.
+fn regenerate_hint(regenerate: &str) -> String {
+    format!("regenerate it with `{regenerate}`")
 }

@@ -46,6 +46,16 @@ got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
 expect "$got" 1 "hunyi-standalone demo reacts"
 
+# ---------------------------------------------------------------- unsafe-confinement
+# 渾儀's unsafe-confinement — the one capability the family cannot self-demo (every family crate is
+# `#![forbid(unsafe_code)]`), so it needs a crate with real, confined `unsafe`.
+cd "$WS/examples/unsafe-confinement"
+mapfile -d '' PATCH < <(patch hunyi xuanji xingbiao)
+cargo test "${PATCH[@]}"
+got=0
+cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
+expect "$got" 1 "unsafe-confinement demo reacts"
+
 # ---------------------------------------------------------------- composed
 cd "$WS/examples/composed"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
@@ -87,5 +97,26 @@ cargo run --quiet --bin runtime_demo "${PATCH[@]}" >/tmp/composed_runtime.txt 2>
 expect "$got" 0 "composed run-mode is event-only (no crash)"
 grep -q 'runtime reaction' /tmp/composed_runtime.txt || { echo "::error::runtime_demo did not emit the reaction"; exit 1; }
 echo "ok  composed run-mode emitted the fail-closed reaction"
+
+# ---------------------------------------------------------------- sans-io-pure
+# The 天衡 shell's `sans_io_pure` profile — folds a 圭表 clock boundary and a subtree-scoped 渾儀
+# async boundary into one declaration; `run` projects both into one exit code.
+cd "$WS/examples/sans-io-pure"
+mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+cargo test "${PATCH[@]}"
+got=0
+cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml >/dev/null 2>&1 || got=$?
+expect "$got" 1 "sans-io-pure check reacts (both axes folded)"
+
+# The profile is real composition, not one axis: `run()` must aggregate BOTH the 圭表 clock (a
+# `module` boundary) fault AND the 渾儀 async fault — asserting the exit code alone would pass if
+# one axis silently stopped contributing.
+cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml --format json \
+    >/tmp/sans_io.json 2>/dev/null || true
+grep -q '"kind": "module"' /tmp/sans_io.json \
+    || { echo "::error::sans-io-pure json has no static (module) clock violation"; exit 1; }
+grep -q '"kind": "semantic"' /tmp/sans_io.json \
+    || { echo "::error::sans-io-pure json has no semantic async violation — the subtree axis dropped"; exit 1; }
+echo "ok  sans-io-pure folds both axes (圭表 clock + 渾儀 async subtree)"
 
 echo "all examples reacted as declared."

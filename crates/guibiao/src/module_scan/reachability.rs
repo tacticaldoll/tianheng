@@ -260,6 +260,97 @@ fn attr_prefix_has_path(bytes: &[u8]) -> bool {
         {
             return true;
         }
+        // The combined `#[cfg_attr(<pred>, …, path = "…")]` spelling (equivalent to
+        // `#[cfg(<pred>)] #[path = "…"]`) is a conditional remap too — recognized cfg-blindly, the
+        // same stated `#[path]` bound. Matched only on a genuine nested `path` meta, so a
+        // `#[cfg_attr(<pred>, deprecated)]` on a normal file module is not mistaken for a remap.
+        if bytes[i..].starts_with(b"cfg_attr")
+            && bytes.get(i + 8).is_none_or(|byte| !is_ident_byte(*byte))
+            && cfg_attr_prefix_has_path(&bytes[i + 8..])
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether a `cfg_attr(…)` attribute — `bytes` positioned just after the `cfg_attr` identifier —
+/// carries a `path` meta among its **applied attributes**. `cfg_attr(<predicate>, <attr>, …)`: the
+/// first meta is the cfg predicate (a condition, not an applied attribute), so it is **skipped**
+/// before matching — mirroring hunyi's `is_path_remap` (`metas.iter().skip(1)`), so the two
+/// dimensions agree. Scans the balanced parenthesis group and matches a depth-1 `path` identifier,
+/// past the predicate, immediately followed by `=` (the `path = "…"` name-value form); it also
+/// **recurses** into a nested applied `cfg_attr(…)`, so `#[cfg_attr(a, cfg_attr(b, path = "…"))]` is
+/// detected too. Conservative — a same-suffixed identifier (`target_path`), a `path` nested inside a
+/// predicate group (`all(…)`), or a `path` in the predicate position is **not** matched — so a
+/// non-remapping `cfg_attr` is never mistaken for a remap (which would drop a governed module — the
+/// inverse false negative).
+///
+/// Input note: this runs on comment/string-stripped bytes (`declared_modules_with_kind` applies
+/// `strip_comments_and_strings` first), so a `path` inside a string literal cannot reach here; the
+/// `b'"'` arm below is defense-in-depth for that upstream invariant, not a live path.
+fn cfg_attr_prefix_has_path(bytes: &[u8]) -> bool {
+    let mut i = 0;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if bytes.get(i) != Some(&b'(') {
+        return false;
+    }
+    i += 1;
+    let mut depth = 1usize;
+    // The first depth-1 meta is the cfg predicate, not an applied attribute; only match a `path`
+    // meta AFTER the first depth-1 comma, so `#[cfg_attr(path = "…", …)]` (a `path` cfg key) is not
+    // mistaken for a remap.
+    let mut past_predicate = false;
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'"' => {
+                // Strings are stripped upstream (see doc); defense-in-depth for the invariant.
+                i += 1;
+                while i < bytes.len() && bytes[i] != b'"' {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                i += 1;
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth -= 1;
+                i += 1;
+            }
+            b',' if depth == 1 => {
+                past_predicate = true;
+                i += 1;
+            }
+            byte if depth == 1 && past_predicate && is_ident_byte(byte) => {
+                let start = i;
+                while i < bytes.len() && is_ident_byte(bytes[i]) {
+                    i += 1;
+                }
+                let ident = &bytes[start..i];
+                if ident == b"path" {
+                    let mut j = i;
+                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if bytes.get(j) == Some(&b'=') {
+                        return true;
+                    }
+                } else if ident == b"cfg_attr" && cfg_attr_prefix_has_path(&bytes[i..]) {
+                    // A nested `cfg_attr(<pred>, …)` applied meta: recurse into ITS group (which
+                    // skips its own predicate), so `#[cfg_attr(a, cfg_attr(b, path = "…"))]` is
+                    // detected too — matching hunyi's recursive `is_path_remap`.
+                    return true;
+                }
+            }
+            _ => i += 1,
+        }
     }
     false
 }
@@ -408,10 +499,10 @@ mod tests {
 
     #[test]
     fn a_stray_lib_beside_a_custom_root_is_not_a_second_crate_root() {
-        // FP closed (bughunt round 3): with a custom target root (`[lib] path = "src/core.rs"`), a
+        // With a custom target root (`[lib] path = "src/core.rs"`), a
         // leftover top-level `lib.rs` is NOT the crate root — cargo never compiles it — so it must
-        // not also claim the segment-less `crate` module. Before the fix `core.rs` and `lib.rs` both
-        // mapped to `crate`, unioning the stray file's `mod ghost;` into the real root and making
+        // not also claim the segment-less `crate` module. If both `core.rs` and `lib.rs` mapped to
+        // `crate`, the stray file's `mod ghost;` would union into the real root and make
         // `crate::ghost` phantom-reachable (a spurious module-boundary violation on an uncompiled file).
         let dir = std::env::temp_dir().join(format!("guibiao-custom-root-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -496,8 +587,82 @@ mod tests {
     }
 
     #[test]
+    fn a_cfg_attr_nested_path_is_a_remap() {
+        // `#[cfg_attr(<pred>, path = "…")]` (== `#[cfg(<pred>)] #[path = "…"]`) is a
+        // conditional remap — the FILE module is out of scope, the same stated `#[path]` bound. Not
+        // recognizing it would scan the module against a wrong/absent conventional file (a silent
+        // false negative in the static dimension).
+        assert!(
+            declared_modules("#[cfg_attr(windows, path = \"os/windows.rs\")]\npub mod os;\n")
+                .is_empty(),
+            "a cfg_attr-nested path remap puts the FILE module out of scope",
+        );
+        // The remap may sit after the predicate among several applied attrs, and whitespace varies.
+        assert!(
+            declared_modules("#[cfg_attr(all(unix), deprecated, path = \"p.rs\")]\nmod a;\n")
+                .is_empty(),
+        );
+        // A NESTED `cfg_attr` remap (== `#[cfg(all(a,b))] #[path]`) is
+        // detected too — the recursion must descend the applied `cfg_attr`, or guibiao would
+        // silently govern nothing while hunyi failed loud (a cross-dimension divergence).
+        assert!(
+            declared_modules("#[cfg_attr(a, cfg_attr(b, path = \"secret.rs\"))]\npub mod m;\n")
+                .is_empty(),
+            "a nested cfg_attr path remap is detected",
+        );
+    }
+
+    #[test]
+    fn a_cfg_attr_without_a_path_meta_is_not_a_remap() {
+        // The inverse false negative: a `cfg_attr` that carries NO `path` meta must not be mistaken
+        // for a remap, or a normal file module would be dropped from scope and never governed.
+        assert_eq!(
+            declared_modules("#[cfg_attr(test, derive(Debug))]\npub mod real;\n"),
+            vec!["real".to_string()],
+            "a cfg_attr without a path meta is not a remap",
+        );
+        // A `path` substring inside a predicate's STRING value is not a `path` meta.
+        assert_eq!(
+            declared_modules("#[cfg_attr(feature = \"path\", deprecated)]\npub mod real;\n"),
+            vec!["real".to_string()],
+            "a `path` inside a predicate string is not a path meta",
+        );
+        // A same-suffixed identifier (`target_path`) is not the `path` meta.
+        assert_eq!(
+            declared_modules("#[cfg_attr(unix, target_path = \"x\")]\npub mod real;\n"),
+            vec!["real".to_string()],
+        );
+        // A NESTED cfg_attr that carries no `path` meta must not be mistaken for a remap either.
+        assert_eq!(
+            declared_modules("#[cfg_attr(a, cfg_attr(b, deprecated))]\npub mod real;\n"),
+            vec!["real".to_string()],
+            "a nested cfg_attr without a path meta is not a remap",
+        );
+        // `path` in the PREDICATE position (first meta) is a cfg key, not an applied `path` attr —
+        // must not be mistaken for a remap (would drop a normal module = inverse false negative).
+        // Mirrors hunyi's `skip(1)`, keeping the two dimensions in agreement.
+        assert_eq!(
+            declared_modules("#[cfg_attr(path = \"x\", deprecated)]\npub mod real;\n"),
+            vec!["real".to_string()],
+            "a `path` cfg predicate key is not an applied path remap",
+        );
+    }
+
+    #[test]
+    fn a_cfg_attr_nested_path_on_an_inline_module_does_not_drop_it() {
+        // As with a direct #[path], a cfg_attr(path) on an INLINE module is a rustc no-op, so the
+        // module stays declared.
+        assert_eq!(
+            declared_modules(
+                "#[cfg_attr(windows, path = \"x.rs\")]\npub mod a { pub mod inner; }\n"
+            ),
+            vec!["a".to_string()],
+        );
+    }
+
+    #[test]
     fn a_path_attr_on_an_inline_module_does_not_drop_it() {
-        // FP closed (bughunt round 2): `#[path]` remaps only a FILE `mod name;` (out of scope); on
+        // `#[path]` remaps only a FILE `mod name;` (out of scope); on
         // an INLINE `mod name { … }` it is a no-op for rustc (the body IS the module), so the module
         // must stay declared — dropping it would leave a compiled module unobserved.
         assert_eq!(
@@ -514,7 +679,7 @@ mod tests {
 
     #[test]
     fn a_block_comment_before_a_mod_name_does_not_fuse_it() {
-        // FN closed (bughunt round 2): `mod/*c*/foo;` must not strip to `modfoo;` (which drops the
+        // `mod/*c*/foo;` must not strip to `modfoo;` (which drops the
         // declaration); a block comment leaves a separator.
         assert_eq!(
             declared_modules("mod/*c*/foo;"),
@@ -525,7 +690,7 @@ mod tests {
 
     #[test]
     fn a_custom_crate_root_filename_maps_to_crate() {
-        // FN closed (bughunt round 2): a crate whose target root is a custom filename
+        // A crate whose target root is a custom filename
         // (`[lib] path = "src/core.rs"`) must still have its submodules reachable. The root file's
         // relative path is passed as root_relative so it maps to `crate` (not `crate::core`).
         let dir = std::env::temp_dir().join(format!("guibiao-customroot-{}", std::process::id()));

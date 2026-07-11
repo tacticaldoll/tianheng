@@ -92,8 +92,7 @@ impl SourceKind {
 }
 
 /// One boundary, of either kind. Named `Boundary` (umbrella) with the crate kind as
-/// [`CrateBoundary`]: now that a module reaction exists, the v0.1 rename is earned
-/// (drift law D2).
+/// [`CrateBoundary`], since a module reaction is also a boundary (drift law D2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Boundary {
@@ -641,6 +640,25 @@ pub enum ModuleRule {
         /// The confined external crate name (e.g. `"libc"`).
         crate_name: String,
     },
+    /// Within the governed module's subtree, forbid inline symbol-path **calls** resolving under
+    /// a declared module-path prefix — the inline-symbol-path (layer b) sibling of
+    /// [`ConfineExternalCrate`](ModuleRule::ConfineExternalCrate), observing *calls* rather than
+    /// `use` imports. The "core reads no ambient clock; time is injected" pattern. The confined
+    /// prefix is the violation target, so identity stays injective across nested prefixes on the
+    /// same subtree.
+    ConfineInlineSymbolPath {
+        /// The confined module-path prefix (e.g. `"std::time"`).
+        prefix: String,
+        /// If `Some`, react only on calls whose terminal segment (leaf-exact) is one of these
+        /// verbs (e.g. `["now"]`); `None` reacts on every call under the prefix. Adopter-owned:
+        /// a read reachable only through an undeclared verb is a false negative the adopter
+        /// accepts by narrowing.
+        ending_with: Option<Vec<String>>,
+        /// If `true`, react on **any** path under the prefix (mentions included — type
+        /// annotations, constants, value captures), not only calls. Mutually exclusive with
+        /// `ending_with` (both set is a constitution error).
+        strict: bool,
+    },
 }
 
 impl ModuleRule {
@@ -652,6 +670,7 @@ impl ModuleRule {
             ModuleRule::MustNotBeImportedBy { .. } => "module must not be imported by",
             ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
             ModuleRule::ConfineExternalCrate { .. } => "external crate confined to module",
+            ModuleRule::ConfineInlineSymbolPath { .. } => "inline symbol path confined to module",
         }
     }
 
@@ -667,6 +686,9 @@ impl ModuleRule {
             ModuleRule::RestrictImportsTo { .. }
             | ModuleRule::MustOnlyBeImportedBy { .. }
             | ModuleRule::ConfineExternalCrate { .. } => Polarity::AllowlistGap,
+            // A forbidden inline call under the prefix is a breach to remove (or replace with
+            // injected time) — the same repair shape as `MustNotImport`, not an allowlist gap.
+            ModuleRule::ConfineInlineSymbolPath { .. } => Polarity::DenyBreach,
         }
     }
 
@@ -692,6 +714,18 @@ impl ModuleRule {
             ModuleRule::ConfineExternalCrate { crate_name } => {
                 format!("confines external crate {crate_name} to this module's subtree")
             }
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix,
+                ending_with,
+                strict,
+            } => match (ending_with, strict) {
+                (_, true) => format!("must not name inline under {prefix} (strict: mentions too)"),
+                (Some(verbs), false) => format!(
+                    "must not call inline under {prefix} ending with: {}",
+                    verbs.join(", ")
+                ),
+                (None, false) => format!("must not call inline under {prefix}"),
+            },
         }
     }
 
@@ -722,6 +756,23 @@ impl ModuleRule {
             // the governed module's subtree, a surface distinct from every internal-edge rule.
             ModuleRule::ConfineExternalCrate { crate_name } => {
                 vec![("external_crate", serde_json::json!(crate_name))]
+            }
+            // `confined_prefix` (self-describing): the module-path prefix whose inline calls are
+            // forbidden in the subtree. `ending_with` / `strict` are emitted only when set, so a
+            // bare confinement keeps byte-identical JSON (the same discipline as the anchor).
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix,
+                ending_with,
+                strict,
+            } => {
+                let mut params = vec![("confined_prefix", serde_json::json!(prefix))];
+                if let Some(verbs) = ending_with {
+                    params.push(("ending_with", serde_json::json!(verbs)));
+                }
+                if *strict {
+                    params.push(("strict", serde_json::json!(true)));
+                }
+                params
             }
         }
     }
@@ -816,6 +867,32 @@ impl ModuleTargetDraft {
         })
     }
 
+    /// Within the governed subtree, forbid inline symbol-path **calls** resolving under the
+    /// module-path `prefix` (e.g. `"std::time"`) — the inline-symbol-path (layer b) sibling of
+    /// [`confine_external_crate`](Self::confine_external_crate), for the "core reads no ambient
+    /// clock; time is injected" pattern. By default only a **call** (`prefix::…::verb(...)`)
+    /// reacts; a type annotation, a bare constant reference, and any non-call mention pass (so the
+    /// core may *receive* injected time), keeping 圭表 free of a built-in read-verb heuristic. The
+    /// returned [`InlineConfinementDraft`] is a dedicated draft — its `.ending_with` /
+    /// `.strict_prefix_only` modifiers cannot be applied to the other module rules.
+    ///
+    /// Resolution follows the alias-carrying use-map, local `type` aliases, and the local
+    /// `pub use` re-export closure to a fixpoint, and reacts fail-closed on a glob that can bring
+    /// a prefix-resolving name into scope. The stated bounds (receiver-method reads, in-macro-body
+    /// aliases, fragment/proc-macro construction, external-crate re-exports, value-position
+    /// captures under the default, and the inherited file-scope scanner bounds) are declared
+    /// non-observations, never silent passes.
+    pub fn must_not_call_inline(self, prefix: &str) -> InlineConfinementDraft {
+        InlineConfinementDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            prefix: prefix.to_string(),
+            ending_with: None,
+            strict: false,
+            severity: Severity::Enforce,
+        }
+    }
+
     fn with_rule(self, rule: ModuleRule) -> ModuleBoundaryDraft {
         ModuleBoundaryDraft {
             crate_package: self.crate_package,
@@ -847,6 +924,68 @@ impl ModuleBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
             rule: self.rule,
+            reason: reason.to_string(),
+            severity: self.severity,
+            anchor: None,
+        }
+    }
+}
+
+/// A dedicated draft for an inline-symbol-path confinement (from
+/// [`must_not_call_inline`](ModuleTargetDraft::must_not_call_inline)). Distinct from
+/// [`ModuleBoundaryDraft`] so its narrowing / escalation modifiers cannot be applied to the other
+/// module rules (no modifier pollution). Chain [`ending_with`](Self::ending_with) **or**
+/// [`strict_prefix_only`](Self::strict_prefix_only) (they are mutually exclusive), and
+/// [`warn`](Self::warn), before [`because`](Self::because).
+pub struct InlineConfinementDraft {
+    crate_package: String,
+    module: String,
+    prefix: String,
+    ending_with: Option<Vec<String>>,
+    strict: bool,
+    severity: Severity,
+}
+
+impl InlineConfinementDraft {
+    /// Narrow the confinement to react only on calls whose **terminal segment** (leaf-exact) is
+    /// one of `verbs` (e.g. `["now"]`) — the adopter's declared read verbs. The adopter owns any
+    /// false negative from omitting a verb (a future `::current()` passes); the engine bakes in no
+    /// default verb set. Mutually exclusive with [`strict_prefix_only`](Self::strict_prefix_only):
+    /// declaring both is a constitution error (exit 2).
+    pub fn ending_with<I, S>(mut self, verbs: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.ending_with = Some(verbs.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Escalate the confinement to react on **any** path under the prefix — mentions included
+    /// (type annotations, constants, value-position captures), not only calls. The whole-surface
+    /// isolation posture for a subtree that may not even name the module. Mutually exclusive with
+    /// [`ending_with`](Self::ending_with): declaring both is a constitution error (exit 2).
+    pub fn strict_prefix_only(mut self) -> Self {
+        self.strict = true;
+        self
+    }
+
+    /// Make this boundary advisory: its violations are reported but do not fail CI.
+    pub fn warn(mut self) -> Self {
+        self.severity = Severity::Warn;
+        self
+    }
+
+    /// Finish the boundary, recording the human-readable `reason` (the repair hint).
+    pub fn because(self, reason: &str) -> ModuleBoundary {
+        ModuleBoundary {
+            crate_package: self.crate_package,
+            module: self.module,
+            rule: ModuleRule::ConfineInlineSymbolPath {
+                prefix: self.prefix,
+                ending_with: self.ending_with,
+                strict: self.strict,
+            },
             reason: reason.to_string(),
             severity: self.severity,
             anchor: None,

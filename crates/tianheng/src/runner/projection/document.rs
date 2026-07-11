@@ -2,8 +2,8 @@ use guibiao::constitution_json;
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, VISIBILITY_RULE,
-    VisibilityBoundary,
+    SIGNATURE_RULE, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
+    UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary};
 use serde_json::Value;
@@ -99,7 +99,7 @@ pub(in crate::runner) fn visibility_boundary_json(boundary: &VisibilityBoundary)
     semantic_module_json(
         boundary.module(),
         boundary.crate_package(),
-        VISIBILITY_RULE,
+        boundary.ceiling().rule(),
         boundary.severity().as_str(),
         boundary.reason(),
         boundary.anchor(),
@@ -159,14 +159,36 @@ pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) 
     object
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
-    semantic_module_json(
+    let mut object = semantic_module_json(
         boundary.module(),
         boundary.crate_package(),
         ASYNC_EXPOSURE_RULE,
         boundary.severity().as_str(),
         boundary.reason(),
         boundary.anchor(),
-    )
+    );
+    // The subtree opt-in changes the reaction (whole subtree vs the anchored seam), so the
+    // projected law must show it. Emitted only when set, so a bare boundary's JSON (and the
+    // Markdown derived from it) stays byte-identical.
+    if boundary.including_submodules() {
+        object["including_submodules"] = serde_json::json!(true);
+    }
+    object
+}
+/// The JSON projection of one unsafe-confinement boundary (`kind`, `target` = the confined crate,
+/// `crate`, `rule`, `severity`, `reason`) plus the `allowed_locations` subtree set.
+pub(in crate::runner) fn unsafe_boundary_json(boundary: &UnsafeBoundary) -> Value {
+    let mut object = boundary_json_base(
+        "semantic",
+        boundary.crate_package(),
+        Some(boundary.crate_package()),
+        UNSAFE_CONFINEMENT_RULE,
+        boundary.severity().as_str(),
+        boundary.reason(),
+        boundary.anchor(),
+    );
+    object["allowed_locations"] = serde_json::json!(boundary.allowed_locations());
+    object
 }
 fn append_array<T>(document: &mut Value, key: &str, items: &[T], project: impl Fn(&T) -> Value) {
     if !items.is_empty() {
@@ -227,6 +249,12 @@ pub(in crate::runner) fn list_document(constitution: &Constitution) -> Value {
     );
     append_array(
         &mut document,
+        "unsafe_confinement_boundaries",
+        &semantic.unsafe_confinement,
+        unsafe_boundary_json,
+    );
+    append_array(
+        &mut document,
         "runtime_boundaries",
         runtime,
         runtime_boundary_json,
@@ -237,7 +265,7 @@ pub(in crate::runner) fn list_document(constitution: &Constitution) -> Value {
 /// `severity`, `posture`, `reason`) plus the `allowed_origins` set. `posture` is projected so a
 /// `panic_on_violation` boundary does not project identically to a default event-only one.
 ///
-/// #16 doc note: the projected `rule` reacts at **runtime** (the prod `assert_boundary!` face),
+/// The projected `rule` reacts at **runtime** (the prod `assert_boundary!` face),
 /// not at `check` — `check`'s runtime face is only probe-coverage. The label is the canonical
 /// `RUNTIME_SEAM_RULE` const, shared with the text projection and the prod `check_crossing`.
 pub(in crate::runner) fn runtime_boundary_json(boundary: &RuntimeBoundary) -> Value {

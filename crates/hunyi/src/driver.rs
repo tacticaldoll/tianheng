@@ -48,7 +48,7 @@ pub(crate) fn read_metadata(manifest_path: &Path) -> Result<Value, Outcome> {
 /// Evaluate one capability's boundaries against an already-read `metadata`, folding findings into
 /// the shared `violations` accumulator; the first constitution error short-circuits (exit 2
 /// supersedes any accumulated drift). Shared by the single-capability `check_*` drivers and
-/// `check_all` — the latter reads `metadata` **once** and evaluates all seven capabilities into
+/// `check_all` — the latter reads `metadata` **once** and evaluates all eight capabilities into
 /// one accumulator, so the single-read and error-supersedes semantics are identical across both.
 pub(crate) fn eval_into<B>(
     metadata: &Value,

@@ -2,6 +2,44 @@
 
 use xuanji::Severity;
 
+use crate::rules::{VISIBILITY_MODULE_RULE, VISIBILITY_RULE, VISIBILITY_SUPER_RULE};
+
+/// The maximum declared visibility a governed module's direct items may carry. An item whose
+/// declared-visibility rank is strictly above the ceiling reacts; at or below it passes.
+/// (`Public` is deliberately not a ceiling — it would never react.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisibilityCeiling {
+    /// Allow up to `pub(crate)`; react on bare `pub`. The `must_not_declare_pub` case.
+    Crate,
+    /// Allow up to `pub(super)`; react on `pub` and `pub(crate)`.
+    Super,
+    /// Allow only module-private (private / `pub(self)`); react on any `pub`-family keyword.
+    Module,
+}
+
+impl VisibilityCeiling {
+    /// The ceiling's rank on the `pub`(3) > `pub(crate)`(2) > `pub(super)`(1) > private(0) scale;
+    /// an item reacts iff its own rank is strictly greater.
+    pub(crate) fn rank(self) -> u8 {
+        match self {
+            VisibilityCeiling::Crate => 2,
+            VisibilityCeiling::Super => 1,
+            VisibilityCeiling::Module => 0,
+        }
+    }
+
+    /// The rule label for this ceiling. `Crate` keeps the legacy `must_not_declare_pub` string
+    /// verbatim (so its findings and baselines never churn); `Super`/`Module` are distinct. Public
+    /// so the shell's projection renders the same label the reaction stamps (one source).
+    pub fn rule(self) -> &'static str {
+        match self {
+            VisibilityCeiling::Crate => VISIBILITY_RULE,
+            VisibilityCeiling::Super => VISIBILITY_SUPER_RULE,
+            VisibilityCeiling::Module => VISIBILITY_MODULE_RULE,
+        }
+    }
+}
+
 /// A visibility boundary: a governed module must not declare any bare-`pub` items —
 /// a declared-visibility hygiene rule for an internal / impl-detail layer. The rule is
 /// **syntactic** (the `pub` keyword on the module's own direct items), not crate-
@@ -16,6 +54,7 @@ pub struct VisibilityBoundary {
     pub(crate) reason: String,
     pub(crate) anchor: Option<String>,
     pub(crate) severity: Severity,
+    pub(crate) ceiling: VisibilityCeiling,
 }
 
 impl VisibilityBoundary {
@@ -58,6 +97,11 @@ impl VisibilityBoundary {
     pub fn severity(&self) -> Severity {
         self.severity
     }
+
+    /// The boundary's maximum-visibility ceiling.
+    pub fn ceiling(&self) -> VisibilityCeiling {
+        self.ceiling
+    }
 }
 
 /// A visibility boundary awaiting its module anchor.
@@ -84,12 +128,20 @@ pub struct VisibilityModuleDraft {
 }
 
 impl VisibilityModuleDraft {
-    /// Forbid the module from declaring any bare-`pub` direct item.
+    /// Forbid the module from declaring any bare-`pub` direct item — sugar for
+    /// [`max_visibility`](Self::max_visibility)`(VisibilityCeiling::Crate)`, byte-identical in
+    /// behavior, rule string, and findings.
     pub fn must_not_declare_pub(self) -> VisibilityBoundaryDraft {
+        self.max_visibility(VisibilityCeiling::Crate)
+    }
+
+    /// Forbid the module from declaring any direct item more visible than `ceiling`.
+    pub fn max_visibility(self, ceiling: VisibilityCeiling) -> VisibilityBoundaryDraft {
         VisibilityBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
             severity: Severity::Enforce,
+            ceiling,
         }
     }
 }
@@ -100,6 +152,7 @@ pub struct VisibilityBoundaryDraft {
     crate_package: String,
     module: String,
     severity: Severity,
+    ceiling: VisibilityCeiling,
 }
 
 impl VisibilityBoundaryDraft {
@@ -118,6 +171,7 @@ impl VisibilityBoundaryDraft {
             reason: reason.to_string(),
             anchor: None,
             severity: self.severity,
+            ceiling: self.ceiling,
         }
     }
 }

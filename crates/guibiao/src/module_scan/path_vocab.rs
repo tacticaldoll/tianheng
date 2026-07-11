@@ -42,3 +42,56 @@ pub(crate) fn path_within(path: &str, prefix: &str) -> bool {
 pub(super) fn is_mod_declaration_keyword(bytes: &[u8], i: usize) -> bool {
     keyword_starts_at(bytes, i, b"mod")
 }
+
+/// Whether a bare head names a crate-root module that **shadows** the extern prelude. Only at the
+/// crate root itself (`current_module == "crate"`) is a sibling `mod` in scope, so a bare
+/// `use foo::…` / path there resolves to the local `crate::foo`; in any submodule the same bare head
+/// reaches only the extern prelude (an external crate). The single home of that shadow rule the
+/// `use`-scan and symbol-scan share, so no copy can drift.
+pub(super) fn is_crate_root_shadow(
+    current_module: &str,
+    head: &str,
+    root_modules: &[String],
+) -> bool {
+    current_module == "crate" && root_modules.iter().any(|m| m == head)
+}
+
+/// Resolve a `self::…` / `super::…` relative path against `current_module` into a crate-rooted
+/// absolute path. `parts` is the already-canonicalized, `::`-split path whose first segment is
+/// `self` or `super`. Returns `None` when a `super` chain **over-pops** past the crate root (more
+/// `super`s than ancestors): the result would not be crate-rooted, names no internal module (and
+/// the source does not compile), so it must never be mistaken for an outward edge. Any other head
+/// (`parts[0]` not `self`/`super`, or empty) also returns `None` — the caller resolves those.
+///
+/// The single home of the `super`-pop loop and its over-pop guard, which the `use`-scan
+/// ([`super::use_scan`]) and symbol-scan ([`super::symbol_scan`]) resolvers share — so a fix to that
+/// subtle edge cannot silently diverge across them (the twin-drift bug class). guibiao-internal;
+/// crosses no dimension boundary.
+pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option<String> {
+    let mut out: Vec<&str> = current_module
+        .split("::")
+        .filter(|s| !s.is_empty())
+        .collect();
+    match parts.first().copied() {
+        Some("self") => {
+            out.extend(&parts[1..]);
+            Some(out.join("::"))
+        }
+        Some("super") => {
+            let mut tail = parts;
+            while let Some(&seg) = tail.first() {
+                if seg != "super" {
+                    break;
+                }
+                out.pop();
+                tail = &tail[1..];
+            }
+            if out.first() != Some(&"crate") {
+                return None;
+            }
+            out.extend(tail);
+            Some(out.join("::"))
+        }
+        _ => None,
+    }
+}

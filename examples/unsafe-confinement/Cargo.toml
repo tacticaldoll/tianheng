@@ -1,0 +1,21 @@
+# Standalone adoption of 渾儀 (hunyi)'s **unsafe-confinement** capability.
+#
+# Its own workspace (`[workspace]` below) so its *deliberate* misplaced `unsafe` is never swept by
+# Tianheng's workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`, patching
+# the family crates to local source so the committed `hunyi = "0.1"` still resolves.
+#
+# Unlike every family crate, this example does NOT declare `#![forbid(unsafe_code)]` — the whole
+# point is a crate that legitimately *contains* `unsafe`, confined to one auditable subtree
+# (`crate::ffi`). `UnsafeBoundary` governs *where* `unsafe` lives, which `#![forbid]` (a crate-wide
+# ban) cannot express — so this capability can only be demonstrated by a crate with real, confined
+# `unsafe`, never by the family (which is `unsafe`-free and says so with `#![forbid]`).
+[package]
+name = "unsafe_confinement"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+hunyi = "0.1"
+
+[workspace]

@@ -1,9 +1,9 @@
 use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
 use super::term_color::Style;
 use super::{
-    Coverage, constitution_markdown, dispatch, dyn_trait_text, impl_trait_text, list_document,
-    list_markdown, merge_outcomes, nearest_manifest_from, projection_gate, report_json,
-    runtime_text, semantic_text, trait_impl_text, visibility_text,
+    Coverage, boundary_params, constitution_markdown, dispatch, dyn_trait_text, impl_trait_text,
+    list_document, list_markdown, merge_outcomes, nearest_manifest_from, projection_gate,
+    report_json, runtime_text, semantic_text, trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
 use serde_json::Value;
@@ -147,6 +147,15 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
     assert!(json.contains("\"anchor\":\"ADR-014\""), "{json}");
     // Markdown derives from the JSON params generically, so the anchor surfaces there too.
     assert!(constitution_markdown(&c).contains("ADR-014"));
+    // Parity: the text projection surfaces the anchor too (it appeared in json/markdown but not
+    // text before — the `list` three-format parity gap).
+    assert!(
+        semantic_text(std::slice::from_ref(
+            c.semantic_boundaries().signature.first().unwrap()
+        ))
+        .contains("anchor: ADR-014"),
+        "text projection must surface the anchor line, like json and markdown"
+    );
 
     let bare = SemanticBoundary::in_crate("app")
         .module("crate::domain")
@@ -155,6 +164,42 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
     let bare_c = Constitution::new("app").signature_boundary(bare);
     let bare_json = serde_json::to_string(&list_document(&bare_c)).expect("json");
     assert!(!bare_json.contains("anchor"), "{bare_json}");
+    // And a bare boundary's text stays byte-identical (no stray `anchor:` line).
+    assert!(
+        !semantic_text(std::slice::from_ref(
+            bare_c.semantic_boundaries().signature.first().unwrap()
+        ))
+        .contains("anchor"),
+        "a boundary without an anchor emits no anchor line in text"
+    );
+}
+
+#[test]
+fn markdown_params_exclude_exactly_the_structural_base_keys() {
+    // Guard the hand-maintained `STRUCTURAL` list (markdown.rs) against drift from the keys
+    // `boundary_json_base` emits: a boundary JSON with every base field set (crate + anchor) plus a
+    // rule param must render the non-structural keys as params and NONE of the structural six. A
+    // future always-present base key added without updating `STRUCTURAL` would leak into params here.
+    let boundary = serde_json::json!({
+        "kind": "semantic", "target": "app", "crate": "app",
+        "rule": "expose", "severity": "enforce", "reason": "why",
+        "forbidden": ["Foo"], "anchor": "ADR-014",
+    });
+    let params = boundary_params(&boundary);
+    for structural in ["kind", "target", "crate", "rule", "severity", "reason"] {
+        assert!(
+            !params.contains(&format!("{structural}:")),
+            "structural base key `{structural}` leaked into markdown params: {params}"
+        );
+    }
+    assert!(
+        params.contains("forbidden:"),
+        "a rule param must surface: {params}"
+    );
+    assert!(
+        params.contains("anchor:"),
+        "anchor is a non-structural param: {params}"
+    );
 }
 
 #[test]
@@ -211,7 +256,7 @@ fn report_sarif_merges_anchor_and_polarity_into_one_property_bag() {
 
 #[test]
 fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
-    // FN closed (bughunt round 3): a violation's identity is (target, rule, finding), but SARIF's
+    // A violation's identity is (target, rule, finding), but SARIF's
     // ruleId/message carry only rule and finding. For a file-less violation `target` is the sole
     // discriminator, so two violations differing ONLY in target rendered byte-identical and a
     // fingerprint-deduping ingester (GitHub code scanning) collapsed them. Each now carries a
@@ -432,6 +477,18 @@ fn visibility_text_lists_each_boundary_and_is_empty_when_none() {
     let text = visibility_text(&[boundary]);
     assert!(text.contains("module crate::internal in app"), "{text}");
     assert!(text.contains("must not declare pub items"), "{text}");
+
+    // A non-Crate ceiling must render its own rule label in text too (one source with check/json/
+    // markdown) — regression guard for the text projection desync.
+    let sealed = VisibilityBoundary::in_crate("app")
+        .module("crate::deep")
+        .max_visibility(VisibilityCeiling::Super)
+        .because("sealed to its parent");
+    let sealed_text = visibility_text(&[sealed]);
+    assert!(
+        sealed_text.contains("must not declare items more visible than pub(super)"),
+        "{sealed_text}"
+    );
 }
 
 #[test]
@@ -776,9 +833,8 @@ fn list_document_covers_every_populated_dimension() {
 }
 
 /// The Markdown projection must carry a section for **every** dimension the JSON document emits
-/// (`constitution-projection`'s "no less than the JSON" guarantee). This reaction replaces the
-/// hand-maintained capability enumeration the spec once carried — which drifted (4 listed while
-/// 7 shipped) — so a capability added to `list_document` without a `list_markdown` section fails
+/// (`constitution-projection`'s "no less than the JSON" guarantee). This reaction replaces a
+/// hand-maintained capability enumeration — so a capability added to `list_document` without a `list_markdown` section fails
 /// CI here rather than silently under-projecting. The dimension set is enumerated in the test (a
 /// reaction), not in prose; the final parity count catches a *new* dimension nobody wired in.
 #[test]
@@ -1069,8 +1125,8 @@ fn plain_render_carries_no_ansi_escapes() {
 
 #[test]
 fn constitution_error_machine_output_carries_no_ansi() {
-    // 0.1.7 coloured the exit-2 constitution-error voice on the human text path. The machine
-    // projections must stay a clean byte stream regardless — presentation never leaks into the
+    // The machine projections must stay a clean byte stream regardless of the coloured exit-2
+    // constitution-error voice on the human text path — presentation never leaks into the
     // JSON/SARIF a tool parses, the same presentation⊥verdict contract the violation paths hold.
     let outcome = Outcome::ConstitutionError("module 'crate::ghost' not found".into());
     let json = report_json(&outcome, &[], None);
@@ -1465,7 +1521,7 @@ fn the_runtime_projection_distinguishes_posture() {
 fn both_baseline_flags_exit_2() {
     // The contradictory pair is a pure usage error (exit 2), and its check runs BEFORE manifest
     // resolution — so with an also-absent `--manifest-path` the flag conflict is still what gets
-    // reported, not a masking "no Cargo.toml found" diagnostic (assay round 3).
+    // reported, not a masking "no Cargo.toml found" diagnostic.
     assert_eq!(
         run_args(&[
             "tianheng",

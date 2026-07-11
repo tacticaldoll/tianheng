@@ -11,6 +11,12 @@ use xuanji::Severity;
 /// items are excluded. Declarative intent by anchor scoping — "this declared seam is synchronous"
 /// (a sync-core/async-edges layering), not a blanket "no async".
 ///
+/// **Scope.** By default the boundary governs the anchored module's **own** items only (the
+/// declared seam). Call [`including_submodules`](AsyncExposureBoundaryDraft::including_submodules)
+/// on the rule draft to descend the anchored module's **whole subtree**, so a public `async fn` in
+/// any descendant module reacts too — the sans-I/O-purity use ("no async anywhere under this
+/// kernel"), where anchoring at `crate` governs the whole crate.
+///
 /// [`ImplTraitBoundary`]: crate::ImplTraitBoundary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncExposureBoundary {
@@ -19,6 +25,9 @@ pub struct AsyncExposureBoundary {
     pub(crate) reason: String,
     pub(crate) anchor: Option<String>,
     pub(crate) severity: Severity,
+    /// When set, the reaction descends the anchored module's whole subtree, not just its own
+    /// items. Off by default, so an existing boundary projects and reacts byte-identically.
+    pub(crate) including_submodules: bool,
 }
 
 impl AsyncExposureBoundary {
@@ -61,6 +70,12 @@ impl AsyncExposureBoundary {
     pub fn severity(&self) -> Severity {
         self.severity
     }
+
+    /// Whether the reaction descends the anchored module's whole subtree (`true`) or governs only
+    /// its own items (`false`, the default).
+    pub fn including_submodules(&self) -> bool {
+        self.including_submodules
+    }
 }
 
 /// An async-exposure boundary awaiting its module anchor.
@@ -98,6 +113,7 @@ impl AsyncExposureModuleDraft {
             crate_package: self.crate_package,
             module: self.module,
             severity: Severity::Enforce,
+            including_submodules: false,
         }
     }
 }
@@ -108,6 +124,7 @@ pub struct AsyncExposureBoundaryDraft {
     crate_package: String,
     module: String,
     severity: Severity,
+    including_submodules: bool,
 }
 
 impl AsyncExposureBoundaryDraft {
@@ -115,6 +132,18 @@ impl AsyncExposureBoundaryDraft {
     /// reaction — the first rung of adoption.
     pub fn warn(mut self) -> Self {
         self.severity = Severity::Warn;
+        self
+    }
+
+    /// Descend the anchored module's **whole subtree**: a public `async fn` in any descendant
+    /// module reacts, not only one at the anchored module's own seam. Off by default (the boundary
+    /// governs the declared seam alone); with it, anchoring at `crate` governs the whole crate —
+    /// the sans-I/O-purity shape. Mirrors [`SemanticBoundary`]'s `including_trait_impls` opt-in:
+    /// projected only when set, so a bare boundary stays byte-identical.
+    ///
+    /// [`SemanticBoundary`]: crate::SemanticBoundary
+    pub fn including_submodules(mut self) -> Self {
+        self.including_submodules = true;
         self
     }
 
@@ -126,6 +155,7 @@ impl AsyncExposureBoundaryDraft {
             reason: reason.to_string(),
             anchor: None,
             severity: self.severity,
+            including_submodules: self.including_submodules,
         }
     }
 }

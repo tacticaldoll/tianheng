@@ -23,6 +23,10 @@ pub(in crate::runner) fn list_markdown(document: &Value) -> String {
         ("dyn_trait_boundaries", "Dyn-trait boundaries"),
         ("impl_trait_boundaries", "Impl-trait boundaries"),
         ("async_exposure_boundaries", "Async-exposure boundaries"),
+        (
+            "unsafe_confinement_boundaries",
+            "Unsafe-confinement boundaries",
+        ),
         ("runtime_boundaries", "Runtime boundaries"),
     ] {
         let Some(Value::Array(items)) = document.get(key) else {
@@ -70,8 +74,10 @@ pub(super) fn boundary_markdown(boundary: &Value) -> String {
 }
 
 /// The rule parameters of a boundary — every JSON field that is not one of the structural keys
-/// (kind/target/crate/rule/severity/reason) — rendered inline.
-pub(super) fn boundary_params(boundary: &Value) -> String {
+/// (kind/target/crate/rule/severity/reason) — rendered inline. `pub(in crate::runner)` so a
+/// projection test can pin `STRUCTURAL` against `boundary_json_base`'s emitted keys (guarding the
+/// hand-maintained list from drift).
+pub(in crate::runner) fn boundary_params(boundary: &Value) -> String {
     const STRUCTURAL: [&str; 6] = ["kind", "target", "crate", "rule", "severity", "reason"];
     let Some(object) = boundary.as_object() else {
         return String::new();

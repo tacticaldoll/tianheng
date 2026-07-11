@@ -361,8 +361,8 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
 /// falls back to a positional marker `_#{ordinal}` (the impl block's index among the module's
 /// items / the scanned impl sites), which stays injective for two otherwise-indistinguishable
 /// blocks. `ordinal` is reached only by these rare unrenderable self types and is stable unless
-/// the items are reordered — this is the render-granularity bound, now injective rather than a
-/// silent collapse (previously the self type wrongly rendered `_`, masking a distinct block).
+/// the items are reordered — this is the render-granularity bound, injective rather than a
+/// silent collapse.
 pub(crate) fn canonical_self_owner(
     self_ty: &syn::Type,
     uses: &UseMap,

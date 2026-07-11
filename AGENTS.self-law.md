@@ -66,3 +66,19 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
 - **kind**: crate · **severity**: enforce
 
+### `crate`
+
+> 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself. The clock axis reacts via 圭表 (must-not-call-inline `std::time::…::now`), the async axis via 渾儀 (must-not-expose an async public fn)
+
+- **rule**: inline symbol path confined to module (confined_prefix: std::time; ending_with: now)
+- **kind**: module · **severity**: enforce · **crate**: xuanji
+
+## Async-exposure boundaries
+
+### `crate`
+
+> 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself. The clock axis reacts via 圭表 (must-not-call-inline `std::time::…::now`), the async axis via 渾儀 (must-not-expose an async public fn)
+
+- **rule**: must not expose async fn (including_submodules: true)
+- **kind**: semantic · **severity**: enforce · **crate**: xuanji
+

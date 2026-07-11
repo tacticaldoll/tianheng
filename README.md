@@ -6,9 +6,10 @@
 > code *is*; the moment they no longer balance, it reacts. **Govern by reaction, not
 > instruction.**
 
-Tianheng is a Rust-native **reactive architectural-governance** framework — the successor
-to [`modou`](https://github.com/tacticaldoll/modou). It does not run your app and it does
-not instruct your agent. Developers and agents propose change; Tianheng uses compiler/CI
+Tianheng is a Rust-native **reactive architectural-governance** framework whose static core
+(圭表) is derived from [`modou`](https://github.com/tacticaldoll/modou) — a still-living,
+independently-developed sibling project, not one Tianheng supersedes. It does not run your app
+and it does not instruct your agent. Developers and agents propose change; Tianheng uses compiler/CI
 and runtime *reactions* to keep architectural shape from drifting.
 
 > **Status: experimental — pre-1.0.** The public faces are still settling; the family is held at
@@ -25,6 +26,36 @@ has no understanding. Tianheng crystallizes the human's intent into a **non-bypa
 reaction**: neither the agent nor Tianheng needs to understand for the law to hold.
 
 ## A declared boundary
+
+**Phase 0 — lock one seam.** The smallest useful law is a single boundary an agent copies by
+reflex: a leaf crate that must not couple to its siblings, enforced in CI from the first commit.
+
+```rust
+use tianheng::prelude::*;
+
+fn constitution() -> Constitution {
+    Constitution::new("my-project").boundary(
+        CrateBoundary::crate_("my-core")
+            .forbid_all_workspace_dependencies()
+            .because("my-core is a leaf; it must not couple to a sibling crate"),
+    )
+}
+
+fn main() -> std::process::ExitCode {
+    tianheng::run(&constitution(), std::env::args())
+}
+```
+
+Wire it into CI once — emit SARIF for code-scanning; the redirect preserves the reaction's own
+exit code, so a violation still fails the job (only a `| jq`-style pipeline would swallow it, the
+one forbidden false negative — see the annotation recipe below):
+
+```sh
+your-binary check --manifest-path Cargo.toml --format sarif > tianheng.sarif
+```
+
+That is the whole on-ramp: one declared seam, enforced. Grow it by adding boundaries to the same
+`Constitution` — the full shape carries every dimension from the one source of truth:
 
 ```rust
 use tianheng::prelude::*;
@@ -152,8 +183,8 @@ measuring instruments — each reads a different surface of the code.
 
 | 儀 Instrument | Crate | Observes | Observation source | Status |
 |---|---|---|---|---|
-| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind | `cargo metadata` + source `use` scan | **v0.1.x:** static core, declared dependency-source boundaries, module-source hardening, inbound allowlist depth, external-crate (FFI/platform-vocabulary) confinement |
-| 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure | AST (`syn`) | **v0.1.x:** semantic boundary family plus external-crate/re-export/alias hardening |
+| 圭表 gnomon (static) | `guibiao` | the cast shadow: imports, dependencies & their declared source kind, and inline symbol-path calls | `cargo metadata` + source `use` / symbol scan | **v0.1.x:** static core, declared dependency-source boundaries, module-source hardening, inbound allowlist depth, external-crate (FFI/platform-vocabulary) confinement, inline-symbol-path (clock-free) confinement |
+| 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, a `pub`-visibility ceiling, forbidden markers, `unsafe`-confinement, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure (opt-in whole-subtree) | AST (`syn`) | **v0.1.x:** semantic boundary family plus external-crate/re-export/alias hardening |
 | 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.x:** origin-assertion, CI probe coverage, escaped-literal and macro-body audit hardening |
 
 **漏刻's two faces, one declared source.** The runtime boundaries you declare in the
@@ -198,6 +229,15 @@ Constitution::new("my-project")
 An empty operand set degenerates to shape-only (any `dyn`) — a loud over-reaction, never a
 silent no-op — so a mis-declared narrowing can never become a false negative.
 
+**More semantic depths, and a shell-composed profile.** Beyond the exposure stair: a **visibility
+ceiling** (`max_visibility(Crate|Super|Module)` — an item declared more visible than the ceiling
+reacts) and **`unsafe`-confinement** (`UnsafeBoundary::only_under(["crate::ffi"])` — confining
+`unsafe` to a declared subtree, governing *where* it lives, the architectural intent
+`#![forbid(unsafe_code)]` cannot express). Because a profile can span dimensions, the 天衡 shell
+composes them — **`sans_io_pure`** folds a clock-free (圭表 `must_not_call_inline`) and a
+synchronous-API (渾儀 `must_not_expose_async_fn`, whole-subtree) boundary into one declaration
+(三儀 ⊥ 三儀: a dimension never composes its sibling, only the shell does).
+
 Beneath the dimensions sits **`xuanji` (璇璣) — the 底**: the dimension-agnostic
 **reaction model** (`Severity`, `BoundaryKind`, `Polarity`, `Violation`, `Report`, `Baseline`,
 `Outcome`) every dimension reacts in. It is `serde_json`-only, renders **no verdict** — it holds the
@@ -231,8 +271,9 @@ codebase never starts red: declare a boundary at `.warn()` (reported, never gati
 `Baseline::of(&report)` to grandfather the violations already there (they stay green while *new*
 drift reacts), then tighten to `enforce`. Two axes — severity and baseline — either of which lands
 the law before you land the fixes. See the runnable [`examples/`](examples/): 圭表 and 渾儀
-standalone, plus the composed all-three funnel — and [`COOKBOOK.md`](COOKBOOK.md) for common
-governance intents translated into boundaries.
+standalone, the composed all-three funnel, plus focused demos of `unsafe`-confinement and the
+`sans_io_pure` profile — and [`COOKBOOK.md`](COOKBOOK.md) for common governance intents translated
+into boundaries.
 
 **What stays stable across the pre-1.0 line.**
 

@@ -128,6 +128,40 @@ the app never imports is simply clean. Because it is cfg-blind, it flags a `#[cf
 windows::…` outside its module even when building on Linux — correct, since confinement is a
 source-location property independent of the active platform.
 
+### Keep a core clock-free (inject time, don't read it)
+
+*Intent: `crate::core` must not read the ambient wall clock — time is injected. It may still
+receive and name `std::time` types; it just must not call into them to read the clock.*
+
+```rust
+// Precise (recommended): forbid the READ calls, allow receiving/naming injected time.
+.boundary(
+    ModuleBoundary::in_crate("my-app")
+        .module("crate::core")
+        .must_not_call_inline("std::time")
+        .ending_with(["now"])
+        .because("core reads no wall clock — time is injected, not read"),
+)
+```
+
+Reacts when `crate::core` (or a submodule) makes an inline **call** whose path resolves under
+`std::time` and ends with a declared read verb — `std::time::SystemTime::now()`,
+`Instant::now()`, a renamed / bare / `type`-aliased / locally re-exported spelling, or such a call
+hidden in a macro body. It does **not** react on a type annotation (`fn tick(now: std::time::Instant)`)
+or a constant — the core may *receive* injected time. Two knobs:
+
+- **Bare** `.must_not_call_inline("std::time")` forbids *every* call under the prefix (including
+  `Duration::from_secs`) — the safe, no-heuristic default; narrow with `.ending_with([…])` (you own
+  any read verb you omit) to a precise read list.
+- **`.strict_prefix_only()`** escalates to forbid *any* mention of `std::time` (type annotations and
+  constants too) — for a core that must not even name it.
+
+Stated bounds (declared non-observations, never silent passes): a receiver-method or UFCS read
+whose type is not in a plain path (`instant.elapsed()`, `<T as Tr>::now()`), an alias defined inside
+a macro body, a symbol assembled by a proc-macro, an external-crate re-export, and a path taken as a
+value under the default. A glob that could smuggle the surface in (`use std::time::*`, or a module
+that re-exports it, globbed) reacts fail-closed.
+
 ---
 
 ## 渾儀 (semantic) — public-API exposure
@@ -199,6 +233,42 @@ An empty operand set degenerates to shape-only (a loud over-reaction), never a s
 )
 ```
 
+`must_not_declare_pub()` is the `max_visibility(VisibilityCeiling::Crate)` sugar — react on bare
+`pub`, allow `pub(crate)` and below. For a more tightly sealed layer, name a lower ceiling:
+
+```rust
+.visibility_boundary(
+    VisibilityBoundary::in_crate("my-app")
+        .module("crate::deep")
+        .max_visibility(VisibilityCeiling::Super)   // also react on pub(crate); allow pub(super)/below
+        .because("this submodule is sealed to its parent"),
+)
+```
+
+`Super` reacts on anything more visible than `pub(super)`; `Module` reacts on any `pub`-family
+keyword (a fully module-private layer). It governs the **declared** keyword, not crate-reachability —
+the compiler accepts widening a `pub(crate)` to `pub`; this catches that drift.
+
+### Confine `unsafe` to one auditable subtree
+
+*Intent: all `unsafe` (blocks, `unsafe fn`/`impl`/`trait`, `unsafe extern`) lives under `crate::ffi`;
+a site elsewhere reacts, so a reviewer knows where to look.*
+
+```rust
+.unsafe_boundary(
+    UnsafeBoundary::in_crate("my-app")
+        .only_under(["crate::ffi"])
+        .because("unsafe lives only behind the ffi module — everywhere else is safe"),
+)
+```
+
+Reacts on any `unsafe` site outside `crate::ffi` (and beneath it); `.only_under(["crate::ffi",
+"crate::simd"])` allows several subtrees. **Confinement only:** for a crate-wide ban use the
+compiler's `#![forbid(unsafe_code)]` (stronger — compile-time, unbypassable); an empty or crate-root
+`only_under` is a constitution error that says so. It observes the `unsafe` **keyword** — a
+`#[unsafe(...)]` attribute, a bare `unsafe fn` pointer type, a plain `extern "C" {}` block (no
+keyword; its call sites still react), and macro-generated `unsafe` are stated bounds.
+
 ---
 
 ## 漏刻 (runtime) — origin governance
@@ -235,6 +305,53 @@ reach through the composed shell, not a standalone on-ramp.
 ---
 
 ## Cross-cutting
+
+### Compose a sans-I/O pure core (clock-free + synchronous, one declaration)
+
+*Intent: `crate::kernel` reads no ambient clock **and** exposes no `async fn` — the two
+source-observable axes of a sans-I/O kernel, declared together.*
+
+```rust
+.sans_io_pure(
+    SansIoPure::in_crate("my-app")
+        .module("crate::kernel")
+        .reading_clock_via("std::time", ["now"])
+        .because("the kernel stays sans-I/O: time is injected, and async lives at the edges"),
+)
+```
+
+Expands to the 圭表 `must_not_call_inline("std::time").ending_with(["now"])` and 渾儀
+`must_not_expose_async_fn().including_submodules()` boundaries on `crate::kernel` — a shell-composed
+convenience for the two you would otherwise write by hand (a dimension never composes its sibling; the
+天衡 shell does). Add `.warn()` before `.because(...)` to make both advisory (the adoption rung).
+
+**Both halves reach the kernel's whole subtree.** A pure kernel is sans-I/O *throughout*, so the
+async half opts into subtree scope: a public `async fn` in **any** module under `crate::kernel`
+reacts, not only one at the kernel's own seam. (The clock half is inherently subtree-wide.)
+
+**Scoped honestly to clock + async only.** A core that must also avoid ambient `fs`/`net`/`env` adds
+those explicitly (`must_not_call_inline("std::fs")`, `confine_external_crate(...)`); nothing is baked
+in — you supply the time prefix and read verbs, so it governs exactly what you declare and no more.
+
+### Forbid `async fn` across a whole subtree (not just one module's seam)
+
+*Intent: no public `async fn` anywhere under `crate::core` — a sync-core/async-edges layering.*
+
+```rust
+.async_exposure_boundary(
+    AsyncExposureBoundary::in_crate("my-app")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .including_submodules()          // descend the whole subtree, not just crate::core's own items
+        .because("the core is synchronous throughout; async lives at the edges"),
+)
+```
+
+By default `must_not_expose_async_fn()` governs the anchored module's **own** seam (one declared
+module). `.including_submodules()` descends the anchored module's whole subtree, so an `async fn` in
+any descendant reacts too — anchor at `crate` to govern the whole crate. The opt-in is projected in
+`list` (a `(including submodules)` marker) only when set; a `#[path]`-remapped module is a stated
+bound (the walk descends the declared mod-tree).
 
 ### Adopt on a dirty codebase without a red wall
 

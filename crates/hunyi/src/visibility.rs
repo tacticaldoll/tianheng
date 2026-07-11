@@ -11,8 +11,7 @@ use crate::dsl::VisibilityBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
 use crate::module_resolve::resolve_module_items;
-use crate::rules::VISIBILITY_RULE;
-use crate::syn_util::pub_item_description;
+use crate::syn_util::item_finding;
 
 /// Run the visibility boundaries against the Cargo workspace at `manifest_path`.
 ///
@@ -37,6 +36,7 @@ pub(crate) fn check_visibility_boundary(
         &root_file,
         &boundary.module,
         &boundary.crate_package,
+        boundary.ceiling().rank(),
     )?;
 
     push_single_module_violations(
@@ -46,7 +46,7 @@ pub(crate) fn check_visibility_boundary(
             root_file: &root_file,
             module: &boundary.module,
             crate_package: &boundary.crate_package,
-            rule: VISIBILITY_RULE,
+            rule: boundary.ceiling().rule(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -56,15 +56,20 @@ pub(crate) fn check_visibility_boundary(
 }
 
 /// The pure heart, testable without spawning `cargo`: resolve the module's direct items and
-/// return the sorted, deduplicated descriptions of those declared bare-`pub`.
+/// return the sorted, deduplicated descriptions of those whose declared-visibility rank exceeds
+/// `ceiling_rank` (the boundary's ceiling — `Crate`=2, `Super`=1, `Module`=0).
 pub(crate) fn visibility_findings(
     src_dir: &Path,
     root_file: &Path,
     module: &str,
     crate_package: &str,
+    ceiling_rank: u8,
 ) -> Result<Vec<String>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
-    let mut findings: Vec<String> = items.iter().filter_map(pub_item_description).collect();
+    let mut findings: Vec<String> = items
+        .iter()
+        .filter_map(|item| item_finding(item, ceiling_rank))
+        .collect();
     findings.sort();
     findings.dedup();
     Ok(findings)

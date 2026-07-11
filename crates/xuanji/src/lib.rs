@@ -19,6 +19,7 @@
 //!
 //! Govern by reaction, not instruction.
 
+#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 use serde_json::Value;
@@ -592,8 +593,7 @@ mod tests {
     #[test]
     fn baseline_round_trips_through_json() {
         // The `violation-baseline` spec's round-trip scenario: a baseline written to JSON and read
-        // back holds the same `(target, rule, finding)` entries. (Previously code-correct but with
-        // no dedicated test.)
+        // back holds the same `(target, rule, finding)` entries.
         let report = Report::new(vec![
             sample_violation(),
             Violation::new(

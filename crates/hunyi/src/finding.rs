@@ -29,13 +29,13 @@ pub(crate) struct PathExposure {
 /// byte-identically to the inline format it replaced, and the `*_findings` functions still return
 /// `Vec<String>` / `Vec<(String, String)>`, so baseline identity and the injectivity tests are
 /// unchanged. Visibility findings are deliberately *not* here: they are a heterogeneous
-/// `pub {kind} {name}` item descriptor, already cohesive in `pub_item_description`, not one
+/// `{visibility} {kind} {name}` item descriptor, already cohesive in `item_finding`, not one
 /// canonical relation line.
 pub(crate) enum SemanticFinding {
     /// `{subject} exposed by {seam}` — signature-coupling and its re-export / trait-impl depths,
     /// plus the dyn-/impl-trait shapes (`subject` is a canonical type path or a `dyn …`/`impl …`
-    /// shape; both render identically). The one exposure literal, formerly written twice
-    /// (path pipeline + shape pipeline).
+    /// shape; both render identically). The one exposure literal, shared by the path pipeline
+    /// and the shape pipeline.
     Exposed { subject: String, seam: String },
     /// `{module} (impl {trait} for {owner})` — trait-impl-locality: a trait impl outside its
     /// allowed site. `trait` is the impl's written trait path **with generic arguments** so two

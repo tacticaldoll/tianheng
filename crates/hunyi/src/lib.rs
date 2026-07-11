@@ -32,10 +32,11 @@
 //! Govern by reaction, not instruction.
 //!
 //! **Layout.** Each semantic capability is a self-contained reaction module
-//! (`check_<cap>` → `check_<cap>_boundary` → `<cap>_findings`); [`check_all`] composes the seven
+//! (`check_<cap>` → `check_<cap>_boundary` → `<cap>_findings`); [`check_all`] composes the eight
 //! with a single `cargo metadata` read. The shared reaction spine lives in the `driver` module
 //! and the canonical rule labels in `rules`, below every capability so none depends on another.
 
+#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 use std::path::Path;
@@ -75,7 +76,7 @@ mod scan;
 mod shape_scan;
 mod syn_util;
 
-// The seven semantic capabilities, each a self-contained reaction (check → check_boundary →
+// The eight semantic capabilities, each a self-contained reaction (check → check_boundary →
 // findings). Their public `check_*` entries and crate-internal `*_findings` hearts are
 // re-exported at the crate root so both the shell and the tests keep their existing paths.
 mod async_exposure;
@@ -84,6 +85,7 @@ mod exposure;
 mod forbidden_marker;
 mod impl_trait;
 mod trait_impl;
+mod unsafe_confinement;
 mod visibility;
 
 pub use async_exposure::check_async_exposure;
@@ -92,13 +94,14 @@ pub use exposure::check;
 pub use forbidden_marker::check_forbidden_marker;
 pub use impl_trait::check_impl_trait;
 pub use trait_impl::check_trait_impl_locality;
+pub use unsafe_confinement::check_unsafe_confinement;
 pub use visibility::check_visibility;
 
 // The pure-heart `*_findings` entries stay crate-internal; the test suite pulls the crate root via
 // `use super::*`, so re-export them here for tests only (they are called in-module by each
 // capability's `check_*_boundary`, so a non-test build never reaches them through the root).
 #[cfg(test)]
-pub(crate) use async_exposure::async_exposure_module_findings;
+pub(crate) use async_exposure::{async_exposure_module_findings, async_exposure_subtree_findings};
 #[cfg(test)]
 pub(crate) use dyn_trait::{dyn_module_findings, dyn_operand_module_findings};
 #[cfg(test)]
@@ -110,6 +113,8 @@ pub(crate) use impl_trait::{impl_trait_module_findings, impl_trait_operand_modul
 #[cfg(test)]
 pub(crate) use trait_impl::trait_impl_findings;
 #[cfg(test)]
+pub(crate) use unsafe_confinement::unsafe_findings;
+#[cfg(test)]
 pub(crate) use visibility::visibility_findings;
 
 use crate::async_exposure::check_async_exposure_boundary;
@@ -119,6 +124,7 @@ use crate::exposure::check_boundary;
 use crate::forbidden_marker::check_forbidden_marker_boundary;
 use crate::impl_trait::check_impl_trait_boundary;
 use crate::trait_impl::check_trait_impl_boundary;
+use crate::unsafe_confinement::check_unsafe_boundary;
 use crate::visibility::check_visibility_boundary;
 
 // --- The 渾儀 dimension's boundary set ----------------------------------------
@@ -142,6 +148,8 @@ pub struct SemanticBoundaries {
     pub impl_trait: Vec<ImplTraitBoundary>,
     /// Async-fn (implicit existential) exposure boundaries (`semantic-async-exposure-boundary`).
     pub async_exposure: Vec<AsyncExposureBoundary>,
+    /// Unsafe-confinement boundaries (`semantic-unsafe-confinement`).
+    pub unsafe_confinement: Vec<UnsafeBoundary>,
 }
 
 impl SemanticBoundaries {
@@ -154,6 +162,7 @@ impl SemanticBoundaries {
             && self.dyn_trait.is_empty()
             && self.impl_trait.is_empty()
             && self.async_exposure.is_empty()
+            && self.unsafe_confinement.is_empty()
     }
 }
 
@@ -161,7 +170,7 @@ impl SemanticBoundaries {
 
 /// Evaluate every declared semantic capability against `metadata` into the one accumulator, in a
 /// fixed order; the first constitution error short-circuits. Split out so [`check_all`] keeps the
-/// single-read + exit-2-supersedes contract with plain `?`, not seven repeated error blocks.
+/// single-read + exit-2-supersedes contract with plain `?`, not eight repeated error blocks.
 fn eval_all(
     metadata: &Value,
     boundaries: &SemanticBoundaries,
@@ -202,6 +211,12 @@ fn eval_all(
         metadata,
         &boundaries.async_exposure,
         check_async_exposure_boundary,
+        violations,
+    )?;
+    eval_into(
+        metadata,
+        &boundaries.unsafe_confinement,
+        check_unsafe_boundary,
         violations,
     )?;
     Ok(())

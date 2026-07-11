@@ -13,11 +13,13 @@ mod fs_walk;
 mod lexer;
 mod path_vocab;
 mod reachability;
+mod symbol_scan;
 mod use_scan;
 
 pub(crate) use fs_walk::rust_files;
 pub(crate) use path_vocab::{canonical_module_path, path_within};
 pub(crate) use reachability::{governed_files, reachable_modules};
+pub(crate) use symbol_scan::{InlineFinding, inline_symbol_findings};
 pub(crate) use use_scan::{
     external_imports_with_importers, imported_module_paths, imports_with_importers,
 };
@@ -85,8 +87,8 @@ mod tests {
     fn keyword_detection_does_not_fire_inside_a_unicode_identifier() {
         // Rust allows non-ASCII identifiers. `use貓` / `mod貓` are single identifiers, so
         // the leading `use` / `mod` is NOT a keyword: the byte after it (the lead byte of
-        // `貓`, >= 0x80) is an identifier byte. A regression guard for ASCII-only
-        // `is_ident_byte`, which used to split the identifier and fire a false keyword.
+        // `貓`, >= 0x80) is an identifier byte. A regression guard against an ASCII-only
+        // `is_ident_byte` splitting the identifier and firing a false keyword.
         assert!(!keyword_starts_at("use貓;".as_bytes(), 0, b"use"));
         assert!(!keyword_starts_at("mod貓 {}".as_bytes(), 0, b"mod"));
         // The genuine keyword (followed by whitespace) is still detected.

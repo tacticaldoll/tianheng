@@ -407,7 +407,7 @@ fn facade_hop_reexporting_a_privately_used_bare_name_is_a_stated_bound() {
 
 #[test]
 fn facade_reaching_a_child_shadowed_extern_head_does_not_react() {
-    // FP closed (extern-set variant): `crate::a` re-exports `dep::spi::Foo` but declares a child
+    // `crate::a` re-exports `dep::spi::Foo` but declares a child
     // `mod dep`, so rustc resolves the bare head to the local module — the target is local, not the
     // dependency. A facade `crate::b`'s `pub use crate::a::Foo;` must NOT react: the crate-wide
     // re-export closure now excludes `crate::a`'s own child modules when collecting its re-exports,
@@ -432,7 +432,7 @@ fn facade_reaching_a_child_shadowed_extern_head_does_not_react() {
 
 #[test]
 fn facade_reaching_a_child_shadowed_rename_alias_head_does_not_react() {
-    // FP closed (rename-alias variant): a crate-root `extern crate worklane_core as wc;`, but
+    // A crate-root `extern crate worklane_core as wc;`, but
     // `crate::a` declares a child `mod wc` that shadows the bare alias head within `crate::a` (a
     // submodule `mod wc` does not conflict with the crate-root rename), so `pub use wc::spi::Foo;`
     // is local. A facade `crate::b` must NOT react — the closure's rename map is child-excluded for
@@ -530,7 +530,7 @@ fn private_alias_in_a_public_seam_reacts() {
 
 #[test]
 fn a_generic_param_shadowing_a_same_module_alias_is_not_a_finding() {
-    // FP closed (bughunt round 2): a generic type parameter named identically to a same-module
+    // A generic type parameter named identically to a same-module
     // `type` alias is a parameter *use*, not the alias, so it must not resolve through the alias to
     // its forbidden target. (Rust lets the param shadow the alias inside the item.)
     let out = findings(
@@ -574,7 +574,7 @@ fn a_generic_param_shadowing_a_same_module_alias_is_not_a_finding() {
 
 #[test]
 fn a_def_site_generic_param_shadowing_a_use_alias_is_not_a_finding() {
-    // FP closed (bughunt round 3): a struct's own generic parameter used bare inside its own
+    // A struct's own generic parameter used bare inside its own
     // where-clause (`struct S<T, U> where U: AsRef<T>`) is a parameter, not a nominal type, so it
     // must not resolve through a same-named `use … as T` alias to a forbidden type. The def-site
     // generics walk previously ran UNSHADOWED (unlike every sibling member walk); it now shadows the
@@ -621,7 +621,7 @@ fn a_def_site_generic_param_shadowing_a_use_alias_is_not_a_finding() {
 
 #[test]
 fn an_assoc_type_projection_off_a_shadowing_param_is_not_a_finding() {
-    // FP closed (bughunt round 3, assay): an associated-type projection off a generic parameter
+    // An associated-type projection off a generic parameter
     // (`T::Item`) is a *parameter* projection, not a nominal type. When the module also declares a
     // same-named import alias (`use crate::infra::Secret as T;` — legal, the fn's `<T>` only
     // lexically shadows it), the projection previously escaped the param shadow (two segments, while
@@ -711,7 +711,7 @@ fn alias_through_a_reexport_chain_reacts() {
 
 #[test]
 fn a_type_reached_through_a_reexported_module_facade_reacts() {
-    // FN closed (bughunt round 2): a `pub use crate::real::sub;` re-exports a MODULE; a member
+    // A `pub use crate::real::sub;` re-exports a MODULE; a member
     // reached through it (`crate::facade::sub::Foo`) must canonicalize (longest-prefix) to its
     // defining path `crate::real::sub::Foo` and react. Whole-key-only canonicalization missed it.
     let out = findings(
@@ -741,7 +741,7 @@ fn a_type_reached_through_a_reexported_module_facade_reacts() {
 
 #[test]
 fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
-    // Termination guaranteed (bughunt round 3): a reexport map entry whose alias key is a strict
+    // Termination guaranteed: a reexport map entry whose alias key is a strict
     // `::`-prefix of its own value — the shape a same-name nested re-export (`pub use self::x::x;`)
     // yields — made `rewrite_longest_prefix` re-fire on its own monotonically-growing output; the
     // exact-repeat `seen` guard never fires on a never-repeating sequence, so the tool hung / OOMed.
@@ -760,7 +760,7 @@ fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
 
 #[test]
 fn a_self_similar_reexport_is_dropped_and_the_real_type_still_reacts() {
-    // Build-time guard (bughunt round 3): `pub use self::sub::sub;` re-exports the value `sub` from
+    // Build-time guard: `pub use self::sub::sub;` re-exports the value `sub` from
     // a same-named child module, yielding a `crate::sub -> crate::sub::sub` map entry (key ⊂ value).
     // `collect_reexports` now refuses it — it is meaningless for type-path canonicalization and would
     // hang the fixpoint. The real type under `crate::sub` must still canonicalize to its own path
@@ -1126,7 +1126,7 @@ fn source_level_extern_crate_rename_in_a_type_position_reacts() {
 
 #[test]
 fn private_use_of_a_crate_root_extern_rename_reacts() {
-    // FN closed: a forbidden type imported by a PRIVATE `use wc::spi::Foo;` (wc = a crate-root
+    // A forbidden type imported by a PRIVATE `use wc::spi::Foo;` (wc = a crate-root
     // `extern crate worklane_core as wc;` rename) resolves through the use-map to `wc::spi::Foo`
     // verbatim — the use-map never consults the rename map. `apply_bare_alias_rename` rewrites the
     // bare alias head to the real crate, so it now matches the forbidden real name, exactly as the
@@ -2946,6 +2946,110 @@ fn a_path_remapped_module_is_a_documented_bound() {
 }
 
 #[test]
+fn a_cfg_attr_remapped_module_is_a_documented_bound() {
+    // `#[cfg_attr(<pred>, path = "…")]` is recognized as a remap (== the separate
+    // `#[cfg(<pred>)] #[path = "…"]`), so the module is out of scope — not scanned against a
+    // wrong/absent conventional file, and NOT a spurious exit-2. Mirrors the direct-#[path] bound.
+    let out = locality_findings(
+        "cfg-attr-remapped",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\n#[cfg_attr(windows, path = \"weird.rs\")]\npub mod domain;\n",
+            ),
+            ("command.rs", "pub trait Command {}\n"),
+            (
+                "weird.rs",
+                "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a cfg_attr-remapped module is out of scope, same as a direct #[path]: {out:?}"
+    );
+
+    // A NESTED cfg_attr remap is recognized too, so hunyi stays
+    // consistent with guibiao (both treat it as the #[path] bound) rather than diverging.
+    let nested = locality_findings(
+        "cfg-attr-nested-remapped",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\n#[cfg_attr(a, cfg_attr(b, path = \"weird.rs\"))]\npub mod domain;\n",
+            ),
+            ("command.rs", "pub trait Command {}\n"),
+            (
+                "weird.rs",
+                "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert!(
+        nested.is_empty(),
+        "a nested cfg_attr remap is out of scope: {nested:?}"
+    );
+}
+
+#[test]
+fn a_cfg_attr_without_a_path_meta_is_scanned_normally() {
+    // The inverse false negative: a cfg_attr carrying NO `path` meta is a normal file module and
+    // must be scanned, or its violations would silently vanish.
+    let out = locality_findings(
+        "cfg-attr-no-path",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\n#[cfg_attr(test, allow(dead_code))]\npub mod domain;\n",
+            ),
+            ("command.rs", "pub trait Command {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert!(
+        !out.is_empty(),
+        "a cfg_attr without a path meta is a normal module and must be scanned: {out:?}"
+    );
+
+    // Twin alignment: only a `path = "…"` NAME-VALUE is a remap. A bare `path` meta (not a valid
+    // `#[path]`) is NOT a remap — so the module is scanned, matching guibiao's byte scanner (which
+    // requires `path =`). Previously hunyi over-matched any `path`-named meta.
+    let bare = locality_findings(
+        "cfg-attr-bare-path",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\n#[cfg_attr(test, path)]\npub mod domain;\n",
+            ),
+            ("command.rs", "pub trait Command {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Command;\npub struct Foo;\nimpl Command for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert!(
+        !bare.is_empty(),
+        "a bare `path` meta (not `path = \"…\"`) is not a remap; the module is scanned: {bare:?}"
+    );
+}
+
+#[test]
 fn two_impls_in_one_module_are_distinct_findings_by_self_type() {
     let out = locality_findings(
         "distinct-self",
@@ -3096,9 +3200,247 @@ fn the_builder_carries_severity() {
     assert_eq!(enforce.severity(), Severity::Enforce);
 }
 
+// --- unsafe confinement --------------------------------------------------
+
+fn unsafe_labels(
+    name: &str,
+    files: &[(&str, &str)],
+    allowed: &[&str],
+) -> Result<Vec<String>, String> {
+    let dir = std::env::temp_dir().join(format!("hunyi-unsafe-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    for (rel, contents) in files {
+        let path = src.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+        std::fs::write(&path, contents).expect("write source");
+    }
+    let root = src.join("lib.rs");
+    let allowed: Vec<String> = allowed.iter().map(|a| a.to_string()).collect();
+    let result = unsafe_findings(&src, &root, &allowed, "x")
+        .map(|fs| fs.into_iter().map(|(finding, _)| finding).collect());
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+#[test]
+fn unsafe_block_outside_subtree_reacts() {
+    let out = unsafe_labels(
+        "block",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod net;\n"),
+            (
+                "ffi.rs",
+                "pub fn ok() { unsafe { core::ptr::null::<u8>(); } }\n",
+            ),
+            (
+                "net.rs",
+                "pub fn f() { unsafe { core::ptr::null::<u8>(); } }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe block in crate::net"],
+        "a block outside the subtree reacts; one under it is clean: {out:?}"
+    );
+}
+
+#[test]
+fn unsafe_fn_impl_trait_extern_outside_react() {
+    let out = unsafe_labels(
+        "kinds",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod net;\n"),
+            ("ffi.rs", "\n"),
+            (
+                "net.rs",
+                "pub unsafe trait Zeroable {}\npub unsafe fn decode() {}\nunsafe impl Zeroable for u8 {}\nunsafe extern \"C\" { fn c(); }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe extern block in crate::net",
+            "unsafe fn decode in crate::net",
+            "unsafe impl Zeroable for u8 in crate::net",
+            "unsafe trait Zeroable in crate::net",
+        ],
+        "every unsafe-keyword site outside the subtree reacts: {out:?}"
+    );
+}
+
+#[test]
+fn unsafe_under_the_subtree_is_clean() {
+    let out = unsafe_labels(
+        "clean",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            ("ffi.rs", "pub mod raw;\npub unsafe fn a() {}\n"),
+            (
+                "ffi/raw.rs",
+                "pub fn b() { unsafe { core::ptr::null::<u8>(); } }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "unsafe at the subtree and beneath it is clean: {out:?}"
+    );
+}
+
+#[test]
+fn empty_allowed_set_is_a_constitution_error() {
+    let err = unsafe_labels("empty", &[("lib.rs", "pub fn f() { unsafe {} }\n")], &[]).unwrap_err();
+    assert!(
+        err.contains("forbid(unsafe_code)"),
+        "empty only_under points at #![forbid(unsafe_code)]: {err}"
+    );
+}
+
+#[test]
+fn crate_root_allowed_set_is_a_constitution_error() {
+    let err = unsafe_labels("root", &[("lib.rs", "pub fn f() {}\n")], &["crate"]).unwrap_err();
+    assert!(err.contains("crate root"), "{err}");
+}
+
+#[test]
+fn unsafe_blocks_dedup_per_module() {
+    let out = unsafe_labels(
+        "dedup",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub fn f() { unsafe {} unsafe {} }\npub fn g() { unsafe {} }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe block in crate::net"],
+        "N blocks in one module dedup to one stable finding: {out:?}"
+    );
+}
+
+#[test]
+fn two_unsafe_impls_of_different_traits_stay_distinct() {
+    let out = unsafe_labels(
+        "impls",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub struct Foo;\nunsafe impl Send for Foo {}\nunsafe impl Sync for Foo {}\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe impl Send for Foo in crate::net",
+            "unsafe impl Sync for Foo in crate::net",
+        ],
+        "the trait is in the finding, so two unsafe impls do not collapse: {out:?}"
+    );
+}
+
+#[test]
+fn two_unsafe_impls_of_one_trait_for_different_types_stay_distinct() {
+    // Same trait, different self type: the finding is owner-qualified, so neither masks the other.
+    // Were the self type omitted, a baseline of the first would silently accept the second — a
+    // false negative (a new out-of-subtree `unsafe` site passing unobserved).
+    let out = unsafe_labels(
+        "impls-same-trait",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub struct Foo;\npub struct Bar;\nunsafe impl Send for Foo {}\nunsafe impl Send for Bar {}\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe impl Send for Bar in crate::net",
+            "unsafe impl Send for Foo in crate::net",
+        ],
+        "the self type is in the finding, so same-trait impls for different types do not collapse: {out:?}"
+    );
+}
+
+#[test]
+fn unsafe_in_a_body_nested_mod_reacts() {
+    // The propose-review false-negative guard: a `mod` inside a fn body is not descended by the
+    // top-level walk; the collector's default recursion must still catch its unsafe.
+    let out = unsafe_labels(
+        "body-nested",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub fn f() { mod raw { pub unsafe fn poke() {} } }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::net"],
+        "unsafe in a body-nested mod is attributed to the enclosing module, never dropped: {out:?}"
+    );
+}
+
+#[test]
+fn unsafe_in_a_macro_body_is_a_stated_bound() {
+    // Macro bodies are unexpanded (the dimension's inherited macro bound): the unsafe inside a
+    // never-invoked macro definition is not observed — stated, not a silent claim.
+    let out = unsafe_labels(
+        "macro",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "macro_rules! m { () => { unsafe {} }; }\npub fn f() {}\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "unsafe in a macro body is not observed: {out:?}"
+    );
+}
+
 // --- visibility boundary -------------------------------------------------
 
 fn vis_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
+    // The Crate ceiling (rank 2) — the `must_not_declare_pub` case existing tests assert.
+    vis_findings_at(name, files, module, VisibilityCeiling::Crate.rank())
+}
+
+fn vis_findings_at(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    ceiling_rank: u8,
+) -> Result<Vec<String>, String> {
     let dir = std::env::temp_dir().join(format!("hunyi-vis-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let src = dir.join("src");
@@ -3108,9 +3450,159 @@ fn vis_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<
         std::fs::write(&path, contents).expect("write source");
     }
     let root = src.join("lib.rs");
-    let result = visibility_findings(&src, &root, module, "x");
+    let result = visibility_findings(&src, &root, module, "x", ceiling_rank);
     let _ = std::fs::remove_dir_all(&dir);
     result
+}
+
+#[test]
+fn visibility_rank_is_false_negative_safe_for_every_form() {
+    use crate::syn_util::visibility_rank;
+    let rank = |vis: &str| {
+        let src = format!("{vis} fn f() {{}}");
+        visibility_rank(&syn::parse_str::<syn::ItemFn>(&src).expect("parse vis").vis)
+    };
+    assert_eq!(rank("pub"), 3);
+    assert_eq!(rank("pub(crate)"), 2);
+    assert_eq!(rank("pub(super)"), 1);
+    assert_eq!(rank("pub(self)"), 0);
+    assert_eq!(rank(""), 0, "inherited/private");
+    assert_eq!(rank("pub(in crate)"), 2);
+    assert_eq!(rank("pub(in super)"), 1);
+    assert_eq!(rank("pub(in self)"), 0);
+    assert_eq!(
+        rank("pub(in crate::a::b)"),
+        2,
+        "in-crate path is at most crate-visible"
+    );
+    // The load-bearing false-negative guard: pub(in super::super) reaches the grandparent's whole
+    // subtree — broader than pub(super) — so it must rank Crate (2), never Super (1). A first-segment
+    // match ("super"->1) would silently pass it under a Super ceiling (the one forbidden bug).
+    assert_eq!(rank("pub(in super::super)"), 2);
+}
+
+#[test]
+fn super_ceiling_reacts_on_pub_and_pub_crate_only() {
+    let out = vis_findings_at(
+        "super-ceiling",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub fn a() {}\npub(crate) fn b() {}\npub(super) fn c() {}\nfn d() {}\n",
+            ),
+        ],
+        "crate::m",
+        VisibilityCeiling::Super.rank(),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub fn a", "pub(crate) fn b"],
+        "Super ceiling reacts on pub + pub(crate), not pub(super)/private: {out:?}"
+    );
+}
+
+#[test]
+fn module_ceiling_reacts_on_pub_super_but_not_private() {
+    let out = vis_findings_at(
+        "module-ceiling",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            ("m.rs", "pub(super) fn c() {}\nfn d() {}\n"),
+        ],
+        "crate::m",
+        VisibilityCeiling::Module.rank(),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub(super) fn c"],
+        "Module ceiling reacts on pub(super), not private: {out:?}"
+    );
+}
+
+#[test]
+fn pub_in_crate_path_is_clean_under_crate_ceiling() {
+    let out = vis_findings_at(
+        "pub-in-crate-path",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            ("m.rs", "pub(in crate::a::b) fn f() {}\n"),
+        ],
+        "crate::m",
+        VisibilityCeiling::Crate.rank(),
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "pub(in crate path) is at most crate-visible, clean under a Crate ceiling: {out:?}"
+    );
+}
+
+#[test]
+fn pub_in_super_super_reacts_under_super_ceiling() {
+    // The conservative upper bound in action: pub(in super::super) ranks Crate (2), which exceeds a
+    // Super (1) ceiling, so it reacts — never silently passed as if it were pub(super).
+    let out = vis_findings_at(
+        "pub-in-super-super",
+        &[
+            ("lib.rs", "pub mod a;\n"),
+            ("a.rs", "pub mod b;\n"),
+            ("a/b.rs", "pub(in super::super) fn f() {}\n"),
+        ],
+        "crate::a::b",
+        VisibilityCeiling::Super.rank(),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub(in super::super) fn f"],
+        "multi-segment pub(in super::super) ranks Crate and reacts under Super: {out:?}"
+    );
+}
+
+#[test]
+fn max_visibility_and_the_sugar_carry_the_ceiling() {
+    let sugar = VisibilityBoundary::in_crate("app")
+        .module("crate::m")
+        .must_not_declare_pub()
+        .because("r");
+    assert_eq!(sugar.ceiling(), VisibilityCeiling::Crate);
+    assert_eq!(sugar.ceiling().rule(), VISIBILITY_RULE);
+
+    let sup = VisibilityBoundary::in_crate("app")
+        .module("crate::m")
+        .max_visibility(VisibilityCeiling::Super)
+        .because("r");
+    assert_eq!(sup.ceiling(), VisibilityCeiling::Super);
+}
+
+#[test]
+fn ceiling_rule_strings_are_distinct_across_the_semantic_family() {
+    // Crate keeps the legacy string byte-for-byte (baseline stability); all three are distinct from
+    // every other rule so (target, rule, finding) stays injective family-wide.
+    assert_eq!(
+        VisibilityCeiling::Crate.rule(),
+        "must not declare pub items"
+    );
+    let all = [
+        VISIBILITY_RULE,
+        VISIBILITY_SUPER_RULE,
+        VISIBILITY_MODULE_RULE,
+        SIGNATURE_RULE,
+        DYN_TRAIT_RULE,
+        IMPL_TRAIT_RULE,
+        ASYNC_EXPOSURE_RULE,
+        TRAIT_IMPL_RULE,
+        FORBIDDEN_MARKER_RULE,
+    ];
+    let set: std::collections::HashSet<&str> = all.iter().copied().collect();
+    assert_eq!(
+        set.len(),
+        all.len(),
+        "all semantic rule strings are distinct"
+    );
 }
 
 #[test]
@@ -3342,7 +3834,7 @@ fn a_generic_self_type_is_rendered_distinctly() {
 
 #[test]
 fn distinct_trait_instantiations_for_one_self_type_stay_distinct_findings() {
-    // Identity-collision closed (bughunt round 2): `impl Convert<u8> for Foo` and
+    // `impl Convert<u8> for Foo` and
     // `impl Convert<u16> for Foo` are two distinct, coherent misplaced impls. The finding now
     // carries the anchor WITH its written generic args, so they stay two findings — previously both
     // collapsed to `crate::domain (impl for crate::domain::Foo)` and a baseline masked the second.
@@ -3401,7 +3893,7 @@ fn array_length_differing_trait_instantiations_stay_distinct() {
 
 #[test]
 fn complex_length_arrays_of_different_element_types_stay_distinct() {
-    // Identity-collision closed (bughunt round 3): when an array length is an unrenderable const
+    // When an array length is an unrenderable const
     // expression (`N + 1`), the renderer must keep the ELEMENT type and mark only the length `_`
     // (`[u8; _]` / `[u16; _]`), never propagate `None` for the whole array. Round 2's Array arm
     // propagated `None`, routing both arrays into the caller's single shared `_` bucket — collapsing
@@ -3523,7 +4015,7 @@ fn a_hand_impl_outside_the_subtree_reacts_via_the_self_type() {
 
 #[test]
 fn a_foreign_or_prelude_self_type_is_not_a_governed_subtree_type() {
-    // FP closed (bughunt round 2): `impl Marker for Vec<u8>` (a local trait on a std type, orphan-
+    // `impl Marker for Vec<u8>` (a local trait on a std type, orphan-
     // legal) must NOT react — Vec is not a type the crate defines, even though the bare `Vec` head
     // would fabricate `crate::domain::Vec` via the CurrentModule fallback. Cross-checking the self
     // type against the crate's actual type definitions rejects the fabrication.
@@ -3566,7 +4058,7 @@ fn a_foreign_or_prelude_self_type_is_not_a_governed_subtree_type() {
 
 #[test]
 fn distinct_generic_marker_instantiations_stay_distinct_findings() {
-    // Identity-collision closed (bughunt round 2): `impl Marker<u8> for Order` and
+    // `impl Marker<u8> for Order` and
     // `impl Marker<u16> for Order` are two distinct, coherent acquisitions. The finding now carries
     // the written trait path WITH its generic args (and the impl-site module), so they stay two
     // findings — a baseline accepting one cannot mask the other (previously both collapsed to
@@ -3659,7 +4151,7 @@ fn a_forbidden_marker_on_a_local_type_alias_reacts() {
 
 #[test]
 fn a_forbidden_marker_on_an_alias_to_a_foreign_type_is_clean() {
-    // FP closed (bughunt round 3): a `type` alias defines no new type — coherence sees through it —
+    // A `type` alias defines no new type — coherence sees through it —
     // so a marker impl'd on an alias to a FOREIGN/prelude type governs no subtree type and must NOT
     // react, exactly like the byte-identical impl on the target itself. Round 2 over-broadened the
     // acceptance to every local alias name; the landing-type check restores the foreign-self principle.
@@ -3842,7 +4334,7 @@ fn a_malformed_derive_is_a_scan_error_not_a_silent_pass() {
 #[cfg(unix)]
 #[test]
 fn a_symlinked_module_cycle_is_a_scan_error_not_a_stack_overflow() {
-    // Panic-safety closed (bughunt round 2): a cyclic symlinked module directory
+    // A cyclic symlinked module directory
     // (`src/foo/foo -> src/foo`) makes the file-backed `mod` walk revisit the same canonical file
     // forever. The scan must stop with a scan error ("cannot judge", exit 2), never recurse into a
     // stack overflow (SIGABRT). Driven through `forbidden_marker_findings`, which runs `scan_crate`
@@ -3975,7 +4467,7 @@ fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<Str
 
 #[test]
 fn a_dyn_in_a_supertrait_or_assoc_type_bound_is_observed() {
-    // FN closed (bughunt round 2): a `dyn` inside a supertrait's generic argument, or inside a
+    // A `dyn` inside a supertrait's generic argument, or inside a
     // public associated type's `: Bound`, is a real exposed trait-object in the trait's public
     // contract. The sibling signature-coupling collector already walks these bound positions
     // (paths_in_bounds); the dyn collector now matches it — previously it skipped supertraits and
@@ -4651,6 +5143,198 @@ fn async_exposure_boundary_carries_anchor_and_severity() {
     assert_eq!(b.crate_package(), "core");
     assert_eq!(b.module(), "crate::core");
     assert_eq!(b.severity(), Severity::Warn);
+    // The subtree opt-in defaults off and threads through `.because`.
+    assert!(!b.including_submodules());
+    let sub = AsyncExposureBoundary::in_crate("core")
+        .module("crate")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("no async anywhere under the kernel");
+    assert!(sub.including_submodules());
+}
+
+// --- async-exposure: subtree scope (`including_submodules`) ----------------
+
+fn async_subtree(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let dir = std::env::temp_dir().join(format!("hunyi-async-sub-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    for (rel, contents) in files {
+        let path = src.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+        std::fs::write(&path, contents).expect("write source");
+    }
+    let root = src.join("lib.rs");
+    let result = async_exposure_subtree_findings(&src, &root, module, "x");
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// Just the finding strings, sorted — for cases where the module attribution rides inside the
+/// finding string anyway.
+fn async_subtree_labels(name: &str, files: &[(&str, &str)], module: &str) -> Vec<String> {
+    async_subtree(name, files, module)
+        .unwrap()
+        .into_iter()
+        .map(|(finding, _module)| finding)
+        .collect()
+}
+
+#[test]
+fn async_subtree_reacts_to_a_submodule_async_fn_the_seam_scope_misses() {
+    // The crux this whole opt-in exists for. A `pub async fn` in a *submodule* is invisible to the
+    // default seam scope (anchored at `crate`, it sees only crate-root items) — the latent false
+    // negative dogfooding `sans_io_pure` on 璇璣 surfaced. The subtree scope catches it.
+    let files = &[
+        ("lib.rs", "pub mod net;\n"),
+        ("net.rs", "pub async fn connect() {}\n"),
+    ];
+    // Default seam scope at `crate` misses it entirely…
+    assert_eq!(
+        async_findings("seam-misses-sub", files, "crate").unwrap(),
+        Vec::<String>::new(),
+    );
+    // …the subtree scope reacts, attributing it to the submodule.
+    assert_eq!(
+        async_subtree("sub-reacts", files, "crate").unwrap(),
+        [(
+            "async fn crate::net::connect()".to_string(),
+            "crate::net".to_string()
+        )],
+    );
+}
+
+#[test]
+fn async_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
+    // The anchor module's own async fn is still caught, and its finding string is byte-identical to
+    // the single-module path — so enabling the opt-in on a seam-only boundary adds deeper findings
+    // without re-identifying the seam ones (baseline stability).
+    let files = &[
+        ("lib.rs", "pub mod m;\n"),
+        ("m.rs", "pub async fn own() {}\npub mod deep;\n"),
+        ("m/deep.rs", "pub async fn nested() {}\n"),
+    ];
+    let seam = async_findings("seam-parity", files, "crate::m").unwrap();
+    assert_eq!(seam, ["async fn crate::m::own()"]);
+    let subtree = async_subtree_labels("subtree-parity", files, "crate::m");
+    assert_eq!(
+        subtree,
+        [
+            "async fn crate::m::deep::nested()",
+            "async fn crate::m::own()",
+        ],
+    );
+    // The seam finding appears verbatim in the subtree result.
+    assert!(subtree.contains(&seam[0]));
+}
+
+#[test]
+fn async_subtree_reacts_through_inline_and_nested_modules() {
+    // Inline `mod`, file `mod`, and a grandchild all react, each attributed to its own module.
+    let files = &[
+        (
+            "lib.rs",
+            "pub mod outer { pub async fn a() {} pub mod middle; }\n",
+        ),
+        ("outer/middle.rs", "pub async fn b() {}\npub mod leaf;\n"),
+        ("outer/middle/leaf.rs", "pub async fn c() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("nested", files, "crate"),
+        [
+            "async fn crate::outer::a()",
+            "async fn crate::outer::middle::b()",
+            "async fn crate::outer::middle::leaf::c()",
+        ],
+    );
+}
+
+#[test]
+fn async_subtree_scopes_to_the_anchored_subtree_not_the_whole_crate() {
+    // Anchored at `crate::a`, an async fn under `crate::a` reacts; a sibling `crate::c` does not —
+    // the subtree is bounded by the anchor, not the crate.
+    let files = &[
+        ("lib.rs", "pub mod a;\npub mod c;\n"),
+        ("a.rs", "pub async fn af() {}\npub mod b;\n"),
+        ("a/b.rs", "pub async fn bf() {}\n"),
+        ("c.rs", "pub async fn cf() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("bounded", files, "crate::a"),
+        ["async fn crate::a::af()", "async fn crate::a::b::bf()"],
+    );
+}
+
+#[test]
+fn async_subtree_tolerates_a_cfg_gated_fileless_submodule() {
+    // A `#[cfg]`-gated module with no file when the feature is off is tolerated (a stated bound),
+    // not a scan error; the present modules still react.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"absent\")]\npub mod gated;\npub mod present;\n",
+        ),
+        ("present.rs", "pub async fn here() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("cfg-tolerated", files, "crate"),
+        ["async fn crate::present::here()"],
+    );
+}
+
+#[test]
+fn async_subtree_errors_on_a_non_cfg_missing_submodule() {
+    // A non-`#[cfg]` `mod x;` with no file is a scan error (exit 2) — "cannot judge", never a
+    // silent pass that would under-react.
+    let files = &[("lib.rs", "pub mod gone;\n")];
+    assert!(async_subtree("non-cfg-missing", files, "crate").is_err());
+}
+
+#[test]
+fn async_subtree_distinguishes_same_named_async_methods_across_modules() {
+    // Cross-module dedup safety (the invariant `push_multi_module_violations` rests on): it flattens
+    // findings to identity `(anchor, rule, finding)`, discarding the enclosing module — so two
+    // same-named inherent async methods in *different* submodules stay distinct ONLY because the
+    // finding string carries the module-qualified owner. If that owner ever lost its module prefix,
+    // baselining one would mask the other (a false negative). This pins it.
+    let files = &[
+        ("lib.rs", "pub mod a;\npub mod b;\n"),
+        (
+            "a.rs",
+            "pub struct S;\nimpl S { pub async fn run(&self) {} }\n",
+        ),
+        (
+            "b.rs",
+            "pub struct S;\nimpl S { pub async fn run(&self) {} }\n",
+        ),
+    ];
+    assert_eq!(
+        async_subtree_labels("cross-mod-owners", files, "crate"),
+        [
+            "async fn <crate::a::S>::run(&self)",
+            "async fn <crate::b::S>::run(&self)",
+        ],
+    );
+}
+
+#[test]
+fn async_subtree_does_not_observe_a_body_nested_module() {
+    // A `mod` declared inside a fn body is not part of the public module tree (its items are not
+    // reachable as `crate::…`), so the subtree walk — which descends the public module tree, not fn
+    // bodies — does not observe it. A stated bound: it is not public API, so async-exposure (which
+    // governs the *public* seam) makes no claim about it, rather than silently asserting cleanliness.
+    let files = &[(
+        "lib.rs",
+        "pub fn outer() { mod inner { pub async fn hidden() {} } }\n",
+    )];
+    assert_eq!(
+        async_subtree_labels("body-nested", files, "crate"),
+        Vec::<String>::new(),
+    );
 }
 
 #[test]
@@ -4754,7 +5438,7 @@ fn dyn_in_const_static_trait_method_assoc_default_and_where_react() {
 
 #[test]
 fn dyn_in_an_inherent_impl_public_assoc_const_reacts() {
-    // FN closed: the dyn collector's inherent-impl arm now observes public associated `const`/`type`
+    // The dyn collector's inherent-impl arm now observes public associated `const`/`type`
     // positions (parity with the signature-coupling collector, which gained them this release), so a
     // `dyn` written in an inherent-impl `pub const` type reacts — it did not before.
     assert_eq!(
@@ -5718,7 +6402,7 @@ fn dyn_operand_inline_dependency_and_crate_root_rename_react() {
 
 #[test]
 fn dyn_operand_crate_relative_extern_rename_reacts() {
-    // FN closed: the crate-relative spelling `crate::d::T` of a crate-root `extern crate dep as d;`
+    // The crate-relative spelling `crate::d::T` of a crate-root `extern crate dep as d;`
     // rename is rewritten (apply_crate_root_rename) exactly as the exposure resolver does, so it
     // reacts alike the bare `d::T` head — the specs' "same resolver ladder … with a crate-root
     // rename applied". Before, the operand resolver skipped this rewrite and this leak was silent.
@@ -5741,7 +6425,7 @@ fn dyn_operand_crate_relative_extern_rename_reacts() {
 
 #[test]
 fn dyn_operand_child_shadowed_rename_head_does_not_react() {
-    // FP closed: the governed module declares its own child `mod d`, which shadows the crate-root
+    // The governed module declares its own child `mod d`, which shadows the crate-root
     // `extern crate dep as d;` alias within it (rustc resolves bare `d::Port` to the local module,
     // not the dep). The operand resolver's bare-head rewrite uses the child-shadowed rename map
     // (renames_bare), so it no longer rewrites `d` to `dep` and does not react. Before, it used the
@@ -5843,7 +6527,7 @@ fn impl_trait_operand_inline_sysroot_trait_reacts() {
 
 #[test]
 fn reexport_head_shadowed_by_a_child_module_does_not_react() {
-    // FP closed: `pub use dep::spi::Foo;` in a module that also declares a child `mod dep`
+    // `pub use dep::spi::Foo;` in a module that also declares a child `mod dep`
     // resolves (per rustc) to the local module, not the dependency, so it must NOT react under a
     // boundary forbidding the dependency. The child `mod dep` is subtracted from the re-export set.
     let out = findings_with_deps(
@@ -5934,7 +6618,7 @@ fn reexport_leading_colon_reacts_despite_a_child_module_shadow() {
 
 #[test]
 fn crate_relative_spelling_of_a_crate_root_rename_reacts() {
-    // FN closed: `crate::wc::spi::Foo` (the crate-relative spelling of a crate-root
+    // `crate::wc::spi::Foo` (the crate-relative spelling of a crate-root
     // `extern crate worklane_core as wc;`) is rewritten to the real crate and reacts.
     let out = findings_with_deps(
         "crate-alias-crate-relative",
@@ -5992,7 +6676,7 @@ fn crate_relative_rename_behind_a_type_alias_and_reexport_reacts() {
 
 #[test]
 fn bare_rename_head_shadowed_by_a_submodule_child_mod_does_not_react() {
-    // FP closed: the governed submodule declares its own child `mod wc`, which rustc lets shadow the
+    // The governed submodule declares its own child `mod wc`, which rustc lets shadow the
     // crate-root extern alias, so bare `wc::spi::Foo` is the local module — not the dependency.
     let out = findings_with_deps(
         "crate-alias-submodule-shadow",

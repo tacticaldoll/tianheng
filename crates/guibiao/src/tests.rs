@@ -566,14 +566,17 @@ fn a_cross_root_same_named_submodule_is_a_documented_bound() {
     );
 }
 
-/// Stated bound (not a fix): only a **direct** `#[path]` is recognized as a remap; a
-/// `#[cfg_attr(cond, path = …)]` is not, so the conventionally-named file is governed as the
-/// module and its imports are observed. Correct for the configuration in which the `cfg_attr`
-/// path is inactive; otherwise the scanner's cfg-blindness. Contrast a direct `#[path]`, which
-/// is out of scope (its conventional file is NOT governed).
+/// A `#[cfg_attr(cond, path = …)]` IS recognized as a (conditional) remap, the same
+/// stated `#[path]` bound as the separate `#[cfg(cond)] #[path = …]` spelling. Not recognizing it
+/// would govern the conventionally-named file — a cfg-blind mishandling that is a
+/// false POSITIVE when the cfg path is active (rustc compiles the remap target, not the
+/// conventional file) and, when no conventional file exists, a silent false NEGATIVE (the real
+/// remapped source never scanned). The remapped module is out of scope: a boundary on it
+/// fails loud (exit 2, "cannot judge") rather than guessing a file, and the conventional file is
+/// not silently governed as the wrong module.
 #[test]
-fn a_cfg_attr_wrapped_path_is_not_recognized_as_a_remap() {
-    let (result, violations) = run_module_check(
+fn a_cfg_attr_wrapped_path_is_recognized_as_a_remap() {
+    let (result, _violations) = run_module_check(
         "cfg-attr-path",
         &[
             (
@@ -588,13 +591,13 @@ fn a_cfg_attr_wrapped_path_is_not_recognized_as_a_remap() {
             .must_not_import("crate::forbidden")
             .because("foo must not import forbidden"),
     );
-    result.expect("the conventional foo.rs backs crate::foo (cfg_attr path not honored)");
+    // crate::foo is a remapped module, out of scope — so a boundary anchored on it is a constitution
+    // error (exit 2), matching a direct `#[path]` remap. The conventional foo.rs is NOT governed as
+    // crate::foo (no false positive on the active-cfg configuration, no silent guess).
     assert!(
-        violations
-            .iter()
-            .any(|v| v.finding.contains("crate::forbidden::Y")),
-        "documented bound: a cfg_attr-wrapped #[path] is not recognized, so the conventional \
-             foo.rs is governed and its import observed: {violations:?}"
+        result.is_err(),
+        "a cfg_attr-remapped module is out of scope; a boundary on it must fail loud, not guess \
+         the conventional file"
     );
 }
 
@@ -894,10 +897,10 @@ fn must_not_be_imported_by_flags_the_forbidden_importer_only() {
 
 #[test]
 fn must_not_be_imported_by_flags_an_inline_module_importer() {
-    // FN closed: `crate::http` is an INLINE module in lib.rs, not a file. Its `use crate::internal`
+    // `crate::http` is an INLINE module in lib.rs, not a file. Its `use crate::internal`
     // is attributed to the inline importer `crate::http`, not the file's module `crate`, so the
-    // forbidden inbound edge reacts. Before, the file-granular attribution tested `crate` against
-    // the forbidden importer, pre-filtered the file out, and silently missed the edge.
+    // forbidden inbound edge reacts. File-granular attribution would test `crate` against
+    // the forbidden importer, pre-filter the file out, and silently miss the edge.
     let (result, violations) = run_module_check(
         "inbound-inline-importer",
         &[
@@ -2404,10 +2407,9 @@ fn must_only_be_imported_by_flags_an_importer_outside_the_allowlist() {
 
 #[test]
 fn must_only_be_imported_by_authorizes_an_allowed_inline_importer() {
-    // FP closed: `crate::facade` is an INLINE module and IS allow-listed. Its import is attributed
-    // to `crate::facade` (not the file's `crate`), so it is correctly authorized. Before, the file
-    // module `crate` was tested against the allowlist and the allowed inline importer was wrongly
-    // flagged.
+    // `crate::facade` is an INLINE module and IS allow-listed. Its import is attributed
+    // to `crate::facade` (not the file's `crate`), so it is correctly authorized. Testing the file
+    // module `crate` against the allowlist would wrongly flag the allowed inline importer.
     let (result, violations) = run_module_check(
         "only-inline-allowed",
         &[
@@ -3026,4 +3028,784 @@ fn confine_observes_an_aliased_import_of_the_confined_crate() {
     );
     assert_eq!(violations[0].target, "libc");
     assert_eq!(violations[0].finding, "crate::service");
+}
+
+// --- inline-symbol-path confinement (`must_not_call_inline`) ----------------------------
+
+fn confine_core_clock() -> ModuleBoundary {
+    ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_call_inline("std::time")
+        .because("core reads no wall clock — time is injected, not read")
+}
+
+#[test]
+fn inline_default_reacts_on_an_associated_fn_call() {
+    let (result, violations) = run_module_check(
+        "inline-call",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "std::time");
+    assert!(
+        violations[0].finding.contains("std::time::SystemTime::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_default_passes_a_type_annotation() {
+    let (result, violations) = run_module_check(
+        "inline-annot",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn handle(now: std::time::Instant) { let _ = now; }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a type annotation is not a call: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_default_passes_a_constant() {
+    let (result, violations) = run_module_check(
+        "inline-const",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let _ = std::time::SystemTime::UNIX_EPOCH; }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a constant read is not a call: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_resolves_a_rename() {
+    let (result, violations) = run_module_check(
+        "inline-rename",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "use std::time::SystemTime as SysT;\nfn f() { let _ = SysT::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a renamed alias resolves: {violations:?}"
+    );
+    assert!(
+        violations[0].finding.contains("std::time::SystemTime::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_resolves_a_bare_path() {
+    let (result, violations) = run_module_check(
+        "inline-bare",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "use std::time;\nfn f() { let _ = time::Instant::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "a bare path resolves: {violations:?}");
+    assert!(
+        violations[0].finding.contains("std::time::Instant::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_resolves_a_type_alias() {
+    let (result, violations) = run_module_check(
+        "inline-typealias",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "type Clock = std::time::SystemTime;\nfn f() { let _ = Clock::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "a type alias resolves: {violations:?}");
+}
+
+#[test]
+fn inline_resolves_a_multi_hop_type_alias() {
+    let (result, violations) = run_module_check(
+        "inline-multihop",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "type A = std::time::SystemTime;\ntype B = A;\nfn f() { let _ = B::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a multi-hop type alias chases to a fixpoint: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_resolves_a_type_alias_past_a_defaulted_generic_param() {
+    // The generic parameter list carries its own `=` (`Tz = LocalTz`); it must not be mistaken for
+    // the alias `=`, or the alias resolves to the default (`LocalTz`) instead of its real target
+    // (`std::time::SystemTime`) — a silent miss of the confined clock (a false negative).
+    let (result, violations) = run_module_check(
+        "inline-defaulted-generic-alias",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "type Clock<Tz = LocalTz> = std::time::SystemTime;\nfn f() { let _ = Clock::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the alias resolves past the defaulted generic param to its real target: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_resolves_a_cross_module_local_reexport() {
+    let (result, violations) = run_module_check(
+        "inline-reexport",
+        &[
+            ("lib.rs", "pub mod core;\npub mod support;\n"),
+            ("support.rs", "pub use std::time::SystemTime;\n"),
+            (
+                "core.rs",
+                "use crate::support::SystemTime;\nfn f() { let _ = SystemTime::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a cross-module local re-export resolves: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_does_not_match_an_unresolved_same_named_local() {
+    let (result, violations) = run_module_check(
+        "inline-local",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "struct Instant;\nimpl Instant { fn now() {} }\nfn f() { Instant::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a same-named local is not matched by leaf: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_glob_of_the_prefix_reacts() {
+    let (result, violations) = run_module_check(
+        "inline-glob",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            ("core.rs", "use std::time::*;\n"),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a glob of the prefix reacts fail-closed: {violations:?}"
+    );
+    assert!(violations[0].finding.contains("glob"), "{violations:?}");
+}
+
+#[test]
+fn inline_glob_above_the_prefix_reacts() {
+    let (result, violations) = run_module_check(
+        "inline-glob-above",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "use std::*;\nfn f() { let _ = time::Instant::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.iter().any(|v| v.finding.contains("glob")),
+        "an ancestor glob reacts: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_glob_of_a_local_reexporting_module_reacts() {
+    let (result, violations) = run_module_check(
+        "inline-glob-local",
+        &[
+            ("lib.rs", "pub mod core;\npub mod support;\n"),
+            ("support.rs", "pub use std::time::SystemTime;\n"),
+            ("core.rs", "use crate::support::*;\n"),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a glob of a local re-exporting module reacts: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_glob_of_a_module_that_itself_globs_the_prefix_reacts() {
+    let (result, violations) = run_module_check(
+        "inline-glob-recursive",
+        &[
+            ("lib.rs", "pub mod core;\npub mod support;\n"),
+            ("support.rs", "pub use std::time::*;\n"),
+            ("core.rs", "use crate::support::*;\n"),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "recursive glob hazard reacts: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_narrowing_drops_a_benign_constructor_and_keeps_the_read() {
+    let (result, violations) = run_module_check(
+        "inline-narrow",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let _ = std::time::Instant::now(); let _ = std::time::Duration::from_secs(5); }\n",
+            ),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(["now"])
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "only the now-read reacts under narrowing: {violations:?}"
+    );
+    assert!(
+        violations[0].finding.contains("Instant::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_narrowing_does_not_suppress_a_glob() {
+    let (result, violations) = run_module_check(
+        "inline-narrow-glob",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            ("core.rs", "use std::time::*;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(["now"])
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a glob still reacts under narrowing: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_flags_a_type_annotation() {
+    let (result, violations) = run_module_check(
+        "inline-strict",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn handle(now: std::time::Instant) { let _ = now; }\n",
+            ),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .strict_prefix_only()
+            .because("core may not name std::time at all"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "strict flags a mention: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_value_capture_is_a_bound_under_the_default() {
+    let (result, violations) = run_module_check(
+        "inline-valuecap",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let g = std::time::SystemTime::now; let _ = g; }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "value-position capture is a stated bound under the default: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_scans_a_macro_body() {
+    let (result, violations) = run_module_check(
+        "inline-macro",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { some_macro! { let _ = std::time::Instant::now(); } }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a read inside a macro body is scanned, not skipped: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_empty_prefix_is_a_constitution_error() {
+    let (result, _violations) = run_module_check(
+        "inline-empty",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", "// clean\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("")
+            .because("bad"),
+    );
+    assert_eq!(result.unwrap_err(), inline_empty_prefix_error("x"));
+}
+
+#[test]
+fn inline_narrow_and_strict_is_a_constitution_error() {
+    let (result, _violations) = run_module_check(
+        "inline-combo",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", "// clean\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(["now"])
+            .strict_prefix_only()
+            .because("contradiction"),
+    );
+    assert_eq!(result.unwrap_err(), inline_narrow_and_strict_error("x"));
+}
+
+#[test]
+fn inline_valid_zero_match_is_clean() {
+    let (result, violations) = run_module_check(
+        "inline-clean",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            ("core.rs", "fn f() { let _ = std::cmp::max(1, 2); }\n"),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a subtree with no std::time call is clean: {violations:?}"
+    );
+}
+
+// --- inline-symbol-path: adversarial-review regression + coverage ------------------------
+
+#[test]
+fn inline_reacts_on_a_leading_colon_path() {
+    // A leading `::std::time::…::now()` must be extracted (its head sits after `::`).
+    let (result, violations) = run_module_check(
+        "inline-leading-colon",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let _ = ::std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a leading-:: call reacts: {violations:?}"
+    );
+    assert!(
+        violations[0].finding.contains("std::time::SystemTime::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_reacts_on_a_nested_grouped_glob() {
+    // `use std::{time::*, cmp::max}` — the nested glob member `time::*` reaches under
+    // the prefix and must react fail-closed, though it is not a top-level `*`.
+    let (result, violations) = run_module_check(
+        "inline-nested-glob",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            ("core.rs", "use std::{cmp::max, time::*};\n"),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.iter().any(|v| v.finding.contains("glob")),
+        "a nested grouped glob of the prefix reacts: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_reacts_on_a_two_hop_use_realias() {
+    // `use std::time::SystemTime; use self::SystemTime as Clock;` — the second use-hop
+    // must chase through the file's own use-map, not only the crate-wide def closure.
+    let (result, violations) = run_module_check(
+        "inline-two-hop-use",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "use std::time::SystemTime;\nuse self::SystemTime as Clock;\nfn f() { let _ = Clock::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a two-hop use re-alias resolves to a fixpoint: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_reacts_through_a_mid_path_turbofish() {
+    // `Clock::<Utc>::now()` — the mid-path turbofish must not break the path, and the
+    // terminal `now` call must still react (via the resolved `std::time::SystemTime::now`).
+    let (result, violations) = run_module_check(
+        "inline-turbofish",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "type Clock = std::time::SystemTime;\nfn f() { let _ = Clock::<u8>::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a mid-path turbofish call reacts: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_reacts_through_interior_whitespace_and_field_colon() {
+    // Interior whitespace in the path, and a no-space struct-field `:` before a path.
+    let (result, violations) = run_module_check(
+        "inline-ws",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let _ = std :: time :: Instant :: now(); }\nstruct E { at: std::time::SystemTime }\nfn g() -> E { E { at:std::time::SystemTime::now() } }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    // Two distinct now-reads (Instant::now, SystemTime::now); the `at: SystemTime` annotation is a
+    // non-call mention and does not react.
+    assert_eq!(
+        violations.len(),
+        2,
+        "interior-whitespace and field-colon calls both react: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_ufcs_is_a_documented_bound_under_the_default() {
+    // Stated bound: a UFCS-qualified call `<Type as Trait>::now()` puts the type inside `<…>`, not
+    // a plain path — like a receiver-method read, out of scope under the default (strict catches
+    // the mention). Asserted non-reaction so the bound is a declared non-observation, not silent.
+    let (result, violations) = run_module_check(
+        "inline-ufcs",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "trait Now { fn now(); }\nfn f() { <std::time::SystemTime as Now>::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "UFCS is a stated bound under the default (type in <…>): {violations:?}"
+    );
+}
+
+#[test]
+fn inline_receiver_method_read_is_a_bound() {
+    // Stated bound: `inst.elapsed()` — the receiver's type is not in the written path (no type
+    // inference), so it is out of scope. Asserted non-reaction (declared, not silent).
+    let (result, violations) = run_module_check(
+        "inline-receiver",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f(inst: std::time::Instant) { let _ = inst.elapsed(); }\n",
+            ),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(["now", "elapsed"])
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a receiver-method read is a stated bound (type not in path): {violations:?}"
+    );
+}
+
+#[test]
+fn inline_grouped_self_glob_reacts() {
+    let (result, violations) = run_module_check(
+        "inline-selfglob",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            ("core.rs", "use std::time::{self, Duration, *};\n"),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.iter().any(|v| v.finding.contains("glob")),
+        "a grouped `{{self, *}}` glob reacts: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_two_distinct_calls_stay_distinct() {
+    // Identity: two distinct canonical calls in one module are two findings (no dedup masking).
+    let (result, violations) = run_module_check(
+        "inline-distinct",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let _ = std::time::Instant::now(); let _ = std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        2,
+        "two distinct canonical calls stay distinct findings: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_prefix_is_carried_in_the_violation_target() {
+    // Identity: the confined prefix is the violation target, so nested-prefix confinements (`std`
+    // vs `std::time`) breached by the same call never share an identity (no baseline masking).
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "fn f() { let _ = std::time::Instant::now(); }\n"),
+    ];
+    let (r1, v1) = run_module_check(
+        "inline-target-time",
+        files,
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .because("no clock"),
+    );
+    let (r2, v2) = run_module_check(
+        "inline-target-std",
+        files,
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std")
+            .because("no std calls"),
+    );
+    assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
+    assert_eq!(v1[0].target, "std::time");
+    assert_eq!(v2[0].target, "std");
+    assert_ne!(
+        v1[0].target, v2[0].target,
+        "distinct prefixes → distinct identity"
+    );
+}
+
+#[test]
+fn inline_warn_severity_is_advisory() {
+    let (result, violations) = run_module_check(
+        "inline-warn",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let _ = std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .warn()
+            .because("advisory"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].severity, Severity::Warn);
+}
+
+#[test]
+fn inline_empty_verbs_is_a_constitution_error() {
+    let (result, _v) = run_module_check(
+        "inline-emptyverbs",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", "// clean\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(Vec::<String>::new())
+            .because("bad"),
+    );
+    assert_eq!(result.unwrap_err(), inline_empty_verbs_error("x"));
+}
+
+#[test]
+fn inline_scanner_does_not_panic_or_hang_on_odd_input() {
+    // Robustness: malformed `use`/brace/self-referential-alias input must never panic or hang.
+    for body in [
+        "use } {;\n",
+        "use std::{time::*;\n",
+        "type A = A::B;\nfn f() { let _ = A::now(); }\n",
+        "use ::;\nfn f() { ::::(); }\n",
+        "fn f() { <>::(); std :: :: now (); }\n",
+    ] {
+        let (result, _v) = run_module_check(
+            "inline-odd",
+            &[("lib.rs", "pub mod core;\n"), ("core.rs", body)],
+            confine_core_clock(),
+        );
+        // Either clean or a violation, but it must complete (no panic / no hang) and not error out.
+        assert!(
+            result.is_ok(),
+            "odd input must not error: {body:?} -> {result:?}"
+        );
+    }
+}
+
+#[test]
+fn inline_in_macro_body_alias_is_a_bound() {
+    // Stated bound: an alias DEFINED INSIDE a macro body is not in the enclosing use-map, so a
+    // call through it inside the same macro body does not resolve — a declared non-observation
+    // (the macro body IS scanned for direct paths, but a body-local alias is out of scope).
+    let (result, violations) = run_module_check(
+        "inline-macro-alias",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { some_macro! { use std::time::SystemTime as X; let _ = X::now(); } }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "an alias defined inside a macro body is a stated bound: {violations:?}"
+    );
 }

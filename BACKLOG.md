@@ -339,7 +339,7 @@ Ordered by readiness. All three instruments ship in v0.1.0 (圭表 static, 渾�
 runtime); the entire admitted 三儀 layer is now built. What remains below is the rejected set
 per dimension and the 三司 governance/observability layer.
 
-### 圭表 (Guībiǎo) — the static dimension  · crate `guibiao`  · **BUILT — proven core (v0.1.0, from modou); growing by depth (v0.1.2 crate-source-boundary); hardened in v0.1.4**
+### 圭表 (Guībiǎo) — the static dimension  · crate `guibiao`  · **BUILT — proven core (from modou), growing by depth**
 Observation source: `cargo metadata --no-deps` (the declared manifests) + a source `use` scan.
 Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation source), not by width.
 
@@ -396,19 +396,30 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   Shipped as the OpenSpec change `external-crate-confinement`, whose synced spec is now the SSOT
   under `openspec/specs/external-crate-confinement/`.
 
-**Forward depth — potential, not active (adopter-surfaced):**
-- **Inline-symbol-path external-crate confinement — layer (b)**: *not built.* The sibling of the
-  shipped `confine_external_crate` (layer (a), above): confine not only `use C::…` but inline symbol
-  paths (`C::foo()` / `C::CONST` written in bodies with no `use`). This needs an all-body path scan
-  deeper than any current pass — a later phase / stated bound, not the core. Same drift-law footing
-  (observable on source) and the same non-`cargo-deny` lane as layer (a). Fires only on adopter demand.
+**Inline-symbol-path confinement — layer (b): BUILT (v0.1.8).** The sibling of
+`confine_external_crate` (layer (a)), realized as the `must_not_call_inline` rule
+(`inline-symbol-path-confinement`): within a governed subtree, forbid inline symbol-path **calls**
+resolving under a module prefix (the "core reads no ambient clock; time is injected" pattern).
+Surfaced by that adopter demand. Key decisions, hardened through a feasibility spike and three
+adversarial-review rounds:
+- **Feasibility spike** (tokio/hyper/reqwest/chrono, prefix `std::time`): macro-body reads are rare
+  and resolve cleanly under a resolve-only posture; the FP concern was a *target-granularity*
+  choice, not a scanner limit.
+- **Call-vs-mention default** (no read-verb heuristic in 圭表): a bare `.must_not_call_inline` reacts
+  on calls; type annotations and constants pass. `.ending_with([verbs])` narrows (adopter owns the
+  FN); `.strict_prefix_only()` escalates to mentions; the two are mutually exclusive (exit 2).
+- **Close the idioms, fail-closed on globs**: resolution follows the alias-carrying use-map, local
+  `type` aliases, and the local `pub use` re-export closure to a fixpoint; a glob that can bring a
+  prefix-resolving name into scope reacts fail-closed, stated by *hazard not shape* (recursing into
+  local re-export closures) so the rule does not itself drift.
+- Stayed 圭表-internal on the hand-rolled token scanner (serde_json-only, no `syn`, 三儀 ⊥ 三儀).
 
 **Declined — externally covered (not a forward depth):**
 - **Resolved dependency-source / build-provenance** — *declined.* Cargo-deny owns the resolved,
   whole-graph source-provenance layer; Tianheng keeps the declared, per-target manifest layer. See
   `PROJECT.md`'s 圭表 source decision for the full A/B rationale.
 
-### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer (v0.1.0); growing by depth (v0.1.2 dyn/impl-trait stair + async-exposure; v0.1.3 re-export + trait-impl exposure); hardened in v0.1.4**
+### 渾儀 (Húnyí) — the semantic dimension  · crate `hunyi`  · **BUILT — originally-conceived layer, growing by depth**
 Observation source: the **AST** (`syn`). Sees what the `圭表` `use`-scan cannot — semantics
 in the syntax tree: `pub` signatures, `impl Trait for Type`, attributes/derives, visibility.
 The observation-source fork is **resolved**: `syn` was chosen (stable; its syntactic partial
@@ -560,22 +571,32 @@ Forward depths (born when built, same `syn` source):
   (written `impl Future`/RPIT) and async-exposure (implicit `impl Future`) under one "no
   existential at this seam" rule. Deferred: the two syntactic signals stay distinct rules until a
   unification earns its own admission (it must not blur the two findings' identities). Not built.
-- **`UnsafeBoundary` — subtree-confined `unsafe`**: *not built.* "All `unsafe` (blocks, `unsafe
-  impl`, `unsafe fn`) lives only under subtree S; elsewhere reacts" — the auditability boundary of a
-  layered Rust crate. Same `syn` observation source (an `unsafe` token is directly visible); reaction
-  is a whole-crate/subtree scan of the forbidden-marker family. Additive/patch, **adopter-surfaced.**
-  **Value scoped precisely:** the pure "crate X is `unsafe`-free" case is already *stronger* as the
-  compiler's `#![forbid(unsafe_code)]` (compile-time, unbypassable) — compile-time-first adopters
-  should use that; `UnsafeBoundary`'s unique, non-compiler-expressible value is **intra-crate subtree
-  confinement** ("unsafe only under `crate::ffi`") plus one unified cross-crate declaration. Spec it
-  as subtree confinement, not the per-crate on/off the attribute already covers.
-- **Visibility ceiling — `max_visibility(Crate|Super|Module)`**: *not built.* Generalizes the binary
-  `must_not_declare_pub` (which becomes the `max_visibility(Crate)` special case, kept as sugar —
-  additive, not breaking) to a parameterized ceiling: an item declared *above* the ceiling reacts,
-  `pub(crate)`/below is allowed. Observation exists (visibility is already read). Non-compiler-
-  expressible value: the compiler enforces a `pub(crate)` item can't be *used* externally but happily
-  accepts *widening the declaration* to `pub`; the ceiling governs the declaration's evolution (never
-  widen) — a governance fact the type system does not carry. **Adopter-surfaced.**
+- **`UnsafeBoundary` — subtree-confined `unsafe`**: **BUILT (v0.1.8).** `UnsafeBoundary::in_crate(p)
+  .only_under(["crate::ffi"])` — `unsafe` (blocks, `unsafe fn`/`impl`/`trait`, `unsafe extern`) may
+  appear only under the declared subtree(s); a site elsewhere reacts. Observed via an
+  `UnsafeSiteCollector` (`syn::visit`) run per-module by a dedicated whole-crate walk inheriting
+  `scan_crate`'s guards. **Confinement-only** (the admission-critical scope): the pure "crate is
+  `unsafe`-free" case is deliberately excluded — `#![forbid(unsafe_code)]` is stronger (compile-time,
+  unbypassable) — so an **empty or crate-root allowed set is a constitution error** pointing at
+  `#![forbid]`; this keeps it declarative-not-lint (governs *where* `unsafe` lives, not *whether* it
+  exists). Findings are per-module, per-kind (anonymous blocks dedup per module; the trait is in an
+  `unsafe impl` finding for injectivity). Stated bounds: `#[unsafe(...)]` attributes, bare `unsafe fn`
+  pointer types, plain `extern "C" {}` blocks (call sites still react), and the inherited macro /
+  `#[path]` whole-crate-scan bounds. Two adversarial-review rounds hardened it (the propose review
+  caught a body-nested-`mod` false negative → `visit_item_mod` left at default + only top-level `mod`
+  filtered). Shipped as the OpenSpec change `semantic-unsafe-confinement`.
+- **Visibility ceiling — `max_visibility(Crate|Super|Module)`**: **BUILT (v0.1.8).** Generalizes the
+  binary `must_not_declare_pub` (now the `max_visibility(Crate)` sugar, byte-stable in findings, rule
+  string, and baselines) to a parameterized ceiling: a direct item reacts iff its declared-visibility
+  rank (`pub`=3 > `pub(crate)`=2 > `pub(super)`=1 > private=0) is strictly above the ceiling. Same
+  `syn` source and item set as before — only the per-item predicate and finding change. Non-compiler-
+  expressible (the compiler accepts *widening* a `pub(crate)` declaration to `pub`; the ceiling governs
+  the declaration's evolution). Key decision: `pub(in P)` is matched **whole and single-segment**
+  (`crate`/`super`/`self`); every other restricted form (multi-segment like `pub(in super::super)`,
+  leading-colon) ranks **Crate, a conservative upper bound** — a `pub(in P)` path is an in-crate
+  ancestor, so at most crate-visible, so this never under-reacts (no false negative), only ever
+  over-reacts under a tight ceiling (a stated bound). Shipped as an OpenSpec change modifying
+  `semantic-visibility-boundary`. Adopter-surfaced.
 
 **Internal structure (refinement, not capability) — v0.1.4:** 渾儀's internals were structured
 where a live pain existed — the finding-string formats centralized into one `SemanticFinding`
@@ -597,7 +618,7 @@ architectural shape** (a stated non-goal — behavioral/contract governance), an
 declaration-integrity anti-pattern the project fights. The real intent ("keep the facade small") is
 a 潛移/review concern, not a brittle enumerated reaction. Adopter-surfaced, declined with reason.
 
-### 漏刻 (Lòukè) — the runtime dimension  · crate `louke`  · **BUILT (v0.1.0) — admitted layer complete**
+### 漏刻 (Lòukè) — the runtime dimension  · crate `louke`  · **BUILT — admitted layer complete**
 Observation source: **runtime `TypeId` / object origin** at architectural seams. Sees what
 static analysis structurally cannot — the concrete type behind a `dyn Trait`. **Built:** the
 **origin-assertion** capability — `RuntimeBoundary::at("seam").only_origins([...])` declared

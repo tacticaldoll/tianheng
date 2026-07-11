@@ -12,6 +12,44 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-07-11
+
+### Added
+- 圭表 inline-symbol-path confinement — forbid a crate from *calling* a fully-qualified path inline
+  (e.g. `std::time::SystemTime::now()`), resolving `use` renames / aliases / re-exports and the
+  glob-danger shapes. The syn-free static complement to observing a `use`-import.
+- 渾儀 `UnsafeBoundary` — declare that a crate's `unsafe` (blocks, `unsafe fn`/`impl`/`trait`,
+  `unsafe extern`) may appear **only under** a declared subtree
+  (`UnsafeBoundary::in_crate("app").only_under(["crate::ffi"])`): the auditability boundary of a
+  layered crate, the confinement complement of `#![forbid(unsafe_code)]`.
+- 渾儀 visibility ceiling — `max_visibility(Crate | Super | Module)`, generalizing the binary
+  `must_not_declare_pub` into a rank ceiling (an item declared above the ceiling reacts; the prior
+  rule is now the `max_visibility(Crate)` sugar, byte-stable in findings).
+- 渾儀 async-exposure opt-in **subtree** scope — `.including_submodules()` descends the anchored
+  module's whole subtree, so a "this seam is synchronous" boundary governs a pure kernel throughout,
+  not only at its own seam.
+- Every crate declares `#![forbid(unsafe_code)]` — the family is `unsafe`-free and says so at
+  compile time.
+- `examples/` gained `unsafe-confinement` and `sans-io-pure`, plus a `max_visibility` demo in
+  `hunyi-standalone`.
+
+### Fixed
+- 渾儀 unsafe-confinement: the finding is owner-qualified (`unsafe impl {trait} for {self type}`), so
+  two `unsafe impl`s of one trait for different self types in a module no longer collapse to one
+  finding — closing a baseline-masking false negative.
+- 渾儀 / 圭表: a nested `#[cfg_attr(pred, path = "…")]` module remap is recognized in both dimensions,
+  closing a silent false negative in the static scanner and the semantic subtree walk.
+- 圭表 type-alias resolution skips a defaulted generic parameter's `=`
+  (`type Clock<Tz = LocalTz> = std::time::SystemTime;` now resolves to its real target), closing a
+  false negative where a confined type reached through the alias passed unobserved.
+
+### Changed
+- modou is no longer framed as superseded. It is a living, independently-developed sibling project;
+  Tianheng's static core (圭表) is *derived from* it, and Tianheng keeps all three dimensions
+  (README / PROJECT).
+- README gained a Phase-0 one-line on-ramp (lock one seam, enforce, pipe SARIF into CI) above the
+  full multi-dimension example.
+
 ## [0.1.7] - 2026-07-08
 
 ### Added
@@ -93,7 +131,8 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/tacticaldoll/tianheng/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tacticaldoll/tianheng/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/tacticaldoll/tianheng/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/tacticaldoll/tianheng/compare/v0.1.4...v0.1.5

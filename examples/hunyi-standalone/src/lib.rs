@@ -3,7 +3,9 @@
 //! 圭表: a type imported for internal use is fine; a type named in a `pub` signature is a leak.
 //!
 //! Here `crate::api` deliberately leaks `crate::infra::DbPool` through a `pub fn` return type.
-//! `tests/reaction.rs` asserts the reaction; the `demo` binary renders it.
+//! `tests/reaction.rs` asserts the reaction; the `demo` binary renders it. `crate::internal` adds a
+//! second 渾儀 depth — a **visibility ceiling** (`max_visibility`) — reacting to an over-`pub` item.
 pub mod api;
 pub mod governance;
 pub mod infra;
+pub mod internal;

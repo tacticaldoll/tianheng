@@ -30,6 +30,7 @@
 //!
 //! Govern by reaction, not instruction.
 
+#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 use std::any::{Any, TypeId};
@@ -53,6 +54,19 @@ pub use audit::audit_probe_coverage;
 /// in one place updates every projection. The specific allowed-origin set is a per-boundary
 /// detail layered on at each site, not part of this rule-family label.
 pub const RUNTIME_SEAM_RULE: &str = "only declared origins may cross the seam";
+
+/// The full runtime seam **rule line** — the canonical [`RUNTIME_SEAM_RULE`] label with the
+/// per-boundary allowed-origin set folded in (`… (only origins: A, B)`). Written **once** here and
+/// shared by the prod reaction (`check_crossing`'s violation rule) and the 天衡 shell's
+/// `list --format text` projection, so the human-readable line the two render never drifts. The JSON
+/// projection deliberately keeps the label bare and carries the origins as a separate field, so it
+/// does not use this.
+pub fn runtime_seam_rule_line(allowed_origins: &[&str]) -> String {
+    format!(
+        "{RUNTIME_SEAM_RULE} (only origins: {})",
+        allowed_origins.join(", ")
+    )
+}
 
 // --- Tracked: the trait-level instrumentation -------------------------------
 
@@ -395,10 +409,7 @@ fn check_crossing(
     // The rule family is the canonical `RUNTIME_SEAM_RULE` label; the allowed-origin set is the
     // per-boundary detail appended here, so the prod reaction and the `list` projection share one
     // rule label (the shell's `runtime` projection references the same const).
-    let rule = format!(
-        "{RUNTIME_SEAM_RULE} (only origins: {})",
-        s.allowed.join(", ")
-    );
+    let rule = runtime_seam_rule_line(&s.allowed);
     Ok(Some((
         Violation::new(
             BoundaryKind::Runtime,
@@ -593,8 +604,25 @@ mod tests {
     }
 
     #[test]
+    fn the_runtime_rule_line_is_shared_by_reaction_and_projection() {
+        // The folded `… (only origins: …)` wording lives once in `runtime_seam_rule_line`; the prod
+        // reaction (`check_crossing`) and the shell's text projection both call it, so the two
+        // human-readable renderings cannot drift (the twin-drift bug class).
+        assert_eq!(
+            runtime_seam_rule_line(&["app::domain", "app::api"]),
+            "only declared origins may cross the seam (only origins: app::domain, app::api)",
+        );
+        // The reaction's violation `rule` is exactly that formatter's output.
+        let reg = registry(&[("seam", &["app::domain"], Severity::Enforce)], &[]);
+        let (v, _) = check_crossing("seam", TypeId::of::<Infra>(), &reg)
+            .unwrap()
+            .unwrap();
+        assert_eq!(v.rule, runtime_seam_rule_line(&["app::domain"]));
+    }
+
+    #[test]
     fn distinct_unregistered_types_stay_distinct_findings() {
-        // Identity-collision closed (bughunt round 2): two DIFFERENT unregistered types crossing the
+        // Two DIFFERENT unregistered types crossing the
         // same seam must not share one Violation identity — otherwise baselining one silently masks
         // the other's later crossing (a false negative). The TypeId discriminant keeps them distinct.
         let reg = registry(&[("seam", &["app::domain"], Severity::Enforce)], &[]);

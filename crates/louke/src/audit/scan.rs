@@ -62,9 +62,8 @@ fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
 
 /// Walk source skipping comments / string & char literals, and when the `assert_boundary!`
 /// probe marker appears in code, record whether its seam argument is a string literal
-/// (auditable) or not (un-auditable). The declaration marker is no longer scanned —
-/// declarations come from the passed `RuntimeBoundary` objects. `file` labels an un-auditable
-/// probe so the reaction is actionable.
+/// (auditable) or not (un-auditable). Declarations come from the passed `RuntimeBoundary` objects.
+/// `file` labels an un-auditable probe so the reaction is actionable.
 pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
     let b = source.as_bytes();
     let mut i = 0;

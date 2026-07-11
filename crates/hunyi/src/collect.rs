@@ -344,7 +344,7 @@ pub(crate) fn collect_item_exposures(
                         // parameters (GAT `<T: crate::infra::Marker>` + where-clause), and its
                         // default target (`= crate::infra::Secret`, an observed type position the
                         // `dyn` collector already walks) — so a forbidden generic argument here is
-                        // not silently dropped as the raw-path push once did.
+                        // not silently dropped.
                         // The trait's params AND the GAT's own params are in scope inside the GAT's
                         // bounds/where-clause, so shadow both — a bare param there is a parameter,
                         // not a nominal type reachable through a same-named alias.
@@ -381,9 +381,9 @@ pub(crate) fn collect_item_exposures(
             let impl_params = type_param_names(&item.generics);
             // The impl block's own generic-param bounds and where-clause are impl-site-authored
             // public contract for the inherent API (`impl<T: crate::infra::Secret> Foo<T> { … }`),
-            // observed like a struct/enum/type def's generics (paths_in_generics) and the trait-impl
-            // collector's where-walk. Owner-qualified so it stays distinct from the block's methods /
-            // assoc items and from another block's generics; previously dropped here entirely.
+            // observed like a struct/enum/type def's generics (paths_in_generics_scoped) and the
+            // trait-impl collector's where-walk. Owner-qualified so it stays distinct from the
+            // block's methods / assoc items and from another block's generics.
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &impl_params),
                 &format!("impl <{owner}> (generics)"),
@@ -671,7 +671,7 @@ pub(crate) fn collect_trait_impl_exposures(
                 ));
             }
             // A const-param's *type* annotation (`impl<const N: crate::infra::X>`) is impl-site-
-            // authored — v1's `paths_in_generics` observes it, so the hand-rolled walk must too.
+            // authored, so this walk observes it too.
             syn::GenericParam::Const(cp) => {
                 let key = strip_raw(&cp.ident.to_string());
                 let seam = format!("{prefix} (where {key})");
@@ -686,8 +686,8 @@ pub(crate) fn collect_trait_impl_exposures(
                 let key = type_to_string(&pt.bounded_ty).unwrap_or_else(|| "_".to_string());
                 let seam = format!("{prefix} (where {key})");
                 // Both sides are impl-site-authored: a forbidden type in the bounded (LHS) type
-                // (`where crate::infra::X: Clone`) leaks as surely as one in the bound (RHS). v1's
-                // `paths_in_generics` observes both; the hand-rolled walk must not lose that.
+                // (`where crate::infra::X: Clone`) leaks as surely as one in the bound (RHS), so
+                // the walk observes both.
                 out.extend(tag_paths(
                     paths_in_type_scoped(&pt.bounded_ty, &params),
                     &seam,
@@ -703,8 +703,7 @@ pub(crate) fn collect_trait_impl_exposures(
     for impl_item in &item.items {
         match impl_item {
             // 3. assoc {name} — associated type/value bindings authored in the impl. Both an
-            //    associated `type X = …` and an associated `const X: … ` carry an impl-site type
-            //    (parity with v1's trait-def walk, which observes both).
+            //    associated `type X = …` and an associated `const X: … ` carry an impl-site type.
             syn::ImplItem::Type(assoc) => {
                 let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));
                 out.extend(tag_paths(paths_in_type_scoped(&assoc.ty, &params), &seam));
@@ -852,7 +851,7 @@ pub(crate) fn collect_item_dyn_exposures(
             let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
             // A `dyn` written in the impl block's own generic-param bound or where-clause
             // (`impl<T: AsRef<Box<dyn crate::Port>>> Foo<T>`) is exposed on the inherent API — the
-            // sibling path collector observes this position (via paths_in_generics), so the dyn rule
+            // sibling path collector observes this position (via paths_in_generics_scoped), so the dyn rule
             // must not lag it. Parallel to the struct/enum/trait arms, which already walk generics.
             out.extend(stamp_seam(
                 dyns_in_generics(&item.generics),
@@ -909,7 +908,7 @@ mod tests {
 
     #[test]
     fn an_inherent_impl_public_assoc_const_and_type_are_observed() {
-        // FN closed: a forbidden type in a public inherent-impl associated `const`'s type or
+        // A forbidden type in a public inherent-impl associated `const`'s type or
         // `type` alias's target is now observed (was skipped — only methods were).
         assert!(
             exposes(
@@ -951,9 +950,9 @@ mod tests {
 
     #[test]
     fn an_inherent_impl_generic_bound_is_observed() {
-        // FN closed: a forbidden type appearing only on the inherent impl's own generic-param bound
+        // A forbidden type appearing only on the inherent impl's own generic-param bound
         // or where-clause is now observed — parity with the trait-impl collector's where-walk and
-        // the struct/enum/type defs' `paths_in_generics` (both already observe this position).
+        // the struct/enum/type defs' `paths_in_generics_scoped` (both already observe this position).
         assert!(
             exposes(
                 "impl<T: crate::infra::Secret> Foo<T> { pub fn m(&self) {} }",

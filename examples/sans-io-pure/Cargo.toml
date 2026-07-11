@@ -1,0 +1,19 @@
+# Standalone adoption of the 天衡 (tianheng) shell's **`sans_io_pure`** composed profile.
+#
+# Its own workspace (`[workspace]` below) so its *deliberate* clock read and async leak are never
+# swept by Tianheng's workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`,
+# patching the family crates to local source so the committed `tianheng = "0.1"` still resolves.
+#
+# It depends on `tianheng` (not a single dimension) because `sans_io_pure` is a SHELL profile: it
+# folds a 圭表 clock boundary and a 渾儀 async-exposure boundary into one declaration — and a
+# dimension never composes its sibling; only the shell does (三儀 ⊥ 三儀).
+[package]
+name = "sans_io_kernel"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tianheng = "0.1"
+
+[workspace]

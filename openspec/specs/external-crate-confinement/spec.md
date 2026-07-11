@@ -19,9 +19,9 @@ severity (default `enforce`, `warn` available) and the baseline exactly like eve
 rule, and introduces no new builder-intermediate type (one method on the existing module draft
 stage). The rule is use-only and inherits the module scanner's stated bounds (cfg-blind,
 `#[path]`-blind, macro-blind, `extern crate`-blind); a deeper **inline-symbol-path** layer
-(`C::foo()` / `C::CONST` written with no `use`) is a stated forward bound, not this capability
-(see `BACKLOG.md`). Not `cargo-deny`'s lane — declared and per-module, not resolved and
-whole-graph.
+(`C::foo()` written with no `use`) is realized as the sibling `must_not_call_inline` rule
+(`inline-symbol-path-confinement`), which observes *calls* rather than `use` imports — not this
+capability. Not `cargo-deny`'s lane — declared and per-module, not resolved and whole-graph.
 
 ## Requirements
 

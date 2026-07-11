@@ -10,13 +10,15 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use syn::parse::Parser;
+use syn::visit::{self, Visit};
 
 use crate::crate_scope::{child_module_names, local_type_namespace_names};
 use crate::errors::missing_module_file_error;
-use crate::module_resolve::{locate_module_file, read_parse};
+use crate::module_resolve::{locate_module_file, read_parse, resolve_module_root};
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_target,
     collect_reexports, collect_uses, extern_verbatim_renamed, resolve_path, strip_raw,
+    type_to_string,
 };
 use crate::syn_util::has_path_attr;
 
@@ -163,6 +165,72 @@ fn canonicalize_source(file: &Path) -> Result<PathBuf, String> {
     })
 }
 
+/// Resolve a module's direct child `mod` declarations to the `(items, module path, child dir)` each
+/// subtree walk recurses into — the single copy of the descent skeleton and its false-negative-
+/// critical guards, shared by [`walk_module`], [`collect_subtree`] (`walk_subtree_modules`), and
+/// [`walk_unsafe`] (`scan_unsafe_sites`) so a fix to one guard cannot silently diverge across the
+/// three (the twin-drift bug class). Owns: the `#[path]` remap skip (a stated coverage bound, incl.
+/// the `cfg_attr`-wrapped spelling), the inline-vs-file dispatch, the symlink module-cycle guard (a
+/// re-reached canonical file is exit 2, never a stack overflow), and the `#[cfg]`-tolerance /
+/// non-cfg-missing-file guard (exit 2).
+///
+/// Children are returned in source order; each caller does its own per-module work, then recurses
+/// over them. All direct children are resolved before the caller recurses; since `visited` is
+/// monotonic over the module tree, the same files are reached in the same order and a re-reach is
+/// exit 2 regardless. An inline module's body is cloned (callers borrow their items).
+fn resolve_child_modules(
+    items: &[syn::Item],
+    module: &str,
+    child_dir: &Path,
+    crate_package: &str,
+    visited: &mut HashSet<PathBuf>,
+) -> Result<Vec<(Vec<syn::Item>, String, PathBuf)>, String> {
+    let mut children = Vec::new();
+    for item in items {
+        let syn::Item::Mod(module_item) = item else {
+            continue;
+        };
+        // A `#[path]`-remapped module is located off the conventional path; not observed (a stated
+        // coverage bound, incl. the `cfg_attr`-wrapped spelling), never a silent claim of cleanliness.
+        if has_path_attr(&module_item.attrs) {
+            continue;
+        }
+        let name = strip_raw(&module_item.ident.to_string());
+        let child_module = format!("{module}::{name}");
+        let sub_dir = child_dir.join(&name);
+        match &module_item.content {
+            // Inline `mod x { … }`: descend its lexical items; file-children under `x/`.
+            Some((_, inner)) => children.push((inner.clone(), child_module, sub_dir)),
+            // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`.
+            None => match locate_module_file(child_dir, &name) {
+                Some(file) => {
+                    // A file already visited (by canonical, symlink-resolved path) is a module cycle
+                    // — a symlinked directory looping the `mod` graph back on itself. Stop with a
+                    // scan error (exit 2 "cannot judge") rather than recursing into a stack overflow.
+                    if !visited.insert(canonicalize_source(&file)?) {
+                        return Err(format!(
+                            "cannot judge module '{child_module}' in package '{crate_package}': \
+                             its source file '{}' forms a module cycle (a symlink loop)",
+                            file.display()
+                        ));
+                    }
+                    let parsed = read_parse(&file)?;
+                    children.push((parsed.items, child_module, sub_dir));
+                }
+                // A `#[cfg]`-gated module may legitimately have no source file when the feature is
+                // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
+                // error. A non-cfg missing file is a real scan error: fail loud (exit 2).
+                None => {
+                    if !has_cfg_attr(&module_item.attrs) {
+                        return Err(missing_module_file_error(&child_module, crate_package));
+                    }
+                }
+            },
+        }
+    }
+    Ok(children)
+}
+
 fn walk_module(
     items: Vec<syn::Item>,
     module: String,
@@ -295,66 +363,79 @@ fn walk_module(
         }
     }
 
-    for item in items {
-        if let syn::Item::Mod(module_item) = item {
-            // A `#[path]`-remapped module is located off the conventional path; not
-            // observed (a stated coverage bound), never a silent claim of cleanliness.
-            if has_path_attr(&module_item.attrs) {
-                continue;
-            }
-            let name = strip_raw(&module_item.ident.to_string());
-            let child_module = format!("{module}::{name}");
-            match module_item.content {
-                // Inline `mod x { … }`: descend its lexical items; file-children under `x/`.
-                Some((_, inner)) => {
-                    walk_module(
-                        inner,
-                        child_module,
-                        child_dir.join(&name),
-                        crate_package,
-                        externs,
-                        visited,
-                        scan,
-                    )?;
-                }
-                // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`.
-                None => match locate_module_file(&child_dir, &name) {
-                    Some(file) => {
-                        // A file already visited (by canonical, symlink-resolved path) is a module
-                        // cycle — a symlinked directory looping the `mod` graph back on itself.
-                        // Stop with a scan error (exit 2 "cannot judge") rather than recursing
-                        // forever into a stack overflow.
-                        if !visited.insert(canonicalize_source(&file)?) {
-                            return Err(format!(
-                                "cannot judge module '{child_module}' in package '{crate_package}': \
-                                 its source file '{}' forms a module cycle (a symlink loop)",
-                                file.display()
-                            ));
-                        }
-                        let parsed = read_parse(&file)?;
-                        walk_module(
-                            parsed.items,
-                            child_module,
-                            child_dir.join(&name),
-                            crate_package,
-                            externs,
-                            visited,
-                            scan,
-                        )?;
-                    }
-                    // A `#[cfg]`-gated module may legitimately have no source file when the
-                    // feature is off (a standard optional-feature pattern) — a stated
-                    // coverage bound, not a scan error. A non-cfg missing file is a real
-                    // scan error: fail loud (exit 2), never a silent pass.
-                    None => {
-                        if !has_cfg_attr(&module_item.attrs) {
-                            return Err(missing_module_file_error(&child_module, crate_package));
-                        }
-                    }
-                },
-            }
-        }
+    for (child_items, child_module, sub_dir) in
+        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
+    {
+        walk_module(
+            child_items,
+            child_module,
+            sub_dir,
+            crate_package,
+            externs,
+            visited,
+            scan,
+        )?;
     }
+    Ok(())
+}
+
+/// Walk the anchored module's whole subtree — the module itself and every descendant (file-based
+/// `mod x;` and inline `mod x { … }` alike) — returning each module's path and the items it owns.
+/// The subtree analogue of [`crate::module_resolve::resolve_module_items`]: where that returns one
+/// module's items, this returns every module at or below the anchor, so a reaction can observe a
+/// "nowhere under here" property (e.g. no public `async fn` anywhere beneath a sans-I/O kernel).
+///
+/// Inherits the crate walk's guards, so a subtree reaction never silently under-reacts: a
+/// `#[path]`-remapped module is skipped (a stated coverage bound), a `#[cfg]`-gated fileless module
+/// is tolerated, a non-`#[cfg]` missing module file is a scan error (exit 2), and a symlink module
+/// cycle is a scan error (exit 2), never a stack overflow.
+pub(crate) fn walk_subtree_modules(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(String, Vec<syn::Item>)>, String> {
+    let (items, file, child_dir) = resolve_module_root(src_dir, root_file, module, crate_package)?;
+    // Seed the cycle guard with the anchor module's own file, so a descendant symlinking back to it
+    // is caught — the same discipline `scan_crate` applies from the crate root.
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    visited.insert(canonicalize_source(&file)?);
+    let mut out: Vec<(String, Vec<syn::Item>)> = Vec::new();
+    collect_subtree(
+        items,
+        module.to_string(),
+        child_dir,
+        crate_package,
+        &mut visited,
+        &mut out,
+    )?;
+    Ok(out)
+}
+
+/// Recurse the subtree from one module: descend each child `mod` (mirroring [`walk_module`]'s
+/// descent and its guards), then record this module's own `(path, items)`. The order of `out` is
+/// unspecified — a subtree reaction sorts its findings — so recording after descent is fine.
+fn collect_subtree(
+    items: Vec<syn::Item>,
+    module: String,
+    child_dir: PathBuf,
+    crate_package: &str,
+    visited: &mut HashSet<PathBuf>,
+    out: &mut Vec<(String, Vec<syn::Item>)>,
+) -> Result<(), String> {
+    for (child_items, child_module, sub_dir) in
+        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
+    {
+        collect_subtree(
+            child_items,
+            child_module,
+            sub_dir,
+            crate_package,
+            visited,
+            out,
+        )?;
+    }
+    out.push((module, items));
     Ok(())
 }
 
@@ -438,4 +519,181 @@ fn extract_derives_from_cfg_metas(
 
 fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("cfg"))
+}
+
+// --- Unsafe-site scan (`semantic-unsafe-confinement`) -------------------------
+
+/// One `unsafe` site observed in the crate: its enclosing (file) module and a stable label
+/// (`unsafe block`, `unsafe fn decode`, `unsafe impl Send`, `unsafe trait Zeroable`,
+/// `unsafe extern block`). The label is module-qualified at the finding layer for injectivity.
+pub(crate) struct UnsafeSite {
+    pub(crate) module: String,
+    pub(crate) label: String,
+}
+
+/// A `syn::visit::Visit` collector recording every executable-`unsafe` **code site** within the
+/// items it is fed: `unsafe fn` (free / inherent / trait-decl / trait-impl method), `unsafe impl`,
+/// `unsafe trait`, `unsafe extern` block, and `unsafe {}` expression block (deep in bodies). It is
+/// fed a module's items **minus top-level `mod`s** (the walk owns their descent); `visit_item_mod`
+/// is left at its **default (recursing)** so a `mod` declared *inside a fn/block body* — which the
+/// top-level walk never reaches — is still observed, attributed to the enclosing file module.
+#[derive(Default)]
+struct UnsafeSiteCollector {
+    labels: Vec<String>,
+    // Positional discriminator for a self type `type_to_string` cannot render (`_#n`), so two such
+    // `unsafe impl`s in one module stay distinct findings rather than masking each other.
+    unsafe_impl_ordinal: usize,
+}
+
+/// Render a trait path for an `unsafe impl` label — segment idents joined by `::` (raw-stripped),
+/// enough to keep two `unsafe impl`s of different traits distinct. No `quote`.
+fn render_trait_path(path: &syn::Path) -> String {
+    let lead = if path.leading_colon.is_some() {
+        "::"
+    } else {
+        ""
+    };
+    let segs: Vec<String> = path
+        .segments
+        .iter()
+        .map(|s| strip_raw(&s.ident.to_string()))
+        .collect();
+    format!("{lead}{}", segs.join("::"))
+}
+
+impl<'ast> Visit<'ast> for UnsafeSiteCollector {
+    fn visit_expr_unsafe(&mut self, node: &'ast syn::ExprUnsafe) {
+        self.labels.push("unsafe block".to_string());
+        visit::visit_expr_unsafe(self, node);
+    }
+
+    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+        if node.sig.unsafety.is_some() {
+            self.labels.push(format!(
+                "unsafe fn {}",
+                strip_raw(&node.sig.ident.to_string())
+            ));
+        }
+        visit::visit_item_fn(self, node);
+    }
+
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        if node.sig.unsafety.is_some() {
+            self.labels.push(format!(
+                "unsafe fn {}",
+                strip_raw(&node.sig.ident.to_string())
+            ));
+        }
+        visit::visit_impl_item_fn(self, node);
+    }
+
+    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
+        if node.sig.unsafety.is_some() {
+            self.labels.push(format!(
+                "unsafe fn {}",
+                strip_raw(&node.sig.ident.to_string())
+            ));
+        }
+        visit::visit_trait_item_fn(self, node);
+    }
+
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        if node.unsafety.is_some() {
+            // Owner-qualify by the implemented-for type so `unsafe impl Send for Foo` and
+            // `unsafe impl Send for Bar` in one module stay distinct findings — else a baseline of
+            // the first silently masks the second (a false negative). Lexical (`type_to_string`, no
+            // resolution — this is the light walk), mirroring the trait-path rendering above.
+            let owner = type_to_string(&node.self_ty)
+                .unwrap_or_else(|| format!("_#{}", self.unsafe_impl_ordinal));
+            self.unsafe_impl_ordinal += 1;
+            let label = match &node.trait_ {
+                Some((_, path, _)) => {
+                    format!("unsafe impl {} for {}", render_trait_path(path), owner)
+                }
+                None => format!("unsafe impl {owner}"),
+            };
+            self.labels.push(label);
+        }
+        visit::visit_item_impl(self, node);
+    }
+
+    fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
+        if node.unsafety.is_some() {
+            self.labels.push(format!(
+                "unsafe trait {}",
+                strip_raw(&node.ident.to_string())
+            ));
+        }
+        visit::visit_item_trait(self, node);
+    }
+
+    fn visit_item_foreign_mod(&mut self, node: &'ast syn::ItemForeignMod) {
+        if node.unsafety.is_some() {
+            self.labels.push("unsafe extern block".to_string());
+        }
+        visit::visit_item_foreign_mod(self, node);
+    }
+}
+
+/// Walk the whole crate from its root and collect every `unsafe` site with its enclosing module.
+/// Mirrors [`scan_crate`]'s descent (file + inline modules, symlink-cycle guard → exit 2, `#[path]`
+/// skipped as a stated bound, a non-`#[cfg]` missing module file → exit 2, a cfg-gated missing file
+/// tolerated). A separate, lighter walk than `scan_crate` (no re-export/alias/type-def resolution).
+pub(crate) fn scan_unsafe_sites(
+    src_dir: &Path,
+    root_file: &Path,
+    crate_package: &str,
+) -> Result<Vec<UnsafeSite>, String> {
+    let root = read_parse(root_file)?;
+    let mut sites = Vec::new();
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    visited.insert(canonicalize_source(root_file)?);
+    walk_unsafe(
+        root.items,
+        "crate".to_string(),
+        src_dir.to_path_buf(),
+        crate_package,
+        &mut visited,
+        &mut sites,
+    )?;
+    Ok(sites)
+}
+
+fn walk_unsafe(
+    items: Vec<syn::Item>,
+    module: String,
+    child_dir: PathBuf,
+    crate_package: &str,
+    visited: &mut HashSet<PathBuf>,
+    sites: &mut Vec<UnsafeSite>,
+) -> Result<(), String> {
+    // Feed the collector this module's items minus top-level `mod`s (walk-owned); body-nested
+    // `mod`s stay in and are caught by the collector's default `visit_item_mod` recursion.
+    let mut collector = UnsafeSiteCollector::default();
+    for item in &items {
+        if matches!(item, syn::Item::Mod(_)) {
+            continue;
+        }
+        collector.visit_item(item);
+    }
+    for label in collector.labels {
+        sites.push(UnsafeSite {
+            module: module.clone(),
+            label,
+        });
+    }
+
+    for (child_items, child_module, sub_dir) in
+        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
+    {
+        walk_unsafe(
+            child_items,
+            child_module,
+            sub_dir,
+            crate_package,
+            visited,
+            sites,
+        )?;
+    }
+    Ok(())
 }

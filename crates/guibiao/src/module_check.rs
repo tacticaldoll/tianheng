@@ -4,14 +4,16 @@ use serde_json::Value;
 
 use crate::cargo_metadata::{crate_root_file, find_package};
 use crate::errors::{
-    confine_external_crate_on_crate_error, crate_not_found_error, inline_module_target_error,
+    confine_external_crate_on_crate_error, crate_not_found_error, inline_empty_prefix_error,
+    inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
     missing_src_error, must_not_be_imported_by_on_crate_error,
     must_only_be_imported_by_on_crate_error, restrict_imports_to_on_crate_error,
     unknown_module_error, unreadable_governed_file_error,
 };
 use crate::module_scan::{
-    canonical_module_path, external_imports_with_importers, governed_files, imported_module_paths,
-    imports_with_importers, path_within, reachable_modules, rust_files,
+    InlineFinding, canonical_module_path, external_imports_with_importers, governed_files,
+    imported_module_paths, imports_with_importers, inline_symbol_findings, path_within,
+    reachable_modules, rust_files,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation};
 
@@ -310,6 +312,52 @@ pub(crate) fn check_module_boundary(
         return Ok(());
     }
 
+    // Inline-symbol-path confinement (layer b): the one rule that observes *calls* (and, under
+    // strict, any path mention) inside the governed subtree's bodies — macro bodies included —
+    // rather than `use` imports. The confined prefix is the violation *target* (so nested-prefix
+    // confinements on one subtree stay injective); the finding is the per-call resolved path (or a
+    // hazardous glob) plus its module.
+    if let ModuleRule::ConfineInlineSymbolPath {
+        prefix,
+        ending_with,
+        strict,
+    } = &boundary.rule
+    {
+        // Misdeclarations are loud (exit 2), never a silent no-op.
+        if prefix.trim().is_empty() {
+            return Err(inline_empty_prefix_error(&boundary.crate_package));
+        }
+        if ending_with.is_some() && *strict {
+            return Err(inline_narrow_and_strict_error(&boundary.crate_package));
+        }
+        if ending_with.as_ref().is_some_and(|verbs| verbs.is_empty()) {
+            return Err(inline_empty_verbs_error(&boundary.crate_package));
+        }
+        // Crate-wide files feed the `type`-alias / `pub use` resolution closure; the governed
+        // subtree's files are where calls are forbidden.
+        let all_files = governed_files(
+            &src_dir,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            root_relative.as_deref(),
+        );
+        let confined_prefix = canonical_module_path(prefix);
+        let findings = inline_symbol_findings(
+            &all_files,
+            &governed,
+            &root_modules,
+            prefix,
+            ending_with.as_deref(),
+            *strict,
+        )?;
+        for InlineFinding { finding, file } in findings {
+            push_module_violation(violations, &confined_prefix, &rule, finding, file, boundary);
+        }
+        return Ok(());
+    }
+
     // Each outbound rule reduces to one predicate over the governed module's observed
     // internal imports — all `crate::…` (the scanner already filters externals). The
     // file/import loop and the Violation it produces are shared; only the predicate (and,
@@ -345,7 +393,8 @@ pub(crate) fn check_module_boundary(
         }
         ModuleRule::MustNotBeImportedBy { .. }
         | ModuleRule::MustOnlyBeImportedBy { .. }
-        | ModuleRule::ConfineExternalCrate { .. } => {
+        | ModuleRule::ConfineExternalCrate { .. }
+        | ModuleRule::ConfineInlineSymbolPath { .. } => {
             unreachable!("the inbound / confinement rules are evaluated above and return early")
         }
     };

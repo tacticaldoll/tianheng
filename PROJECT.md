@@ -10,9 +10,10 @@ and Tianheng uses compiler/CI and runtime **reactions** to keep
 architectural shape from drifting. The source of truth is Rust code; TOML, Markdown, and
 reports are projections of it.
 
-It is the successor to **modou** (墨斗): modou proved the static dimension as a single
-focused crate; Tianheng keeps that proven core and grows it into a **crate family** of
-observation dimensions — without becoming a god crate.
+It grows from **modou** (墨斗): modou proved the static dimension as a single focused crate,
+and 圭表 is derived from it — but modou lives on as an independently-developed sibling project,
+not a line Tianheng supersedes. Tianheng keeps that proven core and grows it into a **crate
+family** of observation dimensions — without becoming a god crate.
 
 ## What Tianheng is — and is not
 
@@ -93,15 +94,19 @@ false negative, and only the reaction can foreclose it.
   the dimensions, so the static and semantic dimensions read the workspace through **one** source
   of truth, not two hand-copied twins that drift apart (the v0.1.6 SSOT extraction — see Decisions).
 - **`guibiao` (圭表) — the static observation core.** The gnomon: it reads the cast
-  shadow — imports and dependencies. The dependency-light static engine, derived from
+  shadow — imports, dependencies, and inline symbol-path calls (the clock-free
+  `must_not_call_inline` confinement). The dependency-light static engine, derived from
   modou: declare crate- and module-import boundaries, observe from `cargo metadata` (read
-  through 星表) and source `use` scans, compare, react. Pure functional core — no shell. Depends on `xuanji`
+  through 星表) and source `use` / symbol scans, compare, react. Pure functional core — no shell. Depends on `xuanji`
   (the reaction model), `xingbiao` (the metadata substrate), and `serde_json` only; the
   report/constitution *assembly* (which folds in the static `Coverage`) lives here, not in the model.
 - **`tianheng` (天衡) — the shell.** The celestial balance that weighs declared against
   observed: the imperative shell + facade — CLI (arg parsing, filesystem, stdout/stderr),
   the `run` reaction that composes every dimension into one, and the re-exported public
-  surface. Depends on every dimension it composes (`guibiao` + `hunyi` + `louke`).
+  surface. Depends on every dimension it composes (`guibiao` + `hunyi` + `louke`). It is also where
+  cross-cutting **composed profiles** live (e.g. `sans_io_pure`, folding a 圭表 clock-free and a 渾儀
+  synchronous-API boundary into one declaration) — a dimension never composes its sibling, only the
+  shell does (三儀 ⊥ 三儀).
 
 **Functional core ⊥ imperative shell, at crate granularity.** `guibiao` must not depend
 on `tianheng`. This is the crate-level upgrade of modou's module-level `engine ⊥ runner`,
@@ -119,8 +124,12 @@ selects governance by depending on the dimensions they want:
   additions to that flagship exposure surface — **re-export exposure** (a named public `pub use`
   of a forbidden type is itself an exposure, default-on — an API-compatible but behavior-changing
   false-negative closure) and **trait-impl exposure** (the opt-in `.including_trait_impls()`
-  depth, surfacing a trait impl's impl-site-authored positions) — all detailed in the Decisions
-  section. The heavy `syn` dependency is quarantined here, never in the core.
+  depth, surfacing a trait impl's impl-site-authored positions); **(v0.1.8):** a **visibility
+  ceiling** (`max_visibility(Crate|Super|Module)` — the binary `must_not_declare_pub` generalized to
+  a rank), **`unsafe`-confinement** (`UnsafeBoundary::only_under([…])` — `unsafe` confined to a
+  declared subtree, the non-compiler-expressible complement of `#![forbid(unsafe_code)]`), and an
+  opt-in **whole-subtree scope** for async-exposure (`including_submodules`) — all detailed in the
+  Decisions section. The heavy `syn` dependency is quarantined here, never in the core.
 - **`louke` (漏刻)** — runtime observation. **Built (v0.1.0):** origin-assertion (a
   declared seam's `only_origins` allowlist), in two faces — the prod probe
   (`assert_boundary!`, fail-closed, a structured event by default, panic opt-in) and the
@@ -157,11 +166,16 @@ govern-by-reaction, never a thing the tool wields.
 
 Record significant decisions here (the *why*; specs and code carry the *what*).
 
-- **Reborn from modou as a crate family.** modou is frozen/complete at its own `0.1.1`;
-  Tianheng starts fresh (clean git history, clean SemVer from `0.1.0`) rather than
-  expanding modou's single crate into a god crate. The runtime dimension *must* be a
-  separate crate (it ships into production and must stay light), so a family is the
-  destiny — but members are born only when built.
+- **Reborn from modou as a crate family.** modou was taken as frozen/complete at its own
+  `0.1.1` when Tianheng was reborn; Tianheng started fresh (clean git history, clean SemVer
+  from `0.1.0`) rather than expanding modou's single crate into a god crate. The runtime
+  dimension *must* be a separate crate (it ships into production and must stay light), so a
+  family is the destiny — but members are born only when built. *(Amended 2026-07: modou is
+  unfrozen and now develops independently in its own repo — a living sibling, not a superseded
+  ancestor. Tianheng retains all three dimensions including the static 圭表, does not reroute
+  static-only users to modou, and 圭表 stays derived-from-modou by lineage. How modou evolves —
+  including whether it depends on `guibiao`/`tianheng` — is out of Tianheng's scope; the two do
+  not share a workspace, so no shared-shell / born-when-built commitment is pulled forward.)*
 - **The static core is `guibiao`, not `tianheng-core`.** Named by its stable identity
   (the gnomon, the static instrument, modou's derivative), not by a temporary role ("the
   whole core back when it was the only dimension").
@@ -835,3 +849,276 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   reaction — a first adopter needing a compatibility promise, a 儀 adopted standalone, an API that
   hurts in use, or API convergence — never the calendar. See BACKLOG "Version horizons" for the
   operational split.
+- **(v0.1.8) Severity is centrally gated and boundary-inherited — and this coverage invariant is
+  prose, not a reaction (a bright-line instance).** Every boundary reaction inherits its declared
+  severity, and the gating decision lives in exactly **one** place — `xuanji::Outcome::exit_code()`:
+  warn-only or fully-baselined → exit 0, any non-baselined `Enforce` → exit 1. No dimension
+  re-implements the exit rule; each only *produces* `Outcome::Violations(report)` and the shell folds
+  them, so `Severity`'s meaning cannot drift per-dimension. Propagation is structural, not
+  per-capability: the 圭表 module reaction stamps `boundary.severity` at a **single** `Violation::new`
+  site, so all six `ModuleRule` variants inherit it (`must_not_call_inline` included), and 圭表/渾儀
+  both dedup violations by `id()` keeping the **more severe** on a collision (`Enforce` dominates
+  `Warn` — spelled out because `Severity` is `#[non_exhaustive]` with no `Ord`), the guard that stops
+  a `warn` duplicate from masking an `enforce` one, which would silently drop exit-1 to exit-0, the
+  one forbidden bug. **漏刻's CI face carries the one deliberate asymmetry, recorded so it does not
+  read as an oversight:** only the *declared-but-unprobed* coverage reaction inherits
+  `boundary.severity()` (a `warn` runtime boundary is advisory, not a CI failure); the three
+  **wiring-integrity** reactions — a seam declared twice, a probe naming an undeclared seam, an
+  un-auditable non-literal probe — are always `Enforce` **by design**, because they are
+  misconfigurations (always wrong, not gradable architectural drift you would warn-adopt), mirroring
+  the prod face's fail-loud `install`. This whole invariant **stays prose and is not migrated to a
+  reaction** — itself an application of the "Declaration integrity" bright line above: "gating lives
+  in one place" is a code-shape property no boundary observes (reacting to it would name a capability
+  with no proven drift, against the drift law), and "why 漏刻's three are `Enforce`" is *rationale
+  explaining a human choice*, which the bright line says never migrates. The real backstop against a
+  future dimension re-implementing the exit rule is **潛移** (the idiom — every dimension returns
+  `Outcome`, only the shell projects it through `exit_code()`), not a manufactured gate. Architecture
+  recorded here, kept honest by the tests; **not** an OpenSpec change.
+- **(v0.1.8) `sans_io_pure` — the first shell-composed profile, gated honest.** A pure kernel's two
+  *source-observable* axes — it reads no ambient clock, and its public API exposes no `async fn` —
+  were already two shipped reactions (圭表 `must_not_call_inline` + 渾儀 `must_not_expose_async_fn`).
+  `Constitution::sans_io_pure(SansIoPure::in_crate(c).module(m).reading_clock_via(prefix, verbs).because(r))`
+  folds them into one declaration. It lives in the **shell** (三儀 ⊥ 三儀: a dimension never imports
+  its sibling; only 天衡 composes) and adds **no new requirement** — it emits two already-spec'd
+  reactions verbatim — so, like the `SemanticBoundaries` facade and the 璇璣 extraction, it is a
+  Decision kept honest by tests, **not** an OpenSpec change. Three calls, each surfaced or hardened by
+  adversarial review: (1) **Honest scope, nothing baked.** The name is the recognized domain term, but
+  the profile governs the *clock* and *async* axes only — `fs`/`net`/`env` stay the adopter's to add
+  explicitly. The clock marker set (prefix + read verbs) is **not** baked: the adopter supplies it via
+  `reading_clock_via`, so a second sans-I/O consumer's needs cannot silently diverge from a frozen
+  default. A *batteries-included* variant (a default marker set) is deliberately **deferred to a second
+  consumer** — the drift-law promotion gate applied to a convenience: the composite *pairing* is proven
+  (the surfacing adopter hand-rolls both halves), but the default *content* is what a second domain
+  reveals; the over-claim risk is bounded because the name appears in no projection (only the adopter's
+  source) — the two emitted boundaries and the reason do. (2) **Fluent, not flat — a false-negative-safe
+  surface.** A flat `(crate, module, prefix, …, reason)` method would put four swappable `&str`
+  adjacent; a caller transposing the confinement prefix and the reason compiles, resolves nothing, and
+  never reacts — the one forbidden bug, and precisely what the whole fluent DSL exists to foreclose. So
+  the profile is a builder where each argument is anchored by its own method; severity is the
+  boundaries' own `.warn()` (one idiom, not a second), applied to both. (3) **Faithful composition is
+  the test, not the reaction.** The two atoms already carry reacting tests in their crates, so
+  `sans_io_pure` is tested by *projection-equality* against the hand-composed pair — every
+  reaction-affecting field (prefix, verbs, severity, reason) is in the projection, so equal projection
+  ⇒ equal boundaries — with a non-canonical-marker case guarding the no-bake rule. `crates/tianheng`
+  only; additive / API-compatible → **patch** (0.1.8).
+- **(v0.1.8) `max_visibility` — a visibility *ceiling* depth, resolved false-negative-safe on the
+  `pub(in P)` corner.** 渾儀's binary `must_not_declare_pub` generalizes to a parameterized ceiling
+  `max_visibility(Crate|Super|Module)`: a direct item reacts iff its declared-visibility **rank**
+  (`pub`=3 > `pub(crate)`=2 > `pub(super)`=1 > private/`pub(self)`=0) is strictly above the ceiling.
+  Depth, not width — same `syn` source, same module descent, same observed item set; only the per-item
+  predicate and the finding string change. `must_not_declare_pub` becomes the `Crate`-ceiling sugar,
+  **byte-stable** in findings, rule string, and baselines (the non-breaking constraint: `item_finding`
+  at rank 2 reproduces the old `pub_item_description` exactly). Admission holds: declarative-not-lint
+  (Crate/Super/Module are genuine per-project intent), non-compiler-expressible (rustc accepts
+  *widening* a `pub(crate)` declaration to `pub`; the ceiling governs the declaration's evolution),
+  anchorable (a module). The one non-obvious call, recorded because it is the false-negative-safety
+  crux: `pub(in P)` is matched **whole and single-segment** (`crate`/`super`/`self`); **every other
+  restricted form** — a multi-segment path such as `pub(in super::super)` (which reaches the
+  grandparent's whole subtree, *broader* than `pub(super)`), a leading-`::` path, an unrecognized
+  single segment — falls to a `match` catch-all and ranks **Crate (2), a conservative upper bound**. A
+  `pub(in P)` path is always an in-crate ancestor, so the item is at most crate-visible; ranking every
+  unrecognized restricted form Crate therefore **never under-reacts** (the one forbidden bug is
+  foreclosed), and at worst **over-reacts** under a Super/Module ceiling when the real path is narrow —
+  a stated bound, loud-over-reaction-over-silent-pass, the same posture as dyn's empty-operand and the
+  glob fail-closed. A first-segment match (`super`→Super) would have silently passed `pub(in
+  super::super)` under a Super ceiling — the exact defect an apply-stage adversarial review is aimed at,
+  guarded here by a rank unit test. The rule string encodes the ceiling (`Crate` keeps the legacy
+  string; `Super`/`Module` are distinct, injective across the whole semantic family), and the finding
+  carries the item's declared visibility so items differing only in visibility never collapse. Ships as
+  an OpenSpec change modifying `semantic-visibility-boundary`; additive → **patch** (0.1.8).
+- **(v0.1.8) `UnsafeBoundary` — confinement-only by admission, and the body-nested-`mod` false
+  negative the review caught.** A new 渾儀 capability confines `unsafe` (blocks, `unsafe fn`/`impl`/
+  `trait`, `unsafe extern`) to a declared subtree: `UnsafeBoundary::in_crate(p).only_under([subtrees])`
+  reacts on a site outside every allowed subtree. **The admission-critical decision is that it is
+  confinement-only, never a crate-wide on/off.** The pure "crate is `unsafe`-free" case is deliberately
+  excluded because `#![forbid(unsafe_code)]` does it *stronger* (compile-time, unbypassable); an empty
+  or crate-root `only_under` is a **constitution error** (exit 2) pointing at `#![forbid]`. This is what
+  keeps the capability declarative-not-lint under the semantic admission test: it governs *where*
+  `unsafe` lives (architectural intent — two crates can confine it differently and both be right),
+  never *whether* it may exist (the compiler's opinion-free job). It reuses the whole-crate-scan family
+  shape (a `syn::visit` `UnsafeSiteCollector` per module over a dedicated walk that inherits
+  `scan_crate`'s symlink-cycle / missing-file / `#[path]` guards; per-module findings via
+  `per_finding_file`, `AllowlistGap` polarity, a fixed rule string with the allowed set as projected
+  configuration — all mirroring trait-impl-locality). Two false-negative-safety calls, both surfaced by
+  adversarial review: (1) the **propose** review caught that making `visit_item_mod` a no-op *and*
+  excluding `Item::Mod` would silently drop `unsafe` in a `mod` declared inside a fn body — fixed by
+  leaving `visit_item_mod` at its default (recursing) and filtering only **top-level** `mod`s (walk-
+  owned), so a body-nested `mod`'s `unsafe` is caught while a top-level inline `mod` is not double-
+  counted; (2) the same review demoted an over-broad "no essential gap" claim to **explicit stated
+  bounds** — `#[unsafe(...)]` attributes, bare `unsafe fn` pointer *types*, and plain `extern "C" {}`
+  blocks (no keyword; their call sites still react) are lexical `unsafe` tokens that are not executable-
+  `unsafe` code sites, declared out of scope rather than silently missed. Findings are per-module,
+  per-kind (anonymous blocks dedup per module — the confinement unit is "this module has `unsafe`
+  outside the subtree", so a fragile per-block ordinal is deliberately avoided; the trait is in an
+  `unsafe impl` finding for injectivity). Ships as the OpenSpec change `semantic-unsafe-confinement`;
+  additive → **patch** (0.1.8).
+- **(v0.1.8) Async-exposure gains an opt-in *subtree* scope — the false negative dogfooding
+  surfaced, fixed at the source.** The 渾儀 async-exposure boundary governs a module's **own** public
+  seam by design ("this declared seam is synchronous", anchor scoping). Dogfooding the shell's
+  `sans_io_pure` profile on 璇璣 exposed a latent false negative in the *profile's* whole-crate use:
+  it pairs a 圭表 `must_not_call_inline` clock boundary (subtree-wide, filesystem-based) with the
+  seam-only async boundary, so anchored at `crate` the two scopes coincide **only for a single-file
+  crate** — the moment such a crate grows a submodule with a public `async fn`, the clock half still
+  reacts while the async half silently does not. Rather than paper over it with honest-prose or a
+  structure-pin on 璇璣, the fix is **at the source**: an **opt-in** `including_submodules()` on
+  `AsyncExposureBoundary` (default OFF, so an existing boundary is byte-identical in reaction and
+  projection — the same shape as `SemanticBoundary::including_trait_impls`). When set, the reaction
+  descends the anchored module's whole subtree, emitting a per-module finding for every public
+  `async fn` at or below the anchor; `sans_io_pure`'s async half opts in, so a pure kernel is
+  sans-I/O *throughout*. The subtree walk (`walk_subtree_modules`) is a **rooted** analogue of the
+  crate-scan family's `walk_module`, inheriting its guards verbatim (`#[path]` skip as a stated
+  bound, `#[cfg]`-fileless tolerance, non-cfg missing → exit 2, symlink cycle → exit 2). Two
+  false-negative-safety calls the adversarial review confirmed: (1) the violation `target` stays the
+  boundary **anchor** (not the deeper enclosing module), so identity `(target, rule, finding)` is
+  stable — enabling the opt-in adds only new, deeper findings and never re-identifies a seam finding
+  (baseline stability); a seam finding is byte-identical to the single-module path (same collector,
+  module string, `ordinal`, and `collect_uses`). (2) `push_multi_module_violations` flattens findings
+  to `(anchor, rule, finding)`, so cross-module distinctness rests on the finding string carrying the
+  **module-qualified owner** — always true for a valid inherent impl (`canonical_self_owner` prefixes
+  the module), pinned by a two-submodules-same-method test. A body-nested `mod` is a stated bound (not
+  public API, unlike unsafe-confinement's body-code observation — differing rule semantics, not a
+  gap); `#[path]` parity between the clock (fs) and async (mod-tree) halves is the semantic
+  dimension's stated bound, disclosed in the `sans_io_pure` doc rather than over-claimed. Ships as the
+  OpenSpec change `async-exposure-subtree-scope`; additive / API-compatible → **patch** (0.1.8).
+- **(v0.1.8) Self-governance grows a *semantic* dimension — dogfood `sans_io_pure` on 璇璣.** Until
+  now the self-constitution (`tianheng_constitution()` in `self_governance.rs`) dogfooded only 圭表
+  (crate dependency allowlists); the 渾儀 dimension governed adopters but never Tianheng itself. The
+  self-constitution is migrated from `GnomonConstitution` to the full `Constitution` and now carries
+  its first cross-cutting semantic self-boundary: `sans_io_pure` on 璇璣 — the crate that most owes the
+  property, being the measure-only reaction model that reads no ambient clock and exposes no `async`.
+  It reacts across both axes (圭表 must-not-call-inline `std::time::…::now`, 渾儀 must-not-expose an
+  async public fn), asserted as **two independent Clean gates** (not merged) so a drift names the
+  dimension it broke — 三儀 ⊥ 三儀 exercised on self. **No new public API, no OpenSpec change:** the
+  test composes the existing public `check` / `check_all`, and the self-law projection is
+  dimension-agnostic (it grows to include the two new boundaries, byte-checked by
+  `self_law_projection_is_fresh`). This is the *second consumer* that retroactively validates the
+  `sans_io_pure` pairing on real code — the surfacing adopter was `pacta`, the self-law is the second.
+  (This dogfood is what surfaced the `async-exposure-subtree-scope` false negative above; with that
+  fix landed, `sans_io_pure`'s async half is subtree-scoped, so 璇璣's "exposes no async" self-claim
+  holds whole-crate, not merely because 璇璣 is single-file today.)
+- **(v0.1.8) The family declares `#![forbid(unsafe_code)]`, and that is why `UnsafeBoundary` is *not*
+  self-dogfooded.** Every workspace crate is `unsafe`-free; each now says so with
+  `#![forbid(unsafe_code)]` at its crate root — the strongest, compile-time, unbypassable statement. By
+  the `UnsafeBoundary` admission decision above (confinement-only; the crate-wide ban is `#![forbid]`'s
+  *stronger* job), applying `UnsafeBoundary` to a family crate would be a vacuous boundary that can
+  never react. So `UnsafeBoundary`'s demonstration belongs in an **example** (a crate with genuinely
+  confined `unsafe`), never in self-governance — the honest scope kept literal. Likewise
+  `max_visibility` is not self-dogfooded absent a real "this module must not leak `pub` past the crate"
+  intent; its demonstration too is an example's job. Source hardening + a test's law, no reaction of its
+  own → **patch** (0.1.8).
+- **(v0.1.8) `#[cfg_attr(<pred>, path = "…")]` is recognized as a remap in both dimensions —
+  implementation caught up to the spec.** A module written with the combined spelling
+  `#[cfg_attr(windows, path = "os/windows.rs")]` (== the separate `#[cfg(windows)] #[path = "…"]`,
+  a legal rustc cross-platform form) was NOT recognized as a `#[path]` remap by either dimension's
+  module-graph probes, though the separate spelling was. The consequence was **dimension-dependent
+  and included a silent false negative**: 圭表 treated `crate::os` as an ordinary file module and,
+  when no conventional file existed, scanned nothing yet reported clean (exit 0 — the cardinal sin);
+  渾儀 hit a spurious `missing_module_file_error` (exit 2, ungovernable). The
+  `inline-symbol-path-confinement` spec **already** stated a "#[path]-remapped module (including a
+  cfg_attr-wrapped #[path])" is a bound — so this is an *implementation-vs-spec bug*, fixed by making
+  the implementation honor what the spec declared, **not an OpenSpec change**. Now both dimensions
+  treat a `cfg_attr(path)` as the documented `#[path]` bound (cfg-blind: a conditional remap is a
+  remap either way), so a boundary on such a module fails loud (exit 2) and no conventional file is
+  silently governed as the wrong module. The false-negative-critical care is on the **inverse**: a
+  `cfg_attr` that carries no `path` meta must stay a normal governed module (over-detection would
+  drop it = a new false negative). Guibiao is `serde_json`-only, so its detector is a byte scanner
+  that (a) skips the cfg **predicate** (the first meta) before matching, mirroring hunyi's syn
+  `metas.skip(1)`, so a `path` cfg *key* is not mistaken for a remap, and (b) matches only a genuine
+  depth-1 `path =` name-value — surfaced by adversarial review, which caught the missing
+  predicate-skip (an over-detection + cross-dimension inconsistency). Found by the 打磨 bug-hunt.
+  Bug fix + tests → **patch** (0.1.8). **Follow-up (second bug-hunt round):** the single-level fix
+  still missed a *nested* `#[cfg_attr(a, cfg_attr(b, path = "…"))]` — both detectors went one level,
+  so guibiao again silently passed (exit 0) while hunyi failed loud. Both detectors now **recurse**
+  into a nested applied `cfg_attr` (skipping its predicate at each level), and both require a
+  `path = "…"` **name-value** (a bare `path` / `path(…)` is not a remap) — closing the residual
+  silent false negative and aligning the twins on every spelling. The recursion terminates (each
+  byte-scanner call takes a strictly shorter slice) and cannot over-detect (only a genuine applied
+  `path` name-value matches). Adversarially reviewed (25 inputs executed through both dimensions).
+- **(v0.1.8) The 圭表 token scanner's `self`/`super` resolver is shared, not triplicated —
+  within-crate, so no dimension line is crossed.** The inline-symbol-path scanner (`symbol_scan.rs`,
+  v0.1.8) had added two more copies of the `self`/`super` relative-path resolution skeleton already
+  in `use_scan.rs::normalize_module_path` — three byte-identical copies of the subtle
+  `super`-pop loop + the **over-pop guard** (a `super` chain past the crate root returns `None`, so a
+  non-crate-rooted path is never mistaken for an outward edge). Extracted into
+  `path_vocab::resolve_self_super` (the documented shared foundation that already owns
+  `canonical_module_path` / `path_within`), plus the one-line crate-root-shadow predicate as
+  `is_crate_root_shadow`. **Not** the cross-dimension resolver consolidation BACKLOG defers (that is
+  guibiao's *token* resolver vs 渾儀's *syn* resolver — a 三儀 ⊥ 三儀 / syn-quarantine concern); this
+  is entirely within guibiao's syn-free scanner, one crate. Pure refactor, adversarially reviewed as
+  strictly behavior-preserving (every `self` / single-/multi-/over-popping-`super` case at all three
+  sites traced to byte-identical output); 193 guibiao tests unchanged. Surfaced by the 打磨
+  hardcoding audit; no spec change → **patch** (0.1.8).
+- **(v0.1.8) 渾儀's three whole-crate/subtree module walks share one module-descent helper —
+  within-crate, so 三儀 ⊥ 三儀 does not bind.** `hunyi/scan.rs` grew a third whole-crate/subtree walk
+  when `walk_subtree_modules`/`collect_subtree` landed (async-exposure subtree scope), joining
+  `walk_module` (the `scan_crate` closure) and `walk_unsafe` (`scan_unsafe_sites`). All three carried
+  a **byte-identical** module-descent loop with the four false-negative-critical guards (`#[path]`
+  remap skip, inline-vs-file dispatch, symlink-cycle → exit 2, `#[cfg]`-tolerance / non-cfg-missing →
+  exit 2). Three copies is the twin-drift bug class — a future fix to one guard silently diverging the
+  others — the same class the 星表 metadata extraction (v0.1.6) and the louke `skip_block_comment`
+  sharing were written to kill. Extracted the descent into one helper `resolve_child_modules`, which
+  each walk calls before recursing (doing its own per-module work). **Crucially this does NOT violate
+  三儀 ⊥ 三儀:** that law forbids a *dimension importing a sibling dimension*; all three walks live in
+  one crate (渾儀), one file — the cross-crate consolidations the duplication audit surfaced (guibiao's
+  token walk, louke's probe scanner) stay **rejected-by-design** (sharing them would force `syn` into
+  the light core or couple the dimensions). The extraction is a **pure refactor**: adversarial review
+  proved it strictly behavior-preserving — `visited` is monotonic over the same module tree, so the
+  eager child-resolution is outcome-equivalent to the former lazy interleaving (OK ⟺ OK, Err ⟺ Err;
+  only which module a cycle/missing-file error *names* can differ, asserted by no test). The one cost
+  is an inline module's body is now cloned (the callers borrow their items). No spec change → **patch**
+  (0.1.8).
+- **(v0.1.8) Projection consistency: one runtime rule-line formatter, and anchor parity across all
+  three `list` formats.** Two drift/parity fixes surfaced by the 打磨 consistency audit. (1) The
+  runtime seam rule *label* was already the shared `RUNTIME_SEAM_RULE` const, but the folded
+  `… (only origins: A, B)` **wrapper** was hand-copied in two places — the prod reaction
+  (`check_crossing`'s violation `rule`) and the `list --format text` projection — the twin-drift bug
+  class. Extracted `louke::runtime_seam_rule_line(&[&str])`, called by both, so the human-readable
+  line is written once. The JSON projection deliberately keeps the label bare with origins as a
+  field, so it is unaffected (the folded style matches the dyn/impl text projection). (2) A boundary's
+  durable governance `anchor` surfaced in the JSON and Markdown `list` projections and in the `check`
+  report, but **not** in `list --format text` — a real three-format parity gap. Added an emit-when-set
+  `anchor:` line to every text boundary block (the same discipline the operand / `including_*` opt-ins
+  use), so a boundary without an anchor stays byte-identical. Both locked by tests (the rule-line is
+  shared by reaction and projection; the anchor appears in text iff set). Deferred as lower-value
+  minor tidies (noted, not done): annotating the deliberate-vs-drifted hunyi/guibiao twin error
+  strings, naming the runner's non-`Outcome` exit-code literals, and a `STRUCTURAL`-keys guard test.
+  No spec change → **patch** (0.1.8).
+- **(v0.1.8) Two new standalone examples for the capabilities the family cannot self-demo.** The
+  0.1.8 capabilities were dogfooded and unit-tested, but the `examples/` set (a BACKLOG track-1
+  role-split: a violating subject as an excluded sub-workspace + a green driver asserting the
+  reaction) covered only the older `must_not_import` / `must_not_expose` / `only_origins`. Added two
+  more, following the same pattern (own `[workspace]`, committed `= "0.1"` dep patched to local by
+  `scripts/test_examples.sh`, a `tests/reaction.rs` that asserts the exit code AND a discriminating
+  does-not-react case). (1) **`examples/unsafe-confinement`** — the flagship, the one capability that
+  *structurally* cannot be shown inside the family (every family crate is `#![forbid(unsafe_code)]`,
+  so a self-applied `UnsafeBoundary` would be vacuous): a crate with real `unsafe` confined to
+  `crate::ffi` and a stray `unsafe` in `crate::net` that reacts, plus the confinement-only exit-2
+  guard (an empty `only_under` points at `#![forbid]`). (2) **`examples/sans-io-pure`** — the shell's
+  `sans_io_pure` profile on `tianheng`, a `crate::kernel` breaking both axes (an inline
+  `std::time::…::now()` clock read + a `pub async fn` in a **submodule**), demonstrating in one shot
+  the profile, the clock half, and the async **subtree** scope — with the load-bearing discriminator
+  that a seam-only async boundary misses the submodule. `max_visibility` gained a demonstration as
+  two `tests/reaction.rs` cases on a new `crate::internal` in `examples/hunyi-standalone` (a `pub`
+  item breaches the `Crate` ceiling; the neighbouring `pub(crate)` passes it but reacts under the
+  stricter `Super` ceiling — the rank-not-binary depth). All wired into `test_examples.sh` (the
+  sans-io-pure entry also asserts the JSON carries BOTH a `module` and a `semantic` violation, so a
+  silently-dropped axis fails CI). Examples only; no crate change → **patch** (0.1.8).
+- **(v0.1.8) The `unsafe impl` finding is owner-qualified — the self type joins the identity, not
+  just the trait.** A post-diff adversarial review found an `unsafe impl`'s finding rendered only its
+  trait (`unsafe impl Send in crate::net`), so `Send for Foo` and `Send for Bar` in one out-of-subtree
+  module collapsed to one finding: baseline the first and the second `unsafe` site passes unobserved —
+  a false negative, the one forbidden class. The label now renders `unsafe impl {trait} for {self-type}`,
+  mirroring the semantic dimension's own trait-impl-locality finding (already owner+trait-qualified for
+  exactly this "a baseline cannot mask a new one" reason) and the spec's standing no-false-negative
+  clause; the distinct-findings scenario is extended to name the self-type axis. The self type is
+  rendered by the shared lexical `type_to_string` (the never-collapse-to-`None` renderer the exposure
+  hearts use) with a positional `_#n` fallback for an unrenderable type — the light `unsafe` walk stays
+  resolution-free. Not an OpenSpec capability change (the requirement is unchanged; the code is brought
+  into fuller compliance with it) → **patch** (0.1.8).
+- **(v0.1.8) The 圭表 type-alias resolver skips a defaulted generic parameter's `=`.** The same review
+  found `type_aliases` stopped at the first `=`, so `type Clock<Tz = LocalTz> = std::time::SystemTime;`
+  resolved `Clock` to the default `LocalTz` instead of its real target — a confined clock reached through
+  the alias would pass unobserved (a false negative). The scan to the aliasing `=` now skips a `<…>`
+  parameter list whole (via the shared `skip_angles`), and the target runs to the top-level `;` honoring
+  `[]`/`()`/`{}` nesting (an inner `[T; N]` `;` no longer truncates it). Behavior-preserving for an
+  ordinary `type X = a::b::C;` → **patch** (0.1.8).

@@ -15,6 +15,7 @@
 //!
 //! Govern by reaction, not instruction.
 
+#![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
 use std::path::{Path, PathBuf};
@@ -35,7 +36,8 @@ mod errors;
 use errors::unreadable_workspace_error;
 #[cfg(test)]
 use errors::{
-    confine_external_crate_on_crate_error, inline_module_target_error,
+    confine_external_crate_on_crate_error, inline_empty_prefix_error, inline_empty_verbs_error,
+    inline_module_target_error, inline_narrow_and_strict_error,
     must_not_be_imported_by_on_crate_error, must_only_be_imported_by_on_crate_error,
     restrict_imports_to_on_crate_error, unknown_module_error,
 };

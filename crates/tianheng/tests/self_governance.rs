@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use guibiao::check_and_cover;
 use tianheng::prelude::*;
-use tianheng::{Boundary, GnomonConstitution, Rule, constitution_markdown};
+use tianheng::{Boundary, Rule, check_all, constitution_markdown};
 
 /// The Tianheng workspace manifest. `None` when it is absent — e.g. inside a published
 /// `.crate` tarball, which has no workspace root — so the self-governance gate SKIPS rather
@@ -65,8 +65,8 @@ fn workspace_manifest() -> Option<PathBuf> {
 ///
 /// A wrong boundary here is fixed by a human-reviewed amendment, never by quietly
 /// weakening this function to make CI pass.
-fn tianheng_constitution() -> GnomonConstitution {
-    GnomonConstitution::new("tianheng")
+fn tianheng_constitution() -> Constitution {
+    Constitution::new("tianheng")
         .boundary(
             CrateBoundary::crate_("xuanji")
                 .restrict_dependencies_to(["serde_json"])
@@ -148,6 +148,22 @@ fn tianheng_constitution() -> GnomonConstitution {
                      stands on every dimension it gates",
                 ),
         )
+        // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on
+        // 璇璣, the crate that most owes the sans-I/O property. It spans two dimensions (圭表
+        // must-not-call-inline for the clock, 渾儀 must-not-expose-async for the API), so it is the
+        // shell's to compose — exactly the 三儀 ⊥ 三儀 shape stated above, now exercised on self.
+        .sans_io_pure(
+            SansIoPure::in_crate("xuanji")
+                .module("crate")
+                .reading_clock_via("std::time", ["now"])
+                .because(
+                    "璇璣 is the measure-only reaction model: it reads no ambient clock inline and \
+                     exposes no async surface — time and effects enter only through the dimensions \
+                     above it, never the model itself. The clock axis reacts via 圭表 \
+                     (must-not-call-inline `std::time::…::now`), the async axis via 渾儀 \
+                     (must-not-expose an async public fn)",
+                ),
+        )
 }
 
 #[test]
@@ -158,12 +174,28 @@ fn tianheng_governs_itself() {
     let Some(manifest) = workspace_manifest() else {
         return; // no workspace root (e.g. a packaged crate) — self-governance runs in-repo only
     };
-    let outcome = check(&tianheng_constitution(), &manifest);
+    let constitution = tianheng_constitution();
+
+    // 圭表 (static): the crate dependency allowlists, plus 璇璣's sans-I/O clock boundary. Any
+    // drift — a new external dependency, the core depending on the shell, or an ambient
+    // `std::time::…::now` creeping into the reaction model — surfaces here, with the offending
+    // boundary's reason as the repair hint.
+    let static_outcome = check(constitution.static_boundaries(), &manifest);
     assert!(
-        matches!(outcome, Outcome::Clean),
-        "Tianheng's self-constitution drifted: {outcome:?}"
+        matches!(static_outcome, Outcome::Clean),
+        "Tianheng's static self-law drifted: {static_outcome:?}"
     );
-    assert_eq!(outcome.exit_code(), 0);
+    assert_eq!(static_outcome.exit_code(), 0);
+
+    // 渾儀 (semantic): 璇璣's sans-I/O async-exposure boundary. Asserted as its own Clean gate,
+    // not merged with the static one — the dimensions are independent (三儀 ⊥ 三儀), so each stands
+    // as a non-bypassable gate on its own, and a drift names the dimension it broke.
+    let semantic_outcome = check_all(constitution.semantic_boundaries(), &manifest);
+    assert!(
+        matches!(semantic_outcome, Outcome::Clean),
+        "Tianheng's semantic self-law drifted: {semantic_outcome:?}"
+    );
+    assert_eq!(semantic_outcome.exit_code(), 0);
 }
 
 /// The fixed preamble of the agent-loaded self-law projection (`AGENTS.self-law.md`). It is a
@@ -206,7 +238,7 @@ fn workspace_root() -> Option<PathBuf> {
 /// never smuggled into [`constitution_markdown`], which adds nothing of its own; the trailing
 /// newline makes the file end conventionally.
 fn render_self_law_doc() -> String {
-    let projection = constitution_markdown(&Constitution::from(tianheng_constitution()));
+    let projection = constitution_markdown(&tianheng_constitution());
     format!("{SELF_LAW_PREAMBLE}\n{projection}\n")
 }
 
@@ -255,6 +287,7 @@ fn dimension_boundaries_declare_the_mutual_independence_law() {
 
     let constitution = tianheng_constitution();
     let dimension_allowlists: Vec<_> = constitution
+        .static_boundaries()
         .boundaries()
         .iter()
         .filter_map(|boundary| match boundary {
@@ -321,7 +354,8 @@ fn every_workspace_member_is_self_governed() {
     let Some(manifest) = workspace_manifest() else {
         return; // outside a checkout — same repo-only discipline as the governance gate
     };
-    let (_, coverage) = check_and_cover(&tianheng_constitution(), &manifest);
+    let constitution = tianheng_constitution();
+    let (_, coverage) = check_and_cover(constitution.static_boundaries(), &manifest);
     let coverage = coverage.expect("workspace metadata is readable in-repo");
     assert!(
         coverage.total > 0,

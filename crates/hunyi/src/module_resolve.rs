@@ -66,6 +66,20 @@ fn resolve_module(
     module: &str,
     crate_package: &str,
 ) -> Result<(Vec<syn::Item>, PathBuf), String> {
+    resolve_module_root(src_dir, root_file, module, crate_package)
+        .map(|(items, file, _child_dir)| (items, file))
+}
+
+/// Like [`resolve_module`] but also returns the module's **child directory** — where its
+/// file-based `mod x;` children live (`src/` for `crate`, `src/foo/` for `crate::foo`). Needed by
+/// a subtree walk that must continue descending below the anchored module; the single descent
+/// already computes it, so returning it cannot drift from the resolved items/file.
+pub(crate) fn resolve_module_root(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<(Vec<syn::Item>, PathBuf, PathBuf), String> {
     let root = read_parse(root_file)?;
     let segments = module_segments(module);
     descend(
@@ -85,9 +99,9 @@ fn descend(
     segments: &[String],
     module: &str,
     crate_package: &str,
-) -> Result<(Vec<syn::Item>, PathBuf), String> {
+) -> Result<(Vec<syn::Item>, PathBuf, PathBuf), String> {
     let Some(seg) = segments.first() else {
-        return Ok((items, current_file));
+        return Ok((items, current_file, child_dir));
     };
     for item in &items {
         if let syn::Item::Mod(module_item) = item {

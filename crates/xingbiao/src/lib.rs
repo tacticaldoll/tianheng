@@ -12,6 +12,7 @@
 //! whereas 星表 does IO (spawns `cargo`) and *observes*. Sharing it does not couple the
 //! dimensions to each other — they compose only through the 天衡 shell; 星表 is a substrate
 //! beneath them, named in each dependent's dependency allowlist.
+#![forbid(unsafe_code)]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -65,8 +66,8 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
 /// only `"lib"` would drop such a crate to no root file even though it has a conventional
 /// `src/lib.rs`, and a dimension reading through it would either raise a false `missing_src` (the
 /// semantic exit-2) or silently drop the crate from its corpus (a runtime-audit false negative).
-/// Both faces read the *same* function, so they cannot disagree on which crates are judgeable — the
-/// divergence that used to live in two hand-copied bodies is structurally gone.
+/// Both faces read the *same* function, so they cannot disagree on which crates are judgeable — no
+/// hand-copied twin can diverge on it.
 ///
 /// Bound (stated, not silent): a member with **only** a non-library, non-`bin` target — a `test`,
 /// `example`, `bench`, or `custom-build` — resolves to `None` and is skipped; it carries no

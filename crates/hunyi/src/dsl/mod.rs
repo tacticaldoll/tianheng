@@ -12,6 +12,7 @@ mod forbidden_marker;
 mod impl_trait;
 mod signature;
 mod trait_impl;
+mod unsafe_confinement;
 mod visibility;
 
 pub use async_exposure::*;
@@ -20,4 +21,5 @@ pub use forbidden_marker::*;
 pub use impl_trait::*;
 pub use signature::*;
 pub use trait_impl::*;
+pub use unsafe_confinement::*;
 pub use visibility::*;
