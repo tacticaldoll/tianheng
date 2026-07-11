@@ -317,20 +317,21 @@ pub(crate) fn check_module_boundary(
     // rather than `use` imports. The confined prefix is the violation *target* (so nested-prefix
     // confinements on one subtree stay injective); the finding is the per-call resolved path (or a
     // hazardous glob) plus its module.
-    if let ModuleRule::ConfineInlineSymbolPath {
-        prefix,
-        ending_with,
-        strict,
-    } = &boundary.rule
-    {
-        // Misdeclarations are loud (exit 2), never a silent no-op.
+    // Both inline variants (default and strict-external) route through this ONE shared path via the
+    // `inline_payload` accessor — never through the exhaustive `is_violation` match below (whose
+    // inline arm is `unreachable!()`), which would skip the inline scan and silently observe
+    // nothing (a false negative). Identity (`target`/`rule`/`finding`) is byte-identical across the
+    // two; the only strict-external-conditional behavior is inside `inline_symbol_findings` /
+    // `resolve_head`. `external` is `true` only for the strict-external variant.
+    if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
+        // Misdeclarations are loud (exit 2), never a silent no-op — for BOTH variants.
         if prefix.trim().is_empty() {
             return Err(inline_empty_prefix_error(&boundary.crate_package));
         }
-        if ending_with.is_some() && *strict {
+        if ending_with.is_some() && strict {
             return Err(inline_narrow_and_strict_error(&boundary.crate_package));
         }
-        if ending_with.as_ref().is_some_and(|verbs| verbs.is_empty()) {
+        if ending_with.is_some_and(|verbs| verbs.is_empty()) {
             return Err(inline_empty_verbs_error(&boundary.crate_package));
         }
         // Crate-wide files feed the `type`-alias / `pub use` resolution closure; the governed
@@ -343,14 +344,24 @@ pub(crate) fn check_module_boundary(
             &inline_only,
             root_relative.as_deref(),
         );
+        // The rename-aware declared-dependency import identifiers back the strict-external head
+        // ladder — read ONLY when the external variant is in play, so the default path reads
+        // nothing new (and no `guibiao → hunyi` edge: 圭表's own reader, from the same `package`).
+        let dependency_names = if external {
+            crate::cargo_metadata::dependency_import_names(package)
+        } else {
+            Vec::new()
+        };
         let confined_prefix = canonical_module_path(prefix);
         let findings = inline_symbol_findings(
             &all_files,
             &governed,
             &root_modules,
             prefix,
-            ending_with.as_deref(),
-            *strict,
+            ending_with,
+            strict,
+            external,
+            &dependency_names,
         )?;
         for InlineFinding { finding, file } in findings {
             push_module_violation(violations, &confined_prefix, &rule, finding, file, boundary);
@@ -394,7 +405,8 @@ pub(crate) fn check_module_boundary(
         ModuleRule::MustNotBeImportedBy { .. }
         | ModuleRule::MustOnlyBeImportedBy { .. }
         | ModuleRule::ConfineExternalCrate { .. }
-        | ModuleRule::ConfineInlineSymbolPath { .. } => {
+        | ModuleRule::ConfineInlineSymbolPath { .. }
+        | ModuleRule::ConfineInlineSymbolPathExternal { .. } => {
             unreachable!("the inbound / confinement rules are evaluated above and return early")
         }
     };

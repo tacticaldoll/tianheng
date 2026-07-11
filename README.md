@@ -187,6 +187,17 @@ measuring instruments — each reads a different surface of the code.
 | 渾儀 armillary (semantic) | `hunyi` | type exposure (incl. public `pub use` re-exports and the opt-in trait-impl surface), impl locality, a `pub`-visibility ceiling, forbidden markers, `unsafe`-confinement, `dyn` & `impl Trait` (existential) exposure (each shape-only & named-operand) & `async fn` (implicit existential) exposure (opt-in whole-subtree) | AST (`syn`) | **v0.1.x:** semantic boundary family plus external-crate/re-export/alias hardening |
 | 漏刻 clepsydra (runtime) | `louke` | flow: the concrete type behind a `dyn Trait` crossing a seam | runtime `TypeId` / observed origin | **v0.1.x:** origin-assertion, CI probe coverage, escaped-literal and macro-body audit hardening |
 
+**What the instruments do NOT see — avoid over-inferring.** Each reads one surface, and the gaps
+between them are deliberate, not oversights. 圭表 reads *declared* dependencies and *written*
+import/call paths — never the resolved dependency graph (cargo-deny's lane) or a runtime value. 渾儀
+reads the *AST*: an exposure rule observes the **types and traits named on a signature**, a
+forbidden-marker rule the **derives/impls on a type** — never a **call site**, so it cannot see
+"this function *reads* the clock" (that is
+圭表's `must_not_call_inline`). 漏刻 sees a concrete type crossing a seam **at runtime**, which no
+static pass can. A capability exists only where a dimension observes it: where no instrument reads a
+surface, Tianheng makes **no claim** about it — a stated bound, never a silent pass. Read a rule's
+name as *what it observes*, not what it might intuitively imply.
+
 **漏刻's two faces, one declared source.** The runtime boundaries you declare in the
 constitution are projected two ways. At CI, `tianheng check` audits that every declared seam
 has an `assert_boundary!` probe (and every probe a declared seam) — the **CI face**. In your

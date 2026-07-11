@@ -8,7 +8,7 @@
 
 use super::lexer::{keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    canonical_segment, is_crate_root_shadow, is_mod_declaration_keyword, resolve_self_super,
+    canonical_segment, effective_module, inline_mod_at, is_crate_root_shadow, resolve_self_super,
 };
 
 /// Internal module paths imported by `source`, normalized to absolute `crate::…`
@@ -97,7 +97,7 @@ pub(crate) fn external_imports_with_importers(
 fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, String)> {
     let bytes = source.as_bytes();
     let mut trees = Vec::new();
-    // (inline module name, brace depth at which its body opened).
+    // (inline module name, enclosing brace depth).
     let mut mod_stack: Vec<(String, usize)> = Vec::new();
     let mut depth = 0usize;
     let mut i = 0;
@@ -152,48 +152,6 @@ fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, Strin
         i += 1;
     }
     trees
-}
-
-/// The module path enclosing a `use`, formed from the file's `base` module and the
-/// names of the inline `mod`s currently open around it.
-fn effective_module(base: &str, mod_stack: &[(String, usize)]) -> String {
-    let mut module = base.to_string();
-    for (name, _) in mod_stack {
-        module.push_str("::");
-        module.push_str(name);
-    }
-    module
-}
-
-/// If an inline module declaration `mod <ident> {` begins at `i` (a standalone `mod`
-/// keyword whose name is followed, after optional whitespace, by `{`), return
-/// `(name_start, name_end, index_of_opening_brace)`; otherwise `None` — a `mod name;`
-/// with no body, or not a declaration. Only an inline body encloses a `use`.
-fn inline_mod_at(bytes: &[u8], i: usize) -> Option<(usize, usize, usize)> {
-    if !is_mod_declaration_keyword(bytes, i) {
-        return None;
-    }
-    let mut j = i + 3;
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
-    let name_start = j;
-    while j < bytes.len() && !bytes[j].is_ascii_whitespace() && bytes[j] != b';' && bytes[j] != b'{'
-    {
-        j += 1;
-    }
-    let name_end = j;
-    if name_end == name_start {
-        return None;
-    }
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
-    if bytes.get(j) == Some(&b'{') {
-        Some((name_start, name_end, j))
-    } else {
-        None
-    }
 }
 
 /// Expand a use tree into leaf paths: `a::{b, c::d}` -> `a::b`, `a::c::d`; drop

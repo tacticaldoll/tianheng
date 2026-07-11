@@ -283,6 +283,30 @@ complement — show, then tell.
   target wants a full prelude); the deliverable is a **scoped** never-break promise, not a smaller
   prelude by default. The three examples' actual import set is empirical evidence for the audit — the
   names they touch are the real committed-stable builder; the rest are convenience.
+- **`Rule` / `ModuleRule` variant shape is a downstream-matchable contract — model-surface narrowing
+  (0.2.0, within the already-named guibiao widened-surface item, not a new breaking line).** `pub use
+  model::*` (`guibiao/src/lib.rs`) re-exports `Rule` / `ModuleRule`; enum-level `#[non_exhaustive]`
+  protects *new variants* but **not a field added to an existing variant** (enum-variant fields are
+  always public → a downstream `E0063` construct / `E0027` exhaustive-match break). So a new modifier
+  on an existing rule variant is **breaking**, which is why the project's growth pattern keeps
+  spawning parallel variants. Surfaced by the `strict_external` adversarial review: to stay
+  patch-honest, `.strict_external()` ships (0.1.9) as a **new variant** rather than an `external:
+  bool` field on `ConfineInlineSymbolPath` — a deliberate patch-safe workaround, one more parallel
+  variant. 0.2.0 should let rule modifiers grow *without* variant proliferation — per-variant
+  `#[non_exhaustive]`, or a builder-only model (variant internals `#[doc(hidden)]`, no
+  downstream-match/construct contract), or an opaque modifier struct — after which the parallel
+  strict variant folds back into one variant + field. **0.1.x-safe pre-management** (the
+  `#[doc(hidden)]` + `#[deprecated]` accidental-surface signal above): the new variant's internals
+  **already ship `#[doc(hidden)]` (v0.1.9)**, pre-announcing the narrowing without breaking anyone.
+  Guardrail unchanged — the break is quarantined to the model surface; the adopter builder
+  (`must_not_call_inline` / `.strict_external()` / `Constitution` / `run`) stays stable.
+- **`inline_symbol_findings` positional-arg growth — collapse into an `InlineScanRequest` param
+  struct (internal, born-when-needed).** `.strict_external()` pushed the scanner entry to 8
+  positional args (now under `#[allow(clippy::too_many_arguments)]`, having added `external` +
+  `dependency_names`); the *next* dimension input should tip it into a named `InlineScanRequest`
+  rather than a ninth positional. Behavior-preserving, internal-only (no model / adopter surface, so
+  distinct from the variant-refactor debt above) — lands whenever the next input does, not a
+  standalone task. Until then the 8 args are cohesive single-caller scan inputs (Gate-5-passed).
 - **Considered decline — a mechanical "policy adapter" importing an existing rule source into a
   `Constitution`.** The *goal* (low-friction adoption, do not reinvent governance syntax) is
   legitimate and is served by the **cookbook / examples** (track 1) that translate common governance
@@ -413,6 +437,13 @@ adversarial-review rounds:
   prefix-resolving name into scope reacts fail-closed, stated by *hazard not shape* (recursing into
   local re-export closures) so the rule does not itself drift.
 - Stayed 圭表-internal on the hand-rolled token scanner (serde_json-only, no `syn`, 三儀 ⊥ 三儀).
+- **`.strict_external()` opt-in — depth (v0.1.9):** reclassify a fully-qualified un-`use`d external
+  call (`chrono::Utc::now()` with no `use chrono`) as external when its head matches a declared
+  dependency, closing the sysroot-vs-external asymmetry (a false negative). A new patch-safe
+  `#[non_exhaustive]` variant (see the model-surface debt above), default byte-identical, gated
+  behind a local-precedence ladder (no false positive on a local item named like a dependency, at
+  any nesting depth) with stated bounds (`extern crate … as` rename; single-segment over-reaction).
+  圭表 grows its **own** rename-aware declared-dependency reader — no `渾儀` edge (三儀 ⊥ 三儀).
 
 **Declined — externally covered (not a forward depth):**
 - **Resolved dependency-source / build-provenance** — *declined.* Cargo-deny owns the resolved,
@@ -743,7 +774,14 @@ survives across sessions.
   `dimension_boundaries_declare_the_mutual_independence_law`; the old hand-maintained
   boundary-number index is gone. **Forward, born when built (no API before a second
   consumer):** (a) a small **constitution-assertion helper** so structural assertions are not
-  re-hand-rolled per repo; (b) the adopter-facing **潛移 generator** (see the 潛移 section). Stated
+  re-hand-rolled per repo; (b) the adopter-facing **潛移 generator** (see the 潛移 section); (c) an
+  adopter-facing **`tianheng::testing` boundary-test harness** (`assert_violates!` / `assert_clean!`
+  over a fixture) — every adopter currently re-hand-rolls a temp-workspace + `check`/`check_all`
+  assertion (the same rebuild pain as (a)). **Docs-first shipped (v0.1.9):** the COOKBOOK "Test that a
+  boundary reacts" recipe over the public entry points; the *API* is deferred until the assert shape
+  settles under a real second consumer — shell-hosted, std-only, feature-gated, additive/patch when it
+  lands (the Spike-A verdict). Note: the entry points read a manifest on disk, so an inline-fixture
+  ergonomics would still materialize a temp crate. Stated
   bound: a `because`-text `contains` predicate is weaker than a structural fact (a reworded clause
   slips it). Adopter-surfaced by worklane.
 

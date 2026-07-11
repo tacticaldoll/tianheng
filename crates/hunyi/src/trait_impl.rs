@@ -3,17 +3,18 @@
 //! anchor (re-export-aware) to a real local trait, and react to the anchored trait's impls whose
 //! module location lies outside the allowed set.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::Path;
 
 use serde_json::Value;
-use xuanji::{BoundaryKind, Outcome, Polarity, Violation};
+use xuanji::{Outcome, Polarity, Violation};
 
 use crate::containment::matches_allowed;
 use crate::driver::run_boundaries;
 use crate::dsl::TraitImplBoundary;
+use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::unknown_trait_error;
-use crate::file_scope::{per_finding_file, resolve_crate};
+use crate::file_scope::resolve_crate;
 use crate::finding::SemanticFinding;
 use crate::resolve::{
     BareFallback, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
@@ -55,33 +56,26 @@ pub(crate) fn check_trait_impl_boundary(
     // A fixed rule string: the allowed locations are policy configuration (surfaced in the
     // `list` projection and the reason), not part of the violation's identity — so editing
     // the allowed set does not turn a still-misplaced impl into a "new" violation against a
-    // baseline (mirroring how `xuanji` excludes reason/severity from the violation id).
-    let rule = TRAIT_IMPL_RULE.to_string();
-    // Each finding carries the module its offending impl sits in; report that module's source
-    // file (memoized per module). See `per_finding_file` for the `.ok()`-degrades-to-null rule.
-    let mut file_cache: HashMap<String, Option<String>> = HashMap::new();
-    for (finding, module) in findings {
-        let file = per_finding_file(
-            &module,
+    // baseline (mirroring how `xuanji` excludes reason/severity from the violation id). The
+    // violation `target` is the canonical trait anchor (spelling-stable across use/rename forms).
+    let target = canonical_path_str(&boundary.trait_path);
+    // Each finding carries the module its offending impl sits in; the shared emit helper resolves
+    // that module's source file (memoized per module) and stamps the allowlist-gap polarity.
+    push_multi_module_violations(
+        violations,
+        MultiModuleViolationContext {
             src_dir,
-            &root_file,
-            &boundary.crate_package,
-            &mut file_cache,
-        );
-        violations.push(
-            Violation::new(
-                BoundaryKind::Semantic,
-                canonical_path_str(&boundary.trait_path),
-                rule.clone(),
-                finding,
-                boundary.reason.clone(),
-                boundary.severity,
-            )
-            .with_file(file)
-            .with_anchor(boundary.anchor.clone())
-            .with_polarity(Polarity::AllowlistGap),
-        );
-    }
+            root_file: &root_file,
+            target: &target,
+            crate_package: &boundary.crate_package,
+            rule: TRAIT_IMPL_RULE,
+            reason: &boundary.reason,
+            severity: boundary.severity,
+            anchor: boundary.anchor(),
+            polarity: Polarity::AllowlistGap,
+        },
+        findings,
+    );
     Ok(())
 }
 

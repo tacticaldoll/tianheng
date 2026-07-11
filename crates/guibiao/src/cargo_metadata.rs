@@ -101,6 +101,42 @@ pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String>
     found
 }
 
+/// The **import identifiers** a crate's declared dependencies are written under in source: each
+/// dependency's `rename` when present (a Cargo `pkg = { package = "…" }` / `dep = { package = "…" }`
+/// rename), else its package `name`, normalized `-`→`_` to the Rust path spelling (`async-trait` →
+/// `async_trait`). This is the vocabulary the strict-external inline confinement
+/// (`ModuleRule::ConfineInlineSymbolPathExternal`) matches a fully-qualified path head against.
+///
+/// 圭表-own (三儀 ⊥ 三儀 — see the module preamble): a small parallel of
+/// `hunyi::crate_scope::dependency_names`, **not** a dependency on 渾儀, reading only the
+/// `package["dependencies"]` value 圭表 already obtains via 星表 (so no new crate dependency). Unlike
+/// [`dependencies`]/[`external_dependencies`] (which read `name` only), it is rename-aware and
+/// `-`→`_`-folded, matching the source spelling.
+///
+/// **Deliberately unfiltered by kind or source** (unlike [`dependencies`]/[`external_dependencies`]):
+/// dev-, build-, and path dependencies are all included. A broader name set makes MORE heads resolve
+/// as external, never fewer — the fail-safe direction for the one forbidden bug (a false negative) —
+/// while the local-precedence ladder still keeps any genuinely-local item local. The only cost is a
+/// possible reaction on a dev/build-dep name used inside scanned test code.
+pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
+    let mut names: Vec<String> = package["dependencies"]
+        .as_array()
+        .map(|deps| {
+            deps.iter()
+                .filter_map(|dep| {
+                    dep["rename"]
+                        .as_str()
+                        .or_else(|| dep["name"].as_str())
+                        .map(|name| name.replace('-', "_"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Classify a dependency's **declared** source kind from its `cargo metadata`
 /// (`--no-deps`) `source` field. Mirrors [`external_dependencies`]'s convention (a
 /// null source is internal/path) one notch finer:

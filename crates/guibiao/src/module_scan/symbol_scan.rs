@@ -12,7 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    canonical_module_path, is_crate_root_shadow, path_within, resolve_self_super,
+    canonical_module_path, canonical_segment, effective_module, inline_mod_at,
+    is_crate_root_shadow, path_within, resolve_self_super,
 };
 
 /// The crate-wide resolution context, built once from every reachable file: the local definition
@@ -35,11 +36,17 @@ pub(crate) struct InlineFinding {
     pub file: String,
 }
 
-/// Scan the crate for inline-symbol-path offences against a `ConfineInlineSymbolPath` boundary.
+/// Scan the crate for inline-symbol-path offences against a `ConfineInlineSymbolPath` or
+/// `ConfineInlineSymbolPathExternal` boundary (both route here via `inline_payload`).
 /// `all_files` is every reachable `(file, module)` pair (crate-wide, for the def closure);
 /// `governed` is the subset whose module is within the governed subtree (where calls are
 /// forbidden). `prefix` is the confined module-path prefix; `ending_with` narrows to read verbs;
-/// `strict` reacts on any mention, not only calls. Returns findings sorted + deduped by `finding`.
+/// `strict` reacts on any mention, not only calls; `external` opts in the strict-external head
+/// ladder (a fully-qualified un-`use`d head matching a declared dependency reclassifies as
+/// external); `dependency_names` are the rename-aware declared-dependency import identifiers that
+/// ladder matches against (unused when `external` is false). Returns findings sorted + deduped by
+/// `finding`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn inline_symbol_findings(
     all_files: &[(std::path::PathBuf, String)],
     governed: &[(std::path::PathBuf, String)],
@@ -47,6 +54,8 @@ pub(crate) fn inline_symbol_findings(
     prefix: &str,
     ending_with: Option<&[String]>,
     strict: bool,
+    external: bool,
+    dependency_names: &[String],
 ) -> Result<Vec<InlineFinding>, String> {
     let prefix = canonical_module_path(prefix);
     // Verbs are matched leaf-exact on the terminal segment; canonicalize raw-identifier forms.
@@ -60,6 +69,14 @@ pub(crate) fn inline_symbol_findings(
     };
     let mut file_text: HashMap<std::path::PathBuf, String> = HashMap::new();
     let mut use_maps: HashMap<std::path::PathBuf, HashMap<String, String>> = HashMap::new();
+    // The FULL local vocabulary backing the strict-external local-precedence ladder, built ONLY
+    // under the flag: (a) the complete crate module-path set — every reachable `(_, module)`, so a
+    // DEEP local `mod` (not just a crate-root child) is visible (rung iii); (b) item-definition
+    // names across all namespaces — a local `struct`/`fn`/plain `mod`/… named like a dependency
+    // (rung iv). `ctx.defs`/`root_modules` alone cannot back these rungs (defs holds only type-alias
+    // + `pub use`; root_modules only crate-root children), the first-cut flaw.
+    let mut module_paths: HashSet<String> = HashSet::new();
+    let mut item_defs: HashSet<String> = HashSet::new();
     for (file, module) in all_files {
         let raw = std::fs::read_to_string(file)
             .map_err(|err| crate::errors::unreadable_governed_file_error(file, &err.to_string()))?;
@@ -71,9 +88,27 @@ pub(crate) fn inline_symbol_findings(
         // SystemTime;` chases correctly.
         let use_map = collect_use_map(&decl_text, module, root_modules);
         collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx);
+        if external {
+            module_paths.insert(module.clone());
+            collect_item_definition_names(module, &decl_text, &mut item_defs);
+        }
         use_maps.insert(file.clone(), use_map);
         file_text.insert(file.clone(), raw);
     }
+    // The declared-dependency import-identifier set (rung v).
+    let dep_names: HashSet<String> = if external {
+        dependency_names.iter().cloned().collect()
+    } else {
+        HashSet::new()
+    };
+    // The head resolver consults this ONLY under `.strict_external()`; `None` keeps head resolution
+    // byte-identical to the default path (the local rungs act purely as a guard on whether the
+    // dependency match fires, still emitting the load-bearing `{module}::…` fallback otherwise).
+    let external_vocab = external.then_some(ExternalVocab {
+        module_paths: &module_paths,
+        item_defs: &item_defs,
+        dep_names: &dep_names,
+    });
 
     // Pass 2 — scan each governed file for offending calls / mentions and hazardous globs.
     let mut findings: Vec<InlineFinding> = Vec::new();
@@ -95,7 +130,14 @@ pub(crate) fn inline_symbol_findings(
         // (i) Glob-hazard: a glob import that can bring a prefix-resolving name into scope reacts
         // fail-closed. Read from decl_text (a glob is a `use`, not a call).
         for glob_path in glob_import_paths(&decl_text) {
-            if let Some(resolved) = resolve_head(&glob_path, module, use_map) {
+            if let Some(resolved) = resolve_head(
+                &glob_path,
+                module,
+                module,
+                use_map,
+                root_modules,
+                external_vocab.as_ref(),
+            ) {
                 if glob_reaches_prefix(&resolved, &prefix, &ctx, &mut HashSet::new()) {
                     findings.push(InlineFinding {
                         finding: format!("glob {} in {module}", glob_path),
@@ -108,9 +150,16 @@ pub(crate) fn inline_symbol_findings(
         // (ii) Call / mention scan: from comment/string-stripped text WITH macro bodies kept
         // (real reads hide in `cfg_if!` / logging / async DSL bodies — scanned, never skipped).
         let call_text = strip_comments_and_strings(raw);
-        for occurrence in path_occurrences(&call_text) {
+        for occurrence in path_occurrences(&call_text, module, external) {
             // A glob has no call terminal segment; narrowing / call-vs-mention apply to paths only.
-            let Some(resolved) = resolve_head(&occurrence.segments, module, use_map) else {
+            let Some(resolved) = resolve_head(
+                &occurrence.segments,
+                module,
+                &occurrence.module,
+                use_map,
+                root_modules,
+                external_vocab.as_ref(),
+            ) else {
                 continue; // unresolved head — not matched by leaf (would be a false positive)
             };
             let resolved = chase_closure(&resolved, &chase_defs, &mut HashSet::new());
@@ -146,11 +195,14 @@ pub(crate) fn inline_symbol_findings(
     Ok(findings)
 }
 
-/// A path occurrence in call/mention position: its `::`-joined segments and whether it is applied
-/// as a call (`path(...)` or `path::<...>(...)`).
+/// A path occurrence in call/mention position: its `::`-joined segments, whether it is applied as a
+/// call (`path(...)` or `path::<...>(...)`), and the true (inline) module that lexically encloses it
+/// (`{file_module}::inner…`). The `module` feeds ONLY the strict-external local-shadow check in
+/// [`resolve_head`]; the finding text and default resolution stay keyed on the file module.
 struct PathOccurrence {
     segments: String,
     is_call: bool,
+    module: String,
 }
 
 /// Extract path occurrences from already comment/string-stripped source. A path is an identifier
@@ -159,11 +211,48 @@ struct PathOccurrence {
 /// zero or more `::`-joined segments, tolerating interior whitespace and mid-path turbofish
 /// `::<…>`. A trailing `(` (after whitespace / a turbofish) marks a call. Interior `::`
 /// continuations are consumed greedily so a mid-path segment is never independently re-scanned.
-fn path_occurrences(source: &str) -> Vec<PathOccurrence> {
+///
+/// Under `external` each occurrence carries its true (inline) module, tracked by inline
+/// `mod name { … }` nesting exactly as [`super::use_scan`]'s walk does (non-`mod` braces move the
+/// depth but never touch the stack, so a call anywhere inside `mod tests { … }` attributes to
+/// `…::tests`). When `external` is `false` the tracking is skipped entirely and every occurrence is
+/// keyed to `base_module`.
+fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<PathOccurrence> {
     let bytes = source.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
+    // Inline-`mod` nesting, populated ONLY under a strict-external boundary (each entry is `(name,
+    // enclosing brace depth)`).
+    let mut depth = 0usize;
+    let mut mod_stack: Vec<(String, usize)> = Vec::new();
     while i < bytes.len() {
+        if external {
+            if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
+                mod_stack.push((
+                    canonical_segment(&normalize_segments(&bytes[name_start..name_end]))
+                        .to_string(),
+                    depth,
+                ));
+                i = brace; // let the `{` arm below increment the depth
+                continue;
+            }
+            match bytes[i] {
+                b'{' => {
+                    depth += 1;
+                    i += 1;
+                    continue;
+                }
+                b'}' => {
+                    depth = depth.saturating_sub(1);
+                    while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
+                        mod_stack.pop();
+                    }
+                    i += 1;
+                    continue;
+                }
+                _ => {}
+            }
+        }
         if !is_ident_byte(bytes[i]) || bytes[i].is_ascii_digit() {
             i += 1;
             continue;
@@ -202,7 +291,16 @@ fn path_occurrences(source: &str) -> Vec<PathOccurrence> {
         let segments = normalize_segments(&bytes[start..end]);
         let is_call = is_call_application(bytes, end);
         if segments.contains("::") || is_call {
-            out.push(PathOccurrence { segments, is_call });
+            let module = if external {
+                effective_module(base_module, &mod_stack)
+            } else {
+                base_module.to_string()
+            };
+            out.push(PathOccurrence {
+                segments,
+                is_call,
+                module,
+            });
         }
         i = end.max(i + 1);
     }
@@ -467,6 +565,104 @@ fn collect_defs(
     }
 }
 
+/// Collect the **true-module-qualified** names of every reachable module's own item definitions —
+/// `mod`, `struct`, `enum`, `union`, `trait`, `type`, `fn`, `const`, `static` — from
+/// declaration-cleaned source into `out` as `{true_module}::{name}`, where `{true_module}` is the
+/// file's `module` extended by the inline `mod name { … }`s enclosing the item. Backs rung (iv) of
+/// the strict-external local-precedence ladder: a bare head naming a local item **of the calling
+/// module** is NOT reclassified as an external dependency (so a local `fn rand()` under a `rand`
+/// dependency, or a local `struct`/`type`/plain `mod` named like a dep, stays clean). The
+/// value-namespace items (`fn`/`const`/`static`) are included beyond
+/// `hunyi::crate_scope::local_type_namespace_names` because a bare *call* head (`rand()`) binds to a
+/// local `fn`.
+///
+/// Two disciplines keep this from *over*-suppressing (an external call silently read as local — the
+/// one forbidden bug, a false negative):
+/// - **True-module-qualified.** Names are keyed `{true_module}::{name}` and matched against
+///   `{occurrence_module}::head` (mirroring rung iii), so a same-named item of another module never
+///   cross-suppresses and a file-top item does not mask a call inside `mod tests { … }`.
+/// - **Module top level only.** Only an item at its own module's top level enters that module's
+///   bare-head scope (brace depth == the enclosing module's body-open depth); associated / block-
+///   local items sit deeper and are skipped (capturing them would over-suppress a same-named
+///   external call). An inline `mod`'s own name is itself such a top-level item. (Comments, strings,
+///   and char literals are pre-stripped from `source`, so a `'}'` cannot miscount the depth.)
+///
+/// Residual stated bound: the full single-segment over-reaction (a local `let` / param / closure
+/// binding, `must_not_call_inline("rand")` only; `chrono::Utc` is immune) is canonical in
+/// `strict_external`'s rustdoc and not re-argued here. One corollary specific to this fn's
+/// module-top-level-only discipline: the definition site of an associated / nested `fn` named like
+/// the crate (whose `name(` reads as a call) may likewise false-positive under a single-segment prefix.
+fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<String>) {
+    const KEYWORDS: [&[u8]; 9] = [
+        b"mod", b"struct", b"enum", b"union", b"trait", b"type", b"fn", b"const", b"static",
+    ];
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    let mut depth = 0usize;
+    // Inline `mod name { … }` nesting, mirroring `use_scan::use_trees_with_modules`: each entry is
+    // `(name, enclosing brace depth)`. A submodule item is keyed by its true (inline) module
+    // (`{module}::inner…::name`), so a submodule-local `fn rand` is `…::tests::rand`, not file-top.
+    let mut mod_stack: Vec<(String, usize)> = Vec::new();
+    while i < bytes.len() {
+        // Body-open depth of the CURRENT module (0 at file top, +1 per open inline `mod`); only
+        // items at exactly this depth are module-top-level bare-head names (see doc).
+        let top = mod_stack.last().map_or(0, |(_, d)| d + 1);
+        // An inline `mod name {`: its name is a top-level item of the CURRENT (enclosing) module —
+        // captured when the `mod` sits at that module's top level — and its body opens a new scope.
+        if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
+            let name = normalize_segments(&bytes[name_start..name_end]);
+            if depth == top && !name.is_empty() {
+                out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
+            }
+            mod_stack.push((canonical_segment(name.trim()).to_string(), depth));
+            i = brace; // let the `{` arm below increment the depth
+            continue;
+        }
+        match bytes[i] {
+            b'{' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
+                    mod_stack.pop();
+                }
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+        if !is_ident_byte(bytes[i]) {
+            i += 1;
+            continue;
+        }
+        // Only a module-top-level item keyword introduces a bare-head name into the CURRENT inline
+        // module's scope; deeper keywords are associated / block-local items (see doc).
+        if depth == top {
+            if let Some(kw) = KEYWORDS
+                .iter()
+                .find(|kw| super::lexer::keyword_starts_at(bytes, i, kw))
+            {
+                // The declared name is the identifier following the keyword (across whitespace),
+                // tolerating a raw-identifier `r#name`. A non-identifier there (e.g. `const _:` or a
+                // `const fn` where `fn` is itself a keyword) simply captures nothing useful — the
+                // subsequent keyword scan still reaches the real name.
+                let name_start = skip_ws(bytes, i + kw.len());
+                if bytes.get(name_start).is_some_and(|b| is_ident_byte(*b)) {
+                    let name =
+                        normalize_segments(&bytes[name_start..end_of_ident(bytes, name_start)]);
+                    if !name.is_empty() {
+                        out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
+                    }
+                }
+            }
+        }
+        i = end_of_ident(bytes, i);
+    }
+}
+
 /// Every `type Name = Target;` in declaration-cleaned source, as `(Name, Target)`.
 fn type_aliases(source: &str) -> Vec<(String, String)> {
     let bytes = source.as_bytes();
@@ -648,15 +844,69 @@ fn split_top_commas(s: &str) -> Vec<String> {
     parts
 }
 
+/// The extra crate vocabulary [`resolve_head`] consults ONLY under `.strict_external()`: the
+/// complete crate module-path set (rung iii), the module-qualified top-level item-definition names
+/// (rung iv), and the declared-dependency import identifiers (rung v). Absent (`None`) on the
+/// default path.
+struct ExternalVocab<'a> {
+    module_paths: &'a HashSet<String>,
+    item_defs: &'a HashSet<String>,
+    dep_names: &'a HashSet<String>,
+}
+
+/// Under `.strict_external()`, whether a bare `head` (already declined by the per-file use-map,
+/// rung i) reclassifies as an **external crate** — i.e. it matches a declared dependency name AND
+/// is not claimed by local precedence. `occurrence_module` is the true (inline) module the call
+/// occurs in (inline-`mod`-aware — see `path_occurrences`), not necessarily the file module. Local
+/// precedence
+/// (first match wins) suppresses the dependency match: (ii) a crate-root module shadow; (iii) a
+/// local module `{occurrence_module}::head` (at ANY depth, from the full crate module-path set —
+/// not only crate-root children); (iv) a local top-level item definition `{occurrence_module}::head`
+/// of the true (inline) module (module-qualified, mirroring iii — a same-named item of another module
+/// never suppresses, which would be a false negative). Only when none of these claim the head does
+/// the dependency match fire.
+fn head_is_external_dependency(
+    head: &str,
+    occurrence_module: &str,
+    root_modules: &[String],
+    vocab: &ExternalVocab,
+) -> bool {
+    let locally_shadowed = is_crate_root_shadow(occurrence_module, head, root_modules)
+        || vocab
+            .module_paths
+            .contains(&format!("{occurrence_module}::{head}"))
+        || vocab
+            .item_defs
+            .contains(&format!("{occurrence_module}::{head}"));
+    !locally_shadowed && vocab.dep_names.contains(head)
+}
+
 /// Resolve the head of a written path occurrence (its `::`-joined `segments`) to a canonical path,
 /// via the per-file use-map, then treating a `std`/`core`/`alloc` head as literal, a
 /// `crate`/`self`/`super` head as local, and any other bare head as a local item of the current
 /// module (so a `type`/`pub use` closure can then rewrite it). Returns `None` only for an
 /// empty/degenerate path. Leaf-only matching of an unresolved head is deliberately NOT done.
+///
+/// `external` is `Some` ONLY under `.strict_external()`: an un-`use`d bare head that matches a
+/// declared dependency (and is not locally shadowed — see [`head_is_external_dependency`]) is then
+/// kept as the literal external path (`chrono::Utc::…`) instead of the fake-local
+/// `{module}::chrono::Utc::…`, closing the fully-qualified-external false negative. When `external`
+/// is `None` the default path is unchanged: every non-`use` bare head falls to the load-bearing
+/// `{module}::…` fallback the `type`-alias / re-export closure depends on.
+///
+/// `occurrence_module` is the occurrence's true (inline) module (`{file_module}::inner…`) and is used
+/// ONLY inside the `external` branch, for the local-shadow ladder — so a file-top item cannot mask
+/// an external call in an inline submodule, and a submodule-local item shadows only its own module.
+/// Everything else (the `{current_module}::…` fallback, `self`/`super`, the finding's module) keeps
+/// using the FILE module `current_module`; on the default path (`external` `None`) the parameter is
+/// unread (the caller passes the file module there anyway).
 fn resolve_head(
     segments: &str,
     current_module: &str,
+    occurrence_module: &str,
     use_map: &HashMap<String, String>,
+    root_modules: &[String],
+    external: Option<&ExternalVocab>,
 ) -> Option<String> {
     let raw = segments.trim().trim_start_matches("::");
     let parts: Vec<String> = raw
@@ -674,16 +924,25 @@ fn resolve_head(
         "self" | "super" => resolve_self_super(current_module, &parts_str)?,
         other => {
             if let Some(target) = use_map.get(other) {
-                // alias / imported head → its target, then the remaining segments
+                // (i) alias / imported head → its target, then the remaining segments.
                 let mut base = target.clone();
                 for seg in rest {
                     base.push_str("::");
                     base.push_str(seg);
                 }
                 base
+            } else if external.is_some_and(|v| {
+                // (ii)-(iv) local-shadow ladder vs the occurrence's true (inline) module, then
+                // (v) the declared-dependency match (see `head_is_external_dependency`).
+                head_is_external_dependency(other, occurrence_module, root_modules, v)
+            }) {
+                // (v) strict-external: a fully-qualified, un-`use`d external head not shadowed by
+                // any local rung — keep the literal external path so it prefix-matches.
+                parts.join("::")
             } else {
                 // an un-imported bare head is a local item of the current module (a local `type`
                 // alias / definition); the closure rewrites it if it re-exports under the prefix.
+                // (Also every local rung under the flag lands here, staying local — no FP.)
                 format!("{current_module}::{}", parts.join("::"))
             }
         }

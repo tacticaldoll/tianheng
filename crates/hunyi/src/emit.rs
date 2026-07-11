@@ -61,13 +61,18 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     pub(crate) reason: &'a str,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
+    /// The finding's polarity metadata (deny-breach vs allowlist-gap). Not part of the violation
+    /// identity, so each capability passes its own without shifting `(target, rule, finding)`.
+    pub(crate) polarity: Polarity,
 }
 
-/// Add deny-style violations for a **subtree** boundary whose findings sit across many modules.
-/// Each finding carries its enclosing module, used only to resolve the per-module source file (a
-/// metadata nicety, cached across findings); the violation `target` stays the boundary's anchor, so
-/// a finding's identity `(target, rule, finding)` is stable whether or not the subtree opt-in is
-/// set — enabling the opt-in adds only new, deeper findings, never re-identifies the seam ones.
+/// Add violations for a boundary whose findings sit across many modules — the shared emitter for
+/// every whole-crate-scan capability (forbidden-marker, trait-impl, unsafe-confinement, and the
+/// async-exposure subtree branch), of either polarity: each caller supplies its own `polarity` via
+/// the context. Each finding carries its enclosing module, used only to resolve the per-module
+/// source file (a metadata nicety, cached across findings); the violation `target` stays the
+/// boundary's anchor, so a finding's identity `(target, rule, finding)` is stable — the enclosing
+/// module is metadata, never part of the identity.
 pub(crate) fn push_multi_module_violations(
     violations: &mut Vec<Violation>,
     context: MultiModuleViolationContext<'_>,
@@ -94,7 +99,7 @@ pub(crate) fn push_multi_module_violations(
             )
             .with_file(file)
             .with_anchor(anchor.clone())
-            .with_polarity(Polarity::DenyBreach),
+            .with_polarity(context.polarity),
         );
     }
 }

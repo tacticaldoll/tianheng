@@ -136,7 +136,7 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) 
         // The offending source file is in hand here (the probe scan captured it). Project it
         // into the `file` field as well as the finding text: it is a genuine observation, so
         // reporting `null` would be a dishonest null. This is the one runtime violation with a
-        // source location — the seam-level ones below/above name a seam, not a file.
+        // source location — the seam-level ones above name a seam, not a file.
         violations.push(
             Violation::new(
                 BoundaryKind::Runtime,

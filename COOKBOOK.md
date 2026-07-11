@@ -162,6 +162,34 @@ a macro body, a symbol assembled by a proc-macro, an external-crate re-export, a
 value under the default. A glob that could smuggle the surface in (`use std::time::*`, or a module
 that re-exports it, globbed) reacts fail-closed.
 
+### Also catch a fully-qualified external-crate call (opt-in `.strict_external()`)
+
+*Intent: the same clock-free core must not read the clock via an external crate either — e.g. a
+`chrono::Utc::now()` written in full, with no `use chrono` in scope.*
+
+```rust
+.boundary(
+    ModuleBoundary::in_crate("my-app")
+        .module("crate::core")
+        .must_not_call_inline("chrono::Utc")
+        .strict_external()
+        .because("core reads no wall clock — not even a fully-qualified chrono call"),
+)
+```
+
+By default `must_not_call_inline` catches a sysroot head (`std::time::…`) but resolves a
+fully-qualified *external* head (`chrono::…` with no `use`) as a local path and lets it pass — a
+stated bound. `.strict_external()` closes it: a bare head matching a **declared dependency** is
+resolved as that crate, so the fully-qualified call reacts (and an external-crate glob
+`use chrono::*;` reacts fail-closed). It composes with `.ending_with([…])` / `.strict_prefix_only()`,
+and the default (flag off) is byte-identical — opt-in, no baseline churn. Stated bounds under the
+flag (**any** prefix): an `extern crate dep as alias;` rename (it catches external calls by the
+crate's *real* name, not a local alias — so `chr::Utc::now()` via `extern crate chrono as chr;` is
+not observed), a glob-brought name *except via the glob-hazard reaction*, and a `mod` token inside a
+macro body. One additional **over-reaction** bound applies **only** under a single-segment bare-crate
+prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local `let`/parameter/closure binding, or
+the definition site of an associated/nested `fn` named like the crate, may false-positive.
+
 ---
 
 ## 渾儀 (semantic) — public-API exposure
@@ -181,6 +209,15 @@ that re-exports it, globbed) reacts fail-closed.
 
 Reacts when a `pub` signature under `crate::api` names `infra::DbPool` — including a
 fully-qualified path a token scanner would miss, and a `pub use` re-export.
+
+> **Why deny-shaped, not a "may only expose" allowlist?** Exposure rules name what must **not**
+> appear, never a closed set of what may. A positive allowlist would have to enumerate the authored
+> public set and diff it against the compiler-derived *reachable closure* — the auto-trait,
+> blanket-impl, and multi-hop re-export reachability the AST scan cannot fully see — so its
+> "complete" list would drift into false positives on legitimate API. Deny-shape reacts to a
+> concrete named leak, which the AST *can* observe. (Import/dependency rules **do** offer closed
+> allowlists — `restrict_imports_to`, `must_only_be_imported_by`, `restrict_dependencies_to` —
+> because there the observed set *is* the declared set, with no hidden closure.)
 
 ### Keep a seam statically dispatched (no `dyn`)
 
@@ -364,6 +401,63 @@ bound (the walk descends the declared mod-tree).
   `(target, rule, finding)`; `file` is metadata).
 
 Start at `warn`, or baseline the existing drift, then tighten to `enforce`.
+
+### Test that a boundary actually reacts
+
+*Intent: prove in `cargo test` that a boundary fires on the code it should — and stays clean on the
+code it shouldn't — so your governance cannot silently rot.*
+
+Each check entry point takes a manifest path and returns an `Outcome` whose `.exit_code()` is the
+contract (`0`/`1`/`2`). Point it at a small **governed fixture crate** committed in your repo — its
+own manifest, resolved relative to `CARGO_MANIFEST_DIR`:
+
+```rust
+use tianheng::check;   // 圭表 (static); use `check_all` for the 渾儀 (semantic) boundaries
+
+fn manifest() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")
+}
+
+#[test]
+fn the_boundary_reacts() {
+    // the fixture crate deliberately violates the law → exit 1
+    assert_eq!(check(constitution().static_boundaries(), &manifest()).exit_code(), 1);
+}
+
+#[test]
+fn a_boundary_that_should_not_fire_stays_clean() {
+    // precision: a boundary naming something the fixture does NOT do → exit 0
+    let clean = vec![/* a boundary that shouldn't react on this fixture */];
+    assert_eq!(check(&clean, &manifest()).exit_code(), 0);
+}
+```
+
+The **semantic teeth are unit-testable the same way** — `check_all(constitution().semantic_boundaries(), &manifest())`. Both entry points read a manifest **on disk**, so the fixture is a small
+committed crate, not an inline string. Tianheng's own `examples/*/tests/reaction.rs` follow this
+pattern — one governed fixture crate, asserting the reacting case (exit 1) alongside a green case (a
+boundary that shouldn't fire, or `.warn()` / a baseline). Copy one as your starting point.
+
+### Gate coverage in CI — assert every crate is governed
+
+*Intent: workspace coverage is a **pure projection** — it names which workspace members are targeted
+by no boundary, but never touches the exit code. Make "every workspace crate carries a boundary" a
+hard gate that **you** own.*
+
+`guibiao::check_and_cover` (on `guibiao` — add it as a direct dependency; it is not re-exported from
+`tianheng`) returns the `Outcome` plus an `Option<Coverage>` (`Some` whenever the workspace metadata
+was read). `Coverage` names the `total` workspace members and the `uncovered` ones. Assert
+`uncovered` empty, guarding against a vacuous pass:
+
+```rust
+let (_outcome, coverage) = guibiao::check_and_cover(constitution().static_boundaries(), &manifest());
+let coverage = coverage.expect("workspace metadata is readable in-repo");
+assert!(coverage.total > 0, "coverage read no crates — the gate would pass vacuously");
+assert!(coverage.uncovered.is_empty(), "ungoverned workspace crates: {:?}", coverage.uncovered);
+```
+
+Coverage changes no exit code on its own, so nothing gates unless *you* assert on it — the wall
+against a new, ungoverned crate slipping in is one you build deliberately. This is exactly how
+Tianheng gates its own coverage in `crates/tianheng/tests/self_governance.rs`.
 
 ### Put your declared law into an AI agent's context (kept fresh)
 

@@ -1122,3 +1122,40 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   parameter list whole (via the shared `skip_angles`), and the target runs to the top-level `;` honoring
   `[]`/`()`/`{}` nesting (an inner `[T; N]` `;` no longer truncates it). Behavior-preserving for an
   ordinary `type X = a::b::C;` → **patch** (0.1.8).
+- **(v0.1.9) `must_not_call_inline` grows an opt-in `.strict_external()` — a new `ModuleRule`
+  variant (patch-safe), not a field.** By default the inline confinement resolves an un-`use`d bare
+  head to a fake-local `{module}::…` path (the load-bearing fallback the `type`-alias / re-export
+  closure depends on), so a fully-qualified, un-`use`d external call (`chrono::Utc::now()` with no
+  `use chrono`) resolved local and was **silently missed** while a sysroot `std::time::…::now()` was
+  caught — an under-coverage false negative reading as full coverage. `.strict_external()` closes it:
+  a bare head matching a **declared dependency** (rename-aware, `-`→`_`-folded to its import
+  identifier) resolves as external. It rides a **new variant** `ConfineInlineSymbolPathExternal`
+  (payload-identical to `ConfineInlineSymbolPath`), **not a field** on the existing variant — a field
+  on a public enum variant is a downstream `E0063`/`E0027` compile break, while a variant on a
+  `#[non_exhaustive]` enum is patch-safe (the same growth pattern as `RestrictDependencySourcesTo`).
+  The twin-variant is `#[doc(hidden)]` and recorded as **0.2.0 model-surface debt** (fold back into
+  one variant + field once the surface is narrowed — see BACKLOG). **Identity parity is
+  baseline-critical:** both variants route through one shared path, so `label()` returns the
+  *identical* `"inline symbol path confined to module"`, `polarity()` is `DenyBreach`, and
+  `target`/`finding` are byte-identical — adding the flag to an already-baselined boundary never
+  re-keys a finding (`strict_external` is emitted only in `text()`/`json_params()`, never in
+  identity). The reclassification honors a **full local-precedence ladder** (first match wins,
+  gated entirely on the flag so the default path is byte-identical): (i) the per-file use-map, (ii)
+  a crate-root module shadow, (iii) **any** local module `{module}::head` at any depth (from the
+  complete crate module-path set — not `root_modules`, which holds only crate-root children), (iv)
+  **any** local item definition across all namespaces (mod/struct/enum/union/trait/type/fn/const/
+  static — a byte-scanned set, not `ctx.defs`, which holds only type-alias + `pub use`), then (v) a
+  declared-dependency match ⇒ external. Only if (i)–(iv) do not claim the head does dep-match fire,
+  so a local item named like a dependency **at any depth** stays local (no false positive — the
+  first-cut flaw the review caught was threading only `root_modules` + `ctx.defs`). **三儀 ⊥ 三儀
+  kept:** 圭表 grows its **own** syn-free, `serde_json`-only rename-aware deps reader
+  (`cargo_metadata::dependency_import_names`) from the `package["dependencies"]` value it already
+  reads via 星表 — a small parallel of `hunyi::crate_scope::dependency_names`, **no** `guibiao → hunyi`
+  edge and no new crate dependency (the closed guibiao allowlist `["serde_json","xuanji","xingbiao"]`
+  still holds — self-governance green). An `extern crate dep as alias;` rename remains a **stated
+  bound** (the use-map reads `use` only; rustdoc must not overclaim "all external calls caught"), and
+  the glob-hazard reaction **extends** to external-crate globs under the flag (an external glob is an
+  ancestor of the prefix → reacts fail-closed). Twice adversarially reviewed; guard test proves the
+  reaction (and disappears when only the resolver branch is reverted), FP-safety tests cover a deep
+  local module / local fn / local alias, and a baseline-churn guard locks identity parity → **minor**
+  (0.1.9, additive opt-in capability).

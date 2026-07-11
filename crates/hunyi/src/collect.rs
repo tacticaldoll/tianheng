@@ -658,7 +658,7 @@ pub(crate) fn collect_trait_impl_exposures(
         &format!("{prefix} (self)"),
     ));
 
-    // 4. where — impl generic-param bounds and the `where`-clause, keyed by the bounded type so
+    // 3. where — impl generic-param bounds and the `where`-clause, keyed by the bounded type so
     //    two distinct bounds exposing the same type never collapse under the baseline.
     for param in &item.generics.params {
         match param {
@@ -702,7 +702,7 @@ pub(crate) fn collect_trait_impl_exposures(
 
     for impl_item in &item.items {
         match impl_item {
-            // 3. assoc {name} — associated type/value bindings authored in the impl. Both an
+            // 4. assoc {name} — associated type/value bindings authored in the impl. Both an
             //    associated `type X = …` and an associated `const X: … ` carry an impl-site type.
             syn::ImplItem::Type(assoc) => {
                 let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));

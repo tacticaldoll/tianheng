@@ -159,13 +159,9 @@ impl Constitution {
             clock
         };
 
-        // 渾儀 — the public seam is synchronous; async lives at the edges. Subtree-scoped: a public
-        // `async fn` anywhere under the module's public mod-tree reacts, so a pure kernel is sans-I/O
-        // *throughout*, not only at its own seam (a seam-only async guard would silently miss a
-        // submodule's async fn). Both halves
-        // reach the subtree, but by different observation — the clock half over the filesystem, the
-        // async half over the declared mod-tree — so a `#[path]`-remapped module is the semantic
-        // dimension's stated bound here (the async half does not descend one), not full parity.
+        // 渾儀 — the public seam is synchronous; async lives at the edges. Subtree-scoped (opts in
+        // via `including_submodules`): a seam-only async guard would silently miss a submodule's
+        // async fn (see the struct doc for how the two halves' subtree reach differs).
         let sync_api = AsyncExposureBoundary::in_crate(&crate_package)
             .module(&module)
             .must_not_expose_async_fn()

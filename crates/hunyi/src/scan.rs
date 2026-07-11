@@ -17,8 +17,8 @@ use crate::errors::missing_module_file_error;
 use crate::module_resolve::{locate_module_file, read_parse, resolve_module_root};
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_target,
-    collect_reexports, collect_uses, extern_verbatim_renamed, resolve_path, strip_raw,
-    type_to_string,
+    bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
+    resolve_path, strip_raw, type_to_string,
 };
 use crate::syn_util::has_path_attr;
 
@@ -94,17 +94,9 @@ fn bare_local_alias_target(
     module: &str,
     local_alias_names: &HashSet<String>,
 ) -> Option<String> {
-    if target.leading_colon.is_some() || target.segments.len() != 1 {
-        return None;
-    }
-    let seg = &target.segments[0];
-    if !matches!(seg.arguments, syn::PathArguments::None) {
-        return None;
-    }
-    let name = strip_raw(&seg.ident.to_string());
-    local_alias_names
-        .contains(&name)
-        .then(|| format!("{module}::{name}"))
+    bare_single_segment_ident(target)
+        .filter(|name| local_alias_names.contains(name))
+        .map(|name| format!("{module}::{name}"))
 }
 
 /// Walk the whole crate from its root, descending every file-based and inline module,

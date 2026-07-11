@@ -329,17 +329,9 @@ impl Baseline {
     /// Build a baseline from the current report's violations, with no metadata. Entries are
     /// sorted and de-duplicated by identity, so the file stays stable and diffable.
     pub fn of(report: &Report) -> Self {
-        let mut entries: Vec<BaselineEntry> = report
-            .violations
-            .iter()
-            .map(|violation| BaselineEntry {
-                id: violation.id(),
-                owner: None,
-                tracker: None,
-            })
-            .collect();
-        sort_dedup_by_id(&mut entries);
-        Baseline { entries }
+        // `of` is `of_preserving` against an empty prior baseline: every prior lookup misses, so
+        // every entry's owner/tracker resolves to None — identical to building bare identities.
+        Self::of_preserving(report, &Baseline::default())
     }
 
     /// Build the next baseline snapshot from the current report, **preserving** each surviving

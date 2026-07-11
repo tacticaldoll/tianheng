@@ -12,6 +12,32 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-07-11
+
+### Added
+- 圭表 `must_not_call_inline(…).strict_external()` — **opt-in**: also catch a *fully-qualified
+  external-crate* call (e.g. a bare `chrono::Utc::now()` with no `use chrono`), closing the
+  asymmetry where a sysroot head (`std::time::…`) was caught but a fully-qualified external head was
+  silently resolved as local. A bare head matching a declared dependency is resolved as that crate,
+  after a local-precedence ladder so a genuinely-local item of the same name stays local at any
+  nesting depth. Composes with `.ending_with` / `.strict_prefix_only`; with the flag off the default
+  is **byte-identical**, so existing constitutions and baselines are unaffected. Carried as a new
+  `#[non_exhaustive]` rule variant (patch-safe; identity-parity, no baseline churn), and 圭表 grows
+  its own rename-aware dependency-name reader — no dependency on 渾儀 (三儀 ⊥ 三儀), still `syn`-free.
+  Stated bounds (an `extern crate … as` rename; and, under a single-segment prefix, a local binding
+  or a definition site that reads as a call) are declared, never a silent pass.
+- Adopter cookbook recipes (`COOKBOOK.md`): test that a boundary reacts, gate workspace coverage in
+  CI, why exposure rules are deny-shaped (not a "may only expose" allowlist), and the
+  `strict_external` recipe. `README.md` gains a "what the instruments do **not** see" note, so a
+  reader does not over-infer a dimension's reach (渾儀 reads a signature's types/traits, never a
+  call site).
+
+### Changed
+- Internal refinement, behavior-preserving and no public-API change: 渾儀's whole-crate-scan
+  capabilities share one violation-emission helper; the text projection shares a module-block
+  helper; idiom/consistency cleanups; and `xingbiao` now carries `#![deny(missing_docs)]` like its
+  five sibling crates.
+
 ## [0.1.8] - 2026-07-11
 
 ### Added
@@ -131,7 +157,8 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/tacticaldoll/tianheng/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/tacticaldoll/tianheng/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tacticaldoll/tianheng/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/tacticaldoll/tianheng/compare/v0.1.5...v0.1.6

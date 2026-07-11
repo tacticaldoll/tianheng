@@ -13,6 +13,7 @@
 //! dimensions to each other — they compose only through the 天衡 shell; 星表 is a substrate
 //! beneath them, named in each dependent's dependency allowlist.
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

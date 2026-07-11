@@ -632,6 +632,47 @@ fn run_module_check(
     (result, violations)
 }
 
+/// Like [`run_module_check`], but with declared dependencies in the synthesized `cargo metadata`
+/// package — needed by the strict-external inline confinement, whose head ladder matches a bare
+/// head against declared dependency import identifiers. Each dep is `(name, rename)`: `rename` is
+/// the Cargo `pkg = { package = "…" }` alias when `Some` (the `-`→`_` fold is applied by the
+/// reader under test, so pass names verbatim).
+fn run_module_check_with_deps(
+    name: &str,
+    files: &[(&str, &str)],
+    deps: &[(&str, Option<&str>)],
+    boundary: ModuleBoundary,
+) -> (Result<(), String>, Vec<Violation>) {
+    let dir = std::env::temp_dir().join(format!("guibiao-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    for (rel, contents) in files {
+        let path = src.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent"))
+            .expect("create src dirs");
+        std::fs::write(&path, contents).expect("write source file");
+    }
+    let manifest = dir.join("Cargo.toml");
+    let dependencies: Vec<serde_json::Value> = deps
+        .iter()
+        .map(|(dep_name, rename)| match rename {
+            Some(rename) => serde_json::json!({ "name": dep_name, "rename": rename }),
+            None => serde_json::json!({ "name": dep_name }),
+        })
+        .collect();
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": dependencies,
+        }]
+    });
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+    (result, violations)
+}
+
 fn restrict_kernel_to_types(governed: &str, allowed: &[&str]) -> ModuleBoundary {
     ModuleBoundary::in_crate("x")
         .module(governed)
@@ -3490,6 +3531,430 @@ fn inline_valid_zero_match_is_clean() {
     );
 }
 
+// --- inline-symbol-path: strict-external opt-in (`.strict_external()`) -------------------
+
+/// A strict-external confinement on `chrono::Utc`, with `chrono` declared as a dependency. `name`
+/// keys a per-test temp dir (must be unique, since tests run in parallel).
+fn confine_chrono_strict(
+    name: &str,
+    files: &[(&str, &str)],
+) -> (Result<(), String>, Vec<Violation>) {
+    run_module_check_with_deps(
+        name,
+        files,
+        &[("chrono", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("chrono::Utc")
+            .strict_external()
+            .because("core reads no wall clock — time is injected"),
+    )
+}
+
+#[test]
+fn inline_strict_external_reacts_on_a_fully_qualified_external_call() {
+    // 4.1 Guard (FN close): a fully-qualified, un-`use`d `chrono::Utc::now()` REACTS under the flag.
+    let (result, violations) = confine_chrono_strict(
+        "inline-strict-ext-fq",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            ("core.rs", "fn stamp() { let _ = chrono::Utc::now(); }\n"),
+        ],
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "chrono::Utc");
+    assert!(
+        violations[0].finding.contains("chrono::Utc::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_absent_fully_qualified_call_is_a_bound() {
+    // 4.2 Default unchanged: the SAME call without the flag does NOT react (stated bound).
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-default",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            ("core.rs", "fn stamp() { let _ = chrono::Utc::now(); }\n"),
+        ],
+        &[("chrono", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("chrono::Utc")
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a fully-qualified external call is a stated bound under the default: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_deep_local_module_stays_clean() {
+    // 4.3 FP safety — a DEEP local module (non-crate-root) named like the dependency wins by local
+    // precedence (rung iii at depth), NOT the crate-root shadow.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-deepmod",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "pub mod time;\nfn f() { let _ = time::format(); }\n",
+            ),
+            ("core/time.rs", "pub fn format() {}\n"),
+        ],
+        &[("time", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("time")
+            .strict_external()
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a deep local module named like a dep stays local: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_local_fn_definition_stays_clean() {
+    // 4.4 FP safety — a local `fn` named like the dependency wins by local precedence (rung iv).
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-localfn",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn rand() -> u32 { 4 }\nfn f() { let _ = rand(); }\n",
+            ),
+        ],
+        &[("rand", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("rand")
+            .strict_external()
+            .because("core is deterministic"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a local fn shadowing a dep name stays local: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_local_alias_stays_clean() {
+    // 4.5 FP safety — a local `use crate::clock as time;` alias resolves through the use-map
+    // (rung i, which precedes the dependency match) and stays clean.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-alias",
+        &[
+            ("lib.rs", "pub mod core;\npub mod clock;\n"),
+            ("clock.rs", "pub fn read() {}\n"),
+            (
+                "core.rs",
+                "use crate::clock as time;\nfn f() { let _ = time::read(); }\n",
+            ),
+        ],
+        &[("time", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("time")
+            .strict_external()
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a local alias shadowing a dep name resolves local: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_glob_reacts_and_default_glob_does_not() {
+    // 4.6 An external-crate glob `use chrono::*;` reacts under the flag (an external glob is an
+    // ancestor of the confined prefix); the same glob under the default does NOT react.
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "use chrono::*;\n"),
+    ];
+    let (result, violations) = confine_chrono_strict("inline-strict-ext-glob", files);
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "external glob reacts: {violations:?}");
+    assert!(violations[0].finding.contains("glob"), "{violations:?}");
+
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-glob-default",
+        files,
+        &[("chrono", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("chrono::Utc")
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "the same glob under the default resolves local and does not react: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_composes_with_narrowing() {
+    // 4.7 `.strict_external().ending_with(["now"])` reacts on `now()` and not on `today()`.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-narrow",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() { let _ = chrono::Utc::now(); let _ = chrono::Utc::today(); }\n",
+            ),
+        ],
+        &[("chrono", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("chrono::Utc")
+            .strict_external()
+            .ending_with(["now"])
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "only the now-read reacts under narrowing: {violations:?}"
+    );
+    assert!(
+        violations[0].finding.contains("chrono::Utc::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_extern_crate_rename_is_a_stated_bound() {
+    // 4.8 `extern crate chrono as chr; chr::Utc::now()` does NOT react (stated bound — the use-map
+    // reads `use` only), while the bare `chrono::Utc::now()` in the same subtree does.
+    let (result, violations) = confine_chrono_strict(
+        "inline-strict-ext-extern",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "extern crate chrono as chr;\nfn a() { let _ = chr::Utc::now(); }\nfn b() { let _ = chrono::Utc::now(); }\n",
+            ),
+        ],
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "only the real-name call reacts; the extern-crate-as rename is a bound: {violations:?}"
+    );
+    assert!(
+        violations[0].finding.contains("chrono::Utc::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_adds_nothing_to_paths_that_already_react() {
+    // 4.9 A `use chrono::Utc; Utc::now()` reacts WITHOUT the flag; and a cross-module
+    // `pub use chrono::Utc;` chased to `Utc::now()` reacts WITHOUT the flag — the flag adds nothing.
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod core;\npub mod support;\n"),
+        ("support.rs", "pub use chrono::Utc;\n"),
+        (
+            "core.rs",
+            "use chrono::Utc;\nuse crate::support::Utc as SupUtc;\nfn f() { let _ = Utc::now(); let _ = SupUtc::now(); }\n",
+        ),
+    ];
+    // Without the flag.
+    let (result, plain) = run_module_check_with_deps(
+        "inline-strict-ext-already-default",
+        files,
+        &[("chrono", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("chrono::Utc")
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        plain.len(),
+        1,
+        "the used import + chased re-export already react under the default: {plain:?}"
+    );
+    // With the flag — same finding count (adds nothing, no over-reach, no double count).
+    let (result, flagged) = run_module_check_with_deps(
+        "inline-strict-ext-already-flag",
+        files,
+        &[("chrono", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("chrono::Utc")
+            .strict_external()
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        flagged.len(),
+        plain.len(),
+        "the flag adds nothing to paths that already react: {flagged:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_preserves_identity_no_baseline_churn() {
+    // 4.10 Baseline-churn guard: a sysroot `std::time::…::now()` finding must have byte-identical
+    // (target, rule, finding) whether or not `.strict_external()` is added — so a baselined finding
+    // survives the flag (identity parity, task 1.3). Locks label()/target/finding.
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod core;\n"),
+        (
+            "core.rs",
+            "fn f() { let _ = std::time::SystemTime::now(); }\n",
+        ),
+    ];
+    let (r1, plain) = run_module_check(
+        "inline-identity-default",
+        files,
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .because("core reads no wall clock"),
+    );
+    let (r2, flagged) = run_module_check_with_deps(
+        "inline-identity-flag",
+        files,
+        &[],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .strict_external()
+            .because("core reads no wall clock"),
+    );
+    assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
+    assert_eq!(plain.len(), 1, "{plain:?}");
+    assert_eq!(flagged.len(), 1, "{flagged:?}");
+    assert_eq!(plain[0].target, flagged[0].target, "target parity");
+    assert_eq!(plain[0].rule, flagged[0].rule, "rule (label) parity");
+    assert_eq!(plain[0].finding, flagged[0].finding, "finding parity");
+    assert_eq!(
+        plain[0].rule, "inline symbol path confined to module",
+        "the identity label is unchanged by the flag"
+    );
+}
+
+#[test]
+fn inline_strict_external_runs_the_exit_2_checks() {
+    // 4.11 The new variant must still run the exit-2 constitution checks, never silently skip them.
+    // Contradictory triple → narrow-and-strict error.
+    let (contradiction, _) = run_module_check_with_deps(
+        "inline-strict-ext-contradiction",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", "// clean\n")],
+        &[("std", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(["now"])
+            .strict_prefix_only()
+            .strict_external()
+            .because("contradiction"),
+    );
+    assert_eq!(
+        contradiction.unwrap_err(),
+        inline_narrow_and_strict_error("x")
+    );
+    // Empty prefix → empty-prefix error.
+    let (empty, _) = run_module_check_with_deps(
+        "inline-strict-ext-empty",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", "// clean\n")],
+        &[],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("")
+            .strict_external()
+            .because("bad"),
+    );
+    assert_eq!(empty.unwrap_err(), inline_empty_prefix_error("x"));
+}
+
+#[test]
+fn inline_strict_external_cross_module_local_item_does_not_mask() {
+    // Apply-review finding 1 (cardinal false negative): the item-definition set MUST be
+    // module-qualified. A `fn rand` in `crate::helpers` must NOT suppress a real external
+    // `rand::random()` call in the governed `crate::core` (a different module). Pre-fix, the set was
+    // crate-flat and this call was silently passed (FN); this guard reacts.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-xmod",
+        &[
+            ("lib.rs", "pub mod core;\npub mod helpers;\n"),
+            ("helpers.rs", "pub fn rand() -> u32 { 4 }\n"),
+            ("core.rs", "fn f() { let _ = rand::random(); }\n"),
+        ],
+        &[("rand", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("rand")
+            .strict_external()
+            .because("core is deterministic"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a same-named item of ANOTHER module must not mask a real external call: {violations:?}"
+    );
+    assert_eq!(violations[0].target, "rand");
+    assert!(
+        violations[0].finding.contains("rand::random"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_block_local_item_does_not_mask() {
+    // Apply-review finding 1 residual: only MODULE-TOP-LEVEL items shadow a bare head. A block-local
+    // `const log` (brace depth ≥ 1) is NOT reachable as a bare head, so it must NOT suppress a real
+    // external `log::logger()` call in the same module. Pre-fix (capture-all depth), the nested name
+    // was captured and silently masked the call (a false negative); this guard reacts.
+    // (A colliding *method*/nested `fn log` is instead a stated over-reaction bound — its definition
+    // site `log(` reads as a call under a single-segment prefix — so this uses a non-call-shaped
+    // `const` to isolate the depth-exclusion behaviour.)
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-blocklocal",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn f() {\n    const log: u32 = 3;\n    let _ = log::logger();\n}\n",
+            ),
+        ],
+        &[("log", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("log")
+            .strict_external()
+            .because("core does not log"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a block-local item (depth ≥ 1) must not mask a same-module external call: {violations:?}"
+    );
+    assert_eq!(violations[0].target, "log");
+    assert!(
+        violations[0].finding.contains("log::logger"),
+        "{violations:?}"
+    );
+}
+
 // --- inline-symbol-path: adversarial-review regression + coverage ------------------------
 
 #[test]
@@ -3807,5 +4272,166 @@ fn inline_in_macro_body_alias_is_a_bound() {
     assert!(
         violations.is_empty(),
         "an alias defined inside a macro body is a stated bound: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_inline_submodule_call_is_not_masked() {
+    // Cardinal false-negative guard (apply-review finding 1): a file-top `fn rand` must NOT mask a real external
+    // `rand::random()` call inside an inline `mod tests { … }`. The call's TRUE module is
+    // `crate::core::tests`, so the file-top item `crate::core::rand` cannot claim its head — the
+    // external match fires. Pre-fix the call scan tracked no inline-`mod` nesting, so the file-top
+    // item silently shadowed the submodule call (the bug the review caught); this guard reacts.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-submod-call",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn rand() -> u32 { 4 }\nmod tests { fn t() { let _ = rand::random(); } }\n",
+            ),
+        ],
+        &[("rand", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("rand")
+            .strict_external()
+            .because("core is deterministic"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a file-top item must not mask an external call inside an inline submodule: {violations:?}"
+    );
+    assert_eq!(violations[0].target, "rand");
+    assert!(
+        violations[0].finding.contains("rand::random"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_submodule_local_item_stays_clean() {
+    // Bonus FP guard: a submodule-local `fn rand` IS now captured under its true module
+    // (`crate::core::tests::rand`), so a bare `rand()` call in that same submodule resolves to the
+    // local item and stays clean. (Pre-fix the item was at brace depth ≥ 1 and never captured, so
+    // this could false-positive; the inline-aware keying closes it.)
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-submod-local",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "mod tests { fn rand() -> u32 { 4 } fn t() { let _ = rand(); } }\n",
+            ),
+        ],
+        &[("rand", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("rand")
+            .strict_external()
+            .because("core is deterministic"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a submodule-local item named like a dep must claim its own submodule's call: {violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_deeply_nested_submodule_reacts() {
+    // The inline-`mod` stack composes to any depth: a file-top `fn rand` cannot mask a
+    // `rand::random()` call two submodules deep (`crate::core::a::b`), so the external match fires.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-nested",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn rand() -> u32 { 4 }\nmod a { mod b { fn t() { let _ = rand::random(); } } }\n",
+            ),
+        ],
+        &[("rand", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("rand")
+            .strict_external()
+            .because("core is deterministic"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a file-top item must not mask a call in a deeply nested submodule: {violations:?}"
+    );
+    assert_eq!(violations[0].target, "rand");
+    assert!(
+        violations[0].finding.contains("rand::random"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_cfg_gated_submodule_reacts() {
+    // A `#[cfg(test)]` attribute on the inline `mod` carries only `(…)`/`[…]` — no `{`/`}` — so it
+    // does not perturb the brace-depth tracking: the `mod tests { … }` body is still entered and the
+    // `rand::random()` call inside it is attributed to `crate::core::tests`, unmasked by the
+    // file-top `fn rand`.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-strict-ext-cfg-gated",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn rand() -> u32 { 4 }\n#[cfg(test)]\nmod tests { fn t() { let _ = rand::random(); } }\n",
+            ),
+        ],
+        &[("rand", None)],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("rand")
+            .strict_external()
+            .because("core is deterministic"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a cfg-gated inline submodule must not perturb brace tracking: {violations:?}"
+    );
+    assert_eq!(violations[0].target, "rand");
+    assert!(
+        violations[0].finding.contains("rand::random"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_strict_external_default_path_module_attribution_unshifted() {
+    // Default-path byte-identity: a NON-strict inline confinement whose call sits inside an inline
+    // `mod tests { … }` must still attribute the finding to the FILE module (`crate::core`), NOT the
+    // submodule — proving the new per-occurrence inline module is computed only under the flag and
+    // never leaks into default attribution.
+    let (result, violations) = run_module_check(
+        "inline-default-attr",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "mod tests { fn t() { let _ = std::time::SystemTime::now(); } }\n",
+            ),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .because("core reads no wall clock"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert!(
+        violations[0].finding.ends_with("in crate::core"),
+        "default attribution must stay on the FILE module, not the inline submodule: {violations:?}"
     );
 }

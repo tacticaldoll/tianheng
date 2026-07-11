@@ -659,6 +659,69 @@ pub enum ModuleRule {
         /// `ending_with` (both set is a constitution error).
         strict: bool,
     },
+    /// The strict-external sibling of
+    /// [`ConfineInlineSymbolPath`](ModuleRule::ConfineInlineSymbolPath), emitted by
+    /// [`must_not_call_inline`](ModuleTargetDraft::must_not_call_inline)`.strict_external()`. It
+    /// carries the identical payload; the variant identity (not a field) encodes that
+    /// fully-qualified, un-`use`d external calls are reclassified as external and observed. A
+    /// separate variant rather than a field on the sibling, so it ships as a patch under the enum's
+    /// `#[non_exhaustive]`. Identity-indistinguishable from the sibling (`label`/`polarity` and the
+    /// violation `target`/`finding` byte-identical), so adding `.strict_external()` never re-keys a
+    /// baselined finding. `#[doc(hidden)]`: twin-variant shape is 0.2.0 model-surface debt (`BACKLOG.md`).
+    #[doc(hidden)]
+    ConfineInlineSymbolPathExternal {
+        /// The confined module-path prefix (e.g. `"chrono::Utc"`).
+        prefix: String,
+        /// Leaf-exact read-verb narrowing, as on
+        /// [`ConfineInlineSymbolPath`](ModuleRule::ConfineInlineSymbolPath).
+        ending_with: Option<Vec<String>>,
+        /// Escalate to any mention (not only calls), as on
+        /// [`ConfineInlineSymbolPath`](ModuleRule::ConfineInlineSymbolPath). Mutually exclusive
+        /// with `ending_with` (both set is a constitution error).
+        strict: bool,
+    },
+}
+
+/// The inline-confinement text projection, shared by both inline variants so a strict-external
+/// boundary's base text is single-sourced with the default one (the ` (strict-external)` suffix is
+/// added by the caller). Not identity — [`ModuleRule::label`] is the identity string and is the
+/// same for both variants.
+fn inline_confinement_text(
+    prefix: &str,
+    ending_with: &Option<Vec<String>>,
+    strict: bool,
+) -> String {
+    match (ending_with, strict) {
+        (_, true) => format!("must not name inline under {prefix} (strict: mentions too)"),
+        (Some(verbs), false) => format!(
+            "must not call inline under {prefix} ending with: {}",
+            verbs.join(", ")
+        ),
+        (None, false) => format!("must not call inline under {prefix}"),
+    }
+}
+
+/// The inline-confinement JSON parameters, shared by both inline variants. `strict_external` is
+/// emitted only for the external variant (`external == true`), matching the emit-when-set
+/// discipline of `ending_with`/`strict` — a strict boundary must not project byte-identically to a
+/// default one. This is projection metadata only; it never leaks into [`ModuleRule::label`].
+fn inline_confinement_json(
+    prefix: &str,
+    ending_with: &Option<Vec<String>>,
+    strict: bool,
+    external: bool,
+) -> Vec<(&'static str, Value)> {
+    let mut params = vec![("confined_prefix", serde_json::json!(prefix))];
+    if let Some(verbs) = ending_with {
+        params.push(("ending_with", serde_json::json!(verbs)));
+    }
+    if strict {
+        params.push(("strict", serde_json::json!(true)));
+    }
+    if external {
+        params.push(("strict_external", serde_json::json!(true)));
+    }
+    params
 }
 
 impl ModuleRule {
@@ -670,7 +733,33 @@ impl ModuleRule {
             ModuleRule::MustNotBeImportedBy { .. } => "module must not be imported by",
             ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
             ModuleRule::ConfineExternalCrate { .. } => "external crate confined to module",
-            ModuleRule::ConfineInlineSymbolPath { .. } => "inline symbol path confined to module",
+            // IDENTITY PARITY: the strict-external variant returns the IDENTICAL label as its
+            // default sibling (matched together), so adding `.strict_external()` to an
+            // already-baselined boundary never re-keys a finding (`rule` is a `ViolationId` field).
+            ModuleRule::ConfineInlineSymbolPath { .. }
+            | ModuleRule::ConfineInlineSymbolPathExternal { .. } => {
+                "inline symbol path confined to module"
+            }
+        }
+    }
+
+    /// The shared inline-confinement payload of either inline variant — `(prefix, ending_with,
+    /// strict, external)` — or `None` for a non-inline rule. Both variants route through this one
+    /// accessor so dispatch and the exit-2 constitution checks are single-sourced; the only
+    /// `external`-conditional behavior lives in the scan (`inline_symbol_findings` / `resolve_head`).
+    pub(crate) fn inline_payload(&self) -> Option<(&str, Option<&[String]>, bool, bool)> {
+        match self {
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix,
+                ending_with,
+                strict,
+            } => Some((prefix, ending_with.as_deref(), *strict, false)),
+            ModuleRule::ConfineInlineSymbolPathExternal {
+                prefix,
+                ending_with,
+                strict,
+            } => Some((prefix, ending_with.as_deref(), *strict, true)),
+            _ => None,
         }
     }
 
@@ -688,7 +777,9 @@ impl ModuleRule {
             | ModuleRule::ConfineExternalCrate { .. } => Polarity::AllowlistGap,
             // A forbidden inline call under the prefix is a breach to remove (or replace with
             // injected time) — the same repair shape as `MustNotImport`, not an allowlist gap.
-            ModuleRule::ConfineInlineSymbolPath { .. } => Polarity::DenyBreach,
+            // Identity parity: the strict-external sibling shares the polarity.
+            ModuleRule::ConfineInlineSymbolPath { .. }
+            | ModuleRule::ConfineInlineSymbolPathExternal { .. } => Polarity::DenyBreach,
         }
     }
 
@@ -718,14 +809,18 @@ impl ModuleRule {
                 prefix,
                 ending_with,
                 strict,
-            } => match (ending_with, strict) {
-                (_, true) => format!("must not name inline under {prefix} (strict: mentions too)"),
-                (Some(verbs), false) => format!(
-                    "must not call inline under {prefix} ending with: {}",
-                    verbs.join(", ")
-                ),
-                (None, false) => format!("must not call inline under {prefix}"),
-            },
+            } => inline_confinement_text(prefix, ending_with, *strict),
+            // Projection (not identity): the strict-external variant appends a ` (strict-external)`
+            // marker so a strict boundary does not read as a default one, while the base text stays
+            // single-sourced with the sibling.
+            ModuleRule::ConfineInlineSymbolPathExternal {
+                prefix,
+                ending_with,
+                strict,
+            } => format!(
+                "{} (strict-external)",
+                inline_confinement_text(prefix, ending_with, *strict)
+            ),
         }
     }
 
@@ -764,16 +859,14 @@ impl ModuleRule {
                 prefix,
                 ending_with,
                 strict,
-            } => {
-                let mut params = vec![("confined_prefix", serde_json::json!(prefix))];
-                if let Some(verbs) = ending_with {
-                    params.push(("ending_with", serde_json::json!(verbs)));
-                }
-                if *strict {
-                    params.push(("strict", serde_json::json!(true)));
-                }
-                params
-            }
+            } => inline_confinement_json(prefix, ending_with, *strict, false),
+            // `strict_external` is emitted (only) here, so the projection discloses the strict
+            // boundary — but NOT in `label()`/identity (see the identity-parity note there).
+            ModuleRule::ConfineInlineSymbolPathExternal {
+                prefix,
+                ending_with,
+                strict,
+            } => inline_confinement_json(prefix, ending_with, *strict, true),
         }
     }
 }
@@ -889,6 +982,7 @@ impl ModuleTargetDraft {
             prefix: prefix.to_string(),
             ending_with: None,
             strict: false,
+            external: false,
             severity: Severity::Enforce,
         }
     }
@@ -943,6 +1037,7 @@ pub struct InlineConfinementDraft {
     prefix: String,
     ending_with: Option<Vec<String>>,
     strict: bool,
+    external: bool,
     severity: Severity,
 }
 
@@ -970,6 +1065,55 @@ impl InlineConfinementDraft {
         self
     }
 
+    /// **Opt-in.** Resolve a written path's bare head that matches a **declared dependency name**
+    /// (rename-aware, `-`→`_`-normalized to its import identifier) as that external crate — so a
+    /// **fully-qualified, un-`use`d external call** (`chrono::Utc::now()` with no `use chrono`)
+    /// resolving under the confined prefix reacts. This closes the asymmetry whereby a sysroot
+    /// head (`std`/`core`/`alloc`) was caught while a fully-qualified external head resolved as a
+    /// fake local path and was silently missed (a false negative).
+    ///
+    /// The flag has a second effect: the existing glob-hazard reaction **extends** to external-crate
+    /// globs. A `use chrono::*;` under a `chrono::…` confinement now resolves its glob head as
+    /// external `chrono` (an ancestor of the prefix) and reacts fail-closed; under the default it
+    /// stays `{module}::chrono` and does not react.
+    ///
+    /// The reclassification honors **local precedence, first match wins**, checked against the
+    /// call's TRUE inline module (`{module}::inner…`, following any `mod name { … }` around it): the
+    /// enclosing module's `use`-map, a crate-root module shadow, any local module `{module}::head`,
+    /// then any top-level item definition (mod/struct/enum/union/trait/type/fn/const/static) of that
+    /// name **in the calling module** — only if none claim the head does the dependency match fire.
+    /// A local item shadows a same-named external call only within its OWN module: a file-top
+    /// `fn rand` does not mask a `rand::random()` call inside an inline `mod tests { … }`, and a
+    /// submodule-local `fn rand` masks only calls in that submodule.
+    ///
+    /// It catches fully-qualified external calls **by the crate's real name**. It does NOT close:
+    /// an `extern crate dep as alias;` rename (a call through the local `alias` head is a stated
+    /// bound — the use-map observes `use` only), glob-brought names beyond the glob-hazard
+    /// reaction, and macro-constructed names. Do not read this as "all external calls caught."
+    ///
+    /// One further stated bound, strict-external only: a `mod name {` token or unbalanced braces
+    /// **inside a macro-invocation body** can perturb the call scan's inline-module tracking (the
+    /// call scan keeps macro bodies — real reads hide there — while the item collector strips them),
+    /// so a call's true module may be mis-attributed. Rare and declared, never a silent pass.
+    ///
+    /// One stated **over-**reaction bound, only under a **single-segment** bare crate prefix
+    /// (`must_not_call_inline("rand")`) — a multi-segment prefix (`chrono::Utc`) is immune: 圭表's
+    /// text scan cannot tell a local binding or a definition site from a call, so a local
+    /// `let rand = …; rand()`, or the definition site of an associated / nested `fn rand(…)` (whose
+    /// `rand(` reads as a call), may false-positive. Module-top-level definitions are exempt (they
+    /// resolve to the local item). Declared, not silent.
+    ///
+    /// Orthogonal to [`ending_with`](Self::ending_with) / [`strict_prefix_only`](Self::strict_prefix_only):
+    /// it changes head *resolution*, not call-vs-mention breadth, and composes with either — it is
+    /// **not** itself part of their mutual exclusion (but the contradictory
+    /// `.ending_with(…).strict_prefix_only()` pair is still a constitution error under the flag).
+    /// When not set, the fully-qualified external call remains a stated non-observation and
+    /// behavior is byte-identical to a confinement without the flag.
+    pub fn strict_external(mut self) -> Self {
+        self.external = true;
+        self
+    }
+
     /// Make this boundary advisory: its violations are reported but do not fail CI.
     pub fn warn(mut self) -> Self {
         self.severity = Severity::Warn;
@@ -978,14 +1122,26 @@ impl InlineConfinementDraft {
 
     /// Finish the boundary, recording the human-readable `reason` (the repair hint).
     pub fn because(self, reason: &str) -> ModuleBoundary {
-        ModuleBoundary {
-            crate_package: self.crate_package,
-            module: self.module,
-            rule: ModuleRule::ConfineInlineSymbolPath {
+        // The external opt-in rides a separate variant (patch-safe: a `#[non_exhaustive]` enum
+        // grows a variant without a downstream break, unlike a new field on an existing variant).
+        // Both variants carry the identical payload and are identity-indistinguishable.
+        let rule = if self.external {
+            ModuleRule::ConfineInlineSymbolPathExternal {
                 prefix: self.prefix,
                 ending_with: self.ending_with,
                 strict: self.strict,
-            },
+            }
+        } else {
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix: self.prefix,
+                ending_with: self.ending_with,
+                strict: self.strict,
+            }
+        };
+        ModuleBoundary {
+            crate_package: self.crate_package,
+            module: self.module,
+            rule,
             reason: reason.to_string(),
             severity: self.severity,
             anchor: None,

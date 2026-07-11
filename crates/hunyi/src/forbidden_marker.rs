@@ -2,17 +2,17 @@
 //! trait. For each forbidden trait, emit findings two ways — a `#[derive]` on a subtree type, and
 //! an `impl T for X` (anywhere) whose self-type resolves to a subtree definition.
 
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
 
 use serde_json::Value;
-use xuanji::{BoundaryKind, Outcome, Polarity, Violation};
+use xuanji::{Outcome, Polarity, Violation};
 
 use crate::containment::{leaf_of, path_leaf, resolve_self_type, under_subtree};
 use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
-use crate::file_scope::{per_finding_file, resolve_crate};
+use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
+use crate::file_scope::resolve_crate;
 use crate::finding::SemanticFinding;
 use crate::resolve::{
     BareFallback, canonical_path_str, canonical_self_owner, path_to_string, resolve_path,
@@ -45,31 +45,23 @@ pub(crate) fn check_forbidden_marker_boundary(
     )?;
 
     // Each finding carries the module its offending element sits in — the impl site's module for
-    // an `impl`, the defining type's module for a `#[derive]`; report that module's source file
-    // (memoized per module). See `per_finding_file` for the `.ok()`-degrades-to-null rule.
-    let mut file_cache: HashMap<String, Option<String>> = HashMap::new();
-    for (finding, module) in findings {
-        let file = per_finding_file(
-            &module,
+    // an `impl`, the defining type's module for a `#[derive]`; the shared emit helper resolves that
+    // module's source file (memoized per module) and stamps the deny-breach polarity.
+    push_multi_module_violations(
+        violations,
+        MultiModuleViolationContext {
             src_dir,
-            &root_file,
-            &boundary.crate_package,
-            &mut file_cache,
-        );
-        violations.push(
-            Violation::new(
-                BoundaryKind::Semantic,
-                boundary.module.clone(),
-                FORBIDDEN_MARKER_RULE.to_string(),
-                finding,
-                boundary.reason.clone(),
-                boundary.severity,
-            )
-            .with_file(file)
-            .with_anchor(boundary.anchor.clone())
-            .with_polarity(Polarity::DenyBreach),
-        );
-    }
+            root_file: &root_file,
+            target: &boundary.module,
+            crate_package: &boundary.crate_package,
+            rule: FORBIDDEN_MARKER_RULE,
+            reason: &boundary.reason,
+            severity: boundary.severity,
+            anchor: boundary.anchor(),
+            polarity: Polarity::DenyBreach,
+        },
+        findings,
+    );
     Ok(())
 }
 

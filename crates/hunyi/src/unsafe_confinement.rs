@@ -3,17 +3,17 @@
 //! sites and react to those whose module lies outside the allowed set. Confinement-only: an empty
 //! or crate-root allowed set is a constitution error (the crate-wide ban is `#![forbid]`'s job).
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use serde_json::Value;
-use xuanji::{BoundaryKind, Outcome, Polarity, Violation};
+use xuanji::{Outcome, Polarity, Violation};
 
 use crate::containment::matches_allowed;
 use crate::driver::run_boundaries;
 use crate::dsl::UnsafeBoundary;
+use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{unsafe_crate_root_allowed_error, unsafe_empty_allowed_error};
-use crate::file_scope::{per_finding_file, resolve_crate};
+use crate::file_scope::resolve_crate;
 use crate::resolve::canonical_path_str;
 use crate::rules::UNSAFE_CONFINEMENT_RULE;
 use crate::scan::scan_unsafe_sites;
@@ -46,31 +46,24 @@ pub(crate) fn check_unsafe_boundary(
     // A fixed rule string: the allowed subtree(s) are policy configuration (surfaced in the `list`
     // projection and the reason), not part of the violation's identity — editing the allowed set
     // does not turn a still-misplaced site into a "new" violation against a baseline (mirroring
-    // trait-impl-locality).
-    let rule = UNSAFE_CONFINEMENT_RULE.to_string();
-    let mut file_cache: HashMap<String, Option<String>> = HashMap::new();
-    for (finding, module) in findings {
-        let file = per_finding_file(
-            &module,
+    // trait-impl-locality). The violation `target` is the crate package (the confinement scope).
+    // The shared emit helper resolves each finding's module source file and stamps the
+    // allowlist-gap polarity.
+    push_multi_module_violations(
+        violations,
+        MultiModuleViolationContext {
             src_dir,
-            &root_file,
-            &boundary.crate_package,
-            &mut file_cache,
-        );
-        violations.push(
-            Violation::new(
-                BoundaryKind::Semantic,
-                boundary.crate_package.clone(),
-                rule.clone(),
-                finding,
-                boundary.reason.clone(),
-                boundary.severity,
-            )
-            .with_file(file)
-            .with_anchor(boundary.anchor.clone())
-            .with_polarity(Polarity::AllowlistGap),
-        );
-    }
+            root_file: &root_file,
+            target: &boundary.crate_package,
+            crate_package: &boundary.crate_package,
+            rule: UNSAFE_CONFINEMENT_RULE,
+            reason: &boundary.reason,
+            severity: boundary.severity,
+            anchor: boundary.anchor(),
+            polarity: Polarity::AllowlistGap,
+        },
+        findings,
+    );
     Ok(())
 }
 

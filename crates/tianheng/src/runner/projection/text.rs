@@ -25,6 +25,21 @@ fn anchor_line(anchor: Option<&str>) -> String {
         None => String::new(),
     }
 }
+/// The shared `[severity] module M in K / rule / reason` text block every per-module boundary
+/// projection emits — one skeleton so the callers cannot drift byte-for-byte. `rule_line` is the
+/// fully-composed rule segment: a bare rule, or one a caller prebuilt by folding its opt-in / scope
+/// / operand detail into the rule string.
+fn module_block(
+    severity: &str,
+    module: &str,
+    krate: &str,
+    rule_line: &str,
+    reason: &str,
+) -> String {
+    format!(
+        "\n[{severity}] module {module} in {krate}\n  rule:   {rule_line}\n  reason: {reason}\n"
+    )
+}
 /// The text projection of the semantic boundaries.
 pub(in crate::runner) fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
     if boundaries.is_empty() {
@@ -38,14 +53,17 @@ pub(in crate::runner) fn semantic_text(boundaries: &[SemanticBoundary]) -> Strin
         } else {
             ""
         };
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}: {}{}\n  reason: {}\n",
+        let rule_line = format!(
+            "{}: {}{}",
+            SIGNATURE_RULE,
+            boundary.forbidden().join(", "),
+            opt_in
+        );
+        out.push_str(&module_block(
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
-            SIGNATURE_RULE,
-            boundary.forbidden().join(", "),
-            opt_in,
+            &rule_line,
             boundary.reason(),
         ));
         out.push_str(&anchor_line(boundary.anchor()));
@@ -79,8 +97,7 @@ pub(in crate::runner) fn visibility_text(boundaries: &[VisibilityBoundary]) -> S
     }
     let mut out = text_section("Visibility", boundaries.len());
     for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
+        out.push_str(&module_block(
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
@@ -118,12 +135,12 @@ pub(in crate::runner) fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> Stri
     }
     let mut out = text_section("Dyn-trait", boundaries.len());
     for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
+        let rule_line = shape_rule_text(DYN_TRAIT_RULE, boundary.forbidden_operands());
+        out.push_str(&module_block(
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
-            shape_rule_text(DYN_TRAIT_RULE, boundary.forbidden_operands()),
+            &rule_line,
             boundary.reason(),
         ));
         out.push_str(&anchor_line(boundary.anchor()));
@@ -146,12 +163,12 @@ pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> St
     }
     let mut out = text_section("Impl-trait", boundaries.len());
     for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}\n  reason: {}\n",
+        let rule_line = shape_rule_text(IMPL_TRAIT_RULE, boundary.forbidden_operands());
+        out.push_str(&module_block(
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
-            shape_rule_text(IMPL_TRAIT_RULE, boundary.forbidden_operands()),
+            &rule_line,
             boundary.reason(),
         ));
         out.push_str(&anchor_line(boundary.anchor()));
@@ -171,13 +188,12 @@ pub(in crate::runner) fn async_exposure_text(boundaries: &[AsyncExposureBoundary
         } else {
             ""
         };
-        out.push_str(&format!(
-            "\n[{}] module {} in {}\n  rule:   {}{}\n  reason: {}\n",
+        let rule_line = format!("{}{}", ASYNC_EXPOSURE_RULE, scope);
+        out.push_str(&module_block(
             boundary.severity().as_str(),
             boundary.module(),
             boundary.crate_package(),
-            ASYNC_EXPOSURE_RULE,
-            scope,
+            &rule_line,
             boundary.reason(),
         ));
         out.push_str(&anchor_line(boundary.anchor()));

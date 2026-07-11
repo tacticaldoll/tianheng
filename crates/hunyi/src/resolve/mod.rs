@@ -522,6 +522,16 @@ pub(crate) fn bare_local_alias(
     module: &str,
     aliases: &AliasMap,
 ) -> Option<String> {
+    bare_single_segment_ident(path)
+        .map(|n| format!("{module}::{n}"))
+        .filter(|key| aliases.contains_key(key))
+}
+
+/// The raw-stripped ident of a bare, single-segment, non-generic path (`H`, `r#H`) — the shared
+/// syntactic guard behind [`bare_local_alias`] and the scan's alias-target resolver. `None` for a
+/// leading-`::`, multi-segment, or generic-argument-bearing path. Each caller forms its own
+/// `{module}::{ident}` key and applies its own (deliberately different) membership check.
+pub(crate) fn bare_single_segment_ident(path: &syn::Path) -> Option<String> {
     if path.leading_colon.is_some() || path.segments.len() != 1 {
         return None;
     }
@@ -529,6 +539,5 @@ pub(crate) fn bare_local_alias(
     if !matches!(seg.arguments, syn::PathArguments::None) {
         return None;
     }
-    let key = format!("{module}::{}", strip_raw(&seg.ident.to_string()));
-    aliases.contains_key(&key).then_some(key)
+    Some(strip_raw(&seg.ident.to_string()))
 }

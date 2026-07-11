@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use serde_json::Value;
-use xuanji::{Outcome, Violation};
+use xuanji::{Outcome, Polarity, Violation};
 
 use crate::collect::collect_item_async_exposures;
 use crate::driver::run_boundaries;
@@ -58,6 +58,7 @@ pub(crate) fn check_async_exposure_boundary(
                 reason: &boundary.reason,
                 severity: boundary.severity,
                 anchor: boundary.anchor(),
+                polarity: Polarity::DenyBreach,
             },
             findings,
         );

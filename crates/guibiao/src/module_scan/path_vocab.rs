@@ -43,6 +43,52 @@ pub(super) fn is_mod_declaration_keyword(bytes: &[u8], i: usize) -> bool {
     keyword_starts_at(bytes, i, b"mod")
 }
 
+/// If an inline module declaration `mod <ident> {` begins at `i` (a standalone `mod` keyword whose
+/// name is followed, after optional whitespace, by `{`), return `(name_start, name_end,
+/// index_of_opening_brace)`; otherwise `None` — a `mod name;` with no body, or not a declaration.
+/// Only an inline body encloses nested items. The single home of the inline-`mod` boundary test the
+/// `use`-scan ([`super::use_scan`]) and symbol-scan ([`super::symbol_scan`]) walks share, so the two
+/// cannot drift (the twin-drift bug class).
+pub(super) fn inline_mod_at(bytes: &[u8], i: usize) -> Option<(usize, usize, usize)> {
+    if !is_mod_declaration_keyword(bytes, i) {
+        return None;
+    }
+    let mut j = i + 3;
+    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+        j += 1;
+    }
+    let name_start = j;
+    while j < bytes.len() && !bytes[j].is_ascii_whitespace() && bytes[j] != b';' && bytes[j] != b'{'
+    {
+        j += 1;
+    }
+    let name_end = j;
+    if name_end == name_start {
+        return None;
+    }
+    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+        j += 1;
+    }
+    if bytes.get(j) == Some(&b'{') {
+        Some((name_start, name_end, j))
+    } else {
+        None
+    }
+}
+
+/// The module path enclosing a lexical position, formed from the file's `base` module and the names
+/// of the inline `mod`s currently open around it (each `mod_stack` entry is `(name,
+/// enclosing brace depth)`; only the names are joined). The shared home backing every walk that
+/// attributes a `use` / item / call to its true inline submodule.
+pub(super) fn effective_module(base: &str, mod_stack: &[(String, usize)]) -> String {
+    let mut module = base.to_string();
+    for (name, _) in mod_stack {
+        module.push_str("::");
+        module.push_str(name);
+    }
+    module
+}
+
 /// Whether a bare head names a crate-root module that **shadows** the extern prelude. Only at the
 /// crate root itself (`current_module == "crate"`) is a sibling `mod` in scope, so a bare
 /// `use foo::…` / path there resolves to the local `crate::foo`; in any submodule the same bare head

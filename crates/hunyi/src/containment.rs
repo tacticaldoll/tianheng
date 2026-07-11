@@ -11,10 +11,8 @@ use crate::resolve::{
 };
 
 /// Sibling-safe `::`-path containment: `path` equals `prefix` or sits strictly beneath it
-/// (`crate::a` contains `crate::a::b`, never the sibling `crate::ab`). The single home of the
-/// containment rule every capability's subtree/forbidden/allowed test shares, so no copy can
-/// drift to a bare `starts_with` that would admit a sibling — a false positive on the allowed
-/// side, a false negative on the forbidden side.
+/// (`crate::a` contains `crate::a::b`, never the sibling `crate::ab`). (The module doc carries the
+/// why — single home, no bare `starts_with`.)
 fn path_within(path: &str, prefix: &str) -> bool {
     path == prefix || path.starts_with(&format!("{prefix}::"))
 }

@@ -278,9 +278,8 @@ where
     // stays static-only.
     let (static_outcome, observed_coverage) =
         check_and_cover(constitution.static_boundaries(), &manifest_path);
-    // Compose the dimensions in order. A constitution error from any dimension supersedes
-    // (the run's verdict is untrustworthy), so once one errors we stop scanning the rest;
-    // otherwise each dimension's violations merge into one report.
+    // Compose the dimensions in order, stopping at the first that raises a constitution error
+    // (its supersede/merge semantics are stated above and in `merge_outcomes`).
     let mut outcome = static_outcome;
     if !matches!(outcome, Outcome::ConstitutionError(_))
         && !constitution.semantic_boundaries().is_empty()

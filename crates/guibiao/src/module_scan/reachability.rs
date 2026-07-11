@@ -384,8 +384,7 @@ fn module_path_of(relative: &Path, root_relative: Option<&Path>) -> String {
 fn is_conventional_root(relative: &Path) -> bool {
     relative
         .file_name()
-        .map(|n| matches!(n.to_string_lossy().as_ref(), "lib.rs" | "main.rs"))
-        .unwrap_or(false)
+        .is_some_and(|n| matches!(n.to_string_lossy().as_ref(), "lib.rs" | "main.rs"))
         && relative.components().count() == 1
 }
 
