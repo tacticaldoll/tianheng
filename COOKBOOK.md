@@ -75,6 +75,36 @@ Reacts when any importer *other than* `crate::facade` imports `crate::internal`.
 
 Reacts when `my-core` declares any external (non-workspace) dependency.
 
+### Forbid a dependency's risky feature (or require `default-features = false`)
+
+*Intent: a crate rule admits a dependency whole; govern which of its **features** you may declare —
+the feature surface a plain dependency allowlist cannot see.*
+
+```rust
+.boundary(
+    CrateBoundary::crate_("app")
+        .forbid_feature("some-lib", "unstable")
+        .because("production must not opt into some-lib's unstable API surface"),
+)
+```
+
+`forbid_feature(C, "default")` is the way to require `default-features = false`, and
+`restrict_features_of` pins a closed set (an empty allowlist forbids every feature, `default`
+included):
+
+```rust
+.boundary(
+    CrateBoundary::crate_("app")
+        .restrict_features_of("some-lib", ["std"])
+        .because("some-lib may be declared only with its std feature"),
+)
+```
+
+It observes the feature request you **author** in `Cargo.toml` — the declared `features` list plus
+the `default` pseudo-feature — matched by package name, unioned across a crate's edges. A feature a
+dependency enables *transitively*, or one a sibling crate turns on via Cargo feature unification, is
+out of scope by design (declared-not-resolved, like every other crate rule).
+
 ### Stay publishable to crates.io (declared source hygiene)
 
 *Intent: a crate prepared for crates.io declares only registry/path dependencies — no git.*

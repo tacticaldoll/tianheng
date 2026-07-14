@@ -258,3 +258,151 @@ The `finding` SHALL be **kind-qualified** so the same dependency name governed u
 - **WHEN** a boundary selects a dependency kind other than `Normal`
 - **THEN** the `list` projection, in text and JSON, shows the selected kind
 
+
+### Requirement: Declared feature-request observation model
+
+For a feature-granularity rule targeting a dependency `C`, the system SHALL compute the set of
+features of `C` that the target crate **declares** — its **authored** feature request — from the
+target's declared dependencies on `C` in the boundary's selected dependency kind (normal
+`[dependencies]` by default). `C` SHALL be matched by the resolved **package name**, not a local
+alias/`rename`, exactly as the other crate rules match dependency names. A target MAY declare `C`
+under more than one edge of the selected kind — for example a plain `[dependencies]` entry and a
+`[target.'cfg(...)'.dependencies]` entry, which Cargo emits as separate edges both of `Normal` kind.
+The declared set SHALL be the **union** across every such edge: it contains a feature if any of those
+edges lists it in `features = [...]`, and contains the pseudo-feature `default` if any of those edges
+leaves default features enabled (`cargo metadata`'s `uses_default_features` boolean true, i.e. the
+edge does not set `default-features = false`). The computation SHALL read only the target package's
+declared dependency edges and SHALL depend on no other crate, so the result is attributable to the
+target alone.
+
+The system SHALL NOT expand the declared set through `C`'s own `[features]` table (it SHALL NOT fold
+in the members of `C`'s default set, nor the features a declared feature transitively enables), and
+SHALL NOT derive the set from `cargo metadata`'s resolved `resolve.nodes[].features`. The former is
+unobservable for an external `C` under the shared `cargo metadata --no-deps` substrate (external
+packages are absent from `packages[]`); the latter is unstable, because Cargo feature unification
+merges every workspace crate's enables of `C` into one resolved set and would attribute another
+crate's enabled feature to this target. The rule therefore governs the **authored** feature request,
+a declared-not-resolved property at the same altitude as the existing declared-dependency rules.
+
+#### Scenario: A declared feature is observed
+
+- **WHEN** the target declares `C = { version = "1", features = ["extra"] }` and a feature rule targets `C`
+- **THEN** the declared set for `C` contains `extra`
+
+#### Scenario: Default features are represented by the `default` pseudo-feature
+
+- **WHEN** the target declares `C = { version = "1" }` without `default-features = false` (so `uses_default_features` is true)
+- **THEN** the declared set for `C` contains `default`
+
+#### Scenario: Disabling default features drops the `default` pseudo-feature
+
+- **WHEN** the target declares `C = { version = "1", default-features = false, features = ["extra"] }`
+- **THEN** the declared set for `C` contains `extra` and does not contain `default`
+
+#### Scenario: Transitive enables are not chased
+
+- **WHEN** `C`'s manifest declares `full = ["unstable"]`, and the target declares `C = { version = "1", features = ["full"] }`
+- **THEN** the declared set for `C` contains `full` and does **not** contain `unstable`, because the rule reads the target's authored request and does not expand `C`'s feature graph
+
+#### Scenario: Another workspace crate's enable is not attributed to the target
+
+- **WHEN** the target declares `C` with `default-features = false` and no features, while a different workspace member declares `C = { features = ["unstable"] }`
+- **THEN** the declared set for the target is empty, because it is computed from the target's own declared edge, not the unified resolved set
+
+#### Scenario: The declared set unions across multiple edges to the same dependency
+
+- **WHEN** the target declares `C = { features = ["a"] }` in `[dependencies]` and `C = { default-features = false, features = ["unstable"] }` under `[target.'cfg(windows)'.dependencies]`
+- **THEN** the declared set for `C` is the union `{ a, unstable, default }` — `default` because the plain edge leaves default features enabled — so a rule forbidding `C`'s `unstable` emits a violation
+
+#### Scenario: A dependency matched by package name, not local alias
+
+- **WHEN** the target declares `myc = { package = "real-c", features = ["unstable"] }` and a rule targets the package name `real-c`
+- **THEN** the declared set for `real-c` contains `unstable`; a rule written against the local alias `myc` matches nothing, because matching is by resolved package name as the other crate rules do
+
+### Requirement: Restrict a dependency's declared features to an allowlist
+
+A boundary SHALL support a rule that restricts the features a target declares on a named dependency
+`C` to a closed allowlist of feature names. Any feature in the target's declared set for `C` (per the
+Declared feature-request observation model) whose name is not in the allowlist SHALL be a violation.
+An empty allowlist SHALL forbid the target from declaring **any** feature of `C`, including the
+`default` pseudo-feature (i.e. it requires `default-features = false` and no explicit features). The
+rule SHALL apply to the boundary's selected dependency kind, and tables other than that kind SHALL be
+out of scope (see Dependency kind selection). The rule SHALL carry severity and react through the
+report, baseline, and projection exactly as the other crate rules do. When the target does not depend
+on `C` in the selected table, the rule SHALL report no violation (there is no declared set to
+constrain).
+
+#### Scenario: A declared feature outside the allowlist is a violation
+
+- **WHEN** the target declares `C`'s feature `unstable` and the boundary restricts `C`'s features to `["stable"]`
+- **THEN** the system emits a violation for `C`'s `unstable` feature and exits 1
+
+#### Scenario: A declared feature inside the allowlist is clean
+
+- **WHEN** the target's only declared feature of `C` is `stable`, it sets `default-features = false`, and the boundary restricts `C`'s features to `["stable"]`
+- **THEN** the system reports no violation for that boundary
+
+#### Scenario: An empty allowlist forbids declaring any feature
+
+- **WHEN** the target declares any feature of `C` (or leaves default features enabled) and the boundary restricts `C`'s features to `[]`
+- **THEN** the system emits a violation
+
+#### Scenario: A rule on a crate the target does not depend on is clean
+
+- **WHEN** the boundary restricts the features of a crate `C` that the target does not depend on in the selected table
+- **THEN** the system reports no violation for that boundary
+
+### Requirement: Forbid a dependency's declared features
+
+A boundary SHALL support a rule that forbids the target from declaring specific named features of a
+dependency `C`. Any feature in the target's declared set for `C` (per the Declared feature-request
+observation model) whose name matches a forbidden name SHALL be a violation; a forbidden feature the
+target does not declare SHALL NOT be a violation. Forbidding the `default` pseudo-feature SHALL be a
+way to require `default-features = false`. An empty forbidden set SHALL be a no-op that always reports
+clean (a vacuous rule, symmetric with forbidding a crate the target does not depend on). The rule
+SHALL apply to the boundary's selected dependency kind, carry severity, and react through the report,
+baseline, and projection exactly as the other crate rules do.
+
+#### Scenario: A forbidden feature that is declared is a violation
+
+- **WHEN** the target declares `C`'s feature `unstable` and the boundary forbids `C`'s `unstable`
+- **THEN** the system emits a violation for `C`'s `unstable` feature and exits 1
+
+#### Scenario: Forbidding `default` requires default-features to be off
+
+- **WHEN** the boundary forbids `C`'s `default` and the target declares `C` without `default-features = false`
+- **THEN** the system emits a violation for `C`'s `default` feature
+
+#### Scenario: A forbidden feature the target does not declare is clean
+
+- **WHEN** the boundary forbids `C`'s `unstable`, and the target's declared set for `C` does not contain `unstable` (even if `C`'s `full`, which the target declares, would transitively enable it)
+- **THEN** the system reports no violation for that boundary, because transitive enables are not chased
+
+#### Scenario: An empty forbidden set is a no-op
+
+- **WHEN** a boundary forbids an empty set of features of `C`
+- **THEN** the system reports no violation for that boundary regardless of what the target declares
+
+### Requirement: Feature-qualified finding
+
+The `finding` of a feature-granularity violation SHALL be qualified by both the dependency name and
+the offending feature name, in the form `C/feature`. Because a feature declared on a dependency edge
+is a plain feature name (Cargo forbids the `dep:`, `pkg/feat`, and `pkg?/feat` syntaxes in a
+dependency's `features` list; those exist only in a manifest's `[features]` table, which this rule
+does not read), the feature name contains no `/`, so `C/feature` is unambiguous. The feature-rule
+polarities (restrict / forbid) SHALL each carry a `rule` label distinct from each other and from the
+crate rules, so that `(target, rule, finding)` stays injective: a `restrict` and a `forbid` rule that
+both flag `C/unstable` on the same target remain distinct triples. Baselining one feature's violation
+SHALL NOT mask a new violation of a different feature of the same dependency. When the selected
+dependency kind is not `Normal`, the finding SHALL additionally carry the kind qualifier consistent
+with Dependency kind selection.
+
+#### Scenario: Two forbidden features of the same crate stay distinct
+
+- **WHEN** the target declares both `C/unstable` and `C/nightly`, both are forbidden, and `C/unstable` is recorded in the baseline
+- **THEN** the `C/nightly` violation still reacts, because its finding differs from the baselined `C/unstable`
+
+#### Scenario: The report names the dependency, feature, and reason
+
+- **WHEN** a feature rule on `C` is violated by the declared feature `unstable`
+- **THEN** the report names the target crate, the feature rule, the finding `C/unstable`, the boundary's reason, and indicates the reaction failed

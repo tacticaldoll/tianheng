@@ -49,6 +49,51 @@ generation, not just repair. But keep it **within the boundary's observable peri
 reason must never assert structure the law does not react to (that is prose prescription, an
 open loop with no backstop). Forward voice, bounded to what reacts.
 
+## Document authority & provenance
+
+Each document has one job, so a fact lives in one place. `PROJECT.md` is the contract — the *why*
+and the invariants, with significant calls recorded in its Decisions section.
+[`AGENTS.self-law.md`](AGENTS.self-law.md) is the enforced self-law, projected from
+`self_governance.rs` (never hand-edited). `openspec/specs/*` is the per-capability requirement
+truth. `BACKLOG.md` records deferred work and explicit non-goals. This file is the operating
+protocol for humans and agents. **Provenance — why a change was made — lives in its commit body and
+PR, not a separate ADR file class.** When two documents conflict, fix the conflict (an OpenSpec
+change, or a doc PR) before building on it.
+
+## OpenSpec lifecycle
+
+A capability change moves through OpenSpec: **explore → propose → apply → sync**. Each phase is a
+self-describing commit on the change branch, subject-prefixed by the phase — `propose: …`,
+`apply: …`, `sync: …` (the prefix names the lifecycle phase, not a Conventional-Commits scope):
+
+1. **explore** — investigate and shape intent; write no feature code outside a change.
+2. **propose** — write `proposal.md` / `design.md` / `specs/**` / `tasks.md`.
+3. **apply** — implement against the delta specs; check off a task only after verification (the
+   Definition of Done below).
+4. **sync** — merge the delta into `openspec/specs/*` (agent-driven).
+
+A completed change is **not** retained as a persistent dated copy. The OpenSpec CLI folds sync
+into its `archive` command, whose default *moves* the change under
+`changes/archive/YYYY-MM-DD-<name>/`; once the delta is synced into the specs, Tianheng removes
+**that dated copy**, while **keeping the `changes/archive/` directory itself as a tracked empty
+placeholder (a single `.gitkeep`)** — the archive home is stable but never accumulates
+completed-change scaffolding. Its record then lives in the main specs and git history. (Pruning
+the dated copy each sync is the guardrail against the archive silently accumulating those copies;
+that one placeholder also keeps `openspec/changes/` present, so no second `.gitkeep` is needed.)
+These lifecycle commits never land on `main` individually — they squash up per *Branching and
+release* below.
+
+## Adversarial review stance
+
+Work is gated by adversarial review, not performed agreement. At **propose**, challenge the design
+before it is accepted: does it earn its weight against the drift law and minimalism; does it push
+`xuanji` or a dimension past measure-only, or breach 三儀 ⊥ 三儀; is it a name without a reaction?
+At **apply**, challenge the implementation: does the declared reaction still *bite* the boundary the
+prose claims, or has the code drifted so the law passes without protecting its reason? Prefer an
+independent reviewer, and verify each finding against the code before acting on it; reject or
+redesign a change rather than let it pass diluted (the no-weakening-to-pass rule itself is
+*Self-governance*, below). (`propose` / `apply` here are the OpenSpec phases above.)
+
 ## Commits & PRs
 
 - **No AI/agent attribution.** Commit messages and PR descriptions must NOT contain a
@@ -62,17 +107,22 @@ open loop with no backstop). Forward voice, bounded to what reacts.
 ## Branching and release
 
 `main` is release-only: it carries nothing but linear, non-merge `release: X.Y.Z` snapshot
-commits, each tagged `vX.Y.Z`. The fine-grained lifecycle commits (propose / apply / sync /
-archive) never land on `main` individually — they collapse through two squash stages on the
+commits, each tagged `vX.Y.Z`. The fine-grained lifecycle commits (propose / apply / sync)
+never land on `main` individually — they collapse through two squash stages on the
 way up: a change branch is squash-merged into `release/X.Y.Z`, and that release branch is
 squash-merged into `main`.
+
+Branch names are prefixed by role: `change/<slug>` for an OpenSpec change's lifecycle work,
+`release/X.Y.Z` for a release branch (the first squash target), `refactor/<slug>` for a
+behavior-preserving refactor, `docs/<slug>` for docs / decision-log work, and `polish/X.Y.Z` for
+pre-release polish of a release line. `main` takes no direct work — it is release-only.
 
 Both squashes are performed by a GitHub pull request's "Squash and merge", not a local merge.
 Strip GitHub's auto-appended `(#N)` from the squash subject (the self-describing-commit rule
 above; the `release: X.Y.Z` snapshot subject is its one exception — a release commit's "change"
 is the whole tree at that version, and the per-change "why" lives in the squashed change
-commits and their PRs). A PR that touches a steward-owned path (`.github/CODEOWNERS`) is merged
-by the steward.
+commits and their PRs — so the `release: X.Y.Z` commit is **subject-only, its body deliberately
+empty**). A PR that touches a steward-owned path (`.github/CODEOWNERS`) is merged by the steward.
 
 Like the self-describing-commit rule above, this is a convention for humans and agents, not a
 Tianheng reaction: a branching pattern is not an observable architectural fact, so the drift law
@@ -88,6 +138,29 @@ hand-maintain a second list here.
 If a change makes this test fail, **fix the change**, not the test. A boundary is altered
 only by a deliberate, human-reviewed amendment to `self_governance.rs` — never by quietly
 weakening it so CI turns green.
+
+## Definition of Done
+
+Run these from the workspace root before checking off an apply task, syncing, or reporting a change
+done. This is the single source for the local pre-flight gate list (so other docs need not restate
+it); CI runs a superset of it:
+
+```bash
+cargo build --workspace
+cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --all --check
+TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+cargo deny check
+bash scripts/test_examples.sh            # every dogfood example still reacts as declared
+```
+
+The self-governance gate (`self_governance.rs`, run under `cargo test`) and its projection
+(`self_law_projection_is_fresh`) must stay green — never weaken the law to pass it. Beyond the list
+above, CI also runs a **default-features** `clippy`/`doc` pass (catching an unused item or a broken
+intra-doc link when the `audit` feature is off), the declared-MSRV build and test, license-text
+bundling, the packaged-tarball self-test, and the reaction on the clean/violating fixtures (see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Versioning — SemVer honesty (the modou lesson)
 

@@ -12,6 +12,30 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-07-15
+
+### Added
+- 圭表 **feature-granularity crate-dependency boundary** — `CrateBoundary::crate_(…)`'s
+  `restrict_features_of(C, […])` / `forbid_features_of(C, […])` / `forbid_feature(C, f)` govern
+  which features a crate *declares* on a dependency `C`: its explicit `features` list plus the
+  `default` pseudo-feature (so `forbid_feature(C, "default")` ≡ requiring `default-features =
+  false`), matched by package name and unioned across the target's dependency edges. It observes
+  the **declared** request only — never expanding `C`'s own `[features]` graph and never reading
+  `cargo metadata`'s resolved `resolve.nodes[].features` — so it is stable under Cargo feature
+  unification and builds under the existing `--no-deps` metadata read with no new dependency.
+  Findings are `C/feature` (kind-qualified when the dependency kind is not `Normal`), injective
+  across the two polarities; severity, baseline, dependency-kind selection, and the text/JSON
+  projection reuse the existing crate-rule machinery. Transitive/unification-enabled features are
+  an explicit non-goal (declared-not-resolved, at the altitude of the existing dependency rules).
+  Additive and non-breaking; existing constitutions and baselines are unaffected. See
+  `COOKBOOK.md`.
+
+### Changed
+- Contributor-facing docs only: `AGENTS.md` makes the project's practised conventions explicit
+  (document authority, OpenSpec lifecycle, adversarial review, single-source Definition of Done,
+  branch prefixes, subject-only release commits); `BACKLOG.md` records the `0.1.x → 0.2.0` trigger
+  and the install-vs-constitution decision; the `README.md` license section links to its files.
+
 ## [0.1.9] - 2026-07-11
 
 ### Added
@@ -157,7 +181,8 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/tacticaldoll/tianheng/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/tacticaldoll/tianheng/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/tacticaldoll/tianheng/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/tacticaldoll/tianheng/compare/v0.1.6...v0.1.7

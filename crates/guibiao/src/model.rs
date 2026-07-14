@@ -225,6 +225,39 @@ pub enum Rule {
         /// The closed allowlist of permitted declared source kinds.
         allowed: Vec<SourceKind>,
     },
+    /// Restrict the **declared features** the target requests on a named dependency
+    /// `crate_` to a closed allowlist: any feature in the target's declared set for
+    /// `crate_` (its authored `features = [...]`, ∪ the `default` pseudo-feature when
+    /// default features are left on) whose name is not in `allowed` is a violation. The
+    /// feature-granularity counterpart of
+    /// [`RestrictDependenciesTo`](Rule::RestrictDependenciesTo) (which governs dependency
+    /// *names*). An empty allowlist forbids the target from declaring **any** feature of
+    /// `crate_`, `default` included (i.e. requires `default-features = false` and no
+    /// explicit features). Governs the *declared* request, not the resolved/unified
+    /// feature set — a feature that `crate_`'s own `[features]` graph or a sibling crate's
+    /// unification enables transitively is not chased (declared-not-resolved).
+    RestrictFeaturesOf {
+        /// The dependency whose declared features are governed (matched by package name).
+        crate_: String,
+        /// The closed allowlist of permitted feature names (`default` is the pseudo-feature
+        /// for default features).
+        allowed: Vec<String>,
+    },
+    /// Forbid the target from declaring specific named features of a dependency `crate_`:
+    /// any feature in the target's declared set for `crate_` matching a `forbidden` name is
+    /// a violation; a forbidden feature the target does not declare is not. The
+    /// feature-granularity counterpart of
+    /// [`ForbidDependencyOn`](Rule::ForbidDependencyOn). Forbidding the `default`
+    /// pseudo-feature is the way to require `default-features = false`. An empty forbidden
+    /// set is a no-op that always reports clean (symmetric with forbidding a crate the
+    /// target does not depend on). Governs the *declared* request, not the resolved/unified
+    /// feature set (transitive enables are not chased).
+    ForbidFeaturesOf {
+        /// The dependency whose declared features are governed (matched by package name).
+        crate_: String,
+        /// The forbidden feature names (`default` is the pseudo-feature for default features).
+        forbidden: Vec<String>,
+    },
 }
 
 impl Rule {
@@ -241,6 +274,8 @@ impl Rule {
             Rule::RestrictDependenciesTo { .. } => "restrict dependencies to",
             Rule::RestrictWorkspaceDependenciesTo { .. } => "restrict workspace dependencies to",
             Rule::RestrictDependencySourcesTo { .. } => "restrict dependency sources to",
+            Rule::RestrictFeaturesOf { .. } => "restrict features of",
+            Rule::ForbidFeaturesOf { .. } => "forbid features of",
         }
     }
 
@@ -251,11 +286,12 @@ impl Rule {
     /// in-boundary declaration path, so a new external dep is either removed or excepted.
     pub(crate) fn polarity(&self) -> Polarity {
         match self {
-            Rule::ForbidDependencyOn { .. } => Polarity::DenyBreach,
+            Rule::ForbidDependencyOn { .. } | Rule::ForbidFeaturesOf { .. } => Polarity::DenyBreach,
             Rule::DenyExternalDependencies { .. }
             | Rule::RestrictDependenciesTo { .. }
             | Rule::RestrictWorkspaceDependenciesTo { .. }
-            | Rule::RestrictDependencySourcesTo { .. } => Polarity::AllowlistGap,
+            | Rule::RestrictDependencySourcesTo { .. }
+            | Rule::RestrictFeaturesOf { .. } => Polarity::AllowlistGap,
         }
     }
 
@@ -296,6 +332,18 @@ impl Rule {
                         .join(", ")
                 )
             }
+            Rule::RestrictFeaturesOf { crate_, allowed } if allowed.is_empty() => {
+                format!("restrict features of {crate_} to nothing")
+            }
+            Rule::RestrictFeaturesOf { crate_, allowed } => {
+                format!("restrict features of {crate_} to: {}", allowed.join(", "))
+            }
+            Rule::ForbidFeaturesOf { crate_, forbidden } if forbidden.is_empty() => {
+                format!("forbid no features of {crate_}")
+            }
+            Rule::ForbidFeaturesOf { crate_, forbidden } => {
+                format!("forbid features of {crate_}: {}", forbidden.join(", "))
+            }
         }
     }
 
@@ -319,6 +367,18 @@ impl Rule {
                 let sources: Vec<&str> = allowed.iter().map(SourceKind::label).collect();
                 vec![("allowed_sources", serde_json::json!(sources))]
             }
+            // `crate` names the governed dependency; `only_features` is the intrinsic closed
+            // set (always emitted, as `[]` when empty), matching the restrict-to vocabulary.
+            Rule::RestrictFeaturesOf { crate_, allowed } => vec![
+                ("crate", serde_json::json!(crate_)),
+                ("only_features", serde_json::json!(allowed)),
+            ],
+            // `forbidden_features` lists the denied names, distinct from restrict's
+            // `only_features` so the projection says which polarity governs the feature set.
+            Rule::ForbidFeaturesOf { crate_, forbidden } => vec![
+                ("crate", serde_json::json!(crate_)),
+                ("forbidden_features", serde_json::json!(forbidden)),
+            ],
         }
     }
 
@@ -354,6 +414,28 @@ impl Rule {
                 .collect(),
             Rule::RestrictDependencySourcesTo { allowed } => {
                 dependencies_with_disallowed_source(package, kind, allowed)
+            }
+            // Feature-granularity rules observe the target's DECLARED feature request on
+            // `crate_` (declared-not-resolved; see `declared_features`) and qualify each
+            // offending feature `f` as `crate_/f`. A feature name on a dependency edge is a
+            // plain name (Cargo forbids `dep:`/`pkg/feat` there), so `crate_/f` is unambiguous.
+            Rule::RestrictFeaturesOf { crate_, allowed } => {
+                // Allowlist: a declared feature outside `allowed` violates. Empty allowlist ⇒
+                // every declared feature (including `default`) violates.
+                declared_features(package, crate_, kind)
+                    .into_iter()
+                    .filter(|feature| !allowed.contains(feature))
+                    .map(|feature| format!("{crate_}/{feature}"))
+                    .collect()
+            }
+            Rule::ForbidFeaturesOf { crate_, forbidden } => {
+                // Denylist: a declared feature matching a forbidden name violates. Empty
+                // forbidden set ⇒ no findings (natural from the filter), a vacuous no-op.
+                declared_features(package, crate_, kind)
+                    .into_iter()
+                    .filter(|feature| forbidden.contains(feature))
+                    .map(|feature| format!("{crate_}/{feature}"))
+                    .collect()
             }
         };
         // Kind-qualify so the same dependency name in two tables (normal vs dev/build) stays a
@@ -483,6 +565,70 @@ impl CrateBoundaryBuilder {
             severity: Severity::Enforce,
             kind: DependencyKind::Normal,
         }
+    }
+
+    /// Restrict the **declared features** this crate requests on dependency `crate_` to a
+    /// closed allowlist: any feature in the target's declared set for `crate_` (its authored
+    /// `features = [...]`, ∪ the `default` pseudo-feature when default features are left on)
+    /// not named in `allowed` is a violation. An empty allowlist forbids declaring **any**
+    /// feature of `crate_`, `default` included (i.e. requires `default-features = false`).
+    /// The feature-granularity mirror of
+    /// [`restrict_dependencies_to`](Self::restrict_dependencies_to). `crate_` is matched by
+    /// package name, not a local `rename`/alias. Chain [`warn`](CrateBoundaryDraft::warn),
+    /// [`dependency_kind`](CrateBoundaryDraft::dependency_kind), and
+    /// [`because`](CrateBoundaryDraft::because) as with the other crate rules.
+    pub fn restrict_features_of<C, I, S>(self, crate_: C, allowed: I) -> CrateBoundaryDraft
+    where
+        C: Into<String>,
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        CrateBoundaryDraft {
+            target: self.target,
+            rule: Rule::RestrictFeaturesOf {
+                crate_: crate_.into(),
+                allowed: allowed.into_iter().map(Into::into).collect(),
+            },
+            severity: Severity::Enforce,
+            kind: DependencyKind::Normal,
+        }
+    }
+
+    /// Forbid this crate from declaring specific named `forbidden` features of dependency
+    /// `crate_`: any feature in the target's declared set for `crate_` matching a forbidden
+    /// name is a violation; a forbidden feature the target does not declare is not. Forbidding
+    /// the `default` pseudo-feature requires `default-features = false`. An empty forbidden
+    /// set is a no-op that always reports clean. The feature-granularity mirror of
+    /// [`forbid_dependency_on`](Self::forbid_dependency_on). `crate_` is matched by package
+    /// name, not a local `rename`/alias. Chain [`warn`](CrateBoundaryDraft::warn),
+    /// [`dependency_kind`](CrateBoundaryDraft::dependency_kind), and
+    /// [`because`](CrateBoundaryDraft::because) as with the other crate rules.
+    pub fn forbid_features_of<C, I, S>(self, crate_: C, forbidden: I) -> CrateBoundaryDraft
+    where
+        C: Into<String>,
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        CrateBoundaryDraft {
+            target: self.target,
+            rule: Rule::ForbidFeaturesOf {
+                crate_: crate_.into(),
+                forbidden: forbidden.into_iter().map(Into::into).collect(),
+            },
+            severity: Severity::Enforce,
+            kind: DependencyKind::Normal,
+        }
+    }
+
+    /// Forbid this crate from declaring the single `feature` of dependency `crate_` — the
+    /// singular convenience for [`forbid_features_of`](Self::forbid_features_of). Forbidding
+    /// `"default"` requires `default-features = false`.
+    pub fn forbid_feature<C, S>(self, crate_: C, feature: S) -> CrateBoundaryDraft
+    where
+        C: Into<String>,
+        S: Into<String>,
+    {
+        self.forbid_features_of(crate_, [feature])
     }
 }
 

@@ -87,6 +87,44 @@ awareness; let demand deepen it.
 
 Until a trigger fires, staying 0.1.x is a **deliberate hold** (waiting for reaction), not drift.
 
+**Trigger fired (2026-07) — 0.2.0 window now open; the bundle above is active, not deferred.** Two
+adopters, two shapes (verified against their source):
+
+- **`../pacta` (composed)** depends on `tianheng` + `guibiao`, drives one `Constitution` through
+  `tianheng::run` / `check_all` (+ `guibiao::check_and_cover` for coverage). This is the
+  suite/funnel adoption → fires *"a first serious external adopter needing a compatibility promise"*.
+- **`../modou` (standalone 圭表)** depends on `guibiao` **only** (no `tianheng`), re-exporting
+  guibiao's DSL + widened surface and adding a thin CLI shell → fires *"a 儀 actually adopted
+  standalone"*.
+
+What each unblocks — the two gates are **not** one:
+
+- **`guibiao` widened surface (`check_and_cover`/`baseline`/`coverage`/`projection`) → resolved to
+  KEEP + shape.** `modou` depends on it directly, so narrowing/deprecating it breaks a real consumer.
+  This **supersedes** the guardrail line above that listed "`guibiao`'s widened `pub` face" among the
+  *safe-to-break internal* surfaces — it is now a kept surface. The 0.2.0 break must avoid breaking
+  **both** pacta's builder (`Constitution`/`CrateBoundary`/`run`/`prelude`) **and** modou's dependence
+  on guibiao's widened projection/baseline (`report_json`/`constitution_json`/`check_and_cover`/
+  `Baseline`/`Coverage`/`apply_baseline`/`Violation`/`ViolationId`).
+- **xuanji-sink (run/projection → `xuanji`, generalizing `BoundaryKind`/`Polarity`) → STILL gated.**
+  The standalone product reaction *did* arrive (modou), but it **validates keeping the dimension's own
+  widened surface, not sinking it**: modou re-exports guibiao's projection, so the sink would *break*
+  modou; and the sink's dedup payoff needs *multiple* standalone 儀 (a hunyi/louke standalone product),
+  which no adopter shows. Revisit only when that arrives — not before.
+- **Structured-baseline / typed-identity bundle → active in the 0.2.0 window.** The crux is *where the
+  per-dimension `FindingKey` union lives* without up-hoisting dimension vocabulary into `xuanji`
+  (三儀 ⊥ 三儀) or growing a generic value model in `xuanji` (serde_json-only). This is a
+  `design-boundaries` question **deferred to when the 0.2.0 work is actually built** (born-when-built —
+  do not lay the identity design ahead of its implementation); `pacta` + `modou` are the two drop-in
+  reference consumers bounding how far `Violation`/`ViolationId`/projection may move. Guardrails on the
+  axis: `reason` stays prose (潛移); the text finding becomes `render(fact)`, never the sole identity;
+  no resolver internals exposed as facts.
+- **P3 (un-auditable-probe file-granular re-mask, below) — re-evaluated: no single-point miss.** Two
+  co-existing non-literal probes in one file react as one file-level violation (neither masked); the
+  only masking is the *temporal* stale-baseline re-mask already recorded below as low-risk (surfaced by
+  `Baseline::stale`), which rides the structured-baseline wire window if ever tightened. Not a coverage
+  false negative; nothing to fix in 0.1.x.
+
 ### Product maturity in the 0.1.x hold — DX and trust, all convention / CI-reaction
 
 Reading as a **mature product** during the deliberate hold above is not new capability — it is
@@ -704,6 +742,25 @@ Deferred / forward:
   accepted fact stays true), and the general baseline-staleness surfacing (`Baseline::stale`) covers
   it; if ever tightened, qualify the finding by a per-probe locator (byte offset / occurrence
   index). Low; not the forbidden FN. Relates to the finding-identity-must-be-injective principle.
+- **CI-declared vs runtime-installed law can diverge — evaluated, kept as documented convention.**
+  *From an external review.* `install` takes an arbitrary `IntoIterator<Item = RuntimeBoundary>`, so
+  the runtime-installed set can diverge from the `Constitution` the CI face verified: a
+  declared-but-uninstalled boundary never enforces (or, if crossed, panics as an *undeclared* seam —
+  the wrong reaction), and an installed-but-undeclared one enforces a law CI never saw. A fix was
+  designed — a prod-face startup reaction `verify_installed(&declared)` comparing the live registry
+  to the declared set, framed as an instance of the "Declaration integrity" decision — and **rejected
+  on adversarial review**: (1) strict set-equality contradicts the deliberately-open `install`
+  iterator (a legitimate compositional/conditional install would false-positive); (2) comparing seam
+  *names* misses a diverged `allowed` allowlist — the load-bearing law — so it would green-light
+  exactly louke's one forbidden bug (a declared boundary silently not enforcing as declared); (3) the
+  only honest structural closure (make `install` consume a `Constitution` projection) **breaks the
+  `install` API and shifts louke from measure to prevent**, a real identity change. Given the project
+  already makes install-vs-constitution the user's responsibility with a documented idiom
+  (`install(constitution().runtime_boundaries()…)`, and the prod face fails loud on a crossed
+  undeclared seam), and there is **no live consumer**, the edge stays **documented convention**. The
+  structural closure (install-from-projection) is the option to revisit *if* a consumer ever
+  justifies the identity cost — not before. Do not re-open as a coverage FN: it is a deliberate
+  deployment-edge convention, not a scanner gap.
 
 ## Deferred — not a reaction phase (the 三司: governance & observability layer)
 

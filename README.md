@@ -312,4 +312,4 @@ dependency-source split.
 
 ## License
 
-Licensed under either of Apache-2.0 or MIT, at your option.
+Licensed under either of [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option.

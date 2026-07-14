@@ -193,6 +193,60 @@ pub(crate) fn dependencies_with_disallowed_source(
     found
 }
 
+/// The **declared feature request** the target authors on a dependency `crate_name` in
+/// the selected table: the union, across every matching edge, of each edge's explicit
+/// `features = [...]` list, ∪ the pseudo-feature `default` when any such edge leaves
+/// default features enabled (`uses_default_features` absent, or `true`). Matches
+/// `crate_name` by **package name** (the `name` field), not a local `rename`/alias, exactly
+/// as [`dependencies`]/[`external_dependencies`] do — a dependency renamed `myc` whose real
+/// package is `real-c` is matched as `real-c`. A crate may appear under more than one edge
+/// of the same kind — a plain `[dependencies]` entry and a `[target.'cfg(…)'.dependencies]`
+/// entry are both `Normal` — so the set is the union across all of them.
+///
+/// Reads only the target package's own declared edges: it never reads `crate_name`'s
+/// package entry (unreadable for an external crate under the `--no-deps` substrate) and
+/// never reads `resolve.nodes[].features` (the resolved/unified set, which feature
+/// unification folds every workspace crate's enables into). The result is therefore the
+/// target's authored request alone — declared, not resolved (PROJECT.md) — and does not
+/// expand through `crate_name`'s own `[features]` table, so a transitively-enabled feature
+/// is not chased. When the target does not declare `crate_name` in the selected kind, the
+/// set is empty.
+pub(crate) fn declared_features(
+    package: &Value,
+    crate_name: &str,
+    kind: DependencyKind,
+) -> Vec<String> {
+    let mut found = Vec::new();
+    if let Some(deps) = package["dependencies"].as_array() {
+        for dependency in deps {
+            if !kind_matches(dependency, kind) {
+                continue;
+            }
+            // Match by resolved package name, never the local `rename`/alias.
+            if dependency["name"].as_str() != Some(crate_name) {
+                continue;
+            }
+            if let Some(features) = dependency["features"].as_array() {
+                for feature in features {
+                    if let Some(feature) = feature.as_str() {
+                        found.push(feature.to_string());
+                    }
+                }
+            }
+            // Cargo's edge carries `uses_default_features`; an absent field means defaults
+            // are on. Represent "the target requests this dependency's default set" as the
+            // pseudo-feature `default`, so one rule shape governs both explicit features and
+            // the default toggle (`forbid default` ≡ "require default-features = false").
+            if dependency["uses_default_features"].as_bool() != Some(false) {
+                found.push("default".to_string());
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
