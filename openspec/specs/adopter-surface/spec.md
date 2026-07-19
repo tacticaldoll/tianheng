@@ -1,4 +1,11 @@
-## ADDED Requirements
+# adopter-surface Specification
+
+## Purpose
+
+Define the composed wildcard entrypoint and its external compilation reaction so Tianheng's
+documented adoption path remains usable and semantically honest across the 0.2 line.
+
+## Requirements
 
 ### Requirement: The prelude is the composed adopter entrypoint
 
