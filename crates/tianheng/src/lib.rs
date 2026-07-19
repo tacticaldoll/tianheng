@@ -21,6 +21,14 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+/// Compile the crate README's Rust examples as doctests so the adopter-facing
+/// snippets cannot rot (a wrong signature or removed export fails `cargo test`).
+/// Gated on `cfg(doctest)` so it neither enters the public API nor the docs.rs
+/// page — only rustdoc's doctest pass sees it.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+pub struct ReadmeDoctests;
+
 mod runner;
 mod sans_io;
 
