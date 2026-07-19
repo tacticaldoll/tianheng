@@ -29,6 +29,8 @@ None.
 - `structured-violation-identity`: require composite semantic observations to encode their
   identity-bearing values as fact-specific named fields, so a display-only wording change does not
   alter a live 渾儀 violation's key.
+- `semantic-dyn-trait-boundary`: replace the obsolete rendered-descriptor identity wording with
+  the named `subject` and structured-seam key contract while preserving its stated rendering bound.
 
 ## Impact
 

@@ -20,14 +20,13 @@ complete, so the near-term line is **0.1.x, a patch line**:
 - **0.1.x (patch)** — additive depth on an existing observation source (a born-when-built
   capability that widens nothing already public), packaging / CI / license-bundling hygiene,
   and governance-doc corrections. Every *additive* forward item below lands here.
-- **0.2.0 (minor)** — earned only by a **breaking** public-API change. The one on the table
-  is the deliberate pre-1.0 refinement of `guibiao`'s widened public surface
-  (`baseline` / `coverage` / `projection` / `check_and_cover`, made `pub` as the price of the
-  crate split — see `PROJECT.md`, Decisions). Two further **breaking** candidates would ride the
-  *same* minor rather than each forcing its own: the `Violation::new` newtype (retiring the
-  4-positional-`String` footgun) and a **structured baseline** (findings as data, not strings — which
-  is what unblocks the deferred 渾儀 `PublicSeam` / `ExposureSubject` typing). Bundle them into one
-  honest 0.2.0, not three. **The `guibiao` item is now demand-gated, not automatic** (see the
+- **0.2.0 (minor, in preparation)** — earned by the breaking structured-violation identity now
+  built on `release/0.2.0`: `Violation::new` takes a typed `ViolationId`, version-2 baselines match
+  dimension-owned `FindingKey`s, and 渾儀 derives named semantic fields plus human text from one
+  typed fact (including typed public seams). The line also deliberately kept and shaped `guibiao`'s
+  widened public surface (`baseline` / `coverage` / `projection` / `check_and_cover`, made `pub` as
+  the price of the crate split — see `PROJECT.md`, Decisions). These are one honest breaking window,
+  not vanity minors. **The `guibiao` item was demand-gated, not automatic** (see the
   product-identity note below): whether its widened surface is *narrowed* (treated as internal) or
   *deliberately kept and shaped* (as the standalone static-linter product) is decided by whether
   guibiao draws standalone adopters — narrowing a face someone relies on would cut a product's
@@ -664,16 +663,18 @@ Forward depths (born when built, same `syn` source):
   over-reacts under a tight ceiling (a stated bound). Shipped as an OpenSpec change modifying
   `semantic-visibility-boundary`. Adopter-surfaced.
 
-**Internal structure (refinement, not capability) — v0.1.4:** 渾儀's internals were structured
+**Internal structure (refinement, not capability) — v0.1.4 → 0.2.0 line:** 渾儀's internals were structured
 where a live pain existed — the finding-string formats centralized into one `SemanticFinding`
 catalog, the ~8k-line `lib.rs` split into `lib` / `dsl` / `tests`, and the sibling-safe
 `::`-containment rule converged into one `path_within` (retiring a drift-prone hand-copied
-false-positive/false-negative rule). **Deferred — `PublicSeam` / `ExposureSubject`:** typing the seam
-and subject is prep for a **structured baseline** (findings as data, not strings), not a live-risk fix
-(collision is tested-closed by seam-qualification + the injectivity tests); it is breaking (0.2.0) and
-raises a seam-type layering question (the seam is stored/stamped in the lower `resolve.rs`, but the
-finding vocabulary lives in `lib.rs`). Born when the structured baseline is greenlit — see
-`PROJECT.md`, "Structure semantic observation facts".
+false-positive/false-negative rule). **Built on the 0.2.0 line — structured semantic facts:** the
+structured baseline supplied the previously absent forcing function. A private `PublicSeam` now
+carries item/owner/module/member/trait-impl-position data through the lower resolver and collectors;
+the one `SemanticFact` catalog derives fact-specific named key fields and byte-identical text. The
+canonical path/shape remains the observed `subject` value rather than growing a speculative subject
+AST. This closes the live gap where 渾儀's nominally structured key was still one rendered
+`descriptor`, so presentation polish would re-identify a baseline entry. See `PROJECT.md`,
+"Structure semantic observation facts".
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),

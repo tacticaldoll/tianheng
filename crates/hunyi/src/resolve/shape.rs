@@ -7,6 +7,8 @@
 
 use syn::visit::Visit;
 
+use crate::finding::PublicSeam;
+
 use super::{BareFallback, UseMap, resolve_path, strip_raw};
 
 /// A Visitor collecting every type path and trait-bound path within a syntax node, so a
@@ -81,21 +83,24 @@ pub(crate) struct ShapeExposure {
     pub(crate) shape: String,
     pub(crate) principals: Vec<syn::Path>,
     /// The public **seam** (the owning item / sub-element) this shape is exposed at, e.g.
-    /// `fn crate::api::make` or `field crate::api::Cfg::sink`. Empty as pushed by the visitor
+    /// `fn crate::api::make` or `field crate::api::Cfg::sink`. `None` as pushed by the visitor
     /// (which sees only the shape node, not its owner); the `collect_item_*` walker stamps it
     /// via [`stamp_seam`] once the owning element is known. It becomes part of the finding so two
     /// distinct seams exposing the *same* shape never collapse to one `(target, rule, finding)`
     /// baseline entry and mask a new leak (the one forbidden bug) — the shape/existential
     /// analogue of async-exposure's owner-qualified identity.
-    pub(crate) seam: String,
+    pub(crate) seam: Option<PublicSeam>,
 }
 
 /// Stamp `seam` onto every exposure a position-walker produced — called by `collect_item_*` once
 /// the owning item / sub-element (a `fn`, `field`, `variant`, …) is known, since the [`Visit`]
 /// collectors observe only the shape node and cannot name its owner.
-pub(crate) fn stamp_seam(mut exposures: Vec<ShapeExposure>, seam: &str) -> Vec<ShapeExposure> {
+pub(crate) fn stamp_seam(
+    mut exposures: Vec<ShapeExposure>,
+    seam: &PublicSeam,
+) -> Vec<ShapeExposure> {
     for exposure in &mut exposures {
-        exposure.seam = seam.to_string();
+        exposure.seam = Some(seam.clone());
     }
     exposures
 }
@@ -118,7 +123,7 @@ impl<'ast> Visit<'ast> for DynCollector {
         self.exposures.push(ShapeExposure {
             shape: trait_object_to_string(node),
             principals: principal_trait_paths(&node.bounds),
-            seam: String::new(),
+            seam: None,
         });
         syn::visit::visit_type_trait_object(self, node);
     }
@@ -195,7 +200,7 @@ impl<'ast> Visit<'ast> for ImplTraitCollector {
         self.exposures.push(ShapeExposure {
             shape: impl_trait_to_string(node),
             principals: principal_trait_paths(&node.bounds),
-            seam: String::new(),
+            seam: None,
         });
         syn::visit::visit_type_impl_trait(self, node);
     }

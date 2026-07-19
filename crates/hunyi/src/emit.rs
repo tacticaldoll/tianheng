@@ -4,7 +4,7 @@ use std::path::Path;
 use xuanji::{BoundaryKind, Polarity, Severity, Violation, ViolationId};
 
 use crate::file_scope::{per_finding_file, seam_file};
-use crate::finding::{SemanticFact, SemanticFactKind};
+use crate::finding::SemanticFact;
 
 pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) src_dir: &'a Path,
@@ -15,7 +15,6 @@ pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) reason: &'a str,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
-    pub(crate) fact_kind: SemanticFactKind,
 }
 
 /// Add deny-style violations for a boundary whose findings all sit on one governed module seam.
@@ -24,7 +23,7 @@ pub(crate) struct SingleModuleViolationContext<'a> {
 pub(crate) fn push_single_module_violations(
     violations: &mut Vec<Violation>,
     context: SingleModuleViolationContext<'_>,
-    findings: Vec<String>,
+    findings: Vec<SemanticFact>,
 ) -> Result<(), String> {
     let module_file = seam_file(
         &findings,
@@ -38,11 +37,7 @@ pub(crate) fn push_single_module_violations(
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
-                ViolationId::new(
-                    context.module,
-                    context.rule,
-                    SemanticFact::new(context.fact_kind, finding).into_finding(),
-                ),
+                ViolationId::new(context.module, context.rule, finding.into_finding()),
                 context.reason.to_string(),
                 context.severity,
             )
@@ -68,7 +63,6 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     /// The finding's polarity metadata (deny-breach vs allowlist-gap). Not part of the violation
     /// identity, so each capability passes its own without shifting structured identity.
     pub(crate) polarity: Polarity,
-    pub(crate) fact_kind: SemanticFactKind,
 }
 
 /// Add violations for a boundary whose findings sit across many modules — the shared emitter for
@@ -81,7 +75,7 @@ pub(crate) struct MultiModuleViolationContext<'a> {
 pub(crate) fn push_multi_module_violations(
     violations: &mut Vec<Violation>,
     context: MultiModuleViolationContext<'_>,
-    findings: Vec<(String, String)>,
+    findings: Vec<(SemanticFact, String)>,
 ) {
     let anchor = context.anchor.map(str::to_string);
     let mut cache: HashMap<String, Option<String>> = HashMap::new();
@@ -96,11 +90,7 @@ pub(crate) fn push_multi_module_violations(
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
-                ViolationId::new(
-                    context.target,
-                    context.rule,
-                    SemanticFact::new(context.fact_kind, finding).into_finding(),
-                ),
+                ViolationId::new(context.target, context.rule, finding.into_finding()),
                 context.reason.to_string(),
                 context.severity,
             )

@@ -686,8 +686,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   reaction). Architecture/charter, not a capability change — like the 璇璣 extraction and the
   `SemanticBoundaries` facade, recorded here and kept honest by `self_governance` + the tests,
   **not** an OpenSpec change.
-- **(v0.1.4) Structure semantic observation facts — ship the containment convergence, defer the
-  seam/subject types to 0.2.0's structured baseline.** A refinement pass structured 渾儀's internals
+- **(v0.1.4 → 0.2.0 line) Structure semantic observation facts — containment first, then typed
+  identity when the structured baseline supplied the reaction.** A refinement pass structured 渾儀's internals
   *where a live pain existed and stopped where only prep remained*. **Shipped:** the sibling-safe
   `::`-path containment rule — hand-copied in `under_subtree` / `matches_forbidden` / `matches_allowed`
   (`x == entry || x.starts_with("{entry}::")`, the `::` that keeps `crate::commands` from matching the
@@ -696,22 +696,18 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   drift-prone copies), the reaction surface already exists, and the abstraction is a byte-identical
   convergence of *existing* observation. (Alongside two behavior-preserving tidies not worth their own
   decisions — the `SemanticFinding` catalog centralizing the finding-string formats, and the split of
-  the ~8k-line `lib.rs` into `lib` / `dsl` / `tests` — recorded in git, not here.) **Deferred:**
-  `PublicSeam` (typing the ~14 seam formats, including the seam stored as `String` in `resolve.rs`'s
-  `ShapeExposure` / `stamp_seam`) and `ExposureSubject` (the `SemanticFinding` subject). No live-risk
-  payoff yet — seam collision is already tested-closed (the v0.1.4 seam-qualification hardening + the
-  injectivity tests) — so typing them now is prep, not convergence, and the drift law forbids laying
-  structure ahead of a forcing function. Their real value is a **structured baseline** (findings as
-  data, not strings), which is **breaking → 0.2.0** and unapproved (in tension with "baseline is a
-  snapshot, not policy"). **Open design question, deliberately unanswered here:** the seam type's
-  ownership crosses layers — the finding vocabulary lives in `lib.rs`, but the seam is stored and
-  stamped in `resolve.rs`, the lower shared resolver; typing it now would either pollute the resolver
-  with presentation vocabulary or force an up-import that inverts the layering. That call belongs
-  *with* the structured-baseline design, when the seam type becomes a data-model necessity rather than
-  tidiness — the honest moment to decide it. So the seam/subject types graduate from *tidiness* to
-  *data-model necessity* exactly when structured baseline is greenlit; until then they wait.
-  Architecture/scope recorded here; the shipped convergence is a behavior-preserving refactor kept
-  honest by the tests, **not** an OpenSpec change.
+  the ~8k-line `lib.rs` into `lib` / `dsl` / `tests` — recorded in git, not here.) **The forcing event
+  arrived on the 0.2.0 line:** version-2 structured baseline identity made the remaining string seam
+  a live contract defect, because 渾儀 was still keying the complete rendered descriptor while 圭表
+  and 漏刻 keyed named observed values. The OpenSpec change `structure-semantic-fact-identity`
+  resolves the earlier layering question with a private `PublicSeam` owned by the finding vocabulary
+  and carried by `resolve.rs`'s `ShapeExposure`; the lower resolver stores the typed observation but
+  does not own its presentation. One `SemanticFact` enum now derives both byte-identical text and
+  fact-specific named key fields. The canonical type path / dyn or impl shape remains the observed
+  `subject` string — no speculative recursive `ExposureSubject` AST. This is deliberately breaking
+  for unreleased descriptor-shaped version-2 semantic keys, while published version-1 baseline text
+  migration remains intact. The earlier deferral therefore did its job: no structure before a
+  reaction, then the narrowest data model once baseline identity required it.
 - **(v0.1.4) Module-source / module-resolution hardening — observe the compiled source root, and
   keep `#[path]` remaps out of scope instead of governing the wrong file.** An adversarial review
   found edge cases against the scanner/resolver decisions above. First, 圭表 module boundaries used

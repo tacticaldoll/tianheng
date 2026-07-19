@@ -13,7 +13,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::ImplTraitBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::{SemanticFactKind, shape_finding};
+use crate::finding::{ExposureKind, SemanticFact, shape_finding};
 use crate::rules::IMPL_TRAIT_RULE;
 use crate::shape_scan::{operand_module_findings, shape_module_findings};
 
@@ -66,7 +66,6 @@ pub(crate) fn check_impl_trait_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
-            fact_kind: SemanticFactKind::ImplTrait,
         },
         findings,
     )
@@ -83,14 +82,14 @@ pub(crate) fn impl_trait_module_findings(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<SemanticFact>, String> {
     shape_module_findings(
         src_dir,
         root_file,
         module,
         crate_package,
         collect_item_return_impl_traits,
-        shape_finding,
+        |exposure| shape_finding(exposure, ExposureKind::ImplTrait),
     )
 }
 
@@ -110,7 +109,7 @@ pub(crate) fn impl_trait_operand_module_findings(
     forbidden: &[String],
     crate_package: &str,
     dep_names: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<SemanticFact>, String> {
     operand_module_findings(
         src_dir,
         root_file,
@@ -118,6 +117,6 @@ pub(crate) fn impl_trait_operand_module_findings(
         forbidden,
         crate_package,
         dep_names,
-        collect_item_return_impl_traits,
+        (ExposureKind::ImplTrait, collect_item_return_impl_traits),
     )
 }
