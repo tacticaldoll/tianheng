@@ -1,4 +1,11 @@
-## ADDED Requirements
+# composed-library-check Specification
+
+## Purpose
+
+Define a presentation-free library entrypoint that evaluates one unified Constitution through the
+same three-dimension reaction semantics as the CLI runner.
+
+## Requirements
 
 ### Requirement: A unified Constitution has an inspectable library check
 
