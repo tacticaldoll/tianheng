@@ -34,6 +34,20 @@ cargo run --bin check -- check --manifest-path Cargo.toml
 cargo run --bin check -- check --manifest-path Cargo.toml --format json    # same exit code, different presentation
 ```
 
+This example is deliberately red. An existing project can land the same enforced constitution
+without accepting a permanently red CI gate by recording only today's violations:
+
+```sh
+cargo run --bin check -- check --manifest-path Cargo.toml \
+  --write-baseline .tianheng-baseline.json   # records current identities, exits 0
+cargo run --bin check -- check --manifest-path Cargo.toml \
+  --baseline .tianheng-baseline.json         # known drift exits 0; new drift exits 1
+```
+
+Commit the generated baseline. When a violation is fixed, gate mode reports its entry as stale;
+review the fix and regenerate to ratchet the snapshot down. `scripts/test_examples.sh` executes
+this write/gate path against the example rather than merely documenting it.
+
 **run-mode** (runtime, in the binary) — the concrete type behind a `dyn Adapter` crossing the
 port seam is checked against the allowlist, fail-closed:
 

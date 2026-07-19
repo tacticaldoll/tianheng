@@ -29,6 +29,26 @@ Exit codes are the contract: `0` clean / warn-only / fully baselined · `1` enfo
 
 ---
 
+## Find the boundary from the intent
+
+| Intent | Recipe |
+|---|---|
+| keep domain/core pointing inward | [Keep a layer pure](#keep-a-layer-pure-hexagonal--onion) |
+| admit access only through a facade | [Funnel access through one module](#funnel-access-through-one-module-closed-inbound-allowlist) |
+| keep a core dependency-light | [Keep a core dependency-light](#keep-a-core-dependency-light) |
+| prevent implementation types from escaping through public API | [Don't leak an internal type](#dont-leak-an-internal-type-on-the-public-api) |
+| confine FFI/platform vocabulary to an adapter subtree | [Confine platform/FFI vocabulary](#confine-a-platform--ffi-vocabulary-to-one-module) |
+| keep a subtree synchronous and free of ambient reads | [Compose a sans-I/O pure core](#compose-a-sans-io-pure-core-clock-free--synchronous-one-declaration) |
+| restrict live objects crossing a port seam | [Govern which adapter crosses a seam](#govern-which-adapter-crosses-a-dyn-seam-at-runtime) |
+| introduce governance without making an existing project red | [Adopt on a dirty codebase](#adopt-on-a-dirty-codebase-without-a-red-wall) |
+| prove a declared boundary still has teeth | [Test that a boundary reacts](#test-that-a-boundary-actually-reacts) |
+
+The table routes by *observable architectural fact*, not by architecture-fashion label. A recipe's
+text immediately below its declaration states what the selected instrument observes; it makes no
+claim outside that perimeter.
+
+---
+
 ## 圭表 (static) — imports & dependencies
 
 ### Keep a layer pure (hexagonal / onion)
@@ -422,15 +442,37 @@ bound (the walk descends the declared mod-tree).
 
 ### Adopt on a dirty codebase without a red wall
 
-*Intent: land the law now, fix the pre-existing violations over time.* Two axes:
+*Intent: land the law now, fix the pre-existing violations over time.* There are two independent
+entry paths, chosen by project state — baseline is not a mandatory stage between warn and enforce:
 
-- **Severity** — declare a boundary at `.warn()`: it is reported but does not gate (exit `0`).
-- **Baseline** — `Baseline::of(&report)` snapshots the violations already there; a fully-baselined
-  report exits `0`, while any *new*, un-baselined violation still reacts. Refactoring the offending
-  code to another file does **not** churn the baseline (a violation's identity is
-  `(target, rule, finding)`; `file` is metadata).
+- **Greenfield / observation period — severity.** Declare a boundary at `.warn()`: it is reported
+  but does not gate (exit `0`). Remove `.warn()` to promote the same declared law to enforce.
+- **Existing dirty codebase — baseline.** Keep the boundary enforced and snapshot the violations
+  already there; a fully-baselined report exits `0`, while any *new*, un-baselined enforce
+  violation still reacts.
 
-Start at `warn`, or baseline the existing drift, then tighten to `enforce`.
+Through the composed `tianheng::run` shell, the baseline path is executable end to end:
+
+```sh
+# First adoption: record current violation identities. Recording exits 0.
+your-binary check --manifest-path Cargo.toml \
+  --write-baseline .tianheng-baseline.json
+
+# Commit the generated file, then make this the CI gate.
+your-binary check --manifest-path Cargo.toml \
+  --baseline .tianheng-baseline.json
+```
+
+Gate mode reports a baseline identity that no longer matches as **stale**; regenerate with
+`--write-baseline` after reviewing the fix to ratchet the snapshot down. Rewriting preserves an
+existing entry's hand-added `owner` / `tracker` metadata when its identity still exists, adds new
+identities without metadata, and drops resolved identities. A missing baseline is an error in gate
+mode (exit `2`), never an empty baseline that silently passes.
+
+Refactoring the offending code to another file does **not** churn the baseline: identity is
+`(target, rule, finding)`; `file`, `anchor`, reason, and severity are metadata. The runnable
+`examples/guibiao-standalone/tests/reaction.rs` proves identity stability and the new-violation
+gate; `scripts/test_examples.sh` drives the real CLI write/gate path.
 
 ### Test that a boundary actually reacts
 
