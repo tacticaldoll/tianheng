@@ -15,7 +15,7 @@ use crate::emit::{
     push_single_module_violations,
 };
 use crate::file_scope::resolve_crate;
-use crate::finding::SemanticFactKind;
+use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::collect_uses;
 use crate::rules::ASYNC_EXPOSURE_RULE;
 use crate::scan::walk_subtree_modules;
@@ -60,7 +60,6 @@ pub(crate) fn check_async_exposure_boundary(
                 severity: boundary.severity,
                 anchor: boundary.anchor(),
                 polarity: Polarity::DenyBreach,
-                fact_kind: SemanticFactKind::AsyncExposure,
             },
             findings,
         );
@@ -85,7 +84,6 @@ pub(crate) fn check_async_exposure_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
-            fact_kind: SemanticFactKind::AsyncExposure,
         },
         findings,
     )
@@ -102,9 +100,9 @@ pub(crate) fn async_exposure_subtree_findings(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<(String, String)>, String> {
+) -> Result<Vec<(SemanticFact, String)>, String> {
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
-    let mut findings: Vec<(String, String)> = Vec::new();
+    let mut findings: Vec<(SemanticFact, String)> = Vec::new();
     for (mod_path, items) in &modules {
         let uses = collect_uses(items);
         for (ordinal, item) in items.iter().enumerate() {
@@ -117,8 +115,7 @@ pub(crate) fn async_exposure_subtree_findings(
             );
         }
     }
-    findings.sort();
-    findings.dedup();
+    sort_attributed_facts(&mut findings);
     Ok(findings)
 }
 
@@ -132,7 +129,7 @@ pub(crate) fn async_exposure_module_findings(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<SemanticFact>, String> {
     // async collectors emit owner-qualified `String` identities directly, so the shared shape heart
     // renders with the identity function (no `shape_finding` map, unlike the dyn / impl-trait path).
     shape_module_findings(

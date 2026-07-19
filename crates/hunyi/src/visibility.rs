@@ -10,9 +10,9 @@ use crate::driver::run_boundaries;
 use crate::dsl::VisibilityBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::SemanticFactKind;
+use crate::finding::{SemanticFact, sort_facts};
 use crate::module_resolve::resolve_module_items;
-use crate::syn_util::item_finding;
+use crate::syn_util::item_observation;
 
 /// Run the visibility boundaries against the Cargo workspace at `manifest_path`.
 ///
@@ -51,7 +51,6 @@ pub(crate) fn check_visibility_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
-            fact_kind: SemanticFactKind::Visibility,
         },
         findings,
     )
@@ -66,13 +65,19 @@ pub(crate) fn visibility_findings(
     module: &str,
     crate_package: &str,
     ceiling_rank: u8,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<SemanticFact>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
-    let mut findings: Vec<String> = items
+    let mut findings: Vec<SemanticFact> = items
         .iter()
-        .filter_map(|item| item_finding(item, ceiling_rank))
+        .filter_map(|item| item_observation(item, ceiling_rank))
+        .map(
+            |(visibility, item_kind, item_name)| SemanticFact::Visibility {
+                visibility,
+                item_kind,
+                item_name,
+            },
+        )
         .collect();
-    findings.sort();
-    findings.dedup();
+    sort_facts(&mut findings);
     Ok(findings)
 }

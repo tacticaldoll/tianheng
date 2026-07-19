@@ -6,8 +6,9 @@
 use syn::visit::Visit;
 
 use crate::finding::{
-    PathExposure, SemanticFinding, field_seam, fn_seam, inherent_assoc_seam, inherent_method_seam,
-    item_seam, member_label, render_sig_tail, tag_paths, trait_assoc_seam, trait_method_seam,
+    AssocKind, ItemKind, MemberKind, PathExposure, PublicSeam, SemanticFact, TraitImplPosition,
+    field_seam, fn_seam, inherent_assoc_seam, inherent_method_seam, item_seam, member_label,
+    render_sig_tail, tag_paths, trait_assoc_seam, trait_method_seam,
 };
 use crate::resolve::{
     DynCollector, ImplTraitCollector, PathCollector, ShapeExposure, UseMap, canonical_self_owner,
@@ -72,19 +73,16 @@ pub(crate) fn collect_item_async_exposures(
     module: &str,
     uses: &UseMap,
     ordinal: usize,
-    out: &mut Vec<String>,
+    out: &mut Vec<SemanticFact>,
 ) {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             if item.sig.asyncness.is_some() {
-                out.push(
-                    SemanticFinding::AsyncFreeFn {
-                        module: module.to_string(),
-                        name: strip_raw(&item.sig.ident.to_string()),
-                        tail: render_sig_tail(&item.sig),
-                    }
-                    .to_string(),
-                );
+                out.push(SemanticFact::AsyncFreeFn {
+                    module: module.to_string(),
+                    name: strip_raw(&item.sig.ident.to_string()),
+                    tail: render_sig_tail(&item.sig),
+                });
             }
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
@@ -92,15 +90,12 @@ pub(crate) fn collect_item_async_exposures(
             for trait_item in &item.items {
                 if let syn::TraitItem::Fn(method) = trait_item {
                     if method.sig.asyncness.is_some() {
-                        out.push(
-                            SemanticFinding::AsyncTraitMethod {
-                                module: module.to_string(),
-                                trait_name: trait_name.clone(),
-                                name: strip_raw(&method.sig.ident.to_string()),
-                                tail: render_sig_tail(&method.sig),
-                            }
-                            .to_string(),
-                        );
+                        out.push(SemanticFact::AsyncTraitMethod {
+                            module: module.to_string(),
+                            trait_name: trait_name.clone(),
+                            name: strip_raw(&method.sig.ident.to_string()),
+                            tail: render_sig_tail(&method.sig),
+                        });
                     }
                 }
             }
@@ -115,14 +110,11 @@ pub(crate) fn collect_item_async_exposures(
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) && method.sig.asyncness.is_some() {
-                        out.push(
-                            SemanticFinding::AsyncInherentMethod {
-                                owner: owner.clone(),
-                                name: strip_raw(&method.sig.ident.to_string()),
-                                tail: render_sig_tail(&method.sig),
-                            }
-                            .to_string(),
-                        );
+                        out.push(SemanticFact::AsyncInherentMethod {
+                            owner: owner.clone(),
+                            name: strip_raw(&method.sig.ident.to_string()),
+                            tail: render_sig_tail(&method.sig),
+                        });
                     }
                 }
             }
@@ -251,11 +243,16 @@ pub(crate) fn collect_item_exposures(
             let params = type_param_names(&item.generics);
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &params),
-                &item_seam("struct", module, &item.ident),
+                &item_seam(ItemKind::Struct, module, &item.ident),
             ));
             for (index, field) in item.fields.iter().enumerate() {
                 if is_public(&field.vis) {
-                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    let seam = field_seam(
+                        MemberKind::Field,
+                        module,
+                        &name,
+                        &member_label(index, field),
+                    );
                     out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
                 }
             }
@@ -265,7 +262,7 @@ pub(crate) fn collect_item_exposures(
             let params = type_param_names(&item.generics);
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &params),
-                &item_seam("enum", module, &item.ident),
+                &item_seam(ItemKind::Enum, module, &item.ident),
             ));
             // Enum variants and their fields are as public as the enum itself. Each field
             // carries a per-member seam (`variant {Enum}::{Variant}::{index|name}`), mirroring
@@ -274,7 +271,12 @@ pub(crate) fn collect_item_exposures(
             for variant in &item.variants {
                 let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
                 for (index, field) in variant.fields.iter().enumerate() {
-                    let seam = field_seam("variant", module, &owner, &member_label(index, field));
+                    let seam = field_seam(
+                        MemberKind::Variant,
+                        module,
+                        &owner,
+                        &member_label(index, field),
+                    );
                     out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
                 }
             }
@@ -284,17 +286,22 @@ pub(crate) fn collect_item_exposures(
             let params = type_param_names(&item.generics);
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &params),
-                &item_seam("union", module, &item.ident),
+                &item_seam(ItemKind::Union, module, &item.ident),
             ));
             for (index, field) in item.fields.named.iter().enumerate() {
                 if is_public(&field.vis) {
-                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    let seam = field_seam(
+                        MemberKind::Field,
+                        module,
+                        &name,
+                        &member_label(index, field),
+                    );
                     out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
                 }
             }
         }
         syn::Item::Type(item) if is_public(&item.vis) => {
-            let seam = item_seam("type", module, &item.ident);
+            let seam = item_seam(ItemKind::Type, module, &item.ident);
             let params = type_param_names(&item.generics);
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &params),
@@ -305,18 +312,18 @@ pub(crate) fn collect_item_exposures(
         syn::Item::Const(item) if is_public(&item.vis) => {
             out.extend(tag_paths(
                 paths_in_type(&item.ty),
-                &item_seam("const", module, &item.ident),
+                &item_seam(ItemKind::Const, module, &item.ident),
             ));
         }
         syn::Item::Static(item) if is_public(&item.vis) => {
             out.extend(tag_paths(
                 paths_in_type(&item.ty),
-                &item_seam("static", module, &item.ident),
+                &item_seam(ItemKind::Static, module, &item.ident),
             ));
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
             let trait_name = strip_raw(&item.ident.to_string());
-            let trait_seam = item_seam("trait", module, &item.ident);
+            let trait_seam = item_seam(ItemKind::Trait, module, &item.ident);
             let trait_params = type_param_names(&item.generics);
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &trait_params),
@@ -338,7 +345,8 @@ pub(crate) fn collect_item_exposures(
                         ));
                     }
                     syn::TraitItem::Type(assoc) => {
-                        let seam = trait_assoc_seam("type", module, &trait_name, &assoc.ident);
+                        let seam =
+                            trait_assoc_seam(AssocKind::Type, module, &trait_name, &assoc.ident);
                         // Full-recursion coverage for every bound position of a public associated
                         // type: its own bounds (`: Into<crate::infra::Secret>`), its generic
                         // parameters (GAT `<T: crate::infra::Marker>` + where-clause), and its
@@ -364,7 +372,8 @@ pub(crate) fn collect_item_exposures(
                         }
                     }
                     syn::TraitItem::Const(assoc) => {
-                        let seam = trait_assoc_seam("const", module, &trait_name, &assoc.ident);
+                        let seam =
+                            trait_assoc_seam(AssocKind::Const, module, &trait_name, &assoc.ident);
                         out.extend(tag_paths(
                             paths_in_type_scoped(&assoc.ty, &trait_params),
                             &seam,
@@ -386,7 +395,9 @@ pub(crate) fn collect_item_exposures(
             // block's methods / assoc items and from another block's generics.
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &impl_params),
-                &format!("impl <{owner}> (generics)"),
+                &PublicSeam::InherentGenerics {
+                    owner: owner.clone(),
+                },
             ));
             for impl_item in &item.items {
                 match impl_item {
@@ -402,7 +413,7 @@ pub(crate) fn collect_item_exposures(
                     }
                     // A public associated `const`'s declared type is public API (`Foo::K`).
                     syn::ImplItem::Const(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam("const", &owner, &assoc.ident);
+                        let seam = inherent_assoc_seam(AssocKind::Const, &owner, &assoc.ident);
                         out.extend(tag_paths(
                             paths_in_type_scoped(&assoc.ty, &impl_params),
                             &seam,
@@ -410,7 +421,7 @@ pub(crate) fn collect_item_exposures(
                     }
                     // A public associated `type`'s target is public API (`Foo::T`).
                     syn::ImplItem::Type(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam("type", &owner, &assoc.ident);
+                        let seam = inherent_assoc_seam(AssocKind::Type, &owner, &assoc.ident);
                         out.extend(tag_paths(
                             paths_in_type_scoped(&assoc.ty, &impl_params),
                             &seam,
@@ -440,7 +451,7 @@ pub(crate) fn collect_item_exposures(
         syn::Item::ExternCrate(item) if is_public(&item.vis) && item.ident != "self" => {
             let name = strip_raw(&item.ident.to_string());
             out.push(PathExposure {
-                seam: format!("pub extern crate {name}"),
+                seam: PublicSeam::ExternCrate { name },
                 path: syn::Path::from(item.ident.clone()),
                 is_reexport: true,
             });
@@ -555,7 +566,10 @@ fn push_reexport(
             leading_colon: leading_colon.then(<syn::Token![::]>::default),
             segments,
         },
-        seam: format!("pub use {module}::{exported}"),
+        seam: PublicSeam::Reexport {
+            module: module.to_string(),
+            exported: exported.to_string(),
+        },
         is_reexport: true,
     });
 }
@@ -626,7 +640,11 @@ pub(crate) fn collect_trait_impl_exposures(
     // granularity choice — its generic args distinguish `From<Vec<X>>` from `From<Box<X>>`).
     let trait_label = path_to_string(trait_path).unwrap_or_else(|| format!("trait_#{ordinal}"));
     let self_label = canonical_self_owner(&item.self_ty, uses, module, ordinal);
-    let prefix = format!("impl {trait_label} for {self_label}");
+    let seam = |position: TraitImplPosition| PublicSeam::TraitImpl {
+        trait_ref: trait_label.clone(),
+        owner: self_label.clone(),
+        position,
+    };
     // The impl block's own generic type parameters are in scope in every position below; shadow
     // them so a bare parameter use is not misresolved through a same-named `use … as <param>` alias
     // to a forbidden type (parity with the inherent-impl / signature-coupling collector).
@@ -636,7 +654,7 @@ pub(crate) fn collect_trait_impl_exposures(
     if let Some(syn::PathArguments::AngleBracketed(args)) =
         trait_path.segments.last().map(|s| &s.arguments)
     {
-        let seam = format!("{prefix} (trait-arg)");
+        let seam = seam(TraitImplPosition::TraitArg);
         for arg in &args.args {
             match arg {
                 syn::GenericArgument::Type(ty) => {
@@ -655,7 +673,7 @@ pub(crate) fn collect_trait_impl_exposures(
     //    does not resolve and cannot double-fire here.
     out.extend(tag_paths(
         paths_in_type_scoped(&item.self_ty, &params),
-        &format!("{prefix} (self)"),
+        &seam(TraitImplPosition::SelfType),
     ));
 
     // 3. where — impl generic-param bounds and the `where`-clause, keyed by the bounded type so
@@ -664,7 +682,7 @@ pub(crate) fn collect_trait_impl_exposures(
         match param {
             syn::GenericParam::Type(tp) => {
                 let key = strip_raw(&tp.ident.to_string());
-                let seam = format!("{prefix} (where {key})");
+                let seam = seam(TraitImplPosition::Where(key));
                 out.extend(tag_paths(
                     paths_in_bounds_scoped(&tp.bounds, &params),
                     &seam,
@@ -674,7 +692,7 @@ pub(crate) fn collect_trait_impl_exposures(
             // authored, so this walk observes it too.
             syn::GenericParam::Const(cp) => {
                 let key = strip_raw(&cp.ident.to_string());
-                let seam = format!("{prefix} (where {key})");
+                let seam = seam(TraitImplPosition::Where(key));
                 out.extend(tag_paths(paths_in_type_scoped(&cp.ty, &params), &seam));
             }
             syn::GenericParam::Lifetime(_) => {}
@@ -684,7 +702,7 @@ pub(crate) fn collect_trait_impl_exposures(
         for predicate in &where_clause.predicates {
             if let syn::WherePredicate::Type(pt) = predicate {
                 let key = type_to_string(&pt.bounded_ty).unwrap_or_else(|| "_".to_string());
-                let seam = format!("{prefix} (where {key})");
+                let seam = seam(TraitImplPosition::Where(key));
                 // Both sides are impl-site-authored: a forbidden type in the bounded (LHS) type
                 // (`where crate::infra::X: Clone`) leaks as surely as one in the bound (RHS), so
                 // the walk observes both.
@@ -705,20 +723,23 @@ pub(crate) fn collect_trait_impl_exposures(
             // 4. assoc {name} — associated type/value bindings authored in the impl. Both an
             //    associated `type X = …` and an associated `const X: … ` carry an impl-site type.
             syn::ImplItem::Type(assoc) => {
-                let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));
+                let seam = seam(TraitImplPosition::Assoc(strip_raw(
+                    &assoc.ident.to_string(),
+                )));
                 out.extend(tag_paths(paths_in_type_scoped(&assoc.ty, &params), &seam));
             }
             syn::ImplItem::Const(assoc) => {
-                let seam = format!("{prefix} (assoc {})", strip_raw(&assoc.ident.to_string()));
+                let seam = seam(TraitImplPosition::Assoc(strip_raw(
+                    &assoc.ident.to_string(),
+                )));
                 out.extend(tag_paths(paths_in_type_scoped(&assoc.ty, &params), &seam));
             }
             // 5. method {name} return — the written return type only (never params/receiver).
             //    Shadow the impl's params AND the method's own generics (`fn f<U>() -> U`).
             syn::ImplItem::Fn(method) => {
-                let seam = format!(
-                    "{prefix} (method {} return)",
-                    strip_raw(&method.sig.ident.to_string())
-                );
+                let seam = seam(TraitImplPosition::MethodReturn(strip_raw(
+                    &method.sig.ident.to_string(),
+                )));
                 out.extend(tag_paths(
                     paths_in_return_scoped(&method.sig, &params),
                     &seam,
@@ -754,11 +775,16 @@ pub(crate) fn collect_item_dyn_exposures(
             let name = strip_raw(&item.ident.to_string());
             out.extend(stamp_seam(
                 dyns_in_generics(&item.generics),
-                &item_seam("struct", module, &item.ident),
+                &item_seam(ItemKind::Struct, module, &item.ident),
             ));
             for (index, field) in item.fields.iter().enumerate() {
                 if is_public(&field.vis) {
-                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    let seam = field_seam(
+                        MemberKind::Field,
+                        module,
+                        &name,
+                        &member_label(index, field),
+                    );
                     out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
                 }
             }
@@ -767,14 +793,19 @@ pub(crate) fn collect_item_dyn_exposures(
             let name = strip_raw(&item.ident.to_string());
             out.extend(stamp_seam(
                 dyns_in_generics(&item.generics),
-                &item_seam("enum", module, &item.ident),
+                &item_seam(ItemKind::Enum, module, &item.ident),
             ));
             // Enum variants and their fields are as public as the enum itself; per-member seam
             // for the same injectivity guarantee as the type-exposure collector above.
             for variant in &item.variants {
                 let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
                 for (index, field) in variant.fields.iter().enumerate() {
-                    let seam = field_seam("variant", module, &owner, &member_label(index, field));
+                    let seam = field_seam(
+                        MemberKind::Variant,
+                        module,
+                        &owner,
+                        &member_label(index, field),
+                    );
                     out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
                 }
             }
@@ -783,17 +814,22 @@ pub(crate) fn collect_item_dyn_exposures(
             let name = strip_raw(&item.ident.to_string());
             out.extend(stamp_seam(
                 dyns_in_generics(&item.generics),
-                &item_seam("union", module, &item.ident),
+                &item_seam(ItemKind::Union, module, &item.ident),
             ));
             for (index, field) in item.fields.named.iter().enumerate() {
                 if is_public(&field.vis) {
-                    let seam = field_seam("field", module, &name, &member_label(index, field));
+                    let seam = field_seam(
+                        MemberKind::Field,
+                        module,
+                        &name,
+                        &member_label(index, field),
+                    );
                     out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
                 }
             }
         }
         syn::Item::Type(item) if is_public(&item.vis) => {
-            let seam = item_seam("type", module, &item.ident);
+            let seam = item_seam(ItemKind::Type, module, &item.ident);
             out.extend(stamp_seam(dyns_in_generics(&item.generics), &seam));
             // A public type-alias target writing `dyn` is exposed at the alias item itself; a
             // public item that merely *names* this alias is not expanded (the resolver does
@@ -803,18 +839,18 @@ pub(crate) fn collect_item_dyn_exposures(
         syn::Item::Const(item) if is_public(&item.vis) => {
             out.extend(stamp_seam(
                 dyns_in_type(&item.ty),
-                &item_seam("const", module, &item.ident),
+                &item_seam(ItemKind::Const, module, &item.ident),
             ));
         }
         syn::Item::Static(item) if is_public(&item.vis) => {
             out.extend(stamp_seam(
                 dyns_in_type(&item.ty),
-                &item_seam("static", module, &item.ident),
+                &item_seam(ItemKind::Static, module, &item.ident),
             ));
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
             let trait_name = strip_raw(&item.ident.to_string());
-            let trait_seam = item_seam("trait", module, &item.ident);
+            let trait_seam = item_seam(ItemKind::Trait, module, &item.ident);
             out.extend(stamp_seam(dyns_in_generics(&item.generics), &trait_seam));
             // Supertraits are part of the trait's public contract. Their bound HEAD is a trait
             // position (never a `dyn`), but a `dyn` legally appears inside a supertrait bound's
@@ -828,7 +864,8 @@ pub(crate) fn collect_item_dyn_exposures(
                         out.extend(stamp_seam(dyns_in_signature(&method.sig), &seam));
                     }
                     syn::TraitItem::Type(assoc) => {
-                        let seam = trait_assoc_seam("type", module, &trait_name, &assoc.ident);
+                        let seam =
+                            trait_assoc_seam(AssocKind::Type, module, &trait_name, &assoc.ident);
                         // A public associated type's `: Bound`s and GAT generics carry the same
                         // dyn-in-generic-argument exposure as a supertrait; its **default**
                         // (`type T = Box<dyn …>;`) is a plain exposed type position. All three are
@@ -840,7 +877,8 @@ pub(crate) fn collect_item_dyn_exposures(
                         }
                     }
                     syn::TraitItem::Const(assoc) => {
-                        let seam = trait_assoc_seam("const", module, &trait_name, &assoc.ident);
+                        let seam =
+                            trait_assoc_seam(AssocKind::Const, module, &trait_name, &assoc.ident);
                         out.extend(stamp_seam(dyns_in_type(&assoc.ty), &seam));
                     }
                     _ => {}
@@ -855,7 +893,9 @@ pub(crate) fn collect_item_dyn_exposures(
             // must not lag it. Parallel to the struct/enum/trait arms, which already walk generics.
             out.extend(stamp_seam(
                 dyns_in_generics(&item.generics),
-                &format!("impl <{owner}> (generics)"),
+                &PublicSeam::InherentGenerics {
+                    owner: owner.clone(),
+                },
             ));
             for impl_item in &item.items {
                 match impl_item {
@@ -867,11 +907,11 @@ pub(crate) fn collect_item_dyn_exposures(
                     // `dyn` written there is exposed — the same positions the signature-coupling
                     // collector observes (`collect_item_exposures`); the dyn rule must not lag it.
                     syn::ImplItem::Const(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam("const", &owner, &assoc.ident);
+                        let seam = inherent_assoc_seam(AssocKind::Const, &owner, &assoc.ident);
                         out.extend(stamp_seam(dyns_in_type(&assoc.ty), &seam));
                     }
                     syn::ImplItem::Type(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam("type", &owner, &assoc.ident);
+                        let seam = inherent_assoc_seam(AssocKind::Type, &owner, &assoc.ident);
                         out.extend(stamp_seam(dyns_in_type(&assoc.ty), &seam));
                     }
                     _ => {}

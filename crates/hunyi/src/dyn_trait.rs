@@ -13,7 +13,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::DynTraitBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::{SemanticFactKind, shape_finding};
+use crate::finding::{ExposureKind, SemanticFact, shape_finding};
 use crate::rules::DYN_TRAIT_RULE;
 use crate::shape_scan::{operand_module_findings, shape_module_findings};
 
@@ -67,7 +67,6 @@ pub(crate) fn check_dyn_trait_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
-            fact_kind: SemanticFactKind::DynTrait,
         },
         findings,
     )
@@ -85,14 +84,14 @@ pub(crate) fn dyn_module_findings(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<SemanticFact>, String> {
     shape_module_findings(
         src_dir,
         root_file,
         module,
         crate_package,
         collect_item_dyn_exposures,
-        shape_finding,
+        |exposure| shape_finding(exposure, ExposureKind::DynTrait),
     )
 }
 
@@ -114,7 +113,7 @@ pub(crate) fn dyn_operand_module_findings(
     forbidden: &[String],
     crate_package: &str,
     dep_names: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<SemanticFact>, String> {
     operand_module_findings(
         src_dir,
         root_file,
@@ -122,6 +121,6 @@ pub(crate) fn dyn_operand_module_findings(
         forbidden,
         crate_package,
         dep_names,
-        collect_item_dyn_exposures,
+        (ExposureKind::DynTrait, collect_item_dyn_exposures),
     )
 }

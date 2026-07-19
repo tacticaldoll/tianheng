@@ -15,7 +15,7 @@ use crate::dsl::TraitImplBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::unknown_trait_error;
 use crate::file_scope::resolve_crate;
-use crate::finding::{SemanticFactKind, SemanticFinding};
+use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     BareFallback, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
     render_last_segment_args, resolve_path,
@@ -73,7 +73,6 @@ pub(crate) fn check_trait_impl_boundary(
             severity: boundary.severity,
             anchor: boundary.anchor(),
             polarity: Polarity::AllowlistGap,
-            fact_kind: SemanticFactKind::TraitImpl,
         },
         findings,
     );
@@ -90,7 +89,7 @@ pub(crate) fn trait_impl_findings(
     trait_path: &str,
     allowed: &[String],
     crate_package: &str,
-) -> Result<Vec<(String, String)>, String> {
+) -> Result<Vec<(SemanticFact, String)>, String> {
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let given = canonical_path_str(trait_path);
     let true_anchor = canonicalize_through_reexports(&given, &scan.reexports);
@@ -140,16 +139,14 @@ pub(crate) fn trait_impl_findings(
         // report its source file. Dedup BY FINDING (below) keeps the count identical to before —
         // `file` is metadata, never a second identity key.
         findings.push((
-            SemanticFinding::MisplacedImpl {
+            SemanticFact::MisplacedImpl {
                 module: site.module.clone(),
                 trait_ref,
                 owner,
-            }
-            .to_string(),
+            },
             site.module.clone(),
         ));
     }
-    findings.sort();
-    findings.dedup_by(|a, b| a.0 == b.0);
+    sort_attributed_facts(&mut findings);
     Ok(findings)
 }

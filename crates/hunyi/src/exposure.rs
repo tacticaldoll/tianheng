@@ -18,7 +18,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::SemanticBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::{SemanticFactKind, SemanticFinding};
+use crate::finding::{ExposureKind, SemanticFact, sort_facts};
 use crate::module_resolve::resolve_module_items;
 use crate::resolve::{
     BareFallback, apply_bare_alias_rename, apply_crate_root_rename, bare_local_alias,
@@ -68,7 +68,6 @@ pub(crate) fn check_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
-            fact_kind: SemanticFactKind::SignatureExposure,
         },
         findings,
     )
@@ -85,7 +84,7 @@ pub(crate) fn module_findings(
     crate_package: &str,
     include_trait_impls: bool,
     dep_names: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<SemanticFact>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let uses = collect_uses(&items);
     // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
@@ -144,7 +143,7 @@ pub(crate) fn module_findings(
         }
     }
 
-    let mut findings: Vec<String> = exposed
+    let mut findings: Vec<SemanticFact> = exposed
         .iter()
         .filter_map(|exposure| {
             // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
@@ -201,16 +200,13 @@ pub(crate) fn module_findings(
                 // Seam-qualify: two distinct seams exposing the same forbidden type stay distinct
                 // findings, so baselining one never masks a new leak at another (the one forbidden
                 // bug) — the shape/existential rules do the same below.
-                .map(|canonical| {
-                    SemanticFinding::Exposed {
-                        subject: canonical,
-                        seam: exposure.seam.clone(),
-                    }
-                    .to_string()
+                .map(|canonical| SemanticFact::Exposed {
+                    kind: ExposureKind::Signature,
+                    subject: canonical,
+                    seam: exposure.seam.clone(),
                 })
         })
         .collect();
-    findings.sort();
-    findings.dedup();
+    sort_facts(&mut findings);
     Ok(findings)
 }

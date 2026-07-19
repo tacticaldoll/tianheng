@@ -28,7 +28,7 @@ fn findings(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 /// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
@@ -53,7 +53,7 @@ fn findings_with_deps(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
@@ -76,7 +76,7 @@ fn findings_including_trait_impls(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", true, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 // --- extern-path exposure (the external-crate name set) -------------------
@@ -105,10 +105,14 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
             ViolationId::new(
                 "crate::m",
                 SIGNATURE_RULE,
-                crate::finding::SemanticFact::new(
-                    crate::finding::SemanticFactKind::SignatureExposure,
-                    "crate::infra::Db exposed by fn crate::m::f".to_string(),
-                )
+                crate::finding::SemanticFact::Exposed {
+                    kind: crate::finding::ExposureKind::Signature,
+                    subject: "crate::infra::Db".to_string(),
+                    seam: crate::finding::PublicSeam::FreeFn {
+                        module: "crate::m".to_string(),
+                        name: "f".to_string(),
+                    },
+                }
                 .into_finding(),
             ),
             "reason".to_string(),
@@ -2587,7 +2591,11 @@ fn locality_findings(
     let result = trait_impl_findings(&src, &root, trait_path, &allowed, "x");
     let _ = std::fs::remove_dir_all(&dir);
     // The pure-heart tests assert on findings only; drop the per-finding module here.
-    result.map(|v| v.into_iter().map(|(finding, _module)| finding).collect())
+    result.map(|v| {
+        v.into_iter()
+            .map(|(finding, _module)| finding.to_string())
+            .collect()
+    })
 }
 
 #[test]
@@ -3223,8 +3231,11 @@ fn unsafe_labels(
     }
     let root = src.join("lib.rs");
     let allowed: Vec<String> = allowed.iter().map(|a| a.to_string()).collect();
-    let result = unsafe_findings(&src, &root, &allowed, "x")
-        .map(|fs| fs.into_iter().map(|(finding, _)| finding).collect());
+    let result = unsafe_findings(&src, &root, &allowed, "x").map(|fs| {
+        fs.into_iter()
+            .map(|(finding, _)| finding.to_string())
+            .collect()
+    });
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
@@ -3458,7 +3469,7 @@ fn vis_findings_at(
     let root = src.join("lib.rs");
     let result = visibility_findings(&src, &root, module, "x", ceiling_rank);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 #[test]
@@ -3949,7 +3960,11 @@ fn marker_findings(
     let result = forbidden_marker_findings(&src, &root, subtree, &forbidden, "x");
     let _ = std::fs::remove_dir_all(&dir);
     // The pure-heart tests assert on findings only; drop the per-finding module here.
-    result.map(|v| v.into_iter().map(|(finding, _module)| finding).collect())
+    result.map(|v| {
+        v.into_iter()
+            .map(|(finding, _module)| finding.to_string())
+            .collect()
+    })
 }
 
 #[test]
@@ -4425,7 +4440,7 @@ fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<
     let root = src.join("lib.rs");
     let result = dyn_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -4458,7 +4473,7 @@ fn dyn_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = dyn_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
@@ -4700,7 +4715,7 @@ fn impl_trait_findings(
     let root = src.join("lib.rs");
     let result = impl_trait_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -4839,7 +4854,7 @@ fn impl_trait_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = impl_trait_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn impl_trait_operand_mod(
@@ -5041,7 +5056,7 @@ fn async_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Ve
     let root = src.join("lib.rs");
     let result = async_exposure_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5177,7 +5192,12 @@ fn async_subtree(
     let root = src.join("lib.rs");
     let result = async_exposure_subtree_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, module)| (fact.to_string(), module))
+            .collect()
+    })
 }
 
 /// Just the finding strings, sorted — for cases where the module attribution rides inside the
