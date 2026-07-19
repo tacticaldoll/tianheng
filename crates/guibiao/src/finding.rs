@@ -70,18 +70,18 @@ pub(crate) enum ModuleFact {
 impl ModuleFact {
     pub(crate) fn into_finding(self) -> Finding {
         match self {
-            ModuleFact::ImportedPath(path) => Finding::new(
-                path.clone(),
-                key("imported_path", [("path", path.as_str())]),
-            ),
-            ModuleFact::ImporterModule(module) => Finding::new(
-                module.clone(),
-                key("importer_module", [("module", module.as_str())]),
-            ),
-            ModuleFact::ExternalImporter(module) => Finding::new(
-                module.clone(),
-                key("external_importer", [("module", module.as_str())]),
-            ),
+            ModuleFact::ImportedPath(path) => {
+                let key = key("imported_path", [("path", path.as_str())]);
+                Finding::new(path, key)
+            }
+            ModuleFact::ImporterModule(module) => {
+                let key = key("importer_module", [("module", module.as_str())]);
+                Finding::new(module, key)
+            }
+            ModuleFact::ExternalImporter(module) => {
+                let key = key("external_importer", [("module", module.as_str())]);
+                Finding::new(module, key)
+            }
             ModuleFact::InlinePath { path, module } => Finding::new(
                 format!("{path} in {module}"),
                 key(
