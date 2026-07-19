@@ -11,7 +11,7 @@ instruction.**
 stdout/stderr) and the `run` reaction that composes every dimension into one. You declare a
 single `Constitution` carrying all 三儀 (the three instruments) and call `run`:
 
-```rust
+```rust,no_run
 use tianheng::prelude::*;
 
 // One declared constitution carries every dimension — the single source of truth.
