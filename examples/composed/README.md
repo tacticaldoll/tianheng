@@ -55,8 +55,9 @@ port seam is checked against the allowlist, fail-closed:
 cargo run --bin runtime_demo    # the blessed adapter crosses cleanly; the rogue one reacts
 ```
 
-`tests/funnel.rs` asserts the two CI-time instruments (圭表 static, 渾儀 semantic) each react to
-their fault; `tests/runtime.rs` asserts the runtime instrument (漏刻) — the rogue origin reacts and
+`tests/funnel.rs` drives the unified Constitution through `check_constitution` and asserts its one
+inspectable report contains both CI-time source faults (圭表 static + 渾儀 semantic) while 漏刻 probe
+coverage stays clean. `tests/runtime.rs` asserts the runtime prod face — the rogue origin reacts and
 the blessed one does not.
 
 > Experimental / pre-1.0: public faces may change until real adoption pressure settles them.

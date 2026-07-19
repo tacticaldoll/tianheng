@@ -831,10 +831,14 @@ survives across sessions.
   re-hand-rolled per repo; (b) the adopter-facing **潛移 generator** (see the 潛移 section); (c) an
   adopter-facing **`tianheng::testing` boundary-test harness** (`assert_violates!` / `assert_clean!`
   over a fixture) — every adopter currently re-hand-rolls a temp-workspace + `check`/`check_all`
-  assertion (the same rebuild pain as (a)). **Docs-first shipped (v0.1.9):** the COOKBOOK "Test that a
-  boundary reacts" recipe over the public entry points; the *API* is deferred until the assert shape
-  settles under a real second consumer — shell-hosted, std-only, feature-gated, additive/patch when it
-  lands (the Spike-A verdict). Note: the entry points read a manifest on disk, so an inline-fixture
+  assertion (the same rebuild pain as (a)). **Built prerequisite (0.2.0 line):**
+  `check_constitution(&Constitution, &Path) -> Outcome` exposes the runner's one shared
+  static→semantic→runtime evaluation path without CLI presentation; the composed example no longer
+  splits its law back into per-dimension checks merely to inspect findings. **Docs-first shipped
+  (v0.1.9):** the COOKBOOK "Test that a boundary reacts" recipe over the public entry points; the
+  higher-level assertion/fixture *API* remains deferred until its shape settles under a real second
+  consumer — shell-hosted, std-only, feature-gated, additive/patch when it lands (the Spike-A
+  verdict). Note: the entry points read a manifest on disk, so an inline-fixture
   ergonomics would still materialize a temp crate. Stated
   bound: a `because`-text `contains` predicate is weaker than a structural fact (a reworded clause
   slips it). Adopter-surfaced by worklane.
