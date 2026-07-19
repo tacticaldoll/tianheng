@@ -12,7 +12,8 @@ inspection type while Tianheng's internal tests remain green.
 - Add the missing `ModuleRule` prelude re-export, symmetric with `Rule`, so
   `ModuleBoundary::rule()` is inspectable through the recommended wildcard entrypoint.
 - Add an integration compile contract that imports only `tianheng::prelude::*` and type-checks the
-  complete supported declaration chains, selector values, `run`, and reaction-inspection model.
+  representative supported declaration chains, selector values, `run`, and reaction-inspection
+  model while naming every promised export.
 - Document the explicit root path for the signature-coupling semantic check and the prelude path for the
   composed adopter workflow, without removing or renaming any existing re-export. Granular hidden
   checks remain outside this contract.
