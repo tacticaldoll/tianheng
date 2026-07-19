@@ -91,6 +91,31 @@ cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml 
 grep -q '"version": "2.1.0"' /tmp/composed.sarif || { echo "::error::composed sarif missing version 2.1.0"; exit 1; }
 echo "ok  composed sarif contract (version 2.1.0)"
 
+# Adoption path — drive the real shell, not only Baseline's library API. Recording the deliberate
+# static + semantic faults is observation (exit 0); gating against that snapshot keeps the known
+# drift green while preserving the violations as baselined machine output. The standalone example's
+# reaction tests separately prove an identity absent from the baseline still exits 1.
+BASELINE_WORK="$(mktemp -d)"
+BASELINE_PATH="$BASELINE_WORK/composed-baseline.json"
+trap 'rm -rf -- "$BASELINE_WORK"' EXIT
+got=0
+cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml \
+    --write-baseline "$BASELINE_PATH" >/tmp/composed_baseline_write.txt 2>&1 || got=$?
+expect "$got" 0 "composed baseline write records existing drift"
+grep -q '"version": 1' "$BASELINE_PATH" \
+    || { echo "::error::composed baseline missing version 1"; exit 1; }
+grep -q '"violations"' "$BASELINE_PATH" \
+    || { echo "::error::composed baseline missing violations"; exit 1; }
+
+got=0
+cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml \
+    --baseline "$BASELINE_PATH" --format json >/tmp/composed_baselined.json 2>/dev/null || got=$?
+expect "$got" 0 "composed baseline gates only new drift"
+grep -q '"baselined": true' /tmp/composed_baselined.json \
+    || { echo "::error::composed gate did not project known drift as baselined"; exit 1; }
+rm -rf -- "$BASELINE_WORK"
+trap - EXIT
+
 # run-mode — the runtime dimension reacts as an event (exit 0, never a crash) and emits the reaction.
 got=0
 cargo run --quiet --bin runtime_demo "${PATCH[@]}" >/tmp/composed_runtime.txt 2>&1 || got=$?

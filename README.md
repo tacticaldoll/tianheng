@@ -25,6 +25,25 @@ it erodes the shape it does not understand, and *instructing* it cannot bind an 
 has no understanding. Tianheng crystallizes the human's intent into a **non-bypassable
 reaction**: neither the agent nor Tianheng needs to understand for the law to hold.
 
+## Start from the intent
+
+Choose the architectural fact you need to keep true, then select the instrument that can actually
+observe it. Tianheng supplies no built-in "best practice" policy: every boundary names *your*
+target, rule, and forward-looking reason.
+
+| Intent | Declare | What reacts | Deliberate bound |
+|---|---|---|---|
+| the domain depends inward, never on infrastructure | `ModuleBoundary::must_not_import` | a written internal `use` edge | not a runtime call graph or macro-generated import |
+| only the facade may reach an internal module | `ModuleBoundary::must_only_be_imported_by` | an importer outside the closed allowlist | file/module imports, not reflective access |
+| a public seam must not leak an implementation type | `SemanticBoundary::must_not_expose` | the forbidden type in an observed public type position | not a function-body call site |
+| an external crate belongs only under an adapter/FFI subtree | `ModuleBoundary::confine_external_crate` | its written `use` outside that subtree | not dynamic loading or resolved supply-chain provenance |
+| a core subtree stays synchronous and clock-free | `Constitution::sans_io_pure` | inline clock reads and exposed `async fn`s | only the explicit prefixes/verbs you provide; nothing baked in |
+| only registered adapter origins cross a runtime seam | `RuntimeBoundary::only_origins` | a live concrete type crossing the probed seam | not general effect or I/O reachability |
+
+The focused, copyable forms live in [`COOKBOOK.md`](COOKBOOK.md). Read each rule's observation
+bound with its recipe: a clean result means no violation was found **within that declared
+perimeter**, never that Tianheng understood surfaces it does not observe.
+
 ## A declared boundary
 
 **Phase 0 — lock one seam.** The smallest useful law is a single boundary an agent copies by
@@ -90,6 +109,30 @@ fn main() -> std::process::ExitCode {
 `your-binary check --manifest-path path/to/Cargo.toml` reacts against *your* constitution:
 exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`
 (constitution/scan error). `list` projects the declared constitution and never reacts.
+
+### Adopt without a red wall
+
+Severity and baseline are two independent entry paths, not three mandatory stages in one sequence:
+
+- **Greenfield or observation period — warn first.** Add `.warn()` before `.because(...)`; the
+  boundary reports what it sees but exits `0`. Remove `.warn()` when the team is ready to gate.
+- **Existing codebase — enforce new drift now.** Keep the boundary enforced, snapshot only the
+  violations that already exist, commit that generated baseline, and gate every subsequent check:
+
+```sh
+# Recording is observation, not judgment: writes the current identities and exits 0.
+your-binary check --manifest-path Cargo.toml \
+  --write-baseline .tianheng-baseline.json
+
+# CI: known identities stay green; a new enforce violation exits 1.
+your-binary check --manifest-path Cargo.toml \
+  --baseline .tianheng-baseline.json
+```
+
+When a violation is fixed, gate mode reports its baseline entry as stale; regenerate the snapshot
+with `--write-baseline` to remove resolved entries. Rewriting preserves hand-added `owner` and
+`tracker` metadata for identities that still exist. A violation's identity is
+`(target, rule, finding)`: `file`, `anchor`, reason, and severity do not churn the baseline.
 
 **CI / agent visibility.** `check --format json` is the machine contract; `check --format sarif`
 emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
