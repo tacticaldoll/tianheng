@@ -9,12 +9,21 @@ use crate::prelude::*;
 use serde_json::Value;
 use std::path::PathBuf;
 
+fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
+    ViolationId::new(
+        target,
+        rule,
+        Finding::new(
+            finding,
+            FindingKey::new("tianheng-test", "fact", [("value", finding)]).unwrap(),
+        ),
+    )
+}
+
 fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Violation {
     Violation::new(
         BoundaryKind::Crate,
-        target.to_string(),
-        rule.to_string(),
-        finding.to_string(),
+        test_id(target, rule, finding),
         format!("reason-for-{target}"),
         Severity::Enforce,
     )
@@ -24,9 +33,7 @@ fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Vio
 fn enforce_violation(kind: BoundaryKind, finding: &str) -> Violation {
     Violation::new(
         kind,
-        "target".to_string(),
-        "rule".to_string(),
-        finding.to_string(),
+        test_id("target", "rule", finding),
         "reason".to_string(),
         Severity::Enforce,
     )
@@ -256,7 +263,7 @@ fn report_sarif_merges_anchor_and_polarity_into_one_property_bag() {
 
 #[test]
 fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
-    // A violation's identity is (target, rule, finding), but SARIF's
+    // SARIF v1 fingerprints retain the human triple for wire compatibility, but SARIF's
     // ruleId/message carry only rule and finding. For a file-less violation `target` is the sole
     // discriminator, so two violations differing ONLY in target rendered byte-identical and a
     // fingerprint-deduping ingester (GitHub code scanning) collapsed them. Each now carries a
@@ -267,9 +274,7 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
     let mk = |target: &str| {
         Violation::new(
             BoundaryKind::Crate,
-            target.to_string(),
-            same_rule.to_string(),
-            same_finding.to_string(),
+            test_id(target, same_rule, same_finding),
             same_reason.to_string(),
             Severity::Enforce,
         )
@@ -1328,27 +1333,29 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
     // case. All project faithfully.
     let single_module = Violation::new(
         BoundaryKind::Semantic,
-        "crate::domain".to_string(),
-        "must not expose".to_string(),
-        "crate::infra::Db exposed by fn crate::domain::leak".to_string(),
+        test_id(
+            "crate::domain",
+            "must not expose",
+            "crate::infra::Db exposed by fn crate::domain::leak",
+        ),
         "domain must not expose infra".to_string(),
         Severity::Enforce,
     )
     .with_file(Some("src/domain.rs".to_string()));
     let whole_crate_scan = Violation::new(
         BoundaryKind::Semantic,
-        "crate::Command".to_string(),
-        "must be implemented only in the allowed locations".to_string(),
-        "crate::plugins (impl for crate::plugins::P)".to_string(),
+        test_id(
+            "crate::Command",
+            "must be implemented only in the allowed locations",
+            "crate::plugins (impl for crate::plugins::P)",
+        ),
         "Command impls live in crate::allowed".to_string(),
         Severity::Enforce,
     )
     .with_file(Some("src/plugins.rs".to_string()));
     let file_less = Violation::new(
         BoundaryKind::Crate,
-        "dep-crate".to_string(),
-        "deny external".to_string(),
-        "serde".to_string(),
+        test_id("dep-crate", "deny external", "serde"),
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     );
@@ -1791,6 +1798,9 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     // First write: no metadata yet.
     assert_eq!(super::write_baseline(&outcome, path_str), 0);
     let first = std::fs::read_to_string(&path).expect("baseline written");
+    let first_doc: Value = serde_json::from_str(&first).unwrap();
+    assert_eq!(first_doc["version"], 2);
+    assert!(first_doc["violations"][0]["finding_key"].is_object());
     assert!(
         !first.contains("owner"),
         "fresh baseline has no metadata: {first}"
@@ -1809,6 +1819,30 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     let doc: Value = serde_json::from_str(&rewritten).expect("valid baseline json");
     assert_eq!(doc["violations"][0]["owner"], "team-core");
     assert_eq!(doc["violations"][0]["tracker"], "ISSUE-7");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn write_baseline_upgrades_version_one_and_preserves_exact_match_metadata() {
+    let path = std::env::temp_dir().join(format!(
+        "tianheng-baseline-v1-upgrade-{}.json",
+        std::process::id()
+    ));
+    let path_str = path.to_str().expect("utf-8 temp path");
+    let legacy = r#"{"version":1,"violations":[{
+        "target":"core","rule":"rule","finding":"serde",
+        "owner":"team-core","tracker":"ISSUE-8"
+    }]}"#;
+    std::fs::write(&path, legacy).expect("write legacy baseline");
+    let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
+
+    assert_eq!(super::write_baseline(&outcome, path_str), 0);
+    let rewritten: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(rewritten["version"], 2);
+    assert!(rewritten["violations"][0]["finding_key"].is_object());
+    assert_eq!(rewritten["violations"][0]["owner"], "team-core");
+    assert_eq!(rewritten["violations"][0]["tracker"], "ISSUE-8");
 
     let _ = std::fs::remove_file(&path);
 }

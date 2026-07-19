@@ -15,6 +15,7 @@ use crate::emit::{
     push_single_module_violations,
 };
 use crate::file_scope::resolve_crate;
+use crate::finding::SemanticFactKind;
 use crate::resolve::collect_uses;
 use crate::rules::ASYNC_EXPOSURE_RULE;
 use crate::scan::walk_subtree_modules;
@@ -59,6 +60,7 @@ pub(crate) fn check_async_exposure_boundary(
                 severity: boundary.severity,
                 anchor: boundary.anchor(),
                 polarity: Polarity::DenyBreach,
+                fact_kind: SemanticFactKind::AsyncExposure,
             },
             findings,
         );
@@ -83,6 +85,7 @@ pub(crate) fn check_async_exposure_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
+            fact_kind: SemanticFactKind::AsyncExposure,
         },
         findings,
     )

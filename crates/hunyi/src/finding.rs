@@ -1,14 +1,70 @@
 //! The 渾儀 finding vocabulary and seam labels — how a semantic finding and the public **seam**
-//! it sits at are rendered and identified, in one place. A finding string is the third component
-//! of a violation's `(target, rule, finding)` baseline identity, so every literal that can become
-//! one lives here; the collectors and the reaction hearts build findings through these.
+//! it sits at are rendered and identified, in one place. A typed semantic fact owns the stable
+//! descriptor used by `(target, rule, finding_key)`; rendering that descriptor as human text is a
+//! separate step, so presentation can change without silently changing baseline identity.
 
 use crate::resolve::{ShapeExposure, strip_raw, type_to_string};
+use xuanji::{Finding, FindingKey};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SemanticFactKind {
+    SignatureExposure,
+    DynTrait,
+    ImplTrait,
+    AsyncExposure,
+    Visibility,
+    TraitImpl,
+    ForbiddenMarker,
+    UnsafeSite,
+}
+
+impl SemanticFactKind {
+    fn code(self) -> &'static str {
+        match self {
+            Self::SignatureExposure => "signature_exposure",
+            Self::DynTrait => "dyn_trait_exposure",
+            Self::ImplTrait => "impl_trait_exposure",
+            Self::AsyncExposure => "async_exposure",
+            Self::Visibility => "visibility_exposure",
+            Self::TraitImpl => "trait_impl_site",
+            Self::ForbiddenMarker => "forbidden_marker_acquisition",
+            Self::UnsafeSite => "unsafe_site",
+        }
+    }
+}
+
+pub(crate) struct SemanticFact {
+    kind: SemanticFactKind,
+    /// A canonical, dimension-owned description of the observed semantic fact. This is machine
+    /// identity even though its current spelling is also a useful default presentation.
+    descriptor: String,
+}
+
+impl SemanticFact {
+    pub(crate) fn new(kind: SemanticFactKind, descriptor: String) -> Self {
+        Self { kind, descriptor }
+    }
+
+    pub(crate) fn into_finding(self) -> Finding {
+        let text = self.descriptor.clone();
+        self.into_finding_with_text(text)
+    }
+
+    fn into_finding_with_text(self, text: String) -> Finding {
+        let key = FindingKey::new(
+            "hunyi",
+            self.kind.code(),
+            [("descriptor", self.descriptor.as_str())],
+        )
+        .expect("hunyi fact schemas use non-empty, unique static field names");
+        Finding::new(text, key)
+    }
+}
 
 /// One exposed type path (signature-coupling), tagged with the public **seam** it was exposed at
 /// — the `syn::Path` counterpart of [`ShapeExposure`]'s `seam`. The seam becomes part of the
-/// finding so two distinct seams exposing the *same* forbidden type never collapse to one
-/// `(target, rule, finding)` baseline entry and mask a new leak (the one forbidden bug).
+/// fact descriptor so two distinct seams exposing the *same* forbidden type never collapse to one
+/// `(target, rule, finding_key)` baseline entry and mask a new leak (the one forbidden bug).
 pub(crate) struct PathExposure {
     pub(crate) seam: String,
     pub(crate) path: syn::Path,
@@ -22,13 +78,11 @@ pub(crate) struct PathExposure {
 
 /// The finding vocabulary of the semantic dimension, rendered in one place.
 ///
-/// A semantic violation's `finding` is the third component of its `(target, rule, finding)`
-/// baseline identity, so every format literal that can become a `finding` lives here and only
-/// here: a reviewer sees the whole vocabulary at once, and a new finding shape must add a variant
-/// rather than sprout an inline `format!`. Behavior-preserving — each variant's `Display` renders
-/// byte-identically to the inline format it replaced, and the `*_findings` functions still return
-/// `Vec<String>` / `Vec<(String, String)>`, so baseline identity and the injectivity tests are
-/// unchanged. Visibility findings are deliberately *not* here: they are a heterogeneous
+/// Each variant produces the canonical descriptor carried by a typed semantic fact. Every format
+/// literal lives here and only here: a reviewer sees the whole vocabulary at once, and a new shape
+/// must add a variant rather than sprout an inline `format!`. Its current `Display` is also the
+/// default human presentation, but the fact key is built before presentation. Visibility findings
+/// are deliberately *not* here: they are a heterogeneous
 /// `{visibility} {kind} {name}` item descriptor, already cohesive in `item_finding`, not one
 /// canonical relation line.
 pub(crate) enum SemanticFinding {
@@ -52,7 +106,7 @@ pub(crate) enum SemanticFinding {
     /// hand-written `impl`. `marker` is the written trait path (with generic args), `owner` the self
     /// type (with generic args), and `module` the impl site — together injective, so two distinct
     /// acquisitions (`impl Marker<u8>`/`impl Marker<u16>`, or the same leaf from different modules)
-    /// never collapse to one `(target, rule, finding)` and mask a new one.
+    /// never collapse to one `(target, rule, finding_key)` and mask a new one.
     ForbiddenImpl {
         marker: String,
         owner: String,
@@ -234,4 +288,52 @@ pub(crate) fn render_sig_tail(sig: &syn::Signature) -> String {
         syn::ReturnType::Default => String::new(),
     };
     format!("({}){ret}", params.join(", "))
+}
+
+#[cfg(test)]
+mod fact_tests {
+    use super::*;
+
+    #[test]
+    fn semantic_fact_shape_and_descriptor_are_both_identity() {
+        let signature = SemanticFact::new(
+            SemanticFactKind::SignatureExposure,
+            "Port exposed by fn crate::api::run".to_string(),
+        )
+        .into_finding()
+        .key()
+        .clone();
+        let dyn_trait = SemanticFact::new(
+            SemanticFactKind::DynTrait,
+            "Port exposed by fn crate::api::run".to_string(),
+        )
+        .into_finding()
+        .key()
+        .clone();
+        let other = SemanticFact::new(
+            SemanticFactKind::SignatureExposure,
+            "Port exposed by fn crate::api::other".to_string(),
+        )
+        .into_finding()
+        .key()
+        .clone();
+        assert_ne!(signature, dyn_trait);
+        assert_ne!(signature, other);
+    }
+
+    #[test]
+    fn semantic_fact_presentation_is_not_identity() {
+        let original = SemanticFact::new(
+            SemanticFactKind::SignatureExposure,
+            "Port exposed by fn crate::api::run".to_string(),
+        )
+        .into_finding_with_text("Port exposed by fn crate::api::run".to_string());
+        let polished = SemanticFact::new(
+            SemanticFactKind::SignatureExposure,
+            "Port exposed by fn crate::api::run".to_string(),
+        )
+        .into_finding_with_text("fn crate::api::run exposes Port".to_string());
+        assert_eq!(original.key(), polished.key());
+        assert_ne!(original.text(), polished.text());
+    }
 }

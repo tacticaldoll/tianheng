@@ -9,8 +9,10 @@ string fields. The baseline SHALL be a generated artifact (a projection), never 
 boundaries, rules, and severity remain declared in Rust. Identity SHALL exclude the human finding
 text, boundary reason, severity, file, anchor, and polarity, so presentation or metadata changes
 SHALL NOT make an existing version-2 violation count as new. The baseline SHALL serialize as JSON
-carrying a `version` and a list of `violations` sorted by structured identity, so the file is stable
-and diffable. Every new write SHALL declare version `2`.
+carrying a `version` and a list of `violations` sorted by identity, so the file is stable and
+diffable. Every baseline newly generated from current violations SHALL declare version `2`.
+Re-serializing a parsed version-1 snapshot without current observations SHALL preserve version 1
+rather than fabricate structured keys.
 
 A baseline entry SHALL be able to carry two optional governance-tracking fields — `owner` (who owns
 this accepted debt) and `tracker` (the external issue tracking its fix). These fields SHALL be
@@ -55,6 +57,11 @@ be an error.
 
 - **WHEN** a version-1 baseline containing only `target`, `rule`, and `finding` is read
 - **THEN** it parses successfully as legacy entries with any owner/tracker metadata preserved
+
+#### Scenario: Re-serializing a legacy snapshot does not invent keys
+
+- **WHEN** a parsed version-1 baseline is serialized without rebuilding it from current violations
+- **THEN** it remains version 1 with the same legacy text identities rather than emitting fabricated structured keys
 
 ### Requirement: Gate suppresses baselined violations and fails only on new ones
 

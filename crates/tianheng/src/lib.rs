@@ -26,8 +26,8 @@ mod sans_io;
 
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
-    ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, Severity, SourceKind, Violation,
-    ViolationId, check, workspace_member_src_dirs,
+    Finding, FindingKey, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, Severity,
+    SourceKind, Violation, ViolationId, check, workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
@@ -217,9 +217,10 @@ impl From<GnomonConstitution> for Constitution {
 pub mod prelude {
     pub use super::{
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
-        CrateBoundary, DependencyKind, DynTraitBoundary, ForbiddenMarkerBoundary,
-        ImplTraitBoundary, ModuleBoundary, Outcome, Polarity, Report, Rule, RuntimeBoundary,
-        SansIoPure, SemanticBoundary, Severity, SourceKind, TraitImplBoundary, UnsafeBoundary,
-        Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, run,
+        CrateBoundary, DependencyKind, DynTraitBoundary, Finding, FindingKey,
+        ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, Outcome, Polarity, Report,
+        Rule, RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
+        TraitImplBoundary, UnsafeBoundary, Violation, ViolationId, VisibilityBoundary,
+        VisibilityCeiling, check, run,
     };
 }

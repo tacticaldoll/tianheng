@@ -10,6 +10,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::finding::ModuleFact;
+
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
     canonical_module_path, canonical_segment, effective_module, inline_mod_at,
@@ -32,7 +34,7 @@ struct ResolveCtx {
 
 /// One inline offence: the `finding` string (per the identity requirement) and the source file.
 pub(crate) struct InlineFinding {
-    pub finding: String,
+    pub fact: ModuleFact,
     pub file: String,
 }
 
@@ -140,7 +142,10 @@ pub(crate) fn inline_symbol_findings(
             ) {
                 if glob_reaches_prefix(&resolved, &prefix, &ctx, &mut HashSet::new()) {
                     findings.push(InlineFinding {
-                        finding: format!("glob {} in {module}", glob_path),
+                        fact: ModuleFact::InlineGlob {
+                            path: glob_path,
+                            module: module.clone(),
+                        },
                         file: file.display().to_string(),
                     });
                 }
@@ -181,7 +186,10 @@ pub(crate) fn inline_symbol_findings(
             };
             if react {
                 findings.push(InlineFinding {
-                    finding: format!("{resolved} in {module}"),
+                    fact: ModuleFact::InlinePath {
+                        path: resolved,
+                        module: module.clone(),
+                    },
                     file: file.display().to_string(),
                 });
             }
@@ -190,8 +198,8 @@ pub(crate) fn inline_symbol_findings(
 
     // One violation per distinct finding (per-(canonical path / glob, module)); keep the first
     // file after a deterministic sort, so a subtree spanning several files does not double-count.
-    findings.sort_by(|a, b| a.finding.cmp(&b.finding).then(a.file.cmp(&b.file)));
-    findings.dedup_by(|a, b| a.finding == b.finding);
+    findings.sort_by(|a, b| a.fact.cmp(&b.fact).then(a.file.cmp(&b.file)));
+    findings.dedup_by(|a, b| a.fact == b.fact);
     Ok(findings)
 }
 

@@ -33,6 +33,7 @@ mod coverage;
 pub use coverage::Coverage;
 use coverage::coverage_from;
 mod errors;
+mod finding;
 use errors::unreadable_workspace_error;
 #[cfg(test)]
 use errors::{
@@ -51,8 +52,8 @@ pub use model::*;
 // (PROJECT.md). Only the per-type vocabulary moved; the report/constitution *assembly*
 // (projection.rs), which folds in the static `Coverage`, stays in this crate.
 pub use xuanji::{
-    Baseline, BaselineEntry, BoundaryKind, Outcome, Polarity, Report, Severity, Violation,
-    ViolationId, apply_baseline,
+    Baseline, BaselineEntry, BoundaryKind, Finding, FindingKey, Outcome, Polarity, Report,
+    Severity, Violation, ViolationId, apply_baseline,
 };
 
 /// Run the constitution's boundaries against the Cargo workspace at `manifest_path`.
@@ -98,7 +99,7 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
     // Two identical crate boundaries (same target/rule/kind) declared on one constitution would
     // each flag the same dependency, emitting duplicate violations with equal identity. The
     // baseline already dedups by identity, so gating is unaffected, but the report and its count
-    // should not double-count a single architectural fact — dedup by `(target, rule, finding)`.
+    // should not double-count a single architectural fact — dedup by structured identity.
     // When duplicates differ in severity (the same rule declared once `warn` and once `enforce`
     // on one crate — a plausible mid-promotion state), keep the **more severe** reaction: `id()`
     // excludes severity, so the two collapse, and keeping first-seen would let a `warn` duplicate

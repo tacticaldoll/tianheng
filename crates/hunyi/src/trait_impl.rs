@@ -15,7 +15,7 @@ use crate::dsl::TraitImplBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::unknown_trait_error;
 use crate::file_scope::resolve_crate;
-use crate::finding::SemanticFinding;
+use crate::finding::{SemanticFactKind, SemanticFinding};
 use crate::resolve::{
     BareFallback, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
     render_last_segment_args, resolve_path,
@@ -73,6 +73,7 @@ pub(crate) fn check_trait_impl_boundary(
             severity: boundary.severity,
             anchor: boundary.anchor(),
             polarity: Polarity::AllowlistGap,
+            fact_kind: SemanticFactKind::TraitImpl,
         },
         findings,
     );

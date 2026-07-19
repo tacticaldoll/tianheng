@@ -13,7 +13,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::SemanticFinding;
+use crate::finding::{SemanticFactKind, SemanticFinding};
 use crate::resolve::{
     BareFallback, canonical_path_str, canonical_self_owner, path_to_string, resolve_path,
 };
@@ -59,6 +59,7 @@ pub(crate) fn check_forbidden_marker_boundary(
             severity: boundary.severity,
             anchor: boundary.anchor(),
             polarity: Polarity::DenyBreach,
+            fact_kind: SemanticFactKind::ForbiddenMarker,
         },
         findings,
     );

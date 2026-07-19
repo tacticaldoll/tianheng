@@ -131,8 +131,10 @@ your-binary check --manifest-path Cargo.toml \
 
 When a violation is fixed, gate mode reports its baseline entry as stale; regenerate the snapshot
 with `--write-baseline` to remove resolved entries. Rewriting preserves hand-added `owner` and
-`tracker` metadata for identities that still exist. A violation's identity is
-`(target, rule, finding)`: `file`, `anchor`, reason, and severity do not churn the baseline.
+`tracker` metadata for identities that still exist. New baselines are version 2: a violation's
+identity is `(target, rule, finding_key)`, while the human `finding`, `file`, `anchor`, reason, and
+severity do not churn it. Version-1 text baselines remain readable and match by their old exact
+`(target, rule, finding)` triple until the next write upgrades them.
 
 **CI / agent visibility.** `check --format json` is the machine contract; `check --format sarif`
 emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
@@ -335,10 +337,10 @@ into boundaries.
   `--format json` report and the `Baseline` snapshot — is the versioned, machine-facing contract (a
   `Baseline` *is* a JSON snapshot). Presentation changes — a coloured terminal render, the SARIF
   projection — never change the verdict or the exit code.
-- **A violation's identity is `(target, rule, finding)`.** Its `file`, `anchor`, and `polarity` are
-  *metadata*, not identity — so relocating the offending code to another file, or attaching an
-  `anchor`, never turns a baselined violation new and never churns your baseline. Refactor freely;
-  the baseline tracks the drift, not the byte offset.
+- **A violation's identity is `(target, rule, finding_key)`.** The key is a dimension-owned fact
+  code plus named observed values; the human `finding`, `file`, `anchor`, and `polarity` are
+  *presentation/metadata*, not identity. Relocating code, attaching an anchor, or improving finding
+  wording therefore does not turn a version-2 baselined violation new.
 - **The adopter-written builder does not break in `0.1.x`.** `Constitution`, the boundary DSL, and
   `run` are the surface you write against; the pre-1.0 churn is quarantined to internal faces.
 

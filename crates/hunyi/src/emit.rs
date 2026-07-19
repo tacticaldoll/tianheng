@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use xuanji::{BoundaryKind, Polarity, Severity, Violation};
+use xuanji::{BoundaryKind, Polarity, Severity, Violation, ViolationId};
 
 use crate::file_scope::{per_finding_file, seam_file};
+use crate::finding::{SemanticFact, SemanticFactKind};
 
 pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) src_dir: &'a Path,
@@ -14,11 +15,12 @@ pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) reason: &'a str,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
+    pub(crate) fact_kind: SemanticFactKind,
 }
 
 /// Add deny-style violations for a boundary whose findings all sit on one governed module seam.
 /// The file metadata is the governed module's source file: where the exposing seam is written.
-/// Finding identity stays `(target, rule, finding)`; file, anchor, and polarity remain metadata.
+/// Identity stays `(target, rule, finding_key)`; text, file, anchor, and polarity remain metadata.
 pub(crate) fn push_single_module_violations(
     violations: &mut Vec<Violation>,
     context: SingleModuleViolationContext<'_>,
@@ -36,9 +38,11 @@ pub(crate) fn push_single_module_violations(
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
-                context.module.to_string(),
-                context.rule.to_string(),
-                finding,
+                ViolationId::new(
+                    context.module,
+                    context.rule,
+                    SemanticFact::new(context.fact_kind, finding).into_finding(),
+                ),
                 context.reason.to_string(),
                 context.severity,
             )
@@ -54,7 +58,7 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     pub(crate) src_dir: &'a Path,
     pub(crate) root_file: &'a Path,
     /// The violation `target` — the boundary's anchored module, kept stable so identity
-    /// `(target, rule, finding)` does not shift as the governed subtree grows.
+    /// `(target, rule, finding_key)` does not shift as the governed subtree grows.
     pub(crate) target: &'a str,
     pub(crate) crate_package: &'a str,
     pub(crate) rule: &'a str,
@@ -62,8 +66,9 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
     /// The finding's polarity metadata (deny-breach vs allowlist-gap). Not part of the violation
-    /// identity, so each capability passes its own without shifting `(target, rule, finding)`.
+    /// identity, so each capability passes its own without shifting structured identity.
     pub(crate) polarity: Polarity,
+    pub(crate) fact_kind: SemanticFactKind,
 }
 
 /// Add violations for a boundary whose findings sit across many modules — the shared emitter for
@@ -71,7 +76,7 @@ pub(crate) struct MultiModuleViolationContext<'a> {
 /// async-exposure subtree branch), of either polarity: each caller supplies its own `polarity` via
 /// the context. Each finding carries its enclosing module, used only to resolve the per-module
 /// source file (a metadata nicety, cached across findings); the violation `target` stays the
-/// boundary's anchor, so a finding's identity `(target, rule, finding)` is stable — the enclosing
+/// boundary's anchor, so a finding's structured identity is stable — the enclosing
 /// module is metadata, never part of the identity.
 pub(crate) fn push_multi_module_violations(
     violations: &mut Vec<Violation>,
@@ -91,9 +96,11 @@ pub(crate) fn push_multi_module_violations(
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
-                context.target.to_string(),
-                context.rule.to_string(),
-                finding,
+                ViolationId::new(
+                    context.target,
+                    context.rule,
+                    SemanticFact::new(context.fact_kind, finding).into_finding(),
+                ),
                 context.reason.to_string(),
                 context.severity,
             )

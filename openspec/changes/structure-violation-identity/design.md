@@ -56,8 +56,10 @@ closed; its key storage is private and exposed through a read-only
 a typed `Finding` and always stores a key, while only the version-1 baseline parser can store `None`
 to represent honestly that the artifact never contained one. `FindingKey` likewise keeps its fields
 private behind validated construction and read-only accessors. `Violation::new` becomes
-`Violation::new(kind, id, reason, severity)`. This removes the adjacent target/rule/finding strings
-from violation construction while leaving file, anchor, polarity, and baseline status as metadata.
+`Violation::new(kind, id, reason, severity)` and rejects a parsed legacy id rather than converting
+historical data into an unstructured live observation. A live `Violation` therefore stores a
+non-optional key. This removes the adjacent target/rule/finding strings from violation construction
+while leaving file, anchor, polarity, and baseline status as metadata.
 
 `ViolationId` equality and ordering are tagged by identity provenance: two structured ids use
 `(target, rule, finding_key)` and deliberately ignore rendered text; two legacy ids use their old
@@ -81,10 +83,12 @@ key to prove equivalence.
 
 ### Version-2 baseline and additive report projection
 
-Every baseline write emits version 2. Each entry keeps `target`, `rule`, and `finding` for humans and
-adds `finding_key` with `namespace`, `code`, and canonical named fields. Sorting and de-duplication
-use structured identity; owner/tracker remain metadata. Rewriting a readable v1 baseline upgrades it
-to v2 and carries metadata for entries that matched under the legacy rule.
+Every newly generated baseline writes version 2. Each entry keeps `target`, `rule`, and `finding` for
+humans and adds `finding_key` with `namespace`, `code`, and canonical named fields. Sorting and
+de-duplication use structured identity; owner/tracker remain metadata. Re-serializing a parsed v1
+snapshot without a current report preserves v1 because no structured fact was observed from which
+to derive truthful keys. The runner's write action rebuilds from current violations, upgrades that
+readable v1 baseline to v2, and carries metadata for entries matched under the legacy rule.
 
 JSON reaction output keeps the existing `finding` string and adds the same `finding_key` object to
 each violation and stale version-2 entry. Existing function names and the surrounding report shape
@@ -104,8 +108,8 @@ not consumed as baseline files.
   Operators needing binary rollback must retain the prior v1 file or regenerate it with the old
   binary before adopting a v2 write.
 - **Public struct construction breaks.** This is deliberate in 0.2.0. Read access to the existing
-  target/rule/finding names remains, while constructors and private key storage establish the new
-  invariants.
+  target/rule/finding names remains, while constructors, private key storage, and rejection of a
+  parsed legacy id at live construction establish the new invariants.
 
 ## Migration Plan
 

@@ -46,8 +46,8 @@ use serde_json::Value;
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
 // hunyi's surface; these names are also used internally below.
 pub use xuanji::{
-    Baseline, BoundaryKind, Outcome, Polarity, Report, Severity, Violation, ViolationId,
-    apply_baseline,
+    Baseline, BoundaryKind, Finding, FindingKey, Outcome, Polarity, Report, Severity, Violation,
+    ViolationId, apply_baseline,
 };
 
 mod dsl;

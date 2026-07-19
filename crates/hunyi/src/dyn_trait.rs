@@ -13,7 +13,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::DynTraitBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::shape_finding;
+use crate::finding::{SemanticFactKind, shape_finding};
 use crate::rules::DYN_TRAIT_RULE;
 use crate::shape_scan::{operand_module_findings, shape_module_findings};
 
@@ -67,6 +67,7 @@ pub(crate) fn check_dyn_trait_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
+            fact_kind: SemanticFactKind::DynTrait,
         },
         findings,
     )

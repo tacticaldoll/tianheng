@@ -224,7 +224,7 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
     action.
   - *Identity ⊥ metadata* — baseline a violation, **move the offending code to another file**
     (changing `Violation.file`), re-check: the baseline still matches and the violation stays
-    grandfathered, because `ViolationId = { target, rule, finding }` excludes `file`. Refactoring
+    grandfathered, because `ViolationId` excludes `file` from its structured identity. Refactoring
     file layout does not churn your baseline — the stability contract made tangible.
 
 **2 — Output: reaction-voice render polish, never fix-instruction.**
@@ -448,7 +448,8 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   Y *may* depend on C, but C may be imported only under subtree S" — the FFI/platform-vocabulary
   confinement pattern. Declared as
   `ModuleBoundary::in_crate(p).module(S).confine_external_crate(C).because(…)`; the confined crate is
-  the violation `target` and the offending importer the `finding`, so `(target, rule, finding)` is
+  the violation `target` and the offending importer the structured fact, so
+  `(target, rule, finding_key)` is
   injective by structure. This is the **first 圭表 rule that observes external-crate imports** — it
   inverts, for this one rule only, the module scanner's long-standing "external imports are out of
   scope" stance; every other rule keeps ignoring them. This is **layer (a), import confinement**

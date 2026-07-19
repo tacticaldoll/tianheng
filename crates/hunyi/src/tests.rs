@@ -102,9 +102,15 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
     let mk = |sev| {
         Violation::new(
             BoundaryKind::Semantic,
-            "crate::m".to_string(),
-            SIGNATURE_RULE.to_string(),
-            "crate::infra::Db exposed by fn crate::m::f".to_string(),
+            ViolationId::new(
+                "crate::m",
+                SIGNATURE_RULE,
+                crate::finding::SemanticFact::new(
+                    crate::finding::SemanticFactKind::SignatureExposure,
+                    "crate::infra::Db exposed by fn crate::m::f".to_string(),
+                )
+                .into_finding(),
+            ),
             "reason".to_string(),
             sev,
         )

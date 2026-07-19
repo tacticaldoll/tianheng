@@ -62,6 +62,14 @@ impl DependencyKind {
             DependencyKind::Build => " (build)",
         }
     }
+
+    pub(crate) fn key_label(&self) -> &'static str {
+        match self {
+            DependencyKind::Normal => "normal",
+            DependencyKind::Dev => "dev",
+            DependencyKind::Build => "build",
+        }
+    }
 }
 
 /// A dependency's **declared** source kind, classified from `cargo metadata`'s
@@ -387,12 +395,25 @@ impl Rule {
     /// filter. `workspace_members` is all workspace member names, observed from
     /// `cargo metadata`; only the workspace-scoped rule consults it. (It includes the
     /// target crate itself, harmlessly: no crate depends on itself.)
+    #[cfg(test)]
     pub(crate) fn findings(
         &self,
         package: &Value,
         workspace_members: &[String],
         kind: DependencyKind,
     ) -> Vec<String> {
+        self.facts(package, workspace_members, kind)
+            .into_iter()
+            .map(|fact| fact.into_finding().text().to_string())
+            .collect()
+    }
+
+    pub(crate) fn facts(
+        &self,
+        package: &Value,
+        workspace_members: &[String],
+        kind: DependencyKind,
+    ) -> Vec<crate::finding::CrateFact> {
         let dependencies: Vec<String> = match self {
             Rule::DenyExternalDependencies { allowed } => external_dependencies(package, kind)
                 .into_iter()
@@ -422,33 +443,30 @@ impl Rule {
             Rule::RestrictFeaturesOf { crate_, allowed } => {
                 // Allowlist: a declared feature outside `allowed` violates. Empty allowlist ⇒
                 // every declared feature (including `default`) violates.
-                declared_features(package, crate_, kind)
+                return declared_features(package, crate_, kind)
                     .into_iter()
                     .filter(|feature| !allowed.contains(feature))
-                    .map(|feature| format!("{crate_}/{feature}"))
-                    .collect()
+                    .map(|feature| {
+                        crate::finding::CrateFact::feature(crate_.clone(), feature, kind)
+                    })
+                    .collect();
             }
             Rule::ForbidFeaturesOf { crate_, forbidden } => {
                 // Denylist: a declared feature matching a forbidden name violates. Empty
                 // forbidden set ⇒ no findings (natural from the filter), a vacuous no-op.
-                declared_features(package, crate_, kind)
+                return declared_features(package, crate_, kind)
                     .into_iter()
                     .filter(|feature| forbidden.contains(feature))
-                    .map(|feature| format!("{crate_}/{feature}"))
-                    .collect()
+                    .map(|feature| {
+                        crate::finding::CrateFact::feature(crate_.clone(), feature, kind)
+                    })
+                    .collect();
             }
         };
-        // Kind-qualify so the same dependency name in two tables (normal vs dev/build) stays a
-        // distinct finding — a baselined `serde` normal-dep must never mask a new `serde (dev)`.
-        let suffix = kind.finding_suffix();
-        if suffix.is_empty() {
-            dependencies
-        } else {
-            dependencies
-                .into_iter()
-                .map(|dependency| format!("{dependency}{suffix}"))
-                .collect()
-        }
+        dependencies
+            .into_iter()
+            .map(|dependency| crate::finding::CrateFact::dependency(dependency, kind))
+            .collect()
     }
 }
 

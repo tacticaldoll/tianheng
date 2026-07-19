@@ -50,7 +50,8 @@ construct a `Violation` from its boundary kind, `ViolationId`, reason, and sever
 id SHALL carry a structured key; only an id parsed from a version-1 baseline SHALL carry no key.
 External callers SHALL NOT be able to construct an id by struct literal or mutate its key; they
 SHALL read the optional key through an accessor while retaining public read access to target, rule,
-and human finding.
+and human finding. Live violation construction SHALL reject a parsed legacy id rather than admit a
+current observation without a structured key.
 Two structured ids SHALL compare and sort by `(target, rule, finding_key)`, two legacy ids by their
 old `(target, rule, finding)` triple, and ids from different identity provenances SHALL NOT compare
 equal. Human finding text, reason, severity, file, anchor, polarity, and baseline status SHALL NOT
@@ -75,6 +76,11 @@ enter structured identity. The public models SHALL continue exposing human `find
 
 - **WHEN** an external caller constructs a newly observed violation identity
 - **THEN** the public constructor requires a typed finding and the caller cannot remove or replace the stored key through public fields
+
+#### Scenario: Historical identity cannot become a live observation
+
+- **WHEN** a caller attempts to construct a live violation from an id read from a version-1 baseline
+- **THEN** construction fails loudly rather than producing a current violation or version-2 entry with a null key
 
 ### Requirement: Existing adopter-facing reaction entry points remain available
 
