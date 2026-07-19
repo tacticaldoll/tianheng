@@ -1,4 +1,11 @@
-## ADDED Requirements
+# rule-model-surface Specification
+
+## Purpose
+
+Define a builder-owned rule construction surface that remains forward-compatibly inspectable while
+allowing rule representations to grow without parallel public variants.
+
+## Requirements
 
 ### Requirement: Boundary builders own public rule construction
 
