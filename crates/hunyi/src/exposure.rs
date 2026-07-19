@@ -18,7 +18,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::SemanticBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::SemanticFinding;
+use crate::finding::{SemanticFactKind, SemanticFinding};
 use crate::module_resolve::resolve_module_items;
 use crate::resolve::{
     BareFallback, apply_bare_alias_rename, apply_crate_root_rename, bare_local_alias,
@@ -68,6 +68,7 @@ pub(crate) fn check_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
+            fact_kind: SemanticFactKind::SignatureExposure,
         },
         findings,
     )

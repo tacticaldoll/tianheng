@@ -10,12 +10,13 @@ use crate::errors::{
     must_only_be_imported_by_on_crate_error, restrict_imports_to_on_crate_error,
     unknown_module_error, unreadable_governed_file_error,
 };
+use crate::finding::ModuleFact;
 use crate::module_scan::{
     InlineFinding, canonical_module_path, external_imports_with_importers, governed_files,
     imported_module_paths, imports_with_importers, inline_symbol_findings, path_within,
     reachable_modules, rust_files,
 };
-use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation};
+use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
 /// The source-root directory for a package's lib/proc-macro/bin target (resolved by 星表's
 /// `crate_root_file`). Prefer Cargo's observed `targets[].src_path` so custom `[lib] path =
@@ -36,16 +37,14 @@ fn push_module_violation(
     violations: &mut Vec<Violation>,
     target: &str,
     rule: &str,
-    finding: String,
+    fact: ModuleFact,
     file: String,
     boundary: &ModuleBoundary,
 ) {
     violations.push(
         Violation::new(
             BoundaryKind::Module,
-            target.to_string(),
-            rule.to_string(),
-            finding,
+            ViolationId::new(target, rule, fact.into_finding()),
             boundary.reason.clone(),
             boundary.severity,
         )
@@ -234,7 +233,7 @@ pub(crate) fn check_module_boundary(
                 violations,
                 &governed_module,
                 &rule,
-                importer_module,
+                ModuleFact::ImporterModule(importer_module),
                 file,
                 boundary,
             );
@@ -304,7 +303,7 @@ pub(crate) fn check_module_boundary(
                 violations,
                 &confined,
                 &rule,
-                importer_module,
+                ModuleFact::ExternalImporter(importer_module),
                 file,
                 boundary,
             );
@@ -363,8 +362,8 @@ pub(crate) fn check_module_boundary(
             external,
             &dependency_names,
         )?;
-        for InlineFinding { finding, file } in findings {
-            push_module_violation(violations, &confined_prefix, &rule, finding, file, boundary);
+        for InlineFinding { fact, file } in findings {
+            push_module_violation(violations, &confined_prefix, &rule, fact, file, boundary);
         }
         return Ok(());
     }
@@ -434,7 +433,14 @@ pub(crate) fn check_module_boundary(
     findings.sort();
     findings.dedup_by(|a, b| a.0 == b.0);
     for (finding, file) in findings {
-        push_module_violation(violations, &governed_module, &rule, finding, file, boundary);
+        push_module_violation(
+            violations,
+            &governed_module,
+            &rule,
+            ModuleFact::ImportedPath(finding),
+            file,
+            boundary,
+        );
     }
     Ok(())
 }

@@ -103,7 +103,7 @@ The system SHALL fold unsafe-confinement findings into the same exit-code contra
 
 ### Requirement: Severity and baseline parity
 
-An unsafe-confinement boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries, and its violations SHALL gate against the same `Baseline` mechanism, sharing the violation identity `(target, rule, finding)` — the `target` being the confined crate, the `rule` a fixed string, and the `finding` naming the offending site qualified by its module — so a project may adopt the boundary on a crate with existing `unsafe` and gate only on new sites. An anonymous `unsafe {}` block SHALL be identified per-module (not by a fragile per-block ordinal), so multiple blocks in one module dedup to one stable finding.
+An unsafe-confinement boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries, and its violations SHALL gate against the same `Baseline` mechanism, sharing the violation identity `(target, rule, finding_key)` — the `target` being the confined crate, the `rule` a fixed string, and the `finding` naming the offending site qualified by its module — so a project may adopt the boundary on a crate with existing `unsafe` and gate only on new sites. An anonymous `unsafe {}` block SHALL be identified per-module (not by a fragile per-block ordinal), so multiple blocks in one module dedup to one stable finding.
 
 #### Scenario: A warn boundary reports without failing
 

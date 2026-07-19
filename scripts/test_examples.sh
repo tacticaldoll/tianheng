@@ -102,8 +102,10 @@ got=0
 cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml \
     --write-baseline "$BASELINE_PATH" >/tmp/composed_baseline_write.txt 2>&1 || got=$?
 expect "$got" 0 "composed baseline write records existing drift"
-grep -q '"version": 1' "$BASELINE_PATH" \
-    || { echo "::error::composed baseline missing version 1"; exit 1; }
+grep -q '"version": 2' "$BASELINE_PATH" \
+    || { echo "::error::composed baseline missing version 2"; exit 1; }
+grep -q '"finding_key"' "$BASELINE_PATH" \
+    || { echo "::error::composed baseline missing structured finding keys"; exit 1; }
 grep -q '"violations"' "$BASELINE_PATH" \
     || { echo "::error::composed baseline missing violations"; exit 1; }
 

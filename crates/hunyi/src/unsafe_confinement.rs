@@ -14,6 +14,7 @@ use crate::dsl::UnsafeBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{unsafe_crate_root_allowed_error, unsafe_empty_allowed_error};
 use crate::file_scope::resolve_crate;
+use crate::finding::SemanticFactKind;
 use crate::resolve::canonical_path_str;
 use crate::rules::UNSAFE_CONFINEMENT_RULE;
 use crate::scan::scan_unsafe_sites;
@@ -61,6 +62,7 @@ pub(crate) fn check_unsafe_boundary(
             severity: boundary.severity,
             anchor: boundary.anchor(),
             polarity: Polarity::AllowlistGap,
+            fact_kind: SemanticFactKind::UnsafeSite,
         },
         findings,
     );

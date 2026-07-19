@@ -13,12 +13,13 @@ dimensions and the shell) — and depends on no other workspace member; every di
 It defines:
 
 - `Severity` — `Enforce` (fails the reaction) or `Warn` (advisory).
-- `Violation` — the dimension-agnostic finding: `kind`, `target`, `rule`, `finding`,
-  `reason`, `severity`, `baselined`, and an optional source `file`, with its intrinsic JSON
-  serialization. Identity is `(target, rule, finding)` — `file` is a non-identity byproduct.
+- `FindingKey` / `Finding` — a validated namespaced fact identity paired with human presentation.
+- `Violation` — the dimension-agnostic finding: `kind`, `target`, `rule`, human `finding`,
+  structured `finding_key`, `reason`, `severity`, `baselined`, and optional metadata. Version-2
+  identity is `(target, rule, finding_key)`; presentation and metadata are not identity.
 - `Report` — every violation from one evaluation.
-- `Baseline` — a generated snapshot of accepted violations, so a dirty project can adopt a
-  boundary and gate only on *new* drift. A baseline **is** a JSON snapshot.
+- `Baseline` — a generated version-2 snapshot of accepted violations, so a dirty project can adopt
+  a boundary and gate only on *new* drift. Version-1 text snapshots remain readable for migration.
 - `Outcome` — `Clean` / `Violations(Report)` / `ConstitutionError(String)`, projected by the
   CI dimensions as an exit code (`0` / `1` / `2`) and by the runtime dimension as an event.
 - `BoundaryKind` — `Crate`, `Module`, `Semantic`, `Runtime`: which instrument observed it.

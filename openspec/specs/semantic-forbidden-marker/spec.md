@@ -93,7 +93,7 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 
 ### Requirement: CI reaction, severity, and baseline parity
 
-The system SHALL fold forbidden-marker findings into the same exit-code contract as the other dimensions (0 clean / 1 enforce violation / 2 constitution or scan error) and aggregate them with the other boundaries. A boundary SHALL carry a severity (`enforce` default, or `warn`, which reports without failing), and its violations SHALL be gated against the same `Baseline` (identity `(target, rule, finding)`, the rule a fixed string), so a project may adopt the boundary on a dirty codebase and gate only on new acquisitions.
+The system SHALL fold forbidden-marker findings into the same exit-code contract as the other dimensions (0 clean / 1 enforce violation / 2 constitution or scan error) and aggregate them with the other boundaries. A boundary SHALL carry a severity (`enforce` default, or `warn`, which reports without failing), and its violations SHALL be gated against the same `Baseline` (identity `(target, rule, finding_key)`, the rule a fixed string), so a project may adopt the boundary on a dirty codebase and gate only on new acquisitions.
 
 #### Scenario: A warn boundary reports without failing
 

@@ -10,6 +10,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::VisibilityBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
+use crate::finding::SemanticFactKind;
 use crate::module_resolve::resolve_module_items;
 use crate::syn_util::item_finding;
 
@@ -50,6 +51,7 @@ pub(crate) fn check_visibility_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
+            fact_kind: SemanticFactKind::Visibility,
         },
         findings,
     )

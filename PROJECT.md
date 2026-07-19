@@ -321,7 +321,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   (`async fn <SelfTy>::name(…)`, `async fn trait <Trait>::name(…)`), NOT a bare name or a
   future-shape, because same-named
   public async fns across impls/traits in one module would otherwise collide under the
-  `(target, rule, finding)` baseline and let a new leak be masked (the one forbidden bug).
+  `(target, rule, finding_key)` baseline and let a new leak be masked (the one forbidden bug).
   **(v0.1.2 hardening)** the sibling exposure findings now carry the same guarantee:
   signature-coupling, dyn-trait, and impl-trait findings are **seam-qualified**
   (`{type|shape} exposed by {seam}`, the seam being the owning item / sub-element — free fn,
@@ -542,7 +542,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   the reaction layer (`check_*_boundary`) attaches via `Violation::with_file`, resolved once per
   boundary and only when reporting. The `finding` still names the canonicalized forbidden
   type/shape (which may be *defined* elsewhere); the `file` names the **seam's** location, the
-  actionable one. `file` stays out of the `(target, rule, finding)` baseline identity, so a
+  actionable one. `file` stays out of the `(target, rule, finding_key)` baseline identity, so a
   previously-null violation baselined and then populated never re-baselines nor changes the count;
   SARIF gains a `physicalLocation` (still no `region` — a file, not a line). **Scope is the five
   single-module capabilities** whose anchor resolves to one module (signature-coupling exposure
@@ -776,7 +776,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   intent. Runtime CI-audit consistency findings stay off this axis (`None`); this is violation
   metadata, not constitution data.
 - **(v0.1.5) `owner`/`tracker` metadata on baseline entries.** Baselines can point accepted debt at
-  people or trackers without changing the match identity `(target, rule, finding)`. This is the
+  people or trackers without changing the match identity (the legacy text triple in v1; structured
+  `(target, rule, finding_key)` in v2). This is the
   additive 實錄 step, deliberately not the future 0.2.0 structured-baseline break.
 - **(v0.1.5) 漏刻 decodes escaped seam literals in the CI probe-coverage face.** The CI audit now
   compares probe literals to the compiler-decoded declaration value, so escaped seam names cannot be
@@ -969,7 +970,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   crate-scan family's `walk_module`, inheriting its guards verbatim (`#[path]` skip as a stated
   bound, `#[cfg]`-fileless tolerance, non-cfg missing → exit 2, symlink cycle → exit 2). Two
   false-negative-safety calls the adversarial review confirmed: (1) the violation `target` stays the
-  boundary **anchor** (not the deeper enclosing module), so identity `(target, rule, finding)` is
+  boundary **anchor** (not the deeper enclosing module), so identity `(target, rule, finding_key)` is
   stable — enabling the opt-in adds only new, deeper findings and never re-identifies a seam finding
   (baseline stability); a seam finding is byte-identical to the single-module path (same collector,
   module string, `ordinal`, and `collect_uses`). (2) `push_multi_module_violations` flattens findings
@@ -1159,3 +1160,11 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   reaction (and disappears when only the resolver branch is reverted), FP-safety tests cover a deep
   local module / local fn / local alias, and a baseline-churn guard locks identity parity → **minor**
   (0.1.9, additive opt-in capability).
+- **(0.2.0 line) Violation identity is a structured observed fact, not its presentation.** Each
+  observation dimension owns typed fact schemas and their human rendering; 璇璣 carries the
+  vocabulary-neutral `FindingKey` envelope and compares current identities by
+  `(target, rule, finding_key)`. The human `finding`, `file`, `reason`, severity, polarity, anchor,
+  and debt metadata remain diagnostic context rather than identity. Newly generated baselines use
+  version 2 and retain both the structured key and human finding. Version-1 baselines remain
+  readable and match current violations only through their exact legacy text triple; writing a new
+  baseline upgrades the durable contract without guessing a key that was never recorded.
