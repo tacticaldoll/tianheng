@@ -1179,3 +1179,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   with a modifier field. This spends the breaking window on accidental model construction only;
   `Constitution`, the boundary DSL, projections, reactions, and violation identity stay unchanged,
   and the pacta/modou reference probes remain green.
+- **(0.2.0 line) The composed adopter surface is compile-reacted and classified by purpose.** A
+  serious adopter uses `tianheng::prelude::*` for both declaration and `Outcome` inspection, so the
+  prelude is not honestly reducible to builders alone. Its declaration/execution and reaction-
+  inspection tiers now carry the same 0.2.x compatibility status and are named by an external-view
+  integration test; an accidental re-export deletion therefore fails compilation instead of
+  silently contradicting documentation. The test exposed and closed one asymmetry by adding the
+  existing `ModuleRule` beside `Rule`, making both boundary `rule()` accessors usable through the
+  recommended entrypoint. Hidden drafts and granular semantic checks remain outside this contract;
+  the explicit `check_semantic` root alias is signature-coupling only, while composed evaluation
+  stays `Constitution` plus `run`.

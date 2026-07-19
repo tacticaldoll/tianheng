@@ -214,12 +214,26 @@ impl From<GnomonConstitution> for Constitution {
 /// The public facade for declaring a constitution and running the reaction. The projection,
 /// baseline, and scanner internals stay in the dimension crates; consumers go through
 /// `Constitution` / `run` (and `check` for the pure static core).
+///
+/// # Compatibility contract
+///
+/// The wildcard prelude has two usage tiers with the same 0.2.x compatibility status:
+///
+/// - **Declaration and execution:** `Constitution`, the terminal boundary and composed-profile
+///   types, their selector enums, [`Severity`], and [`run`]. This is the normal adopter path.
+/// - **Reaction inspection:** [`Outcome`], reports, violations, stable finding/violation identity,
+///   baselines, boundary/rule model types, and the pure static [`check`]. These let a caller inspect
+///   the reaction without constructing rules outside the boundary DSL.
+///
+/// The tiers explain purpose, not stability. Specialized semantic checks do not expand this
+/// wildcard menu: the signature-coupling check is the explicit [`check_semantic`] root import, and
+/// composed governance continues through [`Constitution`] plus [`run`].
 pub mod prelude {
     pub use super::{
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
         CrateBoundary, DependencyKind, DynTraitBoundary, Finding, FindingKey,
-        ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, Outcome, Polarity, Report,
-        Rule, RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
+        ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, ModuleRule, Outcome, Polarity,
+        Report, Rule, RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
         TraitImplBoundary, UnsafeBoundary, Violation, ViolationId, VisibilityBoundary,
         VisibilityCeiling, check, run,
     };

@@ -312,15 +312,17 @@ complement — show, then tell.
   real but one-dimensional; the actual ladder is **two axes**: severity (`warn` first → `enforce`
   gate) *and* baseline (grandfather existing violations → enforce new). An existing codebase adopts
   via baseline, a greenfield one via warn-first — document both as the on-ramp.
-- **Prelude / stable-surface audit (0.2.0-adjacent).** `tianheng::prelude` reexports ~26 names — a
-  large surface the 0.2.0 guardrail has already promised **never to break** (the adopter builder).
-  Bigger prelude = bigger never-break liability. Audit: classify each name as *committed-stable
-  builder* (must-not-break) vs *convenience reexport* (demotable / `#[doc(hidden)]`), and document
-  the tiers — the same family as the split-cost accidental-surface signal (`#[doc(hidden)]` +
-  `#[deprecated]`) in the product-identity note. Not necessarily a trim (a batteries-included funnel
-  target wants a full prelude); the deliverable is a **scoped** never-break promise, not a smaller
-  prelude by default. The three examples' actual import set is empirical evidence for the audit — the
-  names they touch are the real committed-stable builder; the rest are convenience.
+- **Prelude / stable-surface audit — BUILT (0.2.0 line).** The real composed adopter uses the
+  wildcard prelude for both declaration and `Outcome` inspection, so trimming it into a builder-only
+  menu would break the very reaction that opened the 0.2 window. The surface is now classified by
+  purpose, not by weaker stability: declaration/execution and reaction inspection carry the same
+  0.2.x promise. An external-view integration crate names every promised export and composes all
+  three instruments without dimension imports, making an accidental relocation a compile failure.
+  That probe found one genuine asymmetry: `ModuleBoundary::rule()` was public but its `ModuleRule`
+  type was absent from the recommended wildcard path, so the existing type is now re-exported beside
+  crate-side `Rule`. Hidden drafts and granular semantic checks remain outside the contract;
+  `check_semantic` is documented honestly as the focused signature-coupling check, never the full
+  semantic bundle.
 - **`Rule` / `ModuleRule` model-surface narrowing — BUILT (0.2.0 line).** The live reaction was
   `.strict_external()` having to ship in 0.1.9 as a payload-identical hidden variant: enum-level
   `#[non_exhaustive]` protects new variants but not fields added to an existing struct variant, so

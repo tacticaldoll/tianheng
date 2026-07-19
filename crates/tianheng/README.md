@@ -35,6 +35,21 @@ fn main() -> std::process::ExitCode {
 }
 ```
 
+### The adopter surface
+
+`tianheng::prelude::*` is the supported composed entrypoint, with two purpose-only tiers that carry
+the same `0.2.x` compatibility promise:
+
+- **Declare and run:** `Constitution`, the terminal static/semantic/runtime boundary types,
+  `SansIoPure`, their selector enums, `Severity`, and `run`.
+- **Inspect the reaction:** `Outcome`, reports, violations, structured finding/violation identity,
+  baselines, boundary/rule model types, and the pure static `check`.
+
+Rules remain builder-owned even though they are inspectable: obtain `Rule` or `ModuleRule` from a
+built boundary's `rule()` accessor and match known fields with `..`. For a focused semantic
+signature-coupling test, import `tianheng::check_semantic` explicitly; it is not the full semantic
+bundle. Normal composed governance stays `Constitution` + `run`.
+
 `your-binary check --manifest-path path/to/Cargo.toml` reacts against *your* constitution:
 exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`
 (constitution/scan error). `list` projects the declared constitution and never reacts.
