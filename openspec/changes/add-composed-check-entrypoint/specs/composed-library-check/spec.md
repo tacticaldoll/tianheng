@@ -1,0 +1,64 @@
+## ADDED Requirements
+
+### Requirement: A unified Constitution has an inspectable library check
+
+The `tianheng` crate SHALL provide
+`check_constitution(&Constitution, &Path) -> Outcome`. It SHALL evaluate the static boundaries, the
+full semantic boundary bundle, and the runtime probe-coverage CI face declared by that Constitution
+against the explicit manifest workspace. It SHALL return the raw combined Outcome without parsing
+CLI arguments, discovering a manifest from the current directory, printing output, applying a
+baseline, writing a baseline, or emitting coverage advisories.
+
+#### Scenario: Multiple dimensions return one report
+
+- **WHEN** a workspace violates both a static boundary and a semantic boundary in one Constitution
+- **THEN** `check_constitution` returns one `Outcome::Violations` report containing findings from both dimensions
+
+#### Scenario: A clean composed Constitution is inspectable
+
+- **WHEN** every declared boundary is satisfied and runtime probes are consistent
+- **THEN** `check_constitution` returns `Outcome::Clean`
+
+#### Scenario: The manifest is explicit
+
+- **WHEN** a caller invokes `check_constitution`
+- **THEN** the observed workspace is selected only by the supplied manifest path, without current-directory discovery
+
+### Requirement: Library and CLI share composition semantics
+
+`check_constitution` and CLI `run` SHALL use one composition implementation for dimension order,
+violation merging, constitution-error precedence, and runtime probe audit. Static evaluation SHALL
+run first; semantic evaluation SHALL run only when static evaluation did not error and semantic
+boundaries exist; runtime audit SHALL run only when prior evaluation did not error and SHALL run even
+when the declared runtime-boundary set is empty so an orphan probe reacts.
+
+#### Scenario: A constitution error supersedes violations
+
+- **WHEN** an earlier dimension returns a constitution error alongside a workspace that would violate another dimension
+- **THEN** the combined library Outcome is that constitution error and later dimensions are not evaluated
+
+#### Scenario: An orphan runtime probe still reacts
+
+- **WHEN** source contains an `assert_boundary!` probe but the Constitution declares no matching runtime boundary
+- **THEN** `check_constitution` includes the runtime undeclared-seam violation rather than treating an empty runtime declaration as a no-op
+
+#### Scenario: CLI verdict remains derived from the shared Outcome
+
+- **WHEN** CLI `run` checks the same Constitution and explicit manifest without a baseline
+- **THEN** its clean, violation, or constitution-error exit class mirrors the Outcome returned by the shared evaluator
+
+### Requirement: Library checking remains separate from gate presentation
+
+The library check SHALL NOT accept format, baseline, baseline-write, or coverage-warning options.
+Callers that need process exit codes, text/JSON/SARIF projection, baseline gate modes, nearest-
+manifest discovery, or uncovered-crate advisories SHALL continue to use `run`.
+
+#### Scenario: A caller needs structured findings without process output
+
+- **WHEN** a test calls `check_constitution`
+- **THEN** it can inspect the returned Outcome without capturing stdout/stderr or decoding an ExitCode
+
+#### Scenario: A caller needs baseline gate mode
+
+- **WHEN** a caller needs to load or write a baseline
+- **THEN** it uses `run` (or existing lower-level baseline APIs) rather than options on `check_constitution`
