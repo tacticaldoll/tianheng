@@ -236,12 +236,18 @@ A boundary SHALL support a rule that restricts the target crate's dependencies o
 
 A crate boundary SHALL select which dependency table its rule observes — `Normal` (the default), `Dev`, or `Build` — declared in Rust via `.dependency_kind(kind)` on the boundary builder. A boundary that does not select a kind SHALL observe the normal `[dependencies]` table, preserving prior behavior exactly. When `Dev` or `Build` is selected the rule SHALL observe `[dev-dependencies]` or `[build-dependencies]` respectively and SHALL NOT observe the normal table; a boundary observes exactly one table, so governing two tables SHALL be expressed as two boundaries. The selection SHALL apply uniformly to every crate rule (deny-external, forbid, restrict, restrict-workspace), and SHALL appear in the projection when it is not `Normal`.
 
-The `finding` SHALL be **kind-qualified** so the same dependency name governed under two tables stays distinct: a `Normal` finding is the bare dependency name (preserving prior baselines), while `Dev`/`Build` findings carry a ` (dev)`/` (build)` suffix. Without this, two boundaries governing the same crate under the same rule but different kinds would emit the identical `(target, rule, finding)`, and baselining one table's violation would mask a new violation of the same dependency in the other table (the one forbidden bug).
+The structured finding key SHALL include the selected dependency kind so the same dependency name
+governed under two tables stays distinct. The human `finding` SHALL remain kind-qualified as well: a
+`Normal` finding is the bare dependency name (preserving version-1 text compatibility), while
+`Dev`/`Build` findings carry a ` (dev)`/` (build)` suffix. Without the kind in the key, two
+boundaries governing the same crate under the same rule but different kinds would emit the identical
+`(target, rule, finding_key)`, and baselining one table's violation would mask a new violation of the
+same dependency in the other table (the one forbidden bug).
 
 #### Scenario: The same dependency in two tables stays distinct findings
 
 - **WHEN** a crate declares the same dependency (e.g. `serde`) from a forbidden source in both `[dependencies]` and `[dev-dependencies]`, governed by two same-rule boundaries differing only by kind, and the normal violation is recorded in the baseline
-- **THEN** the dev violation still reacts: its finding `serde (dev)` differs from the baselined `serde`, so it is not masked
+- **THEN** the dev violation still reacts: its key's dependency kind differs, while its human finding remains `serde (dev)` for diagnosis and version-1 compatibility
 
 #### Scenario: A boundary defaults to normal dependencies
 
@@ -391,7 +397,7 @@ is a plain feature name (Cargo forbids the `dep:`, `pkg/feat`, and `pkg?/feat` s
 dependency's `features` list; those exist only in a manifest's `[features]` table, which this rule
 does not read), the feature name contains no `/`, so `C/feature` is unambiguous. The feature-rule
 polarities (restrict / forbid) SHALL each carry a `rule` label distinct from each other and from the
-crate rules, so that `(target, rule, finding)` stays injective: a `restrict` and a `forbid` rule that
+crate rules, so that `(target, rule, finding_key)` stays injective: a `restrict` and a `forbid` rule that
 both flag `C/unstable` on the same target remain distinct triples. Baselining one feature's violation
 SHALL NOT mask a new violation of a different feature of the same dependency. When the selected
 dependency kind is not `Normal`, the finding SHALL additionally carry the kind qualifier consistent

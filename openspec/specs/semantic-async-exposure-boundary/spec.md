@@ -82,7 +82,7 @@ crate. Within the observed subtree there SHALL be no false negative: a public `a
 descendant module MUST react.
 
 The violation `target` SHALL remain the boundary's anchored module (not the deeper enclosing
-module), so a finding's identity `(target, rule, finding)` is stable whether or not the opt-in is
+module), so a finding's identity `(target, rule, finding_key)` is stable whether or not the opt-in is
 set — enabling it adds only new, deeper findings and never re-identifies a seam finding (baseline
 stability). A seam finding (one in the anchored module itself) under the opt-in SHALL be
 byte-identical to the same finding under the default scope.
@@ -133,7 +133,7 @@ bare boundary's projection stays byte-identical.
 The finding SHALL be an owner-qualified item identity — the owner kind, the owner path or type, the
 function name, and a stable render of the parameters and return type — NOT a bare function name and
 NOT a future type-shape. Two distinct public async fns SHALL yield two distinct findings, so that
-baselining one never masks the other under the `(target, rule, finding)` identity. The owner render
+baselining one never masks the other under the `(target, rule, finding_key)` identity. The owner render
 SHALL preserve generic arguments (`Foo<u8>` and `Foo<u16>` stay distinct). The rendered return type
 serves readability and collision-avoidance, not to represent the implicit future.
 
@@ -160,7 +160,7 @@ The async-exposure boundary SHALL share the 渾儀 reaction contract with the si
 findings fold into the same aggregated report and exit-code outcome (**0** clean, **1** enforce
 violation, **2** constitution/scan error such as an unresolvable crate or module); the boundary
 carries a severity (`enforce` default, or `warn`) and is gated against the same `Baseline` under
-the shared violation identity `(target, rule, finding)`; and the rule projects through the `list`
+the shared violation identity `(target, rule, finding_key)`; and the rule projects through the `list`
 text/JSON/markdown projection with its own boundary section. The implementation SHALL keep the
 `syn` dependency quarantined in `hunyi` (no new dependency) and SHALL NOT change existing rules.
 

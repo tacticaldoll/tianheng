@@ -72,7 +72,7 @@ The impl-trait boundary SHALL share the 渾儀 reaction contract with the dyn-tr
 fold into the same aggregated report and exit-code outcome (**0** clean, **1** enforce violation,
 **2** constitution/scan error such as an unresolvable crate or module); the boundary carries a
 severity (`enforce` default, or `warn`) and is gated against the same `Baseline` under the shared
-violation identity `(target, rule, finding)`, the finding being the seam-qualified rendered `impl …` shape; and
+violation identity `(target, rule, finding_key)`, the finding being the seam-qualified rendered `impl …` shape; and
 the rule projects through the `list` text/JSON/markdown projection with its own boundary section,
 parallel to dyn-trait. The implementation SHALL keep the `syn` dependency quarantined in `hunyi`
 (no new dependency) and SHALL NOT change the existing rules' behavior.

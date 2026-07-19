@@ -84,13 +84,13 @@ The runner SHALL accept two mutually exclusive baseline flags: `--baseline <file
 
 The runner SHALL accept `--format json` (and `--format=json`) and emit the outcome as a JSON document on standard output; the default format SHALL remain human-readable text, so existing invocations are unchanged. The runner SHALL additionally accept `--format sarif` as a machine/CI-consumable projection of the same outcome (defined below). An unrecognized format value SHALL be a usage error that exits 2, never a silent fallback. The `markdown` format is a `list`-only projection of the declared law and is NOT a `check` format: `check --format markdown` SHALL be a usage error that exits 2, because `check`'s machine-readable output is the JSON report, not a law summary. The JSON SHALL faithfully project the outcome: an `outcome` discriminant (`clean`, `violations`, or `constitution_error`), the `exit_code` mirroring the process exit, a `violations` array, a `stale_baseline` array (empty outside gate mode), and an `error` message (null unless a constitution error). Each violation SHALL carry its `kind`, `target`, `rule`, `finding`, `reason`, `severity`, and `baselined` flag; the `reason` SHALL serve as the repair hint with no separate invented field.
 
-Each violation SHALL additionally carry a `file` field naming the offending source file, so an agent knows *where* to repair. The `file` SHALL be a string wherever the offending source file is a faithful byproduct of observation: a **module-import violation** names a source file where the forbidden import occurs (the static scan already reads that file to observe the import); a **single-module semantic violation** — one whose governed anchor resolves to a single module's items: signature-coupling exposure (including its re-export and trait-impl-exposure depths), dyn-trait and impl-trait (shape and operand), async-exposure, or visibility — names the source file of that **governed module** (the file the semantic scan already descends to in order to observe the module's items, and where the offending seam is written); and an **un-auditable-probe runtime violation** names the source file holding the non-literal `assert_boundary!` (the probe scan already captured that file). a **whole-crate-scan semantic violation** — **trait-impl-locality** and **forbidden-marker**, which observe a whole-crate/subtree scan and name sites scattered across the crate — likewise names a source file: the source file of the **module the offending element sits in** (the `impl` site's module for a trait-impl or a forbidden `impl`; the offending type's defining module for a forbidden `#[derive]`), resolved by the same mechanism as the single-module capabilities but per finding. For any semantic violation the `finding` still names the canonicalized forbidden type/shape or the offending element — which may be *defined* in another file — while the `file` names the module the offending element sits in, the actionable location; the two are distinct. For the remaining violation kinds the `file` SHALL be `null`, a faithful absence rather than an omitted-but-known location: a crate-dependency violation is an edge in the dependency graph with no single source file; and a seam-level runtime violation (a duplicate, undeclared, or unprobed seam) names a seam, not a source location, so no single file applies. The `file` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding`), so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported (it is metadata attached after identity de-duplication, never a de-duplication key).
+Each violation SHALL additionally carry a `file` field naming the offending source file, so an agent knows *where* to repair. The `file` SHALL be a string wherever the offending source file is a faithful byproduct of observation: a **module-import violation** names a source file where the forbidden import occurs (the static scan already reads that file to observe the import); a **single-module semantic violation** — one whose governed anchor resolves to a single module's items: signature-coupling exposure (including its re-export and trait-impl-exposure depths), dyn-trait and impl-trait (shape and operand), async-exposure, or visibility — names the source file of that **governed module** (the file the semantic scan already descends to in order to observe the module's items, and where the offending seam is written); and an **un-auditable-probe runtime violation** names the source file holding the non-literal `assert_boundary!` (the probe scan already captured that file). a **whole-crate-scan semantic violation** — **trait-impl-locality** and **forbidden-marker**, which observe a whole-crate/subtree scan and name sites scattered across the crate — likewise names a source file: the source file of the **module the offending element sits in** (the `impl` site's module for a trait-impl or a forbidden `impl`; the offending type's defining module for a forbidden `#[derive]`), resolved by the same mechanism as the single-module capabilities but per finding. For any semantic violation the `finding` still names the canonicalized forbidden type/shape or the offending element — which may be *defined* in another file — while the `file` names the module the offending element sits in, the actionable location; the two are distinct. For the remaining violation kinds the `file` SHALL be `null`, a faithful absence rather than an omitted-but-known location: a crate-dependency violation is an edge in the dependency graph with no single source file; and a seam-level runtime violation (a duplicate, undeclared, or unprobed seam) names a seam, not a source location, so no single file applies. The `file` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding_key`), so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported (it is metadata attached after identity de-duplication, never a de-duplication key).
 
 The `sarif` format is a **CI-consumable projection of the reaction** and, like the JSON document, is `check`-only: `list --format sarif` SHALL be a usage error that exits 2 (symmetric to `markdown` being `list`-only). It is an open, **vendor-neutral** standard (consumed by GitHub code-scanning and other tools); a vendor-specific format such as GitHub's `::error::` workflow command is deliberately NOT provided, as it would couple the tool to one CI vendor — emitting such annotations from the neutral output is a harness/CI-step convention, not a tool format. SARIF projects the **same** measure as the JSON — the same non-baselined violations, the same severities, the same exit code (it changes presentation, never the outcome or the process exit). A baselined violation SHALL NOT appear (it does not fail, consistent with the human report). `--format sarif` SHALL emit a SARIF 2.1.0 document whose `runs[].results[]` carries one result per non-baselined violation: `ruleId` the rule, `level` `error` for an enforced violation and `warning` for an advisory, and `message.text` carrying the reason and the finding (the rule is carried structurally in `ruleId`, not repeated in the message). Because a violation observes a `file` but **not a line**, a SARIF result's location SHALL carry only `physicalLocation.artifactLocation.uri` (the file) with **no `region`**; a violation with no `file` SHALL emit a SARIF result with no `locations` — never a fabricated location. A constitution error SHALL be surfaced as a SARIF tool-execution notification at `error` level under `runs[0].invocations[0]`, whose `executionSuccessful` SHALL be `false`, and SHALL exit 2, never a silent pass; a clean outcome SHALL emit a valid SARIF document with empty `results` and exit 0.
 
-Each violation SHALL additionally carry a durable governance `anchor` — a stable pointer (e.g. `"ADR-014"`) declared on the producing boundary via `.with_anchor(...)`, distinct from the free-text `reason`: the `reason` stays the human repair-hint sentence, the `anchor` is the durable coordinate into the project's governance a tool or agent keys on. In the JSON report the `anchor` SHALL be present on each violation — a string when the producing boundary declared one, and `null` otherwise, the same faithful-absence shape as `file`. In SARIF an anchored violation's result SHALL carry the anchor in the result property bag (`properties.anchor`); that bag is **shared** with the repair-direction `polarity` (defined below), so a result omits the `properties` key only when the violation has **neither** an anchor nor an on-axis polarity, and the two fields SHALL be merged into one bag, never overwriting each other. The `anchor` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding`) — so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported — and it SHALL never be a reaction input (it never affects whether a violation is produced, its severity, or the count). Like `file`, it is metadata attached after identity de-duplication, never a de-duplication key.
+Each violation SHALL additionally carry a durable governance `anchor` — a stable pointer (e.g. `"ADR-014"`) declared on the producing boundary via `.with_anchor(...)`, distinct from the free-text `reason`: the `reason` stays the human repair-hint sentence, the `anchor` is the durable coordinate into the project's governance a tool or agent keys on. In the JSON report the `anchor` SHALL be present on each violation — a string when the producing boundary declared one, and `null` otherwise, the same faithful-absence shape as `file`. In SARIF an anchored violation's result SHALL carry the anchor in the result property bag (`properties.anchor`); that bag is **shared** with the repair-direction `polarity` (defined below), so a result omits the `properties` key only when the violation has **neither** an anchor nor an on-axis polarity, and the two fields SHALL be merged into one bag, never overwriting each other. The `anchor` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding_key`) — so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported — and it SHALL never be a reaction input (it never affects whether a violation is produced, its severity, or the count). Like `file`, it is metadata attached after identity de-duplication, never a de-duplication key.
 
-Each violation SHALL additionally carry a **repair-direction `polarity`** — a machine-readable classification of *which way to repair*, distinct from `kind` (which names the *dimension*). The polarity is derived from the producing rule's type (known at the reaction site), never observed from code and never declared by the adopter. It takes one of two values on a **boundary-drift** violation: `deny_breach` when the rule forbids a specific target or shape (repair: remove the offending code — `forbid_dependency_on`, `must_not_import`, `must_not_be_imported_by`, the signature-coupling `must_not_expose` and its `dyn`/`impl-trait`/`async` sibling exposure rules, `must_not_declare_pub`, `must_not_acquire`), or `allowlist_gap` when the rule permits a set and reacts to a member outside it (repair: remove the code **or** declare the intent by widening the set — `restrict_dependencies_to`, `restrict_workspace_dependencies_to`, `restrict_dependency_sources_to`, `restrict_imports_to`, `only_implemented_in`, `only_origins`, and `deny_external_dependencies` whose `allow_external` exceptions are an in-boundary declaration path). `only_origins` is an allowlist rule, but its origin-crossing violation is emitted by the runtime **prod** face via `Violation::to_json`, not by `check` (whose runtime face is only the probe-coverage audit), so its polarity rides the runtime event JSON rather than the check report. A violation **not on the boundary-drift axis** — the runtime CI-audit coverage/consistency violations (a declared-but-unprobed seam, a probed-but-undeclared seam, a duplicate seam, an un-auditable probe) — SHALL carry a `null` polarity: `null` means "not on this axis, read the `reason`/`finding` for the repair direction," never a fabricated classification. In the JSON report the `polarity` SHALL be present on every violation — the snake-case string (`"deny_breach"` / `"allowlist_gap"`) when on the boundary-drift axis, and `null` otherwise — always present, the same faithful-absence shape as `file`. In SARIF an on-axis violation's result SHALL carry the polarity in the shared result property bag (`properties.polarity`); a `null`-polarity violation SHALL emit no `polarity` property. The `polarity` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding`) — being a pure function of the rule it is constant for a given identity, so it can never re-baseline an accepted violation nor change the violation count — and it SHALL never be a reaction input.
+Each violation SHALL additionally carry a **repair-direction `polarity`** — a machine-readable classification of *which way to repair*, distinct from `kind` (which names the *dimension*). The polarity is derived from the producing rule's type (known at the reaction site), never observed from code and never declared by the adopter. It takes one of two values on a **boundary-drift** violation: `deny_breach` when the rule forbids a specific target or shape (repair: remove the offending code — `forbid_dependency_on`, `must_not_import`, `must_not_be_imported_by`, the signature-coupling `must_not_expose` and its `dyn`/`impl-trait`/`async` sibling exposure rules, `must_not_declare_pub`, `must_not_acquire`), or `allowlist_gap` when the rule permits a set and reacts to a member outside it (repair: remove the code **or** declare the intent by widening the set — `restrict_dependencies_to`, `restrict_workspace_dependencies_to`, `restrict_dependency_sources_to`, `restrict_imports_to`, `only_implemented_in`, `only_origins`, and `deny_external_dependencies` whose `allow_external` exceptions are an in-boundary declaration path). `only_origins` is an allowlist rule, but its origin-crossing violation is emitted by the runtime **prod** face via `Violation::to_json`, not by `check` (whose runtime face is only the probe-coverage audit), so its polarity rides the runtime event JSON rather than the check report. A violation **not on the boundary-drift axis** — the runtime CI-audit coverage/consistency violations (a declared-but-unprobed seam, a probed-but-undeclared seam, a duplicate seam, an un-auditable probe) — SHALL carry a `null` polarity: `null` means "not on this axis, read the `reason`/`finding` for the repair direction," never a fabricated classification. In the JSON report the `polarity` SHALL be present on every violation — the snake-case string (`"deny_breach"` / `"allowlist_gap"`) when on the boundary-drift axis, and `null` otherwise — always present, the same faithful-absence shape as `file`. In SARIF an on-axis violation's result SHALL carry the polarity in the shared result property bag (`properties.polarity`); a `null`-polarity violation SHALL emit no `polarity` property. The `polarity` SHALL NOT enter the violation's baseline identity (`target`, `rule`, `finding_key`) — being a pure function of the rule it is constant for a given identity, so it can never re-baseline an accepted violation nor change the violation count — and it SHALL never be a reaction input.
 
 #### Scenario: JSON format emits a parseable violations document
 
@@ -135,17 +135,17 @@ Each violation SHALL additionally carry a **repair-direction `polarity`** — a 
 #### Scenario: A module importing from two files still yields one violation
 
 - **WHEN** an importer module backed by more than one source file imports a protected module from each
-- **THEN** the report still carries exactly one violation for that importer module (its identity `(target, rule, finding)` is unchanged) and the `file` names one of the offending files deterministically
+- **THEN** the report still carries exactly one violation for that importer module (its identity `(target, rule, finding_key)` is unchanged) and the `file` names one of the offending files deterministically
 
 #### Scenario: Adding a file does not re-baseline an accepted violation
 
 - **WHEN** a workspace has a module violation already recorded in the active baseline, and the report now carries a `file` for it
-- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding)` is unchanged) and does not fail the gate
+- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding_key)` is unchanged) and does not fail the gate
 
 #### Scenario: Populating the semantic file does not re-baseline an accepted violation
 
 - **WHEN** a workspace has a single-module semantic violation already recorded in the active baseline (recorded while its `file` was `null`), and the report now carries a governed-module `file` for it
-- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding)` is unchanged, `file` not being part of it) and does not fail the gate
+- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding_key)` is unchanged, `file` not being part of it) and does not fail the gate
 
 #### Scenario: A clean workspace emits a clean JSON document
 
@@ -225,7 +225,7 @@ Each violation SHALL additionally carry a **repair-direction `polarity`** — a 
 #### Scenario: The anchor does not re-baseline an accepted violation
 
 - **WHEN** a workspace has a violation already recorded in the active baseline, and the producing boundary now declares an anchor
-- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding)` is unchanged, the anchor not being part of it), does not fail the gate, and the violation count is unchanged
+- **THEN** the violation is still recognized as baselined (its identity `(target, rule, finding_key)` is unchanged, the anchor not being part of it), does not fail the gate, and the violation count is unchanged
 
 #### Scenario: A deny boundary's violation is classified deny_breach
 
@@ -250,7 +250,7 @@ Each violation SHALL additionally carry a **repair-direction `polarity`** — a 
 #### Scenario: The polarity does not change baseline identity or the violation count
 
 - **WHEN** a workspace has a violation already recorded in the active baseline
-- **THEN** its `polarity` (a pure function of the rule) does not enter the identity `(target, rule, finding)`, so the violation is still recognized as baselined, does not fail the gate, and the violation count is unchanged
+- **THEN** its `polarity` (a pure function of the rule) does not enter the identity `(target, rule, finding_key)`, so the violation is still recognized as baselined, does not fail the gate, and the violation count is unchanged
 
 ### Requirement: Runner exposed as a reusable library entry point
 
@@ -470,8 +470,56 @@ This governs the **human text report only** — an ordering/grouping/presence in
 - **WHEN** `check` reports multiple violations spanning more than one boundary as text
 - **THEN** the report orders them by `(target, rule)` so all findings under one boundary appear consecutively
 
-#### Scenario: The JSON projection is unchanged
+#### Scenario: Text presentation does not change the JSON projection
 
 - **WHEN** the same outcome is emitted under `--format json`
-- **THEN** the JSON content and field order are exactly as before this change — the foregrounding, file-surfacing, and grouping are presentation of the text report only
+- **THEN** the JSON content follows the machine-readable report requirements independently of the text foregrounding, file-surfacing, and grouping
 
+### Requirement: Machine-readable reports expose structured finding identity
+
+The runner's JSON report SHALL add a `finding_key` to the existing human-readable violation and
+stale-baseline projections without replacing or weakening any field, format, or exit-code contract
+of the existing machine-readable report requirement. For a current violation and a version-2 stale
+entry, `finding_key` SHALL contain its `namespace`, fact `code`, and named string `fields`.
+
+Each stale version-2 baseline entry SHALL carry `target`, `rule`, human `finding`, and the same
+`finding_key` shape. A stale version-1 entry SHALL retain its target, rule, and human finding and
+SHALL represent the structured key as `null`, faithfully reflecting that the legacy artifact never
+recorded one. The structured key SHALL affect baseline identity but SHALL NOT change outcome, exit
+code, severity, file, anchor, polarity, or violation count. Text and SARIF SHALL remain unchanged
+because they are human/CI diagnostic projections rather than baseline interchange formats.
+
+#### Scenario: JSON emits a structured finding key without removing human text
+
+- **WHEN** the runner reports an enforced violation under `--format json`
+- **THEN** the violation carries both its existing human `finding` and a `finding_key` object with namespace, code, and named string fields
+
+#### Scenario: A presentation-only change keeps the same machine identity
+
+- **WHEN** a violation's human finding wording changes while its observed fact does not
+- **THEN** JSON shows the new `finding` and the unchanged `finding_key`, with outcome and count unchanged
+
+#### Scenario: Gate-mode JSON projects structured stale entries
+
+- **WHEN** a version-2 baseline entry matches no current violation under `--format json`
+- **THEN** `stale_baseline` carries its target, rule, human finding, and structured finding key
+
+#### Scenario: Gate-mode JSON faithfully projects a legacy stale entry
+
+- **WHEN** a version-1 baseline entry has no exact current text match under `--format json`
+- **THEN** `stale_baseline` carries its target, rule, and finding with `finding_key` set to `null`
+
+#### Scenario: Existing violation metadata remains unchanged
+
+- **WHEN** a file-bearing, anchored, or on-axis violation is projected under JSON or SARIF
+- **THEN** its file, anchor, polarity, SARIF location, and shared property-bag behavior remain as previously specified
+
+#### Scenario: The default text format is unchanged
+
+- **WHEN** the runner is invoked without `--format`
+- **THEN** it prints the human-readable report exactly as before
+
+#### Scenario: SARIF continues to mirror the reaction
+
+- **WHEN** the runner reports a violation under `--format sarif`
+- **THEN** it emits the same SARIF 2.1.0 diagnostic shape and process exit as before, without requiring a structured-key extension
