@@ -38,8 +38,8 @@ pub(crate) struct InlineFinding {
     pub file: String,
 }
 
-/// Scan the crate for inline-symbol-path offences against a `ConfineInlineSymbolPath` or
-/// `ConfineInlineSymbolPathExternal` boundary (both route here via `inline_payload`).
+/// Scan the crate for inline-symbol-path offences against a `ConfineInlineSymbolPath` boundary;
+/// its default and strict-external forms both route here via `inline_payload`.
 /// `all_files` is every reachable `(file, module)` pair (crate-wide, for the def closure);
 /// `governed` is the subset whose module is within the governed subtree (where calls are
 /// forbidden). `prefix` is the confined module-path prefix; `ending_with` narrows to read verbs;

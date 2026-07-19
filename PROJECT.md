@@ -1135,7 +1135,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   on a public enum variant is a downstream `E0063`/`E0027` compile break, while a variant on a
   `#[non_exhaustive]` enum is patch-safe (the same growth pattern as `RestrictDependencySourcesTo`).
   The twin-variant is `#[doc(hidden)]` and recorded as **0.2.0 model-surface debt** (fold back into
-  one variant + field once the surface is narrowed — see BACKLOG). **Identity parity is
+  one variant + field once the surface is narrowed — resolved by the later 0.2.0-line decision
+  below). **Identity parity is
   baseline-critical:** both variants route through one shared path, so `label()` returns the
   *identical* `"inline symbol path confined to module"`, `polarity()` is `DenyBreach`, and
   `target`/`finding` are byte-identical — adding the flag to an already-baselined boundary never
@@ -1168,3 +1169,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   version 2 and retain both the structured key and human finding. Version-1 baselines remain
   readable and match current violations only through their exact legacy text triple; writing a new
   baseline upgrades the durable contract without guessing a key that was never recorded.
+- **(0.2.0 line) Rule construction is builder-owned; rule inspection stays open-ended.** The 0.1
+  patch line exposed a concrete model-growth failure: adding the `.strict_external()` modifier as a
+  field would break downstream struct expressions and closed-field matches, so it required a hidden
+  duplicate `ModuleRule` variant. Every data-carrying `Rule` / `ModuleRule` variant is now itself
+  `#[non_exhaustive]`: the existing DSL is the sole construction surface, while consumers retain
+  read access through `CrateBoundary::rule()` and the new symmetric `ModuleBoundary::rule()`, using
+  `Variant { known, .. }`. The strict-external twin consequently collapses into one inline variant
+  with a modifier field. This spends the breaking window on accidental model construction only;
+  `Constitution`, the boundary DSL, projections, reactions, and violation identity stay unchanged,
+  and the pacta/modou reference probes remain green.

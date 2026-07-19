@@ -316,14 +316,14 @@ pub(crate) fn check_module_boundary(
     // rather than `use` imports. The confined prefix is the violation *target* (so nested-prefix
     // confinements on one subtree stay injective); the finding is the per-call resolved path (or a
     // hazardous glob) plus its module.
-    // Both inline variants (default and strict-external) route through this ONE shared path via the
+    // Both inline forms (default and strict-external) route through this ONE shared path via the
     // `inline_payload` accessor — never through the exhaustive `is_violation` match below (whose
     // inline arm is `unreachable!()`), which would skip the inline scan and silently observe
     // nothing (a false negative). Identity (`target`/`rule`/`finding`) is byte-identical across the
-    // two; the only strict-external-conditional behavior is inside `inline_symbol_findings` /
-    // `resolve_head`. `external` is `true` only for the strict-external variant.
+    // two forms; the only strict-external-conditional behavior is inside `inline_symbol_findings` /
+    // `resolve_head`. `external` reflects the single rule's `strict_external` modifier.
     if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
-        // Misdeclarations are loud (exit 2), never a silent no-op — for BOTH variants.
+        // Misdeclarations are loud (exit 2), never a silent no-op — for both forms.
         if prefix.trim().is_empty() {
             return Err(inline_empty_prefix_error(&boundary.crate_package));
         }
@@ -404,8 +404,7 @@ pub(crate) fn check_module_boundary(
         ModuleRule::MustNotBeImportedBy { .. }
         | ModuleRule::MustOnlyBeImportedBy { .. }
         | ModuleRule::ConfineExternalCrate { .. }
-        | ModuleRule::ConfineInlineSymbolPath { .. }
-        | ModuleRule::ConfineInlineSymbolPathExternal { .. } => {
+        | ModuleRule::ConfineInlineSymbolPath { .. } => {
             unreachable!("the inbound / confinement rules are evaluated above and return early")
         }
     };

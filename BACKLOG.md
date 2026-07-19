@@ -321,23 +321,17 @@ complement — show, then tell.
   target wants a full prelude); the deliverable is a **scoped** never-break promise, not a smaller
   prelude by default. The three examples' actual import set is empirical evidence for the audit — the
   names they touch are the real committed-stable builder; the rest are convenience.
-- **`Rule` / `ModuleRule` variant shape is a downstream-matchable contract — model-surface narrowing
-  (0.2.0, within the already-named guibiao widened-surface item, not a new breaking line).** `pub use
-  model::*` (`guibiao/src/lib.rs`) re-exports `Rule` / `ModuleRule`; enum-level `#[non_exhaustive]`
-  protects *new variants* but **not a field added to an existing variant** (enum-variant fields are
-  always public → a downstream `E0063` construct / `E0027` exhaustive-match break). So a new modifier
-  on an existing rule variant is **breaking**, which is why the project's growth pattern keeps
-  spawning parallel variants. Surfaced by the `strict_external` adversarial review: to stay
-  patch-honest, `.strict_external()` ships (0.1.9) as a **new variant** rather than an `external:
-  bool` field on `ConfineInlineSymbolPath` — a deliberate patch-safe workaround, one more parallel
-  variant. 0.2.0 should let rule modifiers grow *without* variant proliferation — per-variant
-  `#[non_exhaustive]`, or a builder-only model (variant internals `#[doc(hidden)]`, no
-  downstream-match/construct contract), or an opaque modifier struct — after which the parallel
-  strict variant folds back into one variant + field. **0.1.x-safe pre-management** (the
-  `#[doc(hidden)]` + `#[deprecated]` accidental-surface signal above): the new variant's internals
-  **already ship `#[doc(hidden)]` (v0.1.9)**, pre-announcing the narrowing without breaking anyone.
-  Guardrail unchanged — the break is quarantined to the model surface; the adopter builder
-  (`must_not_call_inline` / `.strict_external()` / `Constitution` / `run`) stays stable.
+- **`Rule` / `ModuleRule` model-surface narrowing — BUILT (0.2.0 line).** The live reaction was
+  `.strict_external()` having to ship in 0.1.9 as a payload-identical hidden variant: enum-level
+  `#[non_exhaustive]` protects new variants but not fields added to an existing struct variant, so
+  the patch line could not grow a modifier without downstream E0063/E0027 breaks. Every
+  data-carrying rule variant is now itself `#[non_exhaustive]`: consumers construct through the
+  unchanged boundary DSL and can still inspect known fields with `..`. The missing read side was
+  closed deliberately with `ModuleBoundary::rule()`, symmetric with `CrateBoundary::rule()`, rather
+  than retaining a public-but-unobtainable `ModuleRule`. The strict twin folds back into one
+  `ConfineInlineSymbolPath { strict_external, … }`; reaction, projection, and violation identity stay
+  pinned by the existing tests. The break remains quarantined to direct variant construction and
+  closed-field matches; pacta's builder and modou's widened guibiao surface compile unchanged.
 - **`inline_symbol_findings` positional-arg growth — collapse into an `InlineScanRequest` param
   struct (internal, born-when-needed).** `.strict_external()` pushed the scanner entry to 8
   positional args (now under `#[allow(clippy::too_many_arguments)]`, having added `external` +
