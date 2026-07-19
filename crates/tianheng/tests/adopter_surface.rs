@@ -97,6 +97,7 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     // public call shapes without parsing a CLI, scanning a workspace, or writing process output.
     let _run = run::<[&str; 0], &str>;
     let _static_check = |manifest: &Path| check(constitution.static_boundaries(), manifest);
+    let _composed_check = |manifest: &Path| check_constitution(&constitution, manifest);
     let _signature_check = |manifest: &Path| {
         tianheng::check_semantic(&constitution.semantic_boundaries().signature, manifest)
     };

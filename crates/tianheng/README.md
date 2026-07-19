@@ -43,12 +43,33 @@ the same `0.2.x` compatibility promise:
 - **Declare and run:** `Constitution`, the terminal static/semantic/runtime boundary types,
   `SansIoPure`, their selector enums, `Severity`, and `run`.
 - **Inspect the reaction:** `Outcome`, reports, violations, structured finding/violation identity,
-  baselines, boundary/rule model types, and the pure static `check`.
+  baselines, boundary/rule model types, the pure static `check`, and `check_constitution` for the
+  unified law.
 
 Rules remain builder-owned even though they are inspectable: obtain `Rule` or `ModuleRule` from a
 built boundary's `rule()` accessor and match known fields with `..`. For a focused semantic
 signature-coupling test, import `tianheng::check_semantic` explicitly; it is not the full semantic
 bundle. Normal composed governance stays `Constitution` + `run`.
+
+In a library test, inspect all three CI-time reactions without capturing CLI output:
+
+```rust,no_run
+use std::path::Path;
+use tianheng::prelude::*;
+
+let law = Constitution::new("my-project");
+let outcome = check_constitution(&law, Path::new("Cargo.toml"));
+match outcome {
+    Outcome::Violations(report) => assert!(!report.violations.is_empty()),
+    Outcome::Clean => {}
+    Outcome::ConstitutionError(message) => panic!("cannot evaluate the law: {message}"),
+    _ => unreachable!("Outcome is non-exhaustive"),
+}
+```
+
+`check_constitution` requires an explicit manifest and returns the raw, unbaselined `Outcome`. It
+does run Cargo metadata and source observation. Use `run` for nearest-manifest discovery, baseline
+gate/write modes, coverage advisories, text/JSON/SARIF presentation, and process exit handling.
 
 `your-binary check --manifest-path path/to/Cargo.toml` reacts against *your* constitution:
 exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`

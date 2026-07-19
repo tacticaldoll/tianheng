@@ -1189,3 +1189,12 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   recommended entrypoint. Hidden drafts and granular semantic checks remain outside this contract;
   the explicit `check_semantic` root alias is signature-coupling only, while composed evaluation
   stays `Constitution` plus `run`.
+- **(0.2.0 line) A unified Constitution has one inspectable evaluation path.** The composed example
+  exposed a real mismatch: declaration was unified, but a library test had to split back into static
+  and semantic checks because only CLI `run` composed all three dimensions. Public
+  `check_constitution(&Constitution, &Path) -> Outcome` now sits above the same private evaluator as
+  `run`, preserving static-first error precedence, merged findings, and the always-run orphan-probe
+  audit without duplicating composition. It is presentation-free, not observation-free: the
+  explicit manifest is read through Cargo metadata and source scans. Baselines, coverage advisories,
+  formats, manifest discovery, and process output remain shell concerns. This closes the primitive
+  testing seam but deliberately does not pre-build the deferred fixture/assertion harness.

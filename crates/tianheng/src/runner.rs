@@ -22,7 +22,7 @@
 //! work lives in the private [`dispatch`], so the exit code is unit-testable; [`run`] is
 //! a thin [`ExitCode`] wrapper.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use guibiao::{
@@ -94,6 +94,58 @@ where
     S: Into<String>,
 {
     ExitCode::from(dispatch(constitution, args))
+}
+
+/// Evaluate every dimension in a unified [`Constitution`] against the workspace at
+/// `manifest_path`, returning one inspectable reaction without CLI presentation.
+///
+/// This is the library counterpart to [`run`]: it observes static boundaries, the full semantic
+/// bundle, and runtime probe coverage through the same composition path the CLI uses. The manifest
+/// path is explicit; this function performs cargo-metadata and source-file observation, but does not
+/// parse arguments, discover a manifest from the current directory, print output, apply or write a
+/// baseline, or emit coverage advisories. Use [`run`] for those gate and presentation concerns.
+pub fn check_constitution(constitution: &Constitution, manifest_path: &Path) -> Outcome {
+    evaluate_constitution(constitution, manifest_path).0
+}
+
+/// The one composition seam beneath the library check and CLI runner. Coverage remains static-only
+/// and is returned separately for CLI advisory presentation; it never changes the reaction.
+fn evaluate_constitution(
+    constitution: &Constitution,
+    manifest_path: &Path,
+) -> (Outcome, Option<Coverage>) {
+    // One `cargo metadata` read feeds both the static reaction outcome and coverage; the semantic
+    // dimension reads its own (it has no coverage notion). A constitution error from any dimension
+    // supersedes the accumulated verdict, and otherwise violations merge into one report.
+    let (static_outcome, observed_coverage) =
+        check_and_cover(constitution.static_boundaries(), manifest_path);
+    let mut outcome = static_outcome;
+    if !matches!(outcome, Outcome::ConstitutionError(_))
+        && !constitution.semantic_boundaries().is_empty()
+    {
+        outcome = merge_outcomes(
+            outcome,
+            hunyi::check_all(constitution.semantic_boundaries(), manifest_path),
+        );
+    }
+
+    // Audit even an empty runtime declaration: an orphan `assert_boundary!` probe must react.
+    // Once an earlier dimension errors the verdict is untrustworthy, so evaluation stops.
+    if !matches!(outcome, Outcome::ConstitutionError(_)) {
+        match workspace_member_src_dirs(manifest_path) {
+            Ok(src_dirs) => {
+                outcome = merge_outcomes(
+                    outcome,
+                    audit_probe_coverage(constitution.runtime_boundaries(), &src_dirs),
+                );
+            }
+            Err(message) => {
+                outcome = merge_outcomes(outcome, Outcome::ConstitutionError(message));
+            }
+        }
+    }
+
+    (outcome, observed_coverage)
 }
 
 /// The runner's work, returning the exit code as a number so it is assertable
@@ -271,50 +323,7 @@ where
         },
     };
 
-    // One `cargo metadata` read feeds both the static reaction outcome and coverage; the
-    // semantic dimension reads its own (it has no coverage notion). The two outcomes compose
-    // into one: a constitution error from either supersedes (the run's verdict is
-    // untrustworthy), and otherwise the violations merge into a single report. Coverage
-    // stays static-only.
-    let (static_outcome, observed_coverage) =
-        check_and_cover(constitution.static_boundaries(), &manifest_path);
-    // Compose the dimensions in order, stopping at the first that raises a constitution error
-    // (its supersede/merge semantics are stated above and in `merge_outcomes`).
-    let mut outcome = static_outcome;
-    if !matches!(outcome, Outcome::ConstitutionError(_))
-        && !constitution.semantic_boundaries().is_empty()
-    {
-        // The whole 渾儀 dimension composes via one entry (one `cargo metadata` read);
-        // a constitution error from any semantic boundary supersedes.
-        outcome = merge_outcomes(
-            outcome,
-            hunyi::check_all(constitution.semantic_boundaries(), &manifest_path),
-        );
-    }
-    // 漏刻 (runtime) CI face: probe-coverage of the declared runtime seams, scanned across the
-    // workspace's member source roots (resolved here so `louke` stays std-only). Guarded like the
-    // semantic block — once a dimension errors, the verdict is untrustworthy, so we stop. The
-    // src-dir resolution can itself fail (an unreadable workspace) → fold it as a constitution
-    // error (`dispatch` returns `u8`, so we cannot use `?`).
-    //
-    // Run whenever the constitution evaluated — even with an **empty** declared-boundary set:
-    // `audit_probe_coverage(&[], …)` reacts to an `assert_boundary!` probe left in source after its
-    // `RuntimeBoundary` was deleted (an undeclared seam), catching at CI the orphan that would
-    // otherwise panic in production. On a workspace with no probes it is a no-op, so a pure
-    // static/semantic run is undisturbed.
-    if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        match workspace_member_src_dirs(&manifest_path) {
-            Ok(src_dirs) => {
-                outcome = merge_outcomes(
-                    outcome,
-                    audit_probe_coverage(constitution.runtime_boundaries(), &src_dirs),
-                );
-            }
-            Err(message) => {
-                outcome = merge_outcomes(outcome, Outcome::ConstitutionError(message));
-            }
-        }
-    }
+    let (mut outcome, observed_coverage) = evaluate_constitution(constitution, &manifest_path);
 
     if let Some(path) = write_baseline_path {
         return write_baseline(&outcome, &path);

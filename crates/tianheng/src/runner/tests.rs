@@ -1,9 +1,9 @@
 use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
 use super::term_color::Style;
 use super::{
-    Coverage, boundary_params, constitution_markdown, dispatch, dyn_trait_text, impl_trait_text,
-    list_document, list_markdown, merge_outcomes, nearest_manifest_from, projection_gate,
-    report_json, runtime_text, semantic_text, trait_impl_text, visibility_text,
+    Coverage, boundary_params, check_constitution, constitution_markdown, dispatch, dyn_trait_text,
+    impl_trait_text, list_document, list_markdown, merge_outcomes, nearest_manifest_from,
+    projection_gate, report_json, runtime_text, semantic_text, trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
 use serde_json::Value;
@@ -89,6 +89,30 @@ fn a_static_constitution_error_wins_when_both_error() {
     assert!(
         matches!(merged, Outcome::ConstitutionError(message) if message == "bad static crate"),
         "the static error is checked first and wins deterministically",
+    );
+}
+
+#[test]
+fn composed_check_preserves_static_error_precedence() {
+    let Some(manifest) = workspace_manifest() else {
+        return;
+    };
+    let constitution = Constitution::new("error-precedence")
+        .boundary(
+            CrateBoundary::crate_("no-such-static-package")
+                .forbid_dependency_on(["serde"])
+                .because("the static target must resolve first"),
+        )
+        .signature_boundary(
+            SemanticBoundary::in_crate("xuanji")
+                .module("crate::no_such_semantic_module")
+                .must_not_expose("crate::Hidden")
+                .because("the later semantic target is also invalid"),
+        );
+    let outcome = check_constitution(&constitution, &manifest);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("no-such-static-package")),
+        "the first static constitution error wins before semantic evaluation: {outcome:?}",
     );
 }
 
@@ -674,29 +698,42 @@ fn an_orphan_probe_reacts_with_no_declared_boundary() {
     // behind). The audit now runs even against an empty boundary set, so the orphan probe
     // reacts as an undeclared seam (exit 1) — previously the audit was skipped and this passed
     // green, then panicked in production. The `orphan_probe` fixture is its own workspace.
+    let orphan_manifest = fixture("orphan_probe");
     let args = [
         "tianheng".to_string(),
         "check".to_string(),
         "--manifest-path".to_string(),
-        fixture("orphan_probe"),
+        orphan_manifest.clone(),
     ];
     assert_eq!(
         dispatch(&Constitution::new("empty"), args),
         1,
         "an orphan `assert_boundary!` probe with no declared boundary reacts at CI"
     );
+    assert_eq!(
+        check_constitution(&Constitution::new("empty"), &PathBuf::from(orphan_manifest),)
+            .exit_code(),
+        1,
+        "the library check shares the always-run orphan-probe audit",
+    );
     // Contrast: the `clean` fixture has no probe, so an empty constitution scans clean — the
     // always-run audit does not disturb a probe-free workspace.
+    let clean_manifest = fixture("clean");
     let clean_args = [
         "tianheng".to_string(),
         "check".to_string(),
         "--manifest-path".to_string(),
-        fixture("clean"),
+        clean_manifest.clone(),
     ];
     assert_eq!(
         dispatch(&Constitution::new("empty"), clean_args),
         0,
         "a probe-free workspace under an empty constitution stays clean"
+    );
+    assert_eq!(
+        check_constitution(&Constitution::new("empty"), &PathBuf::from(clean_manifest),),
+        Outcome::Clean,
+        "the library check keeps an empty constitution clean on a probe-free workspace",
     );
 }
 
