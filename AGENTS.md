@@ -62,9 +62,12 @@ change, or a doc PR) before building on it.
 
 ## OpenSpec lifecycle
 
-A capability change moves through OpenSpec: **explore → propose → apply → sync**. Each phase is a
-self-describing commit on the change branch, subject-prefixed by the phase — `propose: …`,
-`apply: …`, `sync: …` (the prefix names the lifecycle phase, not a Conventional-Commits scope):
+A capability change moves through OpenSpec: **explore → propose → apply → sync**. Each committed
+phase is self-describing and follows *Commits & PRs* below. Propose and sync are documentation
+changes — `docs(openspec): propose <change>` and `docs(openspec): sync <change>` — while apply names
+the actual product effect (`feat(xuanji)!: …`, `fix(hunyi): …`, `refactor(guibiao)!: …`, and so on).
+The lifecycle phase stays explicit without pretending that `propose` / `apply` / `sync` are
+Conventional Commit types:
 
 1. **explore** — investigate and shape intent; write no feature code outside a change.
 2. **propose** — write `proposal.md` / `design.md` / `specs/**` / `tasks.md`.
@@ -96,6 +99,25 @@ redesign a change rather than let it pass diluted (the no-weakening-to-pass rule
 
 ## Commits & PRs
 
+- **Conventional Commits.** Every non-release subject is
+  `<type>(<scope>)!?: <imperative summary>` using a lowercase type and, when present, a lowercase
+  package or workflow scope. Use the narrowest honest type: `feat`, `fix`, `refactor`, `docs`,
+  `test`, `build`, `ci`, `perf`, or `chore`. Append `!` for a breaking change and name the migration
+  in a `BREAKING CHANGE:` footer. Do not use lifecycle phases, branch roles, issue numbers, or a
+  vague `update` as the type.
+- **Bodies carry provenance.** Except for the release snapshot below, every commit has a concise
+  body that explains why the change exists and what contract or reaction it preserves. Separate it
+  from the subject with one blank line; do not merely repeat the diff or rely on a PR number.
+- **PR title and body are merge inputs.** A PR title is the exact Conventional Commit subject
+  intended for the squash commit. Its body uses `## Why`, `## What changed`,
+  `## Adversarial review`, `## Verification`, and `## Compatibility`; the last section states the
+  public/migration effect and whether manifests or package versions changed. Verification names the
+  commands and external consumers actually checked — never an unqualified "tests pass".
+- **Curated squash message.** For a development PR into a release branch, set the squash subject
+  exactly to the PR title with no auto-appended `(#N)`. Replace GitHub's concatenated commit list
+  with a self-contained body distilled from the PR's why, reaction, and compatibility result;
+  retain any `BREAKING CHANGE:` footer. The branch's fine-grained commits remain review provenance,
+  not the release branch's message body.
 - **No AI/agent attribution.** Commit messages and PR descriptions must NOT contain a
   `Co-Authored-By: Claude` trailer, a "Generated with Claude Code" footer, a "🤖" line, or
   any other tool-authorship mark. The history records *what changed and why*, not what
@@ -112,17 +134,17 @@ never land on `main` individually — they collapse through two squash stages on
 way up: a change branch is squash-merged into `release/X.Y.Z`, and that release branch is
 squash-merged into `main`.
 
-Branch names are prefixed by role: `change/<slug>` for an OpenSpec change's lifecycle work,
-`release/X.Y.Z` for a release branch (the first squash target), `refactor/<slug>` for a
-behavior-preserving refactor, `docs/<slug>` for docs / decision-log work, and `polish/X.Y.Z` for
-pre-release polish of a release line. `main` takes no direct work — it is release-only.
+Branch names encode role and intent: `change/<openspec-name>` exactly matches an OpenSpec change
+directory; `release/X.Y.Z` is the first squash target; `polish/X.Y.Z/<slug>` carries pre-release
+polish; and `refactor/<scope>-<slug>` / `docs/<scope>-<slug>` carry work outside OpenSpec. Slugs are
+lowercase kebab-case, describe the outcome without an issue number, and never use a placeholder such
+as `spike` after intent is known. `main` takes no direct work — it is release-only.
 
-Both squashes are performed by a GitHub pull request's "Squash and merge", not a local merge.
-Strip GitHub's auto-appended `(#N)` from the squash subject (the self-describing-commit rule
-above; the `release: X.Y.Z` snapshot subject is its one exception — a release commit's "change"
-is the whole tree at that version, and the per-change "why" lives in the squashed change
-commits and their PRs — so the `release: X.Y.Z` commit is **subject-only, its body deliberately
-empty**). A PR that touches a steward-owned path (`.github/CODEOWNERS`) is merged by the steward.
+Both squashes are performed by a GitHub pull request's "Squash and merge", not a local merge. The
+release-branch-to-`main` squash is the sole message exception: its subject is `release: X.Y.Z` and
+its body is deliberately empty. A release snapshot's change is the whole tree; per-change why lives
+in the curated commits and PRs below it. A PR that touches a steward-owned path
+(`.github/CODEOWNERS`) is merged by the steward.
 
 Like the self-describing-commit rule above, this is a convention for humans and agents, not a
 Tianheng reaction: a branching pattern is not an observable architectural fact, so the drift law
