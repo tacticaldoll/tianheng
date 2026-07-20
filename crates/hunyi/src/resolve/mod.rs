@@ -433,27 +433,11 @@ fn rewrite_longest_prefix(
 }
 
 /// Follow the re-export closure from `path` to a fixpoint, so a facade path becomes the
-/// canonical path of the item it denotes. Cycle-guarded.
+/// canonical path of the item it denotes. Cycle-guarded. The re-export-only special case of
+/// [`canonicalize_through_aliases`] with an empty alias map, so the two share one fixpoint /
+/// hop-cap implementation and cannot drift.
 pub(crate) fn canonicalize_through_reexports(path: &str, reexports: &ReexportMap) -> String {
-    let mut current = path.to_string();
-    let mut seen = std::collections::HashSet::new();
-    // A terminating chain rewrites through each map edge at most once (after a key fires, the
-    // rewritten head no longer carries it — `collect_reexports` refuses the one entry shape,
-    // key ⊂ target, that would re-present it), so it visits at most `len() + 1` distinct paths.
-    // The exact-repeat `seen` guard alone cannot bound a divergent (monotonically growing,
-    // never-repeating) rewrite; this hop cap hard-guarantees termination on any syn-parseable
-    // input — the tool must exit, never hang, even on non-compiling source.
-    let cap = reexports.len() + 1;
-    while seen.insert(current.clone()) {
-        if seen.len() > cap {
-            break;
-        }
-        match rewrite_longest_prefix(&current, reexports) {
-            Some(next) => current = next,
-            None => break,
-        }
-    }
-    current
+    canonicalize_through_aliases(path, &AliasMap::new(), reexports)
 }
 
 /// Follow the **alias** and **re-export** closures together from `path` to a fixpoint, so a

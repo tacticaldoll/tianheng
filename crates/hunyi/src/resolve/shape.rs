@@ -161,30 +161,37 @@ fn principal_trait_paths(
         .collect()
 }
 
-/// Render a `dyn` trait-object to a stable finding string (`dyn crate::Port`,
-/// `dyn Port + Send`, `dyn Fn(i32) -> i32`, `dyn Iterator<Item = u8>`) — never `quote`/`syn`'s
-/// `printing` feature. The render is **injective for every realistic exposed `dyn`** (the
-/// closure family, associated-type bindings, lifetimes, simple const generics, macro-named and
-/// fn-pointer arguments all render their distinguishing payload), so two structurally-different
-/// trait objects never collide into one finding and mask a new exposure under the
-/// `(target, rule, finding)` baseline identity (the one forbidden bug). A genuinely
-/// unrenderable sub-node — a complex const-generic *expression*, a same-named macro with
-/// different arguments, a `verbatim` type — is a **stated rendering bound** (it contributes a
-/// `_` and may share a finding with another equally-exotic dyn); this is the same
-/// `(target, rule, finding)` render-granularity bound `semantic-trait-impl-locality`'s
-/// `(impl <trait> for <self_ty>)` finding already carries, never a silent claim of cleanliness.
-fn trait_object_to_string(node: &syn::TypeTraitObject) -> String {
-    let parts: Vec<String> = node.bounds.iter().map(bound_to_string).collect();
-    format!("dyn {}", parts.join(" + "))
+/// Render a `+`-joined bound list to a stable finding string behind `keyword` — `dyn`
+/// ([`trait_object_to_string`]) and `impl` ([`impl_trait_to_string`]) share this single renderer,
+/// since a trait object's and an `impl Trait`'s `bounds` are the same `Punctuated<TypeParamBound>`.
+/// Never `quote`/`syn`'s `printing` feature. The render is **injective for every realistic exposed
+/// shape** (the closure family, associated-type bindings, lifetimes, simple const generics,
+/// macro-named and fn-pointer arguments all render their distinguishing payload), so two
+/// structurally-different shapes never collide into one finding and mask a new exposure under the
+/// `(target, rule, finding)` baseline identity (the one forbidden bug). A genuinely unrenderable
+/// sub-node — a complex const-generic *expression*, a same-named macro with different arguments, a
+/// `verbatim` type — is a **stated rendering bound** (it contributes a `_` and may share a finding
+/// with another equally-exotic shape); this is the same `(target, rule, finding)` render-granularity
+/// bound `semantic-trait-impl-locality`'s `(impl <trait> for <self_ty>)` finding already carries,
+/// never a silent claim of cleanliness.
+fn render_bounds<'a>(
+    bounds: impl Iterator<Item = &'a syn::TypeParamBound>,
+    keyword: &str,
+) -> String {
+    let parts: Vec<String> = bounds.map(bound_to_string).collect();
+    format!("{keyword} {}", parts.join(" + "))
 }
 
-/// Render an `impl Trait` node (`syn::TypeImplTrait`) to a stable finding string
-/// (`impl crate::Port`, `impl Iterator<Item = u8>`, `impl Fn(i32) -> i32`) — its `bounds` are the
-/// same `Punctuated<TypeParamBound>` a trait object carries, so it renders through the same
-/// [`bound_to_string`], sharing the `dyn` renderer's injectivity and rendering bound.
+/// Render a `dyn` trait-object to a stable finding string (`dyn crate::Port`, `dyn Port + Send`,
+/// `dyn Fn(i32) -> i32`, `dyn Iterator<Item = u8>`) via the shared [`render_bounds`].
+fn trait_object_to_string(node: &syn::TypeTraitObject) -> String {
+    render_bounds(node.bounds.iter(), "dyn")
+}
+
+/// Render an `impl Trait` node to a stable finding string (`impl crate::Port`,
+/// `impl Iterator<Item = u8>`, `impl Fn(i32) -> i32`) via the shared [`render_bounds`].
 fn impl_trait_to_string(node: &syn::TypeImplTrait) -> String {
-    let parts: Vec<String> = node.bounds.iter().map(bound_to_string).collect();
-    format!("impl {}", parts.join(" + "))
+    render_bounds(node.bounds.iter(), "impl")
 }
 
 /// A Visitor recording every **`impl Trait` node** within a syntax node, at any depth — the leaf
