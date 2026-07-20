@@ -3,7 +3,7 @@
 //! deliberately breaks that rule so the reaction is visible; `tests/reaction.rs` asserts it,
 //! and the `demo` binary renders it.
 //!
-//! The whole dependency footprint is `guibiao = "0.1"` — no `syn` — which *is* the product
+//! The whole dependency footprint is `guibiao = "0.2"` — no `syn` — which *is* the product
 //! pitch: adopt the static dimension on its own, light.
 pub mod domain;
 pub mod governance;
