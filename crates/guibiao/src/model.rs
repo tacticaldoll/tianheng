@@ -62,6 +62,14 @@ impl DependencyKind {
             DependencyKind::Build => " (build)",
         }
     }
+
+    pub(crate) fn key_label(&self) -> &'static str {
+        match self {
+            DependencyKind::Normal => "normal",
+            DependencyKind::Dev => "dev",
+            DependencyKind::Build => "build",
+        }
+    }
 }
 
 /// A dependency's **declared** source kind, classified from `cargo metadata`'s
@@ -184,15 +192,38 @@ pub struct CrateTarget {
 /// What a crate boundary forbids. Each variant is a reaction with an observation
 /// source in `cargo metadata`; no variant is named for a reaction that does not
 /// exist.
+///
+/// Rules are constructed through [`CrateBoundary::crate_`], not variant struct expressions. A
+/// consumer inspecting a rule can match known fields forward-compatibly:
+///
+/// ```
+/// use guibiao::{CrateBoundary, Rule};
+///
+/// let boundary = CrateBoundary::crate_("core")
+///     .forbid_dependency_on(["serde"])
+///     .because("core owns no serialization vocabulary");
+/// match boundary.rule() {
+///     Rule::ForbidDependencyOn { crates, .. } => assert_eq!(crates, &["serde"]),
+///     _ => unreachable!(),
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use guibiao::Rule;
+///
+/// let _ = Rule::ForbidDependencyOn { crates: vec!["serde".to_string()] };
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Rule {
     /// Deny external (registry/git) dependencies, except any named in `allowed`.
+    #[non_exhaustive]
     DenyExternalDependencies {
         /// External crate names permitted despite the deny rule.
         allowed: Vec<String>,
     },
     /// Forbid a normal dependency on any of these crates (external or internal).
+    #[non_exhaustive]
     ForbidDependencyOn {
         /// The forbidden crate names.
         crates: Vec<String>,
@@ -200,6 +231,7 @@ pub enum Rule {
     /// Restrict normal dependencies to a closed allowlist: any normal dependency
     /// (external or internal) whose name is not in `allowed` is a violation. An
     /// empty allowlist forbids every normal dependency.
+    #[non_exhaustive]
     RestrictDependenciesTo {
         /// The closed allowlist of permitted dependency names.
         allowed: Vec<String>,
@@ -209,6 +241,7 @@ pub enum Rule {
     /// violation, while external dependencies are ignored. Workspace membership is
     /// observed from `cargo metadata`, so a newly added member is governed by default.
     /// An empty allowlist forbids every workspace dependency.
+    #[non_exhaustive]
     RestrictWorkspaceDependenciesTo {
         /// The closed allowlist of permitted workspace-member names.
         allowed: Vec<String>,
@@ -221,6 +254,7 @@ pub enum Rule {
     /// source. Governs the *declared* source, not the resolved one — a `[patch]`/
     /// `replace-with` redirect is not observed (the resolved layer is cargo-deny's
     /// `[sources]` lane, not a Tianheng capability).
+    #[non_exhaustive]
     RestrictDependencySourcesTo {
         /// The closed allowlist of permitted declared source kinds.
         allowed: Vec<SourceKind>,
@@ -236,6 +270,7 @@ pub enum Rule {
     /// explicit features). Governs the *declared* request, not the resolved/unified
     /// feature set — a feature that `crate_`'s own `[features]` graph or a sibling crate's
     /// unification enables transitively is not chased (declared-not-resolved).
+    #[non_exhaustive]
     RestrictFeaturesOf {
         /// The dependency whose declared features are governed (matched by package name).
         crate_: String,
@@ -252,6 +287,7 @@ pub enum Rule {
     /// set is a no-op that always reports clean (symmetric with forbidding a crate the
     /// target does not depend on). Governs the *declared* request, not the resolved/unified
     /// feature set (transitive enables are not chased).
+    #[non_exhaustive]
     ForbidFeaturesOf {
         /// The dependency whose declared features are governed (matched by package name).
         crate_: String,
@@ -387,12 +423,25 @@ impl Rule {
     /// filter. `workspace_members` is all workspace member names, observed from
     /// `cargo metadata`; only the workspace-scoped rule consults it. (It includes the
     /// target crate itself, harmlessly: no crate depends on itself.)
+    #[cfg(test)]
     pub(crate) fn findings(
         &self,
         package: &Value,
         workspace_members: &[String],
         kind: DependencyKind,
     ) -> Vec<String> {
+        self.facts(package, workspace_members, kind)
+            .into_iter()
+            .map(|fact| fact.into_finding().text().to_string())
+            .collect()
+    }
+
+    pub(crate) fn facts(
+        &self,
+        package: &Value,
+        workspace_members: &[String],
+        kind: DependencyKind,
+    ) -> Vec<crate::finding::CrateFact> {
         let dependencies: Vec<String> = match self {
             Rule::DenyExternalDependencies { allowed } => external_dependencies(package, kind)
                 .into_iter()
@@ -422,33 +471,30 @@ impl Rule {
             Rule::RestrictFeaturesOf { crate_, allowed } => {
                 // Allowlist: a declared feature outside `allowed` violates. Empty allowlist ⇒
                 // every declared feature (including `default`) violates.
-                declared_features(package, crate_, kind)
+                return declared_features(package, crate_, kind)
                     .into_iter()
                     .filter(|feature| !allowed.contains(feature))
-                    .map(|feature| format!("{crate_}/{feature}"))
-                    .collect()
+                    .map(|feature| {
+                        crate::finding::CrateFact::feature(crate_.clone(), feature, kind)
+                    })
+                    .collect();
             }
             Rule::ForbidFeaturesOf { crate_, forbidden } => {
                 // Denylist: a declared feature matching a forbidden name violates. Empty
                 // forbidden set ⇒ no findings (natural from the filter), a vacuous no-op.
-                declared_features(package, crate_, kind)
+                return declared_features(package, crate_, kind)
                     .into_iter()
                     .filter(|feature| forbidden.contains(feature))
-                    .map(|feature| format!("{crate_}/{feature}"))
-                    .collect()
+                    .map(|feature| {
+                        crate::finding::CrateFact::feature(crate_.clone(), feature, kind)
+                    })
+                    .collect();
             }
         };
-        // Kind-qualify so the same dependency name in two tables (normal vs dev/build) stays a
-        // distinct finding — a baselined `serde` normal-dep must never mask a new `serde (dev)`.
-        let suffix = kind.finding_suffix();
-        if suffix.is_empty() {
-            dependencies
-        } else {
-            dependencies
-                .into_iter()
-                .map(|dependency| format!("{dependency}{suffix}"))
-                .collect()
-        }
+        dependencies
+            .into_iter()
+            .map(|dependency| crate::finding::CrateFact::dependency(dependency, kind))
+            .collect()
     }
 }
 
@@ -744,13 +790,41 @@ impl ModuleBoundary {
     pub fn anchor(&self) -> Option<&str> {
         self.anchor.as_deref()
     }
+
+    /// The rule this boundary declares, exposed read-only for projection and model inspection.
+    pub fn rule(&self) -> &ModuleRule {
+        &self.rule
+    }
 }
 
 /// What a module boundary forbids.
+///
+/// Rules are constructed through [`ModuleBoundary::in_crate`], not variant struct expressions. A
+/// consumer can inspect a builder-produced rule without closing over its complete representation:
+///
+/// ```
+/// use guibiao::{ModuleBoundary, ModuleRule};
+///
+/// let boundary = ModuleBoundary::in_crate("app")
+///     .module("crate::core")
+///     .must_not_import("crate::adapter")
+///     .because("core depends inward only");
+/// match boundary.rule() {
+///     ModuleRule::MustNotImport { module, .. } => assert_eq!(module, "crate::adapter"),
+///     _ => unreachable!(),
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use guibiao::ModuleRule;
+///
+/// let _ = ModuleRule::MustNotImport { module: "crate::adapter".to_string() };
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ModuleRule {
     /// The governed module must not import this module (or anything beneath it).
+    #[non_exhaustive]
     MustNotImport {
         /// The forbidden module path (e.g. `"crate::projection"`).
         module: String,
@@ -758,6 +832,7 @@ pub enum ModuleRule {
     /// The governed module may import only these modules (each "or beneath"), plus its
     /// own subtree; any other internal import is a violation. An empty allowlist permits
     /// only the module's own subtree.
+    #[non_exhaustive]
     RestrictImportsTo {
         /// The closed allowlist of importable module paths (e.g. `["crate::types"]`).
         allowed: Vec<String>,
@@ -765,6 +840,7 @@ pub enum ModuleRule {
     /// The governed (protected) module must not be imported by this module (or anything
     /// beneath it) — an inbound encapsulation rule, the mirror of `MustNotImport`. A
     /// module within the protected module's own subtree is never an importer.
+    #[non_exhaustive]
     MustNotBeImportedBy {
         /// The forbidden importer module path (e.g. `"crate::http"`).
         importer: String,
@@ -773,6 +849,7 @@ pub enum ModuleRule {
     /// beneath") or by its own subtree; any other module that imports it (or anything beneath
     /// it) is a violation — the inbound dual of `RestrictImportsTo`. An empty allowlist permits
     /// only the protected module's own subtree.
+    #[non_exhaustive]
     MustOnlyBeImportedBy {
         /// The closed allowlist of importer module paths (e.g. `["crate::facade"]`).
         allowed: Vec<String>,
@@ -782,6 +859,7 @@ pub enum ModuleRule {
     /// outside that subtree is a violation. The first module rule that observes external
     /// imports — every other rule ignores them. The confined crate is the violation target,
     /// so identity stays injective across different confined crates on the same subtree.
+    #[non_exhaustive]
     ConfineExternalCrate {
         /// The confined external crate name (e.g. `"libc"`).
         crate_name: String,
@@ -792,6 +870,7 @@ pub enum ModuleRule {
     /// `use` imports. The "core reads no ambient clock; time is injected" pattern. The confined
     /// prefix is the violation target, so identity stays injective across nested prefixes on the
     /// same subtree.
+    #[non_exhaustive]
     ConfineInlineSymbolPath {
         /// The confined module-path prefix (e.g. `"std::time"`).
         prefix: String,
@@ -804,34 +883,14 @@ pub enum ModuleRule {
         /// annotations, constants, value captures), not only calls. Mutually exclusive with
         /// `ending_with` (both set is a constitution error).
         strict: bool,
-    },
-    /// The strict-external sibling of
-    /// [`ConfineInlineSymbolPath`](ModuleRule::ConfineInlineSymbolPath), emitted by
-    /// [`must_not_call_inline`](ModuleTargetDraft::must_not_call_inline)`.strict_external()`. It
-    /// carries the identical payload; the variant identity (not a field) encodes that
-    /// fully-qualified, un-`use`d external calls are reclassified as external and observed. A
-    /// separate variant rather than a field on the sibling, so it ships as a patch under the enum's
-    /// `#[non_exhaustive]`. Identity-indistinguishable from the sibling (`label`/`polarity` and the
-    /// violation `target`/`finding` byte-identical), so adding `.strict_external()` never re-keys a
-    /// baselined finding. `#[doc(hidden)]`: twin-variant shape is 0.2.0 model-surface debt (`BACKLOG.md`).
-    #[doc(hidden)]
-    ConfineInlineSymbolPathExternal {
-        /// The confined module-path prefix (e.g. `"chrono::Utc"`).
-        prefix: String,
-        /// Leaf-exact read-verb narrowing, as on
-        /// [`ConfineInlineSymbolPath`](ModuleRule::ConfineInlineSymbolPath).
-        ending_with: Option<Vec<String>>,
-        /// Escalate to any mention (not only calls), as on
-        /// [`ConfineInlineSymbolPath`](ModuleRule::ConfineInlineSymbolPath). Mutually exclusive
-        /// with `ending_with` (both set is a constitution error).
-        strict: bool,
+        /// If `true`, resolve a bare path head matching a declared dependency as external after
+        /// local precedence checks. Projection metadata and scan breadth only; never identity.
+        strict_external: bool,
     },
 }
 
-/// The inline-confinement text projection, shared by both inline variants so a strict-external
-/// boundary's base text is single-sourced with the default one (the ` (strict-external)` suffix is
-/// added by the caller). Not identity — [`ModuleRule::label`] is the identity string and is the
-/// same for both variants.
+/// The inline-confinement text projection. Not identity — [`ModuleRule::label`] is the identity
+/// string for both default and strict-external forms.
 fn inline_confinement_text(
     prefix: &str,
     ending_with: &Option<Vec<String>>,
@@ -847,8 +906,7 @@ fn inline_confinement_text(
     }
 }
 
-/// The inline-confinement JSON parameters, shared by both inline variants. `strict_external` is
-/// emitted only for the external variant (`external == true`), matching the emit-when-set
+/// The inline-confinement JSON parameters. `strict_external` is emitted only when set, matching the emit-when-set
 /// discipline of `ending_with`/`strict` — a strict boundary must not project byte-identically to a
 /// default one. This is projection metadata only; it never leaks into [`ModuleRule::label`].
 fn inline_confinement_json(
@@ -879,19 +937,14 @@ impl ModuleRule {
             ModuleRule::MustNotBeImportedBy { .. } => "module must not be imported by",
             ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
             ModuleRule::ConfineExternalCrate { .. } => "external crate confined to module",
-            // IDENTITY PARITY: the strict-external variant returns the IDENTICAL label as its
-            // default sibling (matched together), so adding `.strict_external()` to an
-            // already-baselined boundary never re-keys a finding (`rule` is a `ViolationId` field).
-            ModuleRule::ConfineInlineSymbolPath { .. }
-            | ModuleRule::ConfineInlineSymbolPathExternal { .. } => {
-                "inline symbol path confined to module"
-            }
+            // IDENTITY PARITY: the modifier never enters the label, so adding
+            // `.strict_external()` never re-keys a finding (`rule` is a `ViolationId` field).
+            ModuleRule::ConfineInlineSymbolPath { .. } => "inline symbol path confined to module",
         }
     }
 
-    /// The shared inline-confinement payload of either inline variant — `(prefix, ending_with,
-    /// strict, external)` — or `None` for a non-inline rule. Both variants route through this one
-    /// accessor so dispatch and the exit-2 constitution checks are single-sourced; the only
+    /// The inline-confinement payload — `(prefix, ending_with, strict, external)` — or `None` for a
+    /// non-inline rule. Dispatch and the exit-2 constitution checks route through this accessor; the only
     /// `external`-conditional behavior lives in the scan (`inline_symbol_findings` / `resolve_head`).
     pub(crate) fn inline_payload(&self) -> Option<(&str, Option<&[String]>, bool, bool)> {
         match self {
@@ -899,12 +952,8 @@ impl ModuleRule {
                 prefix,
                 ending_with,
                 strict,
-            } => Some((prefix, ending_with.as_deref(), *strict, false)),
-            ModuleRule::ConfineInlineSymbolPathExternal {
-                prefix,
-                ending_with,
-                strict,
-            } => Some((prefix, ending_with.as_deref(), *strict, true)),
+                strict_external,
+            } => Some((prefix, ending_with.as_deref(), *strict, *strict_external)),
             _ => None,
         }
     }
@@ -923,9 +972,8 @@ impl ModuleRule {
             | ModuleRule::ConfineExternalCrate { .. } => Polarity::AllowlistGap,
             // A forbidden inline call under the prefix is a breach to remove (or replace with
             // injected time) — the same repair shape as `MustNotImport`, not an allowlist gap.
-            // Identity parity: the strict-external sibling shares the polarity.
-            ModuleRule::ConfineInlineSymbolPath { .. }
-            | ModuleRule::ConfineInlineSymbolPathExternal { .. } => Polarity::DenyBreach,
+            // Identity parity: the strict-external modifier shares the polarity.
+            ModuleRule::ConfineInlineSymbolPath { .. } => Polarity::DenyBreach,
         }
     }
 
@@ -955,18 +1003,15 @@ impl ModuleRule {
                 prefix,
                 ending_with,
                 strict,
-            } => inline_confinement_text(prefix, ending_with, *strict),
-            // Projection (not identity): the strict-external variant appends a ` (strict-external)`
-            // marker so a strict boundary does not read as a default one, while the base text stays
-            // single-sourced with the sibling.
-            ModuleRule::ConfineInlineSymbolPathExternal {
-                prefix,
-                ending_with,
-                strict,
-            } => format!(
-                "{} (strict-external)",
-                inline_confinement_text(prefix, ending_with, *strict)
-            ),
+                strict_external,
+            } => {
+                let text = inline_confinement_text(prefix, ending_with, *strict);
+                if *strict_external {
+                    format!("{text} (strict-external)")
+                } else {
+                    text
+                }
+            }
         }
     }
 
@@ -1005,14 +1050,8 @@ impl ModuleRule {
                 prefix,
                 ending_with,
                 strict,
-            } => inline_confinement_json(prefix, ending_with, *strict, false),
-            // `strict_external` is emitted (only) here, so the projection discloses the strict
-            // boundary — but NOT in `label()`/identity (see the identity-parity note there).
-            ModuleRule::ConfineInlineSymbolPathExternal {
-                prefix,
-                ending_with,
-                strict,
-            } => inline_confinement_json(prefix, ending_with, *strict, true),
+                strict_external,
+            } => inline_confinement_json(prefix, ending_with, *strict, *strict_external),
         }
     }
 }
@@ -1268,21 +1307,11 @@ impl InlineConfinementDraft {
 
     /// Finish the boundary, recording the human-readable `reason` (the repair hint).
     pub fn because(self, reason: &str) -> ModuleBoundary {
-        // The external opt-in rides a separate variant (patch-safe: a `#[non_exhaustive]` enum
-        // grows a variant without a downstream break, unlike a new field on an existing variant).
-        // Both variants carry the identical payload and are identity-indistinguishable.
-        let rule = if self.external {
-            ModuleRule::ConfineInlineSymbolPathExternal {
-                prefix: self.prefix,
-                ending_with: self.ending_with,
-                strict: self.strict,
-            }
-        } else {
-            ModuleRule::ConfineInlineSymbolPath {
-                prefix: self.prefix,
-                ending_with: self.ending_with,
-                strict: self.strict,
-            }
+        let rule = ModuleRule::ConfineInlineSymbolPath {
+            prefix: self.prefix,
+            ending_with: self.ending_with,
+            strict: self.strict,
+            strict_external: self.external,
         };
         ModuleBoundary {
             crate_package: self.crate_package,

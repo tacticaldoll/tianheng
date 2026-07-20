@@ -28,7 +28,7 @@ fn findings(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 /// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
@@ -53,7 +53,7 @@ fn findings_with_deps(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
@@ -76,7 +76,7 @@ fn findings_including_trait_impls(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", true, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 // --- extern-path exposure (the external-crate name set) -------------------
@@ -102,9 +102,19 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
     let mk = |sev| {
         Violation::new(
             BoundaryKind::Semantic,
-            "crate::m".to_string(),
-            SIGNATURE_RULE.to_string(),
-            "crate::infra::Db exposed by fn crate::m::f".to_string(),
+            ViolationId::new(
+                "crate::m",
+                SIGNATURE_RULE,
+                crate::finding::SemanticFact::Exposed {
+                    kind: crate::finding::ExposureKind::Signature,
+                    subject: "crate::infra::Db".to_string(),
+                    seam: crate::finding::PublicSeam::FreeFn {
+                        module: "crate::m".to_string(),
+                        name: "f".to_string(),
+                    },
+                }
+                .into_finding(),
+            ),
             "reason".to_string(),
             sev,
         )
@@ -2581,7 +2591,11 @@ fn locality_findings(
     let result = trait_impl_findings(&src, &root, trait_path, &allowed, "x");
     let _ = std::fs::remove_dir_all(&dir);
     // The pure-heart tests assert on findings only; drop the per-finding module here.
-    result.map(|v| v.into_iter().map(|(finding, _module)| finding).collect())
+    result.map(|v| {
+        v.into_iter()
+            .map(|(finding, _module)| finding.to_string())
+            .collect()
+    })
 }
 
 #[test]
@@ -3217,8 +3231,11 @@ fn unsafe_labels(
     }
     let root = src.join("lib.rs");
     let allowed: Vec<String> = allowed.iter().map(|a| a.to_string()).collect();
-    let result = unsafe_findings(&src, &root, &allowed, "x")
-        .map(|fs| fs.into_iter().map(|(finding, _)| finding).collect());
+    let result = unsafe_findings(&src, &root, &allowed, "x").map(|fs| {
+        fs.into_iter()
+            .map(|(finding, _)| finding.to_string())
+            .collect()
+    });
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
@@ -3384,6 +3401,60 @@ fn two_unsafe_impls_of_one_trait_for_different_types_stay_distinct() {
 }
 
 #[test]
+fn two_same_named_unsafe_fns_on_different_owners_stay_distinct() {
+    // Same method name, different inherent-impl self type: the finding must be owner-qualified,
+    // else a baseline of the first silently accepts the second — a false negative (a new
+    // out-of-subtree `unsafe` site passing unobserved). The unsafe-fn analogue of
+    // `two_unsafe_impls_of_one_trait_for_different_types_stay_distinct`.
+    let out = unsafe_labels(
+        "unsafe-fns-same-name",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub struct Foo;\npub struct Bar;\nimpl Foo { unsafe fn m(&self) {} }\nimpl Bar { unsafe fn m(&self) {} }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe fn Bar::m in crate::net",
+            "unsafe fn Foo::m in crate::net",
+        ],
+        "same-named unsafe fns on different owners must not collapse: {out:?}"
+    );
+}
+
+#[test]
+fn two_same_named_unsafe_trait_fns_stay_distinct() {
+    // Two traits in one module each declaring `unsafe fn m` must stay distinct findings, qualified
+    // by the declaring trait — else a baseline of the first masks the second (a false negative).
+    let out = unsafe_labels(
+        "unsafe-trait-fns",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub trait A { unsafe fn m(&self); }\npub trait B { unsafe fn m(&self); }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe fn A::m in crate::net",
+            "unsafe fn B::m in crate::net"
+        ],
+        "trait-declared unsafe fns must be qualified by their trait: {out:?}"
+    );
+}
+
+#[test]
 fn unsafe_in_a_body_nested_mod_reacts() {
     // The propose-review false-negative guard: a `mod` inside a fn body is not descended by the
     // top-level walk; the collector's default recursion must still catch its unsafe.
@@ -3452,7 +3523,7 @@ fn vis_findings_at(
     let root = src.join("lib.rs");
     let result = visibility_findings(&src, &root, module, "x", ceiling_rank);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 #[test]
@@ -3943,7 +4014,11 @@ fn marker_findings(
     let result = forbidden_marker_findings(&src, &root, subtree, &forbidden, "x");
     let _ = std::fs::remove_dir_all(&dir);
     // The pure-heart tests assert on findings only; drop the per-finding module here.
-    result.map(|v| v.into_iter().map(|(finding, _module)| finding).collect())
+    result.map(|v| {
+        v.into_iter()
+            .map(|(finding, _module)| finding.to_string())
+            .collect()
+    })
 }
 
 #[test]
@@ -4419,7 +4494,7 @@ fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<
     let root = src.join("lib.rs");
     let result = dyn_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -4452,7 +4527,7 @@ fn dyn_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = dyn_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
@@ -4694,7 +4769,7 @@ fn impl_trait_findings(
     let root = src.join("lib.rs");
     let result = impl_trait_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -4833,7 +4908,7 @@ fn impl_trait_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = impl_trait_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn impl_trait_operand_mod(
@@ -5035,7 +5110,7 @@ fn async_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Ve
     let root = src.join("lib.rs");
     let result = async_exposure_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
 }
 
 fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5171,7 +5246,12 @@ fn async_subtree(
     let root = src.join("lib.rs");
     let result = async_exposure_subtree_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, module)| (fact.to_string(), module))
+            .collect()
+    })
 }
 
 /// Just the finding strings, sorted — for cases where the module attribution rides inside the
@@ -5789,6 +5869,39 @@ fn the_semantic_file_is_not_part_of_the_baseline_identity() {
     // `file` is metadata, not identity: a violation baselined while `file` was null still
     // matches once populated, so populating it never re-baselines or changes the count.
     assert_eq!(v.id(), v.clone().with_file(None).id());
+}
+
+#[test]
+fn cfg_duplicated_inline_modules_are_all_governed() {
+    // Two `#[cfg(..)] mod platform {..}` variants parse as separate inline modules (syn does not
+    // evaluate cfg). A signature-coupling boundary anchored on `crate::platform` must observe BOTH:
+    // resolving only the source-first variant let a forbidden exposure in the other pass unobserved
+    // (exit 0) — a mod-resolution divergence, the forbidden false-negative class. Matches the
+    // crate-wide scan's observe-all policy for same-named modules.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-dup-platform",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(unix)] pub mod platform { pub fn open() -> u8 { 0 } }\n\
+                 #[cfg(windows)] pub mod platform { pub fn open() -> crate::infra::Db { unimplemented!() } }\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("platform must not expose infra in any cfg variant");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the non-source-first cfg variant's exposure must react: {violations:?}"
+    );
 }
 
 #[test]

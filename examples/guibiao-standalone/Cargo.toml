@@ -3,7 +3,7 @@
 # This example is its own workspace (`[workspace]` below) so its *deliberate* boundary
 # violation (domain → infra) is never swept by Tianheng's workspace-wide gates. CI runs it in
 # isolation via `scripts/test_examples.sh`, which patches the family crates to local source so
-# the committed `guibiao = "0.1"` — the adopter's real form — still resolves against the
+# the committed `guibiao = "0.2"` — the adopter's real form — still resolves against the
 # in-development version. The footprint is deliberately one dependency, no `syn`: that light
 # footprint IS the 圭表 product pitch, demonstrated here rather than asserted.
 [package]
@@ -13,6 +13,6 @@ edition = "2021"
 publish = false
 
 [dependencies]
-guibiao = "0.1"
+guibiao = "0.2"
 
 [workspace]

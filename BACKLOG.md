@@ -20,14 +20,13 @@ complete, so the near-term line is **0.1.x, a patch line**:
 - **0.1.x (patch)** — additive depth on an existing observation source (a born-when-built
   capability that widens nothing already public), packaging / CI / license-bundling hygiene,
   and governance-doc corrections. Every *additive* forward item below lands here.
-- **0.2.0 (minor)** — earned only by a **breaking** public-API change. The one on the table
-  is the deliberate pre-1.0 refinement of `guibiao`'s widened public surface
-  (`baseline` / `coverage` / `projection` / `check_and_cover`, made `pub` as the price of the
-  crate split — see `PROJECT.md`, Decisions). Two further **breaking** candidates would ride the
-  *same* minor rather than each forcing its own: the `Violation::new` newtype (retiring the
-  4-positional-`String` footgun) and a **structured baseline** (findings as data, not strings — which
-  is what unblocks the deferred 渾儀 `PublicSeam` / `ExposureSubject` typing). Bundle them into one
-  honest 0.2.0, not three. **The `guibiao` item is now demand-gated, not automatic** (see the
+- **0.2.0 (minor, in preparation)** — earned by the breaking structured-violation identity now
+  built on `release/0.2.0`: `Violation::new` takes a typed `ViolationId`, version-2 baselines match
+  dimension-owned `FindingKey`s, and 渾儀 derives named semantic fields plus human text from one
+  typed fact (including typed public seams). The line also deliberately kept and shaped `guibiao`'s
+  widened public surface (`baseline` / `coverage` / `projection` / `check_and_cover`, made `pub` as
+  the price of the crate split — see `PROJECT.md`, Decisions). These are one honest breaking window,
+  not vanity minors. **The `guibiao` item was demand-gated, not automatic** (see the
   product-identity note below): whether its widened surface is *narrowed* (treated as internal) or
   *deliberately kept and shaped* (as the standalone static-linter product) is decided by whether
   guibiao draws standalone adopters — narrowing a face someone relies on would cut a product's
@@ -66,8 +65,6 @@ reversible narrative); irreversible / breaking / high-maintenance weight waits f
 - **Establish now (reversible):** the product identities above; family positioning in each crate's
   README / docs.rs; that most adopters want `tianheng`. Always co-stated with the honest tier
   (**experimental / pre-1.0**) — a claimed-but-unsupported product identity is worse than none.
-- **0.1.x, non-breaking (signal, don't cut):** `#[doc(hidden)]` + `#[deprecated]` on the split-cost
-  accidental public surface — pre-manage the 0.2.0 narrowing without breaking anyone.
 - **Defer to a reaction:** per-儀 standalone CLIs, docs / cookbooks, per-crate 1.0 / long-term
   stability promises, and the standalone 漏刻 product story (a legitimate category, but the
   least-proven — its standalone demand is the most speculative of the three).
@@ -224,7 +221,7 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
     action.
   - *Identity ⊥ metadata* — baseline a violation, **move the offending code to another file**
     (changing `Violation.file`), re-check: the baseline still matches and the violation stays
-    grandfathered, because `ViolationId = { target, rule, finding }` excludes `file`. Refactoring
+    grandfathered, because `ViolationId` excludes `file` from its structured identity. Refactoring
     file layout does not churn your baseline — the stability contract made tangible.
 
 **2 — Output: reaction-voice render polish, never fix-instruction.**
@@ -302,9 +299,10 @@ complement — show, then tell.
     `serde_json`-only, below every dimension, self-law-enforced). Actionable: elevate its JSON /
     `Baseline` schema to an **explicitly versioned, migration-disciplined** contract in docs — ties
     to the 0.2.0 structured-baseline item (findings as data).
-  - *Violation identity ⊥ metadata.* Already so and documented in rustdoc: `ViolationId = { target,
-    rule, finding }` is the baseline match key; `file` is explicitly *not* identity (set via
-    `with_file`, non-breaking, never affects matching); `BaselineEntry.owner/tracker` are
+  - *Violation identity ⊥ metadata.* **BUILT (0.2.0 line):** the baseline match key is
+    `ViolationId = { target, rule, finding, finding_key }` (v2 structured identity; a v1 baseline
+    matches on `{ target, rule, finding }` for migration); `file` is explicitly *not* identity (set
+    via `with_file`, non-breaking, never affects matching); `BaselineEntry.owner/tracker` are
     metadata-only; the baseline carries no `anchor` (it rides the live `Violation`). This is the
     injective-identity principle realized. Actionable: surface it in the **adopter-facing README** as
     a stability contract, not only in rustdoc.
@@ -312,32 +310,28 @@ complement — show, then tell.
   real but one-dimensional; the actual ladder is **two axes**: severity (`warn` first → `enforce`
   gate) *and* baseline (grandfather existing violations → enforce new). An existing codebase adopts
   via baseline, a greenfield one via warn-first — document both as the on-ramp.
-- **Prelude / stable-surface audit (0.2.0-adjacent).** `tianheng::prelude` reexports ~26 names — a
-  large surface the 0.2.0 guardrail has already promised **never to break** (the adopter builder).
-  Bigger prelude = bigger never-break liability. Audit: classify each name as *committed-stable
-  builder* (must-not-break) vs *convenience reexport* (demotable / `#[doc(hidden)]`), and document
-  the tiers — the same family as the split-cost accidental-surface signal (`#[doc(hidden)]` +
-  `#[deprecated]`) in the product-identity note. Not necessarily a trim (a batteries-included funnel
-  target wants a full prelude); the deliverable is a **scoped** never-break promise, not a smaller
-  prelude by default. The three examples' actual import set is empirical evidence for the audit — the
-  names they touch are the real committed-stable builder; the rest are convenience.
-- **`Rule` / `ModuleRule` variant shape is a downstream-matchable contract — model-surface narrowing
-  (0.2.0, within the already-named guibiao widened-surface item, not a new breaking line).** `pub use
-  model::*` (`guibiao/src/lib.rs`) re-exports `Rule` / `ModuleRule`; enum-level `#[non_exhaustive]`
-  protects *new variants* but **not a field added to an existing variant** (enum-variant fields are
-  always public → a downstream `E0063` construct / `E0027` exhaustive-match break). So a new modifier
-  on an existing rule variant is **breaking**, which is why the project's growth pattern keeps
-  spawning parallel variants. Surfaced by the `strict_external` adversarial review: to stay
-  patch-honest, `.strict_external()` ships (0.1.9) as a **new variant** rather than an `external:
-  bool` field on `ConfineInlineSymbolPath` — a deliberate patch-safe workaround, one more parallel
-  variant. 0.2.0 should let rule modifiers grow *without* variant proliferation — per-variant
-  `#[non_exhaustive]`, or a builder-only model (variant internals `#[doc(hidden)]`, no
-  downstream-match/construct contract), or an opaque modifier struct — after which the parallel
-  strict variant folds back into one variant + field. **0.1.x-safe pre-management** (the
-  `#[doc(hidden)]` + `#[deprecated]` accidental-surface signal above): the new variant's internals
-  **already ship `#[doc(hidden)]` (v0.1.9)**, pre-announcing the narrowing without breaking anyone.
-  Guardrail unchanged — the break is quarantined to the model surface; the adopter builder
-  (`must_not_call_inline` / `.strict_external()` / `Constitution` / `run`) stays stable.
+- **Prelude / stable-surface audit — BUILT (0.2.0 line).** The real composed adopter uses the
+  wildcard prelude for both declaration and `Outcome` inspection, so trimming it into a builder-only
+  menu would break the very reaction that opened the 0.2 window. The surface is now classified by
+  purpose, not by weaker stability: declaration/execution and reaction inspection carry the same
+  0.2.x promise. An external-view integration crate names every promised export and composes all
+  three instruments without dimension imports, making an accidental relocation a compile failure.
+  That probe found one genuine asymmetry: `ModuleBoundary::rule()` was public but its `ModuleRule`
+  type was absent from the recommended wildcard path, so the existing type is now re-exported beside
+  crate-side `Rule`. Hidden drafts and granular semantic checks remain outside the contract;
+  `check_semantic` is documented honestly as the focused signature-coupling check, never the full
+  semantic bundle.
+- **`Rule` / `ModuleRule` model-surface narrowing — BUILT (0.2.0 line).** The live reaction was
+  `.strict_external()` having to ship in 0.1.9 as a payload-identical hidden variant: enum-level
+  `#[non_exhaustive]` protects new variants but not fields added to an existing struct variant, so
+  the patch line could not grow a modifier without downstream E0063/E0027 breaks. Every
+  data-carrying rule variant is now itself `#[non_exhaustive]`: consumers construct through the
+  unchanged boundary DSL and can still inspect known fields with `..`. The missing read side was
+  closed deliberately with `ModuleBoundary::rule()`, symmetric with `CrateBoundary::rule()`, rather
+  than retaining a public-but-unobtainable `ModuleRule`. The strict twin folds back into one
+  `ConfineInlineSymbolPath { strict_external, … }`; reaction, projection, and violation identity stay
+  pinned by the existing tests. The break remains quarantined to direct variant construction and
+  closed-field matches; pacta's builder and modou's widened guibiao surface compile unchanged.
 - **`inline_symbol_findings` positional-arg growth — collapse into an `InlineScanRequest` param
   struct (internal, born-when-needed).** `.strict_external()` pushed the scanner entry to 8
   positional args (now under `#[allow(clippy::too_many_arguments)]`, having added `external` +
@@ -358,8 +352,8 @@ complement — show, then tell.
 
 ### 0.1.5 — known-depth consolidation · **SHIPPED**
 
-0.1.5 has converged from scope map to shipped state (0.1.6 and 0.1.7 have since shipped on top of
-it; 0.1.7 is the current line). Its built items are recorded once in the dimension / 三司 sections
+0.1.5 has converged from scope map to shipped state (0.1.6 through 0.1.10 have since shipped on top
+of it; 0.1.10 is the current line). Its built items are recorded once in the dimension / 三司 sections
 below; the remaining forward work stays there as forward depth. The 0.2.0 bundle above remains the
 only currently named breaking line.
 
@@ -448,7 +442,8 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   Y *may* depend on C, but C may be imported only under subtree S" — the FFI/platform-vocabulary
   confinement pattern. Declared as
   `ModuleBoundary::in_crate(p).module(S).confine_external_crate(C).because(…)`; the confined crate is
-  the violation `target` and the offending importer the `finding`, so `(target, rule, finding)` is
+  the violation `target` and the offending importer the structured fact, so
+  `(target, rule, finding_key)` is
   injective by structure. This is the **first 圭表 rule that observes external-crate imports** — it
   inverts, for this one rule only, the module scanner's long-standing "external imports are out of
   scope" stance; every other rule keeps ignoring them. This is **layer (a), import confinement**
@@ -523,8 +518,8 @@ set follow.
 
 Built depths past the shape-only dyn (same `syn` source):
 - **Operand-scoped dyn** (`must_not_expose_dyn_of([…])`) — **BUILT (v0.1.2).** Forbid only a
-  *named* trait's `dyn` rather than any: a `dyn` whose **principal trait** (first trait bound)
-  canonicalizes into the forbidden set reacts, resolved through the shared 渾儀 resolver (exact-
+  *named* trait's `dyn` rather than any: a `dyn` whose **principal trait** (its sole non-auto trait,
+  whatever its bound position) canonicalizes into the forbidden set reacts, resolved through the shared 渾儀 resolver (exact-
   or-module-prefix, re-export消歧) exactly as signature-coupling resolves a forbidden type. The
   next rung on the `name → shape → named-operand` stair. Empty operand set degenerates to
   shape-only (any `dyn`), never a no-op; auto-trait markers are never operands; an unresolvable
@@ -667,16 +662,18 @@ Forward depths (born when built, same `syn` source):
   over-reacts under a tight ceiling (a stated bound). Shipped as an OpenSpec change modifying
   `semantic-visibility-boundary`. Adopter-surfaced.
 
-**Internal structure (refinement, not capability) — v0.1.4:** 渾儀's internals were structured
+**Internal structure (refinement, not capability) — v0.1.4 → 0.2.0 line:** 渾儀's internals were structured
 where a live pain existed — the finding-string formats centralized into one `SemanticFinding`
 catalog, the ~8k-line `lib.rs` split into `lib` / `dsl` / `tests`, and the sibling-safe
 `::`-containment rule converged into one `path_within` (retiring a drift-prone hand-copied
-false-positive/false-negative rule). **Deferred — `PublicSeam` / `ExposureSubject`:** typing the seam
-and subject is prep for a **structured baseline** (findings as data, not strings), not a live-risk fix
-(collision is tested-closed by seam-qualification + the injectivity tests); it is breaking (0.2.0) and
-raises a seam-type layering question (the seam is stored/stamped in the lower `resolve.rs`, but the
-finding vocabulary lives in `lib.rs`). Born when the structured baseline is greenlit — see
-`PROJECT.md`, "Structure semantic observation facts".
+false-positive/false-negative rule). **Built on the 0.2.0 line — structured semantic facts:** the
+structured baseline supplied the previously absent forcing function. A private `PublicSeam` now
+carries item/owner/module/member/trait-impl-position data through the lower resolver and collectors;
+the one `SemanticFact` catalog derives fact-specific named key fields and byte-identical text. The
+canonical path/shape remains the observed `subject` value rather than growing a speculative subject
+AST. This closes the live gap where 渾儀's nominally structured key was still one rendered
+`descriptor`, so presentation polish would re-identify a baseline entry. See `PROJECT.md`,
+"Structure semantic observation facts".
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),
@@ -834,10 +831,14 @@ survives across sessions.
   re-hand-rolled per repo; (b) the adopter-facing **潛移 generator** (see the 潛移 section); (c) an
   adopter-facing **`tianheng::testing` boundary-test harness** (`assert_violates!` / `assert_clean!`
   over a fixture) — every adopter currently re-hand-rolls a temp-workspace + `check`/`check_all`
-  assertion (the same rebuild pain as (a)). **Docs-first shipped (v0.1.9):** the COOKBOOK "Test that a
-  boundary reacts" recipe over the public entry points; the *API* is deferred until the assert shape
-  settles under a real second consumer — shell-hosted, std-only, feature-gated, additive/patch when it
-  lands (the Spike-A verdict). Note: the entry points read a manifest on disk, so an inline-fixture
+  assertion (the same rebuild pain as (a)). **Built prerequisite (0.2.0 line):**
+  `check_constitution(&Constitution, &Path) -> Outcome` exposes the runner's one shared
+  static→semantic→runtime evaluation path without CLI presentation; the composed example no longer
+  splits its law back into per-dimension checks merely to inspect findings. **Docs-first shipped
+  (v0.1.9):** the COOKBOOK "Test that a boundary reacts" recipe over the public entry points; the
+  higher-level assertion/fixture *API* remains deferred until its shape settles under a real second
+  consumer — shell-hosted, std-only, feature-gated, additive/patch when it lands (the Spike-A
+  verdict). Note: the entry points read a manifest on disk, so an inline-fixture
   ergonomics would still materialize a temp crate. Stated
   bound: a `because`-text `contains` predicate is weaker than a structural fact (a reworded clause
   slips it). Adopter-surfaced by worklane.
@@ -883,10 +884,10 @@ adoption funnel's weak seam is the *top* — whether it even occurs to an agent 
 and the first-boundary decision — not the API (the on-ramp is already one line,
 `forbid_all_workspace_dependencies()`). Two levers, different weight:
 
-- **Cheap, patch-now: sharpen the README on-ramp.** Make the *first* boundary a one-line imitable
-  Phase-0 pattern (lock one seam, Enforce, pipe `--format sarif` into CI) that an agent scanning the
-  crate copies by reflex — 潛移 at the doc level, near-zero cost. Likely the highest adoption leverage
-  per unit effort; can ride 0.1.5 on its own.
+- **Cheap, patch-now: sharpen the README on-ramp. · SHIPPED (v0.1.8)** Make the *first* boundary a
+  one-line imitable Phase-0 pattern (lock one seam, Enforce, pipe `--format sarif` into CI) that an
+  agent scanning the crate copies by reflex — 潛移 at the doc level, near-zero cost. Likely the
+  highest adoption leverage per unit effort.
 - **The full deliverable: a projectable two-track adoption guide** (produced by the 潛移 generator,
   worklane pilot). **Brownfield** (invariants already earned, prose exists → encode a mechanical
   subset, prose → code, straight to Enforce) vs. **greenfield** (assumptions, no prose →

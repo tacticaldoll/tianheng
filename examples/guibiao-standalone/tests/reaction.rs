@@ -28,7 +28,7 @@ fn the_import_violation_reacts_with_exit_1() {
 /// 圭表 also governs the *feature* surface of a declared dependency, not just its name. This
 /// dogfoods `forbid_feature` end-to-end through the published `check` surface, on the crate's real
 /// declared edge: the adopter's law pins `guibiao` to `default-features = false` (keep the footprint
-/// minimal), but `Cargo.toml` declares `guibiao = "0.1"` with defaults on, so the declared `default`
+/// minimal), but `Cargo.toml` declares `guibiao = "0.2"` with defaults on, so the declared `default`
 /// feature trips the enforce boundary. Kept as its own constitution so the example's core teaching
 /// (the one module boundary above) stays a single, clean message.
 #[test]
@@ -99,8 +99,8 @@ fn a_violation_absent_from_the_baseline_still_reacts() {
     );
 }
 
-/// Identity ⊥ metadata. `ViolationId = (target, rule, finding)` excludes `file`, so relocating
-/// the offending code to another file keeps the baseline matching — refactoring does not churn it.
+/// Identity ⊥ presentation/metadata. Version-2 `ViolationId = (target, rule, finding_key)` excludes
+/// human finding text and `file`, so relocating the code keeps the baseline matching.
 #[test]
 fn moving_the_file_does_not_churn_the_baseline() {
     let report = report_of(check(&constitution(), &manifest()));

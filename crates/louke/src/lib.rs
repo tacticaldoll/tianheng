@@ -38,7 +38,11 @@ use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::OnceLock;
 
-pub use xuanji::{BoundaryKind, Outcome, Polarity, Report, Severity, Violation};
+pub use xuanji::{
+    BoundaryKind, Finding, FindingKey, Outcome, Polarity, Report, Severity, Violation, ViolationId,
+};
+
+mod finding;
 
 // CI face (the non-default `audit` feature): the probe-coverage audit + source scanner, in its
 // own module so a prod dependency on louke compiles none of it. The prod face (the declaration
@@ -385,26 +389,27 @@ fn check_crossing(
     })?;
 
     let info = registry.origins.get(&type_id);
-    let origin = info.map(|i| i.origin);
-    let allowed = match origin {
-        Some(o) => s.allowed.contains(&o),
-        // Fail-closed: a type that never registered an origin is not in the allowlist.
-        None => false,
-    };
+    // Fail-closed: a type that never registered an origin is not in the allowlist.
+    let allowed = info.is_some_and(|i| s.allowed.contains(&i.origin));
     if allowed {
         return Ok(None);
     }
 
     let finding = match info {
-        Some(i) => format!("{} ({})", i.origin, i.type_name),
+        Some(i) => finding::RuntimeFact::RegisteredCrossing {
+            origin: i.origin.to_string(),
+            type_name: i.type_name.to_string(),
+        },
         // An unregistered type recorded neither an origin nor a name, so the only per-type datum a
         // crossing carries is its `TypeId` (from `Any`; a concrete type NAME is unrecoverable from a
         // `&dyn Any` on stable Rust). Append it so two DISTINCT unregistered types crossing the same
-        // seam produce distinct `(target, rule, finding)` identities — otherwise baselining one
+        // seam produce distinct structured identities — otherwise baselining one
         // silently masks the other (a false negative). The `<unregistered origin>` prefix is kept so
         // the substring the prod contract/tests depend on still holds; the TypeId is stable within a
         // build (a hash of the type's identity).
-        None => format!("<unregistered origin> {type_id:?}"),
+        None => finding::RuntimeFact::UnregisteredCrossing {
+            type_id: format!("{type_id:?}"),
+        },
     };
     // The rule family is the canonical `RUNTIME_SEAM_RULE` label; the allowed-origin set is the
     // per-boundary detail appended here, so the prod reaction and the `list` projection share one
@@ -413,9 +418,7 @@ fn check_crossing(
     Ok(Some((
         Violation::new(
             BoundaryKind::Runtime,
-            seam.to_string(),
-            rule,
-            finding,
+            ViolationId::new(seam, rule, finding.into_finding()),
             s.reason.clone(),
             s.severity,
         )

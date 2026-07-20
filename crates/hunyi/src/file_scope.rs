@@ -21,8 +21,8 @@ use xingbiao::{crate_root_file, find_package};
 /// visibility). The three whole-crate-scan capabilities (trait-impl-locality, forbidden-marker,
 /// unsafe-confinement) do NOT use this — their violations sit at per-site files across the crate,
 /// a stated `null` bound narrowed to them.
-pub(crate) fn seam_file(
-    findings: &[String],
+pub(crate) fn seam_file<T>(
+    findings: &[T],
     src_dir: &Path,
     root_file: &Path,
     module: &str,

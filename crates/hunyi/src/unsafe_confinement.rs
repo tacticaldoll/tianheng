@@ -14,6 +14,7 @@ use crate::dsl::UnsafeBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{unsafe_crate_root_allowed_error, unsafe_empty_allowed_error};
 use crate::file_scope::resolve_crate;
+use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::canonical_path_str;
 use crate::rules::UNSAFE_CONFINEMENT_RULE;
 use crate::scan::scan_unsafe_sites;
@@ -76,7 +77,7 @@ pub(crate) fn unsafe_findings(
     root_file: &Path,
     allowed: &[String],
     crate_package: &str,
-) -> Result<Vec<(String, String)>, String> {
+) -> Result<Vec<(SemanticFact, String)>, String> {
     // Confinement-only, enforced loud (exit 2): the crate-wide "no unsafe" case is #![forbid]'s,
     // and an allowed set naming the crate root could never react. Guarded here (the pure heart) so
     // the rejection is testable without spawning `cargo`.
@@ -87,12 +88,20 @@ pub(crate) fn unsafe_findings(
         return Err(unsafe_crate_root_allowed_error(crate_package));
     }
     let sites = scan_unsafe_sites(src_dir, root_file, crate_package)?;
-    let mut findings: Vec<(String, String)> = sites
+    let mut findings: Vec<(SemanticFact, String)> = sites
         .into_iter()
         .filter(|site| !matches_allowed(&site.module, allowed))
-        .map(|site| (format!("{} in {}", site.label, site.module), site.module))
+        .map(|site| {
+            let module = site.module;
+            (
+                SemanticFact::UnsafeSite {
+                    label: site.label,
+                    module: module.clone(),
+                },
+                module,
+            )
+        })
         .collect();
-    findings.sort();
-    findings.dedup_by(|a, b| a.0 == b.0);
+    sort_attributed_facts(&mut findings);
     Ok(findings)
 }

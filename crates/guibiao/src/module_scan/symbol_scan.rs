@@ -10,10 +10,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::finding::ModuleFact;
+
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    canonical_module_path, canonical_segment, effective_module, inline_mod_at,
-    is_crate_root_shadow, path_within, resolve_self_super,
+    brace_content, canonical_module_path, canonical_segment, effective_module, inline_mod_at,
+    is_crate_root_shadow, path_within, resolve_self_super, split_top_commas,
 };
 
 /// The crate-wide resolution context, built once from every reachable file: the local definition
@@ -32,12 +34,12 @@ struct ResolveCtx {
 
 /// One inline offence: the `finding` string (per the identity requirement) and the source file.
 pub(crate) struct InlineFinding {
-    pub finding: String,
+    pub fact: ModuleFact,
     pub file: String,
 }
 
-/// Scan the crate for inline-symbol-path offences against a `ConfineInlineSymbolPath` or
-/// `ConfineInlineSymbolPathExternal` boundary (both route here via `inline_payload`).
+/// Scan the crate for inline-symbol-path offences against a `ConfineInlineSymbolPath` boundary;
+/// its default and strict-external forms both route here via `inline_payload`.
 /// `all_files` is every reachable `(file, module)` pair (crate-wide, for the def closure);
 /// `governed` is the subset whose module is within the governed subtree (where calls are
 /// forbidden). `prefix` is the confined module-path prefix; `ending_with` narrows to read verbs;
@@ -140,7 +142,10 @@ pub(crate) fn inline_symbol_findings(
             ) {
                 if glob_reaches_prefix(&resolved, &prefix, &ctx, &mut HashSet::new()) {
                     findings.push(InlineFinding {
-                        finding: format!("glob {} in {module}", glob_path),
+                        fact: ModuleFact::InlineGlob {
+                            path: glob_path,
+                            module: module.clone(),
+                        },
                         file: file.display().to_string(),
                     });
                 }
@@ -181,7 +186,10 @@ pub(crate) fn inline_symbol_findings(
             };
             if react {
                 findings.push(InlineFinding {
-                    finding: format!("{resolved} in {module}"),
+                    fact: ModuleFact::InlinePath {
+                        path: resolved,
+                        module: module.clone(),
+                    },
                     file: file.display().to_string(),
                 });
             }
@@ -190,8 +198,8 @@ pub(crate) fn inline_symbol_findings(
 
     // One violation per distinct finding (per-(canonical path / glob, module)); keep the first
     // file after a deterministic sort, so a subtree spanning several files does not double-count.
-    findings.sort_by(|a, b| a.finding.cmp(&b.finding).then(a.file.cmp(&b.file)));
-    findings.dedup_by(|a, b| a.finding == b.finding);
+    findings.sort_by(|a, b| a.fact.cmp(&b.fact).then(a.file.cmp(&b.file)));
+    findings.dedup_by(|a, b| a.fact == b.fact);
     Ok(findings)
 }
 
@@ -397,7 +405,7 @@ fn glob_import_paths(source: &str) -> Vec<String> {
 /// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
 /// `use std::{time::*, io::Write}` yields `std::time`, not just a top-level `use std::time::*`).
 /// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
-/// through [`brace_inner`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
+/// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
 /// `}`-before-`{` cannot panic.
 fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
     if depth > 64 {
@@ -407,7 +415,7 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
     match tree.find('{') {
         Some(open) => {
             let prefix = tree[..open].trim();
-            for part in split_top_commas(&brace_inner(&tree[open..])) {
+            for part in split_top_commas(&brace_content(&tree[open..])) {
                 let part = part.trim();
                 if part.is_empty() {
                     continue;
@@ -494,10 +502,19 @@ fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
         match tree.find('{') {
             Some(open) => {
                 let prefix = tree[..open].trim();
-                let inner = brace_inner(&tree[open..]);
+                let inner = brace_content(&tree[open..]);
                 for part in split_top_commas(&inner) {
                     let part = part.trim();
-                    if part.is_empty() || part == "*" || part.starts_with("self") {
+                    // `self` / `self as x` names the prefix module, not a child leaf, and introduces
+                    // no simple call head, so it is skipped. Strip a trailing ` as <alias>` and test
+                    // the head EXACTLY: a bare `starts_with("self")` also drops a legal import like
+                    // `self_utc` (a false negative — a confined inline call through the alias would
+                    // then pass unresolved). Mirrors `use_scan::expand_use_tree_depth`.
+                    let head = match part.find(" as ") {
+                        Some(idx) => part[..idx].trim(),
+                        None => part,
+                    };
+                    if part.is_empty() || part == "*" || head == "self" {
                         continue;
                     }
                     go(&format!("{prefix}{part}"), out, depth + 1);
@@ -792,56 +809,6 @@ fn pub_use_statements(source: &str) -> Vec<String> {
         i += 1;
     }
     trees
-}
-
-/// Content inside the first `{ … }` of `s` (which starts at `{`), honoring nesting.
-fn brace_inner(s: &str) -> String {
-    let mut depth = 0;
-    let mut out = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                if depth == 1 {
-                    continue;
-                }
-            }
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    break;
-                }
-            }
-            _ => {}
-        }
-        out.push(ch);
-    }
-    out
-}
-
-/// Split on commas at brace depth 0.
-fn split_top_commas(s: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut depth = 0i32;
-    let mut current = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                current.push(ch);
-            }
-            '}' => {
-                depth -= 1;
-                current.push(ch);
-            }
-            ',' if depth == 0 => parts.push(std::mem::take(&mut current)),
-            _ => current.push(ch),
-        }
-    }
-    if !current.trim().is_empty() {
-        parts.push(current);
-    }
-    parts
 }
 
 /// The extra crate vocabulary [`resolve_head`] consults ONLY under `.strict_external()`: the

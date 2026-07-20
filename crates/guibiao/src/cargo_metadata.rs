@@ -104,8 +104,8 @@ pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String>
 /// The **import identifiers** a crate's declared dependencies are written under in source: each
 /// dependency's `rename` when present (a Cargo `pkg = { package = "…" }` / `dep = { package = "…" }`
 /// rename), else its package `name`, normalized `-`→`_` to the Rust path spelling (`async-trait` →
-/// `async_trait`). This is the vocabulary the strict-external inline confinement
-/// (`ModuleRule::ConfineInlineSymbolPathExternal`) matches a fully-qualified path head against.
+/// `async_trait`). This is the vocabulary the inline confinement's `strict_external` modifier
+/// matches a fully-qualified path head against.
 ///
 /// 圭表-own (三儀 ⊥ 三儀 — see the module preamble): a small parallel of
 /// `hunyi::crate_scope::dependency_names`, **not** a dependency on 渾儀, reading only the

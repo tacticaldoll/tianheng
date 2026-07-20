@@ -3,12 +3,24 @@
 //! `check` against fixture workspaces) lives in `tests/dogfood.rs`.
 use super::*;
 
+fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
+    let finding = match finding.split_once('/') {
+        Some((package, feature)) => crate::finding::CrateFact::feature(
+            package.to_string(),
+            feature.to_string(),
+            DependencyKind::Normal,
+        )
+        .into_finding(),
+        None => crate::finding::CrateFact::dependency(finding.to_string(), DependencyKind::Normal)
+            .into_finding(),
+    };
+    ViolationId::new(target, rule, finding)
+}
+
 fn one_enforce_violation() -> Report {
     Report::new(vec![Violation::new(
         BoundaryKind::Crate,
-        "core".to_string(),
-        "deny external dependencies".to_string(),
-        "serde".to_string(),
+        test_id("core", "deny external dependencies", "serde"),
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     )])
@@ -1436,7 +1448,7 @@ fn baseline_round_trips_through_json() {
 #[test]
 fn from_json_rejects_malformed_and_unknown_version() {
     assert!(Baseline::from_json("not json").is_err());
-    assert!(Baseline::from_json(r#"{"version":2,"violations":[]}"#).is_err());
+    assert!(Baseline::from_json(r#"{"version":3,"violations":[]}"#).is_err());
     assert!(
         Baseline::from_json(r#"{"violations":[]}"#).is_err(),
         "a missing version must be an error, not a silent empty baseline"
@@ -1492,6 +1504,9 @@ fn report_json_projects_a_violation_with_its_kind() {
     let violation = &doc["violations"][0];
     assert_eq!(violation["kind"], "crate");
     assert_eq!(violation["finding"], "serde");
+    assert_eq!(violation["finding_key"]["namespace"], "guibiao");
+    assert_eq!(violation["finding_key"]["code"], "dependency");
+    assert_eq!(violation["finding_key"]["fields"]["package"], "serde");
     assert_eq!(violation["severity"], "enforce");
     assert_eq!(violation["baselined"], false);
     // `reason` is the repair hint; there is no separate field.
@@ -1525,16 +1540,29 @@ fn report_json_reflects_baseline_and_stale_in_gate() {
     let baseline = Baseline::of(&report);
     apply_baseline(&mut report, &baseline);
     // A baseline entry that no current violation matches is stale.
-    let stale = vec![ViolationId {
-        target: "core".to_string(),
-        rule: "deny external dependencies".to_string(),
-        finding: "gone".to_string(),
-    }];
+    let stale = vec![test_id("core", "deny external dependencies", "gone")];
     let doc: serde_json::Value =
         serde_json::from_str(&report_json(&Outcome::Violations(report), &stale, None)).unwrap();
     assert_eq!(doc["exit_code"], 0, "a fully baselined run does not fail");
     assert_eq!(doc["violations"][0]["baselined"], true);
     assert_eq!(doc["stale_baseline"][0]["finding"], "gone");
+    assert!(doc["stale_baseline"][0]["finding_key"].is_object());
+
+    let legacy = Baseline::from_json(
+        r#"{"version":1,"violations":[{
+            "target":"core","rule":"deny external dependencies","finding":"legacy-gone"
+        }]}"#,
+    )
+    .unwrap();
+    let legacy_stale: Vec<ViolationId> = legacy
+        .stale(&Report::empty())
+        .into_iter()
+        .cloned()
+        .collect();
+    let legacy_doc: serde_json::Value =
+        serde_json::from_str(&report_json(&Outcome::Clean, &legacy_stale, None)).unwrap();
+    assert_eq!(legacy_doc["stale_baseline"][0]["finding"], "legacy-gone");
+    assert_eq!(legacy_doc["stale_baseline"][0]["finding_key"], Value::Null);
 }
 
 #[test]
@@ -2683,9 +2711,7 @@ fn two_forbidden_features_of_the_same_crate_stay_distinct() {
     let mut report = Report::new(v);
     let baseline = Baseline::of(&Report::new(vec![Violation::new(
         BoundaryKind::Crate,
-        "target".to_string(),
-        "forbid features of".to_string(),
-        "C/unstable".to_string(),
+        test_id("target", "forbid features of", "C/unstable"),
         "no unstable/nightly features of C".to_string(),
         Severity::Enforce,
     )]));
@@ -2786,9 +2812,7 @@ fn the_two_feature_rule_labels_are_distinct_and_keep_identity_injective() {
     let mut report = Report::new(v);
     let baseline = Baseline::of(&Report::new(vec![Violation::new(
         BoundaryKind::Crate,
-        "target".to_string(),
-        "restrict features of".to_string(),
-        "C/unstable".to_string(),
+        test_id("target", "restrict features of", "C/unstable"),
         "C's feature surface is closed".to_string(),
         Severity::Enforce,
     )]));
@@ -3947,6 +3971,34 @@ fn inline_resolves_a_rename() {
     );
     assert!(
         violations[0].finding.contains("std::time::SystemTime::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
+fn inline_resolves_a_self_prefixed_group_alias() {
+    // A use-group member whose name merely *starts with* the substring "self" (`self_utc`) is a
+    // legal import, not the `self` leaf. An over-broad `starts_with("self")` dropped it, so the
+    // alias was unresolved and a confined inline call through it silently passed — a false negative.
+    let (result, violations) = run_module_check(
+        "inline-self-prefixed-group",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "use std::time::{self_utc as clk, Duration};\nfn f() { let _ = clk::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a self-prefixed group alias resolves and reacts: {violations:?}"
+    );
+    assert!(
+        violations[0].finding.contains("std::time::self_utc::now"),
         "{violations:?}"
     );
 }

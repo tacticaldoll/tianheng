@@ -221,7 +221,7 @@ A module boundary SHALL support an inbound rule: `ModuleBoundary::in_crate(p).mo
 
 ### Requirement: A boundary reports each violation once
 
-A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule, finding)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or a module backed by both `lib.rs` and `main.rs` (which both resolve to `crate`) — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
+A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule, finding_key)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or a module backed by both `lib.rs` and `main.rs` (which both resolve to `crate`) — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
 
 #### Scenario: A finding produced by two files in the governed subtree is reported once
 

@@ -22,6 +22,9 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+
 use serde_json::Value;
 
 /// Serialize an owned [`Value`] to pretty JSON. Infallible by construction, not by
@@ -125,6 +128,148 @@ impl Polarity {
     }
 }
 
+/// A dimension-agnostic identity for one observed fact.
+///
+/// The observation dimension owns the meaning of the namespace, code, and fields; 璇璣 only keeps
+/// their validated, comparable envelope. Fields are sorted by name so equality, ordering, baseline
+/// output, and JSON projection all share one canonical representation.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FindingKey {
+    namespace: String,
+    code: String,
+    fields: BTreeMap<String, String>,
+}
+
+impl FindingKey {
+    /// Build a structured finding key.
+    ///
+    /// Names must be non-empty and field names must be unique. Values may be empty when emptiness is
+    /// itself an observed value. Duplicate fields are rejected rather than silently overwritten.
+    pub fn new<I, K, V>(
+        namespace: impl Into<String>,
+        code: impl Into<String>,
+        fields: I,
+    ) -> Result<Self, String>
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        let namespace = namespace.into();
+        if namespace.is_empty() {
+            return Err("finding key namespace must not be empty".to_string());
+        }
+        let code = code.into();
+        if code.is_empty() {
+            return Err("finding key code must not be empty".to_string());
+        }
+        let mut canonical = BTreeMap::new();
+        for (name, value) in fields {
+            let name = name.into();
+            if name.is_empty() {
+                return Err("finding key field name must not be empty".to_string());
+            }
+            if canonical.insert(name.clone(), value.into()).is_some() {
+                return Err(format!("finding key field `{name}` is duplicated"));
+            }
+        }
+        Ok(Self {
+            namespace,
+            code,
+            fields: canonical,
+        })
+    }
+
+    /// Build a key from a dimension's statically-known fact schema, where non-empty, unique field
+    /// names are guaranteed by construction. Infallible convenience over [`FindingKey::new`]: it
+    /// unwraps with the single proof annotation the dimensions share, so a schema that is malformed
+    /// (an empty namespace/code, or duplicate/empty field names) is a construction bug that panics
+    /// loudly rather than each dimension repeating the same `expect`. A dimension building a key from
+    /// live, fallibly-named observation uses [`FindingKey::new`] and handles the error instead.
+    pub fn of<I, K, V>(namespace: impl Into<String>, code: impl Into<String>, fields: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        Self::new(namespace, code, fields)
+            .expect("fact schemas use non-empty, unique static field names")
+    }
+
+    /// The observation dimension that owns the fact schema.
+    pub fn namespace(&self) -> &str {
+        &self.namespace
+    }
+
+    /// The dimension-owned fact code.
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+
+    /// Canonically name-ordered identity fields.
+    pub fn fields(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.fields
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+    }
+
+    /// Project the key into its canonical JSON object (`namespace`, `code`, and named `fields`).
+    pub fn to_json(&self) -> Value {
+        serde_json::json!({
+            "namespace": self.namespace,
+            "code": self.code,
+            "fields": self.fields,
+        })
+    }
+
+    fn from_json(value: &Value) -> Result<Self, String> {
+        let string = |name: &str| {
+            value[name]
+                .as_str()
+                .ok_or_else(|| format!("finding key is missing string `{name}`"))
+        };
+        let fields = value["fields"]
+            .as_object()
+            .ok_or_else(|| "finding key `fields` must be an object".to_string())?
+            .iter()
+            .map(|(name, value)| {
+                value
+                    .as_str()
+                    .map(|value| (name.as_str(), value))
+                    .ok_or_else(|| format!("finding key field `{name}` must be a string"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Self::new(string("namespace")?, string("code")?, fields)
+    }
+}
+
+/// One observed fact's stable identity and human-readable presentation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Finding {
+    text: String,
+    key: FindingKey,
+}
+
+impl Finding {
+    /// Pair human finding text with the dimension-owned stable key for the same observed fact.
+    pub fn new(text: impl Into<String>, key: FindingKey) -> Self {
+        Self {
+            text: text.into(),
+            key,
+        }
+    }
+
+    /// The human-readable finding text.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// The stable structured identity.
+    pub fn key(&self) -> &FindingKey {
+        &self.key
+    }
+}
+
 /// One violated boundary. `severity` is the producing boundary's severity, so the
 /// exit-code decision and the report can treat enforce and warn findings apart.
 /// `baselined` is set when baseline gating records the violation in a baseline; a
@@ -140,6 +285,9 @@ pub struct Violation {
     pub rule: String,
     /// The offending finding (e.g. the dependency name, or the imported module path).
     pub finding: String,
+    /// The finding's structured identity. A live observation always has one; only a parsed
+    /// version-1 baseline entry may carry a legacy [`ViolationId`] without one.
+    finding_key: FindingKey,
     /// The boundary's reason — the repair hint.
     pub reason: String,
     /// The producing boundary's severity.
@@ -150,14 +298,14 @@ pub struct Violation {
     /// faithful byproduct of the scan (e.g. the file a forbidden import sits in). `None` when
     /// the violation has no single source file (a dependency edge, a seam name) or the
     /// dimension does not yet observe a per-element file. Set via [`Violation::with_file`], not
-    /// the constructor, so adding it leaves [`Violation::new`] non-breaking; it is **not** part
+    /// the constructor; it is **not** part
     /// of the baseline identity ([`Violation::id`]), so it never affects baseline matching.
     pub file: Option<String>,
     /// The producing boundary's durable governance anchor — a stable pointer (e.g. `"ADR-014"`)
     /// into the project's governance, distinct from the free-text `reason` sentence, which accretes
     /// ephemeral refs (PR numbers, handles, "recently") that rot faster than the invariant they
     /// justify. `None` when the boundary declared none. Set via [`Violation::with_anchor`], not the
-    /// constructor, so adding it leaves [`Violation::new`] non-breaking; like `file`, it is metadata,
+    /// constructor; like `file`, it is metadata,
     /// **not** part of the baseline identity ([`Violation::id`]), so it never affects baseline
     /// matching, and it is never a reaction input — a pure durable pointer.
     pub anchor: Option<String>,
@@ -175,20 +323,23 @@ impl Violation {
     /// Build a violation an engine has just observed: `baselined` starts `false` and is
     /// set later by [`apply_baseline`]. The constructor a dimension crate needs because
     /// `Violation` is `#[non_exhaustive]` and cannot be struct-literal-built across the
-    /// crate boundary.
-    pub fn new(
-        kind: BoundaryKind,
-        target: String,
-        rule: String,
-        finding: String,
-        reason: String,
-        severity: Severity,
-    ) -> Self {
+    /// crate boundary. A legacy id read from a version-1 baseline is not an observation and is
+    /// rejected loudly if reused here.
+    pub fn new(kind: BoundaryKind, id: ViolationId, reason: String, severity: Severity) -> Self {
+        let ViolationId {
+            target,
+            rule,
+            finding,
+            finding_key,
+        } = id;
         Violation {
             kind,
             target,
             rule,
             finding,
+            finding_key: finding_key.expect(
+                "a live violation requires a structured finding; a version-1 baseline id is legacy data, not an observed fact",
+            ),
             reason,
             severity,
             baselined: false,
@@ -198,10 +349,15 @@ impl Violation {
         }
     }
 
+    /// The stable key for this observed finding.
+    pub fn finding_key(&self) -> &FindingKey {
+        &self.finding_key
+    }
+
     /// Attach the offending source file, consuming and returning `self` so a dimension can
     /// fold it into construction: `Violation::new(…).with_file(Some(path))`. Kept off
-    /// [`Violation::new`] on purpose — the constructor's signature stays stable (non-breaking)
-    /// and dimensions that observe no file simply never call this. The file is metadata, never
+    /// [`Violation::new`] on purpose; dimensions that observe no file simply never call this. The
+    /// file is metadata, never
     /// part of the baseline identity ([`Violation::id`]).
     pub fn with_file(mut self, file: Option<String>) -> Self {
         self.file = file;
@@ -210,8 +366,8 @@ impl Violation {
 
     /// Attach the producing boundary's durable governance anchor, consuming and returning `self`
     /// so a dimension can fold it into construction: `Violation::new(…).with_anchor(boundary…)`.
-    /// Kept off [`Violation::new`] on purpose — the constructor's signature stays stable
-    /// (non-breaking), and a boundary that declared no anchor simply never calls this (or passes
+    /// Kept off [`Violation::new`] on purpose; a boundary that declared no anchor simply never
+    /// calls this (or passes
     /// `None`). The anchor is metadata, never part of the baseline identity ([`Violation::id`]).
     pub fn with_anchor(mut self, anchor: Option<String>) -> Self {
         self.anchor = anchor;
@@ -228,12 +384,13 @@ impl Violation {
         self
     }
 
-    /// The `(target, rule, finding)` identity used to match against a baseline.
+    /// The structured identity used to match against a version-2 baseline.
     pub fn id(&self) -> ViolationId {
         ViolationId {
             target: self.target.clone(),
             rule: self.rule.clone(),
             finding: self.finding.clone(),
+            finding_key: Some(self.finding_key.clone()),
         }
     }
 
@@ -246,6 +403,7 @@ impl Violation {
             "target": self.target,
             "rule": self.rule,
             "finding": self.finding,
+            "finding_key": self.finding_key.to_json(),
             "reason": self.reason,
             "severity": self.severity.as_str(),
             "baselined": self.baselined,
@@ -281,9 +439,13 @@ impl Report {
     }
 }
 
-/// A violation's identity for baseline matching: `(target, rule, finding)`. Reason
-/// and severity are excluded so editing them does not turn a known violation new.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// A violation's baseline identity and human finding text.
+///
+/// Newly observed ids compare by `(target, rule, finding_key)` and ignore presentation. Legacy ids
+/// parsed from a version-1 baseline compare by their old text triple. The two provenance classes
+/// never compare equal; cross-version compatibility is an explicit baseline operation.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ViolationId {
     /// The governed target (crate name or module path).
     pub target: String,
@@ -291,6 +453,68 @@ pub struct ViolationId {
     pub rule: String,
     /// The offending finding.
     pub finding: String,
+    finding_key: Option<FindingKey>,
+}
+
+impl ViolationId {
+    /// Build a newly observed identity from a dimension-owned typed finding.
+    pub fn new(target: impl Into<String>, rule: impl Into<String>, finding: Finding) -> Self {
+        Self {
+            target: target.into(),
+            rule: rule.into(),
+            finding: finding.text,
+            finding_key: Some(finding.key),
+        }
+    }
+
+    fn legacy(target: String, rule: String, finding: String) -> Self {
+        Self {
+            target,
+            rule,
+            finding,
+            finding_key: None,
+        }
+    }
+
+    /// The stable finding key, or `None` for an id parsed from a version-1 baseline.
+    pub fn finding_key(&self) -> Option<&FindingKey> {
+        self.finding_key.as_ref()
+    }
+
+    fn identity_cmp(&self, other: &Self) -> Ordering {
+        match (&self.finding_key, &other.finding_key) {
+            (Some(left), Some(right)) => {
+                (&self.target, &self.rule, left).cmp(&(&other.target, &other.rule, right))
+            }
+            (None, None) => (&self.target, &self.rule, &self.finding).cmp(&(
+                &other.target,
+                &other.rule,
+                &other.finding,
+            )),
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+        }
+    }
+}
+
+impl PartialEq for ViolationId {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity_cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for ViolationId {}
+
+impl PartialOrd for ViolationId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ViolationId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.identity_cmp(other)
+    }
 }
 
 /// One recorded baseline entry: an accepted violation's identity plus optional
@@ -318,11 +542,19 @@ fn sort_dedup_by_id(entries: &mut Vec<BaselineEntry>) {
     entries.dedup_by(|a, b| a.id == b.id);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum BaselineFormat {
+    V1,
+    #[default]
+    V2,
+}
+
 /// A recorded set of accepted violations — a generated observation snapshot, not
 /// policy. The gate fails only on violations absent from it.
 #[derive(Debug, Default)]
 pub struct Baseline {
     entries: Vec<BaselineEntry>,
+    format: BaselineFormat,
 }
 
 impl Baseline {
@@ -345,7 +577,10 @@ impl Baseline {
             .iter()
             .map(|violation| {
                 let id = violation.id();
-                let prior = previous.entries.iter().find(|entry| entry.id == id);
+                let prior = previous
+                    .entries
+                    .iter()
+                    .find(|entry| baseline_id_matches(&entry.id, &id));
                 BaselineEntry {
                     owner: prior.and_then(|entry| entry.owner.clone()),
                     tracker: prior.and_then(|entry| entry.tracker.clone()),
@@ -354,7 +589,10 @@ impl Baseline {
             })
             .collect();
         sort_dedup_by_id(&mut entries);
-        Baseline { entries }
+        Baseline {
+            entries,
+            format: BaselineFormat::V2,
+        }
     }
 
     /// The recorded entries, for reading their identity and metadata.
@@ -365,7 +603,9 @@ impl Baseline {
     /// Whether this baseline records the given violation's identity.
     pub fn contains(&self, violation: &Violation) -> bool {
         let id = violation.id();
-        self.entries.iter().any(|entry| entry.id == id)
+        self.entries
+            .iter()
+            .any(|entry| baseline_id_matches(&entry.id, &id))
     }
 
     /// Baseline entries that match no current violation — stale, safe to remove.
@@ -373,7 +613,7 @@ impl Baseline {
         let current: Vec<ViolationId> = report.violations.iter().map(Violation::id).collect();
         self.entries
             .iter()
-            .filter(|entry| !current.iter().any(|id| id == &entry.id))
+            .filter(|entry| !current.iter().any(|id| baseline_id_matches(&entry.id, id)))
             .map(|entry| &entry.id)
             .collect()
     }
@@ -389,6 +629,12 @@ impl Baseline {
                     "rule": entry.id.rule,
                     "finding": entry.id.finding,
                 });
+                if self.format == BaselineFormat::V2 {
+                    object["finding_key"] =
+                        entry.id.finding_key().map(FindingKey::to_json).expect(
+                            "a version-2 baseline entry must carry a structured finding key",
+                        );
+                }
                 // owner/tracker emitted only when set, so an un-annotated entry is byte-identical
                 // to the pre-metadata form (the same Some-only discipline as `file`/`anchor`).
                 if let Some(owner) = &entry.owner {
@@ -400,7 +646,11 @@ impl Baseline {
                 object
             })
             .collect();
-        let doc = serde_json::json!({ "version": 1, "violations": violations });
+        let version = match self.format {
+            BaselineFormat::V1 => 1,
+            BaselineFormat::V2 => 2,
+        };
+        let doc = serde_json::json!({ "version": version, "violations": violations });
         pretty_json(&doc)
     }
 
@@ -408,11 +658,12 @@ impl Baseline {
     /// an error, never a silently empty baseline.
     pub fn from_json(text: &str) -> Result<Self, String> {
         let doc: Value = serde_json::from_str(text).map_err(|err| err.to_string())?;
-        match doc["version"].as_i64() {
-            Some(1) => {}
+        let format = match doc["version"].as_i64() {
+            Some(1) => BaselineFormat::V1,
+            Some(2) => BaselineFormat::V2,
             Some(other) => return Err(format!("unsupported baseline version {other}")),
             None => return Err("baseline is missing a numeric `version`".to_string()),
-        }
+        };
         let array = doc["violations"]
             .as_array()
             .ok_or_else(|| "baseline `violations` must be an array".to_string())?;
@@ -427,18 +678,37 @@ impl Baseline {
             // owner/tracker are optional metadata — absent (or, tolerant of the lenient parse
             // style, non-string) reads as None; an older baseline without them parses unchanged.
             let optional = |name: &str| item[name].as_str().map(str::to_string);
-            entries.push(BaselineEntry {
-                id: ViolationId {
-                    target: field("target")?,
-                    rule: field("rule")?,
-                    finding: field("finding")?,
+            let target = field("target")?;
+            let rule = field("rule")?;
+            let finding = field("finding")?;
+            let id = match format {
+                BaselineFormat::V1 => ViolationId::legacy(target, rule, finding),
+                BaselineFormat::V2 => ViolationId {
+                    target,
+                    rule,
+                    finding,
+                    finding_key: Some(FindingKey::from_json(&item["finding_key"])?),
                 },
+            };
+            entries.push(BaselineEntry {
+                id,
                 owner: optional("owner"),
                 tracker: optional("tracker"),
             });
         }
         sort_dedup_by_id(&mut entries);
-        Ok(Baseline { entries })
+        Ok(Baseline { entries, format })
+    }
+}
+
+fn baseline_id_matches(baseline: &ViolationId, current: &ViolationId) -> bool {
+    match baseline.finding_key() {
+        Some(_) => baseline == current,
+        None => {
+            baseline.target == current.target
+                && baseline.rule == current.rule
+                && baseline.finding == current.finding
+        }
     }
 }
 
@@ -491,6 +761,17 @@ impl Outcome {
 mod tests {
     use super::*;
 
+    fn test_finding(text: &str) -> Finding {
+        Finding::new(
+            text,
+            FindingKey::new("test", "fact", [("value", text)]).unwrap(),
+        )
+    }
+
+    fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
+        ViolationId::new(target, rule, test_finding(finding))
+    }
+
     #[test]
     fn boundary_kind_labels_cover_every_dimension() {
         assert_eq!(BoundaryKind::Crate.as_str(), "crate");
@@ -499,13 +780,69 @@ mod tests {
         assert_eq!(BoundaryKind::Runtime.as_str(), "runtime");
     }
 
+    #[test]
+    fn finding_key_validates_and_canonicalizes_its_envelope() {
+        let key = FindingKey::new(
+            "module",
+            "forbidden_import",
+            [("module", "crate::z"), ("importer", "crate::a")],
+        )
+        .unwrap();
+        assert_eq!(
+            key.fields().collect::<Vec<_>>(),
+            vec![("importer", "crate::a"), ("module", "crate::z")]
+        );
+        assert!(FindingKey::new("", "fact", [("value", "x")]).is_err());
+        assert!(FindingKey::new("module", "", [("value", "x")]).is_err());
+        assert!(FindingKey::new("module", "fact", [("", "x")]).is_err());
+        assert!(FindingKey::new("module", "fact", [("value", "x"), ("value", "y")]).is_err());
+    }
+
+    #[test]
+    fn structured_identity_ignores_presentation_and_stays_disjoint_from_legacy() {
+        let key = FindingKey::new("crate", "dependency", [("package", "serde")]).unwrap();
+        let old = ViolationId::new("core", "deny", Finding::new("old wording", key.clone()));
+        let new = ViolationId::new("core", "deny", Finding::new("new wording", key));
+        let legacy = ViolationId::legacy(
+            "core".to_string(),
+            "deny".to_string(),
+            "old wording".to_string(),
+        );
+        assert_eq!(old, new, "presentation is not structured identity");
+        assert_ne!(old, legacy, "identity provenances stay disjoint");
+        assert_ne!(new, legacy, "equality remains transitive");
+    }
+
+    #[test]
+    #[should_panic(expected = "a live violation requires a structured finding")]
+    fn a_legacy_baseline_id_cannot_be_reused_as_a_live_violation() {
+        let legacy = Baseline::from_json(
+            r#"{"version":1,"violations":[{"target":"core","rule":"deny","finding":"serde"}]}"#,
+        )
+        .unwrap();
+        Violation::new(
+            BoundaryKind::Module,
+            legacy.entries().next().unwrap().id.clone(),
+            "reason".to_string(),
+            Severity::Enforce,
+        );
+    }
+
     fn sample_violation() -> Violation {
         Violation::new(
             BoundaryKind::Module,
-            "crate::kernel".to_string(),
-            "must not import".to_string(),
-            "crate::projection".to_string(),
+            test_id("crate::kernel", "must not import", "crate::projection"),
             "the kernel must not depend on a projection".to_string(),
+            Severity::Enforce,
+        )
+    }
+
+    fn wording_violation(text: &str) -> Violation {
+        let key = FindingKey::new("test", "dependency", [("package", "serde")]).unwrap();
+        Violation::new(
+            BoundaryKind::Crate,
+            ViolationId::new("core", "deny", Finding::new(text, key)),
+            "reason".to_string(),
             Severity::Enforce,
         )
     }
@@ -525,7 +862,7 @@ mod tests {
 
     #[test]
     fn file_is_not_part_of_the_baseline_identity() {
-        // Attaching a file must not change the (target, rule, finding) identity, so a
+        // Attaching a file must not change the (target, rule, finding_key) identity, so a
         // file-bearing violation still matches a baseline entry recorded without one.
         let without = sample_violation();
         let with = sample_violation().with_file(Some("src/kernel.rs".to_string()));
@@ -548,7 +885,7 @@ mod tests {
     #[test]
     fn anchor_is_not_part_of_the_baseline_identity() {
         // Like `file`, the anchor is metadata: attaching it must not change the
-        // (target, rule, finding) identity, so an anchored violation still matches a baseline
+        // (target, rule, finding_key) identity, so an anchored violation still matches a baseline
         // entry recorded without one and never churns an existing baseline.
         let without = sample_violation();
         let with = sample_violation().with_anchor(Some("ADR-014".to_string()));
@@ -576,7 +913,7 @@ mod tests {
     #[test]
     fn polarity_is_not_part_of_the_baseline_identity() {
         // Like `file`/`anchor`, the polarity is metadata: stamping it must not change the
-        // (target, rule, finding) identity, so it never re-baselines or churns a count.
+        // (target, rule, finding_key) identity, so it never re-baselines or churns a count.
         let without = sample_violation();
         let with = sample_violation().with_polarity(Polarity::AllowlistGap);
         assert_eq!(without.id(), with.id());
@@ -585,19 +922,20 @@ mod tests {
     #[test]
     fn baseline_round_trips_through_json() {
         // The `violation-baseline` spec's round-trip scenario: a baseline written to JSON and read
-        // back holds the same `(target, rule, finding)` entries.
+        // back holds the same `(target, rule, finding_key)` entries.
         let report = Report::new(vec![
             sample_violation(),
             Violation::new(
                 BoundaryKind::Crate,
-                "core".to_string(),
-                "deny external dependencies".to_string(),
-                "serde".to_string(),
+                test_id("core", "deny external dependencies", "serde"),
                 "core stays dependency-light".to_string(),
                 Severity::Enforce,
             ),
         ]);
         let original = Baseline::of(&report);
+        let document: Value = serde_json::from_str(&original.to_json()).unwrap();
+        assert_eq!(document["version"], 2);
+        assert!(document["violations"][0]["finding_key"].is_object());
         let reparsed = Baseline::from_json(&original.to_json()).expect("round-trips");
         // Every original violation is still contained; a stale check against the same report is empty.
         assert!(reparsed.contains(&sample_violation()));
@@ -607,6 +945,58 @@ mod tests {
         );
         // Serializing the reparsed baseline yields byte-identical JSON (stable + diffable).
         assert_eq!(reparsed.to_json(), original.to_json());
+    }
+
+    #[test]
+    fn version_two_matches_and_preserves_metadata_across_wording_changes() {
+        let previous = Baseline::from_json(
+            r#"{"version":2,"violations":[{
+                "target":"core","rule":"deny","finding":"old wording",
+                "finding_key":{"namespace":"test","code":"dependency","fields":{"package":"serde"}},
+                "owner":"team-core","tracker":"ISSUE-9"
+            }]}"#,
+        )
+        .unwrap();
+        let report = Report::new(vec![wording_violation("new wording")]);
+        assert!(previous.contains(&report.violations[0]));
+        let rewritten = Baseline::of_preserving(&report, &previous);
+        let entry = rewritten.entries().next().unwrap();
+        assert_eq!(entry.id.finding, "new wording");
+        assert_eq!(entry.owner.as_deref(), Some("team-core"));
+        assert_eq!(entry.tracker.as_deref(), Some("ISSUE-9"));
+    }
+
+    #[test]
+    fn version_one_matches_only_the_exact_legacy_text() {
+        let legacy = Baseline::from_json(
+            r#"{"version":1,"violations":[{
+                "target":"core","rule":"deny","finding":"old wording"
+            }]}"#,
+        )
+        .unwrap();
+        assert!(legacy.contains(&wording_violation("old wording")));
+        assert!(!legacy.contains(&wording_violation("new wording")));
+        assert_eq!(
+            legacy.stale(&Report::new(vec![wording_violation("new wording")]))[0].finding_key(),
+            None
+        );
+    }
+
+    #[test]
+    fn version_two_deduplicates_by_key_and_keeps_the_first_presentation() {
+        let baseline = Baseline::from_json(
+            r#"{"version":2,"violations":[
+                {"target":"core","rule":"deny","finding":"first","owner":"first",
+                 "finding_key":{"namespace":"test","code":"dependency","fields":{"package":"serde"}}},
+                {"target":"core","rule":"deny","finding":"second","owner":"second",
+                 "finding_key":{"namespace":"test","code":"dependency","fields":{"package":"serde"}}}
+            ]}"#,
+        )
+        .unwrap();
+        let entries: Vec<_> = baseline.entries().collect();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id.finding, "first");
+        assert_eq!(entries[0].owner.as_deref(), Some("first"));
     }
 
     #[test]
@@ -626,6 +1016,11 @@ mod tests {
         assert_eq!(entries[1].tracker, None);
         // Round-trip preserves metadata and is byte-stable.
         let out = baseline.to_json();
+        assert_eq!(
+            serde_json::from_str::<Value>(&out).unwrap()["version"],
+            1,
+            "re-serializing a legacy snapshot cannot invent structured keys"
+        );
         assert_eq!(Baseline::from_json(&out).unwrap().to_json(), out);
         // Some-only: the un-annotated entry carries only the three identity keys.
         let doc: Value = serde_json::from_str(&out).unwrap();
@@ -647,9 +1042,7 @@ mod tests {
         let mk = |t: &str, f: &str| {
             Violation::new(
                 BoundaryKind::Crate,
-                t.to_string(),
-                "r".to_string(),
-                f.to_string(),
+                test_id(t, "r", f),
                 "x".to_string(),
                 Severity::Enforce,
             )
@@ -697,7 +1090,7 @@ mod tests {
             "malformed JSON is an error"
         );
         assert!(
-            Baseline::from_json(r#"{"version": 2, "violations": []}"#).is_err(),
+            Baseline::from_json(r#"{"version": 3, "violations": []}"#).is_err(),
             "an unknown version is an error, not a silently-empty baseline"
         );
         assert!(

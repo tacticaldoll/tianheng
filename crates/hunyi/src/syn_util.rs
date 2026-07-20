@@ -128,23 +128,35 @@ fn vis_prefix(vis: &syn::Visibility) -> String {
 /// attribute-derived public surface (`#[macro_export]`, `#[no_mangle]`, `pub macro`) carries no
 /// readable visibility keyword and is out of scope (stated bounds; the deferred attribute
 /// capability's domain).
-fn item_vis_and_desc(item: &syn::Item) -> Option<(&syn::Visibility, String)> {
+pub(crate) struct VisibleItem<'a> {
+    pub(crate) visibility: &'a syn::Visibility,
+    pub(crate) kind: &'static str,
+    pub(crate) name: String,
+}
+
+fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
+    let observed = |visibility, kind, name| VisibleItem {
+        visibility,
+        kind,
+        name,
+    };
     match item {
-        syn::Item::Fn(i) => Some((&i.vis, format!("fn {}", i.sig.ident))),
-        syn::Item::Struct(i) => Some((&i.vis, format!("struct {}", i.ident))),
-        syn::Item::Enum(i) => Some((&i.vis, format!("enum {}", i.ident))),
-        syn::Item::Union(i) => Some((&i.vis, format!("union {}", i.ident))),
-        syn::Item::Type(i) => Some((&i.vis, format!("type {}", i.ident))),
-        syn::Item::Const(i) => Some((&i.vis, format!("const {}", i.ident))),
-        syn::Item::Static(i) => Some((&i.vis, format!("static {}", i.ident))),
-        syn::Item::Trait(i) => Some((&i.vis, format!("trait {}", i.ident))),
-        syn::Item::TraitAlias(i) => Some((&i.vis, format!("trait {} (alias)", i.ident))),
-        syn::Item::Mod(i) => Some((&i.vis, format!("mod {}", i.ident))),
-        syn::Item::ExternCrate(i) => Some((&i.vis, format!("extern crate {}", i.ident))),
-        syn::Item::Use(i) => Some((
+        syn::Item::Fn(i) => Some(observed(&i.vis, "fn", i.sig.ident.to_string())),
+        syn::Item::Struct(i) => Some(observed(&i.vis, "struct", i.ident.to_string())),
+        syn::Item::Enum(i) => Some(observed(&i.vis, "enum", i.ident.to_string())),
+        syn::Item::Union(i) => Some(observed(&i.vis, "union", i.ident.to_string())),
+        syn::Item::Type(i) => Some(observed(&i.vis, "type", i.ident.to_string())),
+        syn::Item::Const(i) => Some(observed(&i.vis, "const", i.ident.to_string())),
+        syn::Item::Static(i) => Some(observed(&i.vis, "static", i.ident.to_string())),
+        syn::Item::Trait(i) => Some(observed(&i.vis, "trait", i.ident.to_string())),
+        syn::Item::TraitAlias(i) => Some(observed(&i.vis, "trait_alias", i.ident.to_string())),
+        syn::Item::Mod(i) => Some(observed(&i.vis, "mod", i.ident.to_string())),
+        syn::Item::ExternCrate(i) => Some(observed(&i.vis, "extern_crate", i.ident.to_string())),
+        syn::Item::Use(i) => Some(observed(
             &i.vis,
+            "use",
             format!(
-                "use {}{}",
+                "{}{}",
                 if i.leading_colon.is_some() { "::" } else { "" },
                 use_tree_desc(&i.tree)
             ),
@@ -157,9 +169,18 @@ fn item_vis_and_desc(item: &syn::Item) -> Option<(&syn::Visibility, String)> {
 /// (the boundary's ceiling), rendered `{visibility} {kind} {name}`; `None` when the item is at or
 /// below the ceiling or has no governed visibility. Under the Crate ceiling (rank 2) only bare
 /// `pub` (rank 3) reacts and renders `pub {kind} {name}`, byte-identical to the prior rule.
-pub(crate) fn item_finding(item: &syn::Item, ceiling_rank: u8) -> Option<String> {
-    let (vis, desc) = item_vis_and_desc(item)?;
-    (visibility_rank(vis) > ceiling_rank).then(|| format!("{} {}", vis_prefix(vis), desc))
+pub(crate) fn item_observation(
+    item: &syn::Item,
+    ceiling_rank: u8,
+) -> Option<(String, &'static str, String)> {
+    let observed = item_observation_parts(item)?;
+    (visibility_rank(observed.visibility) > ceiling_rank).then(|| {
+        (
+            vis_prefix(observed.visibility),
+            observed.kind,
+            observed.name,
+        )
+    })
 }
 
 /// Render a `use` tree to a stable description for a finding (`crate::db::Handle`,

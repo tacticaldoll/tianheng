@@ -13,7 +13,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::SemanticFinding;
+use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     BareFallback, canonical_path_str, canonical_self_owner, path_to_string, resolve_path,
 };
@@ -75,7 +75,7 @@ pub(crate) fn forbidden_marker_findings(
     subtree: &str,
     forbidden: &[String],
     crate_package: &str,
-) -> Result<Vec<(String, String)>, String> {
+) -> Result<Vec<(SemanticFact, String)>, String> {
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let subtree = canonical_path_str(subtree);
     // The canonical paths of every type the crate actually DEFINES — the only types that can
@@ -118,11 +118,10 @@ pub(crate) fn forbidden_marker_findings(
                     let marker =
                         path_to_string(derived).unwrap_or_else(|| format!("{entry}<_#{ordinal}>"));
                     findings.push((
-                        SemanticFinding::ForbiddenDerive {
+                        SemanticFact::ForbiddenDerive {
                             marker,
                             canonical: td.canonical.clone(),
-                        }
-                        .to_string(),
+                        },
                         td.module.clone(),
                     ));
                 }
@@ -177,19 +176,17 @@ pub(crate) fn forbidden_marker_findings(
                 path_to_string(&site.trait_path).unwrap_or_else(|| format!("{entry}<_#{ordinal}>"));
             let owner = canonical_self_owner(&site.self_ty, &site.uses, &site.module, ordinal);
             findings.push((
-                SemanticFinding::ForbiddenImpl {
+                SemanticFact::ForbiddenImpl {
                     marker,
                     owner,
                     module: site.module.clone(),
-                }
-                .to_string(),
+                },
                 site.module.clone(),
             ));
         }
     }
-    findings.sort();
     // Dedup BY FINDING (keep the first module), so the count is identical to before — `file` is
     // metadata attached to a finding, never a second identity key.
-    findings.dedup_by(|a, b| a.0 == b.0);
+    sort_attributed_facts(&mut findings);
     Ok(findings)
 }

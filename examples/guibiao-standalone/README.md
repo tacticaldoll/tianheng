@@ -6,7 +6,7 @@ deliberately does, so you can watch 圭表 react.
 
 ```toml
 [dependencies]
-guibiao = "0.1"   # the whole footprint — light by design
+guibiao = "0.2"   # the whole footprint — light by design
 ```
 
 Declare the law in Rust (`src/governance.rs`), then react:
@@ -30,9 +30,9 @@ cargo test               # asserts the reaction + the adoption ladder + the stab
 - **the reaction** — the `domain → infra` import trips the enforce boundary (exit 1);
 - **the adoption ladder** — `warn` reports without gating (exit 0); a `Baseline` grandfathers
   existing violations (exit 0) while an un-baselined one still reacts (exit 1);
-- **identity ⊥ metadata** — a violation's `file` is metadata, not identity
-  (`ViolationId = (target, rule, finding)`), so relocating the offending code does not churn
-  the baseline.
+- **identity ⊥ presentation/metadata** — version-2 identity is
+  `(target, rule, finding_key)`, so finding wording and `file` relocation do not churn the
+  baseline; version-1 baselines keep exact-text matching only for migration.
 
 > Most adopters graduate from one 儀 to the composed constitution via the
 > [`tianheng`](https://crates.io/crates/tianheng) shell — see the `composed` example.

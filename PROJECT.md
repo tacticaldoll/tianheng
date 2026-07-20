@@ -256,8 +256,9 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   same way the `engine ⊥ shell` law already is. `guibiao`'s *external*-dependency bound
   stays `{serde_json}`; its self-law uses the stricter `restrict_dependencies_to` (which
   governs internal paths too), so it was amended — by deliberate, human-reviewed change to
-  `self_governance.rs` — to `["serde_json", "xuanji"]`, naming the one internal path the
-  family split requires. 璇璣's own boundary `restrict_dependencies_to(["serde_json"])`
+  `self_governance.rs` — to `["serde_json", "xuanji"]` (later `["serde_json", "xuanji", "xingbiao"]`;
+  see the 星表 decision below), naming the internal paths the family split requires. 璇璣's own
+  boundary `restrict_dependencies_to(["serde_json"])`
   keeps it beneath every dimension (no workspace member below it).
 - **The semantic capability-admission test (the gate against lints).** `syn` makes
   opinionated checks trivial to write ("no `unwrap`", "fns ≤ 50 lines"), every one forbidden
@@ -286,13 +287,14 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   `syn`-resolvable module). **(v0.1.2, same release)** its **named-operand depth**
   (`must_not_expose_dyn_of([…])`) — the next rung on the `name → shape → named-operand` stair:
   it refines the shape-only predicate ("any `dyn`") to "a `dyn` of a *named* trait", resolving
-  each `dyn`'s **principal trait** (first trait bound, guaranteed first by Rust's grammar)
+  each `dyn`'s **principal trait** (its sole non-auto trait, whatever its bound position)
   through the same 渾儀 resolver signature-coupling uses (exact-or-module-prefix, re-export
   canonicalization). It reuses the shape-only surface walk and the resolver, adding only the
   operand match — no new source, no new struct. An **empty** operand set degenerates to
   shape-only ("any `dyn`") — a loud over-reaction chosen deliberately over a silent no-op
   (`Of([])`), so a mis-declared operand set never becomes a false negative. Auto-trait markers
-  are never operands (only the principal, first, trait), and an unresolvable principal (a bare
+  are never operands (only the principal, non-auto, trait — matched regardless of bound position),
+  and an unresolvable principal (a bare
   std trait, a macro/glob re-export) is the inherited resolver bound, never a silent pass of a
   *resolvable* operand. **(v0.1.2, same release)** its **existential sibling**
   `ImplTraitBoundary` (`must_not_expose_impl_trait`) — where dyn-trait forbids the *dynamic-
@@ -321,7 +323,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   (`async fn <SelfTy>::name(…)`, `async fn trait <Trait>::name(…)`), NOT a bare name or a
   future-shape, because same-named
   public async fns across impls/traits in one module would otherwise collide under the
-  `(target, rule, finding)` baseline and let a new leak be masked (the one forbidden bug).
+  `(target, rule, finding_key)` baseline and let a new leak be masked (the one forbidden bug).
   **(v0.1.2 hardening)** the sibling exposure findings now carry the same guarantee:
   signature-coupling, dyn-trait, and impl-trait findings are **seam-qualified**
   (`{type|shape} exposed by {seam}`, the seam being the owning item / sub-element — free fn,
@@ -542,7 +544,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   the reaction layer (`check_*_boundary`) attaches via `Violation::with_file`, resolved once per
   boundary and only when reporting. The `finding` still names the canonicalized forbidden
   type/shape (which may be *defined* elsewhere); the `file` names the **seam's** location, the
-  actionable one. `file` stays out of the `(target, rule, finding)` baseline identity, so a
+  actionable one. `file` stays out of the `(target, rule, finding_key)` baseline identity, so a
   previously-null violation baselined and then populated never re-baselines nor changes the count;
   SARIF gains a `physicalLocation` (still no `region` — a file, not a line). **Scope is the five
   single-module capabilities** whose anchor resolves to one module (signature-coupling exposure
@@ -686,8 +688,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   reaction). Architecture/charter, not a capability change — like the 璇璣 extraction and the
   `SemanticBoundaries` facade, recorded here and kept honest by `self_governance` + the tests,
   **not** an OpenSpec change.
-- **(v0.1.4) Structure semantic observation facts — ship the containment convergence, defer the
-  seam/subject types to 0.2.0's structured baseline.** A refinement pass structured 渾儀's internals
+- **(v0.1.4 → 0.2.0 line) Structure semantic observation facts — containment first, then typed
+  identity when the structured baseline supplied the reaction.** A refinement pass structured 渾儀's internals
   *where a live pain existed and stopped where only prep remained*. **Shipped:** the sibling-safe
   `::`-path containment rule — hand-copied in `under_subtree` / `matches_forbidden` / `matches_allowed`
   (`x == entry || x.starts_with("{entry}::")`, the `::` that keeps `crate::commands` from matching the
@@ -696,22 +698,18 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   drift-prone copies), the reaction surface already exists, and the abstraction is a byte-identical
   convergence of *existing* observation. (Alongside two behavior-preserving tidies not worth their own
   decisions — the `SemanticFinding` catalog centralizing the finding-string formats, and the split of
-  the ~8k-line `lib.rs` into `lib` / `dsl` / `tests` — recorded in git, not here.) **Deferred:**
-  `PublicSeam` (typing the ~14 seam formats, including the seam stored as `String` in `resolve.rs`'s
-  `ShapeExposure` / `stamp_seam`) and `ExposureSubject` (the `SemanticFinding` subject). No live-risk
-  payoff yet — seam collision is already tested-closed (the v0.1.4 seam-qualification hardening + the
-  injectivity tests) — so typing them now is prep, not convergence, and the drift law forbids laying
-  structure ahead of a forcing function. Their real value is a **structured baseline** (findings as
-  data, not strings), which is **breaking → 0.2.0** and unapproved (in tension with "baseline is a
-  snapshot, not policy"). **Open design question, deliberately unanswered here:** the seam type's
-  ownership crosses layers — the finding vocabulary lives in `lib.rs`, but the seam is stored and
-  stamped in `resolve.rs`, the lower shared resolver; typing it now would either pollute the resolver
-  with presentation vocabulary or force an up-import that inverts the layering. That call belongs
-  *with* the structured-baseline design, when the seam type becomes a data-model necessity rather than
-  tidiness — the honest moment to decide it. So the seam/subject types graduate from *tidiness* to
-  *data-model necessity* exactly when structured baseline is greenlit; until then they wait.
-  Architecture/scope recorded here; the shipped convergence is a behavior-preserving refactor kept
-  honest by the tests, **not** an OpenSpec change.
+  the ~8k-line `lib.rs` into `lib` / `dsl` / `tests` — recorded in git, not here.) **The forcing event
+  arrived on the 0.2.0 line:** version-2 structured baseline identity made the remaining string seam
+  a live contract defect, because 渾儀 was still keying the complete rendered descriptor while 圭表
+  and 漏刻 keyed named observed values. The OpenSpec change `structure-semantic-fact-identity`
+  resolves the earlier layering question with a private `PublicSeam` owned by the finding vocabulary
+  and carried by `resolve.rs`'s `ShapeExposure`; the lower resolver stores the typed observation but
+  does not own its presentation. One `SemanticFact` enum now derives both byte-identical text and
+  fact-specific named key fields. The canonical type path / dyn or impl shape remains the observed
+  `subject` string — no speculative recursive `ExposureSubject` AST. This is deliberately breaking
+  for unreleased descriptor-shaped version-2 semantic keys, while published version-1 baseline text
+  migration remains intact. The earlier deferral therefore did its job: no structure before a
+  reaction, then the narrowest data model once baseline identity required it.
 - **(v0.1.4) Module-source / module-resolution hardening — observe the compiled source root, and
   keep `#[path]` remaps out of scope instead of governing the wrong file.** An adversarial review
   found edge cases against the scanner/resolver decisions above. First, 圭表 module boundaries used
@@ -776,7 +774,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   intent. Runtime CI-audit consistency findings stay off this axis (`None`); this is violation
   metadata, not constitution data.
 - **(v0.1.5) `owner`/`tracker` metadata on baseline entries.** Baselines can point accepted debt at
-  people or trackers without changing the match identity `(target, rule, finding)`. This is the
+  people or trackers without changing the match identity (the legacy text triple in v1; structured
+  `(target, rule, finding_key)` in v2). This is the
   additive 實錄 step, deliberately not the future 0.2.0 structured-baseline break.
 - **(v0.1.5) 漏刻 decodes escaped seam literals in the CI probe-coverage face.** The CI audit now
   compares probe literals to the compiler-decoded declaration value, so escaped seam names cannot be
@@ -969,7 +968,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   crate-scan family's `walk_module`, inheriting its guards verbatim (`#[path]` skip as a stated
   bound, `#[cfg]`-fileless tolerance, non-cfg missing → exit 2, symlink cycle → exit 2). Two
   false-negative-safety calls the adversarial review confirmed: (1) the violation `target` stays the
-  boundary **anchor** (not the deeper enclosing module), so identity `(target, rule, finding)` is
+  boundary **anchor** (not the deeper enclosing module), so identity `(target, rule, finding_key)` is
   stable — enabling the opt-in adds only new, deeper findings and never re-identifies a seam finding
   (baseline stability); a seam finding is byte-identical to the single-module path (same collector,
   module string, `ordinal`, and `collect_uses`). (2) `push_multi_module_violations` flattens findings
@@ -1134,7 +1133,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   on a public enum variant is a downstream `E0063`/`E0027` compile break, while a variant on a
   `#[non_exhaustive]` enum is patch-safe (the same growth pattern as `RestrictDependencySourcesTo`).
   The twin-variant is `#[doc(hidden)]` and recorded as **0.2.0 model-surface debt** (fold back into
-  one variant + field once the surface is narrowed — see BACKLOG). **Identity parity is
+  one variant + field once the surface is narrowed — resolved by the later 0.2.0-line decision
+  below). **Identity parity is
   baseline-critical:** both variants route through one shared path, so `label()` returns the
   *identical* `"inline symbol path confined to module"`, `polarity()` is `DenyBreach`, and
   `target`/`finding` are byte-identical — adding the flag to an already-baselined boundary never
@@ -1159,3 +1159,40 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   reaction (and disappears when only the resolver branch is reverted), FP-safety tests cover a deep
   local module / local fn / local alias, and a baseline-churn guard locks identity parity → **minor**
   (0.1.9, additive opt-in capability).
+- **(0.2.0 line) Violation identity is a structured observed fact, not its presentation.** Each
+  observation dimension owns typed fact schemas and their human rendering; 璇璣 carries the
+  vocabulary-neutral `FindingKey` envelope and compares current identities by
+  `(target, rule, finding_key)`. The human `finding`, `file`, `reason`, severity, polarity, anchor,
+  and debt metadata remain diagnostic context rather than identity. Newly generated baselines use
+  version 2 and retain both the structured key and human finding. Version-1 baselines remain
+  readable and match current violations only through their exact legacy text triple; writing a new
+  baseline upgrades the durable contract without guessing a key that was never recorded.
+- **(0.2.0 line) Rule construction is builder-owned; rule inspection stays open-ended.** The 0.1
+  patch line exposed a concrete model-growth failure: adding the `.strict_external()` modifier as a
+  field would break downstream struct expressions and closed-field matches, so it required a hidden
+  duplicate `ModuleRule` variant. Every data-carrying `Rule` / `ModuleRule` variant is now itself
+  `#[non_exhaustive]`: the existing DSL is the sole construction surface, while consumers retain
+  read access through `CrateBoundary::rule()` and the new symmetric `ModuleBoundary::rule()`, using
+  `Variant { known, .. }`. The strict-external twin consequently collapses into one inline variant
+  with a modifier field. This spends the breaking window on accidental model construction only;
+  `Constitution`, the boundary DSL, projections, reactions, and violation identity stay unchanged,
+  and the pacta/modou reference probes remain green.
+- **(0.2.0 line) The composed adopter surface is compile-reacted and classified by purpose.** A
+  serious adopter uses `tianheng::prelude::*` for both declaration and `Outcome` inspection, so the
+  prelude is not honestly reducible to builders alone. Its declaration/execution and reaction-
+  inspection tiers now carry the same 0.2.x compatibility status and are named by an external-view
+  integration test; an accidental re-export deletion therefore fails compilation instead of
+  silently contradicting documentation. The test exposed and closed one asymmetry by adding the
+  existing `ModuleRule` beside `Rule`, making both boundary `rule()` accessors usable through the
+  recommended entrypoint. Hidden drafts and granular semantic checks remain outside this contract;
+  the explicit `check_semantic` root alias is signature-coupling only, while composed evaluation
+  stays `Constitution` plus `run`.
+- **(0.2.0 line) A unified Constitution has one inspectable evaluation path.** The composed example
+  exposed a real mismatch: declaration was unified, but a library test had to split back into static
+  and semantic checks because only CLI `run` composed all three dimensions. Public
+  `check_constitution(&Constitution, &Path) -> Outcome` now sits above the same private evaluator as
+  `run`, preserving static-first error precedence, merged findings, and the always-run orphan-probe
+  audit without duplicating composition. It is presentation-free, not observation-free: the
+  explicit manifest is read through Cargo metadata and source scans. Baselines, coverage advisories,
+  formats, manifest discovery, and process output remain shell concerns. This closes the primitive
+  testing seam but deliberately does not pre-build the deferred fixture/assertion harness.

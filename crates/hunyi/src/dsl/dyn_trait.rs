@@ -114,7 +114,8 @@ impl DynTraitModuleDraft {
 
     /// Forbid the module's public API from exposing a `dyn` of any **named trait** — the
     /// operand-scoped depth of [`must_not_expose_dyn`](Self::must_not_expose_dyn). A `dyn` whose
-    /// **principal trait** (its first trait bound) canonicalizes into `operands` is a violation;
+    /// **principal trait** (the sole non-auto trait, whatever its position among the bounds)
+    /// canonicalizes into `operands` is a violation;
     /// a `dyn` of any other trait passes. An `operands` entry may be an exact trait path
     /// (`crate::ports::Port`) or a module prefix (`crate::ports`), and a re-exported/aliased
     /// trait facade matches its defining path (resolved through the same 渾儀 resolver the
@@ -126,7 +127,7 @@ impl DynTraitModuleDraft {
     /// Iterator<…>`, a bare `dyn Send`), a macro-generated or glob/cross-crate re-exported trait
     /// — is out of the resolver's stated coverage and is not matched; a *resolvable* operand is
     /// never silently passed. Auto-trait / lifetime bounds are never operands (only the principal,
-    /// first, trait is matched).
+    /// non-auto trait is matched, regardless of its position among the bounds).
     pub fn must_not_expose_dyn_of<I, S>(self, operands: I) -> DynTraitBoundaryDraft
     where
         I: IntoIterator<Item = S>,

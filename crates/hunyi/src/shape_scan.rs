@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::containment::matches_forbidden;
 use crate::crate_scope::{extern_resolution, resolve_principal};
-use crate::finding::shape_finding;
+use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_facts};
 use crate::module_resolve::resolve_module_items;
 use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
 
@@ -26,17 +26,16 @@ pub(crate) fn shape_module_findings<E>(
     module: &str,
     crate_package: &str,
     collect: impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<E>),
-    render: impl Fn(E) -> String,
-) -> Result<Vec<String>, String> {
+    render: impl Fn(E) -> SemanticFact,
+) -> Result<Vec<SemanticFact>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let uses = collect_uses(&items);
     let mut collected = Vec::new();
     for (ordinal, item) in items.iter().enumerate() {
         collect(item, module, &uses, ordinal, &mut collected);
     }
-    let mut findings: Vec<String> = collected.into_iter().map(render).collect();
-    findings.sort();
-    findings.dedup();
+    let mut findings: Vec<SemanticFact> = collected.into_iter().map(render).collect();
+    sort_facts(&mut findings);
     Ok(findings)
 }
 
@@ -56,8 +55,11 @@ pub(crate) fn operand_module_findings(
     forbidden: &[String],
     crate_package: &str,
     dep_names: &[String],
-    collect: impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
-) -> Result<Vec<String>, String> {
+    (fact_kind, collect): (
+        ExposureKind,
+        impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
+    ),
+) -> Result<Vec<SemanticFact>, String> {
     let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
     let uses = collect_uses(&items);
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names, &items)?;
@@ -68,7 +70,7 @@ pub(crate) fn operand_module_findings(
         collect(item, module, &uses, ordinal, &mut exposures);
     }
 
-    let mut findings: Vec<String> = exposures
+    let mut findings: Vec<SemanticFact> = exposures
         .into_iter()
         .filter(|exposure| {
             forbidden.is_empty()
@@ -77,9 +79,8 @@ pub(crate) fn operand_module_findings(
                         .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
                 })
         })
-        .map(shape_finding)
+        .map(|exposure| shape_finding(exposure, fact_kind))
         .collect();
-    findings.sort();
-    findings.dedup();
+    sort_facts(&mut findings);
     Ok(findings)
 }

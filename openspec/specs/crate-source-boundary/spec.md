@@ -127,7 +127,7 @@ The dependency-source boundary SHALL share the 圭表 reaction contract with the
 dependency rules: findings fold into the same aggregated report and exit-code outcome (**0** clean,
 **1** enforce violation, **2** constitution/scan error such as an unreadable workspace or an absent
 target crate); the boundary carries a severity (`enforce` default, or `warn`) and is gated against
-the same `Baseline` under the shared violation identity `(target, rule, finding)`, the finding being
+the same `Baseline` under the shared violation identity `(target, rule, finding_key)`, the finding being
 the offending dependency's real package name (kind-qualified with a ` (dev)`/` (build)` suffix for a
 non-`Normal` boundary, per `crate-dependency-boundary`'s Dependency kind selection); and the rule projects through the existing generic
 `CrateBoundary` text/JSON/markdown projection, its parameters being the allowed source-kind list.

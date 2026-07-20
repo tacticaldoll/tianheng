@@ -1,20 +1,29 @@
 use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
 use super::term_color::Style;
 use super::{
-    Coverage, boundary_params, constitution_markdown, dispatch, dyn_trait_text, impl_trait_text,
-    list_document, list_markdown, merge_outcomes, nearest_manifest_from, projection_gate,
-    report_json, runtime_text, semantic_text, trait_impl_text, visibility_text,
+    Coverage, boundary_params, check_constitution, constitution_markdown, dispatch, dyn_trait_text,
+    impl_trait_text, list_document, list_markdown, merge_outcomes, nearest_manifest_from,
+    projection_gate, report_json, runtime_text, semantic_text, trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
 use serde_json::Value;
 use std::path::PathBuf;
 
+fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
+    ViolationId::new(
+        target,
+        rule,
+        Finding::new(
+            finding,
+            FindingKey::new("tianheng-test", "fact", [("value", finding)]).unwrap(),
+        ),
+    )
+}
+
 fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Violation {
     Violation::new(
         BoundaryKind::Crate,
-        target.to_string(),
-        rule.to_string(),
-        finding.to_string(),
+        test_id(target, rule, finding),
         format!("reason-for-{target}"),
         Severity::Enforce,
     )
@@ -24,9 +33,7 @@ fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Vio
 fn enforce_violation(kind: BoundaryKind, finding: &str) -> Violation {
     Violation::new(
         kind,
-        "target".to_string(),
-        "rule".to_string(),
-        finding.to_string(),
+        test_id("target", "rule", finding),
         "reason".to_string(),
         Severity::Enforce,
     )
@@ -82,6 +89,30 @@ fn a_static_constitution_error_wins_when_both_error() {
     assert!(
         matches!(merged, Outcome::ConstitutionError(message) if message == "bad static crate"),
         "the static error is checked first and wins deterministically",
+    );
+}
+
+#[test]
+fn composed_check_preserves_static_error_precedence() {
+    let Some(manifest) = workspace_manifest() else {
+        return;
+    };
+    let constitution = Constitution::new("error-precedence")
+        .boundary(
+            CrateBoundary::crate_("no-such-static-package")
+                .forbid_dependency_on(["serde"])
+                .because("the static target must resolve first"),
+        )
+        .signature_boundary(
+            SemanticBoundary::in_crate("xuanji")
+                .module("crate::no_such_semantic_module")
+                .must_not_expose("crate::Hidden")
+                .because("the later semantic target is also invalid"),
+        );
+    let outcome = check_constitution(&constitution, &manifest);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("no-such-static-package")),
+        "the first static constitution error wins before semantic evaluation: {outcome:?}",
     );
 }
 
@@ -256,7 +287,7 @@ fn report_sarif_merges_anchor_and_polarity_into_one_property_bag() {
 
 #[test]
 fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
-    // A violation's identity is (target, rule, finding), but SARIF's
+    // SARIF v1 fingerprints retain the human triple for wire compatibility, but SARIF's
     // ruleId/message carry only rule and finding. For a file-less violation `target` is the sole
     // discriminator, so two violations differing ONLY in target rendered byte-identical and a
     // fingerprint-deduping ingester (GitHub code scanning) collapsed them. Each now carries a
@@ -267,9 +298,7 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
     let mk = |target: &str| {
         Violation::new(
             BoundaryKind::Crate,
-            target.to_string(),
-            same_rule.to_string(),
-            same_finding.to_string(),
+            test_id(target, same_rule, same_finding),
             same_reason.to_string(),
             Severity::Enforce,
         )
@@ -669,29 +698,42 @@ fn an_orphan_probe_reacts_with_no_declared_boundary() {
     // behind). The audit now runs even against an empty boundary set, so the orphan probe
     // reacts as an undeclared seam (exit 1) — previously the audit was skipped and this passed
     // green, then panicked in production. The `orphan_probe` fixture is its own workspace.
+    let orphan_manifest = fixture("orphan_probe");
     let args = [
         "tianheng".to_string(),
         "check".to_string(),
         "--manifest-path".to_string(),
-        fixture("orphan_probe"),
+        orphan_manifest.clone(),
     ];
     assert_eq!(
         dispatch(&Constitution::new("empty"), args),
         1,
         "an orphan `assert_boundary!` probe with no declared boundary reacts at CI"
     );
+    assert_eq!(
+        check_constitution(&Constitution::new("empty"), &PathBuf::from(orphan_manifest),)
+            .exit_code(),
+        1,
+        "the library check shares the always-run orphan-probe audit",
+    );
     // Contrast: the `clean` fixture has no probe, so an empty constitution scans clean — the
     // always-run audit does not disturb a probe-free workspace.
+    let clean_manifest = fixture("clean");
     let clean_args = [
         "tianheng".to_string(),
         "check".to_string(),
         "--manifest-path".to_string(),
-        fixture("clean"),
+        clean_manifest.clone(),
     ];
     assert_eq!(
         dispatch(&Constitution::new("empty"), clean_args),
         0,
         "a probe-free workspace under an empty constitution stays clean"
+    );
+    assert_eq!(
+        check_constitution(&Constitution::new("empty"), &PathBuf::from(clean_manifest),),
+        Outcome::Clean,
+        "the library check keeps an empty constitution clean on a probe-free workspace",
     );
 }
 
@@ -1328,27 +1370,29 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
     // case. All project faithfully.
     let single_module = Violation::new(
         BoundaryKind::Semantic,
-        "crate::domain".to_string(),
-        "must not expose".to_string(),
-        "crate::infra::Db exposed by fn crate::domain::leak".to_string(),
+        test_id(
+            "crate::domain",
+            "must not expose",
+            "crate::infra::Db exposed by fn crate::domain::leak",
+        ),
         "domain must not expose infra".to_string(),
         Severity::Enforce,
     )
     .with_file(Some("src/domain.rs".to_string()));
     let whole_crate_scan = Violation::new(
         BoundaryKind::Semantic,
-        "crate::Command".to_string(),
-        "must be implemented only in the allowed locations".to_string(),
-        "crate::plugins (impl for crate::plugins::P)".to_string(),
+        test_id(
+            "crate::Command",
+            "must be implemented only in the allowed locations",
+            "crate::plugins (impl for crate::plugins::P)",
+        ),
         "Command impls live in crate::allowed".to_string(),
         Severity::Enforce,
     )
     .with_file(Some("src/plugins.rs".to_string()));
     let file_less = Violation::new(
         BoundaryKind::Crate,
-        "dep-crate".to_string(),
-        "deny external".to_string(),
-        "serde".to_string(),
+        test_id("dep-crate", "deny external", "serde"),
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     );
@@ -1791,6 +1835,9 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     // First write: no metadata yet.
     assert_eq!(super::write_baseline(&outcome, path_str), 0);
     let first = std::fs::read_to_string(&path).expect("baseline written");
+    let first_doc: Value = serde_json::from_str(&first).unwrap();
+    assert_eq!(first_doc["version"], 2);
+    assert!(first_doc["violations"][0]["finding_key"].is_object());
     assert!(
         !first.contains("owner"),
         "fresh baseline has no metadata: {first}"
@@ -1809,6 +1856,30 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     let doc: Value = serde_json::from_str(&rewritten).expect("valid baseline json");
     assert_eq!(doc["violations"][0]["owner"], "team-core");
     assert_eq!(doc["violations"][0]["tracker"], "ISSUE-7");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn write_baseline_upgrades_version_one_and_preserves_exact_match_metadata() {
+    let path = std::env::temp_dir().join(format!(
+        "tianheng-baseline-v1-upgrade-{}.json",
+        std::process::id()
+    ));
+    let path_str = path.to_str().expect("utf-8 temp path");
+    let legacy = r#"{"version":1,"violations":[{
+        "target":"core","rule":"rule","finding":"serde",
+        "owner":"team-core","tracker":"ISSUE-8"
+    }]}"#;
+    std::fs::write(&path, legacy).expect("write legacy baseline");
+    let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
+
+    assert_eq!(super::write_baseline(&outcome, path_str), 0);
+    let rewritten: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(rewritten["version"], 2);
+    assert!(rewritten["violations"][0]["finding_key"].is_object());
+    assert_eq!(rewritten["violations"][0]["owner"], "team-core");
+    assert_eq!(rewritten["violations"][0]["tracker"], "ISSUE-8");
 
     let _ = std::fs::remove_file(&path);
 }

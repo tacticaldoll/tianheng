@@ -10,12 +10,13 @@ use crate::errors::{
     must_only_be_imported_by_on_crate_error, restrict_imports_to_on_crate_error,
     unknown_module_error, unreadable_governed_file_error,
 };
+use crate::finding::ModuleFact;
 use crate::module_scan::{
     InlineFinding, canonical_module_path, external_imports_with_importers, governed_files,
     imported_module_paths, imports_with_importers, inline_symbol_findings, path_within,
     reachable_modules, rust_files,
 };
-use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation};
+use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
 /// The source-root directory for a package's lib/proc-macro/bin target (resolved by 星表's
 /// `crate_root_file`). Prefer Cargo's observed `targets[].src_path` so custom `[lib] path =
@@ -36,16 +37,14 @@ fn push_module_violation(
     violations: &mut Vec<Violation>,
     target: &str,
     rule: &str,
-    finding: String,
+    fact: ModuleFact,
     file: String,
     boundary: &ModuleBoundary,
 ) {
     violations.push(
         Violation::new(
             BoundaryKind::Module,
-            target.to_string(),
-            rule.to_string(),
-            finding,
+            ViolationId::new(target, rule, fact.into_finding()),
             boundary.reason.clone(),
             boundary.severity,
         )
@@ -118,7 +117,7 @@ pub(crate) fn check_module_boundary(
         ));
     }
 
-    let rule = boundary.rule.label().to_string();
+    let rule = boundary.rule.label();
 
     // The inbound rules invert the scope: they scan every reachable file and test each
     // importing *module* (not an import path) against the rule, so they have their own
@@ -233,8 +232,8 @@ pub(crate) fn check_module_boundary(
             push_module_violation(
                 violations,
                 &governed_module,
-                &rule,
-                importer_module,
+                rule,
+                ModuleFact::ImporterModule(importer_module),
                 file,
                 boundary,
             );
@@ -303,8 +302,8 @@ pub(crate) fn check_module_boundary(
             push_module_violation(
                 violations,
                 &confined,
-                &rule,
-                importer_module,
+                rule,
+                ModuleFact::ExternalImporter(importer_module),
                 file,
                 boundary,
             );
@@ -317,14 +316,14 @@ pub(crate) fn check_module_boundary(
     // rather than `use` imports. The confined prefix is the violation *target* (so nested-prefix
     // confinements on one subtree stay injective); the finding is the per-call resolved path (or a
     // hazardous glob) plus its module.
-    // Both inline variants (default and strict-external) route through this ONE shared path via the
+    // Both inline forms (default and strict-external) route through this ONE shared path via the
     // `inline_payload` accessor — never through the exhaustive `is_violation` match below (whose
     // inline arm is `unreachable!()`), which would skip the inline scan and silently observe
     // nothing (a false negative). Identity (`target`/`rule`/`finding`) is byte-identical across the
-    // two; the only strict-external-conditional behavior is inside `inline_symbol_findings` /
-    // `resolve_head`. `external` is `true` only for the strict-external variant.
+    // two forms; the only strict-external-conditional behavior is inside `inline_symbol_findings` /
+    // `resolve_head`. `external` reflects the single rule's `strict_external` modifier.
     if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
-        // Misdeclarations are loud (exit 2), never a silent no-op — for BOTH variants.
+        // Misdeclarations are loud (exit 2), never a silent no-op — for both forms.
         if prefix.trim().is_empty() {
             return Err(inline_empty_prefix_error(&boundary.crate_package));
         }
@@ -363,8 +362,8 @@ pub(crate) fn check_module_boundary(
             external,
             &dependency_names,
         )?;
-        for InlineFinding { finding, file } in findings {
-            push_module_violation(violations, &confined_prefix, &rule, finding, file, boundary);
+        for InlineFinding { fact, file } in findings {
+            push_module_violation(violations, &confined_prefix, rule, fact, file, boundary);
         }
         return Ok(());
     }
@@ -405,8 +404,7 @@ pub(crate) fn check_module_boundary(
         ModuleRule::MustNotBeImportedBy { .. }
         | ModuleRule::MustOnlyBeImportedBy { .. }
         | ModuleRule::ConfineExternalCrate { .. }
-        | ModuleRule::ConfineInlineSymbolPath { .. }
-        | ModuleRule::ConfineInlineSymbolPathExternal { .. } => {
+        | ModuleRule::ConfineInlineSymbolPath { .. } => {
             unreachable!("the inbound / confinement rules are evaluated above and return early")
         }
     };
@@ -434,7 +432,14 @@ pub(crate) fn check_module_boundary(
     findings.sort();
     findings.dedup_by(|a, b| a.0 == b.0);
     for (finding, file) in findings {
-        push_module_violation(violations, &governed_module, &rule, finding, file, boundary);
+        push_module_violation(
+            violations,
+            &governed_module,
+            rule,
+            ModuleFact::ImportedPath(finding),
+            file,
+            boundary,
+        );
     }
     Ok(())
 }

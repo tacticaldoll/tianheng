@@ -9,7 +9,8 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation};
+use crate::finding::RuntimeFact;
+use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation, ViolationId};
 
 mod scan;
 use scan::{Probe, collect_probes};
@@ -72,9 +73,14 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) 
             violations.push(
                 Violation::new(
                     BoundaryKind::Runtime,
-                    seam.to_string(),
-                    "each runtime seam must be declared exactly once".to_string(),
-                    format!("seam '{seam}' is declared more than once"),
+                    ViolationId::new(
+                        seam,
+                        "each runtime seam must be declared exactly once",
+                        RuntimeFact::DuplicateSeam {
+                            seam: seam.to_string(),
+                        }
+                        .into_finding(),
+                    ),
                     "a duplicate declaration would silently shadow the earlier boundary at install"
                         .to_string(),
                     Severity::Enforce,
@@ -93,9 +99,14 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) 
             violations.push(
                 Violation::new(
                     BoundaryKind::Runtime,
-                    seam.to_string(),
-                    "every declared runtime seam must be probed".to_string(),
-                    format!("declared seam '{seam}' has no assert_boundary! probe"),
+                    ViolationId::new(
+                        seam,
+                        "every declared runtime seam must be probed",
+                        RuntimeFact::UnprobedSeam {
+                            seam: seam.to_string(),
+                        }
+                        .into_finding(),
+                    ),
                     "a RuntimeBoundary with no probe is never enforced at runtime".to_string(),
                     boundary.severity(),
                 )
@@ -111,9 +122,11 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) 
             if !declared_set.contains(seam.as_str()) && seen_probe.insert(seam.as_str()) {
                 violations.push(Violation::new(
                     BoundaryKind::Runtime,
-                    seam.clone(),
-                    "every probe must reference a declared seam".to_string(),
-                    format!("probe references undeclared seam '{seam}'"),
+                    ViolationId::new(
+                        seam,
+                        "every probe must reference a declared seam",
+                        RuntimeFact::UndeclaredProbe { seam: seam.clone() }.into_finding(),
+                    ),
                     "an undeclared seam panics at runtime — declare the RuntimeBoundary or fix the probe's seam name".to_string(),
                     Severity::Enforce,
                 ));
@@ -140,11 +153,13 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) 
         violations.push(
             Violation::new(
                 BoundaryKind::Runtime,
-                "<un-auditable probe>".to_string(),
-                "an assert_boundary! seam must be a string literal to be auditable".to_string(),
-                format!(
-                    "{file} has an assert_boundary! probe with a non-literal seam (const or \
-                     expression), which the CI face cannot trace to a declared seam"
+                ViolationId::new(
+                    "<un-auditable probe>",
+                    "an assert_boundary! seam must be a string literal to be auditable",
+                    RuntimeFact::UnauditableProbe {
+                        file: file.to_string(),
+                    }
+                    .into_finding(),
                 ),
                 "spell the seam as a string literal so probe coverage can be verified".to_string(),
                 Severity::Enforce,

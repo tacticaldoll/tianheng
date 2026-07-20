@@ -1,32 +1,40 @@
-//! The funnel, stage by stage: each instrument reacts to its own fault. Asserted through the
-//! per-dimension checks (which return an inspectable `Outcome`), so each stage's exit code is
-//! provable — the composed CLI (`bin/check`) then projects all of them into one code.
+//! The funnel as one inspectable reaction: the same unified Constitution the CLI consumes returns
+//! one Outcome containing each source-observed dimension's fault, while the declared runtime seam's
+//! probe coverage stays clean.
 use std::path::{Path, PathBuf};
 
-use tianheng::{check, check_semantic, GnomonConstitution, ModuleBoundary, SemanticBoundary};
+use composed_app::governance::constitution;
+use tianheng::{BoundaryKind, Outcome, check_constitution};
 
 fn manifest() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")
 }
 
-/// Stage 1 — 圭表: the `domain → infra` import reacts (exit 1).
+/// 圭表 and 渾儀 contribute to one report; 漏刻's declared seam is correctly probed.
 #[test]
-fn the_static_instrument_reacts() {
-    let c = GnomonConstitution::new("composed_app").boundary(
-        ModuleBoundary::in_crate("composed_app")
-            .module("crate::domain")
-            .must_not_import("crate::infra")
-            .because("the domain stays pure"),
+fn the_composed_constitution_returns_every_source_observed_fault() {
+    let Outcome::Violations(report) = check_constitution(&constitution(), &manifest()) else {
+        panic!("the deliberately violating composed fixture must return a report");
+    };
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|violation| violation.kind == BoundaryKind::Module),
+        "the report must include the static module-import fault",
     );
-    assert_eq!(check(&c, &manifest()).exit_code(), 1);
-}
-
-/// Stage 2 — 渾儀: the `api` leak of `infra::DbPool` reacts (exit 1).
-#[test]
-fn the_semantic_instrument_reacts() {
-    let boundaries = vec![SemanticBoundary::in_crate("composed_app")
-        .module("crate::api")
-        .must_not_expose("crate::infra::DbPool")
-        .because("the public API must not leak the internal database pool")];
-    assert_eq!(check_semantic(&boundaries, &manifest()).exit_code(), 1);
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|violation| violation.kind == BoundaryKind::Semantic),
+        "the report must include the semantic API-exposure fault",
+    );
+    assert!(
+        report
+            .violations
+            .iter()
+            .all(|violation| violation.kind != BoundaryKind::Runtime),
+        "the declared runtime seam is probed, so its CI face stays clean",
+    );
 }

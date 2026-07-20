@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use crate::cargo_metadata::find_package;
 use crate::errors::crate_not_found_error;
-use crate::{BoundaryKind, CrateBoundary, Violation};
+use crate::{BoundaryKind, CrateBoundary, Violation, ViolationId};
 
 pub(crate) fn check_crate_boundary(
     metadata: &Value,
@@ -13,16 +13,18 @@ pub(crate) fn check_crate_boundary(
     let package = find_package(metadata, &boundary.target.package)
         .ok_or_else(|| crate_not_found_error(&boundary.target.package))?;
 
-    for finding in boundary.rule.findings(package, workspace, boundary.kind) {
+    for fact in boundary.rule.facts(package, workspace, boundary.kind) {
         // No `with_file`: a crate-dependency violation is an edge in the dependency graph
         // (a `Cargo.toml` manifest relation), not a single source line, so its `file` is a
         // faithful `None` — the location already lives in `(target, finding)`.
         violations.push(
             Violation::new(
                 BoundaryKind::Crate,
-                boundary.target.package.clone(),
-                boundary.rule.label().to_string(),
-                finding,
+                ViolationId::new(
+                    boundary.target.package.clone(),
+                    boundary.rule.label(),
+                    fact.into_finding(),
+                ),
                 boundary.reason.clone(),
                 boundary.severity,
             )

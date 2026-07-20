@@ -141,3 +141,57 @@ pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option
         _ => None,
     }
 }
+
+/// Content inside the first `{ … }` of `s` (which must start with `{`), honoring nesting. The single
+/// home of the brace-body extractor the `use`-scan ([`super::use_scan`]) and symbol-scan
+/// ([`super::symbol_scan`]) use-tree parsers share, so the two cannot drift (the twin-drift bug
+/// class).
+pub(super) fn brace_content(s: &str) -> String {
+    let mut depth = 0i32;
+    let mut out = String::new();
+    for ch in s.chars() {
+        match ch {
+            '{' => {
+                depth += 1;
+                if depth == 1 {
+                    continue;
+                }
+            }
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => {}
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Split on commas at brace depth 0 — the use-tree group splitter both scanners share (see
+/// [`brace_content`]).
+pub(super) fn split_top_commas(s: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut current = String::new();
+    for ch in s.chars() {
+        match ch {
+            '{' => {
+                depth += 1;
+                current.push(ch);
+            }
+            '}' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => parts.push(std::mem::take(&mut current)),
+            _ => current.push(ch),
+        }
+    }
+    if !current.trim().is_empty() {
+        parts.push(current);
+    }
+    parts
+}

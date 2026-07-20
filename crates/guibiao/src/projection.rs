@@ -39,9 +39,14 @@ pub fn report_json(
     };
     let stale_baseline: Vec<Value> = stale
         .iter()
-        .map(
-            |id| serde_json::json!({ "target": id.target, "rule": id.rule, "finding": id.finding }),
-        )
+        .map(|id| {
+            serde_json::json!({
+                "target": id.target,
+                "rule": id.rule,
+                "finding": id.finding,
+                "finding_key": id.finding_key().map(xuanji::FindingKey::to_json),
+            })
+        })
         .collect();
     let mut document = serde_json::json!({
         "outcome": label,
