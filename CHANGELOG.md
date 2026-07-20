@@ -20,6 +20,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - The examples gate now compares an explicit repository-only inventory of published boundary
   families with fulfilled real-reaction owners; missing owners and unknown claims fail loudly
   without adding family metadata to the public API or report wire.
+- Every isolated example workspace now passes format, all-target Clippy, and warning-denied rustdoc
+  gates before its Tianheng reaction is accepted; a focused warning fixture proves the quality gate
+  fails first while committed adopter-facing dependency declarations remain unchanged.
 
 ### Changed
 - Published finding schemas and their dimension-local canonicalizers are now exhaustively pinned as
@@ -29,6 +32,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   explicit V1-to-V2 upgrade path, including metadata carry-forward and stale-entry removal.
 
 ### Fixed
+- The unsafe-confinement example's public raw-pointer functions are now explicitly `unsafe` with
+  safety contracts; the deliberately misplaced site remains outside the allowed subtree and still
+  exercises the same architectural reaction.
 - Baseline `owner` / `tracker` metadata now rejects non-string JSON values instead of silently
   erasing malformed governance data; the CLI gate fails as a constitution error and explicit
   rewrite retains its warning-before-recovery behavior.

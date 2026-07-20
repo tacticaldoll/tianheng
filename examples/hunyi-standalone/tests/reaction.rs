@@ -51,7 +51,11 @@ fn an_over_pub_item_breaches_the_crate_visibility_ceiling() {
             violation.finding_key().namespace() == "hunyi"
                 && violation.finding_key().code() == "visibility_exposure"
         }));
-        let findings: Vec<&str> = report.violations.iter().map(|v| v.finding.as_str()).collect();
+        let findings: Vec<&str> = report
+            .violations
+            .iter()
+            .map(|v| v.finding.as_str())
+            .collect();
         assert!(
             findings.iter().any(|f| f.contains("Widget")),
             "{findings:?}"

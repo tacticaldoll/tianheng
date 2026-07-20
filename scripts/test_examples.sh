@@ -14,9 +14,13 @@ set -euo pipefail
 WS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/published_family_coverage.sh
 source "$WS/scripts/lib/published_family_coverage.sh"
+# shellcheck source=scripts/lib/example_quality.sh
+source "$WS/scripts/lib/example_quality.sh"
 
 # Prove that both ledger failure directions bite before trusting its positive result below.
 bash "$WS/scripts/test_published_family_coverage.sh"
+# Prove a real warning stops an example before its reaction could be accepted.
+bash "$WS/scripts/test_example_quality_gate.sh"
 
 # Emit null-delimited `--config patch...` args for the named family crates.
 patch() {
@@ -38,6 +42,7 @@ expect() { # expect <got> <want> <label>
 # ---------------------------------------------------------------- guibiao-standalone
 cd "$WS/examples/guibiao-standalone"
 mapfile -d '' PATCH < <(patch guibiao xuanji xingbiao)
+quality_gates "guibiao-standalone" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
@@ -47,6 +52,7 @@ fulfill_family guibiao/module
 # ---------------------------------------------------------------- hunyi-standalone
 cd "$WS/examples/hunyi-standalone"
 mapfile -d '' PATCH < <(patch hunyi xuanji xingbiao)
+quality_gates "hunyi-standalone" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
@@ -59,6 +65,7 @@ fulfill_family hunyi/visibility
 # `#![forbid(unsafe_code)]`), so it needs a crate with real, confined `unsafe`.
 cd "$WS/examples/unsafe-confinement"
 mapfile -d '' PATCH < <(patch hunyi xuanji xingbiao)
+quality_gates "unsafe-confinement" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
@@ -70,6 +77,7 @@ fulfill_family hunyi/unsafe
 # focused teaching examples. Bind stable structured identity, never the human finding sentence.
 cd "$WS/examples/capability-catalog"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+quality_gates "capability-catalog" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml --format json \
@@ -97,6 +105,7 @@ fulfill_family hunyi/impl-trait
 # ---------------------------------------------------------------- composed
 cd "$WS/examples/composed"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+quality_gates "composed" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 
 # check-mode — presentation ⊥ verdict: the exit code is identical across formats.
@@ -169,6 +178,7 @@ fulfill_family louke/runtime
 # async boundary into one declaration; `run` projects both into one exit code.
 cd "$WS/examples/sans-io-pure"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+quality_gates "sans-io-pure" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml >/dev/null 2>&1 || got=$?

@@ -42,7 +42,9 @@ fn a_forbidden_dependency_feature_reacts() {
     let law = Constitution::new("hexagonal_demo").boundary(
         CrateBoundary::crate_("hexagonal_demo")
             .forbid_feature("guibiao", "default")
-            .because("pin guibiao to default-features = false — keep the adopter's footprint minimal"),
+            .because(
+                "pin guibiao to default-features = false — keep the adopter's footprint minimal",
+            ),
     );
     let report = report_of(check(&law, &manifest()));
     assert!(
@@ -51,7 +53,11 @@ fn a_forbidden_dependency_feature_reacts() {
             .iter()
             .any(|v| v.finding == "guibiao/default"),
         "the finding names the dependency and the offending feature (guibiao/default), got {:?}",
-        report.violations.iter().map(|v| &v.finding).collect::<Vec<_>>(),
+        report
+            .violations
+            .iter()
+            .map(|v| &v.finding)
+            .collect::<Vec<_>>(),
     );
     assert_eq!(
         Outcome::Violations(report).exit_code(),
