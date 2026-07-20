@@ -5,12 +5,57 @@ projection of the release history; the per-change *why* lives in the squashed ch
 their pull requests. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Versioning is **SemVer honesty** for a pre-1.0 line (see `AGENTS.md`): the family is
-**experimental / late-stage pre-stability**, held at `0.1.x` deliberately until real adoption
-pressure settles which public faces become long-term contracts. Within `0.1.x`, additive depth on
-an existing observation source and packaging/hygiene are patch releases, and no release
+**experimental / pre-1.0**. It held at `0.1.x` deliberately until real adopters arrived; `0.2.0` is
+the first deliberate minor past that hold. Pre-1.0, additive depth on an existing observation source
+and packaging/hygiene are patch releases, a breaking change earns a minor, and no release
 intentionally breaks the adopter-written builder (`Constitution` / boundary DSL / `run`).
 
 ## [Unreleased]
+
+The first **breaking** window since `0.1.0` — a deliberate `0.2.0` minor (the `0.1.x` hold ended
+when real adopters arrived). The break is quarantined to internal identity/model surfaces; the
+adopter-written builder is a drop-in swap (see **Compatibility**).
+
+### Added
+- **`tianheng::check_constitution`** — one inspectable composed reaction over the static (圭表),
+  semantic (渾儀), and runtime (漏刻) dimensions in a single call, sharing the runner's evaluator
+  (static-first error precedence, runtime orphan-probe auditing) without going through the CLI.
+- **Adopter surface contract.** The composed wildcard `prelude` is now an explicit,
+  compile-checked external compatibility promise, with a symmetric `ModuleRule` inspection path;
+  hidden granular checks stay outside the promise.
+
+### Changed
+- **BREAKING — structured violation identity.** Violation matching moved from rendered finding
+  *text* to dimension-owned **structured keys**: `Violation::new` now takes a typed `ViolationId`,
+  and newly-written baselines use version-2 `finding_key`s (fact-specific named fields) instead of a
+  rendered descriptor. 渾儀's semantic findings derive both their diagnostic text and their key from
+  one typed fact model. Reports stay byte-identical.
+- **BREAKING — 圭表 rule model surface narrowed.** `Rule` / `ModuleRule` are now
+  builder-constructed only — downstream can no longer construct or exhaustively destructure their
+  data-carrying variants (open-ended *inspection* stays available through the boundary accessors);
+  `InlineExternalStrict` is folded into `Inline`. Reaction, projection, polarity, and violation
+  identity are unchanged.
+
+### Fixed
+- 渾儀 unsafe-confinement: `unsafe fn` findings are now **owner-qualified** (`unsafe fn {owner}::{m}`)
+  for inherent, trait-declaration, and trait-impl methods, so two same-named `unsafe fn`s on
+  different owners in one out-of-subtree module no longer collapse to one finding — closing a
+  baseline-masking false negative (the `unsafe fn` sibling of 0.1.8's `unsafe impl` closure).
+- 圭表 inline-symbol-path confinement (`must_not_call_inline`): a `use`-group member whose name
+  merely *starts with* the substring `self` (e.g. `use chrono::{self_utc as clk}`) is now resolved
+  rather than dropped, so a confined inline call through such an alias reacts — closing a false
+  negative.
+- 渾儀 single-module resolution: a module split across `#[cfg(…)] mod x { … }` **inline variants** now
+  has every variant governed (matching the crate-wide scan's observe-all), so a forbidden exposure
+  in a non-source-first variant reacts — closing a `mod`-resolution false negative.
+
+### Compatibility
+- The **adopter-written builder** (`Constitution`, `CrateBoundary`, `ModuleBoundary`, the boundary
+  DSL, `run`, `prelude`) is a **drop-in swap** — the break is quarantined to the internal
+  `Violation` / `ViolationId` / baseline wire and 圭表's rule-model surface.
+- **Baseline migration.** Version-1 baselines are still read (exact-text match), so existing
+  baselines keep grandfathering; a baseline rewritten under this release upgrades to the version-2
+  structured form.
 
 ## [0.1.10] - 2026-07-15
 
