@@ -50,6 +50,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - Runtime probe coverage now starts from every exact Cargo library and binary target root and walks
   only module-reachable source, so an orphan `.rs` file can no longer satisfy a seam it never
   enforces. Direct callers that pass a directory retain the legacy recursive corpus.
+- The probe-coverage walker now detects a module's `#[path]` attribute structurally instead of
+  scanning its preamble for the raw substring `path`, so a module preceded by a `// fast path`
+  comment or a `#[cfg(feature = "fastpath")]` is no longer misclassified as relocated and dropped
+  from the audit corpus together with the probes beneath it.
+- CI gates that could pass vacuously now bite: louke's default (audit-off) library is linted on its
+  own so dead `audit`-gated code fails loud despite workspace feature unification pinning `audit`
+  on, and the release-coherence check guards its discovered crate set non-empty so a layout change
+  cannot silently empty its manifest-inheritance and lock loops.
 
 ## [0.2.0] - 2026-07-20
 
