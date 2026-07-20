@@ -802,10 +802,24 @@ Deferred / forward:
     conventionally resolved `mod name;` descendants count; undeclared or inline-shadow sibling
     files cannot cover a seam. 漏刻 still imports neither 圭表 nor `syn`, and its production face
     remains unchanged. Existing direct callers that pass directories retain the recursive corpus
-    for source compatibility; passing root files opts into reachability. `cfg`/feature evaluation
-    and `#[path]`-remapped external modules remain explicit bounds (the latter can over-report an
-    unprobed seam, never silently cover one). A shared reachability substrate still waits for a
-    second dimension proving genuinely shared semantics.
+    for source compatibility; passing root files opts into reachability. A genuinely
+    `#[path]`-remapped external module stays an explicit bound (excluded from by-name resolution — it
+    can over-report an unprobed seam, never silently cover one). A shared reachability substrate still
+    waits for a second dimension proving genuinely shared semantics.
+    - **`#[path]` detection tightened — post-0.2.1 adversarial review (CLOSED).** The exclusion was a
+      raw `path` substring scan of the module preamble, so a `// fast path` comment or a
+      `#[cfg(feature = "fastpath")]` misclassified a *reachable* module as relocated and dropped it —
+      and every probe under it — a **silent coverage FN**, worse than the over-report above. Now
+      detected structurally (an outer attribute whose meta name is exactly `path`, comments and
+      unrelated attributes skipped); `#[cfg_attr(.., path = ..)]` stays a bound. Two pins guard it.
+    - **`cfg`-gated module whose file is absent on the current platform hard-errors — post-0.2.1
+      review, KEPT as a documented bound (not a bug).** The scan is lexical and does not evaluate
+      `cfg` (`runtime-origin-assertion`), and an unresolvable *reachable* module is a constitution
+      error, never a silent skip — the FN-first guard, with a passing test. So `#[cfg(windows)] mod
+      win;` with no `win.rs` on a non-Windows checkout fails loud. Deliberate: keep the file present,
+      or run the audit per platform. Evaluating `cfg` for module resolution would trade away the
+      "does not evaluate cfg" simplicity and weaken a fail-loud FN-guard — a spec amendment if ever
+      wanted, not a fix.
   - **`member_src_dirs` silently skips a lib/bin-less member.** `crate_root_file` returns `None` for
     a member with no lib/bin target (proc-macro/test-only), genuinely out of the audit corpus; a
     lib/bin target always carries a `src_path`, so the "resolvable-but-absent" case is unreachable in
