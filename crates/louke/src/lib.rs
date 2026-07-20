@@ -389,12 +389,8 @@ fn check_crossing(
     })?;
 
     let info = registry.origins.get(&type_id);
-    let origin = info.map(|i| i.origin);
-    let allowed = match origin {
-        Some(o) => s.allowed.contains(&o),
-        // Fail-closed: a type that never registered an origin is not in the allowlist.
-        None => false,
-    };
+    // Fail-closed: a type that never registered an origin is not in the allowlist.
+    let allowed = info.is_some_and(|i| s.allowed.contains(&i.origin));
     if allowed {
         return Ok(None);
     }

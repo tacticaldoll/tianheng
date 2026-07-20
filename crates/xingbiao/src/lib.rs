@@ -83,8 +83,7 @@ pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
     let has_kind = |target: &Value, wanted: &str| {
         target["kind"]
             .as_array()
-            .map(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
-            .unwrap_or(false)
+            .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
     };
     let pick = targets
         .iter()
