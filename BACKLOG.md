@@ -152,12 +152,12 @@ an invitation to redesign the model:
   and composed consumers alike; the gate exits 2, while the explicit `--write-baseline` recovery
   path retains its warning-before-fresh-snapshot behavior. Identity, canonical output, and the
   version-1/version-2 matching contracts are unchanged.
-- **Legacy migration communication — documentation only.** Version 1 remains supported by exact
-  `(target, rule, finding)` matching; `--write-baseline` is already the bounded opt-in upgrade,
-  preserving metadata for exact live matches and dropping stale entries as the snapshot contract
-  requires. Document that wording-sensitive V1 users should rewrite before presentation changes
-  when metadata preservation matters. Do not add a migration command, wall-clock window, or a
-  perpetual read warning absent a V1 deprecation decision.
+- **Legacy migration communication — BUILT (documentation only).** Version 1 remains supported by
+  exact `(target, rule, finding)` matching. The adopter workflow now names the existing
+  `--write-baseline` action as the bounded opt-in upgrade, tells wording-sensitive V1 users to
+  rewrite before presentation changes when suppression or metadata preservation matters, and states
+  that exact live matches carry metadata while stale entries drop with the fresh snapshot. No
+  migration command, wall-clock window, automatic read rewrite, or perpetual warning was added.
 - **Flat-envelope pressure trigger — watch, do not pre-build.** `FindingKey` is intentionally the
   public, vocabulary-neutral shared chokepoint for identity instances, while schemas stay in their
   dimensions. Revisit its flat string-field representation only when a real observed fact cannot

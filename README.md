@@ -134,7 +134,13 @@ with `--write-baseline` to remove resolved entries. Rewriting preserves hand-add
 `tracker` metadata for identities that still exist. New baselines are version 2: a violation's
 identity is `(target, rule, finding_key)`, while the human `finding`, `file`, `anchor`, reason, and
 severity do not churn it. Version-1 text baselines remain readable and match by their old exact
-`(target, rule, finding)` triple until the next write upgrades them.
+`(target, rule, finding)` triple until the next write upgrades them. That write is the bounded,
+opt-in migration: if you still use version 1 and plan to change finding wording, run the existing
+`--write-baseline` command **before** the wording change when you need those suppressions or their
+`owner` / `tracker` annotations carried forward. Exact live text matches keep their metadata and
+gain structured keys; entries with no exact live match are stale snapshot state and are omitted.
+There is no separate migration command or automatic read-time rewrite, and continued version-1
+support has no time-based deprecation window.
 
 **CI / agent visibility.** `check --format json` is the machine contract; `check --format sarif`
 emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
