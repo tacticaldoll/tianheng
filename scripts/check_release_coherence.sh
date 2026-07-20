@@ -57,11 +57,11 @@ changelog_unreleased_is_empty() {
 
 require_workspace_manifests() {
     local manifest package_name
-    while IFS= read -r manifest; do
+    for manifest in "${workspace_manifest_files[@]}"; do
         package_name=$(awk -F '"' '/^[[:space:]]*name[[:space:]]*=/ { print $2; exit }' "$manifest")
         grep -Eq '^[[:space:]]*version\.workspace[[:space:]]*=[[:space:]]*true([[:space:]]*(#.*)?)?$' "$manifest" \
             || fail "workspace package ${package_name:-$manifest} must inherit version.workspace = true"
-    done < <(find "$repo/crates" -mindepth 2 -maxdepth 2 -name Cargo.toml -type f | sort)
+    done
 }
 
 require_internal_pins() {
@@ -78,9 +78,9 @@ require_internal_pins() {
 
 workspace_packages() {
     local manifest
-    while IFS= read -r manifest; do
+    for manifest in "${workspace_manifest_files[@]}"; do
         awk -F '"' '/^[[:space:]]*name[[:space:]]*=/ { print $2; exit }' "$manifest"
-    done < <(find "$repo/crates" -mindepth 2 -maxdepth 2 -name Cargo.toml -type f | sort)
+    done
 }
 
 lock_version_for() {
@@ -171,6 +171,16 @@ else
         1) state=release-ready ;;
     esac
 fi
+
+# Discover the workspace crate manifests once, in the main body — NOT inside a `< <(...)`
+# subshell, where a `fail` exits only the subshell and is swallowed by the outer read loop.
+# Guard the set non-empty: if the crate layout ever deepens (crates/<group>/<pkg>) or `crates/`
+# is renamed/absent, the `find` yields nothing and every manifest-and-lock loop below would
+# otherwise iterate zero times and pass with zero assertions — a coherent-looking but vacuous
+# gate. Mirrors the release-spine emptiness guard above (`${#release_records[@]} -gt 0`).
+mapfile -t workspace_manifest_files < <(find "$repo/crates" -mindepth 2 -maxdepth 2 -name Cargo.toml -type f | sort)
+[[ ${#workspace_manifest_files[@]} -gt 0 ]] \
+    || fail "found no workspace crate manifests under $repo/crates — the crate layout changed or is absent, so manifest and lock coherence cannot be verified"
 
 require_workspace_manifests
 require_internal_pins
