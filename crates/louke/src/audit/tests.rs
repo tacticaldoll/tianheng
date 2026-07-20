@@ -138,6 +138,54 @@ fn root_aware_audit_does_not_follow_a_mod_token_inside_a_macro_body() {
 }
 
 #[test]
+fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
+    let base = std::env::temp_dir().join(format!("louke-path-substr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // The preamble contains the substring "path" twice — a line comment and an unrelated cfg
+    // feature name — but neither is a `#[path]` attribute, so the module must still be followed
+    // and its probe seen. A raw-substring detector would misclassify it as relocated and drop
+    // the module (a silent coverage false negative).
+    let root = write_source(
+        &base,
+        "lib.rs",
+        "// fast path to the adapter\n#[cfg(feature = \"fastpath\")]\nmod adapter;",
+    );
+    write_source(
+        &base,
+        "adapter.rs",
+        "fn live() { assert_boundary!(\"adapter\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("adapter", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "a `path` substring in a comment/attr must not drop a reachable module: {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn a_real_path_attribute_excludes_the_module_from_by_name_resolution() {
+    let base = std::env::temp_dir().join(format!("louke-path-attr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // A genuine `#[path = "..."]` relocation (with a `]` inside the literal to exercise bracket
+    // matching): the by-name resolver must NOT try to resolve `relocated.rs`, so its absence does
+    // not error — the stated `#[path]` scan bound.
+    let root = write_source(
+        &base,
+        "lib.rs",
+        "#[path = \"generated/a]b.rs\"]\nmod relocated;\nfn live() {}",
+    );
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a #[path] module is excluded from by-name resolution (stated bound): {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
 fn directory_input_retains_the_recursive_compatibility_corpus() {
     let base = std::env::temp_dir().join(format!("louke-dir-compat-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
