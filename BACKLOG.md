@@ -146,11 +146,12 @@ an invitation to redesign the model:
   event identity. Treat existing labels as wire identifiers throughout 0.2.x. Revisit a stable
   `rule_key` separate from human rule presentation only with a deliberate model/baseline migration,
   not wording polish.
-- **Baseline metadata parse strictness — 0.2.x candidate after a requirement scenario.** Omitted
-  `owner` / `tracker` correctly parse as absent, but a present non-string value is also silently
-  normalized to absent. Decide whether explicit `null` is absence or malformed, then reject every
-  other wrong type so governance metadata cannot disappear silently. Keep the write action's
-  existing warning-before-fresh-snapshot behavior on an unreadable baseline.
+- **Baseline metadata parse strictness — BUILT (0.2.x).** Omitted or explicit-null `owner` /
+  `tracker` parse as absence, strings are preserved, and every other JSON type now invalidates the
+  baseline instead of silently erasing governance metadata. The shared parser reacts for standalone
+  and composed consumers alike; the gate exits 2, while the explicit `--write-baseline` recovery
+  path retains its warning-before-fresh-snapshot behavior. Identity, canonical output, and the
+  version-1/version-2 matching contracts are unchanged.
 - **Legacy migration communication — documentation only.** Version 1 remains supported by exact
   `(target, rule, finding)` matching; `--write-baseline` is already the bounded opt-in upgrade,
   preserving metadata for exact live matches and dropping stale entries as the snapshot contract
