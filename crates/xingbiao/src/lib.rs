@@ -74,10 +74,6 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
 /// `example`, `bench`, or `custom-build` — resolves to `None` and is skipped; it carries no
 /// crate-root source to govern.
 pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
-    // Cargo's library crate types; a `[lib]` target reports its `kind` as these (never a plain
-    // `"lib"` when a non-default `crate-type` is declared), so a library crate is any target whose
-    // kind is one of them — preferred over a `bin`, which is the crate root only for a bin-only
-    // member.
     const LIB_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
     let targets = package["targets"].as_array()?;
     let has_kind = |target: &Value, wanted: &str| {
