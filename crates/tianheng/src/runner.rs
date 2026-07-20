@@ -443,11 +443,11 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
                 "Tianheng: wrote {} violation(s) to baseline {path}",
                 report.violations.len()
             );
-            0
+            EXIT_OK
         }
         Err(err) => {
             eprintln!("Tianheng: cannot write baseline {path}: {err}");
-            2
+            EXIT_CANNOT_JUDGE
         }
     }
 }
@@ -519,23 +519,24 @@ fn gate(
     outcome.exit_code()
 }
 
-/// Compose the static and semantic outcomes into one reaction. A constitution error from
-/// either dimension supersedes any violation — a boundary that could not be evaluated makes
-/// the run's verdict untrustworthy — and otherwise the two reports' violations merge into a
-/// single report, gated, baselined, and reported together. The static outcome is checked
-/// first, so a static error wins deterministically when both error.
-fn merge_outcomes(static_outcome: Outcome, semantic_outcome: Outcome) -> Outcome {
-    if matches!(static_outcome, Outcome::ConstitutionError(_)) {
-        return static_outcome;
+/// Fold two outcomes into one reaction. Reused across the composition chain — static + semantic,
+/// then the accumulated outcome + the runtime probe-coverage audit, then + a workspace-source
+/// constitution error. A constitution error from either side supersedes any violation — a boundary
+/// that could not be evaluated makes the run's verdict untrustworthy — and otherwise the two reports'
+/// violations merge into a single report, gated, baselined, and reported together. `first` is checked
+/// first, so its error wins deterministically when both error.
+fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
+    if matches!(first, Outcome::ConstitutionError(_)) {
+        return first;
     }
-    if matches!(semantic_outcome, Outcome::ConstitutionError(_)) {
-        return semantic_outcome;
+    if matches!(second, Outcome::ConstitutionError(_)) {
+        return second;
     }
     let mut violations = Vec::new();
-    if let Outcome::Violations(report) = &static_outcome {
+    if let Outcome::Violations(report) = &first {
         violations.extend(report.violations.iter().cloned());
     }
-    if let Outcome::Violations(report) = &semantic_outcome {
+    if let Outcome::Violations(report) = &second {
         violations.extend(report.violations.iter().cloned());
     }
     if violations.is_empty() {

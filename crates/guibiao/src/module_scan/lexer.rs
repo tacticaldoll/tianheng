@@ -116,11 +116,7 @@ fn preceding_macro_name(bytes: &[u8], bang: usize) -> bool {
     if start == end {
         return false; // no identifier word precedes the `!`
     }
-    let raw_ident = start >= 2
-        && bytes[start - 1] == b'#'
-        && bytes[start - 2] == b'r'
-        && (start == 2 || !is_ident_byte(bytes[start - 3]));
-    raw_ident || !is_rust_keyword(&bytes[start..end])
+    is_raw_ident_prefixed(bytes, start) || !is_rust_keyword(&bytes[start..end])
 }
 
 /// Whether `word` is a Rust keyword — a word that, before a `!`, marks a unary negation rather than
@@ -365,14 +361,21 @@ pub(super) fn keyword_starts_at(bytes: &[u8], i: usize, keyword: &[u8]) -> bool 
     if !bytes[i..].starts_with(keyword) {
         return false;
     }
-    let raw_ident_prefixed = i >= 2
-        && bytes[i - 1] == b'#'
-        && bytes[i - 2] == b'r'
-        && (i == 2 || !is_ident_byte(bytes[i - 3]));
-    let before_ok = !raw_ident_prefixed && (i == 0 || !is_ident_byte(bytes[i - 1]));
+    let before_ok = !is_raw_ident_prefixed(bytes, i) && (i == 0 || !is_ident_byte(bytes[i - 1]));
     let after = i + keyword.len();
     let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
     before_ok && after_ok
+}
+
+/// Whether the word beginning at `pos` is a raw identifier (`r#word`) — i.e. immediately preceded by
+/// `r#` with a word boundary before the `r`. The single home of the `r#`-prefix test shared by the
+/// keyword boundary check ([`keyword_starts_at`]) and the macro-name check ([`preceding_macro_name`]),
+/// so the two cannot drift on the subtle `pos == 2` boundary case.
+fn is_raw_ident_prefixed(bytes: &[u8], pos: usize) -> bool {
+    pos >= 2
+        && bytes[pos - 1] == b'#'
+        && bytes[pos - 2] == b'r'
+        && (pos == 2 || !is_ident_byte(bytes[pos - 3]))
 }
 
 pub(super) fn is_ident_byte(byte: u8) -> bool {

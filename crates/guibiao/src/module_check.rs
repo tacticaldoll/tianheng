@@ -117,7 +117,7 @@ pub(crate) fn check_module_boundary(
         ));
     }
 
-    let rule = boundary.rule.label().to_string();
+    let rule = boundary.rule.label();
 
     // The inbound rules invert the scope: they scan every reachable file and test each
     // importing *module* (not an import path) against the rule, so they have their own
@@ -232,7 +232,7 @@ pub(crate) fn check_module_boundary(
             push_module_violation(
                 violations,
                 &governed_module,
-                &rule,
+                rule,
                 ModuleFact::ImporterModule(importer_module),
                 file,
                 boundary,
@@ -302,7 +302,7 @@ pub(crate) fn check_module_boundary(
             push_module_violation(
                 violations,
                 &confined,
-                &rule,
+                rule,
                 ModuleFact::ExternalImporter(importer_module),
                 file,
                 boundary,
@@ -363,7 +363,7 @@ pub(crate) fn check_module_boundary(
             &dependency_names,
         )?;
         for InlineFinding { fact, file } in findings {
-            push_module_violation(violations, &confined_prefix, &rule, fact, file, boundary);
+            push_module_violation(violations, &confined_prefix, rule, fact, file, boundary);
         }
         return Ok(());
     }
@@ -435,7 +435,7 @@ pub(crate) fn check_module_boundary(
         push_module_violation(
             violations,
             &governed_module,
-            &rule,
+            rule,
             ModuleFact::ImportedPath(finding),
             file,
             boundary,

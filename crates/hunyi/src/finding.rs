@@ -518,8 +518,7 @@ impl SemanticFact {
                 ("unsafe_site", vec![("label", label), ("module", module)])
             }
         };
-        let key = FindingKey::new("hunyi", code, fields)
-            .expect("hunyi fact schemas use non-empty, unique static field names");
+        let key = FindingKey::of("hunyi", code, fields);
         Finding::new(text, key)
     }
 }
@@ -531,7 +530,7 @@ impl SemanticFact {
 pub(crate) fn sort_facts(findings: &mut Vec<SemanticFact>) {
     findings.sort();
     findings.dedup();
-    findings.sort_by_key(ToString::to_string);
+    findings.sort_by_cached_key(ToString::to_string);
 }
 
 /// The attributed counterpart of [`sort_facts`]. The enclosing module rides beside a fact only for
@@ -539,7 +538,7 @@ pub(crate) fn sort_facts(findings: &mut Vec<SemanticFact>) {
 pub(crate) fn sort_attributed_facts(findings: &mut Vec<(SemanticFact, String)>) {
     findings.sort_by(|a, b| a.0.cmp(&b.0));
     findings.dedup_by(|a, b| a.0 == b.0);
-    findings.sort_by_key(|(finding, module)| (finding.to_string(), module.clone()));
+    findings.sort_by_cached_key(|(finding, module)| (finding.to_string(), module.clone()));
 }
 
 /// Render a shape exposure (`dyn …` / `impl …`) as its seam-qualified finding string — the

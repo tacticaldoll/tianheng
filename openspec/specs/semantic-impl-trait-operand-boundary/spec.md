@@ -30,9 +30,9 @@ YAML, Markdown, or any generated policy file to declare or run the boundary.
 ### Requirement: A returned impl Trait of a forbidden operand is a violation
 
 The system SHALL emit a violation for each returned `impl Trait` in the governed module's public
-surface whose principal trait — the first trait bound of the `impl Trait` — canonicalizes to a
-member of the forbidden operand set, and SHALL report no violation for a returned `impl Trait`
-whose principal trait is outside the set. The principal trait path SHALL be canonicalized and
+surface **any** of whose non-auto (principal) traits canonicalizes to a member of the forbidden
+operand set — a returned `impl Foo + Bar` may name several, and forbidding any one flags it — and
+SHALL report no violation for a returned `impl Trait` none of whose non-auto traits is in the set. The principal trait path SHALL be canonicalized and
 matched **exactly as signature-coupling matches a forbidden type** — through the *same* resolver
 ladder: the module's `use` map, `crate`/`self`/`super`-relative paths, the **external-crate
 name-set oracle** (declared dependencies ∪ sysroot, `.rename`- and `-`→`_`-aware, with a crate-root

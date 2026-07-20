@@ -8,7 +8,8 @@
 
 use super::lexer::{keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    canonical_segment, effective_module, inline_mod_at, is_crate_root_shadow, resolve_self_super,
+    brace_content, canonical_segment, effective_module, inline_mod_at, is_crate_root_shadow,
+    resolve_self_super, split_top_commas,
 };
 
 /// Internal module paths imported by `source`, normalized to absolute `crate::…`
@@ -214,57 +215,6 @@ fn expand_use_tree_depth(tree: &str, depth: usize) -> Vec<String> {
             }
         }
     }
-}
-
-/// Content inside the first `{ … }` of `s` (which must start with `{`), honoring
-/// nesting.
-fn brace_content(s: &str) -> String {
-    let mut depth = 0;
-    let mut out = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                if depth == 1 {
-                    continue;
-                }
-            }
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    break;
-                }
-            }
-            _ => {}
-        }
-        out.push(ch);
-    }
-    out
-}
-
-/// Split on commas at brace depth 0.
-fn split_top_commas(s: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut depth = 0;
-    let mut current = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                current.push(ch);
-            }
-            '}' => {
-                depth -= 1;
-                current.push(ch);
-            }
-            ',' if depth == 0 => parts.push(std::mem::take(&mut current)),
-            _ => current.push(ch),
-        }
-    }
-    if !current.trim().is_empty() {
-        parts.push(current);
-    }
-    parts
 }
 
 /// Resolve a use path to an absolute `crate::…` module path, or `None` if it refers

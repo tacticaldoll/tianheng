@@ -4,7 +4,6 @@ use xuanji::{Finding, FindingKey};
 
 use crate::DependencyKind;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CrateFact {
     Dependency {
         package: String,
@@ -58,7 +57,7 @@ impl CrateFact {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ModuleFact {
     ImportedPath(String),
     ImporterModule(String),
@@ -101,8 +100,7 @@ impl ModuleFact {
 }
 
 fn key<const N: usize>(code: &str, fields: [(&str, &str); N]) -> FindingKey {
-    FindingKey::new("guibiao", code, fields)
-        .expect("guibiao fact schemas use non-empty, unique static field names")
+    FindingKey::of("guibiao", code, fields)
 }
 
 #[cfg(test)]

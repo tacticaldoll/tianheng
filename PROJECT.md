@@ -256,8 +256,9 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   same way the `engine ⊥ shell` law already is. `guibiao`'s *external*-dependency bound
   stays `{serde_json}`; its self-law uses the stricter `restrict_dependencies_to` (which
   governs internal paths too), so it was amended — by deliberate, human-reviewed change to
-  `self_governance.rs` — to `["serde_json", "xuanji"]`, naming the one internal path the
-  family split requires. 璇璣's own boundary `restrict_dependencies_to(["serde_json"])`
+  `self_governance.rs` — to `["serde_json", "xuanji"]` (later `["serde_json", "xuanji", "xingbiao"]`;
+  see the 星表 decision below), naming the internal paths the family split requires. 璇璣's own
+  boundary `restrict_dependencies_to(["serde_json"])`
   keeps it beneath every dimension (no workspace member below it).
 - **The semantic capability-admission test (the gate against lints).** `syn` makes
   opinionated checks trivial to write ("no `unwrap`", "fns ≤ 50 lines"), every one forbidden
@@ -286,13 +287,14 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   `syn`-resolvable module). **(v0.1.2, same release)** its **named-operand depth**
   (`must_not_expose_dyn_of([…])`) — the next rung on the `name → shape → named-operand` stair:
   it refines the shape-only predicate ("any `dyn`") to "a `dyn` of a *named* trait", resolving
-  each `dyn`'s **principal trait** (first trait bound, guaranteed first by Rust's grammar)
+  each `dyn`'s **principal trait** (its sole non-auto trait, whatever its bound position)
   through the same 渾儀 resolver signature-coupling uses (exact-or-module-prefix, re-export
   canonicalization). It reuses the shape-only surface walk and the resolver, adding only the
   operand match — no new source, no new struct. An **empty** operand set degenerates to
   shape-only ("any `dyn`") — a loud over-reaction chosen deliberately over a silent no-op
   (`Of([])`), so a mis-declared operand set never becomes a false negative. Auto-trait markers
-  are never operands (only the principal, first, trait), and an unresolvable principal (a bare
+  are never operands (only the principal, non-auto, trait — matched regardless of bound position),
+  and an unresolvable principal (a bare
   std trait, a macro/glob re-export) is the inherited resolver bound, never a silent pass of a
   *resolvable* operand. **(v0.1.2, same release)** its **existential sibling**
   `ImplTraitBoundary` (`must_not_expose_impl_trait`) — where dyn-trait forbids the *dynamic-
