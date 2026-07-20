@@ -130,8 +130,45 @@ fn vis_prefix(vis: &syn::Visibility) -> String {
 /// capability's domain).
 pub(crate) struct VisibleItem<'a> {
     pub(crate) visibility: &'a syn::Visibility,
-    pub(crate) kind: &'static str,
+    pub(crate) kind: VisibleItemKind,
     pub(crate) name: String,
+}
+
+/// The finite visibility-fact vocabulary. Its labels are published version-2 `item_kind` wire;
+/// keeping the variants typed makes a new governed item kind an explicit compatibility decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum VisibleItemKind {
+    Fn,
+    Struct,
+    Enum,
+    Union,
+    Type,
+    Const,
+    Static,
+    Trait,
+    TraitAlias,
+    Mod,
+    ExternCrate,
+    Use,
+}
+
+impl VisibleItemKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Fn => "fn",
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Union => "union",
+            Self::Type => "type",
+            Self::Const => "const",
+            Self::Static => "static",
+            Self::Trait => "trait",
+            Self::TraitAlias => "trait_alias",
+            Self::Mod => "mod",
+            Self::ExternCrate => "extern_crate",
+            Self::Use => "use",
+        }
+    }
 }
 
 fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
@@ -141,20 +178,52 @@ fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
         name,
     };
     match item {
-        syn::Item::Fn(i) => Some(observed(&i.vis, "fn", i.sig.ident.to_string())),
-        syn::Item::Struct(i) => Some(observed(&i.vis, "struct", i.ident.to_string())),
-        syn::Item::Enum(i) => Some(observed(&i.vis, "enum", i.ident.to_string())),
-        syn::Item::Union(i) => Some(observed(&i.vis, "union", i.ident.to_string())),
-        syn::Item::Type(i) => Some(observed(&i.vis, "type", i.ident.to_string())),
-        syn::Item::Const(i) => Some(observed(&i.vis, "const", i.ident.to_string())),
-        syn::Item::Static(i) => Some(observed(&i.vis, "static", i.ident.to_string())),
-        syn::Item::Trait(i) => Some(observed(&i.vis, "trait", i.ident.to_string())),
-        syn::Item::TraitAlias(i) => Some(observed(&i.vis, "trait_alias", i.ident.to_string())),
-        syn::Item::Mod(i) => Some(observed(&i.vis, "mod", i.ident.to_string())),
-        syn::Item::ExternCrate(i) => Some(observed(&i.vis, "extern_crate", i.ident.to_string())),
+        syn::Item::Fn(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Fn,
+            i.sig.ident.to_string(),
+        )),
+        syn::Item::Struct(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Struct,
+            i.ident.to_string(),
+        )),
+        syn::Item::Enum(i) => Some(observed(&i.vis, VisibleItemKind::Enum, i.ident.to_string())),
+        syn::Item::Union(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Union,
+            i.ident.to_string(),
+        )),
+        syn::Item::Type(i) => Some(observed(&i.vis, VisibleItemKind::Type, i.ident.to_string())),
+        syn::Item::Const(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Const,
+            i.ident.to_string(),
+        )),
+        syn::Item::Static(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Static,
+            i.ident.to_string(),
+        )),
+        syn::Item::Trait(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Trait,
+            i.ident.to_string(),
+        )),
+        syn::Item::TraitAlias(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::TraitAlias,
+            i.ident.to_string(),
+        )),
+        syn::Item::Mod(i) => Some(observed(&i.vis, VisibleItemKind::Mod, i.ident.to_string())),
+        syn::Item::ExternCrate(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::ExternCrate,
+            i.ident.to_string(),
+        )),
         syn::Item::Use(i) => Some(observed(
             &i.vis,
-            "use",
+            VisibleItemKind::Use,
             format!(
                 "{}{}",
                 if i.leading_colon.is_some() { "::" } else { "" },
@@ -172,7 +241,7 @@ fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
 pub(crate) fn item_observation(
     item: &syn::Item,
     ceiling_rank: u8,
-) -> Option<(String, &'static str, String)> {
+) -> Option<(String, VisibleItemKind, String)> {
     let observed = item_observation_parts(item)?;
     (visibility_rank(observed.visibility) > ceiling_rank).then(|| {
         (

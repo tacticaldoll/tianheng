@@ -107,6 +107,124 @@ fn key<const N: usize>(code: &str, fields: [(&str, &str); N]) -> FindingKey {
 mod tests {
     use super::*;
 
+    type KeyCase<F> = (F, &'static str, Vec<(&'static str, &'static str)>);
+
+    fn assert_dependency_kind_is_cataloged(kind: DependencyKind) {
+        match kind {
+            DependencyKind::Normal | DependencyKind::Dev | DependencyKind::Build => {}
+        }
+    }
+
+    fn assert_crate_fact_is_cataloged(fact: &CrateFact) {
+        match fact {
+            CrateFact::Dependency { package: _, kind }
+            | CrateFact::Feature {
+                package: _,
+                feature: _,
+                kind,
+            } => assert_dependency_kind_is_cataloged(*kind),
+        }
+    }
+
+    fn assert_module_fact_is_cataloged(fact: &ModuleFact) {
+        match fact {
+            ModuleFact::ImportedPath(_)
+            | ModuleFact::ImporterModule(_)
+            | ModuleFact::ExternalImporter(_)
+            | ModuleFact::InlinePath { path: _, module: _ }
+            | ModuleFact::InlineGlob { path: _, module: _ } => {}
+        }
+    }
+
+    fn assert_key(fact: impl IntoFinding, code: &str, fields: &[(&str, &str)]) {
+        let finding = fact.into_finding();
+        assert_eq!(finding.key().namespace(), "guibiao");
+        assert_eq!(finding.key().code(), code);
+        assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
+    }
+
+    trait IntoFinding {
+        fn into_finding(self) -> Finding;
+    }
+
+    impl IntoFinding for CrateFact {
+        fn into_finding(self) -> Finding {
+            CrateFact::into_finding(self)
+        }
+    }
+
+    impl IntoFinding for ModuleFact {
+        fn into_finding(self) -> Finding {
+            ModuleFact::into_finding(self)
+        }
+    }
+
+    #[test]
+    fn published_crate_fact_identity_schema_is_exact_and_exhaustive() {
+        let dependency_cases = [
+            (DependencyKind::Normal, "normal"),
+            (DependencyKind::Dev, "dev"),
+            (DependencyKind::Build, "build"),
+        ];
+        for (kind, label) in dependency_cases {
+            let fact = CrateFact::dependency("serde".to_string(), kind);
+            assert_crate_fact_is_cataloged(&fact);
+            assert_key(fact, "dependency", &[("kind", label), ("package", "serde")]);
+
+            let fact = CrateFact::feature("serde".to_string(), "derive".to_string(), kind);
+            assert_crate_fact_is_cataloged(&fact);
+            assert_key(
+                fact,
+                "dependency_feature",
+                &[("feature", "derive"), ("kind", label), ("package", "serde")],
+            );
+        }
+    }
+
+    #[test]
+    fn published_module_fact_identity_schema_is_exact_and_exhaustive() {
+        let cases: Vec<KeyCase<ModuleFact>> = vec![
+            (
+                ModuleFact::ImportedPath("crate::ports".to_string()),
+                "imported_path",
+                vec![("path", "crate::ports")],
+            ),
+            (
+                ModuleFact::ImporterModule("crate::api".to_string()),
+                "importer_module",
+                vec![("module", "crate::api")],
+            ),
+            (
+                ModuleFact::ExternalImporter("crate::ffi".to_string()),
+                "external_importer",
+                vec![("module", "crate::ffi")],
+            ),
+            (
+                ModuleFact::InlinePath {
+                    path: "std::time::SystemTime::now".to_string(),
+                    module: "crate::kernel".to_string(),
+                },
+                "inline_path",
+                vec![
+                    ("module", "crate::kernel"),
+                    ("path", "std::time::SystemTime::now"),
+                ],
+            ),
+            (
+                ModuleFact::InlineGlob {
+                    path: "std::time::*".to_string(),
+                    module: "crate::kernel".to_string(),
+                },
+                "inline_glob",
+                vec![("module", "crate::kernel"), ("path", "std::time::*")],
+            ),
+        ];
+        for (fact, code, fields) in cases {
+            assert_module_fact_is_cataloged(&fact);
+            assert_key(fact, code, &fields);
+        }
+    }
+
     #[test]
     fn identity_bearing_values_and_fact_shapes_stay_distinct() {
         let normal = CrateFact::dependency("serde".to_string(), DependencyKind::Normal)

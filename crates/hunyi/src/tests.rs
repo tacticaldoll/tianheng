@@ -5834,6 +5834,23 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 1, "one exposure violation");
+    assert_eq!(violations[0].target, "crate::domain");
+    assert_eq!(violations[0].rule, SIGNATURE_RULE);
+    let id = violations[0].id();
+    let key = id
+        .finding_key()
+        .expect("a production violation has structured identity");
+    assert_eq!(key.namespace(), "hunyi");
+    assert_eq!(key.code(), "signature_exposure");
+    assert_eq!(
+        key.fields().collect::<Vec<_>>(),
+        vec![
+            ("seam_kind", "free_fn"),
+            ("seam_module", "crate::domain"),
+            ("seam_name", "leak"),
+            ("subject", "crate::infra::Db"),
+        ]
+    );
     let file = violations[0]
         .file
         .as_deref()

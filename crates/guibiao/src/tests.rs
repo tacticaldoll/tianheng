@@ -156,7 +156,18 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
     );
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert_eq!(violations[0].target, "crate::foo::lib");
+    assert_eq!(violations[0].rule, "module must not import");
     assert_eq!(violations[0].finding, "crate::sink");
+    let id = violations[0].id();
+    let key = id
+        .finding_key()
+        .expect("a production violation has structured identity");
+    assert_eq!(key.namespace(), "guibiao");
+    assert_eq!(key.code(), "imported_path");
+    assert_eq!(
+        key.fields().collect::<Vec<_>>(),
+        vec![("path", "crate::sink")]
+    );
 }
 
 /// An unreadable governed source file must surface as a scan error (exit 2),

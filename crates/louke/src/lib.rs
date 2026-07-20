@@ -405,8 +405,9 @@ fn check_crossing(
         // `&dyn Any` on stable Rust). Append it so two DISTINCT unregistered types crossing the same
         // seam produce distinct structured identities — otherwise baselining one
         // silently masks the other (a false negative). The `<unregistered origin>` prefix is kept so
-        // the substring the prod contract/tests depend on still holds; the TypeId is stable within a
-        // build (a hash of the type's identity).
+        // the substring the prod contract/tests depend on still holds. The Debug bytes become the
+        // published version-2 `type_id` key field: they are identity wire and stable only within a
+        // build (a hash of the type's identity), not a promised cross-toolchain type name.
         None => finding::RuntimeFact::UnregisteredCrossing {
             type_id: format!("{type_id:?}"),
         },
@@ -582,6 +583,18 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(v.kind, BoundaryKind::Runtime);
+        assert_eq!(v.target, "seam");
+        assert_eq!(v.rule, runtime_seam_rule_line(&["app::domain"]));
+        let id = v.id();
+        let key = id
+            .finding_key()
+            .expect("a production violation has structured identity");
+        assert_eq!(key.namespace(), "louke");
+        assert_eq!(key.code(), "registered_crossing");
+        assert_eq!(
+            key.fields().collect::<Vec<_>>(),
+            vec![("origin", "app::infra"), ("type_name", "Infra")]
+        );
         assert!(v.finding.contains("app::infra"));
         // This is the prod default-sink violation (emitted via `to_json`). An origin-assertion
         // violation names an origin, not a source file, so its `file` is `None` and the
