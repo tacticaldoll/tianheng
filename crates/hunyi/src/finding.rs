@@ -518,8 +518,7 @@ impl SemanticFact {
                 ("unsafe_site", vec![("label", label), ("module", module)])
             }
         };
-        let key = FindingKey::new("hunyi", code, fields)
-            .expect("hunyi fact schemas use non-empty, unique static field names");
+        let key = FindingKey::of("hunyi", code, fields);
         Finding::new(text, key)
     }
 }

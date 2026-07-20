@@ -52,8 +52,7 @@ impl RuntimeFact {
 }
 
 fn key<const N: usize>(code: &str, fields: [(&str, &str); N]) -> FindingKey {
-    FindingKey::new("louke", code, fields)
-        .expect("louke fact schemas use non-empty, unique static field names")
+    FindingKey::of("louke", code, fields)
 }
 
 #[cfg(test)]

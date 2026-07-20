@@ -100,8 +100,7 @@ impl ModuleFact {
 }
 
 fn key<const N: usize>(code: &str, fields: [(&str, &str); N]) -> FindingKey {
-    FindingKey::new("guibiao", code, fields)
-        .expect("guibiao fact schemas use non-empty, unique static field names")
+    FindingKey::of("guibiao", code, fields)
 }
 
 #[cfg(test)]

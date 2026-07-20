@@ -180,6 +180,22 @@ impl FindingKey {
         })
     }
 
+    /// Build a key from a dimension's statically-known fact schema, where non-empty, unique field
+    /// names are guaranteed by construction. Infallible convenience over [`FindingKey::new`]: it
+    /// unwraps with the single proof annotation the dimensions share, so a schema that is malformed
+    /// (an empty namespace/code, or duplicate/empty field names) is a construction bug that panics
+    /// loudly rather than each dimension repeating the same `expect`. A dimension building a key from
+    /// live, fallibly-named observation uses [`FindingKey::new`] and handles the error instead.
+    pub fn of<I, K, V>(namespace: impl Into<String>, code: impl Into<String>, fields: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        Self::new(namespace, code, fields)
+            .expect("fact schemas use non-empty, unique static field names")
+    }
+
     /// The observation dimension that owns the fact schema.
     pub fn namespace(&self) -> &str {
         &self.namespace
