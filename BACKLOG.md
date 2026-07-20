@@ -216,15 +216,15 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   snippet.** A footprint *is* the product claim (圭表 syn-free and light; 渾儀 the one that *carries*
   the quarantined `syn` — honest, not "light"; 漏刻 `xuanji`-only), and a composed member's
   `Cargo.toml` (whole family + `syn`) cannot show any of them. The `guibiao`-standalone example
-  commits `[dependencies] guibiao = "0.1"` alone (syn-free, light); the `hunyi`-standalone commits
-  `hunyi = "0.1"` (which honestly pulls `syn` — the point is that the semantic instrument is *where
+  commits `[dependencies] guibiao = "0.2"` alone (syn-free, light); the `hunyi`-standalone commits
+  `hunyi = "0.2"` (which honestly pulls `syn` — the point is that the semantic instrument is *where
   syn lives*, not that it is light) — each footprint *demonstrated, not asserted*. 漏刻 has no
   standalone example (a top-down depth), so its `xuanji`-only footprint stays a copy-paste
   README/docs.rs snippet. Every crate's README still carries a ~10-line Constitution + a copy-paste
   GitHub Actions snippet (`tianheng check` on PRs) as prose — a snippet, not a published composite
   action (more weight; defer to a reaction).
 - **Committed-honest, CI-local (one resolution, not two forms in tension).** Every example commits
-  the adopter's real form — `guibiao = "0.1"` — so its `Cargo.toml` is copy-paste-honest and, for the
+  the adopter's real form — currently `guibiao = "0.2"` — so its `Cargo.toml` is copy-paste-honest and, for the
   standalone examples, *is* the footprint demo. To also track HEAD in CI (catch a local regression
   before it publishes), the CI script injects the `--config patch.crates-io.<crate>.path=` resolution
   the `packaged-selftest` job already uses — committed file honest, resolution local. A raw `path =`
@@ -406,8 +406,8 @@ complement — show, then tell.
 
 ### 0.1.5 — known-depth consolidation · **SHIPPED**
 
-0.1.5 has converged from scope map to shipped state (0.1.6 through 0.1.10 have since shipped on top
-of it; 0.1.10 is the current line). Its built items are recorded once in the dimension / 三司 sections
+0.1.5 has converged from scope map to shipped state (0.1.6 through 0.1.10 and 0.2.0 have since shipped
+on top of it; 0.2.x is the current line). Its built items are recorded once in the dimension / 三司 sections
 below; the remaining forward work stays there as forward depth. The 0.2.0 bundle above remains the
 only currently named breaking line.
 

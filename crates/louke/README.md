@@ -54,8 +54,8 @@ predicates.
 
 ## Adoption & status
 
-**Experimental — pre-1.0.** Public faces may change until adoption settles them; within `0.1.x` no
-release intentionally breaks the adopter-written builder.
+**Experimental — pre-1.0.** The current `0.2.x` line is patch-compatible; a breaking public change
+must earn a new minor. The runtime declaration/probe surface remains guarded across patches.
 
 漏刻 is usually reached **top-down**, through the composed
 [`tianheng`](https://crates.io/crates/tianheng) constitution — runtime origin governance is a

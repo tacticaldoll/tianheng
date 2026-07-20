@@ -86,8 +86,8 @@ conventional orphan file.
 
 ## Adoption & status
 
-**Experimental — pre-1.0.** Public faces may change until adoption settles them; within `0.1.x` no
-release intentionally breaks the adopter-written builder.
+**Experimental — pre-1.0.** The current `0.2.x` line is patch-compatible; a breaking public change
+must earn a new minor. The adopter-written boundary DSL remains the guarded surface.
 
 Adopt 圭表 on its own — the footprint is just `guibiao` (+ `serde_json`), no `syn` — or graduate to
 the composed constitution through the [`tianheng`](https://crates.io/crates/tianheng) shell (which

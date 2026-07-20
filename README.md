@@ -12,10 +12,11 @@ independently-developed sibling project, not one Tianheng supersedes. It does no
 and it does not instruct your agent. Developers and agents propose change; Tianheng uses compiler/CI
 and runtime *reactions* to keep architectural shape from drifting.
 
-> **Status: experimental — pre-1.0.** The public faces are still settling; the family is held at
-> `0.1.x` deliberately (see [`CHANGELOG.md`](CHANGELOG.md)) until real adoption pressure says which
-> become long-term contracts. Within `0.1.x` no release intentionally breaks the adopter-written
-> builder (`Constitution` / the boundary DSL / `run`).
+> **Status: experimental — pre-1.0.** Real adopters ended the deliberate `0.1.x` hold and opened the
+> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The current `0.2.x` line preserves
+> its published API and version-2 identity wire across patches; a breaking change must earn the next
+> minor. The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded
+> drop-in surface.
 
 ## Why reaction, not instruction
 
@@ -349,8 +350,8 @@ translated into boundaries.
   code plus named observed values; the human `finding`, `file`, `anchor`, and `polarity` are
   *presentation/metadata*, not identity. Relocating code, attaching an anchor, or improving finding
   wording therefore does not turn a version-2 baselined violation new.
-- **The adopter-written builder does not break in `0.1.x`.** `Constitution`, the boundary DSL, and
-  `run` are the surface you write against; the pre-1.0 churn is quarantined to internal faces.
+- **The adopter-written builder does not break in `0.2.x`.** `Constitution`, the boundary DSL, and
+  `run` are the surface you write against; a breaking change must earn a new pre-1.0 minor.
 
 ## Non-goals
 
