@@ -32,6 +32,127 @@ fn write_dir(base: &Path, name: &str, body: &str) -> PathBuf {
     dir
 }
 
+fn write_source(base: &Path, relative: &str, body: &str) -> PathBuf {
+    let path = base.join(relative);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, body).unwrap();
+    path
+}
+
+#[test]
+fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
+    let base = std::env::temp_dir().join(format!("louke-root-walk-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+
+    let root = write_source(
+        &base,
+        "custom_root.rs",
+        "mod adapter; mod nested { mod child; } mod inline { fn live() {} }",
+    );
+    write_source(
+        &base,
+        "adapter.rs",
+        "fn live() { assert_boundary!(\"adapter\", o); } mod deep;",
+    );
+    write_source(
+        &base,
+        "adapter/deep.rs",
+        "fn live() { assert_boundary!(\"deep\", o); }",
+    );
+    write_source(
+        &base,
+        "nested/child.rs",
+        "fn live() { assert_boundary!(\"nested\", o); }",
+    );
+    write_source(
+        &base,
+        "orphan.rs",
+        "fn dead() { assert_boundary!(\"orphan\", o); }",
+    );
+    write_source(
+        &base,
+        "inline.rs",
+        "fn dead() { assert_boundary!(\"inline-shadow\", o); }",
+    );
+
+    let outcome = audit_probe_coverage(
+        &[
+            boundary("adapter", Severity::Enforce),
+            boundary("deep", Severity::Enforce),
+            boundary("nested", Severity::Enforce),
+            boundary("orphan", Severity::Enforce),
+            boundary("inline-shadow", Severity::Enforce),
+        ],
+        &[root],
+    );
+    let violations = match outcome {
+        Outcome::Violations(report) => report.violations,
+        other => panic!("orphan and inline shadow must stay unprobed: {other:?}"),
+    };
+    let mut targets: Vec<_> = violations.iter().map(|v| v.target.as_str()).collect();
+    targets.sort_unstable();
+    assert_eq!(targets, ["inline-shadow", "orphan"]);
+
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn root_aware_audit_fails_loud_on_an_unresolvable_reachable_module() {
+    let base = std::env::temp_dir().join(format!("louke-root-missing-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = write_source(&base, "lib.rs", "mod missing;");
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("missing")),
+        "a declared source module cannot disappear silently: {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn root_aware_audit_fails_loud_on_non_utf8_reachable_source() {
+    let base = std::env::temp_dir().join(format!("louke-root-unreadable-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = write_source(&base, "lib.rs", "mod broken;");
+    std::fs::write(base.join("broken.rs"), [0xff, 0xfe]).unwrap();
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("broken.rs")),
+        "a selected source that cannot be decoded must fail loud: {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn root_aware_audit_does_not_follow_a_mod_token_inside_a_macro_body() {
+    let base = std::env::temp_dir().join(format!("louke-root-macro-mod-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = write_source(
+        &base,
+        "lib.rs",
+        "macro_rules! generated { () => { mod phantom; } } fn live() {}",
+    );
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert_eq!(outcome, Outcome::Clean, "macro tokens are not live modules");
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn directory_input_retains_the_recursive_compatibility_corpus() {
+    let base = std::env::temp_dir().join(format!("louke-dir-compat-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let dir = write_dir(
+        &base,
+        "legacy",
+        "fn f() { assert_boundary!(\"legacy\", o); }",
+    );
+    assert_eq!(
+        audit_probe_coverage(&[boundary("legacy", Severity::Enforce)], &[dir]).exit_code(),
+        0
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
 #[test]
 fn scan_collects_only_literal_probes_skipping_comments_and_strings() {
     let src = r#"

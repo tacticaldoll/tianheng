@@ -764,15 +764,16 @@ Deferred / forward:
     is not mistaken for a macro), so a probe in a never-invoked macro body no longer counts. Shipped
     as an OpenSpec change modifying `runtime-origin-assertion`; 三儀 ⊥ 三儀 kept (no `strip_macro_bodies`
     import).
-  - **Probe in an unreachable/orphan `.rs` file counts.** louke scans the src subtree lexically with
-    no module-graph reachability; a probe in a dead orphan file is counted. Closing it needs a
-    reachability walk louke does not have and cannot borrow from 圭表 (三儀 ⊥ 三儀), and louke's prod
-    weight forbids a syn/heavy walker. The narrow first follow-up is target-root file/module
-    reachability that closes only the orphan-file false coverage while retaining the existing
-    `cfg`/feature blindness as an explicit bound; do not attempt a full Cargo compilation matrix in
-    the same change. Prefer a louke-local audit walker initially. Move a substrate into 星表 only if
-    a second dimension proves the reachability semantics are genuinely shared; never borrow 圭表's
-    scanner or introduce a 三儀 dependency edge merely to deduplicate code.
+  - **Probe in an unreachable/orphan `.rs` file counts — CLOSED for root-aware/composed audit
+    (0.2.x).** 天衡 now preserves exact Cargo target roots through 星表 and passes those files to a
+    louke-local, audit-only module walk. Only the root, inline bodies in reachable files, and
+    conventionally resolved `mod name;` descendants count; undeclared or inline-shadow sibling
+    files cannot cover a seam. 漏刻 still imports neither 圭表 nor `syn`, and its production face
+    remains unchanged. Existing direct callers that pass directories retain the recursive corpus
+    for source compatibility; passing root files opts into reachability. `cfg`/feature evaluation
+    and `#[path]`-remapped external modules remain explicit bounds (the latter can over-report an
+    unprobed seam, never silently cover one). A shared reachability substrate still waits for a
+    second dimension proving genuinely shared semantics.
   - **`member_src_dirs` silently skips a lib/bin-less member.** `crate_root_file` returns `None` for
     a member with no lib/bin target (proc-macro/test-only), genuinely out of the audit corpus; a
     lib/bin target always carries a `src_path`, so the "resolvable-but-absent" case is unreachable in

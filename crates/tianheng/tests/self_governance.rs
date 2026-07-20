@@ -140,12 +140,19 @@ fn tianheng_constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("tianheng")
-                .restrict_dependencies_to(["guibiao", "hunyi", "louke", "serde_json"])
+                .restrict_dependencies_to([
+                    "guibiao",
+                    "hunyi",
+                    "louke",
+                    "serde_json",
+                    "xingbiao",
+                ])
                 .because(
                     "the 天衡 shell composes the 三儀 into one reaction, so it depends on the 圭表 \
                      static core, the 渾儀 semantic dimension, and the 漏刻 runtime dimension (whose \
-                     CI probe-coverage face it composes into `check`), plus serde_json; the gate \
-                     stands on every dimension it gates",
+                     CI probe-coverage face it composes into `check`), reads exact Cargo target \
+                     roots through the shared 星表 substrate, and projects with serde_json; all \
+                     edges point to dimensions or shared bases beneath the shell",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on

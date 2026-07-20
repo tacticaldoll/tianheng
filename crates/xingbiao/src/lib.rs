@@ -109,6 +109,51 @@ pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
     dirs
 }
 
+/// Every workspace member library, proc-macro, and binary crate-root source file reported by Cargo.
+/// Roots are sorted and de-duplicated for a deterministic observation corpus; test, example, bench,
+/// and custom-build-only targets remain outside the governed runtime corpus.
+///
+/// Keep the filename when a caller needs module reachability: reducing a custom target root to its
+/// parent directory loses which sibling `.rs` file Cargo actually compiles.
+pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = metadata["packages"]
+        .as_array()
+        .map(|packages| {
+            packages
+                .iter()
+                .flat_map(|package| {
+                    package["targets"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|target| {
+                            target["kind"].as_array().is_some_and(|kinds| {
+                                kinds.iter().any(|kind| {
+                                    matches!(
+                                        kind.as_str(),
+                                        Some(
+                                            "lib"
+                                                | "rlib"
+                                                | "dylib"
+                                                | "cdylib"
+                                                | "staticlib"
+                                                | "proc-macro"
+                                                | "bin"
+                                        )
+                                    )
+                                })
+                            })
+                        })
+                        .filter_map(|target| target["src_path"].as_str().map(PathBuf::from))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +287,26 @@ mod tests {
         let dirs = member_src_dirs(&metadata);
         // The lib target wins; both targets share the same src dir here, so one entry.
         assert_eq!(dirs, vec![PathBuf::from("/ws/both/src")], "{dirs:?}");
+    }
+
+    #[test]
+    fn member_root_files_preserves_exact_custom_roots_and_is_deterministic() {
+        let metadata = json!({ "packages": [
+            { "targets": [
+                { "kind": ["lib"], "src_path": "/ws/z/src/lib.rs" },
+                { "kind": ["bin"], "src_path": "/ws/z/src/main.rs" }
+            ] },
+            { "targets": [{ "kind": ["lib"], "src_path": "/ws/a/custom_root.rs" }] },
+            { "targets": [{ "kind": ["lib"], "src_path": "/ws/a/custom_root.rs" }] },
+            { "targets": [{ "kind": ["test"], "src_path": "/ws/t/test.rs" }] }
+        ]});
+        assert_eq!(
+            member_root_files(&metadata),
+            [
+                PathBuf::from("/ws/a/custom_root.rs"),
+                PathBuf::from("/ws/z/src/lib.rs"),
+                PathBuf::from("/ws/z/src/main.rs")
+            ]
+        );
     }
 }
