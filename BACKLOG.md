@@ -299,9 +299,10 @@ complement — show, then tell.
     `serde_json`-only, below every dimension, self-law-enforced). Actionable: elevate its JSON /
     `Baseline` schema to an **explicitly versioned, migration-disciplined** contract in docs — ties
     to the 0.2.0 structured-baseline item (findings as data).
-  - *Violation identity ⊥ metadata.* Already so and documented in rustdoc: `ViolationId = { target,
-    rule, finding }` is the baseline match key; `file` is explicitly *not* identity (set via
-    `with_file`, non-breaking, never affects matching); `BaselineEntry.owner/tracker` are
+  - *Violation identity ⊥ metadata.* **BUILT (0.2.0 line):** the baseline match key is
+    `ViolationId = { target, rule, finding, finding_key }` (v2 structured identity; a v1 baseline
+    matches on `{ target, rule, finding }` for migration); `file` is explicitly *not* identity (set
+    via `with_file`, non-breaking, never affects matching); `BaselineEntry.owner/tracker` are
     metadata-only; the baseline carries no `anchor` (it rides the live `Violation`). This is the
     injective-identity principle realized. Actionable: surface it in the **adopter-facing README** as
     a stability contract, not only in rustdoc.
@@ -517,8 +518,8 @@ set follow.
 
 Built depths past the shape-only dyn (same `syn` source):
 - **Operand-scoped dyn** (`must_not_expose_dyn_of([…])`) — **BUILT (v0.1.2).** Forbid only a
-  *named* trait's `dyn` rather than any: a `dyn` whose **principal trait** (first trait bound)
-  canonicalizes into the forbidden set reacts, resolved through the shared 渾儀 resolver (exact-
+  *named* trait's `dyn` rather than any: a `dyn` whose **principal trait** (its sole non-auto trait,
+  whatever its bound position) canonicalizes into the forbidden set reacts, resolved through the shared 渾儀 resolver (exact-
   or-module-prefix, re-export消歧) exactly as signature-coupling resolves a forbidden type. The
   next rung on the `name → shape → named-operand` stair. Empty operand set degenerates to
   shape-only (any `dyn`), never a no-op; auto-trait markers are never operands; an unresolvable
