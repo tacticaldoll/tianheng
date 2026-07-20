@@ -31,10 +31,10 @@ TOML, YAML, Markdown, or any generated policy file to declare or run the boundar
 
 The system SHALL emit a violation for each `dyn` node in the governed module's public surface whose
 principal trait canonicalizes to a member of the forbidden operand set, and SHALL report no
-violation for a `dyn` whose principal trait is outside the set. The **principal trait** is the
-first trait bound of the trait object — Rust's grammar guarantees the base trait is syntactically
-first, so any auto-trait (`Send`, `Sync`) or lifetime bound can only follow it and is never the
-matched operand. The principal trait path SHALL be canonicalized and matched **exactly as
+violation for a `dyn` whose principal trait is outside the set. The **principal trait** is the trait
+object's sole non-auto trait — matched regardless of its position among the bounds, so an auto-trait
+(`Send`, `Sync`) or lifetime bound (which may be written before or after it, e.g. `dyn Send + Port`)
+is never the matched operand. The principal trait path SHALL be canonicalized and matched **exactly as
 signature-coupling matches a forbidden type** — through the *same* resolver ladder: the module's
 `use` map, `crate`/`self`/`super`-relative paths, the **external-crate name-set oracle** (declared
 dependencies ∪ sysroot, `.rename`- and `-`→`_`-aware, with a crate-root `extern crate … as` rename
@@ -81,7 +81,7 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 #### Scenario: Auto-trait markers are not operands
 
 - **WHEN** the module exposes `dyn crate::ports::Port + Send` and the boundary forbids `["crate::ports::Port"]`
-- **THEN** the system emits a violation on the principal trait `crate::ports::Port` (the first trait bound); the trailing `Send` marker is not the operand, so a boundary forbidding only `["Send"]` flags nothing here — and against a bare `dyn Send`, `Send` does not resolve under `BareFallback::Ignore` and is likewise dropped
+- **THEN** the system emits a violation on the principal trait `crate::ports::Port` (the sole non-auto trait); the trailing `Send` marker is not the operand, so a boundary forbidding only `["Send"]` flags nothing here — and against a bare `dyn Send`, `Send` does not resolve under `BareFallback::Ignore` and is likewise dropped
 
 ### Requirement: Empty operand set degenerates to shape-only, never a silent no-op
 
