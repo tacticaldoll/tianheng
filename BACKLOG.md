@@ -333,11 +333,14 @@ Clippy, and warning-denied rustdoc in each isolated workspace using the same exe
 patches. A real warning fixture proves quality failure stops before reaction acceptance; the first
 live matrix also corrected two safe public raw-pointer wrappers while leaving their deliberate
 unsafe-confinement reaction intact. Separately, the release-readiness review found an empty
-`[Unreleased]`, stale 0.1.x compatibility prose, and repeated lockfile/version friction. Promote a
-repository-state release-coherence gate that relates manifests, lockfile, CHANGELOG, and a release
-snapshot without a wall clock, warning window, or Tianheng constitution boundary. These are
-different observation sources and repair directions, so release coherence remains its own OpenSpec
-change and PR rather than generic CI-polish machinery.
+`[Unreleased]`, stale 0.1.x compatibility prose, and repeated lockfile/version friction. The
+repository-state release-coherence gate is now **BUILT (0.2.x)**: it derives development,
+release-ready, and snapshot state from the exact release-commit spine and relates manifests,
+internal pins, CHANGELOG, and release-time lock entries without a wall clock, warning window, or
+Tianheng constitution boundary. Development requires adopter-facing notes but does not manufacture
+lock churn; release-ready and snapshot states require every version surface to agree. Its dedicated
+full-history CI job preserves the distinct observation source and repair direction rather than
+folding release integrity into generic polish machinery.
 
 **Rests on the spectrum + triggers** (the product-identity note above): 圭表 genuinely standalone ·
 渾儀 semi-product (a distinct, only partly-overlapping library-author audience) · 漏刻 a *depth* of

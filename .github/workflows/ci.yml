@@ -6,6 +6,20 @@ on:
   pull_request:
 
 jobs:
+  release-coherence:
+    name: Release coherence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # State classification follows the latest exact `release: X.Y.Z` commit. A shallow
+          # checkout cannot observe that release spine and must not masquerade as coherent.
+          fetch-depth: 0
+      - name: repository release surfaces agree
+        run: |
+          bash scripts/test_release_coherence.sh
+          bash scripts/check_release_coherence.sh
+
   dod:
     name: Definition of Done
     runs-on: ubuntu-latest
