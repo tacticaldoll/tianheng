@@ -332,7 +332,12 @@ declared Tianheng reaction, while the **BUILT (0.2.x)** quality matrix first run
 Clippy, and warning-denied rustdoc in each isolated workspace using the same execution-time local
 patches. A real warning fixture proves quality failure stops before reaction acceptance; the first
 live matrix also corrected two safe public raw-pointer wrappers while leaving their deliberate
-unsafe-confinement reaction intact. Separately, the release-readiness review found an empty
+unsafe-confinement reaction intact. The gate's **BUILT (0.2.x)** example-set reaction now also
+derives every immediate `examples/*/Cargo.toml` workspace and requires a fulfilled owner after its
+quality and declared reaction assertions; a forgotten directory or nonexistent claim fails loudly,
+independently of the published-family ledger. All machine projections and generated baselines live
+under one invocation-local, failure-cleaned temporary root, so parallel runs cannot share evidence.
+Separately, the release-readiness review found an empty
 `[Unreleased]`, stale 0.1.x compatibility prose, and repeated lockfile/version friction. The
 repository-state release-coherence gate is now **BUILT (0.2.x)**: it derives development,
 release-ready, and snapshot state from the exact release-commit spine and relates manifests,

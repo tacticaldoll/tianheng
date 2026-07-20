@@ -22,7 +22,7 @@ exclude = [
     "crates/tianheng/tests/fixtures/violating",
     "crates/tianheng/tests/fixtures/orphan_probe",
     # Each example is its own workspace (it carries a deliberate fault and the adopter's real
-    # `= "0.1"` dependency form); excluded so this workspace never absorbs it. CI exercises them
+    # `= "0.2"` dependency form); excluded so this workspace never absorbs it. CI exercises them
     # in isolation via scripts/test_examples.sh.
     "examples/guibiao-standalone",
     "examples/hunyi-standalone",
