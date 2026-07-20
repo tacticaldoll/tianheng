@@ -4,7 +4,6 @@ use xuanji::{Finding, FindingKey};
 
 use crate::DependencyKind;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CrateFact {
     Dependency {
         package: String,
@@ -58,7 +57,7 @@ impl CrateFact {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ModuleFact {
     ImportedPath(String),
     ImporterModule(String),
