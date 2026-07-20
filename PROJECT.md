@@ -1162,7 +1162,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **(0.2.0 line) Violation identity is a structured observed fact, not its presentation.** Each
   observation dimension owns typed fact schemas and their human rendering; 璇璣 carries the
   vocabulary-neutral `FindingKey` envelope and compares current identities by
-  `(target, rule, finding_key)`. The human `finding`, `file`, `reason`, severity, polarity, anchor,
+  `(target, rule, finding_key)`. The envelope is deliberately the narrowest shared measure that
+  fits the built facts — a namespace and fact code plus flat, canonically name-ordered string
+  fields — rather than a recursive generic value model: field meaning, typed fact variants, and
+  rendering stay in the dimension that observed them, so adding vocabulary never makes 璇璣 model a
+  儀. A human finding sentence is presentation; a named field's canonical observed value is wire
+  identity, so the dimension owns that canonicalization and its compatibility cost without exposing
+  resolver internals as facts. The human `finding`, `file`, `reason`, severity, polarity, anchor,
   and debt metadata remain diagnostic context rather than identity. Newly generated baselines use
   version 2 and retain both the structured key and human finding. Version-1 baselines remain
   readable and match current violations only through their exact legacy text triple; writing a new
