@@ -286,13 +286,14 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   `syn`-resolvable module). **(v0.1.2, same release)** its **named-operand depth**
   (`must_not_expose_dyn_of([…])`) — the next rung on the `name → shape → named-operand` stair:
   it refines the shape-only predicate ("any `dyn`") to "a `dyn` of a *named* trait", resolving
-  each `dyn`'s **principal trait** (first trait bound, guaranteed first by Rust's grammar)
+  each `dyn`'s **principal trait** (its sole non-auto trait, whatever its bound position)
   through the same 渾儀 resolver signature-coupling uses (exact-or-module-prefix, re-export
   canonicalization). It reuses the shape-only surface walk and the resolver, adding only the
   operand match — no new source, no new struct. An **empty** operand set degenerates to
   shape-only ("any `dyn`") — a loud over-reaction chosen deliberately over a silent no-op
   (`Of([])`), so a mis-declared operand set never becomes a false negative. Auto-trait markers
-  are never operands (only the principal, first, trait), and an unresolvable principal (a bare
+  are never operands (only the principal, non-auto, trait — matched regardless of bound position),
+  and an unresolvable principal (a bare
   std trait, a macro/glob re-export) is the inherited resolver bound, never a silent pass of a
   *resolvable* operand. **(v0.1.2, same release)** its **existential sibling**
   `ImplTraitBoundary` (`must_not_expose_impl_trait`) — where dyn-trait forbids the *dynamic-

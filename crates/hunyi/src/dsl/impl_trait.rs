@@ -119,7 +119,7 @@ impl ImplTraitModuleDraft {
 
     /// Forbid the module's public API from **returning** a `impl Trait` of any **named trait** —
     /// the operand-scoped depth of [`must_not_expose_impl_trait`](Self::must_not_expose_impl_trait).
-    /// A returned `impl Trait` whose **principal trait** (its first trait bound) canonicalizes into
+    /// A returned `impl Trait` **any of whose non-auto (principal) traits** canonicalizes into
     /// `operands` is a violation; a returned `impl Trait` of any other trait passes (so a seam may
     /// allow ergonomic existentials like `impl Iterator` while forbidding `impl crate::Port`). An
     /// `operands` entry may be an exact trait path or a module prefix, and a re-exported/aliased
@@ -127,7 +127,8 @@ impl ImplTraitModuleDraft {
     ///
     /// Bounds (stated): an **empty** `operands` set degenerates to shape-only (any returned
     /// `impl Trait`) — loud, never an inert no-op. Auto-trait/lifetime bounds are never operands
-    /// (only the principal, first, trait). A principal that does not resolve — a bare std trait
+    /// (a returned `impl Foo + Bar` may name several non-auto traits — forbidding any one flags it).
+    /// A principal that does not resolve — a bare std trait
     /// (`impl Iterator`/`impl Future` written bare), a macro/glob re-export — is out of the
     /// resolver's stated coverage and not matched; a *resolvable* operand is never silently passed.
     /// Return-position scoping is inherited (APIT and `async fn` are not governed).
