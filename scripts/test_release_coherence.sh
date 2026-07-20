@@ -92,8 +92,10 @@ commit_all() {
 }
 
 expect_pass() {
-    local repo=$1 expected=$2 output
-    output=$("$check" "$repo")
+    local repo=$1 expected=$2 output status=0
+    output=$("$check" "$repo") || status=$?
+    [[ $status -eq 0 ]] \
+        || { printf 'expected success (exit 0), got exit %d: %s\n' "$status" "$output" >&2; exit 1; }
     grep -Fq "$expected" <<<"$output" \
         || { printf 'expected success containing %q, got: %s\n' "$expected" "$output" >&2; exit 1; }
 }
@@ -186,6 +188,26 @@ write_release_changelog "$mismatched_snapshot" 0.2.1 0.2.0
 git -C "$mismatched_snapshot" add .
 git -C "$mismatched_snapshot" commit -qm 'release: 0.2.0'
 expect_fail "$mismatched_snapshot" 'subject is 0.2.0 but workspace version is 0.2.1'
+
+# Failure branches of the manifest-and-pin checks — without these, a `require_workspace_manifests`
+# or `require_internal_pins` that degraded to zero assertions (e.g. the crate glob silently emptied)
+# would still pass the whole matrix. Each case makes exactly one of those checks the one that must fire.
+missing_inheritance=$(new_repo missing-inheritance)
+sed -i 's/^version\.workspace = true$/version = "0.2.0"/' "$missing_inheritance/crates/xuanji/Cargo.toml"
+commit_all "$missing_inheritance" 'chore: pin a crate version literally'
+expect_fail "$missing_inheritance" 'must inherit version.workspace = true'
+
+mismatched_pin=$(new_repo mismatched-pin)
+sed -i 's#version = "0.2.0" }#version = "0.1.0" }#' "$mismatched_pin/Cargo.toml"
+commit_all "$mismatched_pin" 'chore: drift an internal pin'
+expect_fail "$mismatched_pin" 'internal dependency xuanji is pinned to 0.1.0; expected 0.2.0'
+
+# The vacuity guard itself: an empty crate set (layout change / crates removed) must fail loud,
+# not iterate the manifest and lock loops zero times and report coherent.
+empty_crate_set=$(new_repo empty-crate-set)
+find "$empty_crate_set/crates" -name Cargo.toml -delete
+commit_all "$empty_crate_set" 'chore: remove crate manifests'
+expect_fail "$empty_crate_set" 'found no workspace crate manifests'
 
 before_tree=$(git -C "$development" status --porcelain=v1 --untracked-files=all)
 before_head=$(git -C "$development" rev-parse HEAD)
