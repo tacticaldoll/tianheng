@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 /// What the source scan found for a probe occurrence (`assert_boundary!`).
 #[derive(Debug)]
@@ -11,7 +12,14 @@ pub(super) enum Probe {
     Unauditable { file: String },
 }
 
-pub(super) fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+pub(super) fn collect_probes(input: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+    if input.is_file() {
+        return collect_reachable_probes(input, probes);
+    }
+    collect_directory_probes(input, probes)
+}
+
+fn collect_directory_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
     let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
     // Sort entries so the scan order — and thus the violation order in the report — is
     // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
@@ -29,7 +37,7 @@ pub(super) fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), 
     paths.sort();
     for (is_dir, path) in paths {
         if is_dir {
-            collect_probes(&path, probes)?;
+            collect_directory_probes(&path, probes)?;
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
             let source = std::fs::read_to_string(&path)
                 .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
@@ -37,6 +45,195 @@ pub(super) fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), 
         }
     }
     Ok(())
+}
+
+fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+    let root_parent = root
+        .parent()
+        .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
+    let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
+    let mut visited = BTreeSet::new();
+    while let Some((file, child_base)) = pending.pop() {
+        if !visited.insert(file.clone()) {
+            continue;
+        }
+        let source = std::fs::read_to_string(&file)
+            .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
+        scan_source(&source, &file.display().to_string(), probes);
+        let mut children = external_module_files(&source, &child_base)?;
+        children.sort();
+        children.reverse();
+        pending.extend(children);
+    }
+    Ok(())
+}
+
+fn external_module_files(
+    source: &str,
+    child_base: &Path,
+) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+    let mut modules = Vec::new();
+    collect_scope_modules(source.as_bytes(), 0, source.len(), child_base, &mut modules)?;
+    Ok(modules)
+}
+
+fn collect_scope_modules(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    child_base: &Path,
+    modules: &mut Vec<(PathBuf, PathBuf)>,
+) -> Result<(), String> {
+    let mut i = start;
+    while i < end {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(end);
+            continue;
+        }
+        if bytes[i] == b'!' && preceding_token_is_ident(bytes, i) {
+            if let Some(next) = foreign_macro_body_end(bytes, i) {
+                i = next.min(end);
+                continue;
+            }
+        }
+        if is_mod_keyword(bytes, i) {
+            let mut cursor = skip_ascii_space(bytes, i + 3);
+            let name_start = cursor;
+            if bytes.get(cursor..cursor + 2) == Some(b"r#") {
+                cursor += 2;
+            }
+            while cursor < end && is_ident_byte(bytes[cursor]) {
+                cursor += 1;
+            }
+            if cursor == name_start
+                || (cursor == name_start + 2 && &bytes[name_start..cursor] == b"r#")
+            {
+                i += 3;
+                continue;
+            }
+            let raw_name = &bytes[name_start..cursor];
+            let name = if raw_name.starts_with(b"r#") {
+                &raw_name[2..]
+            } else {
+                raw_name
+            };
+            let name = std::str::from_utf8(name).map_err(|e| e.to_string())?;
+            cursor = skip_ascii_space(bytes, cursor);
+            match bytes.get(cursor) {
+                Some(b';') => {
+                    if !has_path_attr_before_mod(bytes, i) {
+                        modules.push(resolve_external_module(child_base, name)?);
+                    }
+                    i = cursor + 1;
+                    continue;
+                }
+                Some(b'{') => {
+                    let close = balanced_brace_end(bytes, cursor, end);
+                    let inline_base = child_base.join(name);
+                    collect_scope_modules(
+                        bytes,
+                        cursor + 1,
+                        close.saturating_sub(1),
+                        &inline_base,
+                        modules,
+                    )?;
+                    i = close;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if bytes[i] == b'{' {
+            i = balanced_brace_end(bytes, i, end);
+            continue;
+        }
+        i += 1;
+    }
+    Ok(())
+}
+
+fn resolve_external_module(base: &Path, name: &str) -> Result<(PathBuf, PathBuf), String> {
+    let flat = base.join(format!("{name}.rs"));
+    let nested = base.join(name).join("mod.rs");
+    let file = match (flat.is_file(), nested.is_file()) {
+        (true, false) => flat,
+        (false, true) => nested,
+        (true, true) => {
+            return Err(format!(
+                "module `{name}` resolves to both '{}' and '{}'",
+                flat.display(),
+                nested.display()
+            ));
+        }
+        (false, false) => {
+            return Err(format!(
+                "cannot resolve reachable module `{name}` under {}",
+                base.display()
+            ));
+        }
+    };
+    let next_base = if file.file_name().and_then(|n| n.to_str()) == Some("mod.rs") {
+        file.parent().unwrap_or(base).to_path_buf()
+    } else {
+        file.parent().unwrap_or(base).join(name)
+    };
+    Ok((file, next_base))
+}
+
+fn is_mod_keyword(bytes: &[u8], i: usize) -> bool {
+    bytes.get(i..i + 3) == Some(b"mod")
+        && (i == 0 || !is_ident_byte(bytes[i - 1]))
+        && bytes.get(i + 3).is_none_or(|b| !is_ident_byte(*b))
+}
+
+fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
+    let mut end = bang;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    end > 0 && is_ident_byte(bytes[end - 1])
+}
+
+fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    i
+}
+
+fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < limit {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(limit);
+            continue;
+        }
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    limit
+}
+
+fn has_path_attr_before_mod(bytes: &[u8], mod_index: usize) -> bool {
+    let mut start = 0;
+    for i in (0..mod_index).rev() {
+        if matches!(bytes[i], b';' | b'{' | b'}') {
+            start = i + 1;
+            break;
+        }
+    }
+    let prefix = &bytes[start..mod_index];
+    prefix.windows(4).any(|window| window == b"path")
 }
 
 /// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just

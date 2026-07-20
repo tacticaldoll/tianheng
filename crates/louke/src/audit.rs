@@ -20,7 +20,9 @@ use scan::scan_source;
 
 /// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** (the
 /// authoritative seam set — the constitution, not a source scan for declarations) by scanning
-/// the workspace's `src_dirs` for `assert_boundary!` probes. Reacts, with the static
+/// the workspace's source inputs for `assert_boundary!` probes. A file input is treated as an
+/// exact Cargo target root and walked through reachable modules; a directory input retains the
+/// legacy recursive corpus for source compatibility. Reacts, with the static
 /// dimensions' exit-code contract, in both directions plus an un-auditable case:
 ///
 /// - **declared-but-unprobed** — a declared seam with no literal probe → a `Violation` at the
@@ -45,10 +47,10 @@ use scan::scan_source;
 /// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
 ///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
-pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) -> Outcome {
+pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
     let mut probes = Vec::new();
-    for dir in src_dirs {
-        if let Err(message) = collect_probes(dir, &mut probes) {
+    for input in source_inputs {
+        if let Err(message) = collect_probes(input, &mut probes) {
             return Outcome::ConstitutionError(message);
         }
     }
