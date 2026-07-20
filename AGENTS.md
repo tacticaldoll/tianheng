@@ -170,6 +170,10 @@ it); CI runs a superset of it:
 ```bash
 cargo build --workspace
 cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace -- -D warnings   # shipped lib/bins only (no --all-targets, default features):
+                                           # catches dead code that ships in the crate but is masked by
+                                           # the --all-targets passes above (a test constructs an item
+                                           # that is dead in the library — e.g. a feature-gated variant)
 cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
