@@ -8,7 +8,7 @@ caught here.
 
 ```toml
 [dependencies]
-hunyi = "0.1"   # the semantic instrument carries the quarantined `syn` — the honest footprint
+hunyi = "0.2"   # the semantic instrument carries the quarantined `syn` — the honest footprint
 ```
 
 Declare the law and react:

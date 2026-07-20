@@ -28,7 +28,7 @@ fn the_import_violation_reacts_with_exit_1() {
 /// 圭表 also governs the *feature* surface of a declared dependency, not just its name. This
 /// dogfoods `forbid_feature` end-to-end through the published `check` surface, on the crate's real
 /// declared edge: the adopter's law pins `guibiao` to `default-features = false` (keep the footprint
-/// minimal), but `Cargo.toml` declares `guibiao = "0.1"` with defaults on, so the declared `default`
+/// minimal), but `Cargo.toml` declares `guibiao = "0.2"` with defaults on, so the declared `default`
 /// feature trips the enforce boundary. Kept as its own constitution so the example's core teaching
 /// (the one module boundary above) stays a single, clean message.
 #[test]

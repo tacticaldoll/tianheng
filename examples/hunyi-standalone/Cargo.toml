@@ -2,7 +2,7 @@
 #
 # Its own workspace (`[workspace]` below) so its *deliberate* API leak is never swept by
 # Tianheng's workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`,
-# patching the family crates to local source so the committed `hunyi = "0.1"` still resolves.
+# patching the family crates to local source so the committed `hunyi = "0.2"` still resolves.
 #
 # Unlike 圭表, this footprint is NOT light: 渾儀 is the semantic instrument, so it carries the
 # quarantined `syn`. That is the honest footprint — the point is *where syn lives*, not that it
@@ -14,6 +14,6 @@ edition = "2021"
 publish = false
 
 [dependencies]
-hunyi = "0.1"
+hunyi = "0.2"
 
 [workspace]

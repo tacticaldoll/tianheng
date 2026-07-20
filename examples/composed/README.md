@@ -7,8 +7,8 @@ time.
 
 ```toml
 [dependencies]
-tianheng = "0.1"   # the CI shell — composes 圭表 + 渾儀 + 漏刻 into one `check`
-louke    = "0.1"   # the runtime dimension's prod face — you wire it into your binary
+tianheng = "0.2"   # the CI shell — composes 圭表 + 渾儀 + 漏刻 into one `check`
+louke    = "0.2"   # the runtime dimension's prod face — you wire it into your binary
 ```
 
 ## The funnel, made literal

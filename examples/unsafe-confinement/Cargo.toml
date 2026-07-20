@@ -2,7 +2,7 @@
 #
 # Its own workspace (`[workspace]` below) so its *deliberate* misplaced `unsafe` is never swept by
 # Tianheng's workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`, patching
-# the family crates to local source so the committed `hunyi = "0.1"` still resolves.
+# the family crates to local source so the committed `hunyi = "0.2"` still resolves.
 #
 # Unlike every family crate, this example does NOT declare `#![forbid(unsafe_code)]` — the whole
 # point is a crate that legitimately *contains* `unsafe`, confined to one auditable subtree
@@ -16,6 +16,6 @@ edition = "2021"
 publish = false
 
 [dependencies]
-hunyi = "0.1"
+hunyi = "0.2"
 
 [workspace]

@@ -6,7 +6,7 @@ deliberately does, so you can watch 圭表 react.
 
 ```toml
 [dependencies]
-guibiao = "0.1"   # the whole footprint — light by design
+guibiao = "0.2"   # the whole footprint — light by design
 ```
 
 Declare the law in Rust (`src/governance.rs`), then react:
