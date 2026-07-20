@@ -245,8 +245,17 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   asserting stable rule/FindingKey identities through the real composed evaluator and shell.
   Tianheng's genuine self-Constitution now also runs through `check_constitution`, so self-governance
   dogfoods static → semantic → always-run runtime audit without inventing fake self-law. This is a
-  frozen 0.2.x coverage ledger, not an automatically enumerable registry and not permission to add
-  an example per modifier.
+  frozen 0.2.x coverage ledger, not permission to add an example per modifier.
+- **Published-family completeness reaction — 0.2.x patch, trigger fired.** The ledger now has
+  enough real owners to expose its remaining open loop: its structured assertions fail when a
+  *listed* family loses its reaction, but cannot compare that executed coverage with one explicit
+  repository-owned inventory. Add a test/governance-only inventory and fulfilled-owner comparison
+  so a deliberately published family cannot land without a real evaluator reaction owner. Keep
+  family vocabulary dimension-owned or repository-internal; do not add a public
+  `PublishedBoundaryFamily`, production metadata, violation field, baseline identity component, or
+  serialized-report field in 0.2.x. The reaction closes publication bookkeeping once OpenSpec/API
+  review classifies a new insertion path as a family; it does not pretend that source scanning can
+  decide whether a builder method is a family, modifier, depth, or shorthand.
 - **Worked shape (for imitation — the DSL is real).** `composed` grows its constitution by one
   `.boundary()` per stage: `ModuleBoundary::in_crate("app").module("crate::domain")
   .must_not_import("crate::infra")` (圭表) → `SemanticBoundary::in_crate("app").module("crate::api")
@@ -319,11 +328,18 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   anchor its maintenance into the release SOP — the entry written **on the release branch before its
   squash to `main`**, never independently.
 
-**Future — may graduate to CI reactions (defer; do not pre-build).** Two hygiene invariants become
-gates only when their drift actually bites, the way license-bundling became the "License texts
-bundled" job: (i) every example still passes its expected reaction (the dogfood does not rot); (ii)
-every `release: X.Y.Z` carries a matching CHANGELOG entry. Named as candidates, not built — no
-reaction without the pain.
+**0.2.x hygiene reactions — triggers fired; promote independently.** The behavior half of "dogfood
+does not rot" is already built: `scripts/test_examples.sh` runs every isolated example and checks
+its declared reaction. This refresh exposed a separate quality blind spot because those isolated
+workspaces sit outside the root workspace gates: a manual catalog-local Clippy pass found a warning
+that the normal Definition of Done could not see. Promote an isolated-example quality matrix that
+runs the applicable format / Clippy / rustdoc gates on each clean driver workspace while keeping
+deliberately violating subjects as scan data, not lint targets. Separately, the release-readiness
+review found an empty `[Unreleased]`, stale 0.1.x compatibility prose, and repeated lockfile/version
+friction. Promote a repository-state release-coherence gate that relates manifests, lockfile,
+CHANGELOG, and a release snapshot without a wall clock, warning window, or Tianheng constitution
+boundary. These are two observation sources and two repair directions, so they remain separate
+OpenSpec changes and PRs rather than one generic CI-polish mechanism.
 
 **Rests on the spectrum + triggers** (the product-identity note above): 圭表 genuinely standalone ·
 渾儀 semi-product (a distinct, only partly-overlapping library-author audience) · 漏刻 a *depth* of
