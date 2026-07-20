@@ -18,6 +18,11 @@ jobs:
           # item/import when `audit` is OFF fails here, not silently in a downstream prod build.
           cargo build --workspace
           cargo clippy --all-targets -- -D warnings
+          # Lint the SHIPPED lib/bins on their own (no --all-targets): an item dead in the library
+          # but constructed by a test reads as live under --all-targets, so its dead_code hides until
+          # the isolated crate build `cargo publish` runs. This is what actually delivers the
+          # "unused when audit is OFF fails here" intent above (e.g. a feature-gated enum variant).
+          cargo clippy --workspace -- -D warnings
           # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
           # feature-gated item (it would break docs.rs, which builds default features).
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
