@@ -27,16 +27,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: build / test / clippy / fmt / doc
         run: |
-          # Default features = louke's prod-light config (its CI scanner is gated behind the
-          # non-default `audit` feature). Build + lint that config on its own so an unused
-          # item/import when `audit` is OFF fails here, not silently in a downstream prod build.
           cargo build --workspace
           cargo clippy --all-targets -- -D warnings
           # Lint the SHIPPED lib/bins on their own (no --all-targets): an item dead in the library
-          # but constructed by a test reads as live under --all-targets, so its dead_code hides until
-          # the isolated crate build `cargo publish` runs. This is what actually delivers the
-          # "unused when audit is OFF fails here" intent above (e.g. a feature-gated enum variant).
+          # but constructed by a test reads as live under --all-targets, so its dead_code hides
+          # until the isolated crate build runs.
           cargo clippy --workspace -- -D warnings
+          # Every `--workspace` / `--all-targets` pass above feature-unifies louke's `audit` ON,
+          # because the tianheng shell depends on louke with features = ["audit"] unconditionally —
+          # so NONE of them ever compile louke's default, prod-light (audit-OFF) library, the exact
+          # config a shipped-but-unused `audit`-gated item hides in (the 0.2.0-class escape). Lint
+          # louke on its own (outside the workspace, so tianheng's audit edge is absent) so such
+          # dead code fails loud here, not only when `cargo publish` later builds the crate isolated.
+          cargo clippy -p louke -- -D warnings
           # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
           # feature-gated item (it would break docs.rs, which builds default features).
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
