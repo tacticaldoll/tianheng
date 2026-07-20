@@ -1277,6 +1277,35 @@ mod fact_tests {
 
         let ty: syn::Type = syn::parse_str("Vec<crate::Port>").unwrap();
         assert_eq!(type_to_string(&ty).as_deref(), Some("Vec<crate::Port>"));
+
+        // canonical_self_owner + render_last_segment_args also produce the byte content of the
+        // version-2 owner / seam_owner / trait key fields (trait_impl / forbidden_marker /
+        // inherent-seam facts). Their exact form — including the positional `_#{ordinal}` fallback
+        // a maintainer might mistake for free presentation — is baseline wire too, so pin it.
+        let uses: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let owner: syn::Type = syn::parse_str("Repo<crate::Id>").unwrap();
+        assert_eq!(
+            crate::resolve::canonical_self_owner(&owner, &uses, "app::infra", 0),
+            "app::infra::Repo<crate::Id>"
+        );
+        // Base resolves but the generic arg is an unrenderable const expression: the readable base
+        // is kept and the arg disambiguated by the block's ordinal (injective, not a collapse).
+        let const_owner: syn::Type = syn::parse_str("Arr<{ N + 1 }>").unwrap();
+        assert_eq!(
+            crate::resolve::canonical_self_owner(&const_owner, &uses, "app::infra", 7),
+            "app::infra::Arr<_#7>"
+        );
+
+        let bare: syn::Path = syn::parse_str("Foo").unwrap();
+        assert_eq!(
+            crate::resolve::render_last_segment_args(&bare).as_deref(),
+            Some("")
+        );
+        let generics: syn::Path = syn::parse_str("Foo<u8, T>").unwrap();
+        assert_eq!(
+            crate::resolve::render_last_segment_args(&generics).as_deref(),
+            Some("<u8, T>")
+        );
     }
 
     #[test]
