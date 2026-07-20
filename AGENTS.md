@@ -146,6 +146,13 @@ its body is deliberately empty. A release snapshot's change is the whole tree; p
 in the curated commits and PRs below it. A PR that touches a steward-owned path
 (`.github/CODEOWNERS`) is merged by the steward.
 
+`bash scripts/check_release_coherence.sh` is the release-state reaction. During development it
+requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
+but deliberately tolerates historical lockfile drift. Once the workspace version moves forward for
+release preparation—and at the exact `release: X.Y.Z` snapshot—the dated CHANGELOG section,
+internal pins, and every workspace package entry in `Cargo.lock` must all name that version. The
+check is read-only and needs full git history; it never bumps, commits, tags, or publishes.
+
 Like the self-describing-commit rule above, this is a convention for humans and agents, not a
 Tianheng reaction: a branching pattern is not an observable architectural fact, so the drift law
 keeps it out of the constitution.
@@ -178,6 +185,8 @@ cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo deny check
+bash scripts/test_release_coherence.sh # prove every release state and failure direction
+bash scripts/check_release_coherence.sh # react against this checkout (requires release history)
 bash scripts/test_examples.sh            # every dogfood example still reacts as declared
 ```
 

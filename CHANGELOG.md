@@ -23,6 +23,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - Every isolated example workspace now passes format, all-target Clippy, and warning-denied rustdoc
   gates before its Tianheng reaction is accepted; a focused warning fixture proves the quality gate
   fails first while committed adopter-facing dependency declarations remain unchanged.
+- A read-only release-coherence reaction now classifies development, release-ready, and exact
+  release-snapshot states from the linear release commit spine, then fails on divergent workspace
+  versions, dependency pins, adopter-facing release notes, or release-time lock entries. CI checks
+  it with full git history; ordinary development deliberately does not rewrite historical lock
+  drift merely to pass.
 
 ### Changed
 - Published finding schemas and their dimension-local canonicalizers are now exhaustively pinned as
