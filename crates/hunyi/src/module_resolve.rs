@@ -103,49 +103,59 @@ fn descend(
     let Some(seg) = segments.first() else {
         return Ok((items, current_file, child_dir));
     };
+    // Union every same-named **inline** `mod x { … }` for this segment before descending: a
+    // `#[cfg(..)] mod x {..}` / `#[cfg(..)] mod x {..}` pair parses as two separate inline items
+    // (syn does not evaluate `cfg`), so resolving only the source-first variant would let a
+    // forbidden item in another variant pass unobserved — a `mod`-resolution divergence, the
+    // false-negative class this resolver exists to prevent. This matches the crate-wide scan's
+    // observe-all, cfg-blind policy (`scan::resolve_child_modules`). A `#[path]`-remapped module is
+    // not observed (a stated bound, matching `walk_module`'s crate-wide skip). Inline items live in
+    // the enclosing file, so `current_file` is unchanged; file-children live under `<child_dir>/x/`.
+    let mut inline: Vec<syn::Item> = Vec::new();
     for item in &items {
         if let syn::Item::Mod(module_item) = item {
-            // A `#[path]`-remapped module is located off the conventional path; the
-            // single-module resolver does not observe it (matching `walk_module`'s
-            // crate-wide skip), so it falls through to a loud `unknown_module_error`
-            // (exit 2) rather than governing a same-named stale conventional file — never
-            // a silent claim of cleanliness over a file rustc does not compile.
             if has_path_attr(&module_item.attrs) {
                 continue;
             }
             if strip_raw(&module_item.ident.to_string()) != *seg {
                 continue;
             }
-            match &module_item.content {
-                // Inline `mod x { … }`: descend into the lexical items; the current file is
-                // unchanged (an inline module's items live in the enclosing file). Its
-                // file-children (if any) live under `<child_dir>/x/`.
-                Some((_, inner)) => {
-                    return descend(
-                        inner.clone(),
-                        child_dir.join(seg),
-                        current_file,
-                        &segments[1..],
-                        module,
-                        crate_package,
-                    );
-                }
-                // File `mod x;`: `<child_dir>/x.rs` or `<child_dir>/x/mod.rs` becomes the current
-                // file; x's children live under `<child_dir>/x/`.
-                None => {
-                    let file = locate_module_file(&child_dir, seg)
-                        .ok_or_else(|| missing_module_file_error(module, crate_package))?;
-                    let parsed = read_parse(&file)?;
-                    return descend(
-                        parsed.items,
-                        child_dir.join(seg),
-                        file,
-                        &segments[1..],
-                        module,
-                        crate_package,
-                    );
-                }
+            if let Some((_, inner)) = &module_item.content {
+                inline.extend(inner.iter().cloned());
             }
+        }
+    }
+    if !inline.is_empty() {
+        return descend(
+            inline,
+            child_dir.join(seg),
+            current_file,
+            &segments[1..],
+            module,
+            crate_package,
+        );
+    }
+    // No inline variant — resolve the file form `mod x;`: `<child_dir>/x.rs` or `<child_dir>/x/mod.rs`
+    // becomes the current file; x's children live under `<child_dir>/x/`. (A cfg-duplicated `mod x;`
+    // pair names one file, so the first match suffices.)
+    for item in &items {
+        if let syn::Item::Mod(module_item) = item {
+            if has_path_attr(&module_item.attrs)
+                || strip_raw(&module_item.ident.to_string()) != *seg
+            {
+                continue;
+            }
+            let file = locate_module_file(&child_dir, seg)
+                .ok_or_else(|| missing_module_file_error(module, crate_package))?;
+            let parsed = read_parse(&file)?;
+            return descend(
+                parsed.items,
+                child_dir.join(seg),
+                file,
+                &segments[1..],
+                module,
+                crate_package,
+            );
         }
     }
     Err(unknown_module_error(module, crate_package))

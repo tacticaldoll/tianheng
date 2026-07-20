@@ -5869,6 +5869,39 @@ fn the_semantic_file_is_not_part_of_the_baseline_identity() {
 }
 
 #[test]
+fn cfg_duplicated_inline_modules_are_all_governed() {
+    // Two `#[cfg(..)] mod platform {..}` variants parse as separate inline modules (syn does not
+    // evaluate cfg). A signature-coupling boundary anchored on `crate::platform` must observe BOTH:
+    // resolving only the source-first variant let a forbidden exposure in the other pass unobserved
+    // (exit 0) — a mod-resolution divergence, the forbidden false-negative class. Matches the
+    // crate-wide scan's observe-all policy for same-named modules.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-dup-platform",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(unix)] pub mod platform { pub fn open() -> u8 { 0 } }\n\
+                 #[cfg(windows)] pub mod platform { pub fn open() -> crate::infra::Db { unimplemented!() } }\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("platform must not expose infra in any cfg variant");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the non-source-first cfg variant's exposure must react: {violations:?}"
+    );
+}
+
+#[test]
 fn a_visibility_violation_carries_its_module_file() {
     let (metadata, dir) = fixture_metadata(
         "vis",
