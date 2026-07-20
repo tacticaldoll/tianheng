@@ -12,6 +12,27 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+### Added
+- A deliberately non-tutorial **capability catalog** now exercises the published 0.2.x boundary
+  families without an existing focused example owner, asserting their structured identity through
+  both `check_constitution` and the real CLI shell. Tianheng's own self-law now also runs through the
+  composed evaluator.
+
+### Changed
+- Published finding schemas and their dimension-local canonicalizers are now exhaustively pinned as
+  compatibility reactions. Human finding wording remains presentation and is deliberately not
+  snapshot-frozen.
+- The baseline guide now documents the existing `--write-baseline` operation as the bounded,
+  explicit V1-to-V2 upgrade path, including metadata carry-forward and stale-entry removal.
+
+### Fixed
+- Baseline `owner` / `tracker` metadata now rejects non-string JSON values instead of silently
+  erasing malformed governance data; the CLI gate fails as a constitution error and explicit
+  rewrite retains its warning-before-recovery behavior.
+- Runtime probe coverage now starts from every exact Cargo library and binary target root and walks
+  only module-reachable source, so an orphan `.rs` file can no longer satisfy a seam it never
+  enforces. Direct callers that pass a directory retain the legacy recursive corpus.
+
 ## [0.2.0] - 2026-07-20
 
 The first **breaking** window since `0.1.0` — a deliberate `0.2.0` minor (the `0.1.x` hold ended

@@ -839,15 +839,16 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   reaction, so no commitment without a reaction.** The **product identity** is declared now (a
   reversible narrative); the **product weight** — per-儀 standalone CLIs, cookbooks, per-crate 1.0 /
   stability promises, and the standalone 漏刻 story (a legitimate category, but the least-proven as a
-  product) — waits for an adoption signal. Posture: **0.1.x late-stage pre-stability** — concept and
-  function are saturated (三儀 all born, a complete world-view), so the patch line is not immaturity
-  but the honest pre-1.0 window that withholds API lock-in until real use says which public surfaces
-  to freeze. A category-creating project cannot pull demand for a category nobody knows exists, so the
+  product) — waits for an adoption signal. The historical posture was **0.1.x late-stage
+  pre-stability**: concept and function were saturated (三儀 all born, a complete world-view), while
+  the deliberate hold withheld API lock-in until real use identified which public surfaces to
+  freeze. That trigger fired before 0.2.0; the current **0.2.x compatibility line** preserves its
+  published API and version-2 identity wire across patches, while a break must earn a new minor. A
+  category-creating project cannot pull demand for a category nobody knows exists, so the
   order is **push then pull**: push the honestly-labelled (experimental) narrative to bootstrap
-  awareness; let demand deepen it. The exit trigger to a deliberate breaking 0.2.0 is a real
-  reaction — a first adopter needing a compatibility promise, a 儀 adopted standalone, an API that
-  hurts in use, or API convergence — never the calendar. See BACKLOG "Version horizons" for the
-  operational split.
+  awareness; let demand deepen it. The exit trigger to the deliberate breaking 0.2.0 was a real
+  reaction — composed adopter pacta plus standalone 圭表 adopter modou — never the calendar. See
+  BACKLOG "Version horizons" for the current operational split.
 - **(v0.1.8) Severity is centrally gated and boundary-inherited — and this coverage invariant is
   prose, not a reaction (a bright-line instance).** Every boundary reaction inherits its declared
   severity, and the gating decision lives in exactly **one** place — `xuanji::Outcome::exit_code()`:
