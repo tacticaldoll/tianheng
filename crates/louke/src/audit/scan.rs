@@ -224,6 +224,17 @@ fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
     limit
 }
 
+/// Does the `mod name;` at `mod_index` carry a `#[path = "..."]` attribute?
+///
+/// A `#[path]`-relocated module lives at an author-chosen file, so the by-name resolver must not
+/// try (and fail) to resolve it — a stated scan bound. Detection is **structural, not a raw
+/// substring**: it walks the module's preamble (the bytes since the previous item boundary),
+/// skipping comments and string literals, and matches an *outer attribute whose meta name is
+/// exactly `path`* followed by `=`. A comment or unrelated attribute that merely contains the text
+/// `path` (`// fast path`, `#[cfg(feature = "fastpath")]`) MUST NOT match — a false match would
+/// drop a reachable module and every probe under it (a silent coverage false negative, the worst
+/// outcome under FN-first). A `#[cfg_attr(.., path = ..)]` conditional relocation stays a bound
+/// (its meta name is `cfg_attr`, not `path`), degrading to the unresolved-module reaction.
 fn has_path_attr_before_mod(bytes: &[u8], mod_index: usize) -> bool {
     let mut start = 0;
     for i in (0..mod_index).rev() {
@@ -232,8 +243,81 @@ fn has_path_attr_before_mod(bytes: &[u8], mod_index: usize) -> bool {
             break;
         }
     }
-    let prefix = &bytes[start..mod_index];
-    prefix.windows(4).any(|window| window == b"path")
+    let mut i = start;
+    while i < mod_index {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(mod_index);
+            continue;
+        }
+        if bytes[i] == b'#' {
+            let mut open = i + 1;
+            if bytes.get(open) == Some(&b'!') {
+                open += 1;
+            }
+            if bytes.get(open) == Some(&b'[') {
+                // The attribute's meta name is the first identifier inside the brackets.
+                let name_start = skip_preamble_trivia(bytes, open + 1, mod_index);
+                let mut name_end = name_start;
+                while name_end < mod_index && is_ident_byte(bytes[name_end]) {
+                    name_end += 1;
+                }
+                if &bytes[name_start..name_end] == b"path" {
+                    let eq = skip_preamble_trivia(bytes, name_end, mod_index);
+                    if bytes.get(eq) == Some(&b'=') {
+                        return true;
+                    }
+                }
+                i = attr_group_end(bytes, open, mod_index);
+                continue;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Advance past whitespace, comments, and string/char literals to the next significant byte
+/// (bounded by `end`). Shared by the attribute walk so a comment or literal inside a preamble
+/// never derails the meta-name match.
+fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
+    while i < end {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(end);
+            continue;
+        }
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        break;
+    }
+    i
+}
+
+/// Index just past the `]` closing the attribute-bracket group opened at `open` (which indexes the
+/// `[`), tracking nested `[]` and skipping string/char literals and comments so a `]` inside a
+/// `#[path = "a]b.rs"]` literal does not close the group early. Mirrors [`balanced_brace_end`].
+fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < limit {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(limit);
+            continue;
+        }
+        match bytes[i] {
+            b'[' => depth += 1,
+            b']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    limit
 }
 
 /// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just
