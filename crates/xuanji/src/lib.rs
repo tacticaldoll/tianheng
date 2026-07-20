@@ -668,16 +668,25 @@ impl Baseline {
             .as_array()
             .ok_or_else(|| "baseline `violations` must be an array".to_string())?;
         let mut entries = Vec::with_capacity(array.len());
-        for item in array {
+        for (index, item) in array.iter().enumerate() {
             let field = |name: &str| -> Result<String, String> {
                 item[name]
                     .as_str()
                     .map(str::to_string)
                     .ok_or_else(|| format!("baseline entry is missing string `{name}`"))
             };
-            // owner/tracker are optional metadata — absent (or, tolerant of the lenient parse
-            // style, non-string) reads as None; an older baseline without them parses unchanged.
-            let optional = |name: &str| item[name].as_str().map(str::to_string);
+            // Optional governance metadata has three valid forms: omitted or explicit null means
+            // no annotation, while a string is preserved. Any other type is observable malformed
+            // data and must fail loud rather than disappear on the next baseline rewrite.
+            let optional = |name: &str| -> Result<Option<String>, String> {
+                match item.get(name) {
+                    None | Some(Value::Null) => Ok(None),
+                    Some(Value::String(value)) => Ok(Some(value.clone())),
+                    Some(_) => Err(format!(
+                        "baseline entry {index} `{name}` must be a string or null"
+                    )),
+                }
+            };
             let target = field("target")?;
             let rule = field("rule")?;
             let finding = field("finding")?;
@@ -692,8 +701,8 @@ impl Baseline {
             };
             entries.push(BaselineEntry {
                 id,
-                owner: optional("owner"),
-                tracker: optional("tracker"),
+                owner: optional("owner")?,
+                tracker: optional("tracker")?,
             });
         }
         sort_dedup_by_id(&mut entries);
@@ -1027,6 +1036,78 @@ mod tests {
         let zeta = &doc["violations"][1];
         assert_eq!(zeta["target"], "zeta");
         assert!(zeta.get("owner").is_none() && zeta.get("tracker").is_none());
+    }
+
+    #[test]
+    fn optional_baseline_metadata_accepts_only_absent_null_or_string() {
+        for version in [1, 2] {
+            let mut entry = serde_json::json!({
+                "target": "core",
+                "rule": "deny",
+                "finding": "serde",
+            });
+            if version == 2 {
+                entry["finding_key"] = serde_json::json!({
+                    "namespace": "test",
+                    "code": "dependency",
+                    "fields": {"package": "serde"},
+                });
+            }
+
+            for field in ["owner", "tracker"] {
+                let absent = serde_json::json!({"version": version, "violations": [entry.clone()]});
+                let parsed = Baseline::from_json(&absent.to_string()).expect("omission is absence");
+                assert_eq!(parsed.entries().next().unwrap().owner.as_deref(), None);
+                assert_eq!(parsed.entries().next().unwrap().tracker.as_deref(), None);
+
+                let mut null_entry = entry.clone();
+                null_entry[field] = Value::Null;
+                let parsed = Baseline::from_json(
+                    &serde_json::json!({"version": version, "violations": [null_entry]})
+                        .to_string(),
+                )
+                .expect("explicit null is absence");
+                let serialized: Value = serde_json::from_str(&parsed.to_json()).unwrap();
+                assert!(
+                    serialized["violations"][0].get(field).is_none(),
+                    "version {version} explicit-null {field} stays canonical omission"
+                );
+
+                let mut string_entry = entry.clone();
+                string_entry[field] = serde_json::json!("recorded");
+                let parsed = Baseline::from_json(
+                    &serde_json::json!({"version": version, "violations": [string_entry]})
+                        .to_string(),
+                )
+                .expect("string metadata parses");
+                let parsed_entry = parsed.entries().next().unwrap();
+                let actual = match field {
+                    "owner" => parsed_entry.owner.as_deref(),
+                    "tracker" => parsed_entry.tracker.as_deref(),
+                    _ => unreachable!(),
+                };
+                assert_eq!(actual, Some("recorded"));
+
+                for wrong in [
+                    serde_json::json!(7),
+                    serde_json::json!(true),
+                    serde_json::json!(["team-core"]),
+                    serde_json::json!({"name": "team-core"}),
+                ] {
+                    let mut wrong_entry = entry.clone();
+                    wrong_entry[field] = wrong;
+                    let error = Baseline::from_json(
+                        &serde_json::json!({"version": version, "violations": [wrong_entry]})
+                            .to_string(),
+                    )
+                    .expect_err("wrong-typed metadata must invalidate the baseline");
+                    assert!(
+                        error.contains(field),
+                        "version {version} error must identify {field}: {error}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
