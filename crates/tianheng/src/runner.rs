@@ -443,11 +443,11 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
                 "Tianheng: wrote {} violation(s) to baseline {path}",
                 report.violations.len()
             );
-            0
+            EXIT_OK
         }
         Err(err) => {
             eprintln!("Tianheng: cannot write baseline {path}: {err}");
-            2
+            EXIT_CANNOT_JUDGE
         }
     }
 }
