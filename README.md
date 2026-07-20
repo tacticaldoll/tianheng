@@ -334,8 +334,10 @@ codebase never starts red: declare a boundary at `.warn()` (reported, never gati
 drift reacts), then tighten to `enforce`. Two axes — severity and baseline — either of which lands
 the law before you land the fixes. See the runnable [`examples/`](examples/): 圭表 and 渾儀
 standalone, the composed all-three funnel, plus focused demos of `unsafe`-confinement and the
-`sans_io_pure` profile — and [`COOKBOOK.md`](COOKBOOK.md) for common governance intents translated
-into boundaries.
+`sans_io_pure` profile. The [`capability-catalog`](examples/capability-catalog/) is breadth-only
+contract coverage for otherwise-unowned 0.2.x families, not a starting tutorial. See the
+[`examples` guide](examples/README.md) and [`COOKBOOK.md`](COOKBOOK.md) for common governance intents
+translated into boundaries.
 
 **What stays stable across the pre-1.0 line.**
 

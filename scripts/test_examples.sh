@@ -3,7 +3,7 @@
 #
 # Each example is its own workspace — its *deliberate* faults (a bad import, an API leak, a rogue
 # runtime origin) must never be swept by Tianheng's workspace-wide gates. Each commits the
-# adopter's real dependency form (`guibiao = "0.1"`), so we resolve the family to LOCAL source via
+# adopter's real dependency form (`guibiao = "0.2"`), so we resolve the family to LOCAL source via
 # `--config patch.crates-io.<crate>.path=...` — the same idiom the `packaged-selftest` CI job uses:
 # the committed Cargo.toml stays copy-paste-honest while CI exercises the in-development tree.
 #
@@ -55,6 +55,29 @@ cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
 expect "$got" 1 "unsafe-confinement demo reacts"
+
+# ---------------------------------------------------------------- capability-catalog
+# Breadth-only contract coverage for the published 0.2.x families that have no honest home in the
+# focused teaching examples. Bind stable structured identity, never the human finding sentence.
+cd "$WS/examples/capability-catalog"
+mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+cargo test "${PATCH[@]}"
+got=0
+cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml --format json \
+    >/tmp/capability_catalog.json 2>/dev/null || got=$?
+expect "$got" 1 "capability-catalog shell reacts"
+for identity in \
+    '"rule": "restrict dependency sources to"' \
+    '"code": "external_importer"' \
+    '"code": "trait_impl_site"' \
+    '"code": "forbidden_marker_acquisition"' \
+    '"code": "dyn_trait_exposure"' \
+    '"code": "impl_trait_exposure"'
+do
+    grep -q "$identity" /tmp/capability_catalog.json \
+        || { echo "::error::capability catalog missing structured identity $identity"; exit 1; }
+done
+echo "ok  capability-catalog carries every assigned structured family identity"
 
 # ---------------------------------------------------------------- composed
 cd "$WS/examples/composed"
