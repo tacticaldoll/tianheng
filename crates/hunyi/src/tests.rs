@@ -3401,6 +3401,57 @@ fn two_unsafe_impls_of_one_trait_for_different_types_stay_distinct() {
 }
 
 #[test]
+fn two_same_named_unsafe_fns_on_different_owners_stay_distinct() {
+    // Same method name, different inherent-impl self type: the finding must be owner-qualified,
+    // else a baseline of the first silently accepts the second — a false negative (a new
+    // out-of-subtree `unsafe` site passing unobserved). The unsafe-fn analogue of
+    // `two_unsafe_impls_of_one_trait_for_different_types_stay_distinct`.
+    let out = unsafe_labels(
+        "unsafe-fns-same-name",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub struct Foo;\npub struct Bar;\nimpl Foo { unsafe fn m(&self) {} }\nimpl Bar { unsafe fn m(&self) {} }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe fn Bar::m in crate::net",
+            "unsafe fn Foo::m in crate::net",
+        ],
+        "same-named unsafe fns on different owners must not collapse: {out:?}"
+    );
+}
+
+#[test]
+fn two_same_named_unsafe_trait_fns_stay_distinct() {
+    // Two traits in one module each declaring `unsafe fn m` must stay distinct findings, qualified
+    // by the declaring trait — else a baseline of the first masks the second (a false negative).
+    let out = unsafe_labels(
+        "unsafe-trait-fns",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub trait A { unsafe fn m(&self); }\npub trait B { unsafe fn m(&self); }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn A::m in crate::net", "unsafe fn B::m in crate::net"],
+        "trait-declared unsafe fns must be qualified by their trait: {out:?}"
+    );
+}
+
+#[test]
 fn unsafe_in_a_body_nested_mod_reacts() {
     // The propose-review false-negative guard: a `mod` inside a fn body is not descended by the
     // top-level walk; the collector's default recursion must still catch its unsafe.
