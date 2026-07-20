@@ -70,6 +70,10 @@ type). Within this resolvable scope there SHALL be no false negative.
 - **WHEN** `crate::core` declares `use std::time::SystemTime as SysT;` then calls `SysT::now()`
 - **THEN** the system resolves `SysT` through the use-map to `std::time::SystemTime` and reacts
 
+#### Scenario: A self-prefixed use-group member resolves and reacts
+- **WHEN** `crate::core` declares `use std::time::{self_utc as clk, Duration};` then calls `clk::now()` — a group member whose name merely *starts with* the substring `self`, not the `self` leaf
+- **THEN** the system resolves `clk` through the use-map to `std::time::self_utc` and reacts; only the exact `self` group leaf (bare or `self as x`, which names the prefix module) is skipped, never a legal `self`-prefixed identifier (dropping it would be a false negative — the confined call would pass unresolved)
+
 #### Scenario: A bare path resolves and reacts
 - **WHEN** `crate::core` declares `use std::time;` then calls `time::Instant::now()`
 - **THEN** the system resolves `time` to `std::time` and reacts

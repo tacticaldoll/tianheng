@@ -49,6 +49,11 @@ The system SHALL walk the whole target crate (descending file-based `mod x;` and
 - **WHEN** `crate::net` (outside the subtree) declares `unsafe impl Send for Foo {}` alongside either `unsafe impl Sync for Foo {}` (a different trait) or `unsafe impl Send for Bar {}` (the same trait, a different self type)
 - **THEN** the system emits two distinct findings (both the trait **and** the self type are part of the finding), so neither masks the other under the baseline
 
+#### Scenario: Two same-named unsafe fns on different owners stay distinct
+
+- **WHEN** `crate::net` (outside the subtree) declares `impl Foo { unsafe fn m(&self) {} }` alongside `impl Bar { unsafe fn m(&self) {} }` (the same method name, different owners), or two traits each declaring `unsafe fn m`
+- **THEN** the system emits two distinct findings — each `unsafe fn` finding is qualified by its enclosing owner (`unsafe fn Foo::m`, the inherent-impl self type, or `unsafe fn A::m`, the declaring trait) — so neither masks the other under the baseline, the `unsafe fn` counterpart of the `unsafe impl` distinctness above
+
 #### Scenario: Unsafe in a body-nested module is attributed to the enclosing module
 
 - **WHEN** the crate has `only_under(["crate::ffi"])` and a function in `crate::net` declares `mod raw { pub unsafe fn poke() {} }` (a `mod` inside a fn body)
