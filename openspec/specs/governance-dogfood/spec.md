@@ -1,4 +1,11 @@
-## ADDED Requirements
+# governance-dogfood Specification
+
+## Purpose
+
+Keep Tianheng's published boundary families exercised through genuine self-governance and
+adopter-shaped examples without turning tutorials into exhaustive fixtures or inventing fake law.
+
+## Requirements
 
 ### Requirement: Public boundary families have adopter-shaped reaction coverage
 
