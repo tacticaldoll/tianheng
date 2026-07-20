@@ -14,8 +14,8 @@ use crate::finding::ModuleFact;
 
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    canonical_module_path, canonical_segment, effective_module, inline_mod_at,
-    is_crate_root_shadow, path_within, resolve_self_super,
+    brace_content, canonical_module_path, canonical_segment, effective_module, inline_mod_at,
+    is_crate_root_shadow, path_within, resolve_self_super, split_top_commas,
 };
 
 /// The crate-wide resolution context, built once from every reachable file: the local definition
@@ -405,7 +405,7 @@ fn glob_import_paths(source: &str) -> Vec<String> {
 /// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
 /// `use std::{time::*, io::Write}` yields `std::time`, not just a top-level `use std::time::*`).
 /// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
-/// through [`brace_inner`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
+/// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
 /// `}`-before-`{` cannot panic.
 fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
     if depth > 64 {
@@ -415,7 +415,7 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
     match tree.find('{') {
         Some(open) => {
             let prefix = tree[..open].trim();
-            for part in split_top_commas(&brace_inner(&tree[open..])) {
+            for part in split_top_commas(&brace_content(&tree[open..])) {
                 let part = part.trim();
                 if part.is_empty() {
                     continue;
@@ -502,7 +502,7 @@ fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
         match tree.find('{') {
             Some(open) => {
                 let prefix = tree[..open].trim();
-                let inner = brace_inner(&tree[open..]);
+                let inner = brace_content(&tree[open..]);
                 for part in split_top_commas(&inner) {
                     let part = part.trim();
                     if part.is_empty() || part == "*" || part.starts_with("self") {
@@ -800,56 +800,6 @@ fn pub_use_statements(source: &str) -> Vec<String> {
         i += 1;
     }
     trees
-}
-
-/// Content inside the first `{ … }` of `s` (which starts at `{`), honoring nesting.
-fn brace_inner(s: &str) -> String {
-    let mut depth = 0;
-    let mut out = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                if depth == 1 {
-                    continue;
-                }
-            }
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    break;
-                }
-            }
-            _ => {}
-        }
-        out.push(ch);
-    }
-    out
-}
-
-/// Split on commas at brace depth 0.
-fn split_top_commas(s: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut depth = 0i32;
-    let mut current = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                current.push(ch);
-            }
-            '}' => {
-                depth -= 1;
-                current.push(ch);
-            }
-            ',' if depth == 0 => parts.push(std::mem::take(&mut current)),
-            _ => current.push(ch),
-        }
-    }
-    if !current.trim().is_empty() {
-        parts.push(current);
-    }
-    parts
 }
 
 /// The extra crate vocabulary [`resolve_head`] consults ONLY under `.strict_external()`: the
