@@ -65,8 +65,6 @@ reversible narrative); irreversible / breaking / high-maintenance weight waits f
 - **Establish now (reversible):** the product identities above; family positioning in each crate's
   README / docs.rs; that most adopters want `tianheng`. Always co-stated with the honest tier
   (**experimental / pre-1.0**) — a claimed-but-unsupported product identity is worse than none.
-- **0.1.x, non-breaking (signal, don't cut):** `#[doc(hidden)]` + `#[deprecated]` on the split-cost
-  accidental public surface — pre-manage the 0.2.0 narrowing without breaking anyone.
 - **Defer to a reaction:** per-儀 standalone CLIs, docs / cookbooks, per-crate 1.0 / long-term
   stability promises, and the standalone 漏刻 product story (a legitimate category, but the
   least-proven — its standalone demand is the most speculative of the three).
@@ -353,8 +351,8 @@ complement — show, then tell.
 
 ### 0.1.5 — known-depth consolidation · **SHIPPED**
 
-0.1.5 has converged from scope map to shipped state (0.1.6 and 0.1.7 have since shipped on top of
-it; 0.1.7 is the current line). Its built items are recorded once in the dimension / 三司 sections
+0.1.5 has converged from scope map to shipped state (0.1.6 through 0.1.10 have since shipped on top
+of it; 0.1.10 is the current line). Its built items are recorded once in the dimension / 三司 sections
 below; the remaining forward work stays there as forward depth. The 0.2.0 bundle above remains the
 only currently named breaking line.
 
@@ -885,10 +883,10 @@ adoption funnel's weak seam is the *top* — whether it even occurs to an agent 
 and the first-boundary decision — not the API (the on-ramp is already one line,
 `forbid_all_workspace_dependencies()`). Two levers, different weight:
 
-- **Cheap, patch-now: sharpen the README on-ramp.** Make the *first* boundary a one-line imitable
-  Phase-0 pattern (lock one seam, Enforce, pipe `--format sarif` into CI) that an agent scanning the
-  crate copies by reflex — 潛移 at the doc level, near-zero cost. Likely the highest adoption leverage
-  per unit effort; can ride 0.1.5 on its own.
+- **Cheap, patch-now: sharpen the README on-ramp. · SHIPPED (v0.1.8)** Make the *first* boundary a
+  one-line imitable Phase-0 pattern (lock one seam, Enforce, pipe `--format sarif` into CI) that an
+  agent scanning the crate copies by reflex — 潛移 at the doc level, near-zero cost. Likely the
+  highest adoption leverage per unit effort.
 - **The full deliverable: a projectable two-track adoption guide** (produced by the 潛移 generator,
   worklane pilot). **Brownfield** (invariants already earned, prose exists → encode a mechanical
   subset, prose → code, straight to Enforce) vs. **greenfield** (assumptions, no prose →

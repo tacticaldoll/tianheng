@@ -256,8 +256,9 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   same way the `engine ⊥ shell` law already is. `guibiao`'s *external*-dependency bound
   stays `{serde_json}`; its self-law uses the stricter `restrict_dependencies_to` (which
   governs internal paths too), so it was amended — by deliberate, human-reviewed change to
-  `self_governance.rs` — to `["serde_json", "xuanji"]`, naming the one internal path the
-  family split requires. 璇璣's own boundary `restrict_dependencies_to(["serde_json"])`
+  `self_governance.rs` — to `["serde_json", "xuanji"]` (later `["serde_json", "xuanji", "xingbiao"]`;
+  see the 星表 decision below), naming the internal paths the family split requires. 璇璣's own
+  boundary `restrict_dependencies_to(["serde_json"])`
   keeps it beneath every dimension (no workspace member below it).
 - **The semantic capability-admission test (the gate against lints).** `syn` makes
   opinionated checks trivial to write ("no `unwrap`", "fns ≤ 50 lines"), every one forbidden
