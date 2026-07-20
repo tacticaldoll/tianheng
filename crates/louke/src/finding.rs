@@ -85,6 +85,79 @@ fn key<const N: usize>(code: &str, fields: [(&str, &str); N]) -> FindingKey {
 mod tests {
     use super::*;
 
+    type KeyCase = (RuntimeFact, &'static str, Vec<(&'static str, &'static str)>);
+
+    fn assert_runtime_fact_is_cataloged(fact: &RuntimeFact) {
+        match fact {
+            RuntimeFact::RegisteredCrossing {
+                origin: _,
+                type_name: _,
+            }
+            | RuntimeFact::UnregisteredCrossing { type_id: _ }
+            | RuntimeFact::DuplicateSeam { seam: _ }
+            | RuntimeFact::UnprobedSeam { seam: _ }
+            | RuntimeFact::UndeclaredProbe { seam: _ }
+            | RuntimeFact::UnauditableProbe { file: _ } => {}
+        }
+    }
+
+    #[test]
+    fn published_runtime_fact_identity_schema_is_exact_and_exhaustive() {
+        let cases: Vec<KeyCase> = vec![
+            (
+                RuntimeFact::RegisteredCrossing {
+                    origin: "app::adapter".to_string(),
+                    type_name: "SqlAdapter".to_string(),
+                },
+                "registered_crossing",
+                vec![("origin", "app::adapter"), ("type_name", "SqlAdapter")],
+            ),
+            (
+                RuntimeFact::UnregisteredCrossing {
+                    type_id: "TypeId(0x1234)".to_string(),
+                },
+                "unregistered_crossing",
+                vec![("type_id", "TypeId(0x1234)")],
+            ),
+            (
+                RuntimeFact::DuplicateSeam {
+                    seam: "checkout".to_string(),
+                },
+                "duplicate_seam",
+                vec![("seam", "checkout")],
+            ),
+            (
+                RuntimeFact::UnprobedSeam {
+                    seam: "checkout".to_string(),
+                },
+                "unprobed_seam",
+                vec![("seam", "checkout")],
+            ),
+            (
+                RuntimeFact::UndeclaredProbe {
+                    seam: "checkout".to_string(),
+                },
+                "undeclared_probe",
+                vec![("seam", "checkout")],
+            ),
+            (
+                RuntimeFact::UnauditableProbe {
+                    file: "src/lib.rs".to_string(),
+                },
+                "unauditable_probe",
+                vec![("file", "src/lib.rs")],
+            ),
+        ];
+
+        for (fact, code, fields) in cases {
+            assert_runtime_fact_is_cataloged(&fact);
+            let finding = fact.into_finding();
+            assert_eq!(finding.key().namespace(), "louke");
+            assert_eq!(finding.key().code(), code);
+            assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
+        }
+    }
+
     #[test]
     fn runtime_fact_shape_and_values_stay_distinct() {
         let missing = RuntimeFact::UnprobedSeam {

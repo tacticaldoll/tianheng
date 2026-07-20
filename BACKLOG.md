@@ -117,13 +117,17 @@ dimension's namespace, fact code, field names, canonical values, and the outer `
 roles compatibility-bearing. Keep the current line honest without treating every pressure point as
 an invitation to redesign the model:
 
-- **Published identity-schema compatibility reaction — 0.2.x candidate.** Build an explicit
-  cross-dimension catalog test for every shipped fact family. Pin the 0.2.0 namespace, code, named
-  fields, representative canonical values, and target/rule roles — not an entire presentation JSON
-  snapshot — and label the assertions as published wire so an implementation refactor cannot update
-  the expectation casually. Correct misleading helper docs at the same time: a canonicalizer whose
-  output enters a key (notably async `render_sig_tail`) is wire-sensitive even when it also improves
-  readability. This is a compatibility reaction, no production behavior or key change.
+- **Published identity-schema compatibility reaction — BUILT (0.2.x).** Each dimension owns an
+  exhaustive test catalog for every shipped fact family and identity-bearing discriminator. The
+  catalogs pin the 0.2.0 namespace, code, named fields, representative canonical values, and a real
+  production-emitted target/rule/key wiring case per dimension — never an entire presentation JSON
+  snapshot. Adding a fact or nested discriminator now requires an explicit catalog decision, while
+  finding wording remains free. Key-producing canonicalizers (`DependencyKind::key_label`, semantic
+  path/type/signature rendering, and the runtime unregistered `TypeId` discriminant) are marked as
+  published wire; the runtime discriminant retains its honest build-local stability bound. This is
+  a compatibility reaction only: no production behavior, key, public API, manifest, or package
+  version changed. The unsafe-site decomposition, async-seam identity, and rule-key separation below
+  remain breaking-window questions rather than being smuggled into the catalog work.
 - **Unsafe-site fact decomposition — next breaking-window candidate.** `SemanticFact::UnsafeSite`
   still stores a pre-rendered `label` (`unsafe impl Trait for Owner`, `unsafe fn Owner::method`) as
   one opaque key field beside `module`, despite the collector observing those roles separately.

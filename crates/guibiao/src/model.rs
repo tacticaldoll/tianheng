@@ -63,6 +63,8 @@ impl DependencyKind {
         }
     }
 
+    /// The published version-2 identity value for a dependency table. This is baseline wire, not a
+    /// presentation label; changing a byte re-keys every matching 圭表 finding.
     pub(crate) fn key_label(&self) -> &'static str {
         match self {
             DependencyKind::Normal => "normal",

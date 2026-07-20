@@ -8,8 +8,8 @@ adopter's baseline while all existing tests remain green.
 ## What Changes
 
 - Add an explicit compatibility catalog that exercises every shipped 圭表, 渾儀, and 漏刻 fact
-  family and identity-bearing nested discriminator through its dimension-owned conversion and pins
-  its published version-2 identity shape.
+  family and finite identity-bearing nested discriminator through its dimension-owned conversion
+  and pins its published version-2 identity shape.
 - Pin namespace, code, field roles, representative canonical values, and the target/rule roles that
   complete `ViolationId`; do not snapshot human finding text or an entire report document.
 - Mark key-producing canonicalizers, including async signature-tail rendering, as wire-sensitive so

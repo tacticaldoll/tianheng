@@ -35,9 +35,13 @@ Each dimension's private fact tests will enumerate its variants and assert exact
 namespace, code, canonical field names, and representative values. Test-only exhaustive matches over
 the fact enums and every nested enum that changes a code, field set, or canonical value make a newly
 added identity shape fail compilation until its schema is consciously added. This includes 圭表's
-dependency kind and 渾儀's exposure kind, public-seam kinds, item/member/associated kinds, and
-trait-impl positions. 圭表 keeps separate coverage for its crate and module fact enums; 漏刻's
-audit-only variants remain under the existing `audit` feature.
+dependency kind and 渾儀's exposure kind, public-seam kinds, visibility item kind,
+item/member/associated kinds, and trait-impl positions. The finite visibility item vocabulary moves
+from a string into a private 渾儀 enum so exhaustiveness is structural while its projected bytes stay
+identical. Arbitrary observed scalar values and the deliberately opaque unsafe-site label are pinned
+by representative values, not falsely claimed as finite vocabularies; unsafe decomposition remains
+a breaking-window candidate. 圭表 keeps separate coverage for its crate and module fact enums;
+漏刻's audit-only variants remain under the existing `audit` feature.
 
 This is preferred over a shell-level integration catalog. A central catalog would either expose
 private fact vocabulary or duplicate it outside the observing dimension, both violating ownership;
