@@ -17,7 +17,14 @@ fn manifest() -> PathBuf {
 #[test]
 fn the_clock_axis_reacts() {
     let c = constitution();
-    assert_eq!(check(c.static_boundaries(), &manifest()).exit_code(), 1);
+    let Outcome::Violations(report) = check(c.static_boundaries(), &manifest()) else {
+        panic!("the inline clock read must produce a structured violation");
+    };
+    assert!(report.violations.iter().any(|violation| {
+        violation.finding_key().namespace() == "guibiao"
+            && violation.finding_key().code() == "inline_path"
+    }));
+    assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }
 
 /// The 渾儀 half: `kernel::inner::fetch` is a `pub async fn` in a submodule → exit 1. Asserted on
@@ -26,10 +33,14 @@ fn the_clock_axis_reacts() {
 fn the_async_axis_reacts_across_the_subtree() {
     let c = constitution();
     let async_boundaries = &c.semantic_boundaries().async_exposure;
-    assert_eq!(
-        check_async_exposure(async_boundaries, &manifest()).exit_code(),
-        1
-    );
+    let Outcome::Violations(report) = check_async_exposure(async_boundaries, &manifest()) else {
+        panic!("the subtree async seam must produce a structured violation");
+    };
+    assert!(report.violations.iter().any(|violation| {
+        violation.finding_key().namespace() == "hunyi"
+            && violation.finding_key().code() == "async_exposure"
+    }));
+    assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }
 
 /// The discriminator that makes the subtree scope load-bearing: a **seam-only** async boundary on

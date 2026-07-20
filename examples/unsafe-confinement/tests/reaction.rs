@@ -19,6 +19,10 @@ fn the_stray_unsafe_reacts_with_exit_1() {
     // Self-sufficiently non-vacuous: the violation names the stray site in `crate::net`, never the
     // confined `crate::ffi` one — the confinement reacts on the right module.
     if let Outcome::Violations(report) = &outcome {
+        assert!(report.violations.iter().any(|violation| {
+            violation.finding_key().namespace() == "hunyi"
+                && violation.finding_key().code() == "unsafe_site"
+        }));
         let findings: Vec<&str> = report.violations.iter().map(|v| v.finding.as_str()).collect();
         assert!(findings.iter().any(|f| f.contains("crate::net")), "{findings:?}");
         assert!(
