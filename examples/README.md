@@ -18,3 +18,6 @@ impl-trait exposure. It is not an architecture recommendation or a starting tuto
 Together these owners execute the frozen 0.2.x family set through real evaluators. Dimension unit
 tests remain responsible for individual modifiers and scanner edge cases; a future public builder
 method still requires an explicit OpenSpec/API decision rather than being magically enumerated here.
+The examples gate separately derives every immediate workspace in this directory and requires its
+owner to finish both quality and declared-reaction assertions, so adding a directory without wiring
+it into the gate fails rather than silently shrinking this adoption surface.

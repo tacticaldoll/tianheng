@@ -23,6 +23,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - Every isolated example workspace now passes format, all-target Clippy, and warning-denied rustdoc
   gates before its Tianheng reaction is accepted; a focused warning fixture proves the quality gate
   fails first while committed adopter-facing dependency declarations remain unchanged.
+- The examples gate now closes its successfully exercised owners against every live
+  `examples/*/Cargo.toml` workspace, so a forgotten directory or nonexistent claim fails by name;
+  per-run machine artifacts are isolated and removed on failure instead of sharing fixed `/tmp`
+  paths.
 - A read-only release-coherence reaction now classifies development, release-ready, and exact
   release-snapshot states from the linear release commit spine, then fails on divergent workspace
   versions, dependency pins, adopter-facing release notes, or release-time lock entries. CI checks

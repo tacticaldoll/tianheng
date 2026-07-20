@@ -175,6 +175,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: every example reacts as declared
         # Each example under examples/ is its own workspace carrying a deliberate fault and the
-        # adopter's real `= "0.1"` dependency form; the script patches the family to local source
+        # adopter's real `= "0.2"` dependency form; the script patches the family to local source
         # (the packaged-selftest idiom) and asserts each reaction — the dogfood does not rot.
         run: bash scripts/test_examples.sh
