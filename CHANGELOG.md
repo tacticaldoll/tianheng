@@ -17,6 +17,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   families without an existing focused example owner, asserting their structured identity through
   both `check_constitution` and the real CLI shell. Tianheng's own self-law now also runs through the
   composed evaluator.
+- The examples gate now compares an explicit repository-only inventory of published boundary
+  families with fulfilled real-reaction owners; missing owners and unknown claims fail loudly
+  without adding family metadata to the public API or report wire.
 
 ### Changed
 - Published finding schemas and their dimension-local canonicalizers are now exhaustively pinned as

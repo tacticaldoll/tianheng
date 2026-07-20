@@ -246,16 +246,14 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   Tianheng's genuine self-Constitution now also runs through `check_constitution`, so self-governance
   dogfoods static → semantic → always-run runtime audit without inventing fake self-law. This is a
   frozen 0.2.x coverage ledger, not permission to add an example per modifier.
-- **Published-family completeness reaction — 0.2.x patch, trigger fired.** The ledger now has
-  enough real owners to expose its remaining open loop: its structured assertions fail when a
-  *listed* family loses its reaction, but cannot compare that executed coverage with one explicit
-  repository-owned inventory. Add a test/governance-only inventory and fulfilled-owner comparison
-  so a deliberately published family cannot land without a real evaluator reaction owner. Keep
-  family vocabulary dimension-owned or repository-internal; do not add a public
+- **Published-family completeness reaction — BUILT (0.2.x).** The examples gate now compares one
+  repository-only inventory with fulfilled reaction owners, counting a family only after its real
+  evaluator and structured identity assertions succeed. Unknown claims and missing owners both
+  fail loud and name the family. The inventory remains test governance: no public
   `PublishedBoundaryFamily`, production metadata, violation field, baseline identity component, or
-  serialized-report field in 0.2.x. The reaction closes publication bookkeeping once OpenSpec/API
-  review classifies a new insertion path as a family; it does not pretend that source scanning can
-  decide whether a builder method is a family, modifier, depth, or shorthand.
+  serialized-report field was added. OpenSpec/API review still decides whether a future insertion
+  path is a family, depth, modifier, or shorthand; once declared as a family, the executable ledger
+  prevents it from landing ownerless.
 - **Worked shape (for imitation — the DSL is real).** `composed` grows its constitution by one
   `.boundary()` per stage: `ModuleBoundary::in_crate("app").module("crate::domain")
   .must_not_import("crate::infra")` (圭表) → `SemanticBoundary::in_crate("app").module("crate::api")

@@ -12,6 +12,11 @@
 set -euo pipefail
 
 WS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/published_family_coverage.sh
+source "$WS/scripts/lib/published_family_coverage.sh"
+
+# Prove that both ledger failure directions bite before trusting its positive result below.
+bash "$WS/scripts/test_published_family_coverage.sh"
 
 # Emit null-delimited `--config patch...` args for the named family crates.
 patch() {
@@ -37,6 +42,7 @@ cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
 expect "$got" 1 "guibiao-standalone demo reacts"
+fulfill_family guibiao/module
 
 # ---------------------------------------------------------------- hunyi-standalone
 cd "$WS/examples/hunyi-standalone"
@@ -45,6 +51,8 @@ cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
 expect "$got" 1 "hunyi-standalone demo reacts"
+fulfill_family hunyi/signature
+fulfill_family hunyi/visibility
 
 # ---------------------------------------------------------------- unsafe-confinement
 # 渾儀's unsafe-confinement — the one capability the family cannot self-demo (every family crate is
@@ -55,6 +63,7 @@ cargo test "${PATCH[@]}"
 got=0
 cargo run --quiet --bin demo "${PATCH[@]}" >/dev/null 2>&1 || got=$?
 expect "$got" 1 "unsafe-confinement demo reacts"
+fulfill_family hunyi/unsafe
 
 # ---------------------------------------------------------------- capability-catalog
 # Breadth-only contract coverage for the published 0.2.x families that have no honest home in the
@@ -78,6 +87,12 @@ do
         || { echo "::error::capability catalog missing structured identity $identity"; exit 1; }
 done
 echo "ok  capability-catalog carries every assigned structured family identity"
+fulfill_family guibiao/crate
+fulfill_family guibiao/module
+fulfill_family hunyi/trait-impl
+fulfill_family hunyi/forbidden-marker
+fulfill_family hunyi/dyn-trait
+fulfill_family hunyi/impl-trait
 
 # ---------------------------------------------------------------- composed
 cd "$WS/examples/composed"
@@ -147,6 +162,7 @@ cargo run --quiet --bin runtime_demo "${PATCH[@]}" >/tmp/composed_runtime.txt 2>
 expect "$got" 0 "composed run-mode is event-only (no crash)"
 grep -q 'runtime reaction' /tmp/composed_runtime.txt || { echo "::error::runtime_demo did not emit the reaction"; exit 1; }
 echo "ok  composed run-mode emitted the fail-closed reaction"
+fulfill_family louke/runtime
 
 # ---------------------------------------------------------------- sans-io-pure
 # The 天衡 shell's `sans_io_pure` profile — folds a 圭表 clock boundary and a subtree-scoped 渾儀
@@ -168,5 +184,8 @@ grep -q '"kind": "module"' /tmp/sans_io.json \
 grep -q '"kind": "semantic"' /tmp/sans_io.json \
     || { echo "::error::sans-io-pure json has no semantic async violation — the subtree axis dropped"; exit 1; }
 echo "ok  sans-io-pure folds both axes (圭表 clock + 渾儀 async subtree)"
+fulfill_family hunyi/async-exposure
+fulfill_family tianheng/sans-io-pure
 
+verify_family_coverage
 echo "all examples reacted as declared."

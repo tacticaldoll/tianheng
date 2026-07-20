@@ -22,7 +22,13 @@ fn report_of(outcome: Outcome) -> Report {
 /// The core reaction: the `domain → infra` import trips the enforce boundary → exit 1.
 #[test]
 fn the_import_violation_reacts_with_exit_1() {
-    assert_eq!(check(&constitution(), &manifest()).exit_code(), 1);
+    let report = report_of(check(&constitution(), &manifest()));
+    assert!(report.violations.iter().any(|violation| {
+        violation.kind == guibiao::BoundaryKind::Module
+            && violation.finding_key().namespace() == "guibiao"
+            && violation.finding_key().code() == "imported_path"
+    }));
+    assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }
 
 /// 圭表 also governs the *feature* surface of a declared dependency, not just its name. This
