@@ -3446,7 +3446,10 @@ fn two_same_named_unsafe_trait_fns_stay_distinct() {
     .unwrap();
     assert_eq!(
         out,
-        ["unsafe fn A::m in crate::net", "unsafe fn B::m in crate::net"],
+        [
+            "unsafe fn A::m in crate::net",
+            "unsafe fn B::m in crate::net"
+        ],
         "trait-declared unsafe fns must be qualified by their trait: {out:?}"
     );
 }
