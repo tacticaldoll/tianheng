@@ -326,18 +326,18 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   anchor its maintenance into the release SOP — the entry written **on the release branch before its
   squash to `main`**, never independently.
 
-**0.2.x hygiene reactions — triggers fired; promote independently.** The behavior half of "dogfood
-does not rot" is already built: `scripts/test_examples.sh` runs every isolated example and checks
-its declared reaction. This refresh exposed a separate quality blind spot because those isolated
-workspaces sit outside the root workspace gates: a manual catalog-local Clippy pass found a warning
-that the normal Definition of Done could not see. Promote an isolated-example quality matrix that
-runs the applicable format / Clippy / rustdoc gates on each clean driver workspace while keeping
-deliberately violating subjects as scan data, not lint targets. Separately, the release-readiness
-review found an empty `[Unreleased]`, stale 0.1.x compatibility prose, and repeated lockfile/version
-friction. Promote a repository-state release-coherence gate that relates manifests, lockfile,
-CHANGELOG, and a release snapshot without a wall clock, warning window, or Tianheng constitution
-boundary. These are two observation sources and two repair directions, so they remain separate
-OpenSpec changes and PRs rather than one generic CI-polish mechanism.
+**0.2.x hygiene reactions — promote independently.** The examples gate now owns both halves of
+"dogfood does not rot": its existing behavior checks run every isolated example and assert the
+declared Tianheng reaction, while the **BUILT (0.2.x)** quality matrix first runs format, all-target
+Clippy, and warning-denied rustdoc in each isolated workspace using the same execution-time local
+patches. A real warning fixture proves quality failure stops before reaction acceptance; the first
+live matrix also corrected two safe public raw-pointer wrappers while leaving their deliberate
+unsafe-confinement reaction intact. Separately, the release-readiness review found an empty
+`[Unreleased]`, stale 0.1.x compatibility prose, and repeated lockfile/version friction. Promote a
+repository-state release-coherence gate that relates manifests, lockfile, CHANGELOG, and a release
+snapshot without a wall clock, warning window, or Tianheng constitution boundary. These are
+different observation sources and repair directions, so release coherence remains its own OpenSpec
+change and PR rather than generic CI-polish machinery.
 
 **Rests on the spectrum + triggers** (the product-identity note above): 圭表 genuinely standalone ·
 渾儀 semi-product (a distinct, only partly-overlapping library-author audience) · 漏刻 a *depth* of

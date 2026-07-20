@@ -4,9 +4,7 @@ use hunyi::UnsafeBoundary;
 
 /// The declared law: all `unsafe` in this crate is confined to the `crate::ffi` subtree.
 pub fn constitution() -> Vec<UnsafeBoundary> {
-    vec![
-        UnsafeBoundary::in_crate("unsafe_confinement")
-            .only_under(["crate::ffi"])
-            .because("unsafe lives only behind the ffi module — everywhere else is safe by contract"),
-    ]
+    vec![UnsafeBoundary::in_crate("unsafe_confinement")
+        .only_under(["crate::ffi"])
+        .because("unsafe lives only behind the ffi module — everywhere else is safe by contract")]
 }
