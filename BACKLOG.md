@@ -229,7 +229,7 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   before it publishes), the CI script injects the `--config patch.crates-io.<crate>.path=` resolution
   the `packaged-selftest` job already uses — committed file honest, resolution local. A raw `path =`
   dep is **not** used for the standalone examples: it would falsify the footprint demo (an adopter
-  writes `= "0.1"`, never `path =`). The composed example, whose footprint is not the pitch, may use
+  writes a crates.io requirement, never `path =`). The composed example, whose footprint is not the pitch, may use
   `path =` freely.
 - **Decided — three examples: `composed` + `guibiao`-standalone + `hunyi`-standalone.** The two
   CI-time instruments each get their own runnable standalone demo (check-against-source, no runtime),
@@ -237,6 +237,16 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   on-ramp, not just a README snippet. 漏刻 has **no** standalone example — it is a top-down *depth*,
   so it appears only inside `composed` (run-mode). The accepted cost is the largest example-set to
   maintain; the "dogfood does not rot" CI candidate below is what keeps that cost bounded.
+- **0.2.x dogfood refresh — BUILT.** The three examples above remain the adoption funnel;
+  `unsafe-confinement` and `sans-io-pure` are focused capability demonstrations added only where the
+  family itself cannot honestly carry the law. One explicitly non-tutorial `capability-catalog`
+  owns the remaining published-family breadth (dependency-source metadata, external-crate
+  confinement, trait-impl locality, forbidden markers, dyn exposure, and impl-trait exposure),
+  asserting stable rule/FindingKey identities through the real composed evaluator and shell.
+  Tianheng's genuine self-Constitution now also runs through `check_constitution`, so self-governance
+  dogfoods static → semantic → always-run runtime audit without inventing fake self-law. This is a
+  frozen 0.2.x coverage ledger, not an automatically enumerable registry and not permission to add
+  an example per modifier.
 - **Worked shape (for imitation — the DSL is real).** `composed` grows its constitution by one
   `.boundary()` per stage: `ModuleBoundary::in_crate("app").module("crate::domain")
   .must_not_import("crate::infra")` (圭表) → `SemanticBoundary::in_crate("app").module("crate::api")

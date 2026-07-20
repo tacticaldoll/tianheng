@@ -46,7 +46,7 @@ without a distinct adoption story.
 The ledger keys the published 0.2.x composition surface: static crate/module boundaries; signature,
 trait-impl, visibility, forbidden-marker, dyn-trait, impl-trait, async-exposure, and unsafe semantic
 families; the `sans_io_pure` composed profile; and runtime boundaries. Within static boundaries, the catalog selects rules
-that exercise currently absent observation shapes (dependency metadata, source classification,
+that exercise currently absent observation shapes (source classification,
 external confinement, and inline call paths); focused examples already own module-import and
 severity/baseline behavior. Unit tests remain responsible for every modifier and lexical edge.
 
