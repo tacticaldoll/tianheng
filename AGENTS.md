@@ -181,6 +181,10 @@ cargo clippy --workspace -- -D warnings   # shipped lib/bins only (no --all-targ
                                            # catches dead code that ships in the crate but is masked by
                                            # the --all-targets passes above (a test constructs an item
                                            # that is dead in the library — e.g. a feature-gated variant)
+cargo clippy -p louke -- -D warnings       # louke's audit-OFF library on its own: every --workspace pass
+                                           # feature-unifies louke/audit ON (the tianheng shell enables it),
+                                           # so only an isolated louke build sees the prod-light config where
+                                           # an unused audit-gated item would otherwise hide until publish
 cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
