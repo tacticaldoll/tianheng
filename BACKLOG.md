@@ -11,39 +11,28 @@ not APIs. A new observation dimension is **a crate, born when it is built** (nev
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
 `guibiao` core stays `serde_json`-only.
 
-## Version horizons — what a 0.1.x patch carries vs what earns 0.2.0
+## Version horizons — what 0.2.x carries vs what earns the next breaking window
 
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
-patch, breaking → minor**, and never a vanity minor bump. The admitted 三儀 layer is
-complete, so the near-term line is **0.1.x, a patch line**:
+patch, breaking → minor**, and never a vanity minor bump. Version `0.2.0` shipped the first
+deliberate breaking window; the current line is **0.2.x**:
 
-- **0.1.x (patch)** — additive depth on an existing observation source (a born-when-built
-  capability that widens nothing already public), packaging / CI / license-bundling hygiene,
-  and governance-doc corrections. Every *additive* forward item below lands here.
-- **0.2.0 (minor, in preparation)** — earned by the breaking structured-violation identity now
-  built on `release/0.2.0`: `Violation::new` takes a typed `ViolationId`, version-2 baselines match
-  dimension-owned `FindingKey`s, and 渾儀 derives named semantic fields plus human text from one
-  typed fact (including typed public seams). The line also deliberately kept and shaped `guibiao`'s
-  widened public surface (`baseline` / `coverage` / `projection` / `check_and_cover`, made `pub` as
-  the price of the crate split — see `PROJECT.md`, Decisions). These are one honest breaking window,
-  not vanity minors. **The `guibiao` item was demand-gated, not automatic** (see the
-  product-identity note below): whether its widened surface is *narrowed* (treated as internal) or
-  *deliberately kept and shaped* (as the standalone static-linter product) is decided by whether
-  guibiao draws standalone adopters — narrowing a face someone relies on would cut a product's
-  potential. A further **breaking** candidate rides the same window *only if the 三儀-as-products
-  reaction arrives*: sinking the run / projection (SARIF) machinery from `tianheng` into `xuanji` —
-  the reaction runtime beneath the model — so a single 儀 + `xuanji` is a complete standalone check,
-  possibly generalizing `xuanji`'s Tianheng-specific vocabulary (`BoundaryKind` / `Polarity`). It is
-  0.2.0-windowed because it is breaking, but it does not fire without the product reaction.
-  Additive adopter-facing work (the LSP crate, the
-  adopter-facing 潛移 generator) does **not** force a minor: it rides whatever release is
-  current, a patch unless bundled with that breaking refinement. **Guardrail (reference-consumer
-  steer):** the 0.2.0 break is quarantined to the *internal* surfaces — the `Baseline` data model,
-  the `Violation::new` newtype, `guibiao`'s widened `pub` face — and **must never break the
-  adopter-written builder** (`Constitution` / `CrateBoundary` / `run` / `prelude`). A real
-  consumer's adoption story is a **drop-in swap**; breaking the builder breaks the zero-pain-upgrade
-  promise and damages Tianheng's own adoption curve. A stable builder face is the *price* of the
-  0.2.0 cleanup, not a casualty of it.
+- **0.2.x (patch)** — additive depth on an existing observation source, false-negative closures
+  that preserve the published API and version-2 identity wire, packaging / CI / license hygiene,
+  compatibility reactions, and governance-doc corrections. Size alone never earns a minor.
+- **Next breaking window (`0.3.0` only if earned)** — candidates that must reshape the published
+  reaction-inspection or baseline wire wait here: unsafe-site fact decomposition, a decision on
+  whether an async seam's rendered signature belongs to identity, and separation of stable rule
+  identity from human rule presentation. These candidates do not promise a `0.3.0`; one is promoted
+  only when a real adopter or correctness pressure justifies the break, and then the break earns the
+  minor. The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded
+  drop-in surface unless a separately demonstrated forcing function says otherwise.
+
+**The `0.2.0` window — SHIPPED.** Structured violation identity moved live findings to
+dimension-owned `FindingKey`s and version-2 baselines; the widened `guibiao` projection / baseline
+surface was kept and shaped because modou consumes it standalone. The composed adopter surface was
+compile-reacted against pacta's usage. Those decisions and their rationale now live in `PROJECT.md`;
+the post-0.2 pressure points below are follow-ups, not unfinished 0.2.0 scope.
 
 ### The crate family as products — identity now, product weight on reaction
 
@@ -82,10 +71,10 @@ awareness; let demand deepen it.
 - a 儀 actually adopted standalone, or an API that actually hurts in use;
 - API convergence (no churn across several patch releases).
 
-Until a trigger fires, staying 0.1.x is a **deliberate hold** (waiting for reaction), not drift.
+Until the trigger fired, staying 0.1.x was a **deliberate hold** (waiting for reaction), not drift.
 
-**Trigger fired (2026-07) — 0.2.0 window now open; the bundle above is active, not deferred.** Two
-adopters, two shapes (verified against their source):
+**Trigger fired (2026-07) — the 0.2.0 window opened and has now shipped.** Two adopters, two shapes
+(verified against their source) earned that window:
 
 - **`../pacta` (composed)** depends on `tianheng` + `guibiao`, drives one `Constitution` through
   `tianheng::run` / `check_all` (+ `guibiao::check_and_cover` for coverage). This is the
@@ -108,23 +97,73 @@ What each unblocks — the two gates are **not** one:
   widened surface, not sinking it**: modou re-exports guibiao's projection, so the sink would *break*
   modou; and the sink's dedup payoff needs *multiple* standalone 儀 (a hunyi/louke standalone product),
   which no adopter shows. Revisit only when that arrives — not before.
-- **Structured-baseline / typed-identity bundle → active in the 0.2.0 window.** The crux is *where the
-  per-dimension `FindingKey` union lives* without up-hoisting dimension vocabulary into `xuanji`
-  (三儀 ⊥ 三儀) or growing a generic value model in `xuanji` (serde_json-only). This is a
-  `design-boundaries` question **deferred to when the 0.2.0 work is actually built** (born-when-built —
-  do not lay the identity design ahead of its implementation); `pacta` + `modou` are the two drop-in
-  reference consumers bounding how far `Violation`/`ViolationId`/projection may move. Guardrails on the
-  axis: `reason` stays prose (潛移); the text finding becomes `render(fact)`, never the sole identity;
-  no resolver internals exposed as facts.
+- **Structured-baseline / typed-identity bundle → BUILT (0.2.0).** The per-dimension union resolved
+  as dimension-owned typed facts projected into 璇璣's vocabulary-neutral, flat `FindingKey`
+  envelope; no dimension vocabulary or resolver internals moved into the shared model. `reason`
+  stays prose (潛移), while the human finding is rendered from the same fact but never becomes the
+  sole version-2 identity. `pacta` + `modou` remain the reference consumers bounding future changes
+  to `Violation` / `ViolationId` / baseline projection; the settled rationale lives in
+  `PROJECT.md`, and the residual pressure is recorded below.
 - **P3 (un-auditable-probe file-granular re-mask, below) — re-evaluated: no single-point miss.** Two
   co-existing non-literal probes in one file react as one file-level violation (neither masked); the
   only masking is the *temporal* stale-baseline re-mask already recorded below as low-risk (surfaced by
-  `Baseline::stale`), which rides the structured-baseline wire window if ever tightened. Not a coverage
-  false negative; nothing to fix in 0.1.x.
+  `Baseline::stale`). Not a coverage false negative; do not re-key it in 0.2.x absent a stronger
+  reaction that justifies a stable per-probe locator.
 
-### Product maturity in the 0.1.x hold — DX and trust, all convention / CI-reaction
+### Post-0.2 structured-identity pressure — preserve the wire, promote only on reaction
 
-Reading as a **mature product** during the deliberate hold above is not new capability — it is
+Version 2 closed the live presentation-as-identity failure, but publishing the key also made each
+dimension's namespace, fact code, field names, canonical values, and the outer `target` / `rule`
+roles compatibility-bearing. Keep the current line honest without treating every pressure point as
+an invitation to redesign the model:
+
+- **Published identity-schema compatibility reaction — 0.2.x candidate.** Build an explicit
+  cross-dimension catalog test for every shipped fact family. Pin the 0.2.0 namespace, code, named
+  fields, representative canonical values, and target/rule roles — not an entire presentation JSON
+  snapshot — and label the assertions as published wire so an implementation refactor cannot update
+  the expectation casually. Correct misleading helper docs at the same time: a canonicalizer whose
+  output enters a key (notably async `render_sig_tail`) is wire-sensitive even when it also improves
+  readability. This is a compatibility reaction, no production behavior or key change.
+- **Unsafe-site fact decomposition — next breaking-window candidate.** `SemanticFact::UnsafeSite`
+  still stores a pre-rendered `label` (`unsafe impl Trait for Owner`, `unsafe fn Owner::method`) as
+  one opaque key field beside `module`, despite the collector observing those roles separately.
+  The existing flat envelope can represent form / trait / owner / name / module as named scalar
+  fields; no richer shared value model is needed. Do not re-key published version-2 baselines in a
+  patch. Anonymous `unsafe {}` remains deliberately module-granular, never ordinal-keyed.
+- **Async seam identity — decide in the next breaking window, do not assume the answer.** The
+  owner-qualified module/trait/type plus item name already identifies an async public seam, while
+  the current key additionally stores the rendered signature tail. Decide whether the observed
+  architectural fact is the seam or its exact declaration. If it is the seam, parameter/return
+  refactors should change presentation but not identity; removing `signature` is nevertheless a
+  version-2 wire break and cannot ride 0.2.x.
+- **Rule identity is still presentation-bearing — next reaction-model window.** `rule` remains both
+  human text and a `ViolationId` component (and SARIF `ruleId`); the runtime prod face additionally
+  folds the complete allowed-origin set into that string, so an unrelated allowlist edit changes
+  event identity. Treat existing labels as wire identifiers throughout 0.2.x. Revisit a stable
+  `rule_key` separate from human rule presentation only with a deliberate model/baseline migration,
+  not wording polish.
+- **Baseline metadata parse strictness — 0.2.x candidate after a requirement scenario.** Omitted
+  `owner` / `tracker` correctly parse as absent, but a present non-string value is also silently
+  normalized to absent. Decide whether explicit `null` is absence or malformed, then reject every
+  other wrong type so governance metadata cannot disappear silently. Keep the write action's
+  existing warning-before-fresh-snapshot behavior on an unreadable baseline.
+- **Legacy migration communication — documentation only.** Version 1 remains supported by exact
+  `(target, rule, finding)` matching; `--write-baseline` is already the bounded opt-in upgrade,
+  preserving metadata for exact live matches and dropping stale entries as the snapshot contract
+  requires. Document that wording-sensitive V1 users should rewrite before presentation changes
+  when metadata preservation matters. Do not add a migration command, wall-clock window, or a
+  perpetual read warning absent a V1 deprecation decision.
+- **Flat-envelope pressure trigger — watch, do not pre-build.** `FindingKey` is intentionally the
+  public, vocabulary-neutral shared chokepoint for identity instances, while schemas stay in their
+  dimensions. Revisit its flat string-field representation only when a real observed fact cannot
+  retain role separation, injectivity, and presentation-independent stability through named scalar
+  fields plus dimension-local canonicalization. Its place in the 0.2.x reaction-inspection contract
+  makes in-place reshaping costly; prefer a dimension-local or additive path unless the forcing fact
+  proves those insufficient.
+
+### Product maturity from the 0.1.x hold — shipped history and remaining DX/trust work
+
+Reading as a **mature product** during the deliberate hold was not new capability — it was
 **lower friction (DX) and higher trust**. This is the drift law applied to go-to-market: build no
 shell without a reaction, but polish the packaging and on-ramp of the observation mechanisms that
 already react. Everything here is **convention / CI-reaction hygiene — zero constitution boundaries,
@@ -723,8 +762,12 @@ Deferred / forward:
   - **Probe in an unreachable/orphan `.rs` file counts.** louke scans the src subtree lexically with
     no module-graph reachability; a probe in a dead orphan file is counted. Closing it needs a
     reachability walk louke does not have and cannot borrow from 圭表 (三儀 ⊥ 三儀), and louke's prod
-    weight forbids a syn/heavy walker — a design-bearing follow-up (a louke-local reachability walk,
-    or the shell passing reachable files).
+    weight forbids a syn/heavy walker. The narrow first follow-up is target-root file/module
+    reachability that closes only the orphan-file false coverage while retaining the existing
+    `cfg`/feature blindness as an explicit bound; do not attempt a full Cargo compilation matrix in
+    the same change. Prefer a louke-local audit walker initially. Move a substrate into 星表 only if
+    a second dimension proves the reachability semantics are genuinely shared; never borrow 圭表's
+    scanner or introduce a 三儀 dependency edge merely to deduplicate code.
   - **`member_src_dirs` silently skips a lib/bin-less member.** `crate_root_file` returns `None` for
     a member with no lib/bin target (proc-macro/test-only), genuinely out of the audit corpus; a
     lib/bin target always carries a `src_path`, so the "resolvable-but-absent" case is unreachable in
