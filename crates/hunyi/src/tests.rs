@@ -3401,6 +3401,60 @@ fn two_unsafe_impls_of_one_trait_for_different_types_stay_distinct() {
 }
 
 #[test]
+fn two_same_named_unsafe_fns_on_different_owners_stay_distinct() {
+    // Same method name, different inherent-impl self type: the finding must be owner-qualified,
+    // else a baseline of the first silently accepts the second — a false negative (a new
+    // out-of-subtree `unsafe` site passing unobserved). The unsafe-fn analogue of
+    // `two_unsafe_impls_of_one_trait_for_different_types_stay_distinct`.
+    let out = unsafe_labels(
+        "unsafe-fns-same-name",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub struct Foo;\npub struct Bar;\nimpl Foo { unsafe fn m(&self) {} }\nimpl Bar { unsafe fn m(&self) {} }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe fn Bar::m in crate::net",
+            "unsafe fn Foo::m in crate::net",
+        ],
+        "same-named unsafe fns on different owners must not collapse: {out:?}"
+    );
+}
+
+#[test]
+fn two_same_named_unsafe_trait_fns_stay_distinct() {
+    // Two traits in one module each declaring `unsafe fn m` must stay distinct findings, qualified
+    // by the declaring trait — else a baseline of the first masks the second (a false negative).
+    let out = unsafe_labels(
+        "unsafe-trait-fns",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub trait A { unsafe fn m(&self); }\npub trait B { unsafe fn m(&self); }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe fn A::m in crate::net",
+            "unsafe fn B::m in crate::net"
+        ],
+        "trait-declared unsafe fns must be qualified by their trait: {out:?}"
+    );
+}
+
+#[test]
 fn unsafe_in_a_body_nested_mod_reacts() {
     // The propose-review false-negative guard: a `mod` inside a fn body is not descended by the
     // top-level walk; the collector's default recursion must still catch its unsafe.
@@ -5815,6 +5869,39 @@ fn the_semantic_file_is_not_part_of_the_baseline_identity() {
     // `file` is metadata, not identity: a violation baselined while `file` was null still
     // matches once populated, so populating it never re-baselines or changes the count.
     assert_eq!(v.id(), v.clone().with_file(None).id());
+}
+
+#[test]
+fn cfg_duplicated_inline_modules_are_all_governed() {
+    // Two `#[cfg(..)] mod platform {..}` variants parse as separate inline modules (syn does not
+    // evaluate cfg). A signature-coupling boundary anchored on `crate::platform` must observe BOTH:
+    // resolving only the source-first variant let a forbidden exposure in the other pass unobserved
+    // (exit 0) — a mod-resolution divergence, the forbidden false-negative class. Matches the
+    // crate-wide scan's observe-all policy for same-named modules.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-dup-platform",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(unix)] pub mod platform { pub fn open() -> u8 { 0 } }\n\
+                 #[cfg(windows)] pub mod platform { pub fn open() -> crate::infra::Db { unimplemented!() } }\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("platform must not expose infra in any cfg variant");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the non-source-first cfg variant's exposure must react: {violations:?}"
+    );
 }
 
 #[test]

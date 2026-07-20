@@ -3976,6 +3976,34 @@ fn inline_resolves_a_rename() {
 }
 
 #[test]
+fn inline_resolves_a_self_prefixed_group_alias() {
+    // A use-group member whose name merely *starts with* the substring "self" (`self_utc`) is a
+    // legal import, not the `self` leaf. An over-broad `starts_with("self")` dropped it, so the
+    // alias was unresolved and a confined inline call through it silently passed — a false negative.
+    let (result, violations) = run_module_check(
+        "inline-self-prefixed-group",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "use std::time::{self_utc as clk, Duration};\nfn f() { let _ = clk::now(); }\n",
+            ),
+        ],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "a self-prefixed group alias resolves and reacts: {violations:?}"
+    );
+    assert!(
+        violations[0].finding.contains("std::time::self_utc::now"),
+        "{violations:?}"
+    );
+}
+
+#[test]
 fn inline_resolves_a_bare_path() {
     let (result, violations) = run_module_check(
         "inline-bare",

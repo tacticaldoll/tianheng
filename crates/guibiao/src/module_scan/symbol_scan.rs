@@ -505,7 +505,16 @@ fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
                 let inner = brace_content(&tree[open..]);
                 for part in split_top_commas(&inner) {
                     let part = part.trim();
-                    if part.is_empty() || part == "*" || part.starts_with("self") {
+                    // `self` / `self as x` names the prefix module, not a child leaf, and introduces
+                    // no simple call head, so it is skipped. Strip a trailing ` as <alias>` and test
+                    // the head EXACTLY: a bare `starts_with("self")` also drops a legal import like
+                    // `self_utc` (a false negative — a confined inline call through the alias would
+                    // then pass unresolved). Mirrors `use_scan::expand_use_tree_depth`.
+                    let head = match part.find(" as ") {
+                        Some(idx) => part[..idx].trim(),
+                        None => part,
+                    };
+                    if part.is_empty() || part == "*" || head == "self" {
                         continue;
                     }
                     go(&format!("{prefix}{part}"), out, depth + 1);
