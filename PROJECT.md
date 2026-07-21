@@ -214,7 +214,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a deliberate non-goal here; if ever wanted it is a separate amendment.
 - **A cfg-blind union that makes several physically distinct files share one logical identity
   must never let per-module bookkeeping (an ancestor set, a structural lookup) act on that shared
-  identity as if it named one file.** **(0.2.2 lesson, in three rounds — confirmed twice across
+  identity as if it named one file.** **(0.2.2 lesson, in five rounds — confirmed across
   two independent crates.)** Landing the
   unconditional-`#[path]`-follow work (above) first tracked cycle-guard "already-open source
   files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
@@ -272,6 +272,25 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   "the" file) got reused by a different caller (keep descending) whose needs it does not actually
   meet — the same "governance key vs. safety key" conflation the lesson opened with, now seen at
   a third layer of the same two crates.
+  A **fifth** round, scoped to the newest surface area above plus a fresh cross-crate consistency
+  pass, found two further instances in 圭表 — this time not a repeat of the governance/safety-key
+  conflation, but the SAME "a fix closes the reported instance, not the shared model" pattern
+  applied to the plain-child live probe's own completeness. The probe's `structurally_matches`
+  check only compared the candidate's naive on-disk path against its logical module path — it
+  never checked whether that candidate was actually a member of the crate-wide walk's own file
+  list (`fs_walk::rust_files`, which deliberately never recurses into a symlinked directory, its
+  own cycle guard). A plain child reached only through a symlinked directory component agreed on
+  path but was never in that list, so the probe wrongly assumed `governed_files`' structural
+  iterator would find it on its own — silently governing nothing. Separately, the inline-module
+  scan path never read a `#[path]` attribute preceding an inline header at all (a comment claimed
+  it was "a no-op for rustc", true only for the header's own content, not for where its file-form
+  children resolve from — verified false against a real build). Both are the same shape as the
+  lesson's opening case: a check or a scan that is locally reasonable for the ordinary case turns
+  out to silently assume away a real, rustc-compiling shape it was never actually tested against.
+  Fixed by intersecting the live probe's structural-match test against the walk's own canonical
+  file set, and by reading and following an inline header's own unconditional `#[path]` exactly
+  like a file-form one. Five rounds now, the same two-crate pattern each time: closing a reported
+  instance earns confidence only from the NEXT fresh adversarial pass, never from the fix itself.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
