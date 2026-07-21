@@ -261,10 +261,14 @@ present) remains a constitution error regardless of any gate.
 
 A `mod name;` carrying an **unconditional** `#[path = "..."]` relocation SHALL be recognized
 **structurally** — an outer attribute whose meta name is exactly `path` followed by `=` and a string
-literal, with comments and string literals skipped — and SHALL be **followed** to that author-chosen
-file, resolved relative to the directory a conventional `mod name;` would use; a `#[path]`-loaded file
-is mod-rs-like, so its own children resolve from its directory. Probes inside a relocated module are
-therefore counted, and an undeclared-seam probe there is caught. A declaration whose preamble merely
+literal, with comments and string literals skipped, and the literal's escapes decoded as rustc/syn
+decode them — and SHALL be **followed** to that author-chosen file, resolved relative to the
+containing file's own directory with each enclosing inline-`mod` name accumulated onto it (rustc's
+mod-rs-blind rule); for a non-mod-rs `name.rs` this differs from the conventional-child directory its
+own `mod y;` would use, and a `#[path]` nested inside an inline `mod { … }` block adds that block's
+name as a directory component. A `#[path]`-loaded file is itself mod-rs-like, so its own children
+resolve from its directory. Probes inside a relocated module are therefore counted, and an
+undeclared-seam probe there is caught. A declaration whose preamble merely
 *contains* the text `path` — a `// fast path` comment, a `#[cfg(feature = "fastpath")]` gate — SHALL
 NOT be read as a relocation and SHALL resolve conventionally, so no reachable module is dropped by a
 false substring match (which would silently drop every probe beneath it — a coverage false negative,
@@ -302,6 +306,11 @@ module, while an absent target for an unconditional `#[path]` is a fail-loud con
 
 - **WHEN** a target root declares `#[path = "elsewhere.rs"] mod relocated;` (no conventional `relocated.rs`; `elsewhere.rs` holds a declared seam's probe) alongside a `// fast path` comment and `#[cfg(feature = "fastpath")] mod present;` whose conventional `present.rs` resolves normally
 - **THEN** the `#[path]`-relocated module is recognized structurally and **followed** to `elsewhere.rs`, so its probe counts as coverage (never dropped as off the conventional path), while `present` — matched by no `path` attribute despite the incidental substring — still resolves conventionally
+
+#### Scenario: A #[path] nested inside an inline module resolves from the accumulated directory
+
+- **WHEN** a target root declares `mod inline { #[path = "other.rs"] mod inner; }`, `inline/other.rs` holds an undeclared-seam probe, and a same-named `other.rs` decoy sits beside the root
+- **THEN** the audit resolves `inner` to `inline/other.rs` (the enclosing inline-`mod` name accumulated onto the base, as rustc compiles it) and reports the undeclared-seam probe, never reading the `other.rs` decoy and returning Clean at exit 0
 
 #### Scenario: A cfg_attr-wrapped #[path] relocation is not followed
 

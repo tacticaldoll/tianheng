@@ -50,9 +50,12 @@ use scan::scan_source;
 /// `#[path = "…"] mod name;` is followed to its author-chosen file and its probes are counted — the
 /// base is the directory a conventional `mod name;` would use, and the loaded file is mod-rs-like,
 /// so its own children resolve from its directory. A **`cfg_attr`-wrapped** `#[path]` is
-/// cfg-conditional and is **not** followed (following it cfg-blind could read a file rustc does not
-/// compile in this configuration): such a module's probes are not counted — a stated bound, so keep
-/// a cfg-relocated module's production probes in a conventionally located module instead.
+/// cfg-conditional and its relocation is **not** followed (following it cfg-blind could read a file
+/// rustc does not compile in this configuration): the *relocated* file's probes are not counted, and
+/// — being cfg-blind — the scan instead resolves the module conventionally, counting the
+/// conventional `name.rs` if one is present (even where an active predicate makes rustc compile the
+/// relocated file and ignore the conventional one). This is the same cfg-blindness as the
+/// `#[cfg(test)]` bound above, in both directions; it is a stated bound, not exact rustc fidelity.
 ///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
 pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {

@@ -79,9 +79,14 @@ The system SHALL walk the whole target crate (descending file-based `mod x;` and
 - **WHEN** the crate has `only_under(["crate::ffi"])` and `crate::net` declares `#[path = "net_raw.rs"] mod raw;` where `net_raw.rs` contains an `unsafe fn`
 - **THEN** the walk follows the `#[path]` to `net_raw.rs` and emits a violation for the `unsafe fn` attributed to `crate::net::raw`, never silently dropping it as off the conventional path — while a `cfg_attr`-wrapped relocation stays an unfollowed stated bound
 
+#### Scenario: Unsafe in a #[path] nested inside an inline module reacts at the accumulated file
+
+- **WHEN** the crate root declares `mod inline { #[path = "other.rs"] mod inner; }`, `inline/other.rs` holds an `unsafe fn`, and a same-named `other.rs` decoy sits beside the crate root
+- **THEN** the walk resolves `crate::inline::inner` to `inline/other.rs` (the enclosing inline-`mod` name accumulated onto the base, as rustc compiles it) and emits the `unsafe fn` violation, never reading the `other.rs` decoy and passing at exit 0 — the false negative this closes
+
 ### Requirement: Crate and subtree resolution
 
-For each boundary the system SHALL resolve the target crate to a workspace member and its source root before evaluating it. A target crate absent from the workspace, an unreadable/unparseable source file, or a non-`#[cfg]` missing module file encountered during the walk SHALL be a **constitution error** (exit 2), failing loud and distinct from a violation (exit 1), so an ungovernable target is never reported as an unsafe violation and never silently passed. A symlink module cycle SHALL be a constitution error, never a crash.
+For each boundary the system SHALL resolve the target crate to a workspace member and its source root before evaluating it. A target crate absent from the workspace, an unreadable/unparseable source file, or a non-`#[cfg]` missing module file encountered during the walk SHALL be a **constitution error** (exit 2), failing loud and distinct from a violation (exit 1), so an ungovernable target is never reported as an unsafe violation and never silently passed. A module whose source file loops the current descent path back on itself — a symlinked module directory or a circular `#[path]` — SHALL be a constitution error, never a crash; but two sibling/cousin declarations legitimately resolving to one file (which rustc compiles) SHALL NOT be misreported as a cycle.
 
 #### Scenario: Unknown crate is a constitution error
 
