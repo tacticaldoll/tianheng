@@ -812,14 +812,17 @@ Deferred / forward:
       and every probe under it — a **silent coverage FN**, worse than the over-report above. Now
       detected structurally (an outer attribute whose meta name is exactly `path`, comments and
       unrelated attributes skipped); `#[cfg_attr(.., path = ..)]` stays a bound. Two pins guard it.
-    - **`cfg`-gated module whose file is absent on the current platform hard-errors — post-0.2.1
-      review, KEPT as a documented bound (not a bug).** The scan is lexical and does not evaluate
-      `cfg` (`runtime-origin-assertion`), and an unresolvable *reachable* module is a constitution
-      error, never a silent skip — the FN-first guard, with a passing test. So `#[cfg(windows)] mod
-      win;` with no `win.rs` on a non-Windows checkout fails loud. Deliberate: keep the file present,
-      or run the audit per platform. Evaluating `cfg` for module resolution would trade away the
-      "does not evaluate cfg" simplicity and weaken a fail-loud FN-guard — a spec amendment if ever
-      wanted, not a fix.
+    - **`cfg`-gated module whose file is absent is now tolerated — post-0.2.1 review, CLOSED.**
+      louke's walker errored on *any* unresolvable reachable module, so a `#[cfg(windows)] mod win;`
+      with no `win.rs` on a non-Windows checkout hard-failed the audit, breaking cross-platform
+      adopters. This was **not** a deliberate bound (an earlier triage wrongly kept it as one): 渾儀
+      already tolerates exactly this case (cfg-gated absent → skip; non-cfg absent → exit 2), so
+      louke was merely inconsistent with its sibling dimension. Fixed to match — a
+      `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module with no file is skipped (it compiles no probes in
+      this configuration, so skipping cannot silently cover a seam: no FN weakening), while a non-cfg
+      missing module and a resolution ambiguity stay fail-loud. Not `cfg` evaluation: a resolvable
+      cfg-gated module is still scanned. `runtime-origin-assertion` updated with a scenario; louke
+      stays `syn`-free (byte-level detection, 三儀 ⊥ 三儀).
   - **`member_src_dirs` silently skips a lib/bin-less member.** `crate_root_file` returns `None` for
     a member with no lib/bin target (proc-macro/test-only), genuinely out of the audit corpus; a
     lib/bin target always carries a `src_path`, so the "resolvable-but-absent" case is unreachable in

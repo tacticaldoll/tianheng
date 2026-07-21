@@ -54,6 +54,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   scanning its preamble for the raw substring `path`, so a module preceded by a `// fast path`
   comment or a `#[cfg(feature = "fastpath")]` is no longer misclassified as relocated and dropped
   from the audit corpus together with the probes beneath it.
+- The probe-coverage walker now tolerates a `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module whose file
+  is absent in the current configuration (an off feature or another platform), skipping it instead
+  of failing the audit — matching the semantic dimension, so a cross-platform workspace no longer
+  hard-errors on a platform-specific module. A non-cfg missing module and a resolution ambiguity
+  remain fail-loud.
 - CI gates that could pass vacuously now bite: louke's default (audit-off) library is linted on its
   own so dead `audit`-gated code fails loud despite workspace feature unification pinning `audit`
   on, and the release-coherence check guards its discovered crate set non-empty so a layout change

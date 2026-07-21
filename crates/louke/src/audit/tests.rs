@@ -110,6 +110,35 @@ fn root_aware_audit_fails_loud_on_an_unresolvable_reachable_module() {
 }
 
 #[test]
+fn a_cfg_gated_module_with_no_file_is_skipped_not_errored() {
+    let base = std::env::temp_dir().join(format!("louke-cfg-absent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // `#[cfg(feature = "never")] mod optional;` with no `optional.rs` is legal Rust when the
+    // feature is off; the walk must skip it rather than fail the audit (exit 2), matching 渾儀's
+    // cfg-tolerance. The non-cfg `mod present;` resolves normally and carries the only probe, so a
+    // clean outcome proves the cfg-gated module was tolerated, not that the walk simply stopped.
+    // Its counterpart — a non-cfg `mod missing;` with no file — still fails loud (see
+    // `root_aware_audit_fails_loud_on_an_unresolvable_reachable_module`).
+    let root = write_source(
+        &base,
+        "lib.rs",
+        "#[cfg(feature = \"never\")]\nmod optional;\nmod present;",
+    );
+    write_source(
+        &base,
+        "present.rs",
+        "fn live() { assert_boundary!(\"present\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("present", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "a cfg-gated module with no file is skipped, not errored: {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
 fn root_aware_audit_fails_loud_on_non_utf8_reachable_source() {
     let base = std::env::temp_dir().join(format!("louke-root-unreadable-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
