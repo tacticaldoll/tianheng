@@ -212,28 +212,40 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
   from an unknown-module typo, never a silent pass. Governing inline modules as targets is
   a deliberate non-goal here; if ever wanted it is a separate amendment.
-- **A `#[path]` cycle guard's ancestor set must be tracked per physical source file, never merged
-  across mutually-exclusive `#[cfg]` sibling arms of one logical module path.** **(0.2.2 lesson.)**
-  Landing the unconditional-`#[path]`-follow work (above) first tracked "already-open source
+- **A cfg-blind union that makes several physically distinct files share one logical identity
+  must never let per-module bookkeeping (an ancestor set, a structural lookup) act on that shared
+  identity as if it named one file.** **(0.2.2 lesson, in two rounds.)** Landing the
+  unconditional-`#[path]`-follow work (above) first tracked cycle-guard "already-open source
   files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
   name with different unconditional targets — the standard, already-supported per-platform shim —
   share one logical path, so their targets' canonical paths were unioned into that single set. A
   further `#[path]` inside one arm's target legitimately referencing the *other* arm's target (the
-  two are never simultaneously open in any real single build) was then misreported as a cycle: the
-  guard saw the sibling's canon in the merged set and refused valid, compilable input. The fix
-  tracks each `ScanSource`'s own ancestor set individually — the descent path that reached that
-  *specific* file — never merged with a sibling's. The general shape of the mistake: whenever a
-  scanner's cfg-blind union deliberately makes several physically distinct files share one logical
-  identity (here, one module path), any *safety* bookkeeping keyed on that same logical identity
-  (a cycle guard, or anything else meant to reason about "have I already seen this") silently
-  conflates the union's members with each other. Keyed identity for governance (what to report
-  under) and keyed identity for safety bookkeeping (what counts as "the same thing already open")
-  are not automatically the same key — check which one a new safety check actually needs before
-  reusing whatever key is already at hand. Found and fixed before shipping to any release (an
-  internal adversarial review, not an external report), while implementing the second of two
-  related plain-child-of-a-remap fixes shipped alongside it in 0.2.2; both those fixes independently
-  needed the same kind of scrutiny — one repeated a raw filesystem probe's own directory-shape
-  assumption from a different, narrower case it did not actually generalize from.
+  two are never simultaneously open in any real single build) was then misreported as a cycle. A
+  first-round fix moved ancestor tracking onto each `ScanSource` individually — but a **second**
+  adversarial-review round on the shipped result found the *same* mistake still live one hop away,
+  in the sibling plain-child code path added alongside it: `plain_child_base_ancestors` still
+  unioned a module's *entire* source list rather than only the source that actually declared the
+  child, reproducing the identical false-positive cycle through a plain (non-`#[path]`) child of an
+  inline `#[cfg]` arm; a stray, wholly uncompiled file coincidentally sitting at a remapped
+  module's naive structural location could also be phantom-governed alongside the real one, since
+  the (then still `by_module`-based) plain-child lookup had no way to know its parent was
+  remapped; and a plain child resolved through the `#[path]`-remap live probe had no working
+  formula for *its own* further plain children at all (a false negative), since a directory-shape
+  concept the probe needed (where do THIS file's own plain children live — different from where
+  a `#[path]` written inside it resolves, whenever the file is an ordinary flat `name.rs` rather
+  than `mod.rs`-shaped) was never modeled as its own field, so it silently fell back to whichever
+  adjacent value happened to be at hand. All three were root-caused together: plain-child
+  resolution was redesigned to carry, on every `ScanSource`, both `path_base` (where a `#[path]`
+  written in it resolves from) and a *separate* `child_base` (where its own plain/inline children
+  live — these coincide only for the crate root, an inline body, and a `#[path]` target, never for
+  an ordinary flat file), and the global `by_module` structural index was dropped from child
+  resolution entirely in favor of this per-source probe — closing all three at once rather than
+  patching each symptom where it surfaced. The durable lesson, confirmed twice at increasing
+  depth: keyed identity for *governance* (what to report a violation under) and keyed identity for
+  *safety* bookkeeping (what counts as "the same thing already open", or "where do this file's own
+  children live") are not automatically the same key, and a fix that narrows to the one reported
+  instance rather than the shared underlying model tends to resurface one hop further away on the
+  very next adversarial pass — which is exactly what a second review round is for.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

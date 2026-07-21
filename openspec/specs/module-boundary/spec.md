@@ -344,6 +344,21 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 - **WHEN** a crate declares `#[cfg(feature = "a")] #[path = "variant_a.rs"] mod imp;` and `#[cfg(feature = "b")] #[path = "variant_b.rs"] mod imp;`, and `variant_a.rs` itself declares `#[path = "variant_b.rs"] mod also_b;`
 - **THEN** the system follows `crate::imp::also_b` to `variant_b.rs` without reporting a cycle, because the two `#[cfg]` arms' targets are never simultaneously open in any real single build — the ancestor tracking that would otherwise misreport this is scoped per physical source file, never merged across mutually-exclusive `#[cfg]` sibling arms of one logical module path
 
+#### Scenario: A nested path inside a plain child of an inline cfg arm is not a cycle through a sibling arm
+
+- **WHEN** a crate declares `#[cfg(feature = "u")] mod x { mod y; }` (inline) and `#[cfg(feature = "w")] #[path = "windows_x.rs"] mod x;` (file-form), where only the inline arm declares the plain child `y`, and `y`'s own file declares `#[path = "../windows_x.rs"] mod cross;`
+- **THEN** the system follows `crate::x::y::cross` to `windows_x.rs` without reporting a cycle — a plain child's ancestor set is scoped to only the source that actually declared it, never unioned across `x`'s other mutually-exclusive `#[cfg]` sources
+
+#### Scenario: A grandchild of a plain child of a path-remapped module is governed under its logical path
+
+- **WHEN** a crate declares `#[path = "other/weird.rs"] mod kernel;`, `other/weird.rs` declares a plain `mod child;` (resolved to `other/child.rs`), and `other/child.rs` itself declares a further plain `mod grandchild;`
+- **THEN** the system observes a forbidden import in `other/child/grandchild.rs` under `crate::kernel::child::grandchild` — the ordinary stem-subdirectory convention relative to `child.rs`'s own location, since a plain child reached through a remap is not itself mod-rs-like for its own further children
+
+#### Scenario: A stray file at a remapped module's naive structural location is not phantom-governed
+
+- **WHEN** a crate declares `#[path = "other/weird.rs"] mod kernel;`, `other/weird.rs` declares a plain `mod child;` (resolved to the real `other/child.rs`), and an unrelated, wholly undeclared file also happens to physically sit at `kernel/child.rs` (the location a plain `mod child;` inside a NON-remapped `kernel` would occupy)
+- **THEN** the system governs only `other/child.rs` under `crate::kernel::child` — the stray file at `kernel/child.rs` is never compiled by rustc (`kernel` is wholly remapped) and must never be phantom-governed alongside the real one merely for coincidentally sharing its naive structural path
+
 #### Scenario: A cfg_attr-wrapped path attribute is recognized as a remap
 
 - **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, a conventional `foo.rs` exists containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
