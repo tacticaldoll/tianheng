@@ -12,11 +12,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
-### Changed
-- Backlog governance now separates patch-ready corrections, breaking design pressure, watched
-  ideas, accepted bounds, declined directions, and shipped history, with evidence and promotion
-  triggers required before implementation. The live index preserves the current 0.2.x correctness
-  findings and keeps the possible identity-v3 migration gated rather than promising 0.3.0.
+### Fixed
+- 圭表 module reachability now walks into an inline `mod parent { … }` body to find its own
+  declarations, closing a false negative where a file-backed child reached only through an inline
+  parent (`mod parent { mod child; }`, compiling `parent/child.rs`) was never marked reachable —
+  so a real import in that file went unobserved and could pass a boundary check silently.
 
 ## [0.2.1] - 2026-07-21
 

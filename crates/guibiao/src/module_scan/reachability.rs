@@ -5,7 +5,9 @@
 //! downward on [`super::lexer`] (hygiene / token boundaries) and [`super::path_vocab`] (segment
 //! canonicalization, containment, the `mod`-keyword test); reads files via `std::fs`.
 
-use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
+use super::lexer::{
+    balanced_group_end, is_ident_byte, strip_comments_and_strings, strip_macro_bodies,
+};
 use super::path_vocab::{canonical_segment, is_mod_declaration_keyword, path_within};
 use std::path::{Path, PathBuf};
 
@@ -61,9 +63,14 @@ pub(crate) fn governed_files(
 /// tree, not just the crate root. A reachable file that cannot be read is a scan error
 /// ("cannot judge"), never a silent skip.
 ///
-/// File-backed children only: an inline `mod name { … }` adds `crate::…::name` to the reachable
-/// set, but its own file-backed sub-`mod`s sit at brace depth > 0 and are not walked — a
-/// documented partial-coverage gap, the safe direction (a missed import, never a false one).
+/// An inline `mod name { … }` is walked too: its own `mod` declarations — file-backed or
+/// further inline — sit at brace depth > 0 of the file that declares it, so they are found by
+/// re-scanning that declaration's own body span (see [`declared_modules_in`]), not the file's
+/// top level. A file-backed grandchild reached only through an inline parent
+/// (`mod parent { mod child; }`, compiling `parent/child.rs`) is therefore reachable like any
+/// other declared module; the file itself is already indexed by [`module_path_of`], which is
+/// purely structural (derived from the file's own path on disk), so no directory-base
+/// bookkeeping is needed beyond locating the inline body to re-scan.
 ///
 /// Returns `(reachable, inline_only)`. `inline_only` names every path declared **inline-only** —
 /// declared with an inline body and NOT also declared file-form (`mod name;`) in its parent — so a
@@ -84,7 +91,12 @@ pub(crate) fn reachable_modules(
     ),
     String,
 > {
-    // Index files by their path-derived module path so a module's file(s) are found fast.
+    // Index files by their path-derived module path so a module's file(s) are found fast. This
+    // mapping is purely structural (derived from each file's own path relative to `src_dir`), so
+    // a file backing a deeply inline-nested module (`parent/child.rs` for
+    // `mod parent { mod child; }`) is already keyed at its correct `crate::parent::child` path —
+    // discovering that path only requires walking into `parent`'s inline body, not recomputing a
+    // directory base.
     let mut by_module: std::collections::BTreeMap<String, Vec<&PathBuf>> = Default::default();
     for file in files {
         if let Ok(relative) = file.strip_prefix(src_dir) {
@@ -95,31 +107,68 @@ pub(crate) fn reachable_modules(
         }
     }
 
+    // Where the walk finds a module's own `mod` declarations: either its file(s) (scanned at
+    // top level) or, for an inline-only module, the byte span of its declaring `mod name { … }`
+    // body within its declaring file's cleaned text (scanned at that span's own top level).
+    #[derive(Clone)]
+    enum ScanSource {
+        File(PathBuf),
+        Body(PathBuf, usize, usize),
+    }
+
     let mut reachable = std::collections::BTreeSet::new();
     let mut inline_only = std::collections::BTreeSet::new();
     reachable.insert("crate".to_string());
+    let mut sources: std::collections::BTreeMap<String, Vec<ScanSource>> = Default::default();
+    if let Some(files) = by_module.get("crate") {
+        sources.insert(
+            "crate".to_string(),
+            files
+                .iter()
+                .map(|f| ScanSource::File((*f).clone()))
+                .collect(),
+        );
+    }
     let mut queue = vec!["crate".to_string()];
     while let Some(module) = queue.pop() {
-        // An inline-only module owns no source file of its own; its same-named conventional file
-        // (if any) is an orphan Rust does not compile, so do not read it — reading it would both
-        // scan the wrong body and mine phantom child modules from a file that is not the module.
-        if inline_only.contains(&module) {
-            continue;
-        }
-        let Some(module_files) = by_module.get(&module) else {
-            continue; // an inline module owns no file of its own; nothing to read
+        let Some(scan_sources) = sources.get(&module).cloned() else {
+            continue; // no file backs this module and it declared no inline body; nothing to read
         };
-        // Classify each child across this module's file(s) before descending: a child seen with an
-        // inline body but never a file declaration is inline-only. (A path seen both ways arises
+        // Classify each child across this module's source(s) before descending: a child seen with
+        // an inline body but never a file declaration is inline-only. (A path seen both ways arises
         // only under mutually-exclusive `#[cfg]`; it is not inline-only — the cfg-blind bound.)
         let mut child_kinds: std::collections::BTreeMap<String, (bool, bool)> = Default::default();
-        for file in module_files {
-            let text = std::fs::read_to_string(file)
-                .map_err(|err| format!("cannot read source file '{}': {err}", file.display()))?;
-            for (child, is_inline) in declared_modules_with_kind(&text) {
-                let seen = child_kinds.entry(child).or_default();
-                if is_inline {
+        let mut child_bodies: std::collections::BTreeMap<String, Vec<(PathBuf, usize, usize)>> =
+            Default::default();
+        for source in &scan_sources {
+            let (file, cleaned, range) = match source {
+                ScanSource::File(file) => {
+                    let text = std::fs::read_to_string(file).map_err(|err| {
+                        format!("cannot read source file '{}': {err}", file.display())
+                    })?;
+                    let cleaned = strip_macro_bodies(&strip_comments_and_strings(&text));
+                    let len = cleaned.len();
+                    (file.clone(), cleaned, 0..len)
+                }
+                ScanSource::Body(file, start, end) => {
+                    let text = std::fs::read_to_string(file).map_err(|err| {
+                        format!("cannot read source file '{}': {err}", file.display())
+                    })?;
+                    let cleaned = strip_macro_bodies(&strip_comments_and_strings(&text));
+                    (file.clone(), cleaned, *start..*end)
+                }
+            };
+            for declared in declared_modules_in(&cleaned, range) {
+                let seen = child_kinds.entry(declared.name.clone()).or_default();
+                if declared.is_inline {
                     seen.0 = true;
+                    if let Some((start, end)) = declared.body {
+                        child_bodies.entry(declared.name).or_default().push((
+                            file.clone(),
+                            start,
+                            end,
+                        ));
+                    }
                 } else {
                     seen.1 = true;
                 }
@@ -129,6 +178,20 @@ pub(crate) fn reachable_modules(
             let child_path = format!("{module}::{child}");
             if seen_inline && !seen_file {
                 inline_only.insert(child_path.clone());
+                if let Some(bodies) = child_bodies.remove(&child) {
+                    sources.entry(child_path.clone()).or_default().extend(
+                        bodies
+                            .into_iter()
+                            .map(|(file, start, end)| ScanSource::Body(file, start, end)),
+                    );
+                }
+            } else if let Some(files) = by_module.get(&child_path) {
+                // File-only, or declared both ways under mutually-exclusive `#[cfg]`: observed
+                // through the conventional file, never the inline sibling body (cfg-blind bound).
+                sources
+                    .entry(child_path.clone())
+                    .or_default()
+                    .extend(files.iter().map(|f| ScanSource::File((*f).clone())));
             }
             if reachable.insert(child_path.clone()) {
                 queue.push(child_path);
@@ -138,27 +201,30 @@ pub(crate) fn reachable_modules(
     Ok((reachable, inline_only))
 }
 
-/// Names of modules declared at the top level (brace depth 0) of `source`, each paired with
-/// whether it is an **inline** declaration (`mod name { … }`, `true`) or a **file** declaration
-/// (`mod name;`, `false`) — the distinction [`reachable_modules`] needs to tell a real
-/// file-backed module from an inline body whose same-named conventional file is an orphan.
-/// Declared at any visibility (`pub mod`, `pub(crate) mod`, …). Comments, string/char literals,
-/// and macro bodies are stripped first, so a commented-out, quoted, or macro-generated `mod` is
-/// not counted; a `mod` nested inside another item (depth > 0) declares a child module, not a
-/// crate-root one, and is skipped. Names are canonicalized (`r#name` -> `name`). Robust over
-/// malformed input: it never panics (the same tolerance as the `use` scanner).
-fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
-    // Strip macro bodies as well as comments/strings, the same hygiene the `use`
-    // scanner applies: a `mod` written inside a macro body is macro-generated and out
-    // of scope, so it must not be observed as a real declaration. (A `macro_rules!`
-    // body is already excluded by brace depth; this also closes the `()`/`[]`-delimited
-    // invocation gap, where `mod` would otherwise sit at brace depth 0.)
-    let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
+/// One `mod` declared at the top level of a byte range within already-cleaned (comment/string/
+/// macro-body-stripped) text: its canonical name, whether it is inline (`{ … }`, `true`) or file
+/// (`;`, `false`), and — for an inline declaration — the byte range of its body's *content*
+/// (excluding the enclosing braces), so a caller can re-scan just that span to find further
+/// declarations nested inside it.
+struct DeclaredModule {
+    name: String,
+    is_inline: bool,
+    body: Option<(usize, usize)>,
+}
+
+/// [`declared_modules_with_kind`] generalized to scan `cleaned[range]` instead of a whole file,
+/// so it can be re-applied to an inline module's own body — the byte span between its braces —
+/// to find the `mod` declarations nested inside it. `has_path_attr_before_item` scans backward
+/// from a candidate unbounded by `range.start`, which stays correct here: the nearest preceding
+/// `;`/`{`/`}` it finds is either an earlier sibling's terminator within the range or the range's
+/// own enclosing `{`, never a byte outside the declaration it is checking.
+fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<DeclaredModule> {
     let bytes = cleaned.as_bytes();
-    let mut names = Vec::new();
+    let end = range.end.min(bytes.len());
+    let mut declared = Vec::new();
     let mut depth: i32 = 0;
-    let mut i = 0;
-    while i < bytes.len() {
+    let mut i = range.start.min(end);
+    while i < end {
         match bytes[i] {
             b'{' => {
                 depth += 1;
@@ -169,14 +235,12 @@ fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
                 i += 1;
             }
             b'm' if depth == 0 && is_mod_declaration_keyword(bytes, i) => {
-                // Read the identifier after `mod`, then confirm a `;` or `{` follows so
-                // only real declarations (not a stray `mod` token) are recorded.
                 let mut j = i + 3;
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                while j < end && bytes[j].is_ascii_whitespace() {
                     j += 1;
                 }
                 let start = j;
-                while j < bytes.len()
+                while j < end
                     && !bytes[j].is_ascii_whitespace()
                     && bytes[j] != b';'
                     && bytes[j] != b'{'
@@ -185,20 +249,29 @@ fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
                 }
                 let ident = cleaned[start..j].trim();
                 let mut k = j;
-                while k < bytes.len() && bytes[k].is_ascii_whitespace() {
+                while k < end && bytes[k].is_ascii_whitespace() {
                     k += 1;
                 }
                 if !ident.is_empty() {
-                    // The delimiter after the identifier tells inline (`{`) from file (`;`);
-                    // anything else is a stray `mod` token, not a declaration. A `#[path = "…"]`
-                    // attribute only remaps a FILE module (`mod name;`) off the conventional path
-                    // (out of scope — a stated bound); on an INLINE `mod name { … }` it is a no-op
-                    // for rustc (the body is the module), so an inline module is always recorded —
-                    // applying the skip to it would drop a module Rust actually compiles.
                     match bytes.get(k) {
-                        Some(b'{') => names.push((canonical_segment(ident).to_string(), true)),
+                        Some(b'{') => {
+                            // Skip the whole body in one jump — its content is re-scanned only if
+                            // this module turns out to be inline-only, from `body` below.
+                            let close = balanced_group_end(bytes, k).unwrap_or(bytes.len());
+                            declared.push(DeclaredModule {
+                                name: canonical_segment(ident).to_string(),
+                                is_inline: true,
+                                body: Some((k + 1, close.saturating_sub(1))),
+                            });
+                            i = close;
+                            continue;
+                        }
                         Some(b';') if !has_path_attr_before_item(bytes, i) => {
-                            names.push((canonical_segment(ident).to_string(), false))
+                            declared.push(DeclaredModule {
+                                name: canonical_segment(ident).to_string(),
+                                is_inline: false,
+                                body: None,
+                            });
                         }
                         _ => {}
                     }
@@ -208,11 +281,37 @@ fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
             _ => i += 1,
         }
     }
-    names
+    declared
 }
 
-/// The declared module names only, discarding the inline/file kind — a test-only convenience;
-/// the reachability walk uses [`declared_modules_with_kind`] directly.
+/// Names of modules declared at the top level (brace depth 0) of `source`, each paired with
+/// whether it is an **inline** declaration (`mod name { … }`, `true`) or a **file** declaration
+/// (`mod name;`, `false`) — the distinction [`reachable_modules`] needs to tell a real
+/// file-backed module from an inline body whose same-named conventional file is an orphan.
+/// Declared at any visibility (`pub mod`, `pub(crate) mod`, …). Comments, string/char literals,
+/// and macro bodies are stripped first, so a commented-out, quoted, or macro-generated `mod` is
+/// not counted; a `mod` nested inside another item (depth > 0) declares a child module, not a
+/// crate-root one, and is skipped. Names are canonicalized (`r#name` -> `name`). Robust over
+/// malformed input: it never panics (the same tolerance as the `use` scanner). Test-only: the
+/// reachability walk itself calls [`declared_modules_in`] directly (over both whole files and
+/// inline body spans), so production code no longer goes through this whole-file convenience.
+#[cfg(test)]
+fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
+    // Strip macro bodies as well as comments/strings, the same hygiene the `use`
+    // scanner applies: a `mod` written inside a macro body is macro-generated and out
+    // of scope, so it must not be observed as a real declaration. (A `macro_rules!`
+    // body is already excluded by brace depth; this also closes the `()`/`[]`-delimited
+    // invocation gap, where `mod` would otherwise sit at brace depth 0.)
+    let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
+    let len = cleaned.len();
+    declared_modules_in(&cleaned, 0..len)
+        .into_iter()
+        .map(|declared| (declared.name, declared.is_inline))
+        .collect()
+}
+
+/// The declared module names only, discarding the inline/file kind — a test-only convenience
+/// wrapping [`declared_modules_with_kind`] (itself test-only; see its doc).
 #[cfg(test)]
 pub(super) fn declared_modules(source: &str) -> Vec<String> {
     declared_modules_with_kind(source)
@@ -723,5 +822,223 @@ mod tests {
         assert!(declared_modules("macro_rules! m { () => { mod ghost; }; }").is_empty());
         // A real top-level declaration is still found.
         assert_eq!(declared_modules("mod real;"), vec!["real".to_string()]);
+    }
+
+    #[test]
+    fn an_inline_modules_file_backed_child_is_reachable() {
+        // rustc ground truth (rustc 1.96.0): `pub mod parent { pub mod child; }` in lib.rs
+        // compiles `src/parent/child.rs` as `crate::parent::child` — verified with a real
+        // `cargo build`. `parent` owns no file of its own (inline-only), so before this fix the
+        // walk stopped at `crate::parent` without ever discovering `child`: the forbidden false
+        // negative this test pins (an import in the real compiled file going unobserved).
+        let dir = std::env::temp_dir().join(format!("guibiao-inline-child-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("parent")).expect("create temp src/parent");
+        std::fs::write(
+            src.join("lib.rs"),
+            "pub mod parent {\n    pub mod child;\n}\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(
+            src.join("parent/child.rs"),
+            "use crate::projection::Thing;\n",
+        )
+        .expect("write parent/child.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only) = reachable_modules(&src, &files, None).expect("walk modules");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            inline_only.contains("crate::parent"),
+            "parent has no file of its own: {inline_only:?}"
+        );
+        assert!(
+            reachable.contains("crate::parent::child"),
+            "the real compiled file-backed child of an inline module must be reachable: {reachable:?}"
+        );
+        assert!(
+            !inline_only.contains("crate::parent::child"),
+            "the child is file-backed, not inline-only: {inline_only:?}"
+        );
+    }
+
+    #[test]
+    fn an_inline_modules_file_backed_child_is_governed() {
+        // The end-to-end shape of the false negative: `governed_files` must actually select the
+        // real compiled file for scanning, not just mark its module path reachable.
+        let dir =
+            std::env::temp_dir().join(format!("guibiao-inline-child-gov-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("parent")).expect("create temp src/parent");
+        std::fs::write(
+            src.join("lib.rs"),
+            "pub mod parent {\n    pub mod child;\n}\n",
+        )
+        .expect("write lib.rs");
+        let child_file = src.join("parent/child.rs");
+        std::fs::write(&child_file, "use crate::projection::Thing;\n").expect("write child.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only) = reachable_modules(&src, &files, None).expect("walk modules");
+        let governed = governed_files(&src, &files, "crate", &reachable, &inline_only, None);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            governed
+                .iter()
+                .any(|(file, module)| file == &child_file && module == "crate::parent::child"),
+            "the real compiled child file must be governed: {governed:?}"
+        );
+    }
+
+    #[test]
+    fn a_chain_of_inline_modules_reaches_its_file_backed_leaf() {
+        // rustc ground truth (rustc 1.96.0): from a FILE-backed module (`kernel.rs`), three more
+        // levels of INLINE nesting (`parent`, `a`, `b`) still resolve a file-backed leaf `c` at
+        // `src/kernel/parent/a/b/c.rs` — verified with a real `cargo build`. Each inline level's
+        // own body must be re-scanned in turn, not just the first one.
+        let dir = std::env::temp_dir().join(format!("guibiao-inline-chain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("kernel/parent/a/b")).expect("mkdirs");
+        std::fs::write(src.join("lib.rs"), "pub mod kernel;\n").expect("write lib.rs");
+        std::fs::write(
+            src.join("kernel.rs"),
+            "pub mod parent {\n    pub mod a {\n        pub mod b {\n            pub mod c;\n        }\n    }\n}\n",
+        )
+        .expect("write kernel.rs");
+        std::fs::write(
+            src.join("kernel/parent/a/b/c.rs"),
+            "use crate::projection::Thing;\n",
+        )
+        .expect("write the deep leaf file");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, _inline_only) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            reachable.contains("crate::kernel::parent::a::b::c"),
+            "a file-backed leaf beneath a chain of inline modules must be reachable: {reachable:?}"
+        );
+    }
+
+    #[test]
+    fn an_inline_modules_mod_rs_style_child_is_reachable() {
+        // rustc ground truth: `mod name;` beneath an inline parent may also resolve via the
+        // `<name>/mod.rs` directory form, not just `<name>.rs` — the same two conventional forms
+        // available to any file module, verified here under an inline ancestor.
+        let dir = std::env::temp_dir().join(format!("guibiao-inline-modrs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("parent/child")).expect("mkdirs");
+        std::fs::write(
+            src.join("lib.rs"),
+            "pub mod parent {\n    pub mod child;\n}\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(
+            src.join("parent/child/mod.rs"),
+            "use crate::projection::Thing;\n",
+        )
+        .expect("write parent/child/mod.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, _inline_only) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            reachable.contains("crate::parent::child"),
+            "a mod.rs-style child beneath an inline parent must be reachable: {reachable:?}"
+        );
+    }
+
+    #[test]
+    fn an_inline_only_grandparents_conventional_orphan_stays_excluded() {
+        // The existing inline-only orphan-shadow bound (BUILT v0.1.4) must still hold for an
+        // inline module discovered through this fix's new path: a stray conventional file
+        // matching the INLINE parent's own name (not the file-backed child) is still an orphan
+        // Rust never compiles, so it must stay unreachable and ungoverned.
+        let dir =
+            std::env::temp_dir().join(format!("guibiao-inline-orphan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("parent")).expect("mkdirs");
+        std::fs::write(
+            src.join("lib.rs"),
+            "pub mod parent {\n    pub mod child;\n}\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(
+            src.join("parent/child.rs"),
+            "use crate::projection::Thing;\n",
+        )
+        .expect("write the real compiled child");
+        std::fs::write(
+            src.join("parent.rs"),
+            "use crate::wrong_file_if_observed::Thing;\n",
+        )
+        .expect("write the conventional orphan Rust never compiles");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only) = reachable_modules(&src, &files, None).expect("walk modules");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            inline_only.contains("crate::parent"),
+            "parent is declared inline-only: {inline_only:?}"
+        );
+        assert!(
+            reachable.contains("crate::parent::child"),
+            "the real compiled child stays reachable: {reachable:?}"
+        );
+    }
+
+    #[test]
+    fn a_path_remapped_child_nested_in_an_inline_parent_stays_out_of_scope() {
+        // The `#[path]` exclusion bound (module-source hardening, BUILT v0.1.4) must still hold
+        // for a FILE `mod` declared inside an inline parent's body, discovered through this fix's
+        // new re-scan path: only an UNCONDITIONAL, non-remapped file child is followed. A
+        // conventional orphan matching the child's declared name must not be governed in its
+        // place, matching `path_remapped_modules_are_not_reachable` at the crate-root level.
+        let dir =
+            std::env::temp_dir().join(format!("guibiao-inline-path-remap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("parent")).expect("mkdirs");
+        std::fs::write(
+            src.join("lib.rs"),
+            "pub mod parent {\n    #[path = \"weird.rs\"]\n    pub mod child;\n}\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(
+            src.join("parent/weird.rs"),
+            "use crate::projection::Thing;\n",
+        )
+        .expect("write the real #[path] target");
+        std::fs::write(
+            src.join("parent/child.rs"),
+            "use crate::wrong_file_if_observed::Thing;\n",
+        )
+        .expect("write the conventional orphan the remap must not fall back to");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only) = reachable_modules(&src, &files, None).expect("walk modules");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            inline_only.contains("crate::parent"),
+            "parent is declared inline-only: {inline_only:?}"
+        );
+        assert!(
+            !reachable.contains("crate::parent::child"),
+            "a #[path]-remapped child nested in an inline parent is out of scope, \
+             the same stated bound as at the crate root: {reachable:?}"
+        );
     }
 }

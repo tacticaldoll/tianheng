@@ -189,7 +189,7 @@ fn is_rust_keyword(word: &[u8]) -> bool {
 /// or `[`), or `None` if `j` is not an opening delimiter. Strings and comments are
 /// already stripped, so every delimiter is structural and same-delimiter groups nest
 /// correctly. An unterminated group (malformed input) ends at end of input, not a panic.
-fn balanced_group_end(bytes: &[u8], j: usize) -> Option<usize> {
+pub(super) fn balanced_group_end(bytes: &[u8], j: usize) -> Option<usize> {
     let (open, close) = match bytes.get(j) {
         Some(b'{') => (b'{', b'}'),
         Some(b'(') => (b'(', b')'),

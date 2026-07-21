@@ -43,20 +43,12 @@ This index makes the current work discoverable without duplicating the detailed 
 
 ### READY-PATCH
 
-- **圭表 inline-to-file child reachability false negative.** **Pressure/source:**
-  `crates/guibiao/src/module_scan/reachability.rs` records that an inline `mod parent { mod child; }`
-  is marked reachable but its file-backed `child` is never walked; a real import in
-  `parent/child.rs` can therefore exit 0. **Current reaction:** none; existing reachability tests do
-  not cover this compiler-valid graph. **Risk:** the core contract's forbidden false negative.
-  **Trigger:** already fired by static trace and a minimal valid Rust shape; add a regression test
-  and repair the walk. **Version:** patch correctness fix, preserving public and identity wire.
-  **Authority:** module-boundary reachability requirement + core contract.
 - **圭表 unconditional `#[path]` parity.** **Pressure/source:** 渾儀 and 漏刻 follow an unconditional
   remap while 圭表 deliberately excludes it, leaving imports in a relocated file unobserved.
   **Current reaction:** an explicit module-boundary coverage bound. **Risk:** cross-dimension
-  divergence and a known blind spot, but not a code/spec violation today. **Trigger:** promote with
-  the inline-child correctness work only if the proposal deliberately amends that bound and proves
-  rustc path-base parity; otherwise keep it separate. **Version:** additive false-negative closure,
+  divergence and a known blind spot, but not a code/spec violation today. **Trigger:** now that the
+  inline-child correctness work has shipped (0.2.2), promote if the proposal deliberately amends
+  that bound and proves rustc path-base parity. **Version:** additive false-negative closure,
   patch-safe. **Authority:** module-boundary spec + module-source hardening below.
 - **Cross-scanner conformance matrix.** **Pressure/source:** 圭表 and 漏刻 have accumulated related
   lexical repairs around module/path handling and nested block comments, but no executable parity
@@ -594,6 +586,15 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   inline-**only** so the `#[cfg]`-dual-declaration case stays within the existing cfg-blind bound.
   A propose- and apply-stage adversarial-review-driven false-negative closure; `crates/guibiao`
   only, no new capability. (渾儀 was immune — its AST descent is declaration-driven.)
+- **Inline-to-file child reachability — BUILT (0.2.2).** The walk now re-scans an inline-only
+  module's own declaring body span (found via a balanced-brace lookup, not re-derived directory
+  bases) for its nested `mod` declarations, so a file-backed child reached only through an inline
+  parent (`mod parent { mod child; }`, rustc-compiling `parent/child.rs`) is discovered and
+  governed — closing a forbidden false negative where such a child's imports passed unobserved.
+  `by_module`'s file-to-path indexing is already purely structural (derived from each file's own
+  on-disk path), so no rustc directory-base bookkeeping was needed beyond locating the inline body
+  to re-scan; the fix generalizes `declared_modules_with_kind` to scan an arbitrary byte range.
+  `crates/guibiao` only, no new capability.
 - **Multibyte char-literal lexing — documented robustness bound (not a known FN).** *From the
   v0.1.5 hidden-bug sweep.* The `use`/`mod` lexer's simple-char branch assumes a one-byte char
   body, so a multibyte char literal (`'é'`) in an adjacent-literal pattern can misparse a few bytes.
