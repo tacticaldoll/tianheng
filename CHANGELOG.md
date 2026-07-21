@@ -12,27 +12,6 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
-### Added
-- A deliberately non-tutorial **capability catalog** now exercises the published 0.2.x boundary
-  families without an existing focused example owner, asserting their structured identity through
-  both `check_constitution` and the real CLI shell. Tianheng's own self-law now also runs through the
-  composed evaluator.
-- The examples gate now compares an explicit repository-only inventory of published boundary
-  families with fulfilled real-reaction owners; missing owners and unknown claims fail loudly
-  without adding family metadata to the public API or report wire.
-- Every isolated example workspace now passes format, all-target Clippy, and warning-denied rustdoc
-  gates before its Tianheng reaction is accepted; a focused warning fixture proves the quality gate
-  fails first while committed adopter-facing dependency declarations remain unchanged.
-- The examples gate now closes its successfully exercised owners against every live
-  `examples/*/Cargo.toml` workspace, so a forgotten directory or nonexistent claim fails by name;
-  per-run machine artifacts are isolated and removed on failure instead of sharing fixed `/tmp`
-  paths.
-- A read-only release-coherence reaction now classifies development, release-ready, and exact
-  release-snapshot states from the linear release commit spine, then fails on divergent workspace
-  versions, dependency pins, adopter-facing release notes, or release-time lock entries. CI checks
-  it with full git history; ordinary development deliberately does not rewrite historical lock
-  drift merely to pass.
-
 ### Changed
 - Published finding schemas and their dimension-local canonicalizers are now exhaustively pinned as
   compatibility reactions. Human finding wording remains presentation and is deliberately not
@@ -54,9 +33,6 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `finding_key` of a trait-impl `unsafe fn`, so a 0.2.0 baseline entry for one resurfaces on upgrade
   and must be re-accepted (`--write-baseline`); unsafe-confinement is one release old, so the
   affected surface is minimal.
-- The unsafe-confinement example's public raw-pointer functions are now explicitly `unsafe` with
-  safety contracts; the deliberately misplaced site remains outside the allowed subtree and still
-  exercises the same architectural reaction.
 - Baseline `owner` / `tracker` metadata now rejects non-string JSON values instead of silently
   erasing malformed governance data; the CLI gate fails as a constitution error and explicit
   rewrite retains its warning-before-recovery behavior.
@@ -67,36 +43,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   closing a coverage false negative: a relocated module's `unsafe` sites, trait impls, and
   `assert_boundary!` probes were previously dropped, so a disallowed impl or an undeclared-seam probe
   in a relocated module passed unobserved (semantic single-module boundaries on such a module errored
-  loudly rather than governing it). The `#[path]` target is resolved with rustc fidelity — relative
-  to the **containing file's own directory**, with each enclosing inline-`mod` name accumulated onto
-  it: for a non-mod-rs `name.rs` this differs from the conventional-child directory a plain `mod y;`
-  would use, and a `#[path]` written inside an inline `mod { … }` block adds that block's name as a
-  directory component (so `mod inline { #[path="p.rs"] mod inner; }` reads `inline/p.rs`, never a
-  same-named orphan). Getting the inline-nested base wrong read a decoy and dropped the real
-  `unsafe`/probe site at exit 0 — the forbidden false negative, closed here. A `#[path]`-loaded file
-  is itself mod-rs-like, so its own children resolve from its directory. A `cfg_attr`-wrapped
-  `#[path]` stays a stated bound — not followed cfg-blind, since it could observe a file rustc does
-  not compile in this configuration — and an absent unconditional target is a fail-loud constitution
-  error. Both dimensions detect the attribute structurally (an incidental `path` substring in a
-  comment or a `#[cfg(feature = "fastpath")]` gate is never mistaken for a relocation) and decode the
-  path literal's escapes (`\n`, `\x6f`, `\u{…}`, raw strings) exactly as rustc and syn do, so the two
-  independent implementations resolve the same file.
-- 渾儀's whole-crate walk no longer misreports two module declarations that legitimately resolve to
-  one file — `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, or a conventional `mod foo;` plus a
-  `#[path="foo.rs"]` alias, both of which rustc compiles — as a `"module cycle (symlink loop)"`
-  constitution error. The cycle guard now tracks the files on the current descent path (ancestors)
-  rather than a monotonic whole-tree set, so a true loop (a symlinked module directory or a circular
-  `#[path]`) still fails loud at exit 2 while a shared target is governed under each module path. 漏刻
-  already accepted such input; the two dimensions now agree on it.
+  loudly rather than governing it). The target is resolved with rustc fidelity — relative to the
+  containing file's own directory, accumulating each enclosing inline-`mod` name as a directory
+  component (so `mod inline { #[path="p.rs"] mod inner; }` reads `inline/p.rs`), with the path
+  literal's escapes decoded as rustc and syn do; the two independent dimensions resolve the same
+  file, and two declarations sharing one target (or a conventional `mod` plus a `#[path]` alias to
+  it) are governed under each path rather than misread as a module cycle. A `#[path]`-loaded file is
+  mod-rs-like, so its own children resolve from its directory. A `cfg_attr`-wrapped `#[path]` stays a
+  stated bound — not followed cfg-blind, since it could observe a file rustc does not compile in this
+  configuration — and an absent unconditional target is a fail-loud constitution error. Both
+  dimensions detect the attribute structurally, so an incidental `path` substring in a comment or a
+  `#[cfg(feature = "fastpath")]` gate is never mistaken for a relocation.
 - The probe-coverage walker now tolerates a `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module whose file
   is absent in the current configuration (an off feature or another platform), skipping it instead
   of failing the audit — matching the semantic dimension, so a cross-platform workspace no longer
   hard-errors on a platform-specific module. A non-cfg missing module and a resolution ambiguity
   remain fail-loud.
-- CI gates that could pass vacuously now bite: louke's default (audit-off) library is linted on its
-  own so dead `audit`-gated code fails loud despite workspace feature unification pinning `audit`
-  on, and the release-coherence check guards its discovered crate set non-empty so a layout change
-  cannot silently empty its manifest-inheritance and lock loops.
 
 ## [0.2.0] - 2026-07-20
 
