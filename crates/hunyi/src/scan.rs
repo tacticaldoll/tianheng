@@ -138,6 +138,9 @@ pub(crate) fn scan_crate(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
+        // The crate root is mod-rs-like: its own directory (`src_dir`, the root file's parent) is the
+        // base for both its conventional children and any `#[path]` written in it.
+        src_dir.to_path_buf(),
         crate_package,
         externs,
         &mut visited,
@@ -171,13 +174,19 @@ fn canonicalize_source(file: &Path) -> Result<PathBuf, String> {
 /// over them. All direct children are resolved before the caller recurses; since `visited` is
 /// monotonic over the module tree, the same files are reached in the same order and a re-reach is
 /// exit 2 regardless. An inline module's body is cloned (callers borrow their items).
+// Each child is `(items, module path, child_dir, file_dir)`: `child_dir` is the base for the
+// child's own conventional `mod y;`, `file_dir` the child's own source-file directory (the base for
+// a `#[path]` written in it) — they differ for a non-mod-rs `name.rs`. A named struct would obscure
+// the by-position destructuring at the three call sites; the shape is documented here instead.
+#[allow(clippy::type_complexity)]
 fn resolve_child_modules(
     items: &[syn::Item],
     module: &str,
     child_dir: &Path,
+    file_dir: &Path,
     crate_package: &str,
     visited: &mut HashSet<PathBuf>,
-) -> Result<Vec<(Vec<syn::Item>, String, PathBuf)>, String> {
+) -> Result<Vec<(Vec<syn::Item>, String, PathBuf, PathBuf)>, String> {
     let mut children = Vec::new();
     for item in items {
         let syn::Item::Mod(module_item) = item else {
@@ -187,17 +196,23 @@ fn resolve_child_modules(
         let child_module = format!("{module}::{name}");
         // An **unconditional** `#[path = "…"]` remap is now *followed* — its file (or inline body)
         // observed — closing the relocated-module coverage gap (its `unsafe` sites / items were
-        // previously dropped, a false negative). The base is the same directory a conventional
-        // `mod name;` uses; a `#[path]`-loaded file is mod-rs-like, so ITS children live in the
-        // target file's own directory (rustc's rule). An inline `#[path = "dir"] mod x { … }` uses
-        // the path value as the base for x's file-children; the body is observed as written.
+        // previously dropped, a false negative). rustc resolves a non-inline `#[path]` relative to
+        // the **containing file's own directory** (`file_dir`), NOT the conventional-child base
+        // `child_dir` — mod-rs-blind (a `name.rs` file's `child_dir` is `<dir>/name/`, but its
+        // `#[path]` base is `<dir>/`). A `#[path]`-loaded file is itself mod-rs-like, so ITS children
+        // (conventional and `#[path]` alike) resolve from the loaded file's own directory. An inline
+        // `#[path = "dir"] mod x { … }` uses `<file_dir>/dir` as the base for x's file-children; the
+        // body is observed as written and lives in the same file (so its `file_dir` is unchanged).
         if let Some(rel) = direct_path_value(&module_item.attrs) {
             match &module_item.content {
-                Some((_, inner)) => {
-                    children.push((inner.clone(), child_module, child_dir.join(&rel)))
-                }
+                Some((_, inner)) => children.push((
+                    inner.clone(),
+                    child_module,
+                    file_dir.join(&rel),
+                    file_dir.to_path_buf(),
+                )),
                 None => {
-                    let file = child_dir.join(&rel);
+                    let file = file_dir.join(&rel);
                     if !file.is_file() {
                         // An unconditional `#[path]` target must exist (rustc errors otherwise), so
                         // an absent one is a genuine broken reference: fail loud (exit 2), never a
@@ -212,11 +227,13 @@ fn resolve_child_modules(
                         ));
                     }
                     let parsed = read_parse(&file)?;
-                    let sub_dir = file
+                    // mod-rs-like: the loaded file's own directory is the base for both its
+                    // conventional children and any nested `#[path]` beneath it.
+                    let own_dir = file
                         .parent()
                         .map(Path::to_path_buf)
-                        .unwrap_or_else(|| child_dir.to_path_buf());
-                    children.push((parsed.items, child_module, sub_dir));
+                        .unwrap_or_else(|| file_dir.to_path_buf());
+                    children.push((parsed.items, child_module, own_dir.clone(), own_dir));
                 }
             }
             continue;
@@ -229,9 +246,14 @@ fn resolve_child_modules(
         }
         let sub_dir = child_dir.join(&name);
         match &module_item.content {
-            // Inline `mod x { … }`: descend its lexical items; file-children under `x/`.
-            Some((_, inner)) => children.push((inner.clone(), child_module, sub_dir)),
-            // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`.
+            // Inline `mod x { … }`: descend its lexical items (same file, so `file_dir` unchanged);
+            // file-children under `x/`.
+            Some((_, inner)) => {
+                children.push((inner.clone(), child_module, sub_dir, file_dir.to_path_buf()))
+            }
+            // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`; the child's own
+            // `file_dir` is the located file's directory (`<dir>` for `x.rs`, `<dir>/x` for
+            // `x/mod.rs`), which is where a `#[path]` inside it resolves from.
             None => match locate_module_file(child_dir, &name) {
                 Some(file) => {
                     // A file already visited (by canonical, symlink-resolved path) is a module cycle
@@ -245,7 +267,11 @@ fn resolve_child_modules(
                         ));
                     }
                     let parsed = read_parse(&file)?;
-                    children.push((parsed.items, child_module, sub_dir));
+                    let own_dir = file
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| sub_dir.clone());
+                    children.push((parsed.items, child_module, sub_dir, own_dir));
                 }
                 // A `#[cfg]`-gated module may legitimately have no source file when the feature is
                 // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
@@ -261,10 +287,14 @@ fn resolve_child_modules(
     Ok(children)
 }
 
+// `child_dir` and `file_dir` are distinct module-resolution bases (see `resolve_child_modules`), not
+// bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
+#[allow(clippy::too_many_arguments)]
 fn walk_module(
     items: Vec<syn::Item>,
     module: String,
     child_dir: PathBuf,
+    file_dir: PathBuf,
     crate_package: &str,
     externs: &HashSet<String>,
     visited: &mut HashSet<PathBuf>,
@@ -393,13 +423,19 @@ fn walk_module(
         }
     }
 
-    for (child_items, child_module, sub_dir) in
-        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
-    {
+    for (child_items, child_module, sub_dir, sub_file_dir) in resolve_child_modules(
+        &items,
+        &module,
+        &child_dir,
+        &file_dir,
+        crate_package,
+        visited,
+    )? {
         walk_module(
             child_items,
             child_module,
             sub_dir,
+            sub_file_dir,
             crate_package,
             externs,
             visited,
@@ -430,11 +466,17 @@ pub(crate) fn walk_subtree_modules(
     // is caught — the same discipline `scan_crate` applies from the crate root.
     let mut visited: HashSet<PathBuf> = HashSet::new();
     visited.insert(canonicalize_source(&file)?);
+    // The anchor's own directory (its file's parent) is the base for a `#[path]` written in it.
+    let file_dir = file
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| child_dir.clone());
     let mut out: Vec<(String, Vec<syn::Item>)> = Vec::new();
     collect_subtree(
         items,
         module.to_string(),
         child_dir,
+        file_dir,
         crate_package,
         &mut visited,
         &mut out,
@@ -449,17 +491,24 @@ fn collect_subtree(
     items: Vec<syn::Item>,
     module: String,
     child_dir: PathBuf,
+    file_dir: PathBuf,
     crate_package: &str,
     visited: &mut HashSet<PathBuf>,
     out: &mut Vec<(String, Vec<syn::Item>)>,
 ) -> Result<(), String> {
-    for (child_items, child_module, sub_dir) in
-        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
-    {
+    for (child_items, child_module, sub_dir, sub_file_dir) in resolve_child_modules(
+        &items,
+        &module,
+        &child_dir,
+        &file_dir,
+        crate_package,
+        visited,
+    )? {
         collect_subtree(
             child_items,
             child_module,
             sub_dir,
+            sub_file_dir,
             crate_package,
             visited,
             out,
@@ -719,6 +768,8 @@ pub(crate) fn scan_unsafe_sites(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
+        // The crate root is mod-rs-like: its own directory is the `#[path]` base too.
+        src_dir.to_path_buf(),
         crate_package,
         &mut visited,
         &mut sites,
@@ -730,6 +781,7 @@ fn walk_unsafe(
     items: Vec<syn::Item>,
     module: String,
     child_dir: PathBuf,
+    file_dir: PathBuf,
     crate_package: &str,
     visited: &mut HashSet<PathBuf>,
     sites: &mut Vec<UnsafeSite>,
@@ -750,13 +802,19 @@ fn walk_unsafe(
         });
     }
 
-    for (child_items, child_module, sub_dir) in
-        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
-    {
+    for (child_items, child_module, sub_dir, sub_file_dir) in resolve_child_modules(
+        &items,
+        &module,
+        &child_dir,
+        &file_dir,
+        crate_package,
+        visited,
+    )? {
         walk_unsafe(
             child_items,
             child_module,
             sub_dir,
+            sub_file_dir,
             crate_package,
             visited,
             sites,

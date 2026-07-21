@@ -146,15 +146,19 @@ fn descend(
             if strip_raw(&module_item.ident.to_string()) != *seg {
                 continue;
             }
-            // Follow an **unconditional** `#[path = "…"]` file module: load `<child_dir>/<rel>` and,
-            // since a `#[path]`-loaded file is mod-rs-like, descend with its own directory as the
-            // base for the next segment's children. An inline `#[path]` (has a body) or a
-            // `cfg_attr`-wrapped `#[path]` is not followed by this targeted resolver — a narrow
-            // **fail-loud** bound (exit 2 "cannot judge"), never a silent pass; the whole-crate
-            // walks that carry the coverage property do follow the unconditional form.
+            // Follow an **unconditional** `#[path = "…"]` file module. rustc resolves a non-inline
+            // `#[path]` relative to the **containing file's own directory** (`current_file`'s parent),
+            // NOT `child_dir` (the conventional-child base `<dir>/seg/` for a non-mod-rs file) — the
+            // false-negative the whole-crate walk shares. Load `<current_file_dir>/<rel>`, and since a
+            // `#[path]`-loaded file is mod-rs-like, descend with its own directory as the base for the
+            // next segment's children. An inline `#[path]` (has a body) or a `cfg_attr`-wrapped
+            // `#[path]` is not followed by this targeted resolver — a narrow **fail-loud** bound (exit
+            // 2 "cannot judge"), never a silent pass; the whole-crate walks follow the unconditional
+            // form.
             if module_item.content.is_none() {
                 if let Some(rel) = direct_path_value(&module_item.attrs) {
-                    let file = child_dir.join(&rel);
+                    let base = current_file.parent().unwrap_or(child_dir.as_path());
+                    let file = base.join(&rel);
                     if !file.is_file() {
                         return Err(missing_module_file_error(module, crate_package));
                     }
