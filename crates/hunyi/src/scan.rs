@@ -20,7 +20,7 @@ use crate::resolve::{
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
     resolve_path, strip_raw, type_to_string,
 };
-use crate::syn_util::has_path_attr;
+use crate::syn_util::{direct_path_value, has_path_attr};
 
 /// One impl site observed in the crate: its enclosing module path, the written trait
 /// path, the implemented-for type, and that module's `use`-map (for resolution).
@@ -161,10 +161,11 @@ fn canonicalize_source(file: &Path) -> Result<PathBuf, String> {
 /// subtree walk recurses into — the single copy of the descent skeleton and its false-negative-
 /// critical guards, shared by [`walk_module`], [`collect_subtree`] (`walk_subtree_modules`), and
 /// [`walk_unsafe`] (`scan_unsafe_sites`) so a fix to one guard cannot silently diverge across the
-/// three (the twin-drift bug class). Owns: the `#[path]` remap skip (a stated coverage bound, incl.
-/// the `cfg_attr`-wrapped spelling), the inline-vs-file dispatch, the symlink module-cycle guard (a
-/// re-reached canonical file is exit 2, never a stack overflow), and the `#[cfg]`-tolerance /
-/// non-cfg-missing-file guard (exit 2).
+/// three (the twin-drift bug class). Owns: the `#[path]` policy (an **unconditional** `#[path = "…"]`
+/// is followed to its author-chosen file/body; a `cfg_attr`-wrapped `#[path]` stays a cfg-conditional
+/// skip bound), the inline-vs-file dispatch, the symlink module-cycle guard (a re-reached canonical
+/// file is exit 2, never a stack overflow), and the `#[cfg]`-tolerance / non-cfg-missing-file guard
+/// (exit 2).
 ///
 /// Children are returned in source order; each caller does its own per-module work, then recurses
 /// over them. All direct children are resolved before the caller recurses; since `visited` is
@@ -182,13 +183,50 @@ fn resolve_child_modules(
         let syn::Item::Mod(module_item) = item else {
             continue;
         };
-        // A `#[path]`-remapped module is located off the conventional path; not observed (a stated
-        // coverage bound, incl. the `cfg_attr`-wrapped spelling), never a silent claim of cleanliness.
+        let name = strip_raw(&module_item.ident.to_string());
+        let child_module = format!("{module}::{name}");
+        // An **unconditional** `#[path = "…"]` remap is now *followed* — its file (or inline body)
+        // observed — closing the relocated-module coverage gap (its `unsafe` sites / items were
+        // previously dropped, a false negative). The base is the same directory a conventional
+        // `mod name;` uses; a `#[path]`-loaded file is mod-rs-like, so ITS children live in the
+        // target file's own directory (rustc's rule). An inline `#[path = "dir"] mod x { … }` uses
+        // the path value as the base for x's file-children; the body is observed as written.
+        if let Some(rel) = direct_path_value(&module_item.attrs) {
+            match &module_item.content {
+                Some((_, inner)) => {
+                    children.push((inner.clone(), child_module, child_dir.join(&rel)))
+                }
+                None => {
+                    let file = child_dir.join(&rel);
+                    if !file.is_file() {
+                        // An unconditional `#[path]` target must exist (rustc errors otherwise), so
+                        // an absent one is a genuine broken reference: fail loud (exit 2), never a
+                        // silent skip. A cfg-conditional `#[path]` is the `has_path_attr` skip below.
+                        return Err(missing_module_file_error(&child_module, crate_package));
+                    }
+                    if !visited.insert(canonicalize_source(&file)?) {
+                        return Err(format!(
+                            "cannot judge module '{child_module}' in package '{crate_package}': \
+                             its source file '{}' forms a module cycle (a symlink loop)",
+                            file.display()
+                        ));
+                    }
+                    let parsed = read_parse(&file)?;
+                    let sub_dir = file
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| child_dir.to_path_buf());
+                    children.push((parsed.items, child_module, sub_dir));
+                }
+            }
+            continue;
+        }
+        // A `cfg_attr`-wrapped `#[path]` is cfg-conditional: following it cfg-blind could read a
+        // file rustc does not compile here, so it stays a stated skip bound — and the conventional
+        // file is never governed in its place.
         if has_path_attr(&module_item.attrs) {
             continue;
         }
-        let name = strip_raw(&module_item.ident.to_string());
-        let child_module = format!("{module}::{name}");
         let sub_dir = child_dir.join(&name);
         match &module_item.content {
             // Inline `mod x { … }`: descend its lexical items; file-children under `x/`.
