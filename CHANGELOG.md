@@ -39,8 +39,25 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   snapshot-frozen.
 - The baseline guide now documents the existing `--write-baseline` operation as the bounded,
   explicit V1-to-V2 upgrade path, including metadata carry-forward and stale-entry removal.
+- 圭表 `must_not_import` now documents a stated partial-coverage bound: a `use`-glob of an
+  *ancestor* of the forbidden module (`use crate::*;` while forbidding `crate::secret`) is observed
+  at the glob's base, not as the forbidden descendant edge, so it does not react — forbid or confine
+  the parent. The narrow `use crate::secret;` / `use crate::secret::*;` forms are caught as before.
+- 漏刻 `audit_probe_coverage` now documents a stated bound: a `#[path = "…"]`-relocated module is not
+  followed by the by-name walk, so probes inside it are not counted (a seam covered only there reads
+  unprobed, and an undeclared-seam probe there is not caught) — keep production probes in
+  conventionally located modules.
 
 ### Fixed
+- 渾儀 unsafe-confinement now qualifies a **trait-impl** `unsafe fn` by `<trait for self>`
+  (`unsafe fn <A for Foo>::m`), not its self type alone: on one self type, an inherent `unsafe fn m`,
+  `impl A for Foo { unsafe fn m }`, and `impl B for Foo { unsafe fn m }` are three distinct sites and
+  now stay three findings. Previously all collapsed to `unsafe fn Foo::m`, so a baseline of one
+  silently accepted a later-added trait-impl `unsafe fn` on a safe trait — a false negative, the
+  trait-impl case 0.2.0's notes already claimed owner-qualified. *Baseline note:* this changes the
+  `finding_key` of a trait-impl `unsafe fn`, so a 0.2.0 baseline entry for one resurfaces on upgrade
+  and must be re-accepted (`--write-baseline`); unsafe-confinement is one release old, so the
+  affected surface is minimal.
 - The unsafe-confinement example's public raw-pointer functions are now explicitly `unsafe` with
   safety contracts; the deliberately misplaced site remains outside the allowed subtree and still
   exercises the same architectural reaction.

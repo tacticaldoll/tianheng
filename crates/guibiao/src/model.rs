@@ -1081,6 +1081,13 @@ pub struct ModuleTargetDraft {
 
 impl ModuleTargetDraft {
     /// Forbid the governed module from importing `module` (or anything beneath it).
+    ///
+    /// **Stated bound (glob of an ancestor):** a `use`-glob is observed at its base module only,
+    /// so a glob of an *ancestor* of the forbidden module (`use crate::*;` while forbidding
+    /// `crate::secret`) is recorded as the base (`crate`) — not as the forbidden descendant edge —
+    /// and does not react, though it does bring the forbidden module into nameable scope. The
+    /// narrow forms (`use crate::secret;`, `use crate::secret::*;`) are caught. This is a declared
+    /// partial-coverage bound, not a silent gap: forbid or confine the *parent* to close it.
     pub fn must_not_import(self, module: &str) -> ModuleBoundaryDraft {
         self.with_rule(ModuleRule::MustNotImport {
             module: module.to_string(),

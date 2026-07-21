@@ -541,6 +541,12 @@ struct UnsafeSiteCollector {
     // second (a false negative), the same injectivity `unsafe impl` already guards.
     current_owner: Option<String>,
     current_trait: Option<String>,
+    // The trait of the enclosing *trait `impl`* (`None` for an inherent impl), so a trait-impl
+    // `unsafe fn` is qualified by `<trait for self>` — else `impl Foo { unsafe fn m }` and
+    // `impl A for Foo { unsafe fn m }` (same self type), or `impl A for Foo` and `impl B for Foo`
+    // (same self type, different trait), collapse to one `unsafe fn Foo::m` and a baseline of one
+    // masks the other (a false negative). Self-type alone only separates *different* self types.
+    current_impl_trait: Option<String>,
 }
 
 /// Render a trait path for an `unsafe impl` label — segment idents joined by `::` (raw-stripped),
@@ -578,11 +584,15 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         if node.sig.unsafety.is_some() {
             let name = strip_raw(&node.sig.ident.to_string());
-            // Owner-qualify by the enclosing impl's self type (set in `visit_item_impl`), so two
-            // inherent `unsafe fn m` on different types in one module stay distinct findings.
-            let label = match &self.current_owner {
-                Some(owner) => format!("unsafe fn {owner}::{name}"),
-                None => format!("unsafe fn {name}"),
+            // Qualify by the enclosing impl (set in `visit_item_impl`): a *trait* impl by
+            // `<trait for self>`, an inherent impl by its self type alone. Self-type alone only
+            // separates *different* self types, so a trait-impl method and an inherent (or
+            // other-trait) method with the same name on the *same* self type would otherwise
+            // collapse to one finding and a baseline of one mask the other (a false negative).
+            let label = match (&self.current_impl_trait, &self.current_owner) {
+                (Some(tr), Some(owner)) => format!("unsafe fn <{tr} for {owner}>::{name}"),
+                (_, Some(owner)) => format!("unsafe fn {owner}::{name}"),
+                (_, None) => format!("unsafe fn {name}"),
             };
             self.labels.push(label);
         }
@@ -615,18 +625,25 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
             self.unsafe_impl_ordinal += 1;
             label
         });
+        // The implemented trait (if any), rendered once — reused for the `unsafe impl` label and to
+        // qualify the impl's inner `unsafe fn` methods as `<trait for self>` (injectivity above).
+        let impl_trait = node
+            .trait_
+            .as_ref()
+            .map(|(_, path, _)| render_trait_path(path));
         if node.unsafety.is_some() {
-            let label = match &node.trait_ {
-                Some((_, path, _)) => {
-                    format!("unsafe impl {} for {}", render_trait_path(path), owner)
-                }
+            let label = match &impl_trait {
+                Some(tr) => format!("unsafe impl {tr} for {owner}"),
                 None => format!("unsafe impl {owner}"),
             };
             self.labels.push(label);
         }
-        let prev = self.current_owner.replace(owner);
+        let prev_owner = self.current_owner.replace(owner);
+        let prev_trait = self.current_impl_trait.take();
+        self.current_impl_trait = impl_trait;
         visit::visit_item_impl(self, node);
-        self.current_owner = prev;
+        self.current_owner = prev_owner;
+        self.current_impl_trait = prev_trait;
     }
 
     fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
