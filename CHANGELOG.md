@@ -35,6 +35,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   scanned or governed — the module's own on-disk location diverges from its logical path once
   remapped, so the structural file index never had an entry for it, and a real `use` inside it
   passed every boundary unobserved.
+- A `#[path]` inside one mutually-exclusive `#[cfg]` arm's target that legitimately references a
+  sibling arm's own target (the two are never simultaneously open in any real build) is no longer
+  misreported as a cycle. The cycle guard's "already-open source files" tracking is now scoped per
+  physical source file rather than merged across cfg-sibling arms of one logical module path.
 
 ## [0.2.1] - 2026-07-21
 

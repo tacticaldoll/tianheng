@@ -339,6 +339,11 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 - **WHEN** a crate declares `mod a { #[path = "../lib.rs"] mod b; }` at the crate root, and `a`'s own accumulated directory makes `../lib.rs` resolve back to the crate root file itself
 - **THEN** the system reports a scan error (exit 2) rather than looping or overflowing the stack — the cycle is on the descent path from the crate root, not merely a repeated file elsewhere in the crate
 
+#### Scenario: A nested path crossing into a mutually-exclusive cfg sibling's own target is not a cycle
+
+- **WHEN** a crate declares `#[cfg(feature = "a")] #[path = "variant_a.rs"] mod imp;` and `#[cfg(feature = "b")] #[path = "variant_b.rs"] mod imp;`, and `variant_a.rs` itself declares `#[path = "variant_b.rs"] mod also_b;`
+- **THEN** the system follows `crate::imp::also_b` to `variant_b.rs` without reporting a cycle, because the two `#[cfg]` arms' targets are never simultaneously open in any real single build — the ancestor tracking that would otherwise misreport this is scoped per physical source file, never merged across mutually-exclusive `#[cfg]` sibling arms of one logical module path
+
 #### Scenario: A cfg_attr-wrapped path attribute is recognized as a remap
 
 - **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, a conventional `foo.rs` exists containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
