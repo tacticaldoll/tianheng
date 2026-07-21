@@ -42,6 +42,11 @@ The system SHALL observe module imports by scanning the target crate's source `u
 - **WHEN** a crate declares `mod kernel;`, the file `src/kernel/orphan.rs` exists that `kernel` never declares with `mod orphan;`, that orphan file contains `use crate::projection::Thing;`, and a boundary governs `crate::kernel` forbidding `crate::projection`
 - **THEN** the system reports no violation, because only files reachable from the crate root via `mod` declarations are modules of the crate — the orphan file is not compiled, is not governed, and its import is not observed
 
+#### Scenario: A file-backed child reached only through an inline parent is governed
+
+- **WHEN** a crate-root file declares `mod parent { mod child; }` (inline, with no file of its own), the file `src/parent/child.rs` exists and contains `use crate::projection::Thing;`, and a boundary governs `crate::parent::child` forbidding `crate::projection`
+- **THEN** the system reports the violation, because `crate::parent::child` is reachable — declared inside `parent`'s own inline body, which the walk re-scans for its nested `mod` declarations, not only the crate root's own top level
+
 #### Scenario: A bare use in a submodule is external even when it matches a crate-root module
 
 - **WHEN** a file in a submodule (not the crate root) declares `use serde::Deserialize;` and `serde` is also a crate-root module of the target crate
