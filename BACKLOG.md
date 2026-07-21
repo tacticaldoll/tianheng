@@ -41,16 +41,6 @@ structural enforcement.
 
 This index makes the current work discoverable without duplicating the detailed evidence below.
 
-### READY-PATCH
-
-- **Cross-scanner conformance matrix.** **Pressure/source:** 圭表 and 漏刻 have accumulated related
-  lexical repairs around module/path handling and nested block comments, but no executable parity
-  ledger says where their neutral token behavior should agree. **Current reaction:** separate local
-  test suites. **Risk:** a fix can drift or silently remain absent in its sibling scanner.
-  **Trigger:** pin only the shared, judgment-neutral cases in a conformance matrix before deciding
-  extraction. **Version:** test/internal patch. **Authority:** the 璇璣 judgment-neutral parsing
-  decision in `PROJECT.md`.
-
 ### DESIGN-BREAKING
 
 - **Identity v3 migration bundle.** **Pressure/source:** version-2 identity still couples human
@@ -538,6 +528,17 @@ capability change.
   feeding identical inputs to each dimension's parallel logic and asserting agreement would catch
   drift *without* moving code. Deferred until a resolver twin-drift actually bites; 星表 does not
   address it.
+- **Cross-scanner lexical-hygiene conformance matrix — BUILT (0.2.2).** The narrower, already-fired
+  sibling of the reserve above: 圭表 and 漏刻 each hand-roll comment/string/macro-body skipping
+  independently (三儀 ⊥ 三儀; no shared scanner code), and had accumulated related lexical repairs
+  with no executable ledger pinning where they agree — a fix in one could silently remain absent in
+  the other. `crates/tianheng/tests/lexical_conformance.rs` feeds the SAME literal fixture source to
+  both (via their public `check`/`audit_probe_coverage` surfaces, not shared internals) and asserts
+  parity on: a nested block comment (and real content correctly resuming after it), a macro body
+  regardless of `{}`/`()`/`[]` delimiter, and a raw string's contents never mistaken for real code.
+  Pins parity only; does not decide extraction — the reserve above (resolvers/module-reachability)
+  stays separately gated on a resolver twin-drift actually biting. Test-only patch, no capability
+  change.
 
 ## Reaction phases — the 三儀 (observation dimensions)
 
