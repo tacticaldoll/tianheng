@@ -26,6 +26,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   file or an unconditional `#[path]` remap of the same name also exists under a mutually-exclusive
   `#[cfg]` arm — the standard per-platform shim pattern. Every declared source for a name is now
   observed (cfg-blind), never only one of them.
+- 圭表's `#[path]`-attribute scan no longer depends on attribute order: a `cfg_attr(pred, path =
+  "…")` written *before* an unconditional `#[path = "…"]` on the same `mod` declaration used to
+  make the whole declaration excluded, dropping a module rustc genuinely compiles whenever `pred`
+  is false. The unconditional attribute now wins regardless of which is scanned first.
 
 ## [0.2.1] - 2026-07-21
 

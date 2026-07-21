@@ -349,6 +349,11 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 - **WHEN** a crate declares `#[cfg_attr(path, allow(dead_code))] mod foo;` with a conventional `foo.rs`
 - **THEN** the system does not mistake the predicate named `path` for a remap and governs the conventional module normally
 
+#### Scenario: An unconditional path attribute wins regardless of attribute order
+
+- **WHEN** a crate declares `#[cfg_attr(some_platform, path = "b.rs")] #[path = "a.rs"] mod foo;` — a cfg-conditional remap textually BEFORE the unconditional one on the same declaration
+- **THEN** the system follows the unconditional `#[path = "a.rs"]` target exactly as it would if the two attributes were written in the opposite order, since rustc compiles `a.rs` whenever `some_platform` does not hold regardless of which attribute is written first
+
 ### Requirement: A multi-target package's cross-root same-named submodule is a stated bound
 
 The system SHALL treat, as a **documented out-of-scope bound** (never a silent claim of cleanliness), the imports written in the **inline** body of a submodule whose name is declared **inline in one crate root and file-backed in the other** of a package that builds both a lib and a bin. Because the system observes a package's source under one conventional-path tree, both crate roots (`lib.rs` and `main.rs`) resolve to `crate` and it maintains no per-target module graphs; so when `lib.rs` declares `mod shared { … }` (inline) and `main.rs` declares `mod shared;` (backed by `shared.rs`), the file-backed `shared.rs` is the governed module and the inline body's imports are NOT observed — the conventional-path model cannot distinguish the lib crate's `crate::shared` from the bin crate's. This is the submodule corollary of the same lib+bin conventional-path conflation the dedup requirement already names; closing it would require per-target module graphs, an amendment beyond the conventional-path scanner.

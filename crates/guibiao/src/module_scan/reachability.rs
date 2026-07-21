@@ -573,6 +573,7 @@ fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> PathAttrKind {
 
 fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
     let mut i = 0;
+    let mut excluded = false;
     while i < bytes.len() {
         if bytes[i] != b'#' {
             i += 1;
@@ -592,32 +593,43 @@ fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
         if bytes[i..].starts_with(b"path")
             && bytes.get(i + 4).is_none_or(|byte| !is_ident_byte(*byte))
         {
-            // The direct name-value form (`path = "…"`) is followed; anything else spelled
-            // `path` (a bare `#[path]`/`#[path(...)]` — not valid syntax for a real rustc remap,
-            // but matched conservatively as before) stays excluded rather than followed.
+            // An unconditional direct `path = "…"` wins over a cfg-conditional remap seen
+            // elsewhere on the same item, regardless of which is scanned first: it is what
+            // rustc compiles whenever a sibling `cfg_attr(pred, path = "…")`'s predicate is
+            // false, so the scan must not stop at whichever `#[path]`-ish attribute comes first
+            // textually — an early return here made the result attribute-order-dependent, a real
+            // false negative when the cfg_attr happened to precede the direct attribute.
             let mut j = i + 4;
             while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                 j += 1;
             }
-            return if bytes.get(j) == Some(&b'=') {
-                PathAttrKind::Direct(j)
-            } else {
-                PathAttrKind::Excluded
-            };
+            if bytes.get(j) == Some(&b'=') {
+                return PathAttrKind::Direct(j);
+            }
+            // A bare `#[path]`/`#[path(...)]` (not valid remap syntax) excludes on its own, but
+            // a later unconditional `#[path = "…"]` on the same item still wins — keep scanning
+            // rather than returning.
+            excluded = true;
+            continue;
         }
         // The combined `#[cfg_attr(<pred>, …, path = "…")]` spelling (equivalent to
         // `#[cfg(<pred>)] #[path = "…"]`) is a conditional remap too — recognized cfg-blindly, the
-        // same stated `#[path]` bound: cfg-conditional, so never followed. Matched only on a
-        // genuine nested `path` meta, so a `#[cfg_attr(<pred>, deprecated)]` on a normal file
-        // module is not mistaken for a remap.
+        // same stated `#[path]` bound: cfg-conditional, so never followed on its own. An
+        // unconditional `#[path = "…"]` elsewhere on the same item still wins (above), so this
+        // keeps scanning instead of returning immediately.
         if bytes[i..].starts_with(b"cfg_attr")
             && bytes.get(i + 8).is_none_or(|byte| !is_ident_byte(*byte))
             && cfg_attr_prefix_has_path(&bytes[i + 8..])
         {
-            return PathAttrKind::Excluded;
+            excluded = true;
+            continue;
         }
     }
-    PathAttrKind::None
+    if excluded {
+        PathAttrKind::Excluded
+    } else {
+        PathAttrKind::None
+    }
 }
 
 /// Whether a `cfg_attr(…)` attribute — `bytes` positioned just after the `cfg_attr` identifier —
@@ -984,6 +996,32 @@ mod tests {
             declared_modules("#[cfg_attr(a, cfg_attr(b, path = \"secret.rs\"))]\npub mod m;\n")
                 .is_empty(),
             "a nested cfg_attr path remap is detected",
+        );
+    }
+
+    #[test]
+    fn an_unconditional_path_attr_wins_regardless_of_cfg_attr_order() {
+        // A `cfg_attr(pred, path = "…")` and an unconditional `#[path = "…"]` can legitimately
+        // sit on the same item (the cfg_attr's target is used only when `pred` holds; the direct
+        // one is what rustc compiles whenever it does not — verified against real rustc, which
+        // accepts this and resolves to the direct target when `pred` is false). scanning used to
+        // return on the FIRST recognized `#[path]`-ish attribute, so whichever was written first
+        // "won" — a cfg_attr(path) textually BEFORE the direct #[path] made the whole declaration
+        // `Excluded`, dropping a module rustc genuinely compiles on every build where `pred` is
+        // false. Order must not matter: the unconditional attribute always wins.
+        assert_eq!(
+            declared_modules(
+                "#[cfg_attr(some_platform, path = \"b.rs\")]\n#[path = \"a.rs\"]\npub mod x;\n"
+            ),
+            vec!["x".to_string()],
+            "cfg_attr before the direct #[path] must not drop the module",
+        );
+        assert_eq!(
+            declared_modules(
+                "#[path = \"a.rs\"]\n#[cfg_attr(some_platform, path = \"b.rs\")]\npub mod x;\n"
+            ),
+            vec!["x".to_string()],
+            "the direct #[path] first must keep working as before",
         );
     }
 
