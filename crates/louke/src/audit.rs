@@ -46,6 +46,13 @@ use scan::scan_source;
 /// covering its seam, so a seam whose *only* probe is compiled out of the production binary
 /// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
 ///
+/// **Stated bound (`#[path]` relocation):** the file-input walk resolves reachable modules by the
+/// conventional `mod name;` → `name.rs`/`name/mod.rs` mapping and does **not** follow a
+/// `#[path = "…"]`-relocated `mod`. Probes inside a relocated module are therefore not counted:
+/// a seam covered *only* there is reported unprobed, and — the false-negative direction — an
+/// `assert_boundary!` on an *undeclared* seam inside it is not caught. Keep production probes out
+/// of `#[path]`-relocated modules, or declare and probe the seam in a conventionally located one.
+///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
 pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
     let mut probes = Vec::new();
