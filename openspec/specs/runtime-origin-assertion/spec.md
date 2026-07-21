@@ -259,6 +259,15 @@ dimension applies, reimplemented louke-locally (三儀 ⊥ 三儀). This does no
 for a cfg-gated declaration is tolerated. A resolution ambiguity (both `name.rs` and `name/mod.rs`
 present) remains a constitution error regardless of any gate.
 
+A `mod name;` carrying a `#[path = "..."]` relocation SHALL be recognized **structurally** — an outer
+attribute whose meta name is exactly `path` followed by `=`, with comments and string literals
+skipped — and SHALL NOT be resolved by its conventional name: its author-chosen file is a stated scan
+bound, excluded from the reachable corpus (probes inside it are not counted). A declaration whose
+preamble merely *contains* the text `path` — a `// fast path` comment, a `#[cfg(feature = "fastpath")]`
+gate — SHALL NOT be read as a relocation and SHALL resolve normally, so no reachable module is dropped
+by a false substring match (which would silently drop every probe beneath it — a coverage false
+negative, the worst outcome under FN-first).
+
 #### Scenario: Orphan probe cannot cover a seam
 
 - **WHEN** a target root declares no module for `orphan.rs` and that orphan file contains the only probe for a declared seam
@@ -283,6 +292,11 @@ present) remains a constitution error regardless of any gate.
 
 - **WHEN** a target root declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off) alongside a non-cfg `mod present;` that resolves normally
 - **THEN** the audit skips the absent cfg-gated module without a constitution error, while a non-cfg `mod missing;` with no file remains a fail-loud constitution error
+
+#### Scenario: A #[path]-relocated module is distinguished from an incidental "path" substring
+
+- **WHEN** a target root declares `#[path = "elsewhere.rs"] mod relocated;` (with no conventional `relocated.rs`) alongside a `// fast path` comment and `#[cfg(feature = "fastpath")] mod present;` whose conventional `present.rs` resolves normally and holds a declared seam's probe
+- **THEN** the `#[path]`-relocated module is recognized structurally and skipped by the by-name resolver — never a constitution error for the absent `relocated.rs` — while `present`, matched by no `path` attribute despite the incidental substring, is resolved and its probe counts as coverage
 
 #### Scenario: Legacy directory callers remain compatible
 
