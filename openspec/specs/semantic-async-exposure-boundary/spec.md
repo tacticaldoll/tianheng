@@ -109,6 +109,11 @@ bare boundary's projection stays byte-identical.
 - **WHEN** the anchored module itself declares a public `async fn` and a submodule declares another, and the boundary opts into subtree scope
 - **THEN** the system emits a finding for the anchor's own async fn byte-identical to the default-scope finding, plus a distinct finding for the submodule's — so enabling the opt-in adds the deeper finding without re-identifying the seam one
 
+#### Scenario: Two cfg-split branches sharing an unrenderable owner fallback stay distinct findings
+
+- **WHEN** a subtree-scoped boundary is anchored at a module declared as two mutually-exclusive `#[cfg]` branches, and BOTH branches independently declare a same-named type with an unrenderable const-generic self-type argument (e.g. `Arr<{ N + 1 }>` vs `Arr<{ N + 2 }>`) whose `impl` block declares a same-named public async method
+- **THEN** the system reports TWO distinct violations, one per branch — the position-disambiguating fallback label used when a self type cannot be rendered is never assigned identically to two different branches' items merely because each branch's own item happened to sit at the same position within its own branch, which would otherwise let two genuinely distinct, mutually-exclusive-config async fns silently collapse into one reported finding
+
 #### Scenario: The subtree is bounded by the anchor, not the whole crate
 
 - **WHEN** a boundary anchored at `crate::a` opts into subtree scope, `crate::a::b` declares a public `async fn`, and a sibling `crate::c` also declares one

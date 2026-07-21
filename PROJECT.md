@@ -479,6 +479,55 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   is complete; only the next round's fresh adversarial pass, aimed specifically at the prior round's
   own remedy, earns that confidence, and this now holds across at least two structurally distinct
   bug classes in this codebase, not only the cfg-branch one.
+  A **round-11** re-review of round 10's fix found the self-type shadow gap a THIRD time: neither
+  `resolve_self_type` nor `is_shadowed_param_path` ever checked `tp.qself` — a QUALIFIED-path self
+  type (`<T>::Item`, `<T as Trait>::Item`) stores its own dependent type in `qself.ty`, entirely
+  outside `path.segments`, so a self type dependent on the impl's own generic parameter written this
+  third syntactic way (real, compiling Rust — a `Marker<T>` trait argument satisfies rustc's E0207
+  unconstrained-type-parameter check that a bare, non-generic-trait blanket impl on `T::Item` would
+  fail) still bypassed the shadow entirely and still resolved through a same-named alias. The
+  sibling `canonical_self_owner` had already guarded on `qself.is_none()` from the start (it falls
+  through to lexical rendering otherwise) — `resolve_self_type` never had the matching guard, at
+  any point in this three-round arc. Fixed by adding the identical `qself.is_some() => None` guard,
+  mirroring the sibling function precisely rather than inventing a fourth bespoke shape. Eleven
+  rounds now on this one theme alone: three consecutive rounds each found the immediately preceding
+  round's fix incomplete, through three different syntactic vectors of the same underlying shape
+  (bare param, projection, qualified path) — the lesson holds not just across bug classes but
+  repeatedly within a single one, and a function that already had the right guard (`canonical_self_
+  owner`) was never itself consulted as the reference implementation until the third pass looked
+  for exactly that comparison.
+  The same round found two further, UNRELATED bugs via fresh-eyes lenses on previously
+  under-reviewed surfaces. First, in 圭表: `Rule::RestrictWorkspaceDependenciesTo`'s own doc comment
+  had asserted, since the rule was written, that a workspace member depending on itself is
+  "harmless: no crate depends on itself" — a false premise. Cargo genuinely permits (and real
+  projects use, e.g. a doctest/dogfooding pattern) a crate declaring itself as a
+  `[dev-dependencies]` path dependency on itself, which `cargo metadata --no-deps` emits verbatim;
+  `workspace_member_names` trivially includes the crate's own name and `dependencies()` matches by
+  bare package name with no self-exclusion, so a `forbid_all_workspace_dependencies` /
+  `restrict_workspace_dependencies_to` boundary flagged a crate's own legitimate self-dependency as
+  an "unlisted workspace dependency" — a false positive on a pattern that names no OTHER crate at
+  all, so cannot be a cross-crate layering violation. Fixed by excluding the target's own name from
+  the workspace-scoped rule's match, at the one call site that owns this filter (not by filtering
+  the shared `workspace_member_names` observation itself, which other, non-self-exempt call sites
+  may still need unfiltered). Second, in 渾儀: `async_exposure_subtree_findings`'s `ordinal`
+  (feeding `canonical_self_owner`'s `_#{ordinal}` fallback for an impl whose self-type carries a
+  genuinely unrenderable const-generic argument — `AsyncInherentMethod`'s ONLY disambiguator, unlike
+  its `AsyncFreeFn`/`AsyncTraitMethod` siblings, which embed `module` directly) reset to 0 for EACH
+  `(module, items, file)` tuple the subtree walker returns, while the seam path enumerates
+  continuously over the flattened branch union and never resets — desyncing the two paths' fallback
+  strings for the anchor module's own items (contradicting this function's own "byte-identical to
+  the single-module path" doc promise) and, far more seriously, letting two mutually-exclusive
+  `#[cfg]` branches of the identical anchor — two genuinely distinct async fns, compiled under two
+  different configs — collide on the SAME fallback string and silently dedup-collapse into one
+  reported finding: a real false negative. This is the identical shape the eight-round cfg-branch
+  lesson above already named (a per-branch value computed without the branch as part of its own
+  identity, so two branches alias), now manifesting through a *shared cross-cutting fact-identity
+  dedup* rather than a *use-map/shadow-set merge* — the SAME root shape reaches a THIRD kind of
+  shared state, not just resolution maps and directory bookkeeping. Fixed by making `ordinal` one
+  counter incrementing continuously across the WHOLE subtree walk, never reset per tuple — matching
+  the seam path's own continuous enumerate and, by construction, guaranteeing two different tuples'
+  items can never share a fallback string. All three findings confirmed with a real, executed,
+  then-reverted repro during the adversarial verify phase.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

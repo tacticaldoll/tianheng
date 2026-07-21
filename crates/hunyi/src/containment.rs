@@ -80,6 +80,19 @@ pub(crate) fn resolve_self_type(
 ) -> Option<String> {
     let base = match self_ty {
         syn::Type::Path(tp) => {
+            // A QUALIFIED-path self type (`<T>::Item`, `<T as Trait>::Item`) stores its own
+            // dependent type in `qself.ty`, entirely OUTSIDE `path.segments` — even when that
+            // dependent type is the impl's own generic parameter, `is_shadowed_param_path` (which
+            // only ever inspects `path`) can never see it, so the trailing segments alone would be
+            // resolved as an ordinary bare path, silently bypassing the shadow through a THIRD
+            // syntactic vector neither the bare-param nor the `T::Assoc` projection form covers
+            // (found on a round-11 adversarial review; see `PROJECT.md`'s Decisions). Mirrors
+            // `canonical_self_owner`'s own `qself.is_none()` guard: a qself'd self type is never a
+            // placeable nominal path either way, so it is dropped here — the same "stated bound,
+            // never a silent claim" treatment as any other non-resolvable self-type shape.
+            if tp.qself.is_some() {
+                return None;
+            }
             // A self type naming the impl's own type parameter — bare (`T`) or a projection off it
             // (`T::Assoc`) — is a parameter use, never a nominal type: dropped before any resolution
             // is attempted, via the SAME leading-segment shadow check the sibling exposure

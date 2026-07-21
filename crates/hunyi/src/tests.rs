@@ -4579,6 +4579,39 @@ fn a_blanket_impls_generic_param_is_shadowed_even_through_a_multi_segment_projec
 }
 
 #[test]
+fn a_qualified_path_self_type_off_the_impls_own_generic_param_is_not_resolved_through_an_alias() {
+    // Round-11 finding: `resolve_self_type` had no `qself.is_none()` guard at all, unlike its
+    // sibling `canonical_self_owner` (which excludes a qself'd self type from resolution
+    // entirely). A QUALIFIED-path self type (`<T>::Item`) stores its own dependent type (`T`, the
+    // impl's own generic parameter) in `qself.ty`, entirely OUTSIDE `path.segments` -- so
+    // `is_shadowed_param_path`, which only ever inspects `path`, can never see it. The trailing
+    // segments (`Item`) were resolved as an ordinary bare path instead, silently bypassing the
+    // round-9/10 shadow through a third syntactic vector. `impl<T: HasItem> Marker<T> for <T>::Item
+    // {}` is real, compiling Rust (the `Marker<T>` trait argument satisfies rustc's E0207
+    // unconstrained-type-parameter check). Fixed by dropping any qself'd self type before the
+    // shadow check even runs -- the same "not a placeable nominal path" treatment already given to
+    // every other non-resolvable self-type shape.
+    let out = marker_findings(
+        "qself-bracket-projection-shadow-gap",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use crate::domain::sub::Innocent as Item;\npub mod sub { pub struct Innocent; }\npub trait HasItem { type Item; }\npub trait Marker<X> {}\nimpl<T: HasItem> Marker<T> for <T>::Item {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a qself'd self type dependent on the impl's own generic param T must not resolve its \
+         trailing segment through the unrelated `use ... as Item` module alias: {out:?}"
+    );
+}
+
+#[test]
 fn a_forbidden_marker_on_an_alias_to_a_foreign_type_is_clean() {
     // A `type` alias defines no new type — coherence sees through it —
     // so a marker impl'd on an alias to a FOREIGN/prelude type governs no subtree type and must NOT
@@ -5793,6 +5826,69 @@ fn async_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
     );
     // The seam finding appears verbatim in the subtree result.
     assert!(subtree.contains(&seam[0]));
+}
+
+#[test]
+fn async_subtree_and_seam_agree_on_the_owner_fallback_for_an_unrenderable_const_generic_self_type()
+{
+    // Round-11 finding: the subtree path's `ordinal` (fed to `collect_item_async_exposures`, and
+    // from there into `canonical_self_owner`'s `_#{ordinal}` fallback for an impl block whose
+    // self-type carries an unrenderable const-generic argument) used to reset to 0 for EACH
+    // `(module, items, file)` tuple `walk_subtree_modules` returns, while the seam path
+    // (`shape_module_findings`) enumerates continuously over the flattened branch union and never
+    // resets. For the anchor module's own items this desynced the two paths' owner-fallback
+    // strings for the identical impl block -- contradicting this function's own doc promise that a
+    // seam finding is "byte-identical to the single-module path". `ordinal` is now one counter
+    // incrementing continuously across every tuple the subtree walk visits, matching the seam
+    // path's own continuous enumerate.
+    let files = &[(
+        "lib.rs",
+        "pub struct Arr<const N: usize>;\npub struct Marker;\nimpl Marker { pub async fn before() {} }\nimpl<const N: usize> Arr<{ N + 1 }> { pub async fn unrenderable() {} }\n",
+    )];
+    let seam = async_findings("const-generic-owner-parity-seam", files, "crate").unwrap();
+    let subtree = async_subtree_labels("const-generic-owner-parity-subtree", files, "crate");
+    assert_eq!(
+        seam, subtree,
+        "the seam and subtree paths must assign the identical owner-fallback string to the same \
+         impl block's unrenderable const-generic self type: seam={seam:?} subtree={subtree:?}"
+    );
+}
+
+#[test]
+fn async_subtree_does_not_collapse_two_cfg_split_branches_sharing_an_unrenderable_owner_fallback() {
+    // Round-11 finding (the severe half): because `AsyncInherentMethod`'s identity is `(owner,
+    // name, tail)` with no module field (unlike its `AsyncFreeFn`/`AsyncTraitMethod` siblings), and
+    // the shared fact-only dedup (`sort_attributed_facts`) never consults the carried module/file
+    // either, two mutually-exclusive `#[cfg]` branches of the SAME anchor module, each declaring a
+    // same-named type with an unrenderable const-generic self-type argument at the same
+    // per-branch position, used to collide on the identical `_#{ordinal}` owner-fallback string
+    // (ordinal reset to 0 for each branch's own tuple) -- collapsing two genuinely distinct async
+    // fns, compiled under two different, mutually-exclusive configs, into ONE reported finding. A
+    // continuously-incrementing ordinal across the whole subtree walk (never reset per branch)
+    // means two different branches' items can never share an ordinal, so their fallback labels can
+    // never collide by construction.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod m;\n#[cfg(feature = \"w\")]\n#[path = \"m_w.rs\"]\npub mod m;\n",
+        ),
+        (
+            "m.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 1 }> { pub async fn run() {} }\n",
+        ),
+        (
+            "m_w.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 2 }> { pub async fn run() {} }\n",
+        ),
+    ];
+    let subtree = async_subtree_labels("cfg-split-owner-fallback-collision", files, "crate::m");
+    assert_eq!(
+        subtree.len(),
+        2,
+        "both cfg branches' own async fn are genuinely distinct violations and must not \
+         dedup-collapse into one merely because their unrenderable-self-type owner fallbacks \
+         previously collided: {subtree:?}"
+    );
 }
 
 #[test]

@@ -1952,6 +1952,34 @@ fn workspace_rule_flags_only_unlisted_workspace_members() {
 }
 
 #[test]
+fn workspace_rule_never_flags_a_crates_own_self_referential_dev_dependency() {
+    // Round-11 finding: Cargo genuinely permits (and real projects use, e.g. a doctest/
+    // dogfooding pattern) a crate declaring itself as a `[dev-dependencies]` path dependency
+    // on itself (`main = { path = "." }`), and `cargo metadata --no-deps` emits this edge
+    // verbatim (verified against real cargo). `workspace_member_names` trivially includes the
+    // crate's own name, and `dependencies()` matches by bare package name with no
+    // self-exclusion — so before this fix, a `forbid_all_workspace_dependencies` /
+    // `restrict_workspace_dependencies_to` boundary declared on that crate flagged its own
+    // legitimate self-dev-dependency as an "unlisted workspace dependency", even though a
+    // self-dependency can never be an inter-crate layering violation (there is no OTHER crate
+    // to leak across a boundary to).
+    let package = serde_json::json!({
+        "name": "main",
+        "dependencies": [
+            { "name": "main", "source": null, "kind": "dev" },
+        ]
+    });
+    let workspace = vec!["main".to_string()];
+    let forbid_all = Rule::RestrictWorkspaceDependenciesTo { allowed: vec![] };
+    assert_eq!(
+        forbid_all.findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "a crate's own self-referential dev-dependency must never be flagged as an unlisted \
+         workspace dependency"
+    );
+}
+
+#[test]
 fn coverage_counts_a_module_only_covered_crate_as_covered() {
     let members = vec!["app".to_string(), "core".to_string(), "memory".to_string()];
     let constitution = Constitution::new("c")

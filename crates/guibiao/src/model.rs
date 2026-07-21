@@ -423,8 +423,16 @@ impl Rule {
     /// The target's declared dependencies that violate this rule. Each rule owns both
     /// its observation source (external-only / all normal / workspace-only) and its
     /// filter. `workspace_members` is all workspace member names, observed from
-    /// `cargo metadata`; only the workspace-scoped rule consults it. (It includes the
-    /// target crate itself, harmlessly: no crate depends on itself.)
+    /// `cargo metadata`; only the workspace-scoped rule consults it — and excludes the
+    /// TARGET's own name from that set (see the workspace-scoped arm below): Cargo genuinely
+    /// permits a crate declaring itself as a `[dev-dependencies]` path dependency on itself
+    /// (a common doctest/dogfooding pattern, `main = { path = "." }`), which `cargo metadata
+    /// --no-deps` emits verbatim — a real edge, not a parse artifact. A self-dependency is
+    /// never an inter-crate layering violation (there is no OTHER crate to leak across a
+    /// boundary to), so it must never be governed as one (found on a round-11 adversarial
+    /// review — see `PROJECT.md`'s Decisions; a stale comment here previously claimed this
+    /// case was "harmless" while `workspace_members` still included the target's own name
+    /// unfiltered, which is what actually made it flag).
     #[cfg(test)]
     pub(crate) fn findings(
         &self,
@@ -457,12 +465,23 @@ impl Rule {
                 .into_iter()
                 .filter(|dependency| !allowed.contains(dependency))
                 .collect(),
-            Rule::RestrictWorkspaceDependenciesTo { allowed } => dependencies(package, kind)
-                .into_iter()
-                .filter(|dependency| {
-                    workspace_members.contains(dependency) && !allowed.contains(dependency)
-                })
-                .collect(),
+            Rule::RestrictWorkspaceDependenciesTo { allowed } => {
+                // A dependency on the TARGET'S OWN name is never a cross-crate layering
+                // violation — Cargo allows (and dogfooding/doctest patterns genuinely use) a
+                // crate listing itself as a dev-dependency path on itself, which
+                // `cargo metadata --no-deps` emits verbatim. Excluded here, not by filtering
+                // `workspace_members` itself, since that set is shared read-only observation
+                // data (`workspace_member_names`) other rules may consult unfiltered.
+                let own_name = package["name"].as_str();
+                dependencies(package, kind)
+                    .into_iter()
+                    .filter(|dependency| {
+                        Some(dependency.as_str()) != own_name
+                            && workspace_members.contains(dependency)
+                            && !allowed.contains(dependency)
+                    })
+                    .collect()
+            }
             Rule::RestrictDependencySourcesTo { allowed } => {
                 dependencies_with_disallowed_source(package, kind, allowed)
             }
