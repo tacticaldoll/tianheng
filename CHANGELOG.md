@@ -192,6 +192,27 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   brace-delimited attribute argument (`#[foo({ 1 })]`) between an earlier real `#[path = "..."]` and
   the `mod` keyword had its own internal braces mistaken for item boundaries, reproducing round 9's
   bug through a different vector — fixed by skipping a whole attribute group as one atomic unit.
+- A round-11 review found the self-type shadow gap a THIRD time: neither `resolve_self_type` nor
+  `is_shadowed_param_path` ever checked a self type's `qself` — a qualified-path self type
+  (`<T>::Item`, `<T as Trait>::Item`) stores its own dependent type outside `path.segments`
+  entirely, so a self type dependent on the impl's own generic parameter written this way still
+  bypassed the shadow and resolved through a same-named alias. `canonical_self_owner` already
+  guarded on `qself.is_none()`; `resolve_self_type` never had the matching guard — fixed by adding
+  it, mirroring the sibling function exactly.
+- The same round found two unrelated bugs on previously under-reviewed surfaces. `圭表`'s
+  `RestrictWorkspaceDependenciesTo`/`forbid_all_workspace_dependencies` flagged a crate's own
+  legitimate self-referential `[dev-dependencies]` path dependency on itself (a real, Cargo-legal
+  doctest/dogfooding pattern `cargo metadata` emits verbatim) as an "unlisted workspace dependency"
+  — a false positive on a pattern naming no other crate at all. Fixed by excluding the target's own
+  name from the workspace-scoped rule's match. And `async_exposure_subtree_findings`'s `ordinal`
+  (feeding the owner-fallback for an impl with a genuinely unrenderable const-generic self-type
+  argument) reset to 0 for each module the subtree walker visited rather than incrementing
+  continuously, so the anchor module's own items could get a different owner-fallback string
+  between seam and subtree mode, and — more seriously — two mutually-exclusive `#[cfg]` branches of
+  the identical anchor module could collide on the same fallback string and silently dedup-collapse
+  two genuinely distinct async fns into one reported finding, a real false negative. Fixed by making
+  `ordinal` one counter incrementing continuously across the whole subtree walk, never reset per
+  module.
 
 ## [0.2.1] - 2026-07-21
 
