@@ -190,11 +190,10 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a full AST. A hand-rolled scanner keeps the 圭表 core dependency-light and macro-free;
   its partial coverage — bare path expressions, macro-generated imports, and
   `#[path = "…"]`-remapped modules are out of scope — is acceptable because the drift law
-  only enforces what is observed. (A `#[path]` attribute moves a `mod name;` to a
-  non-conventional file; the token scanner maps modules by their conventional path, so a
-  remapped module's imports are not observed and the module is not governable — the same
-  stated partial-coverage bound as inline and macro-generated items. Closing it would
-  require reading attributes, an AST-class amendment, not a silent trade.) Comments and
+  only enforces what is observed. The token scanner recognizes direct and recursively
+  `cfg_attr`-wrapped `path = "…"` attributes as remaps and excludes them from the conventional
+  module graph, so it fails loud rather than governing a same-named orphan; following the
+  relocated target remains a deliberate future amendment. Comments and
   string literals (normal, byte, and raw) are stripped so their text is never mistaken
   for a `use`. A module's identity is derived in three places — its file path, its `mod`
   declaration, and a `use` path that names it — and these MUST stay in lockstep, since a
