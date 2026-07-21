@@ -360,49 +360,39 @@ fn module_boundary_uses_the_package_target_src_path() {
 }
 
 #[test]
-fn path_remapped_module_is_not_governed_via_a_conventional_orphan() {
-    let dir = std::env::temp_dir().join(format!(
-        "guibiao-path-remap-boundary-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(
-        src.join("lib.rs"),
-        "#[path = \"weird.rs\"]\npub mod kernel;\n",
-    )
-    .expect("write lib.rs");
-    std::fs::write(src.join("weird.rs"), "use crate::projection::Thing;\n")
-        .expect("write remapped module");
-    std::fs::write(src.join("kernel.rs"), "use crate::projection::Wrong;\n")
-        .expect("write conventional orphan");
-
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
-    let boundary = ModuleBoundary::in_crate("x")
-        .module("crate::kernel")
-        .must_not_import("crate::projection")
-        .because("path-remapped modules are outside the token scanner's coverage");
-
-    let mut violations = Vec::new();
-    let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
-
-    assert_eq!(
-        result,
-        Err(unknown_module_error("crate::kernel", "x")),
-        "a #[path]-remapped module must not be governed through a same-named conventional orphan"
+fn path_remapped_module_is_followed_not_governed_via_a_conventional_orphan() {
+    // rustc ground truth: `#[path = "weird.rs"] pub mod kernel;` compiles `weird.rs` as
+    // `crate::kernel` (verified with a real `cargo build`), never the same-named conventional
+    // orphan `kernel.rs`. The boundary must react on the REAL target's import, naming it as the
+    // offending file, and must never react on the orphan's (different) import — a same-named
+    // orphan is not compiled, so its content must never surface as this module's finding.
+    let (result, violations) = run_module_check(
+        "path-remap-boundary",
+        &[
+            ("lib.rs", "#[path = \"weird.rs\"]\npub mod kernel;\n"),
+            ("weird.rs", "use crate::projection::Thing;\n"),
+            ("kernel.rs", "use crate::projection::Wrong;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::projection")
+            .because("closing the #[path]-following divergence from 渾儀/漏刻"),
     );
+
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(
+        violations[0].finding, "crate::projection::Thing",
+        "the real target's import is observed, never the orphan's: {violations:?}"
+    );
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a module-import violation carries its source file");
     assert!(
-        violations.is_empty(),
-        "the conventional orphan is not compiled and must not produce a violation"
+        file.ends_with("weird.rs"),
+        "the violation names the real #[path] target, not the conventional orphan: {file}"
     );
 }
 

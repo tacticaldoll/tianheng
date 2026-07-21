@@ -188,12 +188,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a projection of the report, never the constitution.
 - **Module imports are observed by scanning source `use` declarations**, not by parsing
   a full AST. A hand-rolled scanner keeps the 圭表 core dependency-light and macro-free;
-  its partial coverage — bare path expressions, macro-generated imports, and
-  `#[path = "…"]`-remapped modules are out of scope — is acceptable because the drift law
-  only enforces what is observed. The token scanner recognizes direct and recursively
-  `cfg_attr`-wrapped `path = "…"` attributes as remaps and excludes them from the conventional
-  module graph, so it fails loud rather than governing a same-named orphan; following the
-  relocated target remains a deliberate future amendment. Comments and
+  its partial coverage — bare path expressions and macro-generated imports are out of scope —
+  is acceptable because the drift law only enforces what is observed. An unconditional, direct
+  `#[path = "…"]` remap is **followed** to its target (0.2.2), matching 渾儀/漏刻, so all three
+  observation dimensions agree on what rustc compiles; a `cfg_attr`-wrapped `path = "…"` stays a
+  cfg-conditional exclusion from the conventional module graph (following it cfg-blind could read
+  a file rustc does not compile in the active configuration), so it fails loud rather than
+  governing a same-named orphan. Comments and
   string literals (normal, byte, and raw) are stripped so their text is never mistaken
   for a `use`. A module's identity is derived in three places — its file path, its `mod`
   declaration, and a `use` path that names it — and these MUST stay in lockstep, since a

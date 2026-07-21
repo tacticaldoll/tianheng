@@ -17,6 +17,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   declarations, closing a false negative where a file-backed child reached only through an inline
   parent (`mod parent { mod child; }`, compiling `parent/child.rs`) was never marked reachable —
   so a real import in that file went unobserved and could pass a boundary check silently.
+- 圭表 now follows an unconditional, direct `#[path = "…"]` module declaration to its real target
+  (matching 渾儀 and 漏刻, which already did), instead of excluding it from the reachable module
+  graph. Closes the one remaining cross-dimension divergence: a relocated module's imports are
+  now observed by all three observation dimensions, not silently passed by the static one. A
+  `cfg_attr`-wrapped `#[path]` remains excluded (cfg-conditional, never followed cfg-blind).
 
 ## [0.2.1] - 2026-07-21
 
