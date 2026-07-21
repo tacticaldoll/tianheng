@@ -6122,6 +6122,47 @@ fn cfg_duplicated_inline_modules_are_all_governed() {
 }
 
 #[test]
+fn cfg_mixed_inline_and_file_form_siblings_are_both_governed() {
+    // rustc ground truth (verified with a real rustc build under EITHER single-feature config):
+    // `#[cfg(feature = "a")] pub mod platform { .. }` (inline) and `#[cfg(feature = "b")] pub mod
+    // platform;` (file-form, backed by platform.rs) is the standard per-platform shim pairing an
+    // inline variant with a file-form one — valid, common Rust, not a name collision. `descend`
+    // used to return as soon as it found ANY inline variant, never reading the file-form sibling
+    // at all: a boundary anchored on `crate::platform` observed only the inline arm's exposures,
+    // silently missing the file-form arm's — a real false negative (the resolver never even
+    // opened platform.rs). Both must react now, matching the crate-wide scan's own cfg-blind,
+    // observe-all policy for same-named children.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-inline-file",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod platform { pub fn open() -> u8 { 0 } }\n\
+                 #[cfg(feature = \"b\")] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            (
+                "platform.rs",
+                "pub fn open() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("platform must not expose infra in any cfg variant, inline or file-form");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the file-form sibling's exposure must react even though an inline variant exists: {violations:?}"
+    );
+}
+
+#[test]
 fn a_visibility_violation_carries_its_module_file() {
     let (metadata, dir) = fixture_metadata(
         "vis",
