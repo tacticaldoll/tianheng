@@ -69,7 +69,18 @@ pub(crate) fn governed_files(
             None
         }
     });
-    structural.chain(remap_entries).collect()
+    // The two iterators can name the same `(file, module_path)` pair: a plain-file sibling can
+    // legitimately be the literal same file an unrelated `#[cfg]` arm's `#[path]` also targets
+    // (e.g. `#[cfg(unix)] pub mod a;` + `#[cfg(windows)] #[path = "a.rs"] pub mod a;`), so the
+    // structural iterator includes it (not shadowed — a real plain-file sibling exists) at the
+    // same time `remap_entries` unconditionally includes the remap target. Deduping here — rather
+    // than relying on every caller to dedup by finding identity, which happens to mask this today
+    // — keeps the "no duplicate governed pair" invariant this function's own contract implies.
+    let mut seen = std::collections::BTreeSet::new();
+    structural
+        .chain(remap_entries)
+        .filter(|entry| seen.insert(entry.clone()))
+        .collect()
 }
 
 /// The set of module paths reachable from the crate root via `mod` declarations — the
@@ -1643,6 +1654,54 @@ mod tests {
             reachable.contains("crate::x::y"),
             "the inline sibling's own file-backed child must still be reachable even though a \
              plain-file sibling of crate::x also exists: {reachable:?}"
+        );
+    }
+
+    #[test]
+    fn governed_files_does_not_duplicate_a_plain_files_own_path_remap_target() {
+        // rustc ground truth (verified with a real `cargo build`, both feature configurations):
+        // `#[cfg(not(feature = "b"))] pub mod a;` + `#[cfg(feature = "b")] #[path = "a.rs"] pub
+        // mod a;` compiles the SAME `a.rs` under either arm — an unrelated `#[cfg]` arm's
+        // `#[path]` can legitimately target the literal same file a plain-file sibling already
+        // names. `governed_files`'s structural iterator (a real plain-file sibling, not shadowed)
+        // and its `remap_entries` iterator (unconditional) then both name `(a.rs, crate::a)` —
+        // pinning that the combined result carries it once, not twice.
+        let dir =
+            std::env::temp_dir().join(format!("guibiao-dup-remap-target-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("create temp src");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[cfg(not(feature = \"b\"))]\npub mod a;\n#[cfg(feature = \"b\")]\n#[path = \"a.rs\"]\npub mod a;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(src.join("a.rs"), "use crate::projection::Thing;\n").expect("write a.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only, remapped, remap_shadowed) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let governed = governed_files(
+            &src,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            &remapped,
+            &remap_shadowed,
+            None,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let a_entries: Vec<_> = governed
+            .iter()
+            .filter(|(_, module)| module == "crate::a")
+            .collect();
+        assert_eq!(
+            a_entries.len(),
+            1,
+            "the plain sibling and its own #[path] target are the same file — governed once, \
+             not twice: {governed:?}"
         );
     }
 }
