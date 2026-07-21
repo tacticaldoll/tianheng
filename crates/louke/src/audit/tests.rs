@@ -194,22 +194,69 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
 }
 
 #[test]
-fn a_real_path_attribute_excludes_the_module_from_by_name_resolution() {
+fn an_unconditional_path_attribute_is_followed_to_its_target() {
     let base = std::env::temp_dir().join(format!("louke-path-attr-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
-    // A genuine `#[path = "..."]` relocation (with a `]` inside the literal to exercise bracket
-    // matching): the by-name resolver must NOT try to resolve `relocated.rs`, so its absence does
-    // not error — the stated `#[path]` scan bound.
+    // A genuine unconditional `#[path = "..."]` relocation (with a `]` inside the literal to
+    // exercise bracket matching) is now FOLLOWED to its author-chosen file, and its probe counts;
+    // the conventional name (`relocated.rs`) is never consulted. Previously the module was skipped
+    // — a coverage false negative for a seam probed only in a relocated file.
     let root = write_source(
         &base,
         "lib.rs",
         "#[path = \"generated/a]b.rs\"]\nmod relocated;\nfn live() {}",
     );
+    write_source(
+        &base,
+        "generated/a]b.rs",
+        "fn inner() { assert_boundary!(\"relocated-seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "an unconditional #[path] module is followed and its probe counts: {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn an_absent_unconditional_path_target_is_a_constitution_error() {
+    let base = std::env::temp_dir().join(format!("louke-path-absent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // An unconditional `#[path]` whose target file is absent is a genuine broken reference (rustc
+    // errors too): fail loud (exit 2), never a silent skip that could hide a seam.
+    let root = write_source(
+        &base,
+        "lib.rs",
+        "#[path = \"missing.rs\"]\nmod relocated;\nfn live() {}",
+    );
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "an absent unconditional #[path] target fails loud (exit 2): {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn a_cfg_attr_path_relocation_is_not_followed_a_stated_bound() {
+    let base = std::env::temp_dir().join(format!("louke-cfgattr-path-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // `#[cfg_attr(unix, path = "...")]` is cfg-conditional: it reads as `cfg`, not a followed path,
+    // so an absent target is tolerated (not a constitution error) rather than followed cfg-blind
+    // into a file rustc may not compile here — the stated cfg-relocation bound.
+    let root = write_source(
+        &base,
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"unix_seam.rs\")]\nmod plat;\nfn live() {}",
+    );
     let outcome = audit_probe_coverage(&[], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
-        "a #[path] module is excluded from by-name resolution (stated bound): {outcome:?}"
+        "a cfg_attr #[path] with an absent target is tolerated, not followed: {outcome:?}"
     );
     let _ = std::fs::remove_dir_all(base);
 }
