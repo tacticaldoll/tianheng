@@ -3455,6 +3455,42 @@ fn two_same_named_unsafe_trait_fns_stay_distinct() {
 }
 
 #[test]
+fn trait_impl_unsafe_fn_stays_distinct_from_inherent_and_other_traits() {
+    // A trait-impl `unsafe fn` is qualified by `<trait for self>`, not the self type alone: on ONE
+    // self type, an inherent `unsafe fn m`, `impl A for Foo { unsafe fn m }`, and
+    // `impl B for Foo { unsafe fn m }` are three distinct `unsafe` sites and MUST stay three
+    // findings — else a baseline of the inherent (or one trait-impl) silently accepts a later-added
+    // trait-impl `unsafe fn` on a *safe* trait (no independent `unsafe impl` finding): a new
+    // out-of-subtree `unsafe` site passing unobserved, the forbidden false negative. Self-type-only
+    // qualification (`unsafe fn Foo::m` for all three) collapsed them; this pins the fix.
+    let out = unsafe_labels(
+        "unsafe-fns-trait-impl",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub struct Foo;\npub trait A { fn m(&self); }\npub trait B { fn m(&self); }\n\
+                 impl Foo { unsafe fn m(&self) {} }\n\
+                 impl A for Foo { unsafe fn m(&self) {} }\n\
+                 impl B for Foo { unsafe fn m(&self) {} }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe fn <A for Foo>::m in crate::net",
+            "unsafe fn <B for Foo>::m in crate::net",
+            "unsafe fn Foo::m in crate::net",
+        ],
+        "a trait-impl unsafe fn must be qualified by <trait for self>, distinct from the inherent \
+         method and other trait impls on the same type: {out:?}"
+    );
+}
+
+#[test]
 fn unsafe_in_a_body_nested_mod_reacts() {
     // The propose-review false-negative guard: a `mod` inside a fn body is not descended by the
     // top-level walk; the collector's default recursion must still catch its unsafe.

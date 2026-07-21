@@ -54,6 +54,11 @@ The system SHALL walk the whole target crate (descending file-based `mod x;` and
 - **WHEN** `crate::net` (outside the subtree) declares `impl Foo { unsafe fn m(&self) {} }` alongside `impl Bar { unsafe fn m(&self) {} }` (the same method name, different owners), or two traits each declaring `unsafe fn m`
 - **THEN** the system emits two distinct findings — each `unsafe fn` finding is qualified by its enclosing owner (`unsafe fn Foo::m`, the inherent-impl self type, or `unsafe fn A::m`, the declaring trait) — so neither masks the other under the baseline, the `unsafe fn` counterpart of the `unsafe impl` distinctness above
 
+#### Scenario: A trait-impl unsafe fn stays distinct from the inherent method on the same type
+
+- **WHEN** `crate::net` (outside the subtree) declares, on the **same** self type `Foo`, an inherent `impl Foo { unsafe fn m(&self) {} }` alongside `impl A for Foo { unsafe fn m(&self) {} }` and `impl B for Foo { unsafe fn m(&self) {} }` (safe traits `A`/`B`, so no independent `unsafe impl` finding)
+- **THEN** the system emits three distinct findings — a trait-impl `unsafe fn` is qualified by `<trait for self>` (`unsafe fn <A for Foo>::m`, `unsafe fn <B for Foo>::m`), distinct from the inherent `unsafe fn Foo::m` and from each other — because self-type qualification alone separates only *different* self types, so on one self type a baseline of the inherent method would otherwise mask a later-added trait-impl `unsafe fn` (a false negative)
+
 #### Scenario: Unsafe in a body-nested module is attributed to the enclosing module
 
 - **WHEN** the crate has `only_under(["crate::ffi"])` and a function in `crate::net` declares `mod raw { pub unsafe fn poke() {} }` (a `mod` inside a fn body)
