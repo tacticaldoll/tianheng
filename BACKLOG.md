@@ -43,13 +43,6 @@ This index makes the current work discoverable without duplicating the detailed 
 
 ### READY-PATCH
 
-- **圭表 unconditional `#[path]` parity.** **Pressure/source:** 渾儀 and 漏刻 follow an unconditional
-  remap while 圭表 deliberately excludes it, leaving imports in a relocated file unobserved.
-  **Current reaction:** an explicit module-boundary coverage bound. **Risk:** cross-dimension
-  divergence and a known blind spot, but not a code/spec violation today. **Trigger:** now that the
-  inline-child correctness work has shipped (0.2.2), promote if the proposal deliberately amends
-  that bound and proves rustc path-base parity. **Version:** additive false-negative closure,
-  patch-safe. **Authority:** module-boundary spec + module-source hardening below.
 - **Cross-scanner conformance matrix.** **Pressure/source:** 圭表 and 漏刻 have accumulated related
   lexical repairs around module/path handling and nested block comments, but no executable parity
   ledger says where their neutral token behavior should agree. **Current reaction:** separate local
@@ -565,19 +558,20 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   is not seen), and it is source-kind hygiene, not a `cargo publish` oracle (a `{ git, version }`
   dep is flagged though it would publish).
 - **Module-source hardening**: **BUILT (v0.1.4)**. Module boundaries now use Cargo's observed
-  lib/bin `src_path` as the compiled source root, and `#[path]`-remapped modules stay outside the
-  reachable graph instead of being governed through a same-named conventional orphan file. This is
-  a false-negative closure / stated-bound repair, not a new capability.
-  - **Forward candidate — follow unconditional `#[path]` in 圭表 (patch-safe depth, non-breaking).** As of
-    0.2.1, 渾儀 and 漏刻 **follow** an unconditional `#[path = "…"] mod x;` to its target (base = the
-    containing file's own dir with each enclosing inline-`mod` name accumulated onto it, rustc's
-    mod-rs-blind rule; `cfg_attr` stays a bound). 圭表 still holds the v0.1.4 posture of keeping such
-    modules outside its reachable `use`-graph — so it is now the **one dimension that diverges**: a
-    `use` edge inside a `#[path]`-relocated module is not governed by an import/confinement rule. The
-    observation source already exists (圭表's own `use`/`mod` byte scan); following the relocation
-    there — reusing the rustc base-directory rule the other two now share, staying `syn`-free — would
-    close the divergence. A depth (additive, false-negative closure), promoted when a real adopter
-    relocates a governed module; the three-dimension agreement is the correctness pressure, not size.
+  lib/bin `src_path` as the compiled source root, and a `#[path]`-remapped module's same-named
+  conventional file (if any) stays excluded from governance, instead of being governed through it
+  in the remap's place. This is a false-negative closure / stated-bound repair, not a new capability.
+  - **Unconditional `#[path]` parity — BUILT (0.2.2), closing the divergence noted at 0.2.1.** 圭表
+    now **follows** an unconditional `#[path = "…"] mod x;` to its target too, matching 渾儀/漏刻:
+    base = the containing file's own dir with each enclosing inline-`mod` name accumulated onto it
+    (rustc's mod-rs-blind rule); a `cfg_attr`-wrapped `path` stays the cfg-conditional skip bound
+    (never followed cfg-blind). The observation source is 圭表's own `use`/`mod` byte scan, kept
+    `syn`-free; the target's directory becomes mod-rs-like for its own nested children/`#[path]`s.
+    An absent unconditional target is a scan error (exit 2, a genuine broken reference), and a
+    `#[path]` chain cycling back to an already-open file on the current descent path is a scan
+    error too (never a hang), mirroring 渾儀's ancestor-path (not monotonic whole-tree) cycle guard
+    so two declarations legitimately sharing one target is never misreported. `crates/guibiao`
+    only, no new capability — all three dimensions now agree on what rustc compiles.
 - **Inline-module orphan-shadow**: **BUILT (v0.1.4)**. The inline twin of the `#[path]` orphan
   hazard: an inline-only `mod name { … }`'s same-named conventional file (`name.rs`/`name/mod.rs`)
   is now recognized as an orphan and excluded from the scanned file list, so an inline target stays
