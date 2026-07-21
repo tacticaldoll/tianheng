@@ -288,7 +288,7 @@ A same-named conventional source file (`name.rs` / `name/mod.rs`) that sits besi
 
 ### Requirement: Path-remapped modules are out of scope
 
-The system SHALL treat a module declared with a `#[path = "…"]` attribute as out of scope: its imports SHALL NOT be observed, and it SHALL NOT be a governable target. Module identity is observed from the conventional file path (`lib.rs`/`main.rs` → `crate`, `kernel/foo.rs` → `crate::kernel::foo`), and a `#[path]` attribute relocates the file away from that path, so a remapped module is not mapped to its declaration — a stated partial-coverage bound of the same family as inline and macro-generated items (see the scanner decision in `PROJECT.md`). The drift law enforces only what is observed; closing this gap would require reading attributes (an AST-class amendment), so it is stated, not silently relied upon. Only a **direct** `#[path]` is recognized: a `#[path]` wrapped in `#[cfg_attr(cond, path = "…")]` is **not** detected as a remap, so the conventionally-named file is governed as the module. This is a stated bound — correct for the configuration in which the `cfg_attr` path is inactive, and otherwise the scanner's cfg-blindness (it evaluates no `cfg`) compounded by the attribute-reading bound — never a silent claim.
+The system SHALL treat a file-form module declared with a `#[path = "…"]` attribute (`mod foo;`) as out of scope: its imports SHALL NOT be observed, and it SHALL NOT be a governable target. Module identity is observed from the conventional file path (`lib.rs`/`main.rs` → `crate`, `kernel/foo.rs` → `crate::kernel::foo`), and a `#[path]` attribute relocates the file away from that path, so a remapped module is not mapped to its declaration — a stated partial-coverage bound of the same family as inline and macro-generated items (see the scanner decision in `PROJECT.md`). The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes as remaps, without evaluating the predicate; a `cfg_attr` whose applied metas contain no genuine `path` name-value SHALL remain an ordinary module. This cfg-blind exclusion prevents a conditional remap from silently governing a same-named conventional orphan. A `path` attribute on an inline module (`mod foo { … }`) does not relocate it and SHALL NOT make that inline module disappear from reachability. Following a relocated file-form target remains out of scope and requires a deliberate amendment; the bound is stated, not silently relied upon.
 
 #### Scenario: A path-remapped module's imports are not observed
 
@@ -300,10 +300,20 @@ The system SHALL treat a module declared with a `#[path = "…"]` attribute as o
 - **WHEN** a boundary targets `crate::foo`, declared via `#[path = "weird/place.rs"] mod foo;`
 - **THEN** the system reports a constitution error (exit 2), because no conventionally-pathed source file backs the target — never a silent pass
 
-#### Scenario: A cfg_attr-wrapped path attribute is not recognized as a remap
+#### Scenario: A cfg_attr-wrapped path attribute is recognized as a remap
 
 - **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, a conventional `foo.rs` exists containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
-- **THEN** the system governs the conventional `foo.rs` and observes its import (the `cfg_attr`-wrapped `#[path]` is not detected) — a documented bound, correct where the `cfg_attr` path is inactive and otherwise cfg-blindness, never a silent claim
+- **THEN** the system treats `crate::foo` as remapped and reports it as out of scope (exit 2), rather than governing the conventional orphan or silently passing; the scanner does not evaluate whether `unix` is active
+
+#### Scenario: A nested cfg_attr-wrapped path attribute is recognized as a remap
+
+- **WHEN** a crate declares `#[cfg_attr(a, cfg_attr(b, path = "weird.rs"))] mod foo;`
+- **THEN** the system recursively recognizes the applied `path` name-value and treats `crate::foo` as remapped and out of scope
+
+#### Scenario: A cfg_attr without an applied path remains governable
+
+- **WHEN** a crate declares `#[cfg_attr(path, allow(dead_code))] mod foo;` with a conventional `foo.rs`
+- **THEN** the system does not mistake the predicate named `path` for a remap and governs the conventional module normally
 
 ### Requirement: A multi-target package's cross-root same-named submodule is a stated bound
 
@@ -366,4 +376,3 @@ The finding SHALL be the importing module path, deduplicated so one offending im
 
 - **WHEN** a boundary declares `must_only_be_imported_by([x])` on `crate` (the crate root)
 - **THEN** the system emits a self-describing constitution error and exits 2 — distinct from a boundary violation, never a silent pass — because every internal import would be within the protected subtree and the rule could never react as an inbound rule
-

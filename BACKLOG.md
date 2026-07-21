@@ -11,6 +11,94 @@ not APIs. A new observation dimension is **a crate, born when it is built** (nev
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
 `guibiao` core stays `serde_json`-only.
 
+## Backlog governance — evidence before promotion
+
+The live backlog is a decision surface, not a promise that every recorded idea will ship. Before a
+live item is promoted, it must name: **class**, **observed pressure**, **observation source**,
+**current reaction or bound**, **risk**, **promotion trigger**, **version class**, and **authority**
+(the spec, project decision, or code/test evidence that owns the claim). Classify it as:
+
+- **READY-PATCH** — supported pressure with a concrete source, and the correction preserves the
+  published API and current baseline/report identity wire. It may enter a `0.2.x` change or focused
+  non-OpenSpec maintenance PR according to the authority it changes.
+- **DESIGN-BREAKING** — a supported problem whose honest solution needs a public or wire migration.
+  It waits for its named forcing trigger and an OpenSpec proposal; being listed does not itself
+  promise `0.3.0`.
+- **WATCH** — plausible pressure without enough adopter, second-consumer, or correctness evidence.
+  Preserve the trigger, not a premature design.
+- **ACCEPTED DEBT** — a known, bounded risk whose current reaction or documented coverage bound is
+  intentionally sufficient. Reopen only when the recorded bound is defeated.
+- **DECLINED** — a considered direction rejected for a recorded reason. Reopen only with evidence
+  that invalidates that reason.
+- **BUILT / HISTORY** — shipped context retained only where it explains a live contract or trigger;
+  requirements live in `openspec/specs/*` and settled rationale in `PROJECT.md`.
+
+Classification and promotion remain human-reviewed judgment. Add an automated reaction only after
+an observable, repeated drift demonstrates what a machine can decide without pretending judgment is
+structural enforcement.
+
+## Live decision index — 0.2.x truth repair and the next breaking window
+
+This index makes the current work discoverable without duplicating the detailed evidence below.
+
+### READY-PATCH
+
+- **圭表 inline-to-file child reachability false negative.** **Pressure/source:**
+  `crates/guibiao/src/module_scan/reachability.rs` records that an inline `mod parent { mod child; }`
+  is marked reachable but its file-backed `child` is never walked; a real import in
+  `parent/child.rs` can therefore exit 0. **Current reaction:** none; existing reachability tests do
+  not cover this compiler-valid graph. **Risk:** the core contract's forbidden false negative.
+  **Trigger:** already fired by static trace and a minimal valid Rust shape; add a regression test
+  and repair the walk. **Version:** patch correctness fix, preserving public and identity wire.
+  **Authority:** module-boundary reachability requirement + core contract.
+- **圭表 unconditional `#[path]` parity.** **Pressure/source:** 渾儀 and 漏刻 follow an unconditional
+  remap while 圭表 deliberately excludes it, leaving imports in a relocated file unobserved.
+  **Current reaction:** an explicit module-boundary coverage bound. **Risk:** cross-dimension
+  divergence and a known blind spot, but not a code/spec violation today. **Trigger:** promote with
+  the inline-child correctness work only if the proposal deliberately amends that bound and proves
+  rustc path-base parity; otherwise keep it separate. **Version:** additive false-negative closure,
+  patch-safe. **Authority:** module-boundary spec + module-source hardening below.
+- **Cross-scanner conformance matrix.** **Pressure/source:** 圭表 and 漏刻 have accumulated related
+  lexical repairs around module/path handling and nested block comments, but no executable parity
+  ledger says where their neutral token behavior should agree. **Current reaction:** separate local
+  test suites. **Risk:** a fix can drift or silently remain absent in its sibling scanner.
+  **Trigger:** pin only the shared, judgment-neutral cases in a conformance matrix before deciding
+  extraction. **Version:** test/internal patch. **Authority:** the 璇璣 judgment-neutral parsing
+  decision in `PROJECT.md`.
+- **Remove or turn temporary louke repros into assertions.** **Pressure/source:**
+  `zzz_tmp_finder_repro_nonmodrs_path_base` and `zzz_tmp_finder_repro_fn_orphan` only print outcomes,
+  so they pass regardless of behavior. **Current reaction:** none in those two tests; formal path
+  tests cover related behavior elsewhere. **Risk:** misleading green evidence and stale test noise.
+  **Trigger:** immediate test-hygiene cleanup, preserving any unique fixture as an asserted regression.
+  **Version:** test-only patch. **Authority:** louke audit tests.
+
+### DESIGN-BREAKING
+
+- **Identity v3 migration bundle.** **Pressure/source:** version-2 identity still couples human
+  `rule` presentation to `ViolationId` and SARIF `ruleId`; SARIF fingerprints remain presentation
+  bearing; unsafe facts compress form/trait/owner/name into one label; async facts have not decided
+  whether identity is the seam or exact signature. **Current reaction:** exhaustive v2 schema
+  catalogs and v1/v2 baseline compatibility freeze the existing wire throughout 0.2.x. **Risk:** a
+  piecemeal fix would churn baselines or create two competing identities. **Trigger:** a verified
+  adopter migration need or correctness failure that cannot be solved additively. **Version:** one
+  coordinated `0.3.0` OpenSpec migration: stable rule key, SARIF fingerprint v2, unsafe decomposition,
+  async decision, and baseline v3 compatibility. **Authority:** the post-0.2 identity-pressure
+  section below and the structured-identity decisions in `PROJECT.md`.
+
+### WATCH / ACCEPTED / DECLINED / BUILT
+
+- **WATCH:** judgment-neutral lexer/token extraction is now plausible, but the conformance work must
+  first prove a cross-scanner false negative or a third scanner before the `PROJECT.md` trigger is
+  treated as fired; `cfg_attr(path)` observe-both semantics, a reusable testing harness, qianyi
+  generator, LSP/editor integration, and a debt ratchet remain gated by their detailed triggers below.
+- **ACCEPTED DEBT:** multi-target conventional-path conflation, macro/configuration coverage bounds,
+  and file-granular un-auditable-probe identity remain bounded as documented below.
+- **DECLINED:** keep the existing explicitly rejected directions under their recorded rationale;
+  this index does not reopen them.
+- **BUILT / HISTORY:** shipped capability ledgers below are historical context, not live work. New
+  work starts from the live classes above, then moves through OpenSpec where capability behavior
+  changes.
+
 ## Version horizons — what 0.2.x carries vs what earns the next breaking window
 
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
@@ -494,7 +582,7 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   lib/bin `src_path` as the compiled source root, and `#[path]`-remapped modules stay outside the
   reachable graph instead of being governed through a same-named conventional orphan file. This is
   a false-negative closure / stated-bound repair, not a new capability.
-  - **Forward candidate — follow unconditional `#[path]` in 圭表 (0.3.x depth, non-breaking).** As of
+  - **Forward candidate — follow unconditional `#[path]` in 圭表 (patch-safe depth, non-breaking).** As of
     0.2.1, 渾儀 and 漏刻 **follow** an unconditional `#[path = "…"] mod x;` to its target (base = the
     containing file's own dir with each enclosing inline-`mod` name accumulated onto it, rustc's
     mod-rs-blind rule; `cfg_attr` stays a bound). 圭表 still holds the v0.1.4 posture of keeping such
