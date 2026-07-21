@@ -65,12 +65,6 @@ This index makes the current work discoverable without duplicating the detailed 
   **Trigger:** pin only the shared, judgment-neutral cases in a conformance matrix before deciding
   extraction. **Version:** test/internal patch. **Authority:** the 璇璣 judgment-neutral parsing
   decision in `PROJECT.md`.
-- **Remove or turn temporary louke repros into assertions.** **Pressure/source:**
-  `zzz_tmp_finder_repro_nonmodrs_path_base` and `zzz_tmp_finder_repro_fn_orphan` only print outcomes,
-  so they pass regardless of behavior. **Current reaction:** none in those two tests; formal path
-  tests cover related behavior elsewhere. **Risk:** misleading green evidence and stale test noise.
-  **Trigger:** immediate test-hygiene cleanup, preserving any unique fixture as an asserted regression.
-  **Version:** test-only patch. **Authority:** louke audit tests.
 
 ### DESIGN-BREAKING
 
