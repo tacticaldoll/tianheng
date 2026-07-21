@@ -12,6 +12,8 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-21
+
 ### Changed
 - Published finding schemas and their dimension-local canonicalizers are now exhaustively pinned as
   compatibility reactions. Human finding wording remains presentation and is deliberately not
@@ -279,7 +281,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.10...v0.2.0
 [0.1.10]: https://github.com/tacticaldoll/tianheng/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/tacticaldoll/tianheng/compare/v0.1.8...v0.1.9
