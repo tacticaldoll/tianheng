@@ -141,6 +141,15 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   different ordinals and escaped dedup, inflating one real trait-impl-locality or forbidden-marker
   finding into two. Fixed with the identical dedup, keyed on (declared name, canonical file) so two
   different names legitimately `#[path]`-remapped to the same file are never conflated.
+- A seventh round found the sibling gap the round-6 `use`-map fix had explicitly flagged but not
+  yet confirmed: `exposure.rs::module_findings` fixed its `use`-map per `#[cfg]`-branch file, but
+  still computed `child_mods`/`externs_type`/`externs_reexport`/`renames_bare` once over the
+  flattened cross-branch union — a branch with no local `mod net;` had its own genuine `pub use
+  net::Something;` (the real extern crate) silently suppressed merely because a
+  mutually-exclusive sibling branch happened to declare its own local `mod net`. The identical gap
+  existed in `crate_scope.rs::extern_resolution` (feeding `shape_scan.rs::operand_module_findings`,
+  backing the dyn-trait/impl-trait operand-scoped boundaries). Both are now computed per file,
+  looked up by each exposure's own branch, never shared across mutually-exclusive branches.
 
 ## [0.2.1] - 2026-07-21
 

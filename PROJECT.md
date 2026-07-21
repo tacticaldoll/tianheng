@@ -214,7 +214,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a deliberate non-goal here; if ever wanted it is a separate amendment.
 - **A cfg-blind union that makes several physically distinct files share one logical identity
   must never let per-module bookkeeping (an ancestor set, a structural lookup) act on that shared
-  identity as if it named one file.** **(0.2.2 lesson, in six rounds — confirmed across
+  identity as if it named one file.** **(0.2.2 lesson, in seven rounds — confirmed across
   two independent crates.)** Landing the
   unconditional-`#[path]`-follow work (above) first tracked cycle-guard "already-open source
   files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
@@ -370,6 +370,23 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   closes one data shape's cross-branch conflation (files) does not by itself close a SIBLING data
   shape's identical conflation (use-maps, or a sibling walker's own missing dedup) computed from
   the same underlying union.
+  A **seventh** round confirmed exactly the sibling gap round 6's own writeup had flagged but left
+  unconfirmed: `exposure.rs::module_findings` fixed its `use`-map per file in round 6 but left
+  `child_mods`/`externs_type`/`externs_reexport`/`renames_bare` computed once over the SAME
+  flattened cross-`#[cfg]`-branch union — a branch with no local `mod net;` had its own genuine
+  `pub use net::Something;` (the real extern crate) silently suppressed merely because a
+  MUTUALLY-EXCLUSIVE sibling branch happened to declare its own local `mod net`. The identical
+  shape existed one layer down in `crate_scope.rs::extern_resolution` (feeding
+  `shape_scan.rs::operand_module_findings`, backing the dyn-trait/impl-trait operand-scoped
+  boundaries) — `externs_type`/`renames_bare` there were *also* computed once over the flattened
+  union, never split by file. Both fixed the same way as the `use`-map: a per-file `FileScope`
+  (exposure.rs) / `FileExternScope` (crate_scope.rs) computed from each branch's own items alone,
+  looked up by each exposure's own file — never a value shared across mutually-exclusive branches.
+  This is the clearest demonstration yet of the recurring lesson: round 6 fixed ONE instance
+  (`use`-maps) of a conflation that had FOUR siblings in the same function (and a fifth in a
+  parallel function one file away) — flagging the risk in the fix's own commit message was
+  necessary but not sufficient; only the next round's adversarial pass, armed with a real
+  constructed repro, actually confirmed and closed it.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

@@ -4947,6 +4947,46 @@ fn dyn_operand_matches_a_reexported_trait_by_its_defining_path() {
 }
 
 #[test]
+fn a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_principal() {
+    // Round-7 finding: extern_resolution computed externs_type/renames_bare ONCE over the
+    // flattened union of every #[cfg] branch's items (feeding operand_module_findings, backing
+    // dyn-trait/impl-trait operand-scoped boundaries) -- the identical conflation round 6 fixed
+    // for signature-coupling's use-map, left unfixed here too. The "u" branch (platform.rs)
+    // declares a LOCAL `mod traits { .. }`; the mutually-exclusive "w" branch (win_platform.rs)
+    // has no local `mod traits` at all and its own `dyn traits::Marker` genuinely names the real
+    // extern crate `traits`. Before the fix, the "u" branch's local `mod traits` silently
+    // suppressed the "w" branch's own genuine extern dyn-principal match.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")] pub mod platform;\n\
+             #[cfg(feature = \"w\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+        ),
+        (
+            "platform.rs",
+            "pub mod traits { pub trait Marker {} }\npub fn open() -> u8 { 0 }\n",
+        ),
+        (
+            "win_platform.rs",
+            "pub fn f() -> Box<dyn traits::Marker> { todo!() }\n",
+        ),
+    ];
+    assert_eq!(
+        dyn_operand_findings(
+            "cfg-sibling-childmod-shadow",
+            files,
+            "crate::platform",
+            &["traits::Marker"],
+            &["traits"],
+        )
+        .unwrap(),
+        ["dyn traits::Marker exposed by fn crate::platform::f"],
+        "the w branch's own genuine extern dyn-principal must react, regardless of the u \
+         branch's own local mod traits",
+    );
+}
+
+#[test]
 fn dyn_operand_ignores_auto_trait_markers() {
     // `dyn Port + Send`: the sole non-auto trait is Port. Forbidding Port flags it; forbidding
     // only the Send marker flags nothing (Send is an auto trait, never an operand, and a bare Send
@@ -6686,6 +6726,44 @@ fn a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others() {
         violations.len(),
         1,
         "the unix arm's leak() -> Handle genuinely exposes crate::infra::Db and must react: {violations:?}"
+    );
+}
+
+#[test]
+fn a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_reexport() {
+    // Round-7 finding: module_findings still computed child_mods/externs_type/externs_reexport/
+    // renames_bare ONCE over the flattened union of every #[cfg] branch's items -- the identical
+    // conflation round 6 fixed for the use-map, left unfixed here. The "u" branch (platform.rs)
+    // declares a LOCAL `mod net { .. }`; the mutually-exclusive "w" branch (win_platform.rs) has
+    // no local `mod net` at all and its own `pub use net::Something;` genuinely names the real
+    // extern crate `net` -- verified against real rustc/cargo (win_platform.rs alone, with the
+    // `net` dependency declared, compiles cleanly). Before the fix, the "u" branch's local `mod
+    // net` silently suppressed the "w" branch's own genuine extern re-export, since child_mods
+    // (computed over the union) always contained "net".
+    let out = findings_with_deps(
+        "cfg-sibling-childmod-shadow",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(feature = \"u\")] pub mod platform;\n\
+                 #[cfg(feature = \"w\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            (
+                "platform.rs",
+                "pub mod net { pub struct Something; }\npub fn open() -> u8 { 0 }\n",
+            ),
+            ("win_platform.rs", "pub use net::Something;\n"),
+        ],
+        "crate::platform",
+        &["net::Something"],
+        &["net"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["net::Something exposed by pub use crate::platform::Something"],
+        "the w branch's own genuine extern re-export must react, regardless of the u branch's \
+         own local mod net: {out:?}"
     );
 }
 
