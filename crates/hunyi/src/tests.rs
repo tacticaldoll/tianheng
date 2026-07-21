@@ -3518,6 +3518,32 @@ fn unsafe_in_an_unconditional_path_remapped_module_reacts() {
 }
 
 #[test]
+fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
+    // rustc 1.x ground truth: a non-inline `#[path="bar.rs"]` written INSIDE src/foo.rs (reached via
+    // `mod foo;`) resolves to src/bar.rs — the CONTAINING file's own directory — NOT src/foo/bar.rs.
+    // The real unsafe fn lives at the rustc-correct src/bar.rs; a decoy sits at the wrong src/foo/bar.rs
+    // the earlier (buggy) child_dir base would have read. Resolving from child_dir reads the decoy and
+    // drops the real unsafe (Ok([]) — the forbidden false negative); this pins the corrected base.
+    let out = unsafe_labels(
+        "path-nonmodrs",
+        &[
+            ("lib.rs", "pub mod foo;\n"),
+            ("foo.rs", "#[path = \"bar.rs\"]\npub mod bar;\n"),
+            ("bar.rs", "pub unsafe fn poke() {}\n"),
+            ("foo/bar.rs", "pub fn decoy() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::foo::bar"],
+        "a #[path] inside a non-mod.rs file resolves from that file's own dir (src/bar.rs), not \
+         src/foo/bar.rs: {out:?}"
+    );
+}
+
+#[test]
 fn unsafe_in_a_body_nested_mod_reacts() {
     // The propose-review false-negative guard: a `mod` inside a fn body is not descended by the
     // top-level walk; the collector's default recursion must still catch its unsafe.

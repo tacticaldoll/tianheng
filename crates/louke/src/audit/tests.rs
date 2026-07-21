@@ -221,6 +221,33 @@ fn an_unconditional_path_attribute_is_followed_to_its_target() {
 }
 
 #[test]
+fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
+    let base = std::env::temp_dir().join(format!("louke-path-nonmodrs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // rustc ground truth: a non-inline `#[path="bar.rs"]` inside foo.rs (reached via `mod foo;`)
+    // resolves to <root>/bar.rs — foo.rs's OWN directory — not <root>/foo/bar.rs. bar.rs probes an
+    // UNDECLARED seam, so the rustc-correct verdict is a probed-but-undeclared enforce violation
+    // (exit 1). A decoy at foo/bar.rs (the buggy child_base location) has no probe: reading it would
+    // return Clean/exit 0 — the forbidden false negative. This pins the corrected containing-file dir.
+    let root = write_source(&base, "lib.rs", "mod foo;");
+    write_source(&base, "foo.rs", "#[path = \"bar.rs\"]\nmod bar;");
+    write_source(
+        &base,
+        "bar.rs",
+        "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
+    );
+    write_source(&base, "foo/bar.rs", "fn decoy() {}");
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a #[path] inside a non-mod.rs file resolves from its own dir (bar.rs, undeclared seam -> \
+         exit 1), never the foo/bar.rs decoy (which would be a silent exit-0 FN): {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
 fn an_absent_unconditional_path_target_is_a_constitution_error() {
     let base = std::env::temp_dir().join(format!("louke-path-absent-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
@@ -951,4 +978,53 @@ fn a_seam_level_runtime_violation_has_no_file() {
         "a seam-level runtime violation has no source file: {violations:?}"
     );
     let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn zzz_tmp_finder_repro_nonmodrs_path_base() {
+    let base = std::env::temp_dir().join(format!("louke-finder-repro-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // Finder repro: #[path] inside a NON-mod-rs file (app.rs, reached via `mod app;` in lib.rs).
+    // rustc resolves the target relative to app.rs's OWN directory => src/relocated.rs.
+    let root = write_source(&base, "lib.rs", "pub mod app;\n");
+    write_source(
+        &base,
+        "app.rs",
+        "#[path = \"relocated.rs\"]\npub mod worker;\n",
+    );
+    // The real compiled target (what rustc uses) with the probe:
+    write_source(
+        &base,
+        "relocated.rs",
+        "fn inner() { assert_boundary!(\"relocated-seam\", o); }\n",
+    );
+    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    eprintln!("TMP_REPRO outcome = {outcome:?}");
+    eprintln!("TMP_REPRO exit = {}", outcome.exit_code());
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn zzz_tmp_finder_repro_fn_orphan() {
+    let base = std::env::temp_dir().join(format!("louke-finder-fn-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = write_source(&base, "lib.rs", "pub mod app;\n");
+    write_source(
+        &base,
+        "app.rs",
+        "#[path = \"relocated.rs\"]\npub mod worker;\n",
+    );
+    // The REAL compiled target (rustc uses this): has an assert on an UNDECLARED seam -> should react.
+    write_source(
+        &base,
+        "relocated.rs",
+        "fn inner() { assert_boundary!(\"undeclared-seam\", o); }\n",
+    );
+    // An orphan at louke's wrong join path (src/app/relocated.rs): louke scans THIS instead. No probe.
+    write_source(&base, "app/relocated.rs", "fn inner() {}\n");
+    // No declared boundaries: an assert on "undeclared-seam" in the REAL target must be caught.
+    let outcome = audit_probe_coverage(&[], &[root]);
+    eprintln!("TMP_FN outcome = {outcome:?}");
+    eprintln!("TMP_FN exit = {}", outcome.exit_code());
+    let _ = std::fs::remove_dir_all(base);
 }
