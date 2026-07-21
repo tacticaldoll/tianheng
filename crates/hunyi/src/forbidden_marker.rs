@@ -158,6 +158,7 @@ pub(crate) fn forbidden_marker_findings(
                 &site.module,
                 &scan.alias_targets,
                 &scan.reexports,
+                &site.type_params,
             ) else {
                 continue; // self-type not placeable (glob/external/complex) — a stated bound
             };

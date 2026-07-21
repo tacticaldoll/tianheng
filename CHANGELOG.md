@@ -163,6 +163,21 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   by that index instead of by file alone. The async-exposure subtree walker needed no matching
   change — its own child walker already gave each inline occurrence its own entry and never grouped
   sibling entries by file.
+- A round-9 review found `forbidden_marker.rs`'s marker-acquisition gate resolving a bare `impl`
+  self type with no awareness that it might be the impl block's own declared generic type parameter:
+  a blanket `impl<T> Marker for T {}` in a module with an unrelated `use ... as T` alias resolved
+  `T` through that alias, fabricating a marker finding on a type the source never actually impls the
+  marker for. The sibling exposure collectors already shadowed an impl's own generic-param names for
+  every other position, but the crate-wide scan's `ImplSite` never carried them and the self-type
+  gate never consulted them. Fixed by giving `ImplSite` its own declared generic-param names and
+  dropping a bare self type that matches one of them before any resolution is attempted.
+- The same round found 漏刻's `mod_preamble_attrs` locating a `mod` declaration's own attribute
+  preamble via a backward raw-byte scan for `;`/`{`/`}` — the only traversal in that file not
+  literal/comment-aware. An earlier attribute's own string value containing a bare `;` in ordinary
+  prose (e.g. a `#[doc = "..."]`) desynced the scan, silently swallowing a later `#[path = "..."]`
+  attribute and either hard-failing on a module that genuinely compiles or silently substituting the
+  wrong file. Fixed by replacing it with a forward, literal-aware scan from the enclosing scope's
+  own start, matching every other traversal in the file.
 
 ## [0.2.1] - 2026-07-21
 

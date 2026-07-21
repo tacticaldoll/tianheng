@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use syn::parse::Parser;
 use syn::visit::{self, Visit};
 
+use crate::collect::type_param_names;
 use crate::crate_scope::{child_module_names, local_type_namespace_names};
 use crate::errors::missing_module_file_error;
 use crate::module_resolve::{locate_module_file, read_parse, resolve_module_branches};
@@ -25,13 +26,19 @@ use crate::syn_util::{direct_path_value, has_path_attr};
 /// One impl site observed in the crate: its enclosing module path, the **real file it was read
 /// from** (its own branch's file — never re-resolved afterward from the module string, which
 /// misattributes a finding whenever two `#[cfg]`-split branches share one module path), the
-/// written trait path, the implemented-for type, and that module's `use`-map (for resolution).
+/// written trait path, the implemented-for type, that module's `use`-map (for resolution), and the
+/// impl block's own declared generic **type-parameter names** (`impl<T> Marker for T {}`'s `T`) —
+/// needed so a bare self type that is actually the impl's own parameter is never resolved through a
+/// same-named `use … as <param>` alias in scope in that module (a fabricated marker-acquisition
+/// finding for a type the impl never names at all; the sibling exposure collectors already shadow
+/// impl-generic-param names for this exact reason, see `collect.rs::type_param_names`).
 pub(crate) struct ImplSite {
     pub(crate) module: String,
     pub(crate) file: PathBuf,
     pub(crate) trait_path: syn::Path,
     pub(crate) self_ty: syn::Type,
     pub(crate) uses: UseMap,
+    pub(crate) type_params: HashSet<String>,
 }
 
 /// One type definition observed in the crate: its canonical path (`module::Name`), the module
@@ -453,6 +460,7 @@ fn walk_module(
                     trait_path: trait_path.clone(),
                     self_ty: (*impl_item.self_ty).clone(),
                     uses: uses.clone(),
+                    type_params: type_param_names(&impl_item.generics),
                 });
             }
             syn::Item::Struct(i) => {

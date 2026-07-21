@@ -410,6 +410,39 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   by file" was itself an unexamined stand-in for "grouped by branch" that happened to coincide for
   every shape tested through round 7 — the fix that finally closes it replaces the file key with
   the actual identity the whole model has been about since round 4.
+- **A round-9 adversarial pass, scoped to fresh surfaces the eight rounds above never touched
+  (forbidden-marker's own self-type gate, and 漏刻's probe scanner), found two unrelated bugs —
+  a different bug class each, not the cfg-branch conflation above.** First: `forbidden_marker.rs`'s
+  marker-acquisition gate (`resolve_self_type` in `containment.rs`) resolved a bare `impl` self type
+  exactly like any other path reference, with no notion that the identifier might be the impl
+  block's OWN declared generic type parameter rather than a nominal type — so a blanket
+  `impl<T> Marker for T {}` in a module that also happened to declare an unrelated `use … as T`
+  alias resolved `T` through that alias, fabricating a marker-acquisition finding on a type the
+  source never actually impls the marker for. The sibling exposure collectors already shadow an
+  impl's own generic-param names for every OTHER position (`collect.rs::type_param_names`,
+  guarding the existing `a_trait_impl_generic_param_shadowing_an_alias_is_not_exposed` regression),
+  but that shadowing was never carried into the crate-wide scan's `ImplSite` (backing
+  forbidden-marker, trait-impl-locality, and unsafe-confinement) or into the self-type gate
+  specifically. Fixed by giving `ImplSite` its own `type_params: HashSet<String>` (the impl's
+  declared generic names, via the now-`pub(crate)` `type_param_names`) and threading it into
+  `resolve_self_type`, which now drops a bare self type matching one of them before any resolution
+  is attempted — the same "stated bound, never a silent claim" treatment already given to any other
+  non-placeable self-type shape. Second: 漏刻's `mod_preamble_attrs` (the probe scanner's own
+  attribute-preamble reader) found where a `mod name;`/`mod name {`'s preamble begins by scanning
+  **backward** from the `mod` keyword for the nearest raw byte equal to `;`/`{`/`}` — the only
+  traversal in the whole file that was NOT literal/comment-aware, unlike every other walk there,
+  which routes through `skip_literal_or_comment` for exactly this reason. An EARLIER attribute's own
+  string value containing a bare `;` in ordinary prose (`#[doc = "Handles A; falls back to B."]`)
+  stopped the backward scan mid-literal, desyncing the forward attribute walk that followed: it read
+  the string's own closing quote as the opener of a bogus new string, swallowing a later
+  `#[path = "…"]` attribute's own `#` inside it — so the scanner never saw the real relocation and
+  either hard-failed on a module that genuinely compiles, or silently substituted the wrong
+  (conventional) file. Fixed by replacing the backward raw-byte scan with a **forward**,
+  literal-aware scan from the enclosing scope's own start (a real, always-outside-any-literal
+  boundary) up to the `mod` keyword, tracking the last `;`/`{`/`}` seen outside any literal/comment —
+  matching every other traversal in the file. Both confirmed with a real, executed, then-reverted
+  repro; both closed root-cause, not deferred, since both are genuine false positives / false
+  hard-failures on valid, `cargo build`-clean code, not a narrow or hypothetical edge.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

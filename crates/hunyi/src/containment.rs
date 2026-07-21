@@ -48,6 +48,17 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 /// `impl M for Bar` where `type Bar = Real`, both land on the real definition (to coherence a
 /// re-export/alias denotes the same type, so the marker genuinely lands there).
 ///
+/// `impl_type_params` shadows the impl block's OWN declared generic type-parameter names
+/// (`impl<T> Marker for T {}`'s `T`): a bare self type naming one of them is a parameter use, not a
+/// nominal type, so it must never resolve through a same-named `use … as <param>` alias that
+/// happens to be in scope in that module — the identical shadowing the exposure collectors already
+/// apply (`collect.rs::type_param_names`) for every OTHER impl-site position, but which the
+/// marker-acquisition self-type check lacked (found on a round-9 adversarial review: a blanket
+/// `impl<T> Marker for T {}` in a module with an unrelated `use crate::domain::Innocent as T;`
+/// fabricated a marker-acquisition finding on `Innocent`, which the source never actually impls
+/// the marker for). A stated bound, same treatment as any other non-placeable shape: dropped, never
+/// a silent claim of a resolved landing.
+///
 /// The canonicalization is folded in **here** so a self-type is canonical *by construction*: a
 /// caller cannot resolve a self-type and forget to close the re-export/alias hop (the sibling
 /// capabilities' shared-canonicalizer discipline, made structural at the one self-type resolver).
@@ -64,9 +75,21 @@ pub(crate) fn resolve_self_type(
     module: &str,
     alias_targets: &HashMap<String, String>,
     reexports: &ReexportMap,
+    impl_type_params: &HashSet<String>,
 ) -> Option<String> {
     let base = match self_ty {
-        syn::Type::Path(tp) => resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?,
+        syn::Type::Path(tp) => {
+            // A bare single-segment self type naming the impl's own type parameter is a parameter
+            // use, never a nominal type — dropped before any resolution is attempted, exactly like
+            // the sibling exposure collectors' shadowing (matching `impl<T> ... for T {}` here would
+            // otherwise resolve `T` through an unrelated same-named alias in scope).
+            if let Some(seg) = tp.path.get_ident() {
+                if impl_type_params.contains(&strip_raw(&seg.to_string())) {
+                    return None;
+                }
+            }
+            resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?
+        }
         _ => return None,
     };
     let mut landing = base;

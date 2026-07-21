@@ -125,7 +125,7 @@ pub(crate) fn collect_item_async_exposures(
 
 /// The generic **type-parameter** names declared by `generics` — the names that, used bare, are
 /// parameters rather than nominal types (so a same-named `type` alias must not resolve them).
-fn type_param_names(generics: &syn::Generics) -> std::collections::HashSet<String> {
+pub(crate) fn type_param_names(generics: &syn::Generics) -> std::collections::HashSet<String> {
     generics
         .params
         .iter()

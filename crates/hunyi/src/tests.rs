@@ -4480,6 +4480,39 @@ fn a_forbidden_marker_on_a_local_type_alias_reacts() {
 }
 
 #[test]
+fn a_blanket_impls_own_generic_param_is_not_resolved_through_a_same_named_alias() {
+    // Round-9 finding: resolve_self_type (containment.rs) resolved a bare self type exactly like
+    // any other path reference, with no awareness that the identifier might be the impl's OWN
+    // declared generic type parameter rather than a nominal type. `impl<T> Marker for T {}` (a
+    // blanket impl — T is a parameter use, not a type) in a module that also happens to declare an
+    // unrelated `use ... as T` alias resolved the self type through that alias, fabricating a
+    // marker-acquisition finding on the aliased type even though the source never writes `impl
+    // Marker for` it at all. The sibling exposure collectors already shadow an impl's own generic
+    // params for every OTHER position (collect.rs::type_param_names); the marker gate's self-type
+    // check lacked the identical shadowing. Fixed by threading each ImplSite's own
+    // `type_params` (impl<T, ..>'s declared names) into resolve_self_type, which now drops a bare
+    // self type matching one of them before any resolution is attempted.
+    let out = marker_findings(
+        "blanket-impl-generic-param-shadow",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use crate::domain::sub::Innocent as T;\npub mod sub { pub struct Innocent; }\npub trait Marker {}\nimpl<T> Marker for T {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a blanket impl's own generic param T must not resolve through the unrelated `use ... as T` \
+         alias in scope in that module — the source never impls Marker for Innocent: {out:?}"
+    );
+}
+
+#[test]
 fn a_forbidden_marker_on_an_alias_to_a_foreign_type_is_clean() {
     // A `type` alias defines no new type — coherence sees through it —
     // so a marker impl'd on an alias to a FOREIGN/prelude type governs no subtree type and must NOT
