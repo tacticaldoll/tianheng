@@ -125,6 +125,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   as "already found," even though the `kernel` candidate itself was never walked — silently
   un-governing it. Comparing **literal** (never canonicalized) path identity instead closes this:
   two on-disk paths are never literally equal merely because they resolve to the same target.
+- The same round found 渾儀's signature-coupling and shape/existential (dyn-trait, impl-trait)
+  single-module resolvers computing their `use`-map ONCE over the flattened union of every
+  `#[cfg]`-split branch's items, so two mutually-exclusive branches each declaring `use <different
+  path> as Handle;` (a realistic per-platform shim) collided in one shared map — the branch unioned
+  last silently overwrote the earlier branch's alias, misresolving the first branch's own bare
+  reference through the second branch's `use` and hiding a real forbidden-exposure violation. The
+  `use`-map is now computed per file, looked up by each item's own branch file.
 
 ## [0.2.1] - 2026-07-21
 

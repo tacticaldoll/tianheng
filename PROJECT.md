@@ -339,9 +339,22 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   path identity instead of canonical identity — two distinct on-disk paths are never literally
   equal merely because they resolve to the same target, so the aliasing hazard cannot arise, while
   the original round-5 false negative (a candidate whose own literal path was never in the walked
-  file list at all) is still caught exactly as before. Six rounds now: even a fix produced BY an
-  adversarial-review round is not exempt from the next round's scrutiny — the lesson applies
-  recursively to its own remedies, not just the original bug.
+  file list at all) is still caught exactly as before.
+  The same round found a distinct, previously-unnoticed instance of the founding lesson in 渾儀:
+  `module_findings` (exposure.rs) and `shape_module_findings`/`operand_module_findings`
+  (shape_scan.rs) each called `collect_uses` ONCE over the flattened cross-branch union
+  `resolve_module_items_with_files` returns — the identical items/file conflation the round-5
+  redesign closed for FILE attribution, left unfixed for the `use`-map. Two mutually-exclusive
+  `#[cfg]` branches each declaring `use <different path> as Handle;` (a realistic per-platform
+  shim) collided in the one shared map; the branch unioned last silently overwrote the earlier
+  branch's alias, misresolving the FIRST branch's own bare reference through the SECOND branch's
+  `use` and hiding a real forbidden-exposure violation — a genuine false negative, not a
+  hypothetical. Fixed the same way round 5 fixed file attribution: a `use`-map PER FILE, looked up
+  by each item's own branch file rather than one map merged across the whole module. Six rounds
+  now: even a fix produced BY an adversarial-review round is not exempt from the next round's
+  scrutiny — the lesson applies recursively to its own remedies, not just the original bug, and a
+  redesign that closes one data shape's cross-branch conflation (files) does not by itself close a
+  SIBLING data shape's identical conflation (use-maps) computed from the same underlying union.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
