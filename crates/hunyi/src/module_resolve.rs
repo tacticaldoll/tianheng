@@ -1,9 +1,11 @@
 //! Module resolution — descend a `crate::a::b` path from the crate root to the items it owns
 //! **and** the source file they live in, in one traversal so the two views cannot drift (a
 //! `mod`-resolution divergence is the false-negative class the project forbids). Handles inline
-//! `mod x { … }` and file `mod x;` (`<name>.rs` / `<name>/mod.rs`); a `#[path]`-remapped module
-//! is skipped (matching `walk_module`'s crate-wide skip), falling through to a loud
-//! `unknown_module_error` rather than governing a stale conventional file.
+//! `mod x { … }` and file `mod x;` (`<name>.rs` / `<name>/mod.rs`); an **unconditional**
+//! `#[path = "…"]` file module is followed to its author-chosen file (matching `walk_module`'s
+//! crate-wide policy), while an inline or `cfg_attr`-wrapped `#[path]` is not followed here — a
+//! narrow **fail-loud** bound (`unknown_module_error`, exit 2), never a silent pass and never
+//! governing a stale conventional file.
 
 use std::path::{Path, PathBuf};
 
@@ -12,7 +14,7 @@ use crate::errors::{
     unreadable_source_error,
 };
 use crate::resolve::strip_raw;
-use crate::syn_util::has_path_attr;
+use crate::syn_util::{direct_path_value, has_path_attr};
 
 /// The path segments of a module relative to the crate root: `crate::domain::sub` →
 /// `["domain", "sub"]`; `crate` → `[]`. A leading `crate` is stripped; canonicalized so a
@@ -108,9 +110,10 @@ fn descend(
     // (syn does not evaluate `cfg`), so resolving only the source-first variant would let a
     // forbidden item in another variant pass unobserved — a `mod`-resolution divergence, the
     // false-negative class this resolver exists to prevent. This matches the crate-wide scan's
-    // observe-all, cfg-blind policy (`scan::resolve_child_modules`). A `#[path]`-remapped module is
-    // not observed (a stated bound, matching `walk_module`'s crate-wide skip). Inline items live in
-    // the enclosing file, so `current_file` is unchanged; file-children live under `<child_dir>/x/`.
+    // observe-all, cfg-blind policy (`scan::resolve_child_modules`). An unconditional `#[path]` file
+    // module is followed below; an inline `#[path]` variant is not merged into this union (a narrow
+    // fail-loud bound). Inline items live in the enclosing file, so `current_file` is unchanged;
+    // file-children live under `<child_dir>/x/`.
     let mut inline: Vec<syn::Item> = Vec::new();
     for item in &items {
         if let syn::Item::Mod(module_item) = item {
@@ -140,9 +143,37 @@ fn descend(
     // pair names one file, so the first match suffices.)
     for item in &items {
         if let syn::Item::Mod(module_item) = item {
-            if has_path_attr(&module_item.attrs)
-                || strip_raw(&module_item.ident.to_string()) != *seg
-            {
+            if strip_raw(&module_item.ident.to_string()) != *seg {
+                continue;
+            }
+            // Follow an **unconditional** `#[path = "…"]` file module: load `<child_dir>/<rel>` and,
+            // since a `#[path]`-loaded file is mod-rs-like, descend with its own directory as the
+            // base for the next segment's children. An inline `#[path]` (has a body) or a
+            // `cfg_attr`-wrapped `#[path]` is not followed by this targeted resolver — a narrow
+            // **fail-loud** bound (exit 2 "cannot judge"), never a silent pass; the whole-crate
+            // walks that carry the coverage property do follow the unconditional form.
+            if module_item.content.is_none() {
+                if let Some(rel) = direct_path_value(&module_item.attrs) {
+                    let file = child_dir.join(&rel);
+                    if !file.is_file() {
+                        return Err(missing_module_file_error(module, crate_package));
+                    }
+                    let parsed = read_parse(&file)?;
+                    let next_dir = file
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| child_dir.clone());
+                    return descend(
+                        parsed.items,
+                        next_dir,
+                        file,
+                        &segments[1..],
+                        module,
+                        crate_package,
+                    );
+                }
+            }
+            if has_path_attr(&module_item.attrs) {
                 continue;
             }
             let file = locate_module_file(&child_dir, seg)

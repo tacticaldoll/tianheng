@@ -84,7 +84,7 @@ A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so 
 
 ### Requirement: Anchor resolution and observation bounds
 
-If the boundary's target crate is absent from the workspace, the system SHALL treat it as a constitution error (exit 2). An acquisition the syntactic scan cannot observe — a derive/impl produced by a macro, a `#[path]`-remapped module, or a hand-impl whose self-type cannot be resolved to a subtree definition (a glob/external/complex-generic self-type) — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction; `#[cfg]`-gated code is observed as written. A `#[derive(...)]` whose arguments fail to parse SHALL be a scan error (exit 2), never a silent skip. Within the observed scope there SHALL be no false negative.
+If the boundary's target crate is absent from the workspace, the system SHALL treat it as a constitution error (exit 2). An acquisition the syntactic scan cannot observe — a derive/impl produced by a macro, a module reached only through a `cfg_attr`-wrapped `#[path]` remap (an **unconditional** `#[path = "…"]` module IS followed and observed), or a hand-impl whose self-type cannot be resolved to a subtree definition (a glob/external/complex-generic self-type) — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction; `#[cfg]`-gated code is observed as written. A `#[derive(...)]` whose arguments fail to parse SHALL be a scan error (exit 2), never a silent skip. Within the observed scope there SHALL be no false negative.
 
 #### Scenario: An unresolvable hand-impl self-type is a documented bound
 

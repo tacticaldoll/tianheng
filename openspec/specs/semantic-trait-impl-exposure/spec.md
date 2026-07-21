@@ -147,7 +147,8 @@ fallback policy as signature-coupling** — a bare, unqualified local name SHALL
 against the current module (`BareFallback::Ignore`), so an impl position naming a bare local name is
 not turned into a same-module false positive. Resolution SHALL follow in-scope `use`s (incl.
 renames), `crate`/`self`/`super`-relative paths, and local `pub use` re-export chains. A type whose
-resolution requires a glob import, a macro-generated type, a `#[path]`-remapped module, or full
+resolution requires a glob import, a macro-generated type, a `cfg_attr`-wrapped `#[path]` module (an
+**unconditional** `#[path = "…"]` module is followed and observed), or full
 inference SHALL be an inherited OUT-OF-SCOPE bound, never a silent pass, and no new hole SHALL be
 introduced. Within the resolved scope there SHALL be no false negative. Trait-impl exposure findings
 SHALL fold into the same exit-code contract (**0** clean, **1** enforced violation, **2** constitution

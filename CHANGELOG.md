@@ -43,10 +43,6 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   *ancestor* of the forbidden module (`use crate::*;` while forbidding `crate::secret`) is observed
   at the glob's base, not as the forbidden descendant edge, so it does not react — forbid or confine
   the parent. The narrow `use crate::secret;` / `use crate::secret::*;` forms are caught as before.
-- 漏刻 `audit_probe_coverage` now documents a stated bound: a `#[path = "…"]`-relocated module is not
-  followed by the by-name walk, so probes inside it are not counted (a seam covered only there reads
-  unprobed, and an undeclared-seam probe there is not caught) — keep production probes in
-  conventionally located modules.
 
 ### Fixed
 - 渾儀 unsafe-confinement now qualifies a **trait-impl** `unsafe fn` by `<trait for self>`
@@ -67,10 +63,17 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - Runtime probe coverage now starts from every exact Cargo library and binary target root and walks
   only module-reachable source, so an orphan `.rs` file can no longer satisfy a seam it never
   enforces. Direct callers that pass a directory retain the legacy recursive corpus.
-- The probe-coverage walker now detects a module's `#[path]` attribute structurally instead of
-  scanning its preamble for the raw substring `path`, so a module preceded by a `// fast path`
-  comment or a `#[cfg(feature = "fastpath")]` is no longer misclassified as relocated and dropped
-  from the audit corpus together with the probes beneath it.
+- 渾儀 and 漏刻 now **follow** an unconditional `#[path = "…"] mod x;` to its author-chosen file
+  (resolved from the directory a conventional `mod x;` would use; a `#[path]`-loaded file is
+  mod-rs-like, so its own children resolve from its directory), closing a coverage false negative: a
+  relocated module's `unsafe` sites, trait impls, and `assert_boundary!` probes were previously
+  dropped, so a disallowed impl or an undeclared-seam probe in a relocated module passed unobserved
+  (semantic single-module boundaries on such a module errored loudly rather than governing it). A
+  `cfg_attr`-wrapped `#[path]` stays a stated bound — not followed cfg-blind, since it could observe
+  a file rustc does not compile in this configuration — and an absent unconditional target is a
+  fail-loud constitution error. Both dimensions detect the attribute structurally, so an incidental
+  `path` substring in a comment or a `#[cfg(feature = "fastpath")]` gate is never mistaken for a
+  relocation.
 - The probe-coverage walker now tolerates a `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module whose file
   is absent in the current configuration (an off feature or another platform), skipping it instead
   of failing the audit — matching the semantic dimension, so a cross-platform workspace no longer

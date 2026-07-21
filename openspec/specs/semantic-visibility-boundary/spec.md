@@ -22,7 +22,7 @@ A visibility boundary SHALL be expressed as Rust code and is part of the single 
 
 ### Requirement: Module anchor resolution
 
-For each boundary, the system SHALL resolve the named governed module to a real module in the target crate's source (descending file-based `mod x;` and inline `mod x { … }` alike, as the semantic dimension's existing module-descent does) before evaluating it. If the anchor cannot be resolved — an unknown module path, a target crate absent from the workspace, or a module reachable only through a `#[path]`-remapped or `#[cfg]`-gated-absent ancestor (the dimension's stated coverage bound) — the system SHALL treat this as a **constitution error** (exit 2), failing loud and distinct from a boundary violation (exit 1), so a mistyped or ungovernable anchor is never reported as a visibility violation and never silently passed.
+For each boundary, the system SHALL resolve the named governed module to a real module in the target crate's source (descending file-based `mod x;` and inline `mod x { … }` alike, as the semantic dimension's existing module-descent does) before evaluating it. If the anchor cannot be resolved — an unknown module path, a target crate absent from the workspace, or a module reachable only through a `cfg_attr`-wrapped/inline `#[path]` or a `#[cfg]`-gated-absent ancestor (the dimension's stated coverage bound; an **unconditional** `#[path = "…"]` file ancestor IS followed) — the system SHALL treat this as a **constitution error** (exit 2), failing loud and distinct from a boundary violation (exit 1), so a mistyped or ungovernable anchor is never reported as a visibility violation and never silently passed.
 
 #### Scenario: Anchor resolves to a real module
 
@@ -94,7 +94,7 @@ The unit of judgment is the **item's own declared visibility**, not its members'
 
 The rule SHALL govern only the **declared** visibility keyword on the module's own direct items; the prior bounds hold verbatim, plus one added conservative bound:
 
-- **Incidental observation bounds** (stated, never a silent claim): an item produced by a macro expansion, a module reached through a `#[path]` remap, or a `pub macro` (declarative macros 2.0, which parses as an opaque token item with no readable visibility) is not observed; `#[cfg]`-gated code is observed **as written** (cfg-agnostic).
+- **Incidental observation bounds** (stated, never a silent claim): an item produced by a macro expansion, a module reached through a `cfg_attr`-wrapped `#[path]` remap (an **unconditional** `#[path = "…"]` module is followed and observed), or a `pub macro` (declarative macros 2.0, which parses as an opaque token item with no readable visibility) is not observed; `#[cfg]`-gated code is observed **as written** (cfg-agnostic).
 - **Out of declared scope (not this capability):** public surface that carries no visibility keyword *in this module* — a `#[macro_export] macro_rules!` (crate-public via attribute), a `#[no_mangle]`/`pub extern` symbol, or an item re-exported *from another module*. Governing attribute-derived public surface is the deferred attribute capability's domain; the static import dimension governs cross-module reachability. This capability makes no claim about them.
 - **Conservative `pub(in P)` upper bound** (stated, false-negative-safe): a `pub(in <non-canonical in-crate path>)` item ranks as `Crate`. Under a `Super` or `Module` ceiling this MAY over-react when the real path is narrow (effectively private), a loud over-reaction chosen over a silent pass. It never under-reacts.
 

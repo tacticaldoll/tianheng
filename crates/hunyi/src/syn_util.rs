@@ -5,9 +5,13 @@
 
 use crate::resolve::strip_raw;
 
-/// Whether a module's attributes remap its source file off the conventional path — the stated
-/// `#[path]` coverage bound (such a module is not conventionally file-backed, so the whole-crate
-/// walks skip it rather than govern the wrong file). Recognizes **both** the direct
+/// Whether a module's attributes remap its source file off the conventional path. This is the
+/// broader "is it remapped at all" test: it stays `true` for the `cfg_attr`-wrapped spelling, which
+/// the whole-crate walks do **not** follow (cfg-conditional → following it cfg-blind could read a
+/// file rustc does not compile here) and must therefore skip rather than govern the wrong
+/// conventional file — a stated bound. The **unconditional** `#[path = "…"]` form is instead
+/// *followed* via [`direct_path_value`]; this predicate still reports `true` for it, but callers
+/// consult `direct_path_value` first. Recognizes **both** the direct
 /// `#[path = "…"]` and the combined `#[cfg_attr(<pred>, …, path = "…")]` spelling (equivalent to
 /// `#[cfg(<pred>)] #[path = "…"]`), including arbitrarily **nested** `cfg_attr`
 /// (`#[cfg_attr(a, cfg_attr(b, path = "…"))]`). Cfg-blind, like the rest of the scan: a
@@ -18,6 +22,33 @@ use crate::resolve::strip_raw;
 /// mistaken for a remap (which would drop a governed module — the inverse false negative).
 pub(crate) fn has_path_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(is_path_remap)
+}
+
+/// The file path of an **unconditional** `#[path = "…"]` remap (the direct name-value form only),
+/// or `None`. This is the value the whole-crate walks and the targeted resolver now *follow* to
+/// observe a relocated module's source (closing the coverage false negative where its `unsafe`
+/// sites / items were silently dropped). A `cfg_attr`-wrapped `path` is deliberately **excluded**:
+/// it is cfg-conditional, so following it cfg-blind could read a file rustc does not compile in
+/// this configuration — that form stays a skip bound via [`has_path_attr`], which remains the
+/// broader "is this remapped at all (so never govern the conventional file)" test. A module has at
+/// most one applied `#[path]`, so the first match is the value.
+pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
+    attrs.iter().find_map(|attr| {
+        if !attr.path().is_ident("path") {
+            return None;
+        }
+        match &attr.meta {
+            syn::Meta::NameValue(syn::MetaNameValue {
+                value:
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }),
+                ..
+            }) => Some(s.value()),
+            _ => None,
+        }
+    })
 }
 
 fn is_path_remap(attr: &syn::Attribute) -> bool {

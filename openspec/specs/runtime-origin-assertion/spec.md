@@ -259,14 +259,19 @@ dimension applies, reimplemented louke-locally (三儀 ⊥ 三儀). This does no
 for a cfg-gated declaration is tolerated. A resolution ambiguity (both `name.rs` and `name/mod.rs`
 present) remains a constitution error regardless of any gate.
 
-A `mod name;` carrying a `#[path = "..."]` relocation SHALL be recognized **structurally** — an outer
-attribute whose meta name is exactly `path` followed by `=`, with comments and string literals
-skipped — and SHALL NOT be resolved by its conventional name: its author-chosen file is a stated scan
-bound, excluded from the reachable corpus (probes inside it are not counted). A declaration whose
-preamble merely *contains* the text `path` — a `// fast path` comment, a `#[cfg(feature = "fastpath")]`
-gate — SHALL NOT be read as a relocation and SHALL resolve normally, so no reachable module is dropped
-by a false substring match (which would silently drop every probe beneath it — a coverage false
-negative, the worst outcome under FN-first).
+A `mod name;` carrying an **unconditional** `#[path = "..."]` relocation SHALL be recognized
+**structurally** — an outer attribute whose meta name is exactly `path` followed by `=` and a string
+literal, with comments and string literals skipped — and SHALL be **followed** to that author-chosen
+file, resolved relative to the directory a conventional `mod name;` would use; a `#[path]`-loaded file
+is mod-rs-like, so its own children resolve from its directory. Probes inside a relocated module are
+therefore counted, and an undeclared-seam probe there is caught. A declaration whose preamble merely
+*contains* the text `path` — a `// fast path` comment, a `#[cfg(feature = "fastpath")]` gate — SHALL
+NOT be read as a relocation and SHALL resolve conventionally, so no reachable module is dropped by a
+false substring match (which would silently drop every probe beneath it — a coverage false negative,
+the worst outcome under FN-first). A `cfg_attr`-wrapped `#[path]` is cfg-conditional and SHALL NOT be
+followed — following it cfg-blind could read a file rustc does not compile in this configuration — so
+such a module is not counted (a stated bound); an absent target for it is tolerated like any cfg-gated
+module, while an absent target for an unconditional `#[path]` is a fail-loud constitution error.
 
 #### Scenario: Orphan probe cannot cover a seam
 
@@ -293,10 +298,15 @@ negative, the worst outcome under FN-first).
 - **WHEN** a target root declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off) alongside a non-cfg `mod present;` that resolves normally
 - **THEN** the audit skips the absent cfg-gated module without a constitution error, while a non-cfg `mod missing;` with no file remains a fail-loud constitution error
 
-#### Scenario: A #[path]-relocated module is distinguished from an incidental "path" substring
+#### Scenario: An unconditional #[path] module is followed; an incidental "path" substring is not
 
-- **WHEN** a target root declares `#[path = "elsewhere.rs"] mod relocated;` (with no conventional `relocated.rs`) alongside a `// fast path` comment and `#[cfg(feature = "fastpath")] mod present;` whose conventional `present.rs` resolves normally and holds a declared seam's probe
-- **THEN** the `#[path]`-relocated module is recognized structurally and skipped by the by-name resolver — never a constitution error for the absent `relocated.rs` — while `present`, matched by no `path` attribute despite the incidental substring, is resolved and its probe counts as coverage
+- **WHEN** a target root declares `#[path = "elsewhere.rs"] mod relocated;` (no conventional `relocated.rs`; `elsewhere.rs` holds a declared seam's probe) alongside a `// fast path` comment and `#[cfg(feature = "fastpath")] mod present;` whose conventional `present.rs` resolves normally
+- **THEN** the `#[path]`-relocated module is recognized structurally and **followed** to `elsewhere.rs`, so its probe counts as coverage (never dropped as off the conventional path), while `present` — matched by no `path` attribute despite the incidental substring — still resolves conventionally
+
+#### Scenario: A cfg_attr-wrapped #[path] relocation is not followed
+
+- **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_seam.rs")] mod plat;` with no conventional `plat.rs`, where the relocated file would hold the only probe for a declared seam
+- **THEN** the cfg-conditional relocation is not followed (a stated bound, tolerated as a cfg-gated absence, not a constitution error) and the seam is reported unprobed — never a silent claim that a file rustc may not compile here is covered
 
 #### Scenario: Legacy directory callers remain compatible
 

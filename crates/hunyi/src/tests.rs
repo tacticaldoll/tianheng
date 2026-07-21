@@ -2935,7 +2935,11 @@ fn a_glob_imported_trait_is_a_documented_bound() {
 }
 
 #[test]
-fn a_path_remapped_module_is_a_documented_bound() {
+fn an_unconditional_path_remapped_module_is_followed_and_its_impl_reacts() {
+    // An unconditional `#[path = "weird.rs"] mod domain;` is now *followed* to weird.rs: a
+    // disallowed impl there reacts, attributed to the module `crate::domain` (its declared path,
+    // regardless of the file it lives in). Previously the module was skipped — a false negative
+    // (a disallowed impl in a relocated module passing unobserved).
     let out = locality_findings(
         "path-remapped",
         &[
@@ -2953,9 +2957,10 @@ fn a_path_remapped_module_is_a_documented_bound() {
         &["crate::commands"],
     )
     .unwrap();
-    assert!(
-        out.is_empty(),
-        "a #[path]-remapped module is out of scope, not silently matched: {out:?}"
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"],
+        "the impl in the #[path]-relocated module is followed and reacts: {out:?}"
     );
 }
 
@@ -3487,6 +3492,28 @@ fn trait_impl_unsafe_fn_stays_distinct_from_inherent_and_other_traits() {
         ],
         "a trait-impl unsafe fn must be qualified by <trait for self>, distinct from the inherent \
          method and other trait impls on the same type: {out:?}"
+    );
+}
+
+#[test]
+fn unsafe_in_an_unconditional_path_remapped_module_reacts() {
+    // An unconditional `#[path = "relocated.rs"] mod net;` is followed to relocated.rs (there is no
+    // conventional net.rs, so this only resolves by following the remap); its `unsafe fn`, outside
+    // the allowed subtree, reacts attributed to the declared module path `crate::net`. Previously
+    // the relocated module was skipped — a false negative (relocated `unsafe` passing unobserved).
+    let out = unsafe_labels(
+        "path-remap-unsafe",
+        &[
+            ("lib.rs", "#[path = \"relocated.rs\"]\npub mod net;\n"),
+            ("relocated.rs", "pub unsafe fn poke() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::net"],
+        "unsafe in an unconditional #[path] module is followed and reacts: {out:?}"
     );
 }
 
@@ -6194,8 +6221,12 @@ fn a_facade_chain_reexport_reports_the_governed_module_file_not_the_facades() {
 }
 
 #[test]
-fn path_remapped_module_file_is_not_resolved_via_a_conventional_orphan() {
-    let err = resolve_file(
+fn path_remapped_module_resolves_to_its_target_not_the_conventional_orphan() {
+    // `crate::domain` is `#[path = "weird.rs"]`, so it resolves to weird.rs — the file rustc
+    // compiles — and NEVER to the same-named conventional orphan `domain.rs` (which rustc does not
+    // compile). The FP-guard intent survives the switch from skip to follow: the target, not the
+    // orphan.
+    let file = resolve_file(
         "path-remap",
         &[
             (
@@ -6208,16 +6239,21 @@ fn path_remapped_module_file_is_not_resolved_via_a_conventional_orphan() {
         ],
         "crate::domain",
     )
-    .expect_err("a #[path]-remapped module is outside single-module resolution");
-    assert_eq!(
-        err,
-        unknown_module_error("crate::domain", "x"),
-        "the resolver must not govern the same-named conventional orphan"
+    .expect("an unconditional #[path] module now resolves to its target");
+    let file = file.display().to_string();
+    assert!(
+        file.ends_with("weird.rs"),
+        "the resolver follows #[path] to weird.rs, never the conventional orphan domain.rs: {file}"
     );
 }
 
 #[test]
-fn path_remapped_semantic_module_is_not_governed_via_a_conventional_orphan() {
+fn path_remapped_semantic_module_is_governed_at_its_target_not_the_orphan() {
+    // `crate::domain` is `#[path = "weird.rs"]`; the boundary is now evaluated against weird.rs
+    // (the compiled file), whose `real() -> crate::infra::Db` violates `must_not_expose`. The
+    // same-named conventional orphan `domain.rs` — which rustc does not compile — is never
+    // governed, so its `orphan()` exposure is neither the source of a violation nor masks the real
+    // one. Previously this was a constitution error (the module skipped) — a false negative.
     let (metadata, dir) = fixture_metadata(
         "semantic-path-remap",
         &[
@@ -6239,16 +6275,21 @@ fn path_remapped_semantic_module_is_not_governed_via_a_conventional_orphan() {
     let boundary = SemanticBoundary::in_crate("x")
         .module("crate::domain")
         .must_not_expose("crate::infra")
-        .because("path-remapped modules are outside single-module semantic resolution");
+        .because("an unconditional #[path] module is governed at its target file");
     let mut violations = Vec::new();
-    let err = check_boundary(&metadata, &boundary, &mut violations)
-        .expect_err("a #[path]-remapped governed module is a constitution error");
+    check_boundary(&metadata, &boundary, &mut violations)
+        .expect("the #[path] target resolves and is governed");
+    let file = violations
+        .first()
+        .and_then(|v| v.file.as_deref())
+        .map(str::to_string);
     let _ = std::fs::remove_dir_all(&dir);
 
-    assert_eq!(err, unknown_module_error("crate::domain", "x"));
+    assert_eq!(violations.len(), 1, "weird.rs's exposure of infra reacts");
+    let file = file.expect("a governed-module file");
     assert!(
-        violations.is_empty(),
-        "the same-named conventional orphan is not compiled and must not produce a violation"
+        file.ends_with("weird.rs"),
+        "the reaction is in the #[path] target weird.rs, never the conventional orphan domain.rs: {file}"
     );
 }
 
