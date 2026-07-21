@@ -53,7 +53,12 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   mutually-exclusive `#[cfg]` arm pairing an inline body with a file-form sibling (the standard
   per-platform shim) previously returned only the inline variant's items, never even reading the
   file-form sibling's own file. Both variants' items are now unioned, matching the resolver's
-  existing cfg-blind policy for two same-named inline variants.
+  existing cfg-blind policy for two same-named inline variants. A follow-up fix closes a further
+  gap a second review round found in the same mixed-sibling case: a segment nested *beneath* the
+  split point now resolves from whichever variant's own directory actually declared it, instead of
+  always the inline variant's — previously a flat (non-`mod.rs`) file-form sibling's own `#[path]`
+  was silently mis-resolved (or hard-failed) whenever it needed a different directory than the
+  inline accumulation.
 
 ## [0.2.1] - 2026-07-21
 
