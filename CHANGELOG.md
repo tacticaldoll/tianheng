@@ -39,6 +39,12 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   sibling arm's own target (the two are never simultaneously open in any real build) is no longer
   misreported as a cycle. The cycle guard's "already-open source files" tracking is now scoped per
   physical source file rather than merged across cfg-sibling arms of one logical module path.
+- 渾儀's single-module resolver (backing signature-coupling, visibility, dyn/impl-trait, and
+  async-exposure anchors) no longer stops at the first same-named `mod` variant it finds: a
+  mutually-exclusive `#[cfg]` arm pairing an inline body with a file-form sibling (the standard
+  per-platform shim) previously returned only the inline variant's items, never even reading the
+  file-form sibling's own file. Both variants' items are now unioned, matching the resolver's
+  existing cfg-blind policy for two same-named inline variants.
 
 ## [0.2.1] - 2026-07-21
 
