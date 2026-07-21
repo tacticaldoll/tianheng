@@ -629,6 +629,74 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   boundary check in a *shipped* crate, or 圭表 gaining `#[cfg]` awareness for an unrelated reason
   (at which point this closes for free). **Version:** not scheduled; reopen only on the trigger
   above. **Authority:** the dependency-light scanner decision in `PROJECT.md`'s Decisions section.
+- **`descend`'s file-form dedup silently disengages if `canonicalize` fails mid-scan — ACCEPTED
+  DEBT (narrow TOCTOU, pre-existing shape, newly surfaced by 0.2.2's round-5 review).**
+  **Pressure/source:** a round-5 adversarial review of `crates/hunyi/src/module_resolve.rs::descend`'s
+  `seen_files` dedup (added in 0.2.2 to stop two mutually-exclusive `#[cfg]` siblings backed by the
+  identical file from double-counting that file's items) found both dedup sites
+  (`if let Ok(canon) = std::fs::canonicalize(&file) { if !seen_files.insert(canon) { continue; } }`)
+  fall through **unconditionally** on `Err` — no `else`, no propagated error — so a transient
+  `canonicalize` failure during the scan silently disables the guard for that one file, reproducing
+  the exact double-counted-violation defect the guard exists to prevent. **Current reaction:** the
+  branch is still pushed on `Err`, same as before `seen_files` existed. **Why not closed:** the
+  precondition is a real OS-level race (empirically confirmed reproducible — a background thread
+  deleting+recreating the file mid-scan flips `canonicalize` to `Err` in well under a second on this
+  filesystem) but requires an external actor mutating the source tree *during* a single scan pass, or
+  an unusual filesystem where `canonicalize` is flaky; ordinary, static source trees never hit it.
+  Closing it properly means picking one of this codebase's own two existing precedents for a fallible
+  `canonicalize` — fail loud (`scan.rs::canonicalize_source`) or skip-and-never-register
+  (`reachability.rs`'s own sibling dedup) — rather than the third, undocumented "proceed
+  unconditionally" the two `descend` sites currently do; a same-shape one-hop fix, deferred only
+  for sequencing, not because it's hard. **Risk:** low; requires concurrent external mutation of the
+  scanned tree, not reachable from a static, checked-in crate. **Promotion trigger:** a real report of
+  a duplicated violation count from a scan racing external file churn (e.g. a codegen step running
+  concurrently with CI). **Version:** not scheduled. **Authority:** round-5 adversarial review,
+  `PROJECT.md` Decisions (0.2.2 lesson).
+- **A conventional module backed by both `name.rs` and `name/mod.rs` is silently dual-governed
+  instead of erroring — ACCEPTED DEBT (pre-existing, cross-dimension inconsistency).**
+  **Pressure/source:** a round-5 review found that when a plain `mod x;`'s probed base directory
+  contains **both** `x.rs` and `x/mod.rs` — a genuine `rustc` compile error, E0761, "file for module
+  `x` found at both …" — 圭表's per-source live probe (`reachable_modules`) happily accepts both
+  candidates as separate sources (both pass `.is_file()`, both canonicalize to distinct real files,
+  both structurally match `crate::…::x`) and governs both, as if the crate compiled. **Current
+  reaction:** silently accepted; two `governed_files` entries are produced for one module path.
+  **Why not closed:** this predates 0.2.2 (the old `by_module: BTreeMap<String, Vec<&PathBuf>>`
+  indexed both files under the identical key, same collision) — the 0.2.2 probe rewrite carried the
+  tolerance through, it did not introduce it. It is also the mirror image of the already-accepted
+  "missing plain `mod x;` file" debt entry above: both concern a layout that would never `cargo build`
+  in the first place, so both are reachable only via a broken or mid-edit tree, never shipped code.
+  Note for symmetry: `crates/louke/src/audit/scan.rs::resolve_external_module` already hard-errors on
+  this exact `(true, true)` case ("module `{name}` resolves to both … and …") — so this is a genuine,
+  demonstrated three-dimension inconsistency (漏刻 fail-loud, 圭表 silent-accept), not just a
+  hypothetical. **Risk:** low, same reasoning as the sibling missing-file entry: unreachable from a
+  tree that actually compiles. **Promotion trigger:** a real report of a dual-backed module masking a
+  boundary check, or 圭表 adopting 漏刻's `(true, true) => Err(...)` shape when the probe loop is next
+  touched for an unrelated reason. **Version:** not scheduled. **Authority:** round-5 adversarial
+  review; the existing missing-plain-file ACCEPTED DEBT entry above sets the precedent for this
+  classification.
+- **hunyi's own two module walkers disagree on `#[cfg]`-tolerance for a missing plain-form file —
+  ACCEPTED DEBT (pre-existing, out of 0.2.2's diff scope).** **Pressure/source:** a round-5 review
+  comparing `module_resolve.rs::descend` (backs the five single-module-anchored capabilities via
+  `resolve_module_items`/`resolve_module_file`/`resolve_module_branches`) against
+  `scan.rs::resolve_child_modules` (backs the crate-wide/subtree walkers) found `descend` hard-errors
+  unconditionally (`missing_module_file_error`) on a plain `mod x;` whose file cannot be located,
+  while `resolve_child_modules` explicitly tolerates the identical shape when the item carries
+  `#[cfg]` (`if !has_cfg_attr(&module_item.attrs) { return Err(...) }`) — a real, `cargo check`-clean
+  layout (`#[cfg(feature = "never")] pub mod gated;` with no `gated.rs`) that the crate-wide walk
+  accepts but a boundary anchored *directly* at `crate::gated` hard-aborts on (exit 2) instead of
+  tolerating. **Current reaction:** `descend` always errors; `resolve_child_modules` never errors on
+  a `#[cfg]`-gated miss. **Why not closed:** confirmed via `git diff v0.2.1..release/0.2.2` that
+  `descend`'s unconditional-error line predates the 0.2.2 `Branch`-vector rewrite byte-for-byte in
+  behavior — it was restructured, not introduced, by this release. BACKLOG's existing missing-file
+  entry above only compares 圭表 against 渾儀's *crate-wide* walker; it does not mention this narrower,
+  purely-渾儀-internal asymmetry between 渾儀's own two walkers. Whether a single-module anchor
+  *should* tolerate `#[cfg]`-gated absence (there is no principled non-error answer to give for a
+  module with no items) is a real open design question, not a same-shape fix. **Risk:** low; the
+  same "a `cfg`-gated absence is expected, not broken" reasoning as the sibling entry applies, and
+  this predates 0.2.2. **Promotion trigger:** a real report of a legitimate `#[cfg]`-gated boundary
+  anchor hard-failing a CI check, or a deliberate design pass reconciling `descend` and
+  `resolve_child_modules`'s missing-file policies. **Version:** not scheduled; pre-existing, out of
+  0.2.2's fix scope. **Authority:** round-5 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson).
 - **Multibyte char-literal lexing — documented robustness bound (not a known FN).** *From the
   v0.1.5 hidden-bug sweep.* The `use`/`mod` lexer's simple-char branch assumes a one-byte char
   body, so a multibyte char literal (`'é'`) in an adjacent-literal pattern can misparse a few bytes.
