@@ -178,6 +178,20 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   attribute and either hard-failing on a module that genuinely compiles or silently substituting the
   wrong file. Fixed by replacing it with a forward, literal-aware scan from the enclosing scope's
   own start, matching every other traversal in the file.
+- A round-10 review, re-checking round 9's own two fixes one hop further, found both incomplete.
+  `resolve_self_type`'s shadow check only recognized a bare single-segment self type, so `impl<T>
+  Marker for T::Assoc {}` (a projection off the impl's own parameter) still resolved through a
+  same-named alias one segment deeper — fixed by sharing the sibling exposure collector's own
+  leading-segment shadow check (`is_shadowed_param_path`) between both instead of a narrower copy.
+  `canonical_self_owner` (the self-type label used in `trait_impl.rs`'s `MisplacedImpl` finding
+  identity) had received no shadow at all, so a blanket impl's own parameter resolving through an
+  alias to the same owner string a genuine direct impl also produced silently dedup-collapsed two
+  distinct trait-impl-locality violations into one — a real false negative, not a cosmetic mislabel
+  — fixed by giving it the identical shadow, threaded through its seven call sites. And 漏刻's
+  `mod_preamble_attrs` forward scan (round 9) was literal-aware but not attribute-group-aware: a
+  brace-delimited attribute argument (`#[foo({ 1 })]`) between an earlier real `#[path = "..."]` and
+  the `mod` keyword had its own internal braces mistaken for item boundaries, reproducing round 9's
+  bug through a different vector — fixed by skipping a whole attribute group as one atomic unit.
 
 ## [0.2.1] - 2026-07-21
 

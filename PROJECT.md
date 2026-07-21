@@ -443,6 +443,42 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   matching every other traversal in the file. Both confirmed with a real, executed, then-reverted
   repro; both closed root-cause, not deferred, since both are genuine false positives / false
   hard-failures on valid, `cargo build`-clean code, not a narrow or hypothetical edge.
+  A **round-10** pass, adversarially re-reviewing round 9's own two fixes one hop further (the same
+  discipline the cfg-branch lesson above established, now shown to apply beyond that one bug class
+  too), found both were incomplete. `resolve_self_type`'s new shadow check recognized ONLY a bare
+  single-segment self type (`Path::get_ident()`, which returns `None` for anything but exactly one
+  segment) — so `impl<T> Marker for T::Assoc {}` (a projection off the impl's own parameter, never a
+  nominal type) was still never shadowed and still resolved through a same-named alias, the
+  identical false positive one segment deeper. The sibling exposure collector
+  (`resolve/shape.rs::PathCollector::is_shadowed_param`) already had the RIGHT shape — shadow the
+  leading segment regardless of how many further segments follow — so the fix extracted that check
+  into a shared `is_shadowed_param_path` function and pointed both call sites at it, closing the
+  drift at its root (two independent copies of "what counts as a param use" is exactly the shape
+  this whole lesson warns against) rather than patching `resolve_self_type`'s own copy again. The
+  same round found `canonical_self_owner` (the self-type **label** renderer used to build
+  `trait_impl.rs`'s `MisplacedImpl` owner field, among others) had received NO shadow treatment at
+  all — not a narrower copy, none — despite `ImplSite` carrying `type_params` since round 9
+  specifically for this purpose. This was not merely a cosmetic mislabel: `owner` is part of
+  `MisplacedImpl`'s finding IDENTITY, deduplicated by exact equality, so a blanket impl's own
+  parameter resolving through an alias to the SAME canonical string a genuine direct impl on that
+  aliased type also produces silently collapsed two textually and semantically distinct
+  trait-impl-locality violations into one reported finding — a real false negative (one violation
+  vanishing), not just a wrong display string. Fixed by giving `canonical_self_owner` the identical
+  `impl_type_params` shadow via the same shared `is_shadowed_param_path`, threaded through its seven
+  call sites (`collect.rs` ×5, `forbidden_marker.rs`, `trait_impl.rs`). And 漏刻's `mod_preamble_attrs`
+  forward scan (round 9) was literal-aware but not attribute-group-aware: it tracked no nesting, so
+  a brace-delimited attribute ARGUMENT (`#[foo({ 1 })]`, a valid token tree, not a string literal)
+  between an earlier real `#[path = "…"]` and the `mod` keyword had its own internal `{`/`}` bytes
+  mistaken for item-boundary terminators, resetting the scan past the real attribute — the identical
+  failure mode round 9 closed, reached through a different vector. Fixed by skipping a whole
+  `#[…]`/`#![…]` group as one atomic unit (via `attr_group_end`, the same primitive the existing
+  attribute-matching pass already used) when scanning for the preamble's own start, and likewise
+  skipping a non-attribute `{…}` (a preceding sibling item's own body) via `balanced_brace_end` to
+  its own matching `}` rather than examining its interior bytes. Ten rounds now: a fix that closes
+  the CONFIRMED instance is not evidence the shared model — or even that SAME fix's own new check —
+  is complete; only the next round's fresh adversarial pass, aimed specifically at the prior round's
+  own remedy, earns that confidence, and this now holds across at least two structurally distinct
+  bug classes in this codebase, not only the cfg-branch one.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

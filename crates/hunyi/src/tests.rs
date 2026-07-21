@@ -2636,6 +2636,41 @@ fn an_impl_outside_the_allowed_location_is_a_finding() {
 }
 
 #[test]
+fn two_misplaced_impls_do_not_dedup_collapse_when_a_blanket_impls_param_shadows_an_alias() {
+    // Round-10 finding: `canonical_self_owner` never received round 9's impl_type_params shadow at
+    // all -- unlike resolve_self_type (containment.rs), it unconditionally resolved any bare self
+    // type via resolve_path. This is not merely a cosmetic label: the `owner` it renders is part of
+    // `SemanticFact::MisplacedImpl`'s finding IDENTITY, deduplicated by exact equality. A module
+    // declaring `use Foo as T;` alongside BOTH a blanket `impl<T> Command for T {}` (T is the
+    // impl's own generic parameter) AND a genuine direct `impl Command for Foo {}` had the blanket
+    // impl's bare `T` incorrectly resolve through the alias to the SAME canonical owner string as
+    // the direct impl's own (correctly resolved) owner -- two textually and semantically distinct
+    // misplaced-impl violations collapsed into one reported finding, a real false negative (one
+    // genuine violation silently vanishing), not just a wrong display string. Fixed by giving
+    // `canonical_self_owner` the same `impl_type_params` shadow `resolve_self_type` already has.
+    let out = locality_findings(
+        "owner-collapse-blanket-and-direct",
+        &[
+            ("lib.rs", "pub mod command;\npub mod domain;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Command;\nuse crate::domain::sub::Foo as T;\npub mod sub { pub struct Foo; }\nimpl<T> Command for T {}\nimpl Command for crate::domain::sub::Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        2,
+        "both the blanket impl (its own param T) and the direct impl on Foo are genuinely distinct \
+         misplaced-impl violations and must not dedup-collapse into one: {out:?}"
+    );
+}
+
+#[test]
 fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_impl_finding() {
     // Round-6 finding: resolve_child_modules (scan.rs, backing the whole-crate scan) had no
     // canonical-file dedup for two mutually-exclusive #[cfg] arms plainly declaring the IDENTICAL
@@ -4509,6 +4544,37 @@ fn a_blanket_impls_own_generic_param_is_not_resolved_through_a_same_named_alias(
         out.is_empty(),
         "a blanket impl's own generic param T must not resolve through the unrelated `use ... as T` \
          alias in scope in that module — the source never impls Marker for Innocent: {out:?}"
+    );
+}
+
+#[test]
+fn a_blanket_impls_generic_param_is_shadowed_even_through_a_multi_segment_projection() {
+    // Round-10 finding: round 9's fix (resolve_self_type) only recognized a BARE single-segment
+    // self type as the impl's own generic parameter (via `Path::get_ident()`, which returns `None`
+    // for anything with more than one segment). `impl<T> Marker for T::Assoc {}` -- T::Assoc is a
+    // projection off the impl's own parameter, never a nominal type, exactly like the sibling
+    // exposure collector's own `is_shadowed_param_path` already treats `T::Item` -- was therefore
+    // never shadowed and still resolved the leading `T` through an unrelated same-named alias,
+    // fabricating a marker-acquisition finding one segment deeper than round 9 closed. Fixed by
+    // sharing `is_shadowed_param_path` (the leading-segment check, regardless of further segments)
+    // between the exposure collector and resolve_self_type instead of a narrower private copy.
+    let out = marker_findings(
+        "blanket-impl-multi-segment-generic-param-shadow",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use crate::domain::sub as T;\npub mod sub { pub struct Assoc; }\npub trait Marker {}\nimpl<T> Marker for T::Assoc {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a blanket impl's own generic param T must stay shadowed even in a projection T::Assoc, \
+         never resolving through the unrelated `use ... as T` module alias: {out:?}"
     );
 }
 
