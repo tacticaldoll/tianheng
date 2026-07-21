@@ -3,7 +3,7 @@
 //! against the in-scope `use`s, the crate-wide re-export/alias closure, and the extern-crate
 //! oracle before matching the forbidden set.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -91,7 +91,22 @@ pub(crate) fn module_findings(
         .iter()
         .map(|(item, _)| item.clone())
         .collect();
-    let uses = collect_uses(&items);
+    // A `use`-map per FILE, not one shared map over the flattened cross-branch union: two
+    // mutually-exclusive `#[cfg]` branches are never compiled together, so merging their `use`
+    // declarations into one map lets the branch unioned last silently overwrite an earlier
+    // branch's alias for the same local name (a realistic per-platform shim, e.g. `#[cfg(unix)]
+    // use libc::Foo as Handle;` / `#[cfg(windows)] use winapi::Bar as Handle;`) — misresolving a
+    // bare type reference in the FIRST branch through the SECOND branch's `use` and silently
+    // hiding a real forbidden-exposure finding (a confirmed false negative, found on a round-6
+    // adversarial review; see `PROJECT.md`'s Decisions).
+    let mut items_by_file: HashMap<&PathBuf, Vec<syn::Item>> = HashMap::new();
+    for (item, file) in &items_with_files {
+        items_by_file.entry(file).or_default().push(item.clone());
+    }
+    let uses_by_file: HashMap<&PathBuf, crate::resolve::UseMap> = items_by_file
+        .iter()
+        .map(|(file, file_items)| (*file, collect_uses(file_items)))
+        .collect();
     // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
     // the sysroot crates. A bare head in it denotes an external crate, so an inline extern path
     // resolves to itself verbatim and reacts — closing the extern-path false negative. Applied
@@ -139,13 +154,14 @@ pub(crate) fn module_findings(
 
     let mut exposed = Vec::new();
     for (ordinal, (item, file)) in items_with_files.iter().enumerate() {
+        let uses = &uses_by_file[file];
         let mut buf = Vec::new();
-        collect_item_exposures(item, module, &uses, ordinal, &mut buf);
+        collect_item_exposures(item, module, uses, ordinal, &mut buf);
         // Opt-in depth: also observe the module's trait `impl` blocks' impl-site-authored
         // positions (`semantic-trait-impl-exposure`). The same resolve → canonicalize → match →
         // `{type} exposed by {seam}` pipeline below applies unchanged; only the seam differs.
         if include_trait_impls {
-            collect_trait_impl_exposures(item, module, &uses, ordinal, &mut buf);
+            collect_trait_impl_exposures(item, module, uses, ordinal, &mut buf);
         }
         exposed.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
     }
@@ -153,6 +169,7 @@ pub(crate) fn module_findings(
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()
         .filter_map(|(exposure, file)| {
+            let uses = &uses_by_file[file];
             // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
             // `use`-map); the extern oracle then fires for an external-crate head, resolving
             // the inline extern path to itself. Ordering guarantees a local `use … as <dep>`
@@ -178,7 +195,7 @@ pub(crate) fn module_findings(
             let resolved = if exposure.path.leading_colon.is_some() {
                 extern_verbatim_renamed(&exposure.path, &externs, &extern_renames)
             } else {
-                resolve_path(&exposure.path, &uses, module, BareFallback::Ignore)
+                resolve_path(&exposure.path, uses, module, BareFallback::Ignore)
                     .or_else(|| bare_local_alias(&exposure.path, module, &aliases))
                     // The bare-head extern-rename rewrite uses `renames_bare`: a `Y::…` head shadowed
                     // by this module's own child `mod Y` is not rewritten to the crate (rustc resolves

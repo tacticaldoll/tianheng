@@ -5,6 +5,7 @@
 //! These two helpers hold that skeleton once so the three boundary modules pass only their
 //! collector, rather than each re-implementing the identical pipeline.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::containment::matches_forbidden;
@@ -12,6 +13,23 @@ use crate::crate_scope::{extern_resolution, resolve_principal};
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
+
+/// A `use`-map per FILE, not one shared map over the flattened cross-branch union: two
+/// mutually-exclusive `#[cfg]` branches are never compiled together, so merging their `use`
+/// declarations into one map lets the branch unioned last silently overwrite an earlier branch's
+/// alias for the same local name (a realistic per-platform shim), misresolving a bare reference in
+/// the FIRST branch through the SECOND branch's `use` — a confirmed false negative, found on a
+/// round-6 adversarial review; see `PROJECT.md`'s Decisions.
+fn uses_by_file(items_with_files: &[(syn::Item, PathBuf)]) -> HashMap<&PathBuf, UseMap> {
+    let mut items_by_file: HashMap<&PathBuf, Vec<syn::Item>> = HashMap::new();
+    for (item, file) in items_with_files {
+        items_by_file.entry(file).or_default().push(item.clone());
+    }
+    items_by_file
+        .iter()
+        .map(|(file, file_items)| (*file, collect_uses(file_items)))
+        .collect()
+}
 
 /// Resolve `module`'s items, collect each item's exposures with `collect`, render each to a finding
 /// with `render`, then sort + dedup. The shape-only heart shared by the dyn / impl-trait / async
@@ -32,15 +50,12 @@ pub(crate) fn shape_module_findings<E>(
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
-    let items: Vec<syn::Item> = items_with_files
-        .iter()
-        .map(|(item, _)| item.clone())
-        .collect();
-    let uses = collect_uses(&items);
+    let uses_by_file = uses_by_file(&items_with_files);
     let mut collected: Vec<(E, PathBuf)> = Vec::new();
     for (ordinal, (item, file)) in items_with_files.iter().enumerate() {
+        let uses = &uses_by_file[file];
         let mut buf = Vec::new();
-        collect(item, module, &uses, ordinal, &mut buf);
+        collect(item, module, uses, ordinal, &mut buf);
         collected.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
     }
     let mut findings: Vec<(SemanticFact, PathBuf)> = collected
@@ -80,23 +95,25 @@ pub(crate) fn operand_module_findings(
         .iter()
         .map(|(item, _)| item.clone())
         .collect();
-    let uses = collect_uses(&items);
+    let uses_by_file = uses_by_file(&items_with_files);
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names, &items)?;
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposures: Vec<(ShapeExposure, PathBuf)> = Vec::new();
     for (ordinal, (item, file)) in items_with_files.iter().enumerate() {
+        let uses = &uses_by_file[file];
         let mut buf = Vec::new();
-        collect(item, module, &uses, ordinal, &mut buf);
+        collect(item, module, uses, ordinal, &mut buf);
         exposures.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
     }
 
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposures
         .into_iter()
-        .filter(|(exposure, _)| {
+        .filter(|(exposure, file)| {
+            let uses = &uses_by_file[file];
             forbidden.is_empty()
                 || exposure.principals.iter().any(|path| {
-                    resolve_principal(path, &uses, module, &resolution)
+                    resolve_principal(path, uses, module, &resolution)
                         .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
                 })
         })
