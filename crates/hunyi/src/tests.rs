@@ -6163,6 +6163,53 @@ fn cfg_mixed_inline_and_file_form_siblings_are_both_governed() {
 }
 
 #[test]
+fn a_further_segment_beneath_a_flat_file_form_cfg_sibling_resolves_from_its_own_directory() {
+    // rustc ground truth (verified with a real rustc build under the "b" feature): a flat
+    // (non-`mod.rs`) file-form cfg sibling's OWN `#[path]` resolves relative to ITS OWN
+    // containing directory, not `<child_dir>/<its own name>/` — the same rule an ordinary flat
+    // file always follows, regardless of whether it also happens to pair with a mutually-
+    // exclusive `#[cfg]` inline sibling. Before the fix, descend()'s merged-branch case
+    // unconditionally continued a further segment from the INLINE sibling's accumulated
+    // directory, which only coincides with a `mod.rs`-style file-form sibling's own directory —
+    // silently misresolving (or hard-erroring on) the real target for a flat one instead.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-flat-further-segment",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod plat { pub struct Marker; }\n\
+                 #[cfg(feature = \"b\")] #[path = \"moved/plat_moved.rs\"] pub mod plat;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            (
+                "moved/plat_moved.rs",
+                "#[path = \"elsewhere.rs\"]\npub mod target;\n",
+            ),
+            (
+                "moved/elsewhere.rs",
+                "pub fn get() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::plat::target")
+        .must_not_expose("crate::infra")
+        .because(
+            "plat::target must not expose infra even through a flat cfg-sibling's own #[path]",
+        );
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the flat file-form sibling's own #[path] target (moved/elsewhere.rs, a SIBLING of \
+         plat_moved.rs, not a child of a plat/ subdirectory) must be read and react: {violations:?}"
+    );
+}
+
+#[test]
 fn a_visibility_violation_carries_its_module_file() {
     let (metadata, dir) = fixture_metadata(
         "vis",

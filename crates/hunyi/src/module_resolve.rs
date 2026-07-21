@@ -79,6 +79,13 @@ fn resolve_module(
 /// file-based `mod x;` children live (`src/` for `crate`, `src/foo/` for `crate::foo`). Needed by
 /// a subtree walk that must continue descending below the anchored module; the single descent
 /// already computes it, so returning it cannot drift from the resolved items/file.
+///
+/// When `module` was reached through a mutually-exclusive `#[cfg]` split (an inline variant
+/// paired with a file-form sibling, the standard per-platform shim), the returned **items** are
+/// the union of every surviving branch (see [`descend`]) — but the returned file/child-dir are
+/// the **first** branch's own, a stated, deterministic choice: a single-module violation carries
+/// one `file` field, not one per branch, so there is no way to report "the file" precisely when
+/// more than one legitimately backs the module.
 pub(crate) fn resolve_module_root(
     src_dir: &Path,
     root_file: &Path,
@@ -87,16 +94,37 @@ pub(crate) fn resolve_module_root(
 ) -> Result<(Vec<syn::Item>, PathBuf, PathBuf), String> {
     let root = read_parse(root_file)?;
     let segments = module_segments(module);
-    descend(
-        root.items,
-        src_dir.to_path_buf(),
-        root_file.to_path_buf(),
+    let initial = Branch {
+        items: root.items,
+        current_file: root_file.to_path_buf(),
+        child_dir: src_dir.to_path_buf(),
         // The crate root is mod-rs-like: its own directory (`src_dir`) is the `#[path]` base too.
-        src_dir.to_path_buf(),
-        &segments,
-        module,
-        crate_package,
-    )
+        path_base: src_dir.to_path_buf(),
+    };
+    let branches = descend(vec![initial], &segments, module, crate_package)?;
+    let mut items = Vec::new();
+    for branch in &branches {
+        items.extend(branch.items.iter().cloned());
+    }
+    let first = &branches[0];
+    Ok((items, first.current_file.clone(), first.child_dir.clone()))
+}
+
+/// One candidate continuation of the descent: the items visible at this position, the file they
+/// live in, and the two directories a further segment resolves from (`child_dir` for a
+/// conventional file-form child, `path_base` for a `#[path]` written at this position — see the
+/// module-level doc for why these can differ). Ordinarily there is exactly one branch; a
+/// mutually-exclusive `#[cfg]` split (an inline variant paired with a file-form sibling) produces
+/// two **independent** branches rather than merging their items into one, because each has its
+/// own correct directories for anything nested *beneath* the split — merging into one shared pair
+/// of directories silently mis-resolved a further segment whenever the file-form sibling's own
+/// directories differed from the inline accumulation (the false negative this design fixes).
+/// [`resolve_module_root`] merges every surviving branch's items back into one list at the leaf.
+struct Branch {
+    items: Vec<syn::Item>,
+    current_file: PathBuf,
+    child_dir: PathBuf,
+    path_base: PathBuf,
 }
 
 // `path_base` is the directory a non-inline `#[path]` at the current position resolves from: the
@@ -106,149 +134,153 @@ pub(crate) fn resolve_module_root(
 // which is exactly the case `current_file.parent()` alone got wrong (a false negative when a
 // `#[path]` relocated inside an inline block was resolved from the enclosing file's dir).
 fn descend(
-    items: Vec<syn::Item>,
-    child_dir: PathBuf,
-    current_file: PathBuf,
-    path_base: PathBuf,
+    branches: Vec<Branch>,
     segments: &[String],
     module: &str,
     crate_package: &str,
-) -> Result<(Vec<syn::Item>, PathBuf, PathBuf), String> {
+) -> Result<Vec<Branch>, String> {
     let Some(seg) = segments.first() else {
-        return Ok((items, current_file, child_dir));
+        return Ok(branches);
     };
-    // Union every same-named **inline** `mod x { … }` for this segment before descending: a
-    // `#[cfg(..)] mod x {..}` / `#[cfg(..)] mod x {..}` pair parses as two separate inline items
-    // (syn does not evaluate `cfg`), so resolving only the source-first variant would let a
-    // forbidden item in another variant pass unobserved — a `mod`-resolution divergence, the
-    // false-negative class this resolver exists to prevent. This matches the crate-wide scan's
-    // observe-all, cfg-blind policy (`scan::resolve_child_modules`). An unconditional `#[path]` file
-    // module is followed below; an inline `#[path]` variant is not merged into this union (a narrow
-    // fail-loud bound). Inline items live in the enclosing file, so `current_file` is unchanged;
-    // file-children live under `<child_dir>/x/`.
-    let mut inline: Vec<syn::Item> = Vec::new();
-    for item in &items {
-        if let syn::Item::Mod(module_item) = item {
-            if has_path_attr(&module_item.attrs) {
-                continue;
-            }
-            if strip_raw(&module_item.ident.to_string()) != *seg {
-                continue;
-            }
-            if let Some((_, inner)) = &module_item.content {
-                inline.extend(inner.iter().cloned());
+    let mut next_branches = Vec::new();
+    for branch in &branches {
+        // Union every same-named **inline** `mod x { … }` for this segment before descending: a
+        // `#[cfg(..)] mod x {..}` / `#[cfg(..)] mod x {..}` pair parses as two separate inline
+        // items (syn does not evaluate `cfg`), so resolving only the source-first variant would
+        // let a forbidden item in another variant pass unobserved — a `mod`-resolution
+        // divergence, the false-negative class this resolver exists to prevent. This matches the
+        // crate-wide scan's observe-all, cfg-blind policy (`scan::resolve_child_modules`). An
+        // unconditional `#[path]` file module is followed below; an inline `#[path]` variant is
+        // not merged into this union (a narrow fail-loud bound). Inline items live in the
+        // enclosing file, so `current_file` is unchanged; file-children live under
+        // `<child_dir>/x/`.
+        let mut inline: Vec<syn::Item> = Vec::new();
+        for item in &branch.items {
+            if let syn::Item::Mod(module_item) = item {
+                if has_path_attr(&module_item.attrs) {
+                    continue;
+                }
+                if strip_raw(&module_item.ident.to_string()) != *seg {
+                    continue;
+                }
+                if let Some((_, inner)) = &module_item.content {
+                    inline.extend(inner.iter().cloned());
+                }
             }
         }
-    }
-    // Resolve a file-form `mod seg;` too — ALWAYS attempted now, not only when no inline variant
-    // was found above: a mutually-exclusive `#[cfg]` per-platform shim can legitimately pair an
-    // inline variant on one platform with a file-form variant on another (the same additive,
-    // cfg-blind union the whole-crate walk and 圭表 already apply to their own same-named
-    // children), and the scanner does not evaluate `#[cfg]`, so observing only whichever variant
-    // happened to carry an inline body was a real false negative: a forbidden item declared only
-    // in the file-form sibling passed unobserved. (A cfg-duplicated file-form `mod seg;` pair
-    // names one file, so the first match still suffices — unioning *multiple* file-form targets
-    // is the whole-crate walk's job, not this single-path resolver's.)
-    let mut file_form: Option<(Vec<syn::Item>, PathBuf, PathBuf)> = None;
-    'find_file_form: for item in &items {
-        if let syn::Item::Mod(module_item) = item {
-            if module_item.content.is_some() {
-                continue; // an inline body for this name is already collected above
-            }
-            if strip_raw(&module_item.ident.to_string()) != *seg {
-                continue;
-            }
-            // Follow an **unconditional** `#[path = "…"]` file module. rustc resolves a non-inline
-            // `#[path]` relative to `path_base` — the containing file's own directory, with each
-            // enclosing inline-`mod` name accumulated onto it — NOT `child_dir` (the conventional-child
-            // base `<dir>/seg/` for a non-mod-rs file), the false-negative the whole-crate walk shares.
-            // Load `<path_base>/<rel>`, and since a `#[path]`-loaded file is mod-rs-like, descend with
-            // its own directory as the base (both `child_dir` and `path_base`) for the next segment's
-            // children. An inline `#[path]` (has a body) or a `cfg_attr`-wrapped `#[path]` is not
-            // followed by this targeted resolver — a narrow **fail-loud** bound (exit 2 "cannot
-            // judge"), never a silent pass; the whole-crate walks follow the unconditional form.
-            if let Some(rel) = direct_path_value(&module_item.attrs) {
-                let file = path_base.join(&rel);
-                if !file.is_file() {
-                    return Err(missing_module_file_error(module, crate_package));
+        // Resolve a file-form `mod seg;` too — ALWAYS attempted, not only when no inline variant
+        // was found above: a mutually-exclusive `#[cfg]` per-platform shim can legitimately pair
+        // an inline variant on one platform with a file-form variant on another (the same
+        // additive, cfg-blind union the whole-crate walk and 圭表 already apply to their own
+        // same-named children), and the scanner does not evaluate `#[cfg]`, so observing only
+        // whichever variant happened to carry an inline body was a real false negative: a
+        // forbidden item declared only in the file-form sibling passed unobserved. (A
+        // cfg-duplicated file-form `mod seg;` pair names one file, so the first match still
+        // suffices — unioning *multiple* file-form targets is the whole-crate walk's job, not
+        // this single-path resolver's.)
+        let mut file_form: Option<(Vec<syn::Item>, PathBuf, PathBuf)> = None;
+        'find_file_form: for item in &branch.items {
+            if let syn::Item::Mod(module_item) = item {
+                if module_item.content.is_some() {
+                    continue; // an inline body for this name is already collected above
                 }
+                if strip_raw(&module_item.ident.to_string()) != *seg {
+                    continue;
+                }
+                // Follow an **unconditional** `#[path = "…"]` file module. rustc resolves a
+                // non-inline `#[path]` relative to `path_base` — the containing file's own
+                // directory, with each enclosing inline-`mod` name accumulated onto it — NOT
+                // `child_dir` (the conventional-child base `<dir>/seg/` for a non-mod-rs file),
+                // the false-negative the whole-crate walk shares. Load `<path_base>/<rel>`, and
+                // since a `#[path]`-loaded file is mod-rs-like, descend with its own directory as
+                // the base (both `child_dir` and `path_base`) for the next segment's children. An
+                // inline `#[path]` (has a body) or a `cfg_attr`-wrapped `#[path]` is not followed
+                // by this targeted resolver — a narrow **fail-loud** bound (exit 2 "cannot
+                // judge"), never a silent pass; the whole-crate walks follow the unconditional
+                // form.
+                if let Some(rel) = direct_path_value(&module_item.attrs) {
+                    let file = branch.path_base.join(&rel);
+                    if !file.is_file() {
+                        return Err(missing_module_file_error(module, crate_package));
+                    }
+                    let parsed = read_parse(&file)?;
+                    let next_dir = file
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| branch.child_dir.clone());
+                    file_form = Some((parsed.items, file, next_dir));
+                    break 'find_file_form;
+                }
+                if has_path_attr(&module_item.attrs) {
+                    continue;
+                }
+                let file = locate_module_file(&branch.child_dir, seg)
+                    .ok_or_else(|| missing_module_file_error(module, crate_package))?;
                 let parsed = read_parse(&file)?;
-                let next_dir = file
+                // The loaded file's own directory is the base for a `#[path]` written at its top
+                // level (`<dir>` for `seg.rs`, `<dir>/seg` for `seg/mod.rs`); its conventional
+                // children live under `<child_dir>/seg`.
+                let own_dir = file
                     .parent()
                     .map(Path::to_path_buf)
-                    .unwrap_or_else(|| child_dir.clone());
-                file_form = Some((parsed.items, file, next_dir));
+                    .unwrap_or_else(|| branch.child_dir.join(seg));
+                file_form = Some((parsed.items, file, own_dir));
                 break 'find_file_form;
             }
-            if has_path_attr(&module_item.attrs) {
-                continue;
+        }
+        match (inline.is_empty(), file_form) {
+            (false, Some((file_items, file, own_dir))) => {
+                // Both an inline body and a file-form sibling declare `seg` under
+                // mutually-exclusive `#[cfg]` arms. Rather than merging their items into one
+                // shared pair of directories (correct only when the file-form sibling is an
+                // ordinary `seg/mod.rs` — wrong the moment it is a flat `seg.rs`, whose own
+                // `#[path]`-resolution base is its own containing directory, not
+                // `<child_dir>/seg`; the false negative this redesign fixes), each becomes its
+                // own independent branch, carrying its own correct directories for anything
+                // nested beneath `seg`. [`resolve_module_root`] merges every surviving branch's
+                // items back into one list once the descent reaches its leaf.
+                let inline_dir = branch.child_dir.join(seg);
+                next_branches.push(Branch {
+                    items: inline,
+                    current_file: branch.current_file.clone(),
+                    child_dir: inline_dir.clone(),
+                    path_base: inline_dir,
+                });
+                next_branches.push(Branch {
+                    items: file_items,
+                    current_file: file,
+                    child_dir: branch.child_dir.join(seg),
+                    path_base: own_dir,
+                });
             }
-            let file = locate_module_file(&child_dir, seg)
-                .ok_or_else(|| missing_module_file_error(module, crate_package))?;
-            let parsed = read_parse(&file)?;
-            // The loaded file's own directory is the base for a `#[path]` written at its top level
-            // (`<dir>` for `seg.rs`, `<dir>/seg` for `seg/mod.rs`); its conventional children live
-            // under `<child_dir>/seg`.
-            let own_dir = file
-                .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|| child_dir.join(seg));
-            file_form = Some((parsed.items, file, own_dir));
-            break 'find_file_form;
+            (false, None) => {
+                // Descending an inline `mod seg { … }`: the body stays in `current_file`, but its
+                // own children — conventional AND any nested `#[path]` — resolve from
+                // `<child_dir>/seg` (rustc accumulates the inline-module name as a directory
+                // component), so that becomes the new `path_base` as well as the new `child_dir`.
+                let inline_dir = branch.child_dir.join(seg);
+                next_branches.push(Branch {
+                    items: inline,
+                    current_file: branch.current_file.clone(),
+                    child_dir: inline_dir.clone(),
+                    path_base: inline_dir,
+                });
+            }
+            (true, Some((file_items, file, own_dir))) => {
+                next_branches.push(Branch {
+                    items: file_items,
+                    current_file: file,
+                    child_dir: branch.child_dir.join(seg),
+                    path_base: own_dir,
+                });
+            }
+            (true, None) => {} // a dead end for this branch; contributes no continuation
         }
     }
-    match (inline.is_empty(), file_form) {
-        (false, Some((file_items, _file, _own_dir))) => {
-            // Both an inline body and a file-form sibling declare `seg` under mutually-exclusive
-            // `#[cfg]` arms: union their items, matching rustc (exactly one is ever compiled, and
-            // the scanner does not evaluate which). Descent continues from the inline body's own
-            // accumulated directory — for an ordinary (non-`#[path]`) file-form sibling this
-            // coincides with its own directory too (both are `<child_dir>/seg`), so a *further*
-            // segment resolves identically either way. A **stated, narrower bound**: if the
-            // file-form sibling ALSO carries its own `#[path]` (relocating it elsewhere), a
-            // segment nested beneath `seg` is resolved only from the inline accumulation, not
-            // from that relocated directory — an amendment, not silently claimed complete, since
-            // fixing it requires this resolver to carry more than one candidate directory forward.
-            let mut merged = inline;
-            merged.extend(file_items);
-            let inline_dir = child_dir.join(seg);
-            descend(
-                merged,
-                inline_dir.clone(),
-                current_file,
-                inline_dir,
-                &segments[1..],
-                module,
-                crate_package,
-            )
-        }
-        (false, None) => {
-            // Descending an inline `mod seg { … }`: the body stays in `current_file`, but its own
-            // children — conventional AND any nested `#[path]` — resolve from `<child_dir>/seg`
-            // (rustc accumulates the inline-module name as a directory component), so that becomes
-            // the new `path_base` as well as the new `child_dir`.
-            let inline_dir = child_dir.join(seg);
-            descend(
-                inline,
-                inline_dir.clone(),
-                current_file,
-                inline_dir,
-                &segments[1..],
-                module,
-                crate_package,
-            )
-        }
-        (true, Some((file_items, file, own_dir))) => descend(
-            file_items,
-            child_dir.join(seg),
-            file,
-            own_dir,
-            &segments[1..],
-            module,
-            crate_package,
-        ),
-        (true, None) => Err(unknown_module_error(module, crate_package)),
+    if next_branches.is_empty() {
+        return Err(unknown_module_error(module, crate_package));
     }
+    descend(next_branches, &segments[1..], module, crate_package)
 }
 
 pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> Option<PathBuf> {
