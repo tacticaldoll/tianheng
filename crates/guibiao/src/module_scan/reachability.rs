@@ -108,17 +108,22 @@ pub(crate) fn governed_files(
 /// an unbounded walk — mirroring 渾儀's ancestor-path (not monotonic whole-tree) cycle guard, so
 /// two sibling declarations legitimately sharing one `#[path]` target is never misreported.
 ///
-/// Returns `(reachable, inline_only, remapped)`. `inline_only` names every path declared
-/// **inline-only** — declared with an inline body and NOT also declared file-form (`mod name;`)
-/// in its parent — so a same-named conventional file (`name.rs` / `name/mod.rs`) beside it is an
-/// orphan Rust never compiles as that module. The walk does not read such a file (nor mine it for
-/// phantom children), and [`governed_files`] excludes it, so an inline target remains the
-/// self-describing inline constitution error rather than silently governing the orphan. A path
-/// declared **both** ways — which in valid source arises only under mutually-exclusive `#[cfg]` —
-/// is not inline-only and keeps being observed through its conventional file (the existing
-/// cfg-blind lexical bound). `remapped` is every `(target file, logical module path)` pair
-/// reached through an unconditional `#[path]`; [`governed_files`] uses it to govern the real
-/// target under its logical path and to exclude a same-named conventional orphan in its place.
+/// Returns `(reachable, inline_only, remapped, remap_shadowed)`. `inline_only` names every path
+/// declared **inline-only** — declared with an inline body and NOT ALSO declared plain file-form
+/// (`mod name;`) in its parent — so a same-named conventional file (`name.rs` / `name/mod.rs`)
+/// beside it is an orphan Rust never compiles as that module. The walk does not read such a file
+/// in place of the inline body, and [`governed_files`] excludes it, so an inline target remains
+/// the self-describing inline constitution error rather than silently governing the orphan. The
+/// inline body's OWN declarations are re-scanned regardless of `inline_only` — a plain-file or
+/// `#[path]` sibling of the same name (only possible under mutually-exclusive `#[cfg]`, the
+/// per-platform shim pattern) is additive with the inline body, cfg-blind, never mutually
+/// exclusive; `inline_only` governs only whether a *stray, undeclared* same-named conventional
+/// file is an orphan, which is moot once a plain file is genuinely declared. `remapped` is every
+/// `(target file, logical module path)` pair reached through an unconditional `#[path]`;
+/// `remap_shadowed` names the paths where that `#[path]` is the ONLY file-form source (no plain
+/// file also declared) — the genuine orphan-shadow hazard [`governed_files`] excludes, since a
+/// plain-file sibling under a different `#[cfg]` arm is real and must not be excluded merely for
+/// sharing a path with an unrelated remap.
 #[allow(clippy::type_complexity)]
 pub(crate) fn reachable_modules(
     src_dir: &Path,
@@ -289,21 +294,16 @@ pub(crate) fn reachable_modules(
         for (child, (seen_inline, seen_plain_file)) in child_kinds {
             let child_path = format!("{module}::{child}");
             let mut next_ancestors = module_ancestors.clone();
-            // The inline body is observed only when there is no PLAIN conventional file
-            // declaration of the same name in this scope — the existing cfg-blind bound (a path
-            // declared both inline and plain file-form, only possible under mutually-exclusive
-            // `#[cfg]`, is observed through its conventional file, never the inline sibling body).
-            // That bound is specifically about a conventional FILE (the two forms genuinely
-            // compete for the same on-disk path in the conventional-path model); it does NOT
-            // extend to a `#[path]` sibling, which relocates to an entirely different file and so
-            // never competes with the inline body's own path — the inline body and every `#[path]`
-            // target below are additive with each other, cfg-blind, never mutually exclusive
-            // (mirroring how multiple `#[path]` targets among themselves already union). Dropping
-            // the inline body whenever ANY `#[path]` sibling existed was a real false negative
-            // this condition fixes: a per-platform shim pairing an inline body with a `#[path]`-
-            // relocated sibling silently lost the inline body's own children.
-            if seen_inline && !seen_plain_file {
-                inline_only.insert(child_path.clone());
+            // Every declared source for a name is additive, cfg-blind, never mutually exclusive —
+            // a mutually-exclusive `#[cfg]` per-platform shim can legitimately pair ANY two (or
+            // three) of a plain conventional file, an inline body, and a `#[path]` remap under the
+            // same name, and the scanner does not evaluate `#[cfg]`, so it must observe every
+            // variant's own real content (never picking one and silently dropping the others'
+            // children). The inline body's OWN declarations are therefore re-scanned whenever it
+            // is declared at all, regardless of a plain-file or `#[path]` sibling — dropping them
+            // whenever any sibling existed was a real false negative (a per-platform shim pairing
+            // an inline body with a sibling silently lost the inline body's own children).
+            if seen_inline {
                 if let Some(bodies) = child_bodies.remove(&child) {
                     // rustc accumulates the inline-module name as a directory component: a
                     // `#[path]` (or further nested inline `mod`) inside THIS body resolves from
@@ -315,6 +315,15 @@ pub(crate) fn reachable_modules(
                             ScanSource::Body(file, start, end, base.join(&child))
                         }));
                 }
+            }
+            // `inline_only` is narrower than "inline was declared": it drives ONLY the
+            // orphan-shadow exclusion for a STRAY same-named conventional file that no
+            // declaration brings into scope. That question is live only when no plain file is
+            // ALSO declared (a declared plain file is real, not stray) — independent of whether a
+            // `#[path]` sibling also exists, since a `#[path]` target relocates to an entirely
+            // different file and never competes with `x`'s own conventional path.
+            if seen_inline && !seen_plain_file {
+                inline_only.insert(child_path.clone());
             }
             if seen_plain_file {
                 if let Some(files) = by_module.get(&child_path) {
@@ -1589,6 +1598,51 @@ mod tests {
                 .iter()
                 .any(|(f, m)| f == &remapped_target && m == "crate::x"),
             "crate::x is governed via its #[path] target regardless of the inline sibling: {governed:?}"
+        );
+    }
+
+    #[test]
+    fn an_inline_sibling_of_a_plain_file_is_still_governed() {
+        // rustc ground truth (verified with a real `cargo build`, both feature configurations):
+        // `#[cfg(not(feature = "b"))] pub mod x;` + `#[cfg(feature = "b")] pub mod x { pub mod y;
+        // }` compiles the PLAIN `x.rs` by default and the INLINE body (with its own file-backed
+        // child `x/y.rs` as `crate::x::y`) under feature `b`. The pre-existing v0.1.4 bound
+        // ("a path declared both inline and file-form is observed through its conventional file")
+        // is about which file backs `crate::x` itself for orphan-shadow purposes — it must not
+        // also mean the inline body's OWN declarations go unscanned: `crate::x::y` is real,
+        // compiled source under its own `#[cfg]` arm, and dropping it was a genuine false
+        // negative (the scanner does not evaluate `#[cfg]`, so it must observe every variant).
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-cfg-plain-inline-sibling-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("x")).expect("mkdirs");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[cfg(not(feature = \"b\"))]\npub mod x;\n#[cfg(feature = \"b\")]\npub mod x {\n    pub mod y;\n}\n",
+        )
+        .expect("write lib.rs");
+        let plain = src.join("x.rs");
+        std::fs::write(&plain, "use crate::projection::Plain;\n").expect("write x.rs");
+        let inline_child = src.join("x/y.rs");
+        std::fs::write(&inline_child, "use crate::projection::InlineChild;\n")
+            .expect("write x/y.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only, _remapped, _remap_shadowed) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            !inline_only.contains("crate::x"),
+            "a plain file is declared, so crate::x is not inline-only: {inline_only:?}"
+        );
+        assert!(
+            reachable.contains("crate::x::y"),
+            "the inline sibling's own file-backed child must still be reachable even though a \
+             plain-file sibling of crate::x also exists: {reachable:?}"
         );
     }
 }
