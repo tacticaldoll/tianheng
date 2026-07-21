@@ -75,6 +75,66 @@ fn rust_files_governs_a_symlinked_source_file() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_plain_child_reached_only_through_a_symlinked_directory_is_governed() {
+    // `rust_files` deliberately never recurses into a symlinked directory (its own cycle guard,
+    // see the sibling tests above), so a file that lives only behind one is absent from the
+    // structural file list `governed_files` scans from. But `reachable_modules`'s live probe for
+    // a plain child resolves the candidate path via `is_file`/`canonicalize`, which DO follow a
+    // symlinked directory component — so before this fix, such a child was marked reachable and
+    // even read/descended into, yet was absent from every `governed_files` output (neither the
+    // structural iterator, which never walked it, nor `remapped`, since its naive path
+    // structurally agreed with its own module path). Verified against a real `cargo check`: this
+    // exact layout compiles `real_target/child.rs` as `crate::mymod::child` through the symlink.
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("guibiao-symlinked-child-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("mkdir src");
+    std::fs::create_dir_all(dir.join("real_target")).expect("mkdir real_target");
+    std::fs::write(
+        src.join("lib.rs"),
+        "pub mod mymod;\npub mod secret { pub struct Thing; }\n",
+    )
+    .expect("write lib.rs");
+    std::fs::write(src.join("mymod.rs"), "pub mod child;\n").expect("write mymod.rs");
+    std::fs::write(
+        dir.join("real_target").join("child.rs"),
+        "use crate::secret::Thing;\n",
+    )
+    .expect("write real_target/child.rs");
+    symlink(dir.join("real_target"), src.join("mymod")).expect("symlink src/mymod -> real_target");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::mymod")
+        .must_not_import("crate::secret")
+        .because("a symlinked-directory child must still be governed, not silently invisible");
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    result.expect("a symlinked-directory-reached child is a valid, governable target");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::mymod");
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a module-import violation carries its source file");
+    assert!(
+        file.ends_with("child.rs"),
+        "the violation must name the real file reached through the symlinked directory: {file}"
+    );
+}
+
 #[test]
 fn expand_use_tree_does_not_overflow_on_pathological_nesting() {
     // A pathologically brace-nested `use` must not overflow the stack. The depth cap bounds the
@@ -393,6 +453,45 @@ fn path_remapped_module_is_followed_not_governed_via_a_conventional_orphan() {
     assert!(
         file.ends_with("weird.rs"),
         "the violation names the real #[path] target, not the conventional orphan: {file}"
+    );
+}
+
+/// An unconditional `#[path = "…"]` preceding an INLINE module header is not a no-op: it
+/// relocates the base directory the inline body's OWN file-form children resolve from, exactly
+/// like a file-form `#[path]`. Verified against a real `cargo check`: `#[path = "thread_files"]
+/// pub mod thread { pub mod local_data; }` compiles `thread_files/local_data.rs` as
+/// `crate::thread::local_data`, with no `src/thread/` directory at all — the naive
+/// (non-relocated) location `thread/local_data.rs` does not even exist. Before this fix the
+/// scanner treated the preceding `#[path]` as a pure no-op and always looked in the naive
+/// location, silently finding nothing and leaving the real file's imports unobserved.
+#[test]
+fn an_unconditional_path_on_an_inline_module_relocates_its_own_file_form_children() {
+    let (result, violations) = run_module_check(
+        "inline-path-relocate",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"thread_files\"]\npub mod thread {\n    pub mod local_data;\n}\n\
+                     pub mod secret { pub struct Thing; }\n",
+            ),
+            ("thread_files/local_data.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::thread")
+            .must_not_import("crate::secret")
+            .because("an inline module's #[path] must relocate its own children, not no-op"),
+    );
+    result.expect("the relocated child must be a valid, governable target");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::thread");
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a module-import violation carries its source file");
+    assert!(
+        file.ends_with("thread_files/local_data.rs")
+            || file.ends_with("thread_files\\local_data.rs"),
+        "the violation must name the #[path]-relocated file, not a naive thread/local_data.rs: {file}"
     );
 }
 

@@ -104,7 +104,13 @@ pub(crate) fn governed_files(
 /// (`mod parent { mod child; }`, compiling `parent/child.rs`) is therefore reachable like any
 /// other declared module; the file itself is already indexed by [`module_path_of`], which is
 /// purely structural (derived from the file's own path on disk), so no directory-base
-/// bookkeeping is needed beyond locating the inline body to re-scan.
+/// bookkeeping is needed beyond locating the inline body to re-scan. An **unconditional**
+/// `#[path = "…"]` preceding the inline header does NOT relocate the header's own content (the
+/// body already IS the module) but DOES relocate the base directory its own file-form children
+/// resolve from (rustc's rule, verified against a real build: `#[path = "d"] mod x { mod y; }`
+/// compiles `y` at `d/y.rs`, never the default `<parent's child_base>/x/y.rs`) — followed the
+/// same way an unconditional file-form `#[path]` is, below; a `cfg_attr`-wrapped one stays the
+/// same cfg-conditional skip bound.
 ///
 /// An **unconditional** `#[path = "…"]` file declaration is now *followed* to its author-chosen
 /// target — closing the divergence from 渾儀/漏刻, which already follow it — resolved from
@@ -166,6 +172,22 @@ pub(crate) fn reachable_modules(
                 .push(file);
         }
     }
+    // Every file the crate-wide walk (`fs_walk::rust_files`) actually found, by canonical path —
+    // used below to tell whether a plain child's live-probed candidate is one `governed_files`'
+    // OWN structural iterator will find on its own, or one it never will. `rust_files` deliberately
+    // does not recurse into a symlinked DIRECTORY (its own cycle guard), so a file that is real,
+    // exists, and rustc genuinely compiles — but sits only behind a symlinked directory component —
+    // is absent from `files` even though `Path::is_file`/`canonicalize` (used by the live probe
+    // below) transparently follow that same symlink. Without this check, such a file's own naive
+    // path still maps back to its own module path (`structurally_matches` alone can't tell it
+    // apart from an ordinary, actually-walked file), so it was wrongly assumed to be "already
+    // found by the structural iterator" and silently never registered anywhere — reachable, read,
+    // and descended into, yet absent from every `governed_files` output. A confirmed false
+    // negative, not a hypothetical: `cargo check` compiles this shape cleanly.
+    let files_canon: HashSet<PathBuf> = files
+        .iter()
+        .filter_map(|f| std::fs::canonicalize(f).ok())
+        .collect();
 
     // Where the walk finds a module's own `mod` declarations: either its file(s) (scanned at
     // top level) or, for an inline-only module, the byte span of its declaring `mod name { … }`
@@ -232,10 +254,21 @@ pub(crate) fn reachable_modules(
         // (never its `path_base`) joined with the inline name — so a plain `mod x { … }` declared
         // inside an ordinary flat `bar.rs` still accumulates as `<bar's own child directory>/x`,
         // not `<bar.rs's containing dir>/x` (verified against a real rustc build: `bar.rs`
-        // containing `mod x { mod y; }` compiles `y` at `bar/x/y.rs`, not `x/y.rs`).
+        // containing `mod x { mod y; }` compiles `y` at `bar/x/y.rs`, not `x/y.rs`) — UNLESS an
+        // unconditional `#[path = "…"]` precedes the inline header, in which case that value
+        // (resolved from the declaring source's own `path_base`, the fifth tuple element here)
+        // relocates the base its own file-form children resolve from instead (rustc's rule;
+        // verified against a real build).
         let mut child_bodies: std::collections::BTreeMap<
             String,
-            Vec<(PathBuf, usize, usize, PathBuf, HashSet<PathBuf>)>,
+            Vec<(
+                PathBuf,
+                usize,
+                usize,
+                PathBuf,
+                Option<PathBuf>,
+                HashSet<PathBuf>,
+            )>,
         > = Default::default();
         // Every direct `#[path]` target seen for a name, across this module's source(s), paired
         // with the DECLARING SOURCE's own ancestor set (critically: per-source, not merged across
@@ -301,12 +334,24 @@ pub(crate) fn reachable_modules(
                 let seen = child_kinds.entry(declared.name.clone()).or_default();
                 if declared.is_inline {
                     seen.0 = true;
+                    // An unconditional `#[path = "…"]` preceding this inline header relocates the
+                    // base its own file-form children resolve from — resolved from THIS source's
+                    // own `path_base` (where a `#[path]` found within it resolves from), exactly
+                    // like the file-form direct-path handling below. A value this reader cannot
+                    // decode falls back to the default accumulated directory, same fail-safe as
+                    // the file-form case.
+                    let relocated_base = declared.direct_path_eq.and_then(|eq_cleaned| {
+                        let &orig_eq = positions.get(eq_cleaned)?;
+                        let rel = read_path_string(text.as_bytes(), orig_eq + 1, text.len())?;
+                        Some(path_base.join(rel))
+                    });
                     if let Some((start, end)) = declared.body {
                         child_bodies.entry(declared.name).or_default().push((
                             file.clone(),
                             start,
                             end,
                             child_base.clone(),
+                            relocated_base,
                             source_ancestors.clone(),
                         ));
                     }
@@ -365,16 +410,19 @@ pub(crate) fn reachable_modules(
                     // `#[path]` (or further nested inline `mod`) inside THIS body — or a further
                     // plain child of it — resolves from `<parent's child_base>/<child>`, not the
                     // parent's own `path_base` (which, for an ordinary flat file, is a DIFFERENT,
-                    // shallower directory — see the `ScanSource` doc above). An inline body opens
-                    // no new file and is itself mod-rs-like, so `path_base` and `child_base`
-                    // coincide for it; it simply carries forward whichever source declared it —
-                    // its own ancestor set is already correct as-is.
+                    // shallower directory — see the `ScanSource` doc above) — UNLESS an
+                    // unconditional `#[path]` preceded this inline header, in which case
+                    // `relocated_base` (resolved above) is authoritative instead. An inline body
+                    // opens no new file and is itself mod-rs-like either way, so `path_base` and
+                    // `child_base` coincide for it; it simply carries forward whichever source
+                    // declared it — its own ancestor set is already correct as-is.
                     sources
                         .entry(child_path.clone())
                         .or_default()
                         .extend(bodies.into_iter().map(
-                            |(file, start, end, base, source_ancestors)| {
-                                let inline_dir = base.join(&child);
+                            |(file, start, end, base, relocated_base, source_ancestors)| {
+                                let inline_dir =
+                                    relocated_base.unwrap_or_else(|| base.join(&child));
                                 ScanSource::Body(
                                     file,
                                     start,
@@ -450,12 +498,19 @@ pub(crate) fn reachable_modules(
                         // `#[path]` remap. Recorded in `remapped` only in that divergent case —
                         // exactly like a direct `#[path]` target — so a plain child is never
                         // double-registered under its own already-correct structural identity.
-                        let structurally_matches = candidate
-                            .strip_prefix(src_dir)
-                            .ok()
-                            .is_some_and(|relative| {
-                                module_path_of(relative, root_relative) == child_path
-                            });
+                        // Agreeing on the PATH alone is not enough: `files_canon` (built from
+                        // `rust_files`, which never recurses into a symlinked directory) must
+                        // ALSO contain this exact file, or the structural iterator this branch
+                        // defers to will never actually find it — a plain child reached only
+                        // through a symlinked directory component agrees on path but is absent
+                        // from `files_canon`, so it must be registered here instead.
+                        let structurally_matches = files_canon.contains(&canon)
+                            && candidate
+                                .strip_prefix(src_dir)
+                                .ok()
+                                .is_some_and(|relative| {
+                                    module_path_of(relative, root_relative) == child_path
+                                });
                         if structurally_matches {
                             any_structural_match = true;
                         } else {
@@ -601,15 +656,27 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
                     match bytes.get(k) {
                         Some(b'{') => {
                             // Skip the whole body in one jump — its content is re-scanned only if
-                            // this module turns out to be inline-only, from `body` below. A
-                            // `#[path]` on an inline module is a no-op for rustc (the body IS the
-                            // module), so it is always declared regardless of `path_attr_before_item`.
+                            // this module turns out to be inline-only, from `body` below. The
+                            // module itself is always declared regardless of a preceding
+                            // `#[path]` (rustc's `path` attribute never relocates an inline
+                            // body's OWN content — the body already IS the module). It is NOT a
+                            // no-op, though: it relocates the base directory THIS body's own
+                            // file-form children resolve from (verified against a real rustc
+                            // build: `#[path = "d"] mod x { mod y; }` compiles `y` at `d/y.rs`,
+                            // never `<parent's child_base>/x/y.rs`) — an unconditional direct
+                            // value is captured here (`direct_path_eq`) for exactly that reason;
+                            // a `cfg_attr`-wrapped one stays the same stated, cfg-conditional skip
+                            // bound as the file-form case (never followed cfg-blind).
+                            let direct_path_eq = match path_attr_before_item(bytes, i) {
+                                PathAttrKind::Direct(eq) => Some(eq),
+                                PathAttrKind::None | PathAttrKind::Excluded => None,
+                            };
                             let close = balanced_group_end(bytes, k).unwrap_or(bytes.len());
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
                                 is_inline: true,
                                 body: Some((k + 1, close.saturating_sub(1))),
-                                direct_path_eq: None,
+                                direct_path_eq,
                             });
                             i = close;
                             continue;

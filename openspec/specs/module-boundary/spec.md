@@ -47,6 +47,11 @@ The system SHALL observe module imports by scanning the target crate's source `u
 - **WHEN** a crate-root file declares `mod parent { mod child; }` (inline, with no file of its own), the file `src/parent/child.rs` exists and contains `use crate::projection::Thing;`, and a boundary governs `crate::parent::child` forbidding `crate::projection`
 - **THEN** the system reports the violation, because `crate::parent::child` is reachable — declared inside `parent`'s own inline body, which the walk re-scans for its nested `mod` declarations, not only the crate root's own top level
 
+#### Scenario: A plain child reached only through a symlinked directory is still governed
+
+- **WHEN** a crate declares `mod parent;`, `parent.rs` declares a plain `mod child;`, `parent/child.rs` does not physically exist but `parent` itself is a symlink to a real directory elsewhere containing `child.rs` (a forbidden import), and a boundary governs `crate::parent` forbidding the import
+- **THEN** the system reports the violation, attributed to the real file behind the symlink — a symlinked directory component along a module's resolved path does not make its content invisible to governance, even though the crate-wide file walk itself does not recurse into a symlinked directory (a separate, cycle-safety concern)
+
 #### Scenario: A bare use in a submodule is external even when it matches a crate-root module
 
 - **WHEN** a file in a submodule (not the crate root) declares `use serde::Deserialize;` and `serde` is also a crate-root module of the target crate
@@ -302,7 +307,7 @@ The system SHALL follow a file-form module declared with an **unconditional, dir
 
 An unconditional target that does not exist on disk is a genuine broken reference (rustc itself errors on it) and SHALL be a scan error (exit 2), never a silent skip. A `#[path]` chain that resolves back to a source file already open on the path from the crate root (only possible through `#[path]`, since ordinary conventional/inline nesting is bounded by the crate's finite file list) SHALL likewise be a scan error, never an unbounded walk — tracked by the set of files open on the *current descent path*, not a monotonic whole-crate visited set, so two sibling or cousin declarations legitimately sharing one `#[path]` target (rustc compiles the same file twice, as two distinct modules) is never misreported as a cycle.
 
-The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes, but only the **direct, unconditional** form is followed. A `cfg_attr`-wrapped `path` remains a stated, cfg-conditional coverage bound (the same family as inline and macro-generated items — see the scanner decision in `PROJECT.md`): it is cfg-conditional, so following it cfg-blind could read a file rustc does not compile in the active configuration; a `cfg_attr` whose applied metas contain no genuine `path` name-value SHALL remain an ordinary module. This cfg-blind exclusion prevents a conditional remap from silently governing a same-named conventional orphan. A `path` attribute on an inline module (`mod foo { … }`) does not relocate it (rustc treats it as a no-op there) and SHALL NOT make that inline module disappear from reachability.
+The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes, but only the **direct, unconditional** form is followed. A `cfg_attr`-wrapped `path` remains a stated, cfg-conditional coverage bound (the same family as inline and macro-generated items — see the scanner decision in `PROJECT.md`): it is cfg-conditional, so following it cfg-blind could read a file rustc does not compile in the active configuration; a `cfg_attr` whose applied metas contain no genuine `path` name-value SHALL remain an ordinary module. This cfg-blind exclusion prevents a conditional remap from silently governing a same-named conventional orphan. An **unconditional, direct** `path` attribute on an inline module (`mod foo { … }`) does not relocate the module's own content (rustc treats the attribute as a no-op for that purpose — the body already IS the module) and SHALL NOT make that inline module disappear from reachability, but it DOES relocate the base directory the inline body's OWN file-form children resolve from, exactly as it would for a file-form declaration — the system SHALL follow it there too, resolved from the declaring source's own `path_base`. A `cfg_attr`-wrapped `path` preceding an inline module remains the same stated, cfg-conditional coverage bound as the file-form case (never followed cfg-blind; the inline body's own default child directory is used instead).
 
 #### Scenario: A path-remapped module's imports are observed at its real target
 
@@ -378,6 +383,11 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 
 - **WHEN** a crate declares `#[cfg_attr(some_platform, path = "b.rs")] #[path = "a.rs"] mod foo;` — a cfg-conditional remap textually BEFORE the unconditional one on the same declaration
 - **THEN** the system follows the unconditional `#[path = "a.rs"]` target exactly as it would if the two attributes were written in the opposite order, since rustc compiles `a.rs` whenever `some_platform` does not hold regardless of which attribute is written first
+
+#### Scenario: An unconditional path on an inline module relocates its own file-form children
+
+- **WHEN** a crate declares `#[path = "thread_files"] pub mod thread { pub mod local_data; }`, `thread_files/local_data.rs` contains a forbidden import, and no `thread/` directory exists at all
+- **THEN** the system observes the forbidden import under `crate::thread::local_data`, attributed to `thread_files/local_data.rs` — the `#[path]` attribute is not treated as a no-op merely because the module it precedes is inline; it relocates where the inline body's own file-form children resolve from, exactly as it would for a file-form declaration
 
 ### Requirement: A multi-target package's cross-root same-named submodule is a stated bound
 

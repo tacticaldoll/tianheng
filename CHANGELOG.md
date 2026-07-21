@@ -80,6 +80,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   both resolve to the one real backing file) produced a duplicate branch, inflating one real
   violation into two apparently-distinct findings; file-form matches are now deduped by the
   resolved file's canonical path.
+- A fifth adversarial review round, focused on the newest surface area above plus a fresh
+  cross-crate consistency pass, found two further false negatives in 圭表's plain-child live
+  probe. A plain child reached only through a **symlinked directory** component was marked
+  reachable and read (`fs_walk::rust_files` never recurses into a symlinked directory, its own
+  cycle guard, so such a file is absent from the structural file list `governed_files` scans
+  from — but the live probe's `is_file`/`canonicalize` calls transparently follow it) yet was
+  absent from every `governed_files` output, silently passing its real imports. And an
+  unconditional `#[path = "…"]` preceding an **inline** module header (`#[path = "d"] pub mod x {
+  pub mod y; }`) was treated as a pure no-op, when rustc actually uses it to relocate the base
+  directory the inline body's own file-form children resolve from — so such a child's real file
+  was never found at its relocated location and its imports went unobserved. Both are now
+  followed/governed correctly, verified against real `cargo check` builds of each shape.
 
 ## [0.2.1] - 2026-07-21
 
