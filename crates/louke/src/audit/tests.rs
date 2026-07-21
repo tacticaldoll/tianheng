@@ -1038,31 +1038,35 @@ fn a_seam_level_runtime_violation_has_no_file() {
 }
 
 #[test]
-fn zzz_tmp_finder_repro_nonmodrs_path_base() {
-    let base = std::env::temp_dir().join(format!("louke-finder-repro-{}", std::process::id()));
+fn finder_repro_nonmodrs_path_base() {
+    let base = std::env::temp_dir().join(format!("louke-finder-base-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
-    // Finder repro: #[path] inside a NON-mod-rs file (app.rs, reached via `mod app;` in lib.rs).
-    // rustc resolves the target relative to app.rs's OWN directory => src/relocated.rs.
     let root = write_source(&base, "lib.rs", "pub mod app;\n");
     write_source(
         &base,
         "app.rs",
         "#[path = \"relocated.rs\"]\npub mod worker;\n",
     );
-    // The real compiled target (what rustc uses) with the probe:
+    // The REAL compiled target (rustc uses this)
     write_source(
         &base,
         "relocated.rs",
         "fn inner() { assert_boundary!(\"relocated-seam\", o); }\n",
     );
+    // An orphan at louke's wrong join path (src/app/relocated.rs)
+    write_source(&base, "app/relocated.rs", "fn inner() {}\n");
+    // Only the REAL target is compiled and has the probe -> must be caught.
     let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
-    eprintln!("TMP_REPRO outcome = {outcome:?}");
-    eprintln!("TMP_REPRO exit = {}", outcome.exit_code());
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "Coverage should pass as the probe is matched"
+    );
     let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
-fn zzz_tmp_finder_repro_fn_orphan() {
+fn finder_repro_fn_orphan() {
     let base = std::env::temp_dir().join(format!("louke-finder-fn-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let root = write_source(&base, "lib.rs", "pub mod app;\n");
@@ -1081,7 +1085,6 @@ fn zzz_tmp_finder_repro_fn_orphan() {
     write_source(&base, "app/relocated.rs", "fn inner() {}\n");
     // No declared boundaries: an assert on "undeclared-seam" in the REAL target must be caught.
     let outcome = audit_probe_coverage(&[], &[root]);
-    eprintln!("TMP_FN outcome = {outcome:?}");
-    eprintln!("TMP_FN exit = {}", outcome.exit_code());
+    assert_eq!(outcome.exit_code(), 1, "Should catch undeclared seam");
     let _ = std::fs::remove_dir_all(base);
 }
