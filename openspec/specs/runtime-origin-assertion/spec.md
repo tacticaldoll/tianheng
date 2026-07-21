@@ -250,6 +250,15 @@ reachable selected source file SHALL be read fail-loud; an unreadable file SHALL
 constitution error. The walker SHALL remain louke-local, std-only, and audit-feature-only. Directory
 inputs SHALL remain accepted as the legacy recursive corpus for source compatibility.
 
+A `mod name;` whose conventional file (`name.rs` or `name/mod.rs`) cannot be resolved SHALL be a
+constitution error **unless** the declaration carries a `#[cfg(...)]` or `#[cfg_attr(...)]` gate, in
+which case the module may legitimately have no file in the current configuration (an off feature or
+another platform) and SHALL be skipped rather than errored — the same cfg-tolerance the semantic
+dimension applies, reimplemented louke-locally (三儀 ⊥ 三儀). This does not evaluate `cfg`: a
+*resolvable* cfg-gated module is still scanned and its probes still counted; only an *absent* file
+for a cfg-gated declaration is tolerated. A resolution ambiguity (both `name.rs` and `name/mod.rs`
+present) remains a constitution error regardless of any gate.
+
 #### Scenario: Orphan probe cannot cover a seam
 
 - **WHEN** a target root declares no module for `orphan.rs` and that orphan file contains the only probe for a declared seam
@@ -269,6 +278,11 @@ inputs SHALL remain accepted as the legacy recursive corpus for source compatibi
 
 - **WHEN** Cargo reports a custom library root filename and its reachable modules contain probes
 - **THEN** the audit starts from that exact file rather than guessing `src/lib.rs`
+
+#### Scenario: A cfg-gated module with no file is tolerated
+
+- **WHEN** a target root declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off) alongside a non-cfg `mod present;` that resolves normally
+- **THEN** the audit skips the absent cfg-gated module without a constitution error, while a non-cfg `mod missing;` with no file remains a fail-loud constitution error
 
 #### Scenario: Legacy directory callers remain compatible
 

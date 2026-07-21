@@ -121,8 +121,23 @@ fn collect_scope_modules(
             cursor = skip_ascii_space(bytes, cursor);
             match bytes.get(cursor) {
                 Some(b';') => {
-                    if !has_path_attr_before_mod(bytes, i) {
-                        modules.push(resolve_external_module(child_base, name)?);
+                    let attrs = mod_preamble_attrs(bytes, i);
+                    if !attrs.path {
+                        match resolve_external_module(child_base, name)? {
+                            Some(resolved) => modules.push(resolved),
+                            // No conventional file. A `#[cfg]`-gated declaration may legitimately
+                            // have none in this configuration (an off feature / another platform),
+                            // so tolerate it — it compiles no probes here, so skipping it cannot
+                            // silently cover a seam. A non-cfg missing module is a real broken
+                            // reference: fail loud (exit 2), never a silent skip.
+                            None if attrs.cfg => {}
+                            None => {
+                                return Err(format!(
+                                    "cannot resolve reachable module `{name}` under {}",
+                                    child_base.display()
+                                ));
+                            }
+                        }
                     }
                     i = cursor + 1;
                     continue;
@@ -152,7 +167,11 @@ fn collect_scope_modules(
     Ok(())
 }
 
-fn resolve_external_module(base: &Path, name: &str) -> Result<(PathBuf, PathBuf), String> {
+/// Resolve a `mod name;` to its conventional file and the base directory for its own children:
+/// `Ok(Some(..))` for `<base>/name.rs` or `<base>/name/mod.rs`, `Ok(None)` when neither exists (the
+/// caller decides whether an absent file is a legitimate `#[cfg]`-gated skip or a hard error), and
+/// `Err` only for a genuine ambiguity (both files present).
+fn resolve_external_module(base: &Path, name: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
     let flat = base.join(format!("{name}.rs"));
     let nested = base.join(name).join("mod.rs");
     let file = match (flat.is_file(), nested.is_file()) {
@@ -165,19 +184,14 @@ fn resolve_external_module(base: &Path, name: &str) -> Result<(PathBuf, PathBuf)
                 nested.display()
             ));
         }
-        (false, false) => {
-            return Err(format!(
-                "cannot resolve reachable module `{name}` under {}",
-                base.display()
-            ));
-        }
+        (false, false) => return Ok(None),
     };
     let next_base = if file.file_name().and_then(|n| n.to_str()) == Some("mod.rs") {
         file.parent().unwrap_or(base).to_path_buf()
     } else {
         file.parent().unwrap_or(base).join(name)
     };
-    Ok((file, next_base))
+    Ok(Some((file, next_base)))
 }
 
 fn is_mod_keyword(bytes: &[u8], i: usize) -> bool {
@@ -224,18 +238,29 @@ fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
     limit
 }
 
-/// Does the `mod name;` at `mod_index` carry a `#[path = "..."]` attribute?
-///
-/// A `#[path]`-relocated module lives at an author-chosen file, so the by-name resolver must not
-/// try (and fail) to resolve it — a stated scan bound. Detection is **structural, not a raw
-/// substring**: it walks the module's preamble (the bytes since the previous item boundary),
-/// skipping comments and string literals, and matches an *outer attribute whose meta name is
-/// exactly `path`* followed by `=`. A comment or unrelated attribute that merely contains the text
-/// `path` (`// fast path`, `#[cfg(feature = "fastpath")]`) MUST NOT match — a false match would
-/// drop a reachable module and every probe under it (a silent coverage false negative, the worst
-/// outcome under FN-first). A `#[cfg_attr(.., path = ..)]` conditional relocation stays a bound
-/// (its meta name is `cfg_attr`, not `path`), degrading to the unresolved-module reaction.
-fn has_path_attr_before_mod(bytes: &[u8], mod_index: usize) -> bool {
+/// Outer attributes on the `mod name;` at `mod_index` that steer the walker.
+struct ModPreambleAttrs {
+    /// A `#[path = "..."]` relocation: the module lives at an author-chosen file, so the by-name
+    /// resolver must not try (and fail) to resolve it — a stated scan bound.
+    path: bool,
+    /// A `#[cfg(...)]` / `#[cfg_attr(...)]` gate: the module may legitimately have no file in the
+    /// current configuration (an off feature / another platform), so an absent file is tolerated
+    /// rather than a scan error — the same cfg-tolerance 渾儀 applies, reimplemented louke-locally
+    /// (三儀 ⊥ 三儀). This is not `cfg` evaluation: a resolvable cfg-gated module is still scanned
+    /// and its probes still counted; only an *absent* file for a cfg-gated declaration is tolerated.
+    cfg: bool,
+}
+
+/// Scan a `mod name;`'s preamble (the bytes since the previous item boundary) for the outer
+/// attributes that steer the walker. Detection is **structural, not a raw substring**: comments and
+/// string literals are skipped, and only an *outer attribute whose meta name is exactly* `path`
+/// (followed by `=`), `cfg`, or `cfg_attr` matches. A comment or unrelated attribute that merely
+/// contains the text (`// fast path`, `#[cfg(feature = "fastpath")]`) MUST NOT be read as a `path`
+/// relocation — a false match would drop a reachable module and every probe under it (a silent
+/// coverage false negative, the worst outcome under FN-first). A `#[cfg_attr(.., path = ..)]`
+/// conditional relocation reads as `cfg` (its meta name is `cfg_attr`, not `path`), so an absent
+/// target is tolerated rather than errored.
+fn mod_preamble_attrs(bytes: &[u8], mod_index: usize) -> ModPreambleAttrs {
     let mut start = 0;
     for i in (0..mod_index).rev() {
         if matches!(bytes[i], b';' | b'{' | b'}') {
@@ -243,6 +268,10 @@ fn has_path_attr_before_mod(bytes: &[u8], mod_index: usize) -> bool {
             break;
         }
     }
+    let mut attrs = ModPreambleAttrs {
+        path: false,
+        cfg: false,
+    };
     let mut i = start;
     while i < mod_index {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
@@ -261,11 +290,15 @@ fn has_path_attr_before_mod(bytes: &[u8], mod_index: usize) -> bool {
                 while name_end < mod_index && is_ident_byte(bytes[name_end]) {
                     name_end += 1;
                 }
-                if &bytes[name_start..name_end] == b"path" {
-                    let eq = skip_preamble_trivia(bytes, name_end, mod_index);
-                    if bytes.get(eq) == Some(&b'=') {
-                        return true;
+                match &bytes[name_start..name_end] {
+                    b"path" => {
+                        let eq = skip_preamble_trivia(bytes, name_end, mod_index);
+                        if bytes.get(eq) == Some(&b'=') {
+                            attrs.path = true;
+                        }
                     }
+                    b"cfg" | b"cfg_attr" => attrs.cfg = true,
+                    _ => {}
                 }
                 i = attr_group_end(bytes, open, mod_index);
                 continue;
@@ -273,7 +306,7 @@ fn has_path_attr_before_mod(bytes: &[u8], mod_index: usize) -> bool {
         }
         i += 1;
     }
-    false
+    attrs
 }
 
 /// Advance past whitespace, comments, and string/char literals to the next significant byte
