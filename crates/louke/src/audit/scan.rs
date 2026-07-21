@@ -60,7 +60,11 @@ fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), 
         let source = std::fs::read_to_string(&file)
             .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
         scan_source(&source, &file.display().to_string(), probes);
-        let mut children = external_module_files(&source, &child_base)?;
+        // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
+        // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
+        // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
+        let file_dir = file.parent().unwrap_or(child_base.as_path());
+        let mut children = external_module_files(&source, &child_base, file_dir)?;
         children.sort();
         children.reverse();
         pending.extend(children);
@@ -71,9 +75,17 @@ fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), 
 fn external_module_files(
     source: &str,
     child_base: &Path,
+    file_dir: &Path,
 ) -> Result<Vec<(PathBuf, PathBuf)>, String> {
     let mut modules = Vec::new();
-    collect_scope_modules(source.as_bytes(), 0, source.len(), child_base, &mut modules)?;
+    collect_scope_modules(
+        source.as_bytes(),
+        0,
+        source.len(),
+        child_base,
+        file_dir,
+        &mut modules,
+    )?;
     Ok(modules)
 }
 
@@ -82,6 +94,7 @@ fn collect_scope_modules(
     start: usize,
     end: usize,
     child_base: &Path,
+    file_dir: &Path,
     modules: &mut Vec<(PathBuf, PathBuf)>,
 ) -> Result<(), String> {
     let mut i = start;
@@ -125,7 +138,9 @@ fn collect_scope_modules(
                     // Resolve either the unconditional `#[path = "…"]` target (followed to observe
                     // its probes) or, absent one, the conventional `<base>/name.rs|name/mod.rs`.
                     let resolved = match &attrs.path {
-                        Some(rel) => resolve_path_module(child_base, rel),
+                        // A non-inline `#[path]` resolves from the containing file's OWN directory
+                        // (`file_dir`), not the conventional-child base — rustc's mod-rs-blind rule.
+                        Some(rel) => resolve_path_module(file_dir, rel),
                         None => resolve_external_module(child_base, name),
                     }?;
                     match resolved {
@@ -148,12 +163,21 @@ fn collect_scope_modules(
                 }
                 Some(b'{') => {
                     let close = balanced_brace_end(bytes, cursor, end);
-                    let inline_base = child_base.join(name);
+                    let attrs = mod_preamble_attrs(bytes, i);
+                    // An inline `#[path = "dir"] mod x { … }` relocates x's file-children base to
+                    // `<file_dir>/dir` (rustc uses the path value, relative to the containing file's
+                    // own directory); otherwise they live under `<child_base>/name`. The body is in
+                    // the SAME file, so `file_dir` is unchanged for any `#[path]` nested in it.
+                    let inline_base = match &attrs.path {
+                        Some(rel) => file_dir.join(rel),
+                        None => child_base.join(name),
+                    };
                     collect_scope_modules(
                         bytes,
                         cursor + 1,
                         close.saturating_sub(1),
                         &inline_base,
+                        file_dir,
                         modules,
                     )?;
                     i = close;
