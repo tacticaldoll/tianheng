@@ -116,6 +116,15 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `per_finding_file`'s module-string-keyed re-resolution are removed entirely — there is no longer
   a class of caller that resolves a finding's file from anything other than the exact branch that
   produced it.
+- A sixth adversarial review round, focused on the round-5 changes above, found that the
+  symlinked-directory fix itself introduced a narrower false negative: it compared a live-probed
+  candidate's **canonical** (symlink-resolved) identity against the crate-wide walk's own file set,
+  so a module reached through a symlinked directory that happened to alias the same physical file
+  as some OTHER, unrelated, genuinely-walked module (`mod real;` backed directly by `src/real/mod.rs`,
+  plus a separate `mod kernel;` where `src/kernel` is a symlink to `src/real`) was wrongly treated
+  as "already found," even though the `kernel` candidate itself was never walked — silently
+  un-governing it. Comparing **literal** (never canonicalized) path identity instead closes this:
+  two on-disk paths are never literally equal merely because they resolve to the same target.
 
 ## [0.2.1] - 2026-07-21
 
