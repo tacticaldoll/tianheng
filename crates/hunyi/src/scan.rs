@@ -227,6 +227,21 @@ fn resolve_child_modules(
     String,
 > {
     let mut children = Vec::new();
+    // Deduped by (declared name, resolved file's CANONICAL path): two mutually-exclusive `#[cfg]`
+    // arms that both plainly declare the SAME name `mod seg;` (no `#[path]`, so both are found via
+    // the identical `locate_module_file` lookup), or that both `#[path]`-remap the SAME name to the
+    // identical target, are the same real file compiled twice by neither build — pushing a branch
+    // per occurrence would duplicate that file's items in the crate-wide scan
+    // (`ImplSite`/`TypeDef`/`UnsafeSite`), inflating one real violation into two apparently-
+    // distinct findings whenever a self-type's generic argument is unrenderable and falls back to
+    // a positional ordinal that differs between the two scan-Vec positions (escaping the eventual
+    // fact-identity dedup). Mirrors `module_resolve.rs::descend`'s own `seen_files` guard, closing
+    // the identical gap left open here (found on a round-6 adversarial review; see `PROJECT.md`'s
+    // Decisions). Keyed on the NAME too, not the file alone: two DIFFERENT declared names that
+    // happen to `#[path]`-remap to the identical file (`#[path="s.rs"] mod a;` / `#[path="s.rs"]
+    // mod b;`) are two real, separately-compiled modules — already an existing, tested case — and
+    // must never collide with each other's own dedup entry.
+    let mut seen_files: HashSet<(String, PathBuf)> = HashSet::new();
     for item in items {
         let syn::Item::Mod(module_item) = item else {
             continue;
@@ -274,6 +289,9 @@ fn resolve_child_modules(
                     let canon = canonicalize_source(&file)?;
                     if ancestors.contains(&canon) {
                         return Err(module_cycle_error(&child_module, crate_package, &file));
+                    }
+                    if !seen_files.insert((name.clone(), canon.clone())) {
+                        continue;
                     }
                     let parsed = read_parse(&file)?;
                     // mod-rs-like: the loaded file's own directory is the base for both its
@@ -333,6 +351,9 @@ fn resolve_child_modules(
                     let canon = canonicalize_source(&file)?;
                     if ancestors.contains(&canon) {
                         return Err(module_cycle_error(&child_module, crate_package, &file));
+                    }
+                    if !seen_files.insert((name.clone(), canon.clone())) {
+                        continue;
                     }
                     let parsed = read_parse(&file)?;
                     let own_dir = file
