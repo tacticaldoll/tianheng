@@ -2636,6 +2636,41 @@ fn an_impl_outside_the_allowed_location_is_a_finding() {
 }
 
 #[test]
+fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_impl_finding() {
+    // Round-6 finding: resolve_child_modules (scan.rs, backing the whole-crate scan) had no
+    // canonical-file dedup for two mutually-exclusive #[cfg] arms plainly declaring the IDENTICAL
+    // name resolving to the ONE real file -- unlike module_resolve.rs's descend(), which gained
+    // exactly this dedup in 0.2.2. Because the self-type's generic argument here is an
+    // unrenderable const-generic block expression, canonical_self_owner falls back to a positional
+    // `_#{ordinal}` marker computed from the scan Vec's own position -- so the two duplicate scan
+    // entries got DIFFERENT ordinals and escaped the eventual fact-identity dedup, inflating one
+    // real impl into two findings. Verified against real rustc: both `cargo check --features u`
+    // and `--features w` compile cleanly with exactly one `impl Command for Arr<2>`.
+    let out = locality_findings(
+        "cfg-dual-same-file",
+        &[
+            (
+                "lib.rs",
+                "pub trait Command {}\npub struct Arr<const N: usize>;\n\
+                 #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
+            ),
+            (
+                "foo.rs",
+                "impl crate::Command for crate::Arr<{ 1 + 1 }> {}\n",
+            ),
+        ],
+        "crate::Command",
+        &["crate::allowed_elsewhere"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "one real impl, backed by one real file under either #[cfg] arm, must be one finding: {out:?}"
+    );
+}
+
+#[test]
 fn an_impl_inside_the_allowed_location_is_clean() {
     let out = locality_findings(
         "inside",
@@ -4683,6 +4718,37 @@ fn two_same_named_types_in_different_submodules_stay_distinct() {
             "derive serde::Serialize on crate::domain::b::Order"
         ],
         "two same-named types must stay distinct findings: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_marker_finding() {
+    // The forbidden-marker impl form shares resolve_child_modules/scan.impls with trait-impl-
+    // locality, so it has the identical round-6 duplication hazard: two mutually-exclusive
+    // #[cfg] arms declaring the same name resolving to one real file, whose self-type generic
+    // argument is unrenderable (falling back to a positional ordinal), used to inflate one real
+    // marker acquisition into two findings.
+    let out = marker_findings(
+        "cfg-dual-same-file",
+        &[
+            (
+                "lib.rs",
+                "pub struct Arr<const N: usize>;\n\
+                 #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
+            ),
+            (
+                "foo.rs",
+                "impl crate::Marker for crate::Arr<{ 1 + 1 }> {}\n",
+            ),
+        ],
+        "crate",
+        &["crate::Marker"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "one real impl, backed by one real file under either #[cfg] arm, must be one finding: {out:?}"
     );
 }
 

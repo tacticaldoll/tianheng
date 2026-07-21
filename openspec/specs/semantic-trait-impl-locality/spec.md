@@ -116,6 +116,11 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 - **WHEN** a disallowed impl lives in a module declared `#[path = "…"] mod x;` (an unconditional remap) whose file is located off the conventional path
 - **THEN** the system follows the remap to that file and reacts on the impl, attributed to the module's declared path `crate::…::x`, rather than silently asserting the boundary is clean — while a `cfg_attr`-wrapped `#[path]` remains a stated (unfollowed) coverage bound
 
+#### Scenario: Two cfg-siblings declaring the identical name backed by one real file are one finding
+
+- **WHEN** the crate declares the SAME module name under two mutually-exclusive `#[cfg]` arms with no `#[path]` (so both resolve to the identical real file), and that file contains a single disallowed impl whose self-type carries an unrenderable generic argument
+- **THEN** the system reports exactly one violation, never two — the two `#[cfg]` arms name the same real, once-compiled file, and must not be treated as two independent scan sites merely because they were declared twice
+
 #### Scenario: A cfg-gated module with an absent file is skipped, not a scan error
 
 - **WHEN** the crate declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off)

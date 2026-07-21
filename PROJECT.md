@@ -350,11 +350,26 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   branch's alias, misresolving the FIRST branch's own bare reference through the SECOND branch's
   `use` and hiding a real forbidden-exposure violation — a genuine false negative, not a
   hypothetical. Fixed the same way round 5 fixed file attribution: a `use`-map PER FILE, looked up
-  by each item's own branch file rather than one map merged across the whole module. Six rounds
-  now: even a fix produced BY an adversarial-review round is not exempt from the next round's
-  scrutiny — the lesson applies recursively to its own remedies, not just the original bug, and a
-  redesign that closes one data shape's cross-branch conflation (files) does not by itself close a
-  SIBLING data shape's identical conflation (use-maps) computed from the same underlying union.
+  by each item's own branch file rather than one map merged across the whole module.
+  The same round found a THIRD instance, this time in `scan.rs`'s own `resolve_child_modules` (the
+  shared descent skeleton backing the whole-crate scan and the async-exposure subtree's further
+  descent): `module_resolve.rs::descend` gained a `seen_files` dedup in 0.2.2 for two
+  mutually-exclusive `#[cfg]` arms plainly declaring the identical name (resolving to the one real
+  file) — but `resolve_child_modules`, a separately-maintained sibling walker for the identical
+  shape, never received it. Because a self-type's generic argument `canonical_self_owner` cannot
+  render falls back to a positional `_#{ordinal}` marker computed from the scan `Vec`'s own
+  position, the two duplicate scan entries got DIFFERENT ordinals and escaped the eventual
+  fact-identity dedup — inflating one real trait-impl or forbidden-marker acquisition into two
+  apparently-distinct findings. Fixed with the identical `seen_files`-style guard, keyed on
+  (declared name, canonical file) rather than file alone, since two DIFFERENT names `#[path]`-
+  remapped to the same file are two real, separately-compiled modules — an existing, already-
+  tested case that must never collide with this new dedup entry (a live regression caught by the
+  existing test suite the moment the naive file-only key was tried). Six rounds now: even a fix
+  produced BY an adversarial-review round is not exempt from the next round's scrutiny — the
+  lesson applies recursively to its own remedies, not just the original bug, and a redesign that
+  closes one data shape's cross-branch conflation (files) does not by itself close a SIBLING data
+  shape's identical conflation (use-maps, or a sibling walker's own missing dedup) computed from
+  the same underlying union.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
