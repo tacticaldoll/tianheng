@@ -14,7 +14,7 @@ use syn::visit::{self, Visit};
 
 use crate::crate_scope::{child_module_names, local_type_namespace_names};
 use crate::errors::missing_module_file_error;
-use crate::module_resolve::{locate_module_file, read_parse, resolve_module_root};
+use crate::module_resolve::{locate_module_file, read_parse, resolve_module_branches};
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_target,
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
@@ -511,35 +511,46 @@ fn walk_module(
 /// here), a `#[cfg]`-gated fileless module is tolerated, a non-`#[cfg]` missing module file is a
 /// scan error (exit 2), and a symlink module cycle is a scan error (exit 2), never a stack
 /// overflow.
+///
+/// When the anchor (or any segment on the path to it) was reached through a mutually-exclusive
+/// `#[cfg]` split, [`resolve_module_branches`] keeps every surviving branch's own items paired
+/// with its own directories — the subtree walk runs `collect_subtree` **once per branch**, each
+/// seeded with only that branch's own ancestor file, and merges every branch's results. Using
+/// `resolve_module_root`'s single, first-branch-only directory pair together with its *unioned*
+/// items here would resolve a non-first branch's own child against the wrong directory, silently
+/// dropping it — a real false negative found on adversarial review.
 pub(crate) fn walk_subtree_modules(
     src_dir: &Path,
     root_file: &Path,
     module: &str,
     crate_package: &str,
 ) -> Result<Vec<(String, Vec<syn::Item>)>, String> {
-    let (items, file, child_dir, file_dir) =
-        resolve_module_root(src_dir, root_file, module, crate_package)?;
-    // Seed the ancestor path with the anchor module's own file, so a descendant looping back to it
-    // is caught — the same discipline `scan_crate` applies from the crate root.
-    let mut ancestors: HashSet<PathBuf> = HashSet::new();
-    ancestors.insert(canonicalize_source(&file)?);
-    // `resolve_module_root`'s own `path_base` IS the base a `#[path]` written in the anchor
-    // resolves from — used AS-IS, never re-derived as `file.parent()`: for an inline-module
-    // anchor, `path_base` is its accumulated directory, which differs from the *enclosing* file's
-    // own directory (the inline body stays in the parent's file, but its own `#[path]`s and
-    // conventional children do not resolve from the parent's directory) — re-deriving it here
-    // silently substituted the wrong base and could hard-error or, worse, silently observe the
-    // wrong (uncompiled) file in the subtree walk.
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut out: Vec<(String, Vec<syn::Item>)> = Vec::new();
-    collect_subtree(
-        items,
-        module.to_string(),
-        child_dir,
-        file_dir,
-        crate_package,
-        &ancestors,
-        &mut out,
-    )?;
+    for (items, file, child_dir, file_dir) in branches {
+        // Seed the ancestor path with THIS branch's own file, so a descendant looping back to it
+        // is caught — the same discipline `scan_crate` applies from the crate root. Never a set
+        // shared across branches: two mutually-exclusive `#[cfg]` arms' own files are never
+        // simultaneously open in any real build, so one arm's file must never gate the other's.
+        let mut ancestors: HashSet<PathBuf> = HashSet::new();
+        ancestors.insert(canonicalize_source(&file)?);
+        // This branch's own `path_base` IS the base a `#[path]` written in it resolves from —
+        // used AS-IS, never re-derived as `file.parent()`: for an inline-module branch,
+        // `path_base` is its accumulated directory, which differs from the *enclosing* file's own
+        // directory (the inline body stays in the parent's file, but its own `#[path]`s and
+        // conventional children do not resolve from the parent's directory) — re-deriving it here
+        // silently substituted the wrong base and could hard-error or, worse, silently observe
+        // the wrong (uncompiled) file in the subtree walk.
+        collect_subtree(
+            items,
+            module.to_string(),
+            child_dir,
+            file_dir,
+            crate_package,
+            &ancestors,
+            &mut out,
+        )?;
+    }
     Ok(out)
 }
 

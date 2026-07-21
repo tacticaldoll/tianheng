@@ -5558,6 +5558,56 @@ fn async_subtree_anchored_at_an_inline_module_follows_its_own_further_path_child
 }
 
 #[test]
+fn async_subtree_walks_every_branch_of_a_cfg_split_anchor_not_just_the_first() {
+    // rustc ground truth (verified with a real rustc build under either single-feature config):
+    // `#[cfg(feature = "u")] pub mod foo;` (flat, own directory src/) paired with
+    // `#[cfg(feature = "w")] #[path = "win/foo.rs"] pub mod foo;` (own directory src/win/) is the
+    // standard per-platform shim — each arm plainly declares its OWN `pub mod bar;`, resolving to
+    // a DIFFERENT real file (src/foo/bar.rs vs src/win/bar.rs). `resolve_module_root` correctly
+    // unions both arms' items, but `walk_subtree_modules` used to thread only the FIRST arm's own
+    // directory pair through to resolve those unioned items' own children — so the second arm's
+    // `bar` silently resolved against the wrong directory and its own async fn was never observed.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\n#[path = \"win/foo.rs\"]\npub mod foo;\n",
+        ),
+        ("foo.rs", "pub mod bar;\n"),
+        ("foo/bar.rs", "pub async fn unix_leaf() {}\n"),
+        ("win/foo.rs", "pub mod bar;\n"),
+        ("win/bar.rs", "pub async fn win_leaf() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("cfg-split-anchor-both-branches", files, "crate::foo"),
+        [
+            "async fn crate::foo::bar::unix_leaf()",
+            "async fn crate::foo::bar::win_leaf()",
+        ],
+    );
+}
+
+#[test]
+fn async_subtree_does_not_duplicate_a_file_shared_by_two_plain_cfg_siblings() {
+    // rustc ground truth: `#[cfg(feature = "u")] pub mod foo;` and `#[cfg(feature = "w")] pub mod
+    // foo;` (both PLAIN, no #[path]) are two mutually-exclusive declarations of the SAME name that
+    // resolve to the IDENTICAL real file (foo.rs) — neither build ever compiles it twice.
+    // descend()'s file-form search used to push one branch per matching declaration regardless of
+    // whether they resolved to the same file, so foo.rs's own async fn was observed (and reported)
+    // twice.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
+        ),
+        ("foo.rs", "pub async fn seam() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("plain-cfg-siblings-one-file", files, "crate::foo"),
+        ["async fn crate::foo::seam()"],
+    );
+}
+
+#[test]
 fn async_subtree_scopes_to_the_anchored_subtree_not_the_whole_crate() {
     // Anchored at `crate::a`, an async fn under `crate::a` reacts; a sibling `crate::c` does not —
     // the subtree is bounded by the anchor, not the crate.

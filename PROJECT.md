@@ -258,6 +258,20 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   separate reaction models (a stateful worklist walk in 圭表, a recursive branch-vec descent in
   渾儀): a redesign that closes a reported instance is not evidence the *shared model* is closed —
   only a fresh adversarial pass against the *new* code, not the old bug, earns that confidence.
+  A **fourth** round found the mistake yet again, this time at the boundary between 渾儀's
+  single-module resolver and its OWN subtree walker: `resolve_module_root` correctly unions every
+  surviving branch's items for a single-module report, but the subtree walker fed that union back
+  through only the *first* branch's own directories for further descent — a child declared only in
+  a non-first branch's own file resolved against the wrong directory, silently dropping it. Fixed
+  by exposing every branch on its own (not the collapsed, first-branch-only shape) to the one
+  caller that must keep descending beneath a possibly-split anchor. The same round also found a
+  duplicate-items case in the opposite, lesser-severity direction: two `#[cfg]` arms plainly
+  declaring the identical name resolve to one real file, but nothing deduped the resulting
+  branches, inflating one real violation into two apparently-distinct findings. Four rounds, one
+  recurring root cause: a data shape (a single merged tuple) built for one caller's needs (report
+  "the" file) got reused by a different caller (keep descending) whose needs it does not actually
+  meet — the same "governance key vs. safety key" conflation the lesson opened with, now seen at
+  a third layer of the same two crates.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

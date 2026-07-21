@@ -10,6 +10,7 @@
 //! (`unknown_module_error`, exit 2), never a silent pass and never governing a stale conventional
 //! file.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::errors::{
@@ -91,13 +92,39 @@ fn resolve_module(
 /// [`descend`]) — but the returned file/child-dir/path-base are the **first** branch's own, a
 /// stated, deterministic choice: a single-module violation carries one `file` field, not one per
 /// branch, so there is no way to report "the file" precisely when more than one legitimately
-/// backs the module.
+/// backs the module. A caller that must keep descending *beneath* the anchor (a subtree walk)
+/// MUST NOT pair these unioned items with this single directory pair — a non-first branch's own
+/// child would then resolve against the wrong directory (a real false negative, found on
+/// adversarial review); such a caller should use [`resolve_module_branches`] instead, which keeps
+/// every branch's own items and directories together.
 pub(crate) fn resolve_module_root(
     src_dir: &Path,
     root_file: &Path,
     module: &str,
     crate_package: &str,
 ) -> Result<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf), String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    let mut items = Vec::new();
+    for (branch_items, ..) in &branches {
+        items.extend(branch_items.iter().cloned());
+    }
+    let (_, file, child_dir, path_base) = &branches[0];
+    Ok((items, file.clone(), child_dir.clone(), path_base.clone()))
+}
+
+/// The full descent result: every surviving [`Branch`] on its own, each keeping its own items
+/// paired with the directories they must be resolved against. A subtree walk that continues
+/// descending below the anchor needs this — never the single, unioned-items/first-branch-only
+/// shape [`resolve_module_root`] returns, which is correct only for a single-module violation's
+/// "one file" report and actively wrong for further descent (a non-first branch's own child would
+/// resolve against a directory pair that isn't its own).
+#[allow(clippy::type_complexity)]
+pub(crate) fn resolve_module_branches(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf)>, String> {
     let root = read_parse(root_file)?;
     let segments = module_segments(module);
     let initial = Branch {
@@ -108,17 +135,10 @@ pub(crate) fn resolve_module_root(
         path_base: src_dir.to_path_buf(),
     };
     let branches = descend(vec![initial], &segments, module, crate_package)?;
-    let mut items = Vec::new();
-    for branch in &branches {
-        items.extend(branch.items.iter().cloned());
-    }
-    let first = &branches[0];
-    Ok((
-        items,
-        first.current_file.clone(),
-        first.child_dir.clone(),
-        first.path_base.clone(),
-    ))
+    Ok(branches
+        .into_iter()
+        .map(|b| (b.items, b.current_file, b.child_dir, b.path_base))
+        .collect())
 }
 
 /// One candidate continuation of the descent: the items visible at this position, the file they
@@ -190,6 +210,14 @@ fn descend(
         // declared only in the sibling that lost the race passed unobserved, nondeterministically
         // depending on source order).
         let mut file_forms: Vec<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf)> = Vec::new();
+        // Deduped by the resolved file's CANONICAL path: two mutually-exclusive `#[cfg]` arms
+        // that both plainly declare `mod seg;` (no `#[path]`, so both are found via the identical
+        // `locate_module_file` lookup) are the same real file compiled twice by neither build —
+        // pushing a branch per occurrence would duplicate that file's items in the merged result,
+        // inflating one real violation into two apparently-distinct findings with no way for
+        // exact-string finding dedup to collapse them back (their owner labels can differ when an
+        // impl-Trait self type falls back to a positional ordinal marker).
+        let mut seen_files: HashSet<PathBuf> = HashSet::new();
         for item in &branch.items {
             if let syn::Item::Mod(module_item) = item {
                 if module_item.content.is_some() {
@@ -216,6 +244,11 @@ fn descend(
                     if !file.is_file() {
                         return Err(missing_module_file_error(module, crate_package));
                     }
+                    if let Ok(canon) = std::fs::canonicalize(&file) {
+                        if !seen_files.insert(canon) {
+                            continue;
+                        }
+                    }
                     let parsed = read_parse(&file)?;
                     let next_dir = file
                         .parent()
@@ -229,6 +262,11 @@ fn descend(
                 }
                 let file = locate_module_file(&branch.child_dir, seg)
                     .ok_or_else(|| missing_module_file_error(module, crate_package))?;
+                if let Ok(canon) = std::fs::canonicalize(&file) {
+                    if !seen_files.insert(canon) {
+                        continue;
+                    }
+                }
                 let parsed = read_parse(&file)?;
                 // The loaded file's own directory is the base for a `#[path]` written at its top
                 // level (`<dir>` for `seg.rs`, `<dir>/seg` for `seg/mod.rs`); its CONVENTIONAL
