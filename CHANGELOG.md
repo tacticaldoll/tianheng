@@ -132,6 +132,15 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   last silently overwrote the earlier branch's alias, misresolving the first branch's own bare
   reference through the second branch's `use` and hiding a real forbidden-exposure violation. The
   `use`-map is now computed per file, looked up by each item's own branch file.
+- The same round found `scan.rs`'s `resolve_child_modules` (the whole-crate scan's shared descent
+  skeleton) never received the same-file dedup `module_resolve.rs::descend` gained in 0.2.2: two
+  mutually-exclusive `#[cfg]` arms plainly declaring the identical name, resolving to one real
+  file, produced a duplicate `ImplSite`/`TypeDef` scan entry. This was normally absorbed by the
+  final fact-identity dedup, but a self-type whose generic argument cannot be rendered falls back
+  to a positional ordinal computed from the scan's own position — so the two duplicates got
+  different ordinals and escaped dedup, inflating one real trait-impl-locality or forbidden-marker
+  finding into two. Fixed with the identical dedup, keyed on (declared name, canonical file) so two
+  different names legitimately `#[path]`-remapped to the same file are never conflated.
 
 ## [0.2.1] - 2026-07-21
 
