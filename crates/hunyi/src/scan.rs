@@ -504,26 +504,32 @@ fn walk_module(
 /// module's items, this returns every module at or below the anchor, so a reaction can observe a
 /// "nowhere under here" property (e.g. no public `async fn` anywhere beneath a sans-I/O kernel).
 ///
-/// Inherits the crate walk's guards, so a subtree reaction never silently under-reacts: a
-/// `#[path]`-remapped module is skipped (a stated coverage bound), a `#[cfg]`-gated fileless module
-/// is tolerated, a non-`#[cfg]` missing module file is a scan error (exit 2), and a symlink module
-/// cycle is a scan error (exit 2), never a stack overflow.
+/// Inherits the crate walk's guards, so a subtree reaction never silently under-reacts: an
+/// **unconditional** `#[path]`-remapped module is followed like any other descendant (matching
+/// `resolve_child_modules`'s own policy), a `cfg_attr`-wrapped `#[path]` is the actual stated
+/// coverage bound (skipped, since following it cfg-blind could read a file rustc does not compile
+/// here), a `#[cfg]`-gated fileless module is tolerated, a non-`#[cfg]` missing module file is a
+/// scan error (exit 2), and a symlink module cycle is a scan error (exit 2), never a stack
+/// overflow.
 pub(crate) fn walk_subtree_modules(
     src_dir: &Path,
     root_file: &Path,
     module: &str,
     crate_package: &str,
 ) -> Result<Vec<(String, Vec<syn::Item>)>, String> {
-    let (items, file, child_dir) = resolve_module_root(src_dir, root_file, module, crate_package)?;
+    let (items, file, child_dir, file_dir) =
+        resolve_module_root(src_dir, root_file, module, crate_package)?;
     // Seed the ancestor path with the anchor module's own file, so a descendant looping back to it
     // is caught — the same discipline `scan_crate` applies from the crate root.
     let mut ancestors: HashSet<PathBuf> = HashSet::new();
     ancestors.insert(canonicalize_source(&file)?);
-    // The anchor's own directory (its file's parent) is the base for a `#[path]` written in it.
-    let file_dir = file
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| child_dir.clone());
+    // `resolve_module_root`'s own `path_base` IS the base a `#[path]` written in the anchor
+    // resolves from — used AS-IS, never re-derived as `file.parent()`: for an inline-module
+    // anchor, `path_base` is its accumulated directory, which differs from the *enclosing* file's
+    // own directory (the inline body stays in the parent's file, but its own `#[path]`s and
+    // conventional children do not resolve from the parent's directory) — re-deriving it here
+    // silently substituted the wrong base and could hard-error or, worse, silently observe the
+    // wrong (uncompiled) file in the subtree walk.
     let mut out: Vec<(String, Vec<syn::Item>)> = Vec::new();
     collect_subtree(
         items,

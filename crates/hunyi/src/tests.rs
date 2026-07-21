@@ -5534,6 +5534,30 @@ fn async_subtree_reacts_through_inline_and_nested_modules() {
 }
 
 #[test]
+fn async_subtree_anchored_at_an_inline_module_follows_its_own_further_path_child() {
+    // rustc ground truth (verified with a real rustc build): `#[path = "moved/leaf.rs"]` written
+    // inside an INLINE `mod outer { … }` accumulates outer's own directory as the base — the file
+    // actually compiles at `outer/moved/leaf.rs`, never `moved/leaf.rs` (which would sit beside
+    // lib.rs itself). `walk_subtree_modules` used to re-derive the anchor's own `#[path]`-base as
+    // `file.parent()` — correct for a file-form anchor, but wrong for an INLINE anchor (the inline
+    // body stays in the *enclosing* file, whose own directory is not the inline module's
+    // accumulated one) — silently substituting the wrong base for anything the subtree walk
+    // itself needs to resolve a further `#[path]` from. `resolve_module_root`'s own returned
+    // `path_base` (this fix) is used directly instead of being re-derived.
+    let files = &[
+        (
+            "lib.rs",
+            "pub mod outer {\n    #[path = \"moved/leaf.rs\"]\n    pub mod leaf;\n}\n",
+        ),
+        ("outer/moved/leaf.rs", "pub async fn seam() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("inline-anchor-path-child", files, "crate::outer"),
+        ["async fn crate::outer::leaf::seam()"],
+    );
+}
+
+#[test]
 fn async_subtree_scopes_to_the_anchored_subtree_not_the_whole_crate() {
     // Anchored at `crate::a`, an async fn under `crate::a` reacts; a sibling `crate::c` does not —
     // the subtree is bounded by the anchor, not the crate.
@@ -6206,6 +6230,88 @@ fn a_further_segment_beneath_a_flat_file_form_cfg_sibling_resolves_from_its_own_
         1,
         "the flat file-form sibling's own #[path] target (moved/elsewhere.rs, a SIBLING of \
          plat_moved.rs, not a child of a plat/ subdirectory) must be read and react: {violations:?}"
+    );
+}
+
+#[test]
+fn a_plain_child_of_a_path_remapped_module_resolves_from_the_remaps_own_directory() {
+    // rustc ground truth (verified with a real rustc build): `#[path = "moved/thing.rs"] pub mod
+    // net;` makes `moved/thing.rs` mod-rs-like, so its own plain `pub mod inner;` resolves to
+    // `moved/inner.rs`, NOT `net/inner.rs` (a name-derived location that has nothing to do with
+    // where the file actually lives). descend()'s Branch redesign correctly threads `path_base`
+    // for a FURTHER `#[path]` beneath a `#[path]`-loaded file, but a `child_dir` bug left the
+    // CONVENTIONAL-child continuation still computed as the naive `<child_dir>/<seg>` regardless
+    // of origin — silently resolving a plain child of a #[path]-remapped module at the wrong,
+    // uncompiled location.
+    let (metadata, dir) = fixture_metadata(
+        "path-remap-plain-child",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n#[path = \"moved/thing.rs\"]\npub mod net;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("moved/thing.rs", "pub mod inner;\n"),
+            (
+                "moved/inner.rs",
+                "pub fn get() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::net::inner")
+        .must_not_expose("crate::infra")
+        .because("net::inner must not expose infra even though net is #[path]-remapped");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "moved/inner.rs (the real, rustc-compiled file) must be read and react: {violations:?}"
+    );
+}
+
+#[test]
+fn cfg_mixed_plain_and_path_remapped_file_form_siblings_are_both_governed() {
+    // rustc ground truth (verified with a real rustc build under either single-feature config):
+    // `#[cfg(feature = "a")] pub mod platform;` (plain, backed by platform.rs) paired with
+    // `#[cfg(feature = "b")] #[path = "win_platform.rs"] pub mod platform;` (remapped) is the
+    // standard per-platform shim between two NON-inline variants — valid, common Rust, and once
+    // #[path]-following exists the two variants need not name the same file at all. descend()'s
+    // file-form search used to `break` at the first non-inline match regardless of source order,
+    // silently dropping whichever variant did not win the race. Matching
+    // `resolve_child_modules`'s own crate-wide policy (which never breaks after one match),
+    // EVERY non-inline declaration for a segment now produces its own branch.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-plain-and-remapped-file-form",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod platform;\n\
+                 #[cfg(feature = \"b\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("platform.rs", "pub fn open() -> u8 { 0 }\n"),
+            (
+                "win_platform.rs",
+                "pub fn open() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("platform must not expose infra in either the plain or #[path]-remapped arm");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the #[path]-remapped sibling's exposure must react even though a plain sibling was \
+         declared first in source order: {violations:?}"
     );
 }
 

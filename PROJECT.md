@@ -214,7 +214,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a deliberate non-goal here; if ever wanted it is a separate amendment.
 - **A cfg-blind union that makes several physically distinct files share one logical identity
   must never let per-module bookkeeping (an ancestor set, a structural lookup) act on that shared
-  identity as if it named one file.** **(0.2.2 lesson, in two rounds.)** Landing the
+  identity as if it named one file.** **(0.2.2 lesson, in three rounds — confirmed twice across
+  two independent crates.)** Landing the
   unconditional-`#[path]`-follow work (above) first tracked cycle-guard "already-open source
   files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
   name with different unconditional targets — the standard, already-supported per-platform shim —
@@ -246,6 +247,17 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   children live") are not automatically the same key, and a fix that narrows to the one reported
   instance rather than the shared underlying model tends to resurface one hop further away on the
   very next adversarial pass — which is exactly what a second review round is for.
+  A **third** round, re-auditing 渾儀's own single-module resolver (`descend`) redesigned alongside
+  the fixes above, found the identical shape of mistake in a second, independent crate: a
+  `#[path]`-loaded module's own *conventional* children were resolved from a name-derived directory
+  unrelated to where the file actually lives (the exact inverse of the `path_base`/`child_base`
+  conflation above), and two non-inline (file-form) `#[cfg]` siblings — one plain, one
+  `#[path]`-remapped — were still not unioned, first-match-wins, unlike the crate-wide walk's own
+  already-established "never stop at one match" policy for the identical shape of declaration. The
+  lesson holds a third time, now confirmed independently in two separate crates built by two
+  separate reaction models (a stateful worklist walk in 圭表, a recursive branch-vec descent in
+  渾儀): a redesign that closes a reported instance is not evidence the *shared model* is closed —
+  only a fresh adversarial pass against the *new* code, not the old bug, earns that confidence.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
