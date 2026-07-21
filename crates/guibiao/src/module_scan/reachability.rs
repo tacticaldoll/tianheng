@@ -615,9 +615,9 @@ struct DeclaredModule {
     direct_path_eq: Option<usize>,
 }
 
-/// [`declared_modules_with_kind`] generalized to scan `cleaned[range]` instead of a whole file,
-/// so it can be re-applied to an inline module's own body — the byte span between its braces —
-/// to find the `mod` declarations nested inside it. `path_attr_before_item` scans backward
+/// The test-only `declared_modules_with_kind` generalized to scan `cleaned[range]` instead of a
+/// whole file, so it can be re-applied to an inline module's own body — the byte span between its
+/// braces — to find the `mod` declarations nested inside it. `path_attr_before_item` scans backward
 /// from a candidate unbounded by `range.start`, which stays correct here: the nearest preceding
 /// `;`/`{`/`}` it finds is either an earlier sibling's terminator within the range or the range's
 /// own enclosing `{`, never a byte outside the declaration it is checking.
