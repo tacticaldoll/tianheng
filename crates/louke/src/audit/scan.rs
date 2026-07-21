@@ -164,10 +164,13 @@ fn collect_scope_modules(
                 Some(b'{') => {
                     let close = balanced_brace_end(bytes, cursor, end);
                     let attrs = mod_preamble_attrs(bytes, i);
-                    // An inline `#[path = "dir"] mod x { … }` relocates x's file-children base to
-                    // `<file_dir>/dir` (rustc uses the path value, relative to the containing file's
-                    // own directory); otherwise they live under `<child_base>/name`. The body is in
-                    // the SAME file, so `file_dir` is unchanged for any `#[path]` nested in it.
+                    // Descending an inline `mod x { … }`: x's children resolve from `inline_base` —
+                    // `<child_base>/name`, or `<file_dir>/dir` for an inline `#[path = "dir"]` remap.
+                    // rustc accumulates the inline-module name as a directory component, so this base
+                    // governs BOTH x's conventional file-children AND any `#[path]` nested in x's body
+                    // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
+                    // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
+                    // component and read a same-named orphan — a false negative.)
                     let inline_base = match &attrs.path {
                         Some(rel) => file_dir.join(rel),
                         None => child_base.join(name),
@@ -177,7 +180,7 @@ fn collect_scope_modules(
                         cursor + 1,
                         close.saturating_sub(1),
                         &inline_base,
-                        file_dir,
+                        &inline_base,
                         modules,
                     )?;
                     i = close;
@@ -223,11 +226,13 @@ fn resolve_external_module(base: &Path, name: &str) -> Result<Option<(PathBuf, P
 }
 
 /// Resolve an unconditional `#[path = "rel"] mod name;` to its author-chosen file and the base
-/// directory for its own children. `rel` is relative to `base` (the same directory a conventional
-/// `mod name;` uses); a `#[path]`-loaded file is mod-rs-like, so its children resolve from the
-/// target file's **own** directory. `Ok(None)` when the target is absent (the caller tolerates a
-/// cfg-conditional absence and fails loud otherwise) — no ambiguity is possible (the path names one
-/// file), unlike the conventional `name.rs` / `name/mod.rs` pair.
+/// directory for its own children. `rel` is relative to `base` — the containing file's own directory
+/// (`file_dir`), with each enclosing inline-`mod` name already accumulated onto it by the caller;
+/// for a non-mod-rs `name.rs` this differs from the conventional-child directory a plain `mod name;`
+/// uses. A `#[path]`-loaded file is mod-rs-like, so its children resolve from the target file's
+/// **own** directory. `Ok(None)` when the target is absent (the caller tolerates a cfg-conditional
+/// absence and fails loud otherwise) — no ambiguity is possible (the path names one file), unlike the
+/// conventional `name.rs` / `name/mod.rs` pair.
 fn resolve_path_module(base: &Path, rel: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
     let file = base.join(rel);
     if !file.is_file() {
@@ -293,27 +298,19 @@ fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
         return None;
     }
     i += 1;
-    let mut out: Vec<u8> = Vec::new();
+    let content_start = i;
     while i < end {
         match bytes[i] {
-            b'"' => return String::from_utf8(out).ok(),
-            b'\\' => {
-                i += 1;
-                match bytes.get(i) {
-                    Some(b'\\') => out.push(b'\\'),
-                    Some(b'"') => out.push(b'"'),
-                    Some(b'n') => out.push(b'\n'),
-                    Some(b't') => out.push(b'\t'),
-                    Some(b'r') => out.push(b'\r'),
-                    Some(b'0') => out.push(0),
-                    // An exotic escape (unicode / byte) is not expected in a path: bail rather than
-                    // mis-decode, so the module falls back to non-relocated handling — fail-safe.
-                    _ => return None,
-                }
-            }
-            other => out.push(other),
+            // Decode the literal's escapes through the crate's full decoder — the same set rustc
+            // and syn accept (incl. `\x` / `\u{}` / `\'`) — so 漏刻's `#[path]` value matches 渾儀's
+            // syn-derived `s.value()` on the same input (twin-drift parity). A residually
+            // undecodable form (e.g. a backslash-newline line continuation) yields `None` and the
+            // module falls back to non-relocated handling — fail-safe, never a mis-decoded path.
+            b'"' => return decode_str_escapes(&bytes[content_start..i]),
+            // Skip the escaped byte so an escaped quote `\"` (or `\\`) does not end the literal early.
+            b'\\' => i += 2,
+            _ => i += 1,
         }
-        i += 1;
     }
     None
 }

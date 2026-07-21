@@ -63,17 +63,31 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - Runtime probe coverage now starts from every exact Cargo library and binary target root and walks
   only module-reachable source, so an orphan `.rs` file can no longer satisfy a seam it never
   enforces. Direct callers that pass a directory retain the legacy recursive corpus.
-- 渾儀 and 漏刻 now **follow** an unconditional `#[path = "…"] mod x;` to its author-chosen file
-  (resolved from the directory a conventional `mod x;` would use; a `#[path]`-loaded file is
-  mod-rs-like, so its own children resolve from its directory), closing a coverage false negative: a
-  relocated module's `unsafe` sites, trait impls, and `assert_boundary!` probes were previously
-  dropped, so a disallowed impl or an undeclared-seam probe in a relocated module passed unobserved
-  (semantic single-module boundaries on such a module errored loudly rather than governing it). A
-  `cfg_attr`-wrapped `#[path]` stays a stated bound — not followed cfg-blind, since it could observe
-  a file rustc does not compile in this configuration — and an absent unconditional target is a
-  fail-loud constitution error. Both dimensions detect the attribute structurally, so an incidental
-  `path` substring in a comment or a `#[cfg(feature = "fastpath")]` gate is never mistaken for a
-  relocation.
+- 渾儀 and 漏刻 now **follow** an unconditional `#[path = "…"] mod x;` to its author-chosen file,
+  closing a coverage false negative: a relocated module's `unsafe` sites, trait impls, and
+  `assert_boundary!` probes were previously dropped, so a disallowed impl or an undeclared-seam probe
+  in a relocated module passed unobserved (semantic single-module boundaries on such a module errored
+  loudly rather than governing it). The `#[path]` target is resolved with rustc fidelity — relative
+  to the **containing file's own directory**, with each enclosing inline-`mod` name accumulated onto
+  it: for a non-mod-rs `name.rs` this differs from the conventional-child directory a plain `mod y;`
+  would use, and a `#[path]` written inside an inline `mod { … }` block adds that block's name as a
+  directory component (so `mod inline { #[path="p.rs"] mod inner; }` reads `inline/p.rs`, never a
+  same-named orphan). Getting the inline-nested base wrong read a decoy and dropped the real
+  `unsafe`/probe site at exit 0 — the forbidden false negative, closed here. A `#[path]`-loaded file
+  is itself mod-rs-like, so its own children resolve from its directory. A `cfg_attr`-wrapped
+  `#[path]` stays a stated bound — not followed cfg-blind, since it could observe a file rustc does
+  not compile in this configuration — and an absent unconditional target is a fail-loud constitution
+  error. Both dimensions detect the attribute structurally (an incidental `path` substring in a
+  comment or a `#[cfg(feature = "fastpath")]` gate is never mistaken for a relocation) and decode the
+  path literal's escapes (`\n`, `\x6f`, `\u{…}`, raw strings) exactly as rustc and syn do, so the two
+  independent implementations resolve the same file.
+- 渾儀's whole-crate walk no longer misreports two module declarations that legitimately resolve to
+  one file — `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, or a conventional `mod foo;` plus a
+  `#[path="foo.rs"]` alias, both of which rustc compiles — as a `"module cycle (symlink loop)"`
+  constitution error. The cycle guard now tracks the files on the current descent path (ancestors)
+  rather than a monotonic whole-tree set, so a true loop (a symlinked module directory or a circular
+  `#[path]`) still fails loud at exit 2 while a shared target is governed under each module path. 漏刻
+  already accepted such input; the two dimensions now agree on it.
 - The probe-coverage walker now tolerates a `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module whose file
   is absent in the current configuration (an off feature or another platform), skipping it instead
   of failing the audit — matching the semantic dimension, so a cross-platform workspace no longer

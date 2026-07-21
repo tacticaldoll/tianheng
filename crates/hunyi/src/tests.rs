@@ -3544,6 +3544,117 @@ fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
 }
 
 #[test]
+fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir() {
+    // rustc ground truth (verified against rustc 1.96.0): a `#[path="other.rs"]` written INSIDE an
+    // inline `mod inline { … }` at the crate root resolves to src/inline/other.rs — rustc accumulates
+    // the inline-module name as a directory component onto the file's own dir. The real unsafe lives
+    // at the rustc-correct src/inline/other.rs; a decoy sits at src/other.rs, which threading the
+    // enclosing file_dir UNCHANGED through inline descent would have read (dropping the real unsafe,
+    // Ok([]) — the forbidden false negative). Pins the accumulated inline base.
+    let out = unsafe_labels(
+        "path-inline-modrs",
+        &[
+            (
+                "lib.rs",
+                "pub mod inline { #[path = \"other.rs\"] pub mod inner; }\n",
+            ),
+            ("inline/other.rs", "pub unsafe fn poke() {}\n"),
+            ("other.rs", "pub fn decoy() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::inline::inner"],
+        "a #[path] nested in an inline block resolves from <file_dir>/inline (src/inline/other.rs), \
+         not the src/other.rs orphan: {out:?}"
+    );
+}
+
+#[test]
+fn path_nested_in_an_inline_block_in_a_non_mod_rs_file_accumulates_both_components() {
+    // rustc ground truth (rustc 1.96.0): src/bar.rs (reached via `mod bar;`, a non-mod-rs file) with
+    // `pub mod inline { #[path="p.rs"] pub mod inner; }` resolves inner to src/bar/inline/p.rs — the
+    // base accumulates BOTH the non-mod-rs conventional-child dir (bar/) AND the inline name (inline/).
+    // Real unsafe at the rustc-correct src/bar/inline/p.rs; a decoy at src/p.rs (the enclosing
+    // file_dir base). Confirms the two components compose.
+    let out = unsafe_labels(
+        "path-inline-nonmodrs",
+        &[
+            ("lib.rs", "pub mod bar;\n"),
+            (
+                "bar.rs",
+                "pub mod inline { #[path = \"p.rs\"] pub mod inner; }\n",
+            ),
+            ("bar/inline/p.rs", "pub unsafe fn poke() {}\n"),
+            ("p.rs", "pub fn decoy() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::bar::inline::inner"],
+        "the #[path] base accumulates bar/ and inline/ (src/bar/inline/p.rs), not src/p.rs: {out:?}"
+    );
+}
+
+#[test]
+fn two_modules_sharing_one_path_target_are_not_a_false_cycle() {
+    // rustc ground truth (rustc 1.96.0): `#[path="shared.rs"] pub mod a; #[path="shared.rs"] pub mod
+    // b;` compiles cleanly — two sibling declarations legitimately resolving to one file is NOT a
+    // cycle. A monotonic whole-tree visited set misreported the second reach as a "symlink loop"
+    // (exit 2) on rustc-compilable input — a false positive and a 三儀 ⊥ 三儀 divergence (漏刻 accepts
+    // it). The ancestor-path guard must accept it: the unsafe in shared.rs reacts under BOTH paths.
+    let out = unsafe_labels(
+        "path-shared-target",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"shared.rs\"]\npub mod a;\n#[path = \"shared.rs\"]\npub mod b;\n",
+            ),
+            ("shared.rs", "pub unsafe fn poke() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .expect("two modules sharing one #[path] target is not a cycle (rustc compiles it)");
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::a", "unsafe fn poke in crate::b",],
+        "a file shared by two #[path] declarations reacts under both module paths, no false cycle: \
+         {out:?}"
+    );
+}
+
+#[test]
+fn a_conventional_module_and_a_path_alias_to_it_are_not_a_false_cycle() {
+    // rustc ground truth (rustc 1.96.0): `pub mod foo; #[path="foo.rs"] pub mod bar;` compiles — one
+    // file (src/foo.rs) reached by a conventional decl and a #[path] alias is not a cycle. Pins the
+    // second, conventional-branch face of the ancestor-guard fix.
+    let out = unsafe_labels(
+        "path-alias-conventional",
+        &[
+            (
+                "lib.rs",
+                "pub mod foo;\n#[path = \"foo.rs\"]\npub mod bar;\n",
+            ),
+            ("foo.rs", "pub unsafe fn poke() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .expect("a conventional module and a #[path] alias to the same file is not a cycle");
+    assert_eq!(
+        out,
+        [
+            "unsafe fn poke in crate::bar",
+            "unsafe fn poke in crate::foo",
+        ],
+        "one file reached conventionally and via a #[path] alias reacts under both paths: {out:?}"
+    );
+}
+
+#[test]
 fn unsafe_in_a_body_nested_mod_reacts() {
     // The propose-review false-negative guard: a `mod` inside a fn body is not descended by the
     // top-level walk; the collector's default recursion must still catch its unsafe.
@@ -6270,6 +6381,35 @@ fn path_remapped_module_resolves_to_its_target_not_the_conventional_orphan() {
     assert!(
         file.ends_with("weird.rs"),
         "the resolver follows #[path] to weird.rs, never the conventional orphan domain.rs: {file}"
+    );
+}
+
+#[test]
+fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir_targeted() {
+    // The targeted resolver's twin of the whole-crate walk fix. rustc ground truth (rustc 1.96.0):
+    // `pub mod inline { #[path="other.rs"] pub mod inner; }` at the crate root resolves
+    // crate::inline::inner to src/inline/other.rs. The earlier `descend` used current_file.parent()
+    // (= src/) as the #[path] base, which drops the accumulated inline component — it would resolve
+    // to the src/other.rs decoy (governing a file rustc never compiles = FP, and missing the real
+    // src/inline/other.rs = FN). Pins the accumulated path_base.
+    let file = resolve_file(
+        "path-inline-targeted",
+        &[
+            (
+                "lib.rs",
+                "pub mod inline { #[path = \"other.rs\"] pub mod inner; }\n",
+            ),
+            ("inline/other.rs", "pub struct Real;\n"),
+            ("other.rs", "pub struct Decoy;\n"),
+        ],
+        "crate::inline::inner",
+    )
+    .expect("a #[path] nested in an inline block resolves to its accumulated target");
+    let file = file.display().to_string();
+    assert!(
+        file.replace('\\', "/").ends_with("inline/other.rs"),
+        "the resolver accumulates the inline name: src/inline/other.rs, not the src/other.rs decoy: \
+         {file}"
     );
 }
 

@@ -248,6 +248,63 @@ fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
 }
 
 #[test]
+fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir() {
+    let base = std::env::temp_dir().join(format!("louke-path-inline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // rustc ground truth (rustc 1.96.0): `mod inline { #[path="other.rs"] mod inner; }` at the crate
+    // root resolves inner to <root>/inline/other.rs — the base accumulates the inline-module name.
+    // inline/other.rs probes an UNDECLARED seam (rustc-correct verdict: exit 1). A decoy at
+    // <root>/other.rs (the enclosing file_dir base, no probe) is what threading file_dir UNCHANGED
+    // through the inline recursion would have read — returning Clean/exit 0, the forbidden false
+    // negative. Pins the accumulated inline base.
+    let root = write_source(
+        &base,
+        "lib.rs",
+        "mod inline { #[path = \"other.rs\"] mod inner; }",
+    );
+    write_source(
+        &base,
+        "inline/other.rs",
+        "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
+    );
+    write_source(&base, "other.rs", "fn decoy() {}");
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a #[path] nested in an inline block resolves from <root>/inline (undeclared seam -> exit 1), \
+         never the <root>/other.rs decoy (a silent exit-0 FN): {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn a_hex_escape_in_a_path_literal_decodes_to_the_same_file_syn_reads() {
+    let base = std::env::temp_dir().join(format!("louke-path-escape-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    // rustc ground truth (rustc 1.96.0): `#[path = "f\x6fo.rs"] mod name;` compiles foo.rs (\x6f =
+    // 'o') and ignores a conventional name.rs. 渾儀 decodes the escape via syn's `s.value()`; 漏刻 must
+    // decode it identically (twin-drift parity) rather than bail to conventional resolution. foo.rs
+    // probes an UNDECLARED seam (rustc-correct verdict exit 1); the name.rs decoy has no probe, so a
+    // bail-to-conventional would read it and return Clean/exit 0 — the compound false negative.
+    let root = write_source(&base, "lib.rs", "#[path = \"f\\x6fo.rs\"]\nmod name;");
+    write_source(
+        &base,
+        "foo.rs",
+        "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
+    );
+    write_source(&base, "name.rs", "fn decoy() {}");
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a \\x escape in a #[path] literal decodes to foo.rs (undeclared seam -> exit 1), matching \
+         syn, never the name.rs decoy (a silent exit-0 FN): {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
 fn an_absent_unconditional_path_target_is_a_constitution_error() {
     let base = std::env::temp_dir().join(format!("louke-path-absent-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
