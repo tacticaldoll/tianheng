@@ -5,10 +5,13 @@
 //! `#[path = "…"]` file module is followed to its author-chosen file (matching `walk_module`'s
 //! crate-wide policy) — resolved from `path_base`, the containing file's own directory with each
 //! enclosing inline-`mod` name accumulated onto it (rustc's rule), so a `#[path]` relocated inside
-//! an inline block reads the file rustc compiles, not a same-named orphan. An inline or
-//! `cfg_attr`-wrapped `#[path]` is not followed here — a narrow **fail-loud** bound
-//! (`unknown_module_error`, exit 2), never a silent pass and never governing a stale conventional
-//! file.
+//! an inline block reads the file rustc compiles, not a same-named orphan. An unconditional
+//! `#[path]` preceding an INLINE module header is followed too — not for the header's own content
+//! (already inline, unaffected), but to relocate the base its own file-form children resolve
+//! from, matching `walk_module`'s crate-wide policy for the identical shape. A `cfg_attr`-wrapped
+//! `#[path]` on a FILE module remains a narrow **fail-loud** bound (`unknown_module_error`, exit
+//! 2) when it is the only declaration for a segment, never a silent pass and never governing a
+//! stale conventional file.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -180,22 +183,27 @@ fn descend(
         // items (syn does not evaluate `cfg`), so resolving only the source-first variant would
         // let a forbidden item in another variant pass unobserved — a `mod`-resolution
         // divergence, the false-negative class this resolver exists to prevent. This matches the
-        // crate-wide scan's observe-all, cfg-blind policy (`scan::resolve_child_modules`). An
-        // unconditional `#[path]` file module is followed below; an inline `#[path]` variant is
-        // not merged into this union (a narrow fail-loud bound). Inline items live in the
-        // enclosing file, so `current_file` is unchanged; file-children live under
-        // `<child_dir>/x/`.
+        // crate-wide scan's observe-all, cfg-blind policy (`scan::resolve_child_modules`). Inline
+        // items live in the enclosing file, so `current_file` is unchanged; file-children live
+        // under `<child_dir>/x/` by default — UNLESS an unconditional `#[path = "…"]` precedes
+        // this inline header, which relocates that base (rustc's rule for an inline module too;
+        // it is NOT a no-op merely because the header has a body — verified against a real
+        // build). An inline module is unioned here regardless of any `#[path]`: the header's own
+        // presence/content is never conditional on it. A `cfg_attr`-wrapped `path` is not followed
+        // (the same cfg-conditional bound as the file-form case below), so it does not relocate.
         let mut inline: Vec<syn::Item> = Vec::new();
+        let mut inline_relocated_base: Option<PathBuf> = None;
         for item in &branch.items {
             if let syn::Item::Mod(module_item) = item {
-                if has_path_attr(&module_item.attrs) {
-                    continue;
-                }
                 if strip_raw(&module_item.ident.to_string()) != *seg {
                     continue;
                 }
-                if let Some((_, inner)) = &module_item.content {
-                    inline.extend(inner.iter().cloned());
+                let Some((_, inner)) = &module_item.content else {
+                    continue; // a file-form declaration of this name; handled below
+                };
+                inline.extend(inner.iter().cloned());
+                if let Some(rel) = direct_path_value(&module_item.attrs) {
+                    inline_relocated_base = Some(branch.path_base.join(rel));
                 }
             }
         }
@@ -287,10 +295,11 @@ fn descend(
             // Descending an inline `mod seg { … }`: the body stays in `current_file`, but its own
             // children — conventional AND any nested `#[path]` — resolve from `<child_dir>/seg`
             // (rustc accumulates the inline-module name as a directory component), so that
-            // becomes the new `path_base` as well as the new `child_dir`. Never merged with a
-            // file-form sibling's own items/directories (see the `Branch` doc above) — each stays
-            // its own independent branch.
-            let inline_dir = branch.child_dir.join(seg);
+            // becomes the new `path_base` as well as the new `child_dir` — UNLESS an unconditional
+            // `#[path]` preceded the inline header, in which case `inline_relocated_base` is
+            // authoritative instead. Never merged with a file-form sibling's own items/directories
+            // (see the `Branch` doc above) — each stays its own independent branch.
+            let inline_dir = inline_relocated_base.unwrap_or_else(|| branch.child_dir.join(seg));
             next_branches.push(Branch {
                 items: inline,
                 current_file: branch.current_file.clone(),

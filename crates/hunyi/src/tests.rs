@@ -6061,6 +6061,36 @@ fn module_file_descends_a_deep_file_module() {
     assert!(file.ends_with("a/b.rs"), "got {}", file.display());
 }
 
+#[test]
+fn module_file_follows_an_unconditional_path_on_an_inline_module_to_its_relocated_child() {
+    // rustc ground truth (verified with a real `cargo check`): `#[path = "thread_files"] pub mod
+    // thread { pub mod local_data; }` compiles `thread_files/local_data.rs` as
+    // `crate::thread::local_data`, with no `src/thread/` directory at all — the naive
+    // (non-relocated) location does not even exist. Before the fix, `descend`'s inline-collection
+    // loop skipped ANY `#[path]`-bearing mod (inline or not) before ever checking its content,
+    // and the file-form loop then also skipped it (assuming it was "already collected above"),
+    // so the item vanished from both loops — `crate::thread` itself failed with a spurious
+    // "module not found" error, even though it demonstrably exists and compiles.
+    let file = resolve_file(
+        "inline-path-relocate",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"thread_files\"]\npub mod thread {\n    pub mod local_data;\n}\n",
+            ),
+            ("thread_files/local_data.rs", "pub struct A;\n"),
+        ],
+        "crate::thread::local_data",
+    )
+    .unwrap();
+    assert!(
+        file.ends_with("thread_files/local_data.rs")
+            || file.ends_with("thread_files\\local_data.rs"),
+        "got {}",
+        file.display()
+    );
+}
+
 /// Build fixtures under a temp `src` plus synthetic `cargo metadata --no-deps` for a single
 /// crate `x` whose lib root is that `src/lib.rs`, so a private `check_*_boundary` can run
 /// without spawning `cargo`. Returns `(metadata, tempdir)`; the caller removes `tempdir`
@@ -6233,6 +6263,46 @@ fn cfg_mixed_inline_and_file_form_siblings_are_both_governed() {
         violations.len(),
         1,
         "the file-form sibling's exposure must react even though an inline variant exists: {violations:?}"
+    );
+}
+
+#[test]
+fn a_semantic_boundary_anchored_at_an_inline_module_with_an_unconditional_path_reacts_instead_of_erroring()
+ {
+    // Before the fix, ANY single-module-anchored capability (signature-coupling-exposure,
+    // dyn-trait-boundary, impl-trait-boundary, visibility-boundary, and async-exposure's
+    // non-subtree seam) hard-failed with a spurious "module not found" (exit 2) when anchored at
+    // an inline module carrying an unconditional `#[path]` — or any of its descendants — even
+    // though hunyi's own crate-wide walker (`walk_subtree_modules`/`resolve_child_modules`)
+    // resolved the identical layout without trouble. This asserts the single-module path now
+    // agrees with the crate-wide one: the boundary must react on the real exposure, not error.
+    let (metadata, dir) = fixture_metadata(
+        "inline-path-boundary",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[path = \"thread_files\"]\npub mod thread {\n    pub mod local_data;\n}\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            (
+                "thread_files/local_data.rs",
+                "pub fn leak() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::thread::local_data")
+        .must_not_expose("crate::infra")
+        .because("an inline module's own #[path] must not make its children unresolvable");
+    let mut violations = Vec::new();
+    let result = check_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+    result.expect("crate::thread::local_data must resolve, not hard-error as an unknown module");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the relocated child's exposure must still be observed: {violations:?}"
     );
 }
 
