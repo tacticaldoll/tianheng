@@ -6578,6 +6578,52 @@ fn a_cfg_mixed_single_module_violation_names_the_offending_sibling_not_the_first
 }
 
 #[test]
+fn a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others() {
+    // Round-6 finding: module_findings called collect_uses ONCE over the flattened union of every
+    // #[cfg] branch's items, so two mutually-exclusive branches each declaring `use <different
+    // path> as Handle;` collided in one shared use-map -- the branch unioned LAST silently
+    // overwrote the earlier branch's mapping, misresolving the FIRST branch's own bare `Handle`
+    // reference through the SECOND branch's `use` and hiding a real forbidden-exposure finding.
+    // Verified against real rustc: both platform.rs and win_platform.rs compile cleanly under
+    // their own respective feature. A control fixture with the identical platform.rs but no cfg
+    // split correctly reports 1 violation, confirming this is a cfg-split-specific regression,
+    // not a general resolution gap.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-split-use-alias-collision",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\npub mod other;\n\
+                 #[cfg(feature = \"u\")] pub mod platform;\n\
+                 #[cfg(feature = \"w\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("other.rs", "pub struct Widget;\n"),
+            (
+                "platform.rs",
+                "use crate::infra::Db as Handle;\npub fn leak() -> Handle { unimplemented!() }\n",
+            ),
+            (
+                "win_platform.rs",
+                "use crate::other::Widget as Handle;\npub fn leak2() -> Handle { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("the unix arm's own Handle alias must resolve to infra, not the windows arm's");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unix arm's leak() -> Handle genuinely exposes crate::infra::Db and must react: {violations:?}"
+    );
+}
+
+#[test]
 fn a_visibility_violation_carries_its_module_file() {
     let (metadata, dir) = fixture_metadata(
         "vis",
