@@ -289,8 +289,42 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   out to silently assume away a real, rustc-compiling shape it was never actually tested against.
   Fixed by intersecting the live probe's structural-match test against the walk's own canonical
   file set, and by reading and following an inline header's own unconditional `#[path]` exactly
-  like a file-form one. Five rounds now, the same two-crate pattern each time: closing a reported
-  instance earns confidence only from the NEXT fresh adversarial pass, never from the fix itself.
+  like a file-form one. The same round found 渾儀's OWN single-module resolver (`descend`)
+  mishandling the identical inline-`#[path]` shape in the mirror-image direction: its
+  inline-collection loop excluded ANY `#[path]`-bearing item before ever checking whether it had
+  inline content, and its file-form loop then also skipped it (a stale comment assumed it was
+  "already collected above"), so the item vanished from both loops — a hard, spurious "module not
+  found" (exit 2) on a module that demonstrably exists and compiles, for every single-module-
+  anchored capability, while 渾儀's own crate-wide walker (`resolve_child_modules`, maintained as
+  an independent function) resolved the identical layout without trouble. Two crates, opposite
+  failure directions (圭表 too permissive — silently governing nothing; 渾儀 too strict — hard-
+  erroring on a real module), the SAME root shape: a scan/check written for the ordinary case
+  silently assumed away a real one it was never tested against. Fixed by unioning `descend`'s
+  inline items regardless of `#[path]`, while still following an unconditional one to relocate
+  the base its own file-form children resolve from — matching `resolve_child_modules`'s existing,
+  correct handling of the identical syntax. Five rounds now, the same two-crate pattern each time:
+  closing a reported instance earns confidence only from the NEXT fresh adversarial pass, never
+  from the fix itself.
+  The same round's fifth finding was different in KIND, not degree: `resolve_module_root`'s
+  single-file shape (branches[0]'s file, alongside every branch's unioned items — the deliberate,
+  documented choice from round 4) turned out to disagree with the CLI report's own published
+  promise (`openspec/specs/cli-check-runner/spec.md`: `file` names "where the offending seam is
+  written") once a `#[cfg]`-split module's finding genuinely came from a non-first branch — a real
+  violation could be reported at an innocent sibling's file. `push_multi_module_violations`'
+  `per_finding_file` cache had the identical hazard one hop further: two findings sharing one
+  module string (a legitimate cfg-split) resolved through a cache keyed only by that string, so
+  the second finding silently inherited the first's file. Unlike the four one-hop directory/dedup
+  fixes above, closing this one properly meant `Violation.file` could no longer be resolved from a
+  single module string AFTER the fact at all — it needed to be collected AT THE SITE, while the
+  real file is still open, and carried alongside every item/finding from there to the violation.
+  `resolve_module_items_with_files` now pairs every item with its own branch's file; `ImplSite`,
+  `TypeDef`, and `UnsafeSite` (the crate-wide scan's own site records) and the subtree walker's
+  per-module output now each carry their own real file directly. `seam_file` and `per_finding_file`
+  — the module-string-keyed re-resolution layer this whole hazard lived in — are gone; there is no
+  longer a caller that resolves a finding's file from anything other than the exact branch that
+  produced it. A genuine schema change, not a same-shape patch — confirmed as necessary rather than
+  deferred, since the disagreement was with a published, adopter-facing report guarantee, not an
+  internal implementation comment.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

@@ -3,7 +3,7 @@
 //! sites and react to those whose module lies outside the allowed set. Confinement-only: an empty
 //! or crate-root allowed set is a constitution error (the crate-wide ban is `#![forbid]`'s job).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
@@ -53,10 +53,7 @@ pub(crate) fn check_unsafe_boundary(
     push_multi_module_violations(
         violations,
         MultiModuleViolationContext {
-            src_dir,
-            root_file: &root_file,
             target: &boundary.crate_package,
-            crate_package: &boundary.crate_package,
             rule: UNSAFE_CONFINEMENT_RULE,
             reason: &boundary.reason,
             severity: boundary.severity,
@@ -77,7 +74,7 @@ pub(crate) fn unsafe_findings(
     root_file: &Path,
     allowed: &[String],
     crate_package: &str,
-) -> Result<Vec<(SemanticFact, String)>, String> {
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     // Confinement-only, enforced loud (exit 2): the crate-wide "no unsafe" case is #![forbid]'s,
     // and an allowed set naming the crate root could never react. Guarded here (the pure heart) so
     // the rejection is testable without spawning `cargo`.
@@ -88,7 +85,7 @@ pub(crate) fn unsafe_findings(
         return Err(unsafe_crate_root_allowed_error(crate_package));
     }
     let sites = scan_unsafe_sites(src_dir, root_file, crate_package)?;
-    let mut findings: Vec<(SemanticFact, String)> = sites
+    let mut findings: Vec<(SemanticFact, String, PathBuf)> = sites
         .into_iter()
         .filter(|site| !matches_allowed(&site.module, allowed))
         .map(|site| {
@@ -99,6 +96,7 @@ pub(crate) fn unsafe_findings(
                     module: module.clone(),
                 },
                 module,
+                site.file,
             )
         })
         .collect();

@@ -3,7 +3,7 @@
 //! an `impl T for X` (anywhere) whose self-type resolves to a subtree definition.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
@@ -50,10 +50,7 @@ pub(crate) fn check_forbidden_marker_boundary(
     push_multi_module_violations(
         violations,
         MultiModuleViolationContext {
-            src_dir,
-            root_file: &root_file,
             target: &boundary.module,
-            crate_package: &boundary.crate_package,
             rule: FORBIDDEN_MARKER_RULE,
             reason: &boundary.reason,
             severity: boundary.severity,
@@ -75,7 +72,7 @@ pub(crate) fn forbidden_marker_findings(
     subtree: &str,
     forbidden: &[String],
     crate_package: &str,
-) -> Result<Vec<(SemanticFact, String)>, String> {
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let subtree = canonical_path_str(subtree);
     // The canonical paths of every type the crate actually DEFINES — the only types that can
@@ -123,6 +120,7 @@ pub(crate) fn forbidden_marker_findings(
                             canonical: td.canonical.clone(),
                         },
                         td.module.clone(),
+                        td.file.clone(),
                     ));
                 }
             }
@@ -182,6 +180,7 @@ pub(crate) fn forbidden_marker_findings(
                     module: site.module.clone(),
                 },
                 site.module.clone(),
+                site.file.clone(),
             ));
         }
     }

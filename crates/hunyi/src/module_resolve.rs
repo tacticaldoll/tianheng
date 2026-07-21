@@ -5,10 +5,13 @@
 //! `#[path = "…"]` file module is followed to its author-chosen file (matching `walk_module`'s
 //! crate-wide policy) — resolved from `path_base`, the containing file's own directory with each
 //! enclosing inline-`mod` name accumulated onto it (rustc's rule), so a `#[path]` relocated inside
-//! an inline block reads the file rustc compiles, not a same-named orphan. An inline or
-//! `cfg_attr`-wrapped `#[path]` is not followed here — a narrow **fail-loud** bound
-//! (`unknown_module_error`, exit 2), never a silent pass and never governing a stale conventional
-//! file.
+//! an inline block reads the file rustc compiles, not a same-named orphan. An unconditional
+//! `#[path]` preceding an INLINE module header is followed too — not for the header's own content
+//! (already inline, unaffected), but to relocate the base its own file-form children resolve
+//! from, matching `walk_module`'s crate-wide policy for the identical shape. A `cfg_attr`-wrapped
+//! `#[path]` on a FILE module remains a narrow **fail-loud** bound (`unknown_module_error`, exit
+//! 2) when it is the only declaration for a segment, never a silent pass and never governing a
+//! stale conventional file.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -34,25 +37,43 @@ fn module_segments(module: &str) -> Vec<String> {
         .collect()
 }
 
-/// Resolve a module path to the items it owns, descending `mod` declarations from the crate
-/// root (inline `mod x { … }` and file-based `mod x;` both). An unknown segment is a
+/// Resolve a module path to its items, each paired with the **file its own branch was resolved
+/// from** — needed by a caller that must attribute EACH finding to the real file that produced it,
+/// rather than a single, first-branch file for the whole module. When `module` is ordinary
+/// (reached through exactly one branch), every item pairs with that one file, same as
+/// [`resolve_module_file`] would report. When `module` was reached through a mutually-exclusive
+/// `#[cfg]` split, an item pairs with the file its OWN branch actually lives in — so a finding
+/// produced from a non-first branch's item is never misattributed to a different branch's file
+/// (the false-attribution class [`resolve_module_root`]'s single-file shape cannot avoid, found on
+/// a round-5 adversarial review — see `PROJECT.md`'s Decisions). An unknown segment is a
 /// constitution error; a declared-but-fileless module is a scan error — never a silent pass.
-pub(crate) fn resolve_module_items(
+pub(crate) fn resolve_module_items_with_files(
     src_dir: &Path,
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<syn::Item>, String> {
-    resolve_module(src_dir, root_file, module, crate_package).map(|(items, _file)| items)
+) -> Result<Vec<(syn::Item, PathBuf)>, String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    let mut items = Vec::new();
+    for (branch_items, file, ..) in &branches {
+        items.extend(
+            branch_items
+                .iter()
+                .cloned()
+                .map(|item| (item, file.clone())),
+        );
+    }
+    Ok(items)
 }
 
 /// Resolve a module path to the **source file** its items live in — the crate root for `crate`
-/// or an inline module, or the located `<name>.rs` / `<name>/mod.rs` for a file module. This is
-/// the file a single-module semantic violation reports (`Violation::with_file`): the file the
-/// reaction already descends to in order to observe the module's items, where the offending
-/// seam is written (the finding names the canonicalized forbidden type, which may be *defined*
-/// elsewhere). It shares [`resolve_module`]'s one traversal with [`resolve_module_items`], so
-/// the reported file can never disagree with the items reacted on.
+/// or an inline module, or the located `<name>.rs` / `<name>/mod.rs` for a file module. Test-only
+/// (production callers all need per-finding attribution and use
+/// [`resolve_module_items_with_files`] instead — this single-file shape is exactly the false-
+/// attribution hazard its own doc warns about for a `#[cfg]`-split module, see `PROJECT.md`'s
+/// Decisions): a convenience for a resolver-level test that only cares which file one particular
+/// module path resolves to.
+#[cfg(test)]
 pub(crate) fn resolve_module_file(
     src_dir: &Path,
     root_file: &Path,
@@ -62,10 +83,11 @@ pub(crate) fn resolve_module_file(
     resolve_module(src_dir, root_file, module, crate_package).map(|(_items, file)| file)
 }
 
-/// The shared module resolution: the items a module owns **and** the file they live in, from
-/// one descent. [`resolve_module_items`] and [`resolve_module_file`] each keep one half, so the
-/// two views come from the same traversal and never drift (a `mod`-resolution divergence is the
-/// false-negative class the project forbids).
+/// The shared module resolution backing [`resolve_module_file`] (test-only): the items a module
+/// owns **and** the file they live in, from one descent, so the two views come from the same
+/// traversal and never drift (a `mod`-resolution divergence is the false-negative class the
+/// project forbids).
+#[cfg(test)]
 fn resolve_module(
     src_dir: &Path,
     root_file: &Path,
@@ -96,7 +118,11 @@ fn resolve_module(
 /// MUST NOT pair these unioned items with this single directory pair — a non-first branch's own
 /// child would then resolve against the wrong directory (a real false negative, found on
 /// adversarial review); such a caller should use [`resolve_module_branches`] instead, which keeps
-/// every branch's own items and directories together.
+/// every branch's own items and directories together. Test-only in production terms: every real
+/// caller needing a module's file now goes through [`resolve_module_items_with_files`] instead,
+/// for exactly the false-attribution reason above, generalized to any finding, not just a subtree
+/// walk's further descent.
+#[cfg(test)]
 pub(crate) fn resolve_module_root(
     src_dir: &Path,
     root_file: &Path,
@@ -180,22 +206,27 @@ fn descend(
         // items (syn does not evaluate `cfg`), so resolving only the source-first variant would
         // let a forbidden item in another variant pass unobserved — a `mod`-resolution
         // divergence, the false-negative class this resolver exists to prevent. This matches the
-        // crate-wide scan's observe-all, cfg-blind policy (`scan::resolve_child_modules`). An
-        // unconditional `#[path]` file module is followed below; an inline `#[path]` variant is
-        // not merged into this union (a narrow fail-loud bound). Inline items live in the
-        // enclosing file, so `current_file` is unchanged; file-children live under
-        // `<child_dir>/x/`.
+        // crate-wide scan's observe-all, cfg-blind policy (`scan::resolve_child_modules`). Inline
+        // items live in the enclosing file, so `current_file` is unchanged; file-children live
+        // under `<child_dir>/x/` by default — UNLESS an unconditional `#[path = "…"]` precedes
+        // this inline header, which relocates that base (rustc's rule for an inline module too;
+        // it is NOT a no-op merely because the header has a body — verified against a real
+        // build). An inline module is unioned here regardless of any `#[path]`: the header's own
+        // presence/content is never conditional on it. A `cfg_attr`-wrapped `path` is not followed
+        // (the same cfg-conditional bound as the file-form case below), so it does not relocate.
         let mut inline: Vec<syn::Item> = Vec::new();
+        let mut inline_relocated_base: Option<PathBuf> = None;
         for item in &branch.items {
             if let syn::Item::Mod(module_item) = item {
-                if has_path_attr(&module_item.attrs) {
-                    continue;
-                }
                 if strip_raw(&module_item.ident.to_string()) != *seg {
                     continue;
                 }
-                if let Some((_, inner)) = &module_item.content {
-                    inline.extend(inner.iter().cloned());
+                let Some((_, inner)) = &module_item.content else {
+                    continue; // a file-form declaration of this name; handled below
+                };
+                inline.extend(inner.iter().cloned());
+                if let Some(rel) = direct_path_value(&module_item.attrs) {
+                    inline_relocated_base = Some(branch.path_base.join(rel));
                 }
             }
         }
@@ -287,10 +318,11 @@ fn descend(
             // Descending an inline `mod seg { … }`: the body stays in `current_file`, but its own
             // children — conventional AND any nested `#[path]` — resolve from `<child_dir>/seg`
             // (rustc accumulates the inline-module name as a directory component), so that
-            // becomes the new `path_base` as well as the new `child_dir`. Never merged with a
-            // file-form sibling's own items/directories (see the `Branch` doc above) — each stays
-            // its own independent branch.
-            let inline_dir = branch.child_dir.join(seg);
+            // becomes the new `path_base` as well as the new `child_dir` — UNLESS an unconditional
+            // `#[path]` preceded the inline header, in which case `inline_relocated_base` is
+            // authoritative instead. Never merged with a file-form sibling's own items/directories
+            // (see the `Branch` doc above) — each stays its own independent branch.
+            let inline_dir = inline_relocated_base.unwrap_or_else(|| branch.child_dir.join(seg));
             next_branches.push(Branch {
                 items: inline,
                 current_file: branch.current_file.clone(),

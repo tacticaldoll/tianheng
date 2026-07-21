@@ -91,7 +91,31 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   pub mod y; }`) was treated as a pure no-op, when rustc actually uses it to relocate the base
   directory the inline body's own file-form children resolve from — so such a child's real file
   was never found at its relocated location and its imports went unobserved. Both are now
-  followed/governed correctly, verified against real `cargo check` builds of each shape.
+  followed/governed correctly, verified against real `cargo check` builds of each shape. The same
+  round found 渾儀's single-module resolver (`descend`) mishandling the identical inline-`#[path]`
+  shape in the opposite direction: it dropped such a module from both its inline-union and
+  file-form loops entirely, so any single-module-anchored capability (signature-coupling-exposure,
+  dyn-trait-boundary, impl-trait-boundary, visibility-boundary, async-exposure's non-subtree seam)
+  hard-failed with a spurious "module not found" (exit 2) on a module that demonstrably exists and
+  compiles — while 渾儀's own crate-wide walker resolved it without trouble. `descend` now unions
+  an inline module's items regardless of any `#[path]`, while still following an unconditional
+  one to relocate the base its own file-form children resolve from, matching the crate-wide
+  walker's existing, correct handling.
+- 渾儀's `Violation.file` for a `#[cfg]`-split module used to always name the **first surviving
+  branch's** file, even when the actual finding came from a different branch's items — so a
+  violation genuinely written in the second `#[cfg]` arm could be reported at the first, innocent
+  arm's file, contradicting the CLI report's own documented promise that `file` names where the
+  offending seam is written. The same shape of bug hit the whole-crate-scan/subtree path one hop
+  further: two findings sharing one module string (a legitimate `#[cfg]`-split shim) resolved
+  their file through a cache keyed only by that string, so the second finding silently reused the
+  first's (possibly wrong) file. Both are closed by attributing file provenance **at collection
+  time**, not by re-resolving from a module string afterward: every module-resolved item now
+  carries the real file its own branch was read from (`resolve_module_items_with_files`), and
+  every crate-wide-scan site (`ImplSite`, `TypeDef`, `UnsafeSite`) and subtree-walk module now
+  carries its own real file directly, collected while the file is actually open. `seam_file` and
+  `per_finding_file`'s module-string-keyed re-resolution are removed entirely — there is no longer
+  a class of caller that resolves a finding's file from anything other than the exact branch that
+  produced it.
 
 ## [0.2.1] - 2026-07-21
 
