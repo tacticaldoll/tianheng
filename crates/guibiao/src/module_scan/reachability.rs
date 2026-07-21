@@ -149,12 +149,14 @@ pub(crate) fn reachable_modules(
     ),
     String,
 > {
-    // Index files by their path-derived module path so a module's file(s) are found fast. This
-    // mapping is purely structural (derived from each file's own path relative to `src_dir`), so
-    // a file backing a deeply inline-nested module (`parent/child.rs` for
-    // `mod parent { mod child; }`) is already keyed at its correct `crate::parent::child` path —
-    // discovering that path only requires walking into `parent`'s inline body, not recomputing a
-    // directory base.
+    // Index files by their path-derived module path — used ONLY to discover the crate root's own
+    // file(s) below (`by_module.get("crate")`), the one place a module has no declaring source of
+    // its own to probe a directory from. Every OTHER module's plain children are resolved by a
+    // live per-source directory probe (see `child_plain_bases` below), not this index: a
+    // structural, module-path-keyed lookup cannot tell which of a module's several sources (e.g.
+    // mutually-exclusive `#[cfg]` arms) actually declared a given child, and — since a file can
+    // physically coincide with a module's naive structural path even when that module was reached
+    // through an unrelated `#[path]` remap — it can also phantom-match a stray, uncompiled file.
     let mut by_module: std::collections::BTreeMap<String, Vec<&PathBuf>> = Default::default();
     for file in files {
         if let Ok(relative) = file.strip_prefix(src_dir) {
@@ -168,13 +170,20 @@ pub(crate) fn reachable_modules(
     // Where the walk finds a module's own `mod` declarations: either its file(s) (scanned at
     // top level) or, for an inline-only module, the byte span of its declaring `mod name { … }`
     // body within its declaring file's cleaned text (scanned at that span's own top level).
-    // `path_base` is carried alongside so a `#[path]` found within a source can be resolved. The
-    // trailing `HashSet<PathBuf>` is this SPECIFIC source's own ancestor set — every file already
-    // open on the exact descent path that reached THIS source (see the cycle-guard note below).
+    // `path_base` is where a `#[path]` found WITHIN this source resolves its relative value from
+    // (the file's own containing directory — rustc's rule for a `#[path]` written at file scope).
+    // `child_base` is where THIS source's own PLAIN (`#[path]`-free) children live — a
+    // *different* directory whenever this source is an ordinary flat `name.rs` file (its
+    // conventional children nest under `<path_base>/<name>/`, not beside it), coinciding with
+    // `path_base` for every mod-rs-like source (the crate root, an inline body, and a
+    // `#[path]`-loaded file, which rustc treats as mod-rs-like regardless of its own filename).
+    // The trailing `HashSet<PathBuf>` is this SPECIFIC source's own ancestor set — every file
+    // already open on the exact descent path that reached THIS source (see the cycle-guard note
+    // below) — never merged with a sibling source's.
     #[derive(Clone)]
     enum ScanSource {
-        File(PathBuf, PathBuf, HashSet<PathBuf>),
-        Body(PathBuf, usize, usize, PathBuf, HashSet<PathBuf>),
+        File(PathBuf, PathBuf, PathBuf, HashSet<PathBuf>),
+        Body(PathBuf, usize, usize, PathBuf, PathBuf, HashSet<PathBuf>),
     }
 
     let mut reachable = std::collections::BTreeSet::new();
@@ -186,22 +195,6 @@ pub(crate) fn reachable_modules(
     // ALSO exists (the per-platform shim pattern), that file is real and must NOT be excluded, so
     // this is tracked separately from mere membership in `remapped`.
     let mut remap_shadowed = std::collections::BTreeSet::new();
-    // For a module reached through an unconditional `#[path]` remap: the directory ITS OWN plain
-    // (`#[path]`-free) children resolve from, paired with the ancestor set on the exact descent
-    // path that reached THIS SPECIFIC target (see the cycle-guard note below — critically NOT
-    // merged with a mutually-exclusive `#[cfg]` sibling's own target). A `#[path]`-loaded file is
-    // mod-rs-like by rustc's rule REGARDLESS of its own filename, so the directory is
-    // `canon.parent()` — the same value already used as the ScanSource's own `path_base` for that
-    // module. Deliberately populated ONLY here (the `#[path]` branch below), never for an ordinary
-    // structurally-declared module (`by_module` already resolves those correctly) and never
-    // propagated to a plain child's OWN further children (an ordinary "name.rs" file found this
-    // way still nests under its own stem-named subdirectory like any other conventional file, not
-    // its parent's directory) — so the live-probe fallback below stays scoped to exactly the one
-    // hop it is proven correct for.
-    let mut mod_rs_like_own_dir: std::collections::BTreeMap<
-        String,
-        Vec<(PathBuf, HashSet<PathBuf>)>,
-    > = Default::default();
     reachable.insert("crate".to_string());
     let mut sources: std::collections::BTreeMap<String, Vec<ScanSource>> = Default::default();
     if let Some(root_files) = by_module.get("crate") {
@@ -216,7 +209,12 @@ pub(crate) fn reachable_modules(
             root_files
                 .iter()
                 .map(|f| {
-                    ScanSource::File((*f).clone(), src_dir.to_path_buf(), root_ancestors.clone())
+                    ScanSource::File(
+                        (*f).clone(),
+                        src_dir.to_path_buf(),
+                        src_dir.to_path_buf(),
+                        root_ancestors.clone(),
+                    )
                 })
                 .collect(),
         );
@@ -230,6 +228,11 @@ pub(crate) fn reachable_modules(
         // an inline body but never a file declaration is inline-only. (A path seen both ways arises
         // only under mutually-exclusive `#[cfg]`; it is not inline-only — the cfg-blind bound.)
         let mut child_kinds: std::collections::BTreeMap<String, (bool, bool)> = Default::default();
+        // An inline body's own accumulated directory is the DECLARING source's `child_base`
+        // (never its `path_base`) joined with the inline name — so a plain `mod x { … }` declared
+        // inside an ordinary flat `bar.rs` still accumulates as `<bar's own child directory>/x`,
+        // not `<bar.rs's containing dir>/x` (verified against a real rustc build: `bar.rs`
+        // containing `mod x { mod y; }` compiles `y` at `bar/x/y.rs`, not `x/y.rs`).
         let mut child_bodies: std::collections::BTreeMap<
             String,
             Vec<(PathBuf, usize, usize, PathBuf, HashSet<PathBuf>)>,
@@ -248,41 +251,52 @@ pub(crate) fn reachable_modules(
             String,
             Vec<(PathBuf, PathBuf, HashSet<PathBuf>)>,
         > = Default::default();
+        // Every `child_base` (NOT `path_base` — see the `ScanSource` doc above) a PLAIN
+        // (`#[path]`-free) declaration for a name was seen under, each paired with the DECLARING
+        // SOURCE's own ancestor set — critically per-source, exactly like `child_direct_paths`
+        // above, and for the same reason: a mutually-exclusive `#[cfg]` arm's own ancestors must
+        // never leak into a sibling arm's plain child.
+        let mut child_plain_bases: std::collections::BTreeMap<
+            String,
+            Vec<(PathBuf, HashSet<PathBuf>)>,
+        > = Default::default();
         for source in &scan_sources {
-            let (file, text, cleaned, positions, range, path_base, source_ancestors) = match source
-            {
-                ScanSource::File(file, path_base, ancestors) => {
-                    let text = std::fs::read_to_string(file).map_err(|err| {
-                        format!("cannot read source file '{}': {err}", file.display())
-                    })?;
-                    let (cleaned, positions) = clean_with_positions(&text);
-                    let len = cleaned.len();
-                    (
-                        file.clone(),
-                        text,
-                        cleaned,
-                        positions,
-                        0..len,
-                        path_base.clone(),
-                        ancestors.clone(),
-                    )
-                }
-                ScanSource::Body(file, start, end, path_base, ancestors) => {
-                    let text = std::fs::read_to_string(file).map_err(|err| {
-                        format!("cannot read source file '{}': {err}", file.display())
-                    })?;
-                    let (cleaned, positions) = clean_with_positions(&text);
-                    (
-                        file.clone(),
-                        text,
-                        cleaned,
-                        positions,
-                        *start..*end,
-                        path_base.clone(),
-                        ancestors.clone(),
-                    )
-                }
-            };
+            let (file, text, cleaned, positions, range, path_base, child_base, source_ancestors) =
+                match source {
+                    ScanSource::File(file, path_base, child_base, ancestors) => {
+                        let text = std::fs::read_to_string(file).map_err(|err| {
+                            format!("cannot read source file '{}': {err}", file.display())
+                        })?;
+                        let (cleaned, positions) = clean_with_positions(&text);
+                        let len = cleaned.len();
+                        (
+                            file.clone(),
+                            text,
+                            cleaned,
+                            positions,
+                            0..len,
+                            path_base.clone(),
+                            child_base.clone(),
+                            ancestors.clone(),
+                        )
+                    }
+                    ScanSource::Body(file, start, end, path_base, child_base, ancestors) => {
+                        let text = std::fs::read_to_string(file).map_err(|err| {
+                            format!("cannot read source file '{}': {err}", file.display())
+                        })?;
+                        let (cleaned, positions) = clean_with_positions(&text);
+                        (
+                            file.clone(),
+                            text,
+                            cleaned,
+                            positions,
+                            *start..*end,
+                            path_base.clone(),
+                            child_base.clone(),
+                            ancestors.clone(),
+                        )
+                    }
+                };
             for declared in declared_modules_in(&cleaned, range) {
                 let seen = child_kinds.entry(declared.name.clone()).or_default();
                 if declared.is_inline {
@@ -292,20 +306,23 @@ pub(crate) fn reachable_modules(
                             file.clone(),
                             start,
                             end,
-                            path_base.clone(),
+                            child_base.clone(),
                             source_ancestors.clone(),
                         ));
                     }
                     continue;
                 }
                 let Some(eq_cleaned) = declared.direct_path_eq else {
-                    // A PLAIN file declaration (no `#[path]`) — resolved conventionally via
-                    // `by_module`, plus (see `mod_rs_like_own_dir` above) a direct probe when this
-                    // module was itself reached through a `#[path]` remap. Kept a separate flag
-                    // from a direct `#[path]` sibling below: the two are additive (a
+                    // A PLAIN file declaration (no `#[path]`) — resolved by a live probe from
+                    // THIS source's own `child_base` (see `child_plain_bases` above). Kept a
+                    // separate flag from a direct `#[path]` sibling below: the two are additive (a
                     // `#[cfg]`-gated per-platform shim commonly pairs a plain file on one platform
                     // with a `#[path]`-relocated one on another), never mutually exclusive.
                     seen.1 = true;
+                    child_plain_bases
+                        .entry(declared.name)
+                        .or_default()
+                        .push((child_base.clone(), source_ancestors.clone()));
                     continue;
                 };
                 let Some(&orig_eq) = positions.get(eq_cleaned) else {
@@ -345,20 +362,25 @@ pub(crate) fn reachable_modules(
             if seen_inline {
                 if let Some(bodies) = child_bodies.remove(&child) {
                     // rustc accumulates the inline-module name as a directory component: a
-                    // `#[path]` (or further nested inline `mod`) inside THIS body resolves from
-                    // `<parent's path_base>/<child>`, not the parent's own path_base unchanged.
-                    // An inline body opens no new file, so it simply carries forward whichever
-                    // source declared it — its own ancestor set is already correct as-is.
+                    // `#[path]` (or further nested inline `mod`) inside THIS body — or a further
+                    // plain child of it — resolves from `<parent's child_base>/<child>`, not the
+                    // parent's own `path_base` (which, for an ordinary flat file, is a DIFFERENT,
+                    // shallower directory — see the `ScanSource` doc above). An inline body opens
+                    // no new file and is itself mod-rs-like, so `path_base` and `child_base`
+                    // coincide for it; it simply carries forward whichever source declared it —
+                    // its own ancestor set is already correct as-is.
                     sources
                         .entry(child_path.clone())
                         .or_default()
                         .extend(bodies.into_iter().map(
                             |(file, start, end, base, source_ancestors)| {
+                                let inline_dir = base.join(&child);
                                 ScanSource::Body(
                                     file,
                                     start,
                                     end,
-                                    base.join(&child),
+                                    inline_dir.clone(),
+                                    inline_dir,
                                     source_ancestors,
                                 )
                             },
@@ -375,59 +397,27 @@ pub(crate) fn reachable_modules(
                 inline_only.insert(child_path.clone());
             }
             if seen_plain_file {
+                // Resolved by a live probe from EACH declaring source's own directory —
+                // uniformly for every plain child, whether its module sits at its own
+                // structurally-derived location or was itself reached through a `#[path]` remap
+                // (or nests inside one). A structural, module-path-keyed index (the prior
+                // `by_module`-based design) cannot make this distinction: it does not know which
+                // specific source declared the child, so it either merges an unrelated sibling
+                // arm's ancestors into this child's own (a false-positive cycle one hop later) or
+                // phantom-matches a stray, uncompiled file that coincidentally sits at the naive
+                // structural location of a remapped module's child (a false positive of a
+                // different shape) — both real bugs found and fixed here. Probing per source
+                // instead means a probed child's OWN further children are resolved by this exact
+                // same mechanism when their turn comes, with no special-casing needed.
                 let mut already_sourced: HashSet<PathBuf> = HashSet::new();
-                // A conservative basis to carry forward for a plain child's OWN descendants — the
-                // union of this module's own source(s)' ancestor sets. No cycle-check ever
-                // consults this directly (a `by_module` lookup is bounded and cannot cycle, see
-                // below), so unioning here is safe: it can only make a later, more exotic nested
-                // check more conservative, never mask a real cycle.
-                let plain_child_base_ancestors: HashSet<PathBuf> = scan_sources
-                    .iter()
-                    .flat_map(|s| match s {
-                        ScanSource::File(_, _, a) | ScanSource::Body(_, _, _, _, a) => {
-                            a.iter().cloned()
-                        }
-                    })
-                    .collect();
-                if let Some(files) = by_module.get(&child_path) {
-                    for f in files {
-                        let base = f
-                            .parent()
-                            .map(Path::to_path_buf)
-                            .unwrap_or_else(|| src_dir.to_path_buf());
-                        // `by_module` is a finite, precomputed structural index — each entry is a
-                        // genuinely distinct real file, so revisiting an ancestor through it is
-                        // impossible (unlike the live filesystem probe below); no cycle check
-                        // is needed here, only forward ancestor bookkeeping for any further hop.
-                        let mut file_ancestors = plain_child_base_ancestors.clone();
-                        if let Ok(canon) = std::fs::canonicalize(f) {
-                            already_sourced.insert(canon.clone());
-                            file_ancestors.insert(canon);
-                        }
-                        sources
-                            .entry(child_path.clone())
-                            .or_default()
-                            .push(ScanSource::File((*f).clone(), base, file_ancestors));
-                    }
-                }
-                // `by_module` is a purely structural index — keyed by each file's OWN on-disk
-                // path — so it only resolves a plain child correctly when THIS module sits at
-                // its own structurally-derived location. When THIS module (`module`, not `child`)
-                // was itself reached through a `#[path]` remap, its logical path diverges from its
-                // own directory, so `by_module` never has an entry under `child_path` for a file
-                // that legitimately lives beside it — resolve directly from the remap target's own
-                // directory instead, trying both rustc file-module conventions. Scoped to exactly
-                // that one hop (via `mod_rs_like_own_dir`, populated only by the `#[path]` branch
-                // below): a plain child found this way is an ordinary conventional file, so ITS OWN
-                // further children still nest under its own stem-named subdirectory like any other
-                // file, not this shortcut. Deduped by canonical path against the structural
-                // resolution above so an ordinary (non-remapped) module never double-registers.
-                for (base, target_ancestors) in mod_rs_like_own_dir
-                    .get(&module)
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .collect::<Vec<_>>()
+                // Whether ANY resolved candidate for this child sits at its own genuinely correct
+                // structural location. If none do — every resolution was reached only through a
+                // divergent (remap-derived) source — a coincidental file at the naive structural
+                // location is a true orphan (see `remap_shadowed` below), exactly like the
+                // existing #[path]-target exclusion, generalized to a probed plain child.
+                let mut any_structural_match = false;
+                for (base, source_ancestors) in
+                    child_plain_bases.remove(&child).into_iter().flatten()
                 {
                     for candidate in [
                         base.join(format!("{child}.rs")),
@@ -442,37 +432,55 @@ pub(crate) fn reachable_modules(
                         if !already_sourced.insert(canon.clone()) {
                             continue;
                         }
-                        // Unlike a structural `by_module` lookup (bounded by a precomputed,
-                        // finite file list, so it can never revisit a physical file through an
-                        // ever-lengthening logical path), this is a live filesystem probe: a
-                        // directory symlink cycle could otherwise let it re-open an
-                        // already-open source file forever, growing `child_path` without bound.
-                        // Checked against `target_ancestors` — the specific `#[path]` target that
-                        // led here — never a set merged across a mutually-exclusive `#[cfg]`
-                        // sibling's own target.
-                        if target_ancestors.contains(&canon) {
+                        // A directory symlink cycle could otherwise let this live probe re-open
+                        // an already-open source file forever, growing `child_path` without
+                        // bound. Checked against `source_ancestors` — the specific declaring
+                        // source's own ancestor set — never a set merged across a
+                        // mutually-exclusive `#[cfg]` sibling's own source.
+                        if source_ancestors.contains(&canon) {
                             return Err(format!(
                                 "module '{child_path}' resolves to '{}', which cycles back to an already-open source file",
                                 candidate.display()
                             ));
                         }
                         // `governed_files`' structural iterator keys every file by ITS OWN
-                        // on-disk path (`module_path_of`), which for this file is `crate::…`
-                        // through its real directory, never `child_path` — so, exactly like a
-                        // direct `#[path]` target, this file must ALSO be recorded in `remapped`
-                        // or `governed_files` would never attribute it to its logical path.
-                        remapped.push((candidate.clone(), child_path.clone()));
+                        // on-disk path (`module_path_of`) — which agrees with `child_path` for an
+                        // ordinary, non-remapped module (that iterator already finds and governs
+                        // it on its own) but diverges once any ancestor was reached through a
+                        // `#[path]` remap. Recorded in `remapped` only in that divergent case —
+                        // exactly like a direct `#[path]` target — so a plain child is never
+                        // double-registered under its own already-correct structural identity.
+                        let structurally_matches = candidate
+                            .strip_prefix(src_dir)
+                            .ok()
+                            .is_some_and(|relative| {
+                                module_path_of(relative, root_relative) == child_path
+                            });
+                        if structurally_matches {
+                            any_structural_match = true;
+                        } else {
+                            remapped.push((candidate.clone(), child_path.clone()));
+                        }
                         let own_dir = canon
                             .parent()
                             .map(Path::to_path_buf)
                             .unwrap_or_else(|| base.clone());
-                        let mut anc = target_ancestors.clone();
+                        let new_child_base = base.join(&child);
+                        let mut anc = source_ancestors.clone();
                         anc.insert(canon);
                         sources
                             .entry(child_path.clone())
                             .or_default()
-                            .push(ScanSource::File(candidate, own_dir, anc));
+                            .push(ScanSource::File(candidate, own_dir, new_child_base, anc));
                     }
+                }
+                if !already_sourced.is_empty() && !any_structural_match {
+                    // Every real source for this child was reached only through a divergent
+                    // (remap-derived) path, so any OTHER file that merely happens to sit at the
+                    // naive structural location `governed_files`' own scan would otherwise find is
+                    // an uncompiled orphan, never a legitimate sibling — the same hazard
+                    // `remap_shadowed` already excludes for a direct `#[path]` target.
+                    remap_shadowed.insert(child_path.clone());
                 }
             }
             if let Some(targets) = child_direct_paths.remove(&child) {
@@ -517,20 +525,13 @@ pub(crate) fn reachable_modules(
                         .unwrap_or_else(|| base.clone());
                     let mut anc = target_ancestors.clone();
                     anc.insert(canon);
-                    // Recorded so that, when `child_path` is later popped as `module`, its OWN
-                    // plain (`#[path]`-free) children can be resolved from this directory too
-                    // (see `mod_rs_like_own_dir` above) — `by_module`'s structural index has no
-                    // entry for them, since their real on-disk location sits beside `target`, not
-                    // at `child_path`'s logical location. Carries THIS target's own ancestor set
-                    // forward, not a sibling-merged one.
-                    mod_rs_like_own_dir
-                        .entry(child_path.clone())
-                        .or_default()
-                        .push((own_dir.clone(), anc.clone()));
+                    // A `#[path]`-loaded file is mod-rs-like regardless of its own filename, so
+                    // `path_base` and `child_base` coincide (both `own_dir`) — its own `#[path]`
+                    // siblings and its own plain children resolve from the same directory.
                     sources
                         .entry(child_path.clone())
                         .or_default()
-                        .push(ScanSource::File(target, own_dir, anc));
+                        .push(ScanSource::File(target, own_dir.clone(), own_dir, anc));
                 }
             }
             if reachable.insert(child_path.clone()) {
@@ -1771,6 +1772,186 @@ mod tests {
             also_b_targets,
             vec![&variant_b],
             "crate::imp::also_b resolves to variant_b.rs: {remapped:?}"
+        );
+    }
+
+    #[test]
+    fn a_nested_path_inside_an_inline_cfg_siblings_plain_child_is_not_a_cycle() {
+        // rustc ground truth (verified with a real rustc build under the "u" feature): mutually
+        // exclusive `#[cfg(feature = "u")] pub mod x { pub mod y; }` (inline) and
+        // `#[cfg(feature = "w")] #[path = "windows_x.rs"] pub mod x;` (file-form, the standard
+        // per-platform shim). `x`'s two cfg-sibling sources are an inline Body (ancestors =
+        // {lib.rs}) and a #[path] File (ancestors = {lib.rs, windows_x.rs}) — but only the inline
+        // source declares the plain child `y`. Before the fix, the plain-child branch unioned
+        // ALL of `x`'s sources' ancestors regardless of which one actually declared `y`, so `y`'s
+        // own ancestor set wrongly included `windows_x.rs`'s canon — and when `y.rs` legitimately
+        // `#[path]`-references `windows_x.rs` (the OTHER, never-simultaneously-open cfg arm's own
+        // target), the cycle guard misfired on valid, compilable input.
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-cfg-inline-plain-child-cross-arm-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("x")).expect("create temp src/x");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[cfg(feature = \"u\")]\npub mod x {\n    pub mod y;\n}\n#[cfg(feature = \"w\")]\n#[path = \"windows_x.rs\"]\npub mod x;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(
+            src.join("x/y.rs"),
+            "#[path = \"../windows_x.rs\"]\nmod cross;\n",
+        )
+        .expect("write x/y.rs");
+        std::fs::write(src.join("windows_x.rs"), "// the other cfg arm's target\n")
+            .expect("write windows_x.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, _inline_only, remapped, _remap_shadowed) = reachable_modules(
+            &src, &files, None,
+        )
+        .expect(
+            "a plain child's own nested #[path] crossing into a cfg sibling's target must not be a cycle",
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(reachable.contains("crate::x::y"), "{reachable:?}");
+        assert!(
+            reachable.contains("crate::x::y::cross"),
+            "the nested #[path] inside y.rs is followed: {reachable:?}"
+        );
+        assert!(
+            remapped
+                .iter()
+                .any(|(_, module)| module == "crate::x::y::cross"),
+            "{remapped:?}"
+        );
+    }
+
+    #[test]
+    fn a_grandchild_of_a_probed_plain_child_is_governed() {
+        // rustc ground truth (verified with a real rustc build): `#[path = "other/weird.rs"] pub
+        // mod kernel;` where `other/weird.rs` declares `pub mod child;` (resolved to
+        // `other/child.rs` via the live probe, fix 2) and `other/child.rs` itself declares a
+        // further plain `pub mod grandchild;`. rustc compiles the grandchild at
+        // `other/child/grandchild.rs` — the ordinary stem-subdirectory convention relative to
+        // child.rs's own location, since child.rs (an ordinary flat file reached this way) is NOT
+        // itself mod-rs-like. Before the fix, nothing resolved this: the probed child's own
+        // `child_base` was never computed/carried forward, so its own plain children were
+        // reachable (inserted unconditionally) but never governed — a real false negative.
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-probed-child-grandchild-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("other/child")).expect("create temp dirs");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[path = \"other/weird.rs\"]\npub mod kernel;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(src.join("other/weird.rs"), "pub mod child;\n").expect("write weird.rs");
+        std::fs::write(src.join("other/child.rs"), "pub mod grandchild;\n")
+            .expect("write other/child.rs");
+        let grandchild_file = src.join("other/child/grandchild.rs");
+        std::fs::write(&grandchild_file, "use crate::projection::Thing;\n")
+            .expect("write grandchild.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only, remapped, remap_shadowed) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let governed = governed_files(
+            &src,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            &remapped,
+            &remap_shadowed,
+            None,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            reachable.contains("crate::kernel::child::grandchild"),
+            "{reachable:?}"
+        );
+        assert!(
+            governed
+                .iter()
+                .any(|(file, module)| file == &grandchild_file
+                    && module == "crate::kernel::child::grandchild"),
+            "the probed child's own grandchild is governed under its logical path: {governed:?}"
+        );
+    }
+
+    #[test]
+    fn a_stray_file_at_a_remapped_modules_naive_structural_path_is_not_phantom_governed() {
+        // rustc ground truth (verified with a real rustc build, including deliberately invalid
+        // syntax in the stray file to confirm rustc never reads it): `#[path = "other/weird.rs"]
+        // pub mod kernel;` means rustc NEVER looks at `kernel.rs` or `kernel/` at all — `kernel`
+        // is wholly remapped. A leftover, wholly undeclared file that happens to physically sit
+        // at the naive structural location a plain `mod child;` inside `kernel` would occupy if
+        // `kernel` were NOT remapped (`src/kernel/child.rs`) is a true orphan. Before the fix, a
+        // structural `by_module` lookup for the probed child's logical path did not know its
+        // parent was remapped, so it phantom-matched this stray file alongside the real,
+        // probe-resolved one — a false positive (an uncompiled file wrongly governed).
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-remap-stray-structural-sibling-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("other")).expect("create temp src/other");
+        std::fs::create_dir_all(src.join("kernel")).expect("create temp src/kernel");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[path = \"other/weird.rs\"]\npub mod kernel;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(src.join("other/weird.rs"), "pub mod child;\n").expect("write weird.rs");
+        let real_child = src.join("other/child.rs");
+        std::fs::write(&real_child, "// the real, rustc-compiled child\n")
+            .expect("write real child");
+        // A stray file that coincidentally sits where a plain `mod child;` inside a
+        // NON-remapped `kernel` would have looked — rustc never compiles this, since `kernel` is
+        // wholly remapped to `other/weird.rs` and no `kernel.rs`/`kernel/mod.rs` exists.
+        std::fs::write(
+            src.join("kernel/child.rs"),
+            "this is not even valid rust syntax {{{",
+        )
+        .expect("write stray file");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only, remapped, remap_shadowed) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let governed = governed_files(
+            &src,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            &remapped,
+            &remap_shadowed,
+            None,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            governed
+                .iter()
+                .any(|(file, module)| file == &real_child && module == "crate::kernel::child"),
+            "the real probed child is governed: {governed:?}"
+        );
+        assert_eq!(
+            governed
+                .iter()
+                .filter(|(_, module)| module == "crate::kernel::child")
+                .count(),
+            1,
+            "the stray file at the naive structural location must NOT be phantom-governed alongside the real one: {governed:?}"
         );
     }
 

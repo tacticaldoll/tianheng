@@ -35,10 +35,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   scanned or governed — the module's own on-disk location diverges from its logical path once
   remapped, so the structural file index never had an entry for it, and a real `use` inside it
   passed every boundary unobserved.
-- A `#[path]` inside one mutually-exclusive `#[cfg]` arm's target that legitimately references a
-  sibling arm's own target (the two are never simultaneously open in any real build) is no longer
-  misreported as a cycle. The cycle guard's "already-open source files" tracking is now scoped per
-  physical source file rather than merged across cfg-sibling arms of one logical module path.
+- A `#[path]` inside one mutually-exclusive `#[cfg]` arm's target — or inside a *plain* child of
+  that arm — that legitimately references a sibling arm's own target (the two are never
+  simultaneously open in any real build) is no longer misreported as a cycle. Plain-child
+  resolution was redesigned so every source now carries its own ancestor set and its own
+  `child_base` (where its plain/inline children live — a different directory from where a
+  `#[path]` written in it resolves, whenever the source is an ordinary flat file), replacing the
+  global structural index previously used to resolve a plain child. This closes three related
+  gaps found by a second adversarial-review round on the first fix: the cross-arm cycle false
+  positive recurring one hop through a plain child (not just directly at a `#[path]` target); a
+  stray, wholly uncompiled file coincidentally sitting at a remapped module's naive structural
+  location no longer being phantom-governed alongside the real one; and a plain child's own
+  further plain children (a grandchild reached only through a `#[path]` remap) now being resolved
+  and governed at all, closing a real false negative.
 - 渾儀's single-module resolver (backing signature-coupling, visibility, dyn/impl-trait, and
   async-exposure anchors) no longer stops at the first same-named `mod` variant it finds: a
   mutually-exclusive `#[cfg]` arm pairing an inline body with a file-form sibling (the standard
