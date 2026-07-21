@@ -53,7 +53,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   stated bound — not followed cfg-blind, since it could observe a file rustc does not compile in this
   configuration — and an absent unconditional target is a fail-loud constitution error. Both
   dimensions detect the attribute structurally, so an incidental `path` substring in a comment or a
-  `#[cfg(feature = "fastpath")]` gate is never mistaken for a relocation.
+  `#[cfg(feature = "fastpath")]` gate is never mistaken for a relocation. As with any false-negative
+  closure, a downstream carrying a real violation inside a relocated module may see green CI turn red
+  on upgrade — adopt via `warn` / `Baseline` (the same patch-level precedent as the v0.1.3 re-export
+  closure).
 - The probe-coverage walker now tolerates a `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module whose file
   is absent in the current configuration (an off feature or another platform), skipping it instead
   of failing the audit — matching the semantic dimension, so a cross-platform workspace no longer

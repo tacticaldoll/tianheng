@@ -128,11 +128,18 @@ an invitation to redesign the model:
   a compatibility reaction only: no production behavior, key, public API, manifest, or package
   version changed. The unsafe-site decomposition, async-seam identity, and rule-key separation below
   remain breaking-window questions rather than being smuggled into the catalog work.
-- **Unsafe-site fact decomposition — next breaking-window candidate.** `SemanticFact::UnsafeSite`
-  still stores a pre-rendered `label` (`unsafe impl Trait for Owner`, `unsafe fn Owner::method`) as
-  one opaque key field beside `module`, despite the collector observing those roles separately.
-  The existing flat envelope can represent form / trait / owner / name / module as named scalar
-  fields; no richer shared value model is needed. Do not re-key published version-2 baselines in a
+- **Unsafe-site fact decomposition — next breaking-window candidate (strengthened by 0.2.1).**
+  `SemanticFact::UnsafeSite` still stores a pre-rendered `label` as one opaque key field beside
+  `module`, despite the collector observing those roles separately. 0.2.1 **widened that opacity**:
+  closing the trait-impl identity-collapse FN made a trait-impl unsafe fn's label carry the trait
+  role too — `unsafe fn <Trait for Owner>::method` (an inherent one stays `unsafe fn Owner::method`;
+  an impl stays `unsafe impl Trait for Owner`) — so the trait is now **identity-bearing**, not
+  presentation, and the single string crams form / trait / owner / name. The existing flat envelope
+  can already represent form / trait / owner / name / module as named scalar fields; no richer shared
+  value model is needed. The concrete cost of keeping the key opaque is now visible: that
+  trait-qualification re-keyed a trait-impl unsafe fn, so a 0.2.0 baseline entry for one resurfaces on
+  upgrade and must be re-accepted — a named-field decomposition would have localized the change to a
+  new field rather than churning the whole key. Do not re-key published version-2 baselines in a
   patch. Anonymous `unsafe {}` remains deliberately module-granular, never ordinal-keyed.
 - **Async seam identity — decide in the next breaking window, do not assume the answer.** The
   owner-qualified module/trait/type plus item name already identifies an async public seam, while
@@ -487,6 +494,16 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   lib/bin `src_path` as the compiled source root, and `#[path]`-remapped modules stay outside the
   reachable graph instead of being governed through a same-named conventional orphan file. This is
   a false-negative closure / stated-bound repair, not a new capability.
+  - **Forward candidate — follow unconditional `#[path]` in 圭表 (0.3.x depth, non-breaking).** As of
+    0.2.1, 渾儀 and 漏刻 **follow** an unconditional `#[path = "…"] mod x;` to its target (base = the
+    containing file's own dir with each enclosing inline-`mod` name accumulated onto it, rustc's
+    mod-rs-blind rule; `cfg_attr` stays a bound). 圭表 still holds the v0.1.4 posture of keeping such
+    modules outside its reachable `use`-graph — so it is now the **one dimension that diverges**: a
+    `use` edge inside a `#[path]`-relocated module is not governed by an import/confinement rule. The
+    observation source already exists (圭表's own `use`/`mod` byte scan); following the relocation
+    there — reusing the rustc base-directory rule the other two now share, staying `syn`-free — would
+    close the divergence. A depth (additive, false-negative closure), promoted when a real adopter
+    relocates a governed module; the three-dimension agreement is the correctness pressure, not size.
 - **Inline-module orphan-shadow**: **BUILT (v0.1.4)**. The inline twin of the `#[path]` orphan
   hazard: an inline-only `mod name { … }`'s same-named conventional file (`name.rs`/`name/mod.rs`)
   is now recognized as an orphan and excluded from the scanned file list, so an inline target stays
@@ -566,8 +583,13 @@ The observation-source fork is **resolved**: `syn` was chosen (stable; its synta
 coverage — glob / cross-crate re-export / macro / inference blindness, while local `pub use`
 chains, incl. multi-hop and aliased, *are* followed — is *stated*, never silently passed),
 over `cargo rustdoc --output-format json` (nightly + unstable format).
-Single-module resolution keeps `#[path]`-remapped modules outside scope instead of governing a
-same-named conventional orphan file (v0.1.4 hardening; stated-bound repair, not a new capability).
+Single-module and whole-crate resolution now **follow** an unconditional `#[path = "…"] mod x;` to
+its author-chosen file (0.2.1; base = the containing file's own directory with each enclosing
+inline-`mod` name accumulated onto it, matching rustc for mod-rs and non-mod-rs files), closing the
+coverage false negative where a relocated module's items were dropped. A `cfg_attr`-wrapped `#[path]`
+stays a cfg-blind bound; an absent unconditional target fails loud (exit 2). (The v0.1.4 posture of
+keeping `#[path]` modules outside scope — governing neither the target nor a same-named orphan — is
+**superseded**; 圭表 still holds that older bound, see its section.)
 
 - **Public-API type leakage — signature-coupling** (flagship): **BUILT.** "A module's public
   API must not *expose* a forbidden type" — depending on a type internally is fine; leaking
@@ -721,8 +743,9 @@ Forward depths (born when built, same `syn` source):
   `#![forbid]`; this keeps it declarative-not-lint (governs *where* `unsafe` lives, not *whether* it
   exists). Findings are per-module, per-kind (anonymous blocks dedup per module; the trait is in an
   `unsafe impl` finding for injectivity). Stated bounds: `#[unsafe(...)]` attributes, bare `unsafe fn`
-  pointer types, plain `extern "C" {}` blocks (call sites still react), and the inherited macro /
-  `#[path]` whole-crate-scan bounds. Two adversarial-review rounds hardened it (the propose review
+  pointer types, plain `extern "C" {}` blocks (call sites still react), and the inherited macro
+  whole-crate-scan bound (an unconditional `#[path]` module is now followed as of 0.2.1; a
+  `cfg_attr`-wrapped `#[path]` stays the bound). Two adversarial-review rounds hardened it (the propose review
   caught a body-nested-`mod` false negative → `visit_item_mod` left at default + only top-level `mod`
   filtered). Shipped as the OpenSpec change `semantic-unsafe-confinement`.
 - **Visibility ceiling — `max_visibility(Crate|Super|Module)`**: **BUILT (v0.1.8).** Generalizes the
@@ -802,17 +825,30 @@ Deferred / forward:
     conventionally resolved `mod name;` descendants count; undeclared or inline-shadow sibling
     files cannot cover a seam. 漏刻 still imports neither 圭表 nor `syn`, and its production face
     remains unchanged. Existing direct callers that pass directories retain the recursive corpus
-    for source compatibility; passing root files opts into reachability. A genuinely
-    `#[path]`-remapped external module stays an explicit bound (excluded from by-name resolution — it
-    can over-report an unprobed seam, never silently cover one). A shared reachability substrate still
-    waits for a second dimension proving genuinely shared semantics.
-    - **`#[path]` detection tightened — post-0.2.1 adversarial review (CLOSED).** The exclusion was a
-      raw `path` substring scan of the module preamble, so a `// fast path` comment or a
-      `#[cfg(feature = "fastpath")]` misclassified a *reachable* module as relocated and dropped it —
-      and every probe under it — a **silent coverage FN**, worse than the over-report above. Now
-      detected structurally (an outer attribute whose meta name is exactly `path`, comments and
-      unrelated attributes skipped); `#[cfg_attr(.., path = ..)]` stays a bound. Two pins guard it.
-    - **`cfg`-gated module whose file is absent is now tolerated — post-0.2.1 review, CLOSED.**
+    for source compatibility; passing root files opts into reachability. An unconditional
+    `#[path]`-remapped module is now **followed** to its target (0.2.1, see the `#[path]` sub-bullets
+    below) rather than excluded; a `cfg_attr`-wrapped one stays an explicit bound. A shared
+    reachability substrate still waits for a second dimension proving genuinely shared semantics.
+    - **`#[path]` detection tightened — 0.2.1 adversarial review (CLOSED).** Detection was a raw
+      `path` substring scan of the module preamble, so a `// fast path` comment or a
+      `#[cfg(feature = "fastpath")]` misclassified a *reachable* module (mis-resolving its file) — a
+      **silent coverage FN** risk. Now detected structurally (an outer attribute whose meta name is
+      exactly `path`, comments and unrelated attributes skipped); `#[cfg_attr(.., path = ..)]` stays a
+      bound. Two pins guard it.
+    - **Unconditional `#[path]` followed with rustc fidelity — 0.2.1 re-review (CLOSED).** Beyond
+      detecting the attribute, 漏刻 (with 渾儀) now **follows** an unconditional `#[path]` to its file
+      so a relocated module's probes count (closing the drop-the-relocated-module FN). Three
+      rustc-fidelity corrections landed under adversarial review, each with a real-`rustc`-1.96
+      ground-truth test: (1) the base is the **containing file's own directory**, not the
+      conventional-child dir — mod-rs-blind; (2) with each enclosing **inline-`mod`** name accumulated
+      onto it, so a `#[path]` inside `mod inline { … }` reads `inline/p.rs`, never a same-named orphan
+      (the inline-nested base bug was a silent exit-0 drop — the forbidden FN); (3) the byte scanner
+      **decodes the path literal's escapes** (`\x`/`\u{}`, raw strings) as syn does, so 漏刻 and 渾儀
+      resolve the same file (twin-drift parity). 渾儀's whole-crate walk also stopped misreporting two
+      declarations sharing one `#[path]` target as a false module cycle (ancestor-path guard, not a
+      monotonic visited set); 漏刻 already accepted such input. `runtime-origin-assertion` and
+      `semantic-unsafe-confinement` carry the scenarios; louke stays `syn`-free (三儀 ⊥ 三儀).
+    - **`cfg`-gated module whose file is absent is now tolerated — 0.2.1 review, CLOSED.**
       louke's walker errored on *any* unresolvable reachable module, so a `#[cfg(windows)] mod win;`
       with no `win.rs` on a non-Windows checkout hard-failed the audit, breaking cross-platform
       adopters. This was **not** a deliberate bound (an earlier triage wrongly kept it as one): 渾儀
@@ -823,6 +859,19 @@ Deferred / forward:
       missing module and a resolution ambiguity stay fail-loud. Not `cfg` evaluation: a resolvable
       cfg-gated module is still scanned. `runtime-origin-assertion` updated with a scenario; louke
       stays `syn`-free (byte-level detection, 三儀 ⊥ 三儀).
+    - **Forward candidate — `cfg_attr(pred, path=…)` cfg-blindness, both directions (0.3.x depth).**
+      A `cfg_attr`-wrapped `#[path]` is a stated bound today (not followed, because following it
+      cfg-blind could read a file rustc does not compile in this configuration). The 0.2.1 re-review
+      confirmed the bound masks a genuine two-directional divergence when the predicate is *active*
+      (e.g. `unix` on a unix host): rustc compiles the relocated file and ignores the conventional
+      one, but (a) 渾儀's whole-crate walk **drops the whole module** (an in-domain FN — a real
+      `unsafe`/marker in the compiled relocated file goes unobserved), and (b) 漏刻 **scans the
+      conventional file** rustc never compiles (an FP on dead code, and an FN on the compiled file's
+      seam). Neither dimension evaluates `cfg` (by design, 三儀 ⊥ 三儀), so no single cfg-blind file is
+      universally correct. The **FN-safe design is observe-both**: union the relocated *and*
+      conventional files (a probe/`unsafe` in *either* configuration reacts), which neither dimension
+      does today. A depth, promoted only if a real adopter's `cfg_attr` relocation hides a site — the
+      current stated bound is honest, not silent. (`cfg` evaluation itself stays a permanent non-goal.)
   - **`member_src_dirs` silently skips a lib/bin-less member.** `crate_root_file` returns `None` for
     a member with no lib/bin target (proc-macro/test-only), genuinely out of the audit corpus; a
     lib/bin target always carries a `src_path`, so the "resolvable-but-absent" case is unreachable in
