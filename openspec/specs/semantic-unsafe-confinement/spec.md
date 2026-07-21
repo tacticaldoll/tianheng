@@ -74,6 +74,11 @@ The system SHALL walk the whole target crate (descending file-based `mod x;` and
 - **WHEN** an `unsafe` site the scan observes lies outside every allowed subtree
 - **THEN** the system emits a violation, never exit 0 for that boundary
 
+#### Scenario: Unsafe in an unconditionally #[path]-relocated module reacts
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and `crate::net` declares `#[path = "net_raw.rs"] mod raw;` where `net_raw.rs` contains an `unsafe fn`
+- **THEN** the walk follows the `#[path]` to `net_raw.rs` and emits a violation for the `unsafe fn` attributed to `crate::net::raw`, never silently dropping it as off the conventional path — while a `cfg_attr`-wrapped relocation stays an unfollowed stated bound
+
 ### Requirement: Crate and subtree resolution
 
 For each boundary the system SHALL resolve the target crate to a workspace member and its source root before evaluating it. A target crate absent from the workspace, an unreadable/unparseable source file, or a non-`#[cfg]` missing module file encountered during the walk SHALL be a **constitution error** (exit 2), failing loud and distinct from a violation (exit 1), so an ungovernable target is never reported as an unsafe violation and never silently passed. A symlink module cycle SHALL be a constitution error, never a crash.
@@ -88,7 +93,7 @@ For each boundary the system SHALL resolve the target crate to a workspace membe
 The rule SHALL observe the executable-`unsafe` **code sites** (blocks, `fn`, `impl`, `trait`, `unsafe extern`); other lexical `unsafe` tokens and non-source `unsafe` SHALL be **stated bounds, never a silent claim of safety**:
 
 - **Peripheral `unsafe` keywords, out of scope by design:** an `unsafe(...)` **attribute** (`#[unsafe(no_mangle)]`, Rust 2024 — a linkage assertion, not a code region), a bare **`unsafe fn` pointer type** (`type H = unsafe fn(...)` — a type signature, not an execution), and a **plain `extern "C" { … }` block** carrying no `unsafe` keyword (only the `unsafe extern {}` form is a site; the plain block's foreign-fn *call sites* are `unsafe {}` and DO react). The rule confines executable-`unsafe` code sites, not every lexical `unsafe` token.
-- **Incidental bounds** (the dimension's inherited whole-crate-scan bounds): `unsafe` produced by a macro expansion or inside an unexpanded macro body is not observed; a module reached through a `#[path]` remap is not observed; a `#[cfg]`-gated module absent when its feature is off is tolerated, while cfg-present code is observed **as written** (cfg-blind); a distinct `[lib] name` is a bound.
+- **Incidental bounds** (the dimension's inherited whole-crate-scan bounds): `unsafe` produced by a macro expansion or inside an unexpanded macro body is not observed; a module reached through an **unconditional** `#[path = "…"]` remap **is** observed (the walk follows it to its author-chosen file), but a **`cfg_attr`-wrapped** `#[path]` is cfg-conditional and is not followed (a stated bound — following it cfg-blind could observe a file rustc does not compile here); a `#[cfg]`-gated module absent when its feature is off is tolerated, while cfg-present code is observed **as written** (cfg-blind); a distinct `[lib] name` is a bound.
 
 The system makes no claim about `unsafe` outside these observed sites.
 

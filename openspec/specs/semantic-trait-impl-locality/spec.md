@@ -79,7 +79,7 @@ An allowed location SHALL match an impl's module location either by exact path o
 
 ### Requirement: Trait-path resolution scope and no false negative
 
-The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, a `#[path]`-remapped module, or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait.
+The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed and observed), or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait.
 
 #### Scenario: A use-imported trait path resolves and reacts
 
@@ -111,10 +111,10 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 - **WHEN** an `impl Command for Foo` is produced by a macro expansion in a disallowed module
 - **THEN** the system does not claim to observe it (out of scope, the same nature as the existing macro bound), rather than silently asserting the boundary is clean
 
-#### Scenario: A #[path]-remapped module is a documented coverage bound
+#### Scenario: An unconditional #[path]-remapped module is followed and its disallowed impl reacts
 
-- **WHEN** a disallowed impl lives in a module declared `#[path = "…"] mod x;` whose file is located off the conventional path
-- **THEN** the system does not observe it (a stated coverage bound), rather than silently asserting the boundary is clean
+- **WHEN** a disallowed impl lives in a module declared `#[path = "…"] mod x;` (an unconditional remap) whose file is located off the conventional path
+- **THEN** the system follows the remap to that file and reacts on the impl, attributed to the module's declared path `crate::…::x`, rather than silently asserting the boundary is clean — while a `cfg_attr`-wrapped `#[path]` remains a stated (unfollowed) coverage bound
 
 #### Scenario: A cfg-gated module with an absent file is skipped, not a scan error
 

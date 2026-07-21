@@ -136,7 +136,8 @@ silently pass an exposed `dyn` it was able to observe. The capability inherits æ
 **incidental, already-stated** coverage bounds unchanged and SHALL NOT silently assert a
 boundary clean when one applies: a `dyn` introduced by **macro expansion** (the call site
 writes no `dyn` token), a `dyn` reached only through a **glob import** or a
-**`#[path]`-remapped module**, and a `dyn` reached only by expanding a **named `type`
+**`cfg_attr`-wrapped `#[path]` module** (an **unconditional** `#[path = "â€¦"]` module is followed
+and observed), and a `dyn` reached only by expanding a **named `type`
 alias** are out of scope. No *new* essential gap is introduced by this capability.
 
 #### Scenario: A macro-generated dyn is a documented coverage bound

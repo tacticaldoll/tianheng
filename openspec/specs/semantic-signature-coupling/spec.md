@@ -38,7 +38,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 #### Scenario: A cfg-duplicated inline anchor governs every variant
 
 - **WHEN** the anchored module is declared as two `#[cfg(…)] mod x { … }` inline variants (which `syn` parses as two separate modules, evaluating no `cfg`), and only the source-*later* variant exposes a forbidden type
-- **THEN** the system observes the union of all same-named inline variants and reacts on the exposure, never resolving only the source-first variant (a `mod`-resolution divergence from the crate-wide scan is the false-negative class this resolver forbids). This anchor-resolution property is shared by every single-module-anchored semantic capability (visibility, dyn/impl-trait, async-exposure), not only signature-coupling; `#[path]`-remapped modules remain the stated out-of-scope bound.
+- **THEN** the system observes the union of all same-named inline variants and reacts on the exposure, never resolving only the source-first variant (a `mod`-resolution divergence from the crate-wide scan is the false-negative class this resolver forbids). This anchor-resolution property is shared by every single-module-anchored semantic capability (visibility, dyn/impl-trait, async-exposure), not only signature-coupling; an **unconditional** `#[path = "…"]` file module is followed to its target, while an inline or `cfg_attr`-wrapped `#[path]` remains a stated (fail-loud) out-of-scope bound.
 
 ### Requirement: Public-signature observation governs exposure
 
@@ -111,7 +111,7 @@ The system SHALL resolve a type named in a signature using the **shared 渾儀 r
 - **A local type-namespace item shadows the extern prelude.** A bare head naming a local `struct`/`enum`/`union`/`trait`/`type`-alias/`mod` in the governed module denotes that local item, and the extern oracle SHALL NOT fire for it.
 - **A bare local-alias chain resolves regardless of collection order.** When a type alias's target is itself a bare local alias whose name shadows a dependency (`type serde = crate::infra::Db; type X = serde;`), the alias-collection ladder SHALL resolve the local alias before the extern oracle (identical to the query ladder), closing the chain to the defining path.
 
-A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a `#[path]`-remapped module, a complex-target or generic type alias, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
+A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a type defined only in a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed, so its types are collected and resolvable), a complex-target or generic type alias, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
 
 #### Scenario: A leading-`::` extern path resolves and reacts through a local shadow
 
