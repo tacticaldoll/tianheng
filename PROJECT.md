@@ -212,6 +212,28 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
   from an unknown-module typo, never a silent pass. Governing inline modules as targets is
   a deliberate non-goal here; if ever wanted it is a separate amendment.
+- **A `#[path]` cycle guard's ancestor set must be tracked per physical source file, never merged
+  across mutually-exclusive `#[cfg]` sibling arms of one logical module path.** **(0.2.2 lesson.)**
+  Landing the unconditional-`#[path]`-follow work (above) first tracked "already-open source
+  files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
+  name with different unconditional targets — the standard, already-supported per-platform shim —
+  share one logical path, so their targets' canonical paths were unioned into that single set. A
+  further `#[path]` inside one arm's target legitimately referencing the *other* arm's target (the
+  two are never simultaneously open in any real single build) was then misreported as a cycle: the
+  guard saw the sibling's canon in the merged set and refused valid, compilable input. The fix
+  tracks each `ScanSource`'s own ancestor set individually — the descent path that reached that
+  *specific* file — never merged with a sibling's. The general shape of the mistake: whenever a
+  scanner's cfg-blind union deliberately makes several physically distinct files share one logical
+  identity (here, one module path), any *safety* bookkeeping keyed on that same logical identity
+  (a cycle guard, or anything else meant to reason about "have I already seen this") silently
+  conflates the union's members with each other. Keyed identity for governance (what to report
+  under) and keyed identity for safety bookkeeping (what counts as "the same thing already open")
+  are not automatically the same key — check which one a new safety check actually needs before
+  reusing whatever key is already at hand. Found and fixed before shipping to any release (an
+  internal adversarial review, not an external report), while implementing the second of two
+  related plain-child-of-a-remap fixes shipped alongside it in 0.2.2; both those fixes independently
+  needed the same kind of scrutiny — one repeated a raw filesystem probe's own directory-shape
+  assumption from a different, narrower case it did not actually generalize from.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
