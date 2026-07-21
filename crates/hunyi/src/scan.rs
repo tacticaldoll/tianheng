@@ -135,8 +135,10 @@ pub(crate) fn scan_crate(
     // cyclic symlinked module directory (`src/foo/foo -> src/foo`) would otherwise recurse forever
     // and stack-overflow (SIGABRT) — neither exit 0/1 nor the contract's exit 2. Re-reaching an
     // canonical file already on the descent path is that cycle: "cannot judge" (exit 2), never a
-    // crash. The louke probe scanner guards the same hazard; the two dimensions keep parallel copies
-    // (三儀 ⊥ 三儀). Seeded with the crate root so a submodule looping back to it is caught too.
+    // crash. 圭表 keeps a parallel canonicalizing guard on its own module-boundary walk (三儀 ⊥ 三儀);
+    // 漏刻's probe scanner does NOT — it dedups on the literal path only, a confirmed, documented
+    // pre-existing gap (see `BACKLOG.md`'s accepted-debt entry), not a parallel copy of this guard.
+    // Seeded with the crate root so a submodule looping back to it is caught too.
     let mut ancestors: HashSet<PathBuf> = HashSet::new();
     ancestors.insert(canonicalize_source(root_file)?);
     walk_module(

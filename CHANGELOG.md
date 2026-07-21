@@ -150,6 +150,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   existed in `crate_scope.rs::extern_resolution` (feeding `shape_scan.rs::operand_module_findings`,
   backing the dyn-trait/impl-trait operand-scoped boundaries). Both are now computed per file,
   looked up by each exposure's own branch, never shared across mutually-exclusive branches.
+- An eighth round found the round-6/7 "per file" fix above was itself structurally a no-op for two
+  mutually-exclusive **inline** `#[cfg]` siblings sharing one enclosing file
+  (`#[cfg(a)] mod x { .. } #[cfg(b)] mod x { .. }`, the standard per-platform shim): `descend()`
+  still merged every same-named inline occurrence into one shared branch before the per-file
+  grouping ever ran, so the two arms' `use`-maps and child-module shadow sets were still merged one
+  hop further in, unnoticed because no earlier round's repro used two purely-inline siblings.
+  `descend()` now gives every inline occurrence its own branch, matching the file-form loop's
+  existing policy; and since two inline siblings still share one identical file even once split,
+  `resolve_module_items_with_files` now pairs each item with a **branch index**, and every consumer
+  (signature-coupling's `use`-map/shadow sets, the dyn-trait/impl-trait operand resolvers) groups
+  by that index instead of by file alone. The async-exposure subtree walker needed no matching
+  change — its own child walker already gave each inline occurrence its own entry and never grouped
+  sibling entries by file.
 
 ## [0.2.1] - 2026-07-21
 

@@ -4987,6 +4987,39 @@ fn a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_pri
 }
 
 #[test]
+fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_others_own_extern_principal()
+ {
+    // Round-8 finding, the operand-scoped (`shape_scan.rs`/`crate_scope.rs`) analogue of
+    // `a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_others_extern_reexport`
+    // above: `operand_module_findings` groups its per-branch `FileExternScope` (and `uses_by_branch`)
+    // by branch index too, not just by file — two INLINE `#[cfg]` siblings share the identical
+    // enclosing lib.rs, so a file-keyed group would let the "u" arm's local `mod traits` suppress
+    // the "w" arm's genuine extern `dyn traits::Marker`, the identical conflation the file-form
+    // version above exercises, but with both arms declared inline in one shared file.
+    let files = &[(
+        "lib.rs",
+        "#[cfg(feature = \"u\")] pub mod platform {\n\
+         pub mod traits { pub trait Marker {} }\n\
+         pub fn open() -> u8 { 0 }\n}\n\
+         #[cfg(feature = \"w\")] pub mod platform {\n\
+         pub fn f() -> Box<dyn traits::Marker> { todo!() }\n}\n",
+    )];
+    assert_eq!(
+        dyn_operand_findings(
+            "cfg-split-inline-inline-childmod-shadow",
+            files,
+            "crate::platform",
+            &["traits::Marker"],
+            &["traits"],
+        )
+        .unwrap(),
+        ["dyn traits::Marker exposed by fn crate::platform::f"],
+        "the w arm's own genuine extern dyn-principal must react, regardless of the u arm's own \
+         local mod traits, even though both arms are inline and share lib.rs",
+    );
+}
+
+#[test]
 fn dyn_operand_ignores_auto_trait_markers() {
     // `dyn Port + Send`: the sole non-auto trait is Port. Forbidding Port flags it; forbidding
     // only the Send marker flags nothing (Send is an auto trait, never an operand, and a bare Send
@@ -6764,6 +6797,107 @@ fn a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_ree
         ["net::Something exposed by pub use crate::platform::Something"],
         "the w branch's own genuine extern re-export must react, regardless of the u branch's \
          own local mod net: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_split_module_with_two_inline_siblings_does_not_let_one_arms_use_alias_shadow_the_others() {
+    // Round-8 finding: `descend()` used to MERGE every same-named inline `#[cfg]` occurrence into
+    // one shared `Branch` before this whole per-file fix (round 6) even had a chance to run, so
+    // the round-6/7 "per-file" use-map/shadow-set grouping was structurally a no-op for two INLINE
+    // siblings — they always shared one `Branch`, one merged items list, one merged use-map,
+    // regardless of which file's identity that fix grouped by. `descend()` now gives each inline
+    // occurrence its OWN branch (mirroring the file-form loop), but two inline siblings still
+    // share the identical ENCLOSING file (lib.rs here) — so `resolve_module_items_with_files`
+    // pairs each item with a BRANCH INDEX, not just a file, and `module_findings` groups by that
+    // index. This is the identical `a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others`
+    // scenario (round 6), but with BOTH arms declared INLINE in the SAME file rather than as two
+    // separate file-form siblings — exercising the file-keyed grouping's own blind spot.
+    let out = findings(
+        "cfg-split-inline-inline-use-alias-collision",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\npub mod other;\n\
+             #[cfg(feature = \"u\")] pub mod platform {\n\
+             use crate::infra::Db as Handle;\n\
+             pub fn leak() -> Handle { unimplemented!() }\n}\n\
+             #[cfg(feature = \"w\")] pub mod platform {\n\
+             use crate::other::Widget as Handle;\n\
+             pub fn leak2() -> Handle { unimplemented!() }\n}\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("other.rs", "pub struct Widget;\n"),
+        ],
+        "crate::platform",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::infra::Db exposed by fn crate::platform::leak"],
+        "the u arm's own Handle alias must resolve to infra, not the w arm's, even though both \
+         arms are inline and share lib.rs: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_others_extern_reexport()
+ {
+    // Round-8 finding, the childmod/extern-reexport analogue of the test above (round 7's own
+    // file-form version is `a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_reexport`).
+    // The "u" arm declares a LOCAL `mod net { .. }` inline; the mutually-exclusive "w" arm — also
+    // inline, sharing the identical lib.rs — has no local `mod net` at all, so its own `pub use
+    // net::Something;` genuinely names the real extern crate `net`. Grouping by file alone would
+    // let the "u" arm's local `mod net` suppress the "w" arm's genuine extern re-export merely
+    // because both share one file; grouping by branch index keeps them apart.
+    let out = findings_with_deps(
+        "cfg-split-inline-inline-childmod-shadow",
+        &[(
+            "lib.rs",
+            "#[cfg(feature = \"u\")] pub mod platform {\n\
+             pub mod net { pub struct Something; }\n\
+             pub fn open() -> u8 { 0 }\n}\n\
+             #[cfg(feature = \"w\")] pub mod platform {\n\
+             pub use net::Something;\n}\n",
+        )],
+        "crate::platform",
+        &["net::Something"],
+        &["net"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["net::Something exposed by pub use crate::platform::Something"],
+        "the w arm's own genuine extern re-export must react, regardless of the u arm's own \
+         local mod net, even though both arms are inline and share lib.rs: {out:?}"
+    );
+}
+
+#[test]
+fn async_subtree_observes_both_arms_of_a_two_inline_sibling_cfg_split_anchor() {
+    // Round-8 finding (b): when the async-exposure subtree boundary is anchored DIRECTLY at a
+    // module reached through two mutually-exclusive INLINE `#[cfg]` siblings sharing one file,
+    // `walk_subtree_modules` must observe EACH arm's own async fn — never merging the two arms'
+    // items into one shared list (which happened to still union both fns correctly under the old
+    // pre-round-8 `descend()`, since shape-only observation over a union list drops nothing) nor
+    // dropping either arm now that `descend()` gives each its own `Branch` and its own
+    // `collect_subtree` call (two entries sharing one file, each with only its own arm's items).
+    let files = &[(
+        "lib.rs",
+        "#[cfg(feature = \"u\")] pub mod platform { pub async fn unix_seam() {} }\n\
+         #[cfg(feature = \"w\")] pub mod platform { pub async fn win_seam() {} }\n",
+    )];
+    let mut labels =
+        async_subtree_labels("inline-inline-cfg-split-anchor", files, "crate::platform");
+    labels.sort();
+    assert_eq!(
+        labels,
+        [
+            "async fn crate::platform::unix_seam()",
+            "async fn crate::platform::win_seam()",
+        ],
+        "both inline cfg arms' own async fns must be observed, even though they share lib.rs: {labels:?}"
     );
 }
 
