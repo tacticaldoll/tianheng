@@ -56,7 +56,7 @@ pub(crate) fn violations_text(report: &Report) -> String {
 }
 
 /// The styled implementation. With [`Style::PLAIN`] the output is byte-identical to the un-styled
-/// report (so [`violations_text`] and its unit tests stay stable); with [`Style::ACTIVE`] the
+/// report (so `violations_text` and its unit tests stay stable); with [`Style::ACTIVE`] the
 /// header carries a severity colour and the reason is emphasised — colour is layered *around* the
 /// existing text, never reordering or removing a field, so the machine JSON projection and the
 /// reason → boundary → rule → found → file → reaction order are untouched.

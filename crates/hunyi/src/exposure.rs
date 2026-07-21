@@ -87,19 +87,27 @@ pub(crate) fn module_findings(
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
-    // Grouped by FILE, not one shared computation over the flattened cross-branch union: two
-    // mutually-exclusive `#[cfg]` branches are never compiled together, so deriving a shadow set
-    // (a `use`-map, a child-module-name set, a rename map) from their UNION lets one branch's own
-    // declarations silently apply to the OTHER, mutually-exclusive branch's resolution — a
-    // confirmed false negative, found on round-6/7 adversarial reviews; see `PROJECT.md`'s
-    // Decisions. `uses_by_file` was fixed in round 6; `externs_type`/`externs_reexport`/
-    // `renames_bare` (all derived from each file's own child-module names) had the identical
-    // conflation left unfixed, found in round 7 — e.g. a branch with no local `mod net` had its
-    // genuine `pub use net::Something;` (the real extern crate) silently suppressed merely because
-    // a MUTUALLY-EXCLUSIVE sibling branch happened to declare its own local `mod net`.
-    let mut items_by_file: HashMap<&PathBuf, Vec<syn::Item>> = HashMap::new();
-    for (item, file) in &items_with_files {
-        items_by_file.entry(file).or_default().push(item.clone());
+    // Grouped by BRANCH INDEX, not by file and not one shared computation over the flattened
+    // cross-branch union: two mutually-exclusive `#[cfg]` branches are never compiled together, so
+    // deriving a shadow set (a `use`-map, a child-module-name set, a rename map) from their UNION
+    // lets one branch's own declarations silently apply to the OTHER, mutually-exclusive branch's
+    // resolution — a confirmed false negative, found on round-6/7 adversarial reviews; see
+    // `PROJECT.md`'s Decisions. `uses_by_file` was fixed in round 6; `externs_type`/
+    // `externs_reexport`/`renames_bare` (all derived from each file's own child-module names) had
+    // the identical conflation left unfixed, found in round 7 — e.g. a branch with no local `mod
+    // net` had its genuine `pub use net::Something;` (the real extern crate) silently suppressed
+    // merely because a MUTUALLY-EXCLUSIVE sibling branch happened to declare its own local `mod
+    // net`. Grouping by FILE ALONE is itself insufficient: two mutually-exclusive **inline**
+    // `#[cfg]` siblings share one identical enclosing file, so a file-keyed group re-merges them —
+    // the identical conflation one hop past item observation, found on a round-8 adversarial
+    // review; see `PROJECT.md`'s Decisions. The branch index `resolve_module_items_with_files`
+    // pairs each item with is the finer key that keeps them apart.
+    let mut items_by_branch: HashMap<usize, Vec<syn::Item>> = HashMap::new();
+    for (item, _file, branch) in &items_with_files {
+        items_by_branch
+            .entry(*branch)
+            .or_default()
+            .push(item.clone());
     }
     // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
     // the sysroot crates. A bare head in it denotes an external crate, so an inline extern path
@@ -137,9 +145,9 @@ pub(crate) fn module_findings(
         externs_reexport: HashSet<String>,
         renames_bare: crate::resolve::ExternRenameMap,
     }
-    let scopes: HashMap<&PathBuf, FileScope> = items_by_file
+    let scopes: HashMap<usize, FileScope> = items_by_branch
         .iter()
-        .map(|(file, file_items)| {
+        .map(|(branch, file_items)| {
             let child_mods = child_module_names(file_items);
             let externs_type = externs
                 .difference(&local_type_namespace_names(file_items))
@@ -148,7 +156,7 @@ pub(crate) fn module_findings(
             let externs_reexport = externs.difference(&child_mods).cloned().collect();
             let renames_bare = renames_shadowed(&extern_renames, &child_mods);
             (
-                *file,
+                *branch,
                 FileScope {
                     uses: collect_uses(file_items),
                     externs_type,
@@ -161,8 +169,8 @@ pub(crate) fn module_findings(
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposed = Vec::new();
-    for (ordinal, (item, file)) in items_with_files.iter().enumerate() {
-        let uses = &scopes[file].uses;
+    for (ordinal, (item, file, branch)) in items_with_files.iter().enumerate() {
+        let uses = &scopes[branch].uses;
         let mut buf = Vec::new();
         collect_item_exposures(item, module, uses, ordinal, &mut buf);
         // Opt-in depth: also observe the module's trait `impl` blocks' impl-site-authored
@@ -171,13 +179,16 @@ pub(crate) fn module_findings(
         if include_trait_impls {
             collect_trait_impl_exposures(item, module, uses, ordinal, &mut buf);
         }
-        exposed.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
+        exposed.extend(
+            buf.into_iter()
+                .map(|exposure| (exposure, file.clone(), *branch)),
+        );
     }
 
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()
-        .filter_map(|(exposure, file)| {
-            let scope = &scopes[file];
+        .filter_map(|(exposure, file, branch)| {
+            let scope = &scopes[branch];
             let uses = &scope.uses;
             // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
             // `use`-map); the extern oracle then fires for an external-crate head, resolving

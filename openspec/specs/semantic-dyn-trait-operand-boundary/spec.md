@@ -63,6 +63,11 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 - **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, one declaring a local child module with the same name as a real extern crate dependency, and the OTHER branch (with no such local child module) exposes a `dyn` whose principal trait is written with that extern crate's bare name
 - **THEN** the system resolves the second branch's own principal trait through the external-crate oracle to the real extern crate — never treating it as shadowed by a local child module that only the FIRST, mutually-exclusive branch declares
 
+#### Scenario: Two INLINE cfg siblings sharing one enclosing file do not let one arm's child module shadow the other's extern principal
+
+- **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, BOTH inline (sharing the identical enclosing file), one declaring a local child module with the same name as a real extern crate dependency, and the OTHER inline arm (with no such local child module) exposes a `dyn` whose principal trait is written with that extern crate's bare name
+- **THEN** the system resolves the second arm's own principal trait through the external-crate oracle to the real extern crate — never treating it as shadowed by a local child module that only the FIRST inline arm declares, merely because both arms share one file
+
 #### Scenario: A dyn of an unlisted trait passes
 
 - **WHEN** the governed module's public API exposes `Box<dyn std::error::Error>` and the boundary forbids only `["crate::ports::Port"]`

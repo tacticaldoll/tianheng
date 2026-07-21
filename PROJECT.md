@@ -214,7 +214,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a deliberate non-goal here; if ever wanted it is a separate amendment.
 - **A cfg-blind union that makes several physically distinct files share one logical identity
   must never let per-module bookkeeping (an ancestor set, a structural lookup) act on that shared
-  identity as if it named one file.** **(0.2.2 lesson, in seven rounds — confirmed across
+  identity as if it named one file.** **(0.2.2 lesson, in eight rounds — confirmed across
   two independent crates.)** Landing the
   unconditional-`#[path]`-follow work (above) first tracked cycle-guard "already-open source
   files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
@@ -387,6 +387,29 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   parallel function one file away) — flagging the risk in the fix's own commit message was
   necessary but not sufficient; only the next round's adversarial pass, armed with a real
   constructed repro, actually confirmed and closed it.
+  An **eighth** round found that rounds 6 and 7's own "per file" fix rests on an assumption that
+  is true for a file-form `#[cfg]` sibling (each gets a genuinely distinct file, guaranteed by
+  round 4's per-branch design plus round 6's same-file dedup) but FALSE for an **inline** one:
+  `descend()` still merged every same-named inline `#[cfg]` occurrence into ONE shared `Branch`
+  before round 6's per-file grouping ever ran, so two inline siblings — the standard shape,
+  `#[cfg(a)] mod x { .. } #[cfg(b)] mod x { .. }` — were never separated in the first place; the
+  round-6/7 fix was structurally a no-op for this shape, and the original cross-branch conflation
+  reappeared one hop further in, unnoticed because every prior round's repro used at least one
+  file-form sibling. Fixed in two parts: `descend()` now gives every inline occurrence its OWN
+  branch (mirroring the file-form loop's existing "every declaration produces its own branch"
+  policy), and — since two inline siblings still share one identical ENCLOSING file even once
+  split into separate branches — `resolve_module_items_with_files` now pairs each item with a
+  **branch index**, not just a file, and every consumer (`exposure.rs`'s `FileScope`,
+  `shape_scan.rs`'s `uses_by_branch`/`operand_module_findings`'s `file_scopes`) groups by that
+  index instead of by file alone. `async_exposure.rs`'s subtree path
+  (`scan.rs::walk_subtree_modules`/`collect_subtree`) needed no matching consumer-side change:
+  its own child walker (`resolve_child_modules`) already gave each inline occurrence its own
+  entry (verified — it never merged same-named inline siblings the way `descend()` did), and
+  each subtree entry already builds its `use`-map from its own items directly, never grouped
+  across sibling entries by file. Eight rounds now, the sharpest form of the lesson yet: "grouped
+  by file" was itself an unexamined stand-in for "grouped by branch" that happened to coincide for
+  every shape tested through round 7 — the fix that finally closes it replaces the file key with
+  the actual identity the whole model has been about since round 4.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

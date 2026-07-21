@@ -697,6 +697,30 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   anchor hard-failing a CI check, or a deliberate design pass reconciling `descend` and
   `resolve_child_modules`'s missing-file policies. **Version:** not scheduled; pre-existing, out of
   0.2.2's fix scope. **Authority:** round-5 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson).
+- **漏刻's probe scanner dedups module-cycle detection on a LITERAL path, not a canonicalized one —
+  ACCEPTED DEBT (cross-dimension inconsistency, pre-existing).** **Pressure/source:** a round-8
+  adversarial review of `crates/louke/src/audit/scan.rs::collect_reachable_probes` found its
+  `visited: BTreeSet<PathBuf>` cycle/dedup guard inserts the file path exactly as resolved (never
+  `canonicalize`d — confirmed via `grep -rn canonicalize crates/louke/` returning zero matches),
+  while both 圭表's and 渾儀's own module-cycle guards canonicalize before comparing (closing the
+  identical symlinked-directory hazard on their own dimensions in earlier 0.2.2 rounds; see the
+  `crates/hunyi/src/scan.rs` comment at `resolve_child_modules` explicitly claiming "the louke probe
+  scanner guards the same hazard; the two dimensions keep parallel copies (三儀 ⊥ 三儀)" — a claim
+  this review found to be FALSE for 漏刻 specifically, though the parallel-copies *architecture* the
+  comment describes is otherwise accurate). **Current reaction:** a symlinked directory (or a
+  circular `#[path]`) reached via two distinct literal paths to the identical real file is not
+  recognized as the same node, so `collect_reachable_probes`'s explicit work-queue (`pending`, a
+  `Vec`, not the call stack) can grow without bound on a genuine cycle rather than terminating —a
+  hang, not a stack overflow, since the walk is iterative. **Why not closed:** confirmed via `git
+  log --oneline -- crates/louke/src/audit/scan.rs` unchanged since the `v0.2.1` tag — this predates
+  0.2.2 entirely, is out of this release's diff scope, and 漏刻's own probe-audit surface (unlike
+  圭表/渾儀's module-boundary walks) has never had a reported symlink-cycle incident. **Risk:** low;
+  requires a symlinked source directory or a circular `#[path]` chain specifically inside the CI
+  probe-audit target, a layout no shipped crate in this repo uses. **Promotion trigger:** a real
+  report of the probe audit hanging on a cyclic layout, or a maintenance pass on
+  `collect_reachable_probes` for an unrelated reason (at which point canonicalizing `visited`'s
+  entries closes this for free, mirroring 圭表/渾儀's own guards). **Version:** not scheduled.
+  **Authority:** round-8 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds).
 - **Multibyte char-literal lexing — documented robustness bound (not a known FN).** *From the
   v0.1.5 hidden-bug sweep.* The `use`/`mod` lexer's simple-char branch assumes a one-byte char
   body, so a multibyte char literal (`'é'`) in an adjacent-literal pattern can misparse a few bytes.
