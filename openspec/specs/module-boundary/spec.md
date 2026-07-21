@@ -52,6 +52,11 @@ The system SHALL observe module imports by scanning the target crate's source `u
 - **WHEN** a crate declares `mod parent;`, `parent.rs` declares a plain `mod child;`, `parent/child.rs` does not physically exist but `parent` itself is a symlink to a real directory elsewhere containing `child.rs` (a forbidden import), and a boundary governs `crate::parent` forbidding the import
 - **THEN** the system reports the violation, attributed to the real file behind the symlink — a symlinked directory component along a module's resolved path does not make its content invisible to governance, even though the crate-wide file walk itself does not recurse into a symlinked directory (a separate, cycle-safety concern)
 
+#### Scenario: A symlink-aliased module is governed under its own path, not dropped for matching another's file
+
+- **WHEN** a crate declares `mod real;` (backed directly by `src/real/mod.rs`, containing a forbidden import) and a separate `mod kernel;`, where `src/kernel` is a symlink to `src/real` (so `crate::kernel` and `crate::real` are two distinct, separately-declared modules that happen to resolve to the identical physical file), and a boundary governs `crate::kernel` forbidding the same import
+- **THEN** the system reports the violation for `crate::kernel` — the aliasing with `crate::real`'s own file does not make `crate::kernel` invisible; two on-disk paths resolving to the same physical content are never treated as the same module merely because their canonical (symlink-resolved) identity coincides
+
 #### Scenario: A bare use in a submodule is external even when it matches a crate-root module
 
 - **WHEN** a file in a submodule (not the crate root) declares `use serde::Deserialize;` and `serde` is also a crate-root module of the target crate

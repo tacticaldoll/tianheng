@@ -135,6 +135,64 @@ fn a_plain_child_reached_only_through_a_symlinked_directory_is_governed() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_symlinked_module_aliasing_an_unrelated_walked_file_is_still_governed_under_its_own_path() {
+    // Round-6 regression in the fix above: `files_canon` compared CANONICAL (symlink-resolved)
+    // identity, so a module reached through a symlinked directory that happens to alias the same
+    // physical file as some OTHER, unrelated, genuinely-walked module was wrongly treated as
+    // "already found by the structural iterator" merely because canon(candidate) == canon(some
+    // files entry) — even though the candidate itself was never walked. Here `mod real;` is
+    // backed directly by `src/real/mod.rs` (normally walked), and a SEPARATE `mod kernel;` is
+    // backed by `src/kernel/mod.rs`, where `src/kernel` is a symlink to `src/real` (never walked,
+    // since rust_files skips symlinked directories) — so canon(src/kernel/mod.rs) ==
+    // canon(src/real/mod.rs) even though they are two distinct, separately-declared modules.
+    // Verified against a real `cargo check`: both crate::real and crate::kernel compile as
+    // distinct modules, each observing `use crate::secret::Thing;`. Comparing LITERAL (not
+    // canonical) path identity closes this: two on-disk paths are never literally equal merely
+    // because they resolve to the same target.
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("guibiao-symlink-alias-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(src.join("real")).expect("mkdir src/real");
+    std::fs::write(
+        src.join("lib.rs"),
+        "pub mod real;\npub mod kernel;\npub mod secret { pub struct Thing; }\n",
+    )
+    .expect("write lib.rs");
+    std::fs::write(
+        src.join("real").join("mod.rs"),
+        "use crate::secret::Thing;\n",
+    )
+    .expect("write src/real/mod.rs");
+    symlink("real", src.join("kernel")).expect("symlink src/kernel -> real");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::secret")
+        .because(
+            "a symlink-aliased module must be governed under its own path, not silently dropped",
+        );
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    result.expect(
+        "crate::kernel is a valid, governable target even though it aliases crate::real's file",
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::kernel");
+}
+
 #[test]
 fn expand_use_tree_does_not_overflow_on_pathological_nesting() {
     // A pathologically brace-nested `use` must not overflow the stack. The depth cap bounds the

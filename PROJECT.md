@@ -214,7 +214,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a deliberate non-goal here; if ever wanted it is a separate amendment.
 - **A cfg-blind union that makes several physically distinct files share one logical identity
   must never let per-module bookkeeping (an ancestor set, a structural lookup) act on that shared
-  identity as if it named one file.** **(0.2.2 lesson, in five rounds — confirmed across
+  identity as if it named one file.** **(0.2.2 lesson, in six rounds — confirmed across
   two independent crates.)** Landing the
   unconditional-`#[path]`-follow work (above) first tracked cycle-guard "already-open source
   files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
@@ -325,6 +325,23 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   produced it. A genuine schema change, not a same-shape patch — confirmed as necessary rather than
   deferred, since the disagreement was with a published, adopter-facing report guarantee, not an
   internal implementation comment.
+  A **sixth** round, adversarially reviewing round 5's own changes, found the symlinked-directory
+  fix (round 5, above) had reintroduced the identical false-negative SHAPE through the fix's own
+  new check: `structurally_matches` compared the live-probed candidate's CANONICAL (symlink-
+  resolved) identity against a set of the crate-wide walk's own files' canonical identities. Two
+  on-disk paths that resolve to the same physical file are not the same module — `#[path]` remaps
+  sharing one target is the existing, correctly-handled case for exactly this reason (rustc
+  compiles the same bytes twice as two distinct modules) — but a canonical-identity set cannot
+  distinguish "this exact candidate was walked" from "some OTHER file that happens to alias the
+  same physical target was walked": a module reached only through a symlinked directory that
+  happened to alias an unrelated, genuinely-walked module's file was wrongly treated as "already
+  found," silently un-governing it. The fix within the fix: compare LITERAL (never canonicalized)
+  path identity instead of canonical identity — two distinct on-disk paths are never literally
+  equal merely because they resolve to the same target, so the aliasing hazard cannot arise, while
+  the original round-5 false negative (a candidate whose own literal path was never in the walked
+  file list at all) is still caught exactly as before. Six rounds now: even a fix produced BY an
+  adversarial-review round is not exempt from the next round's scrutiny — the lesson applies
+  recursively to its own remedies, not just the original bug.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

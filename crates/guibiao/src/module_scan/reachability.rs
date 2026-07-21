@@ -172,22 +172,24 @@ pub(crate) fn reachable_modules(
                 .push(file);
         }
     }
-    // Every file the crate-wide walk (`fs_walk::rust_files`) actually found, by canonical path —
-    // used below to tell whether a plain child's live-probed candidate is one `governed_files`'
-    // OWN structural iterator will find on its own, or one it never will. `rust_files` deliberately
-    // does not recurse into a symlinked DIRECTORY (its own cycle guard), so a file that is real,
-    // exists, and rustc genuinely compiles — but sits only behind a symlinked directory component —
-    // is absent from `files` even though `Path::is_file`/`canonicalize` (used by the live probe
-    // below) transparently follow that same symlink. Without this check, such a file's own naive
-    // path still maps back to its own module path (`structurally_matches` alone can't tell it
-    // apart from an ordinary, actually-walked file), so it was wrongly assumed to be "already
-    // found by the structural iterator" and silently never registered anywhere — reachable, read,
-    // and descended into, yet absent from every `governed_files` output. A confirmed false
-    // negative, not a hypothetical: `cargo check` compiles this shape cleanly.
-    let files_canon: HashSet<PathBuf> = files
-        .iter()
-        .filter_map(|f| std::fs::canonicalize(f).ok())
-        .collect();
+    // Every file the crate-wide walk (`fs_walk::rust_files`) actually found, by LITERAL (never
+    // canonicalized) path — used below to tell whether a plain child's live-probed candidate is
+    // one `governed_files`' OWN structural iterator will find on its own, or one it never will.
+    // `rust_files` deliberately does not recurse into a symlinked DIRECTORY (its own cycle guard),
+    // so a file that is real, exists, and rustc genuinely compiles — but sits only behind a
+    // symlinked directory component — is absent from `files` even though `Path::is_file` (used by
+    // the live probe below) transparently follows that same symlink. Deliberately literal, NOT
+    // canonicalized: comparing canonical (symlink-resolved) identity instead would wrongly treat a
+    // candidate reached through a symlinked directory as "found" whenever that symlink happens to
+    // alias the same physical file some OTHER, genuinely-walked module path already resolves to
+    // (e.g. `mod real;` backed by `src/real/mod.rs`, plus a SEPARATE `mod kernel;` where
+    // `src/kernel` is a symlink to `src/real` — `canon(src/kernel/mod.rs) == canon(src/real/mod.rs)`
+    // even though `kernel`'s own candidate was never itself walked) — a real false negative found
+    // on a later adversarial review. Literal-path membership has no such aliasing hazard: two
+    // distinct on-disk paths are never literally equal merely because they resolve to the same
+    // target, so a stray file at a remapped module's naive location (a real class this check must
+    // also still reject) is unaffected.
+    let files_literal: HashSet<&PathBuf> = files.iter().collect();
 
     // Where the walk finds a module's own `mod` declarations: either its file(s) (scanned at
     // top level) or, for an inline-only module, the byte span of its declaring `mod name { … }`
@@ -498,13 +500,14 @@ pub(crate) fn reachable_modules(
                         // `#[path]` remap. Recorded in `remapped` only in that divergent case —
                         // exactly like a direct `#[path]` target — so a plain child is never
                         // double-registered under its own already-correct structural identity.
-                        // Agreeing on the PATH alone is not enough: `files_canon` (built from
-                        // `rust_files`, which never recurses into a symlinked directory) must
-                        // ALSO contain this exact file, or the structural iterator this branch
-                        // defers to will never actually find it — a plain child reached only
-                        // through a symlinked directory component agrees on path but is absent
-                        // from `files_canon`, so it must be registered here instead.
-                        let structurally_matches = files_canon.contains(&canon)
+                        // Agreeing on the PATH alone is not enough: `candidate` (this exact,
+                        // literal path) must ALSO be a literal member of `files` — built from
+                        // `rust_files`, which never recurses into a symlinked directory — or the
+                        // structural iterator this branch defers to will never actually find it.
+                        // Compared by LITERAL identity, not canonical: a symlinked-directory
+                        // candidate must never be treated as "found" merely because its resolved
+                        // target happens to alias some other, genuinely-walked file.
+                        let structurally_matches = files_literal.contains(&candidate)
                             && candidate
                                 .strip_prefix(src_dir)
                                 .ok()
