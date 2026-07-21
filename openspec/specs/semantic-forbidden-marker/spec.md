@@ -96,6 +96,11 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 - **WHEN** a module declares a blanket `impl<T> Marker for T {}` and ALSO declares an unrelated `use <some path> as T;` naming a real subtree-defined type
 - **THEN** the system does not react — `T` in the impl header is the impl's own declared generic type parameter, not a nominal self-type, so it is never resolved through the module's same-named `use ... as T` alias merely because both share the identifier `T`; the source never writes an impl for the aliased type at all
 
+#### Scenario: The shadow holds through a projection off the impl's own generic parameter
+
+- **WHEN** a module declares a blanket `impl<T> Marker for T::Assoc {}` (a projection off the impl's own parameter, never a nominal type) and ALSO declares an unrelated `use <some path> as T;` naming a real subtree-defined type
+- **THEN** the system does not react — the shadow applies to the self type's LEADING segment regardless of how many further segments follow (`T::Assoc`, not only the bare `T` form), so it is never resolved through the alias merely because the projection's head shares the identifier `T`
+
 ### Requirement: CI reaction, severity, and baseline parity
 
 The system SHALL fold forbidden-marker findings into the same exit-code contract as the other dimensions (0 clean / 1 enforce violation / 2 constitution or scan error) and aggregate them with the other boundaries. A boundary SHALL carry a severity (`enforce` default, or `warn`, which reports without failing), and its violations SHALL be gated against the same `Baseline` (identity `(target, rule, finding_key)`, the rule a fixed string), so a project may adopt the boundary on a dirty codebase and gate only on new acquisitions.

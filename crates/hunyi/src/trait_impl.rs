@@ -124,7 +124,13 @@ pub(crate) fn trait_impl_findings(
         // (`impl LocalTrait for Box<Foo>`), which the module-relative canonicalization over-qualifies
         // (`crate::m::Box<…>`) — a stable identity label, not a resolved-path claim; the actionable
         // part (the module location) is exact.
-        let owner = canonical_self_owner(&site.self_ty, &site.uses, &site.module, ordinal);
+        let owner = canonical_self_owner(
+            &site.self_ty,
+            &site.uses,
+            &site.module,
+            ordinal,
+            &site.type_params,
+        );
         // The canonical anchor (spelling-stable across `use`/rename/relative forms) plus the
         // written generic arguments; an unrenderable arg (a complex const-generic expression) falls
         // back to the impl's position, so two such impls still stay distinct rather than collapsing.

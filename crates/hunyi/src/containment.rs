@@ -7,7 +7,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::resolve::{
-    BareFallback, ReexportMap, UseMap, canonicalize_through_reexports, resolve_path, strip_raw,
+    BareFallback, ReexportMap, UseMap, canonicalize_through_reexports, is_shadowed_param_path,
+    resolve_path, strip_raw,
 };
 
 /// Sibling-safe `::`-path containment: `path` equals `prefix` or sits strictly beneath it
@@ -79,14 +80,14 @@ pub(crate) fn resolve_self_type(
 ) -> Option<String> {
     let base = match self_ty {
         syn::Type::Path(tp) => {
-            // A bare single-segment self type naming the impl's own type parameter is a parameter
-            // use, never a nominal type — dropped before any resolution is attempted, exactly like
-            // the sibling exposure collectors' shadowing (matching `impl<T> ... for T {}` here would
-            // otherwise resolve `T` through an unrelated same-named alias in scope).
-            if let Some(seg) = tp.path.get_ident() {
-                if impl_type_params.contains(&strip_raw(&seg.to_string())) {
-                    return None;
-                }
+            // A self type naming the impl's own type parameter — bare (`T`) or a projection off it
+            // (`T::Assoc`) — is a parameter use, never a nominal type: dropped before any resolution
+            // is attempted, via the SAME leading-segment shadow check the sibling exposure
+            // collectors use (`is_shadowed_param_path`), not a narrower single-segment-only copy —
+            // matching `impl<T> ... for T {}` OR `impl<T> ... for T::Assoc {}` here would otherwise
+            // resolve `T` through an unrelated same-named alias in scope.
+            if is_shadowed_param_path(&tp.path, impl_type_params) {
+                return None;
             }
             resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?
         }

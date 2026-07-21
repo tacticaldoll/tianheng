@@ -173,7 +173,13 @@ pub(crate) fn forbidden_marker_findings(
             // (never the bare entry alone), keeping distinct unrenderable-arg impls distinct.
             let marker =
                 path_to_string(&site.trait_path).unwrap_or_else(|| format!("{entry}<_#{ordinal}>"));
-            let owner = canonical_self_owner(&site.self_ty, &site.uses, &site.module, ordinal);
+            let owner = canonical_self_owner(
+                &site.self_ty,
+                &site.uses,
+                &site.module,
+                ordinal,
+                &site.type_params,
+            );
             findings.push((
                 SemanticFact::ForbiddenImpl {
                     marker,

@@ -41,21 +41,38 @@ impl PathCollector {
     }
 
     fn is_shadowed_param(&self, path: &syn::Path) -> bool {
-        let Some(head) = path.segments.first() else {
-            return false;
-        };
-        // A path is a *use* of a shadowed param when its leading (non-`::`-rooted) segment names one
-        // and carries no generic args — true for the bare form (`T`) AND an associated-type
-        // projection off it (`T::Item`, `T::Item::Sub`). A projection off a type parameter can never
-        // denote a nominal forbidden type, so it must not be collected and resolved: were the module
-        // to also declare a same-named import alias (`use crate::infra::Secret as T;`, legal since the
-        // fn's `<T>` only lexically shadows it), collecting `T::Item` would misresolve it through the
-        // alias to `crate::infra::Secret::Item` — a false positive on code exposing nothing. A
-        // genuine multi-segment leak (`crate::infra::X`) has a non-param head and stays collected.
-        path.leading_colon.is_none()
-            && matches!(head.arguments, syn::PathArguments::None)
-            && self.shadowed.contains(&strip_raw(&head.ident.to_string()))
+        is_shadowed_param_path(path, &self.shadowed)
     }
+}
+
+/// A path is a *use* of one of `shadowed`'s generic type parameters when its leading
+/// (non-`::`-rooted) segment names one and carries no generic args — true for the bare form (`T`)
+/// AND an associated-type projection off it (`T::Item`, `T::Item::Sub`). A projection off a type
+/// parameter can never denote a nominal forbidden type, so it must not be collected/resolved as
+/// one: were the module to also declare a same-named import alias (`use crate::infra::Secret as
+/// T;`, legal since an enclosing `<T>` only lexically shadows it), resolving `T::Item` would
+/// misresolve it through the alias to `crate::infra::Secret::Item` — a false positive on code
+/// exposing nothing. A genuine multi-segment leak (`crate::infra::X`) has a non-param head and
+/// stays a resolvable path. Shared by every self-type/path check that must not resolve a param use
+/// through a same-named alias/type — [`PathCollector`]'s own shadowing, and
+/// `containment.rs::resolve_self_type`'s impl-self-type check — kept as one function so the two
+/// cannot drift on which self-type SHAPE counts as a param use: `resolve_self_type` used to carry
+/// its own, narrower, single-segment-only copy of this check (`Path::get_ident()`, which returns
+/// `None` for anything but a bare single segment), so a MULTI-segment self type whose leading
+/// segment named the impl's own param (`impl<T> Marker for T::Assoc {}`) was never shadowed and
+/// still resolved through a same-named alias — the identical false positive this function exists
+/// to prevent, one segment deeper (found on a round-10 adversarial review; see `PROJECT.md`'s
+/// Decisions).
+pub(crate) fn is_shadowed_param_path(
+    path: &syn::Path,
+    shadowed: &std::collections::HashSet<String>,
+) -> bool {
+    let Some(head) = path.segments.first() else {
+        return false;
+    };
+    path.leading_colon.is_none()
+        && matches!(head.arguments, syn::PathArguments::None)
+        && shadowed.contains(&strip_raw(&head.ident.to_string()))
 }
 
 impl<'ast> Visit<'ast> for PathCollector {
@@ -383,9 +400,23 @@ pub(crate) fn canonical_self_owner(
     uses: &UseMap,
     module: &str,
     ordinal: usize,
+    impl_type_params: &std::collections::HashSet<String>,
 ) -> String {
     if let syn::Type::Path(tp) = self_ty {
-        if tp.qself.is_none() {
+        // A self type naming the impl's own generic type parameter (`impl<T> Trait for T {}` /
+        // `for T::Assoc {}`) is a parameter use, never a nominal type — it must not resolve through
+        // a same-named alias/type in scope, exactly like `containment.rs::resolve_self_type`'s
+        // identical shadow (`is_shadowed_param_path`). This label previously carried NO such
+        // shadow at all, unconditionally resolving any bare self type via `resolve_path` — not
+        // merely a cosmetic mislabel: this owner is part of `SemanticFact::MisplacedImpl`'s finding
+        // IDENTITY in `trait_impl.rs`, so two impls that happen to canonicalize to the same owner
+        // string dedup together, and a param resolved through an unrelated alias to the SAME
+        // target a genuine direct impl also names collapses two distinct trait-impl-locality
+        // violations into one reported finding — a real false negative, not just a wrong display
+        // string (found on a round-10 adversarial review; see `PROJECT.md`'s Decisions). Falling
+        // through to the plain-render/positional-marker path below (skipping resolution entirely)
+        // gives the parameter its own stable, alias-independent label instead.
+        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
             if let Some(base) = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule) {
                 return match render_last_segment_args(&tp.path) {
                     Some(args) => format!("{base}{args}"),
