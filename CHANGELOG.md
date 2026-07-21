@@ -91,7 +91,16 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   pub mod y; }`) was treated as a pure no-op, when rustc actually uses it to relocate the base
   directory the inline body's own file-form children resolve from — so such a child's real file
   was never found at its relocated location and its imports went unobserved. Both are now
-  followed/governed correctly, verified against real `cargo check` builds of each shape.
+  followed/governed correctly, verified against real `cargo check` builds of each shape. The same
+  round found 渾儀's single-module resolver (`descend`) mishandling the identical inline-`#[path]`
+  shape in the opposite direction: it dropped such a module from both its inline-union and
+  file-form loops entirely, so any single-module-anchored capability (signature-coupling-exposure,
+  dyn-trait-boundary, impl-trait-boundary, visibility-boundary, async-exposure's non-subtree seam)
+  hard-failed with a spurious "module not found" (exit 2) on a module that demonstrably exists and
+  compiles — while 渾儀's own crate-wide walker resolved it without trouble. `descend` now unions
+  an inline module's items regardless of any `#[path]`, while still following an unconditional
+  one to relocate the base its own file-form children resolve from, matching the crate-wide
+  walker's existing, correct handling.
 
 ## [0.2.1] - 2026-07-21
 

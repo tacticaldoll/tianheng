@@ -289,8 +289,22 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   out to silently assume away a real, rustc-compiling shape it was never actually tested against.
   Fixed by intersecting the live probe's structural-match test against the walk's own canonical
   file set, and by reading and following an inline header's own unconditional `#[path]` exactly
-  like a file-form one. Five rounds now, the same two-crate pattern each time: closing a reported
-  instance earns confidence only from the NEXT fresh adversarial pass, never from the fix itself.
+  like a file-form one. The same round found 渾儀's OWN single-module resolver (`descend`)
+  mishandling the identical inline-`#[path]` shape in the mirror-image direction: its
+  inline-collection loop excluded ANY `#[path]`-bearing item before ever checking whether it had
+  inline content, and its file-form loop then also skipped it (a stale comment assumed it was
+  "already collected above"), so the item vanished from both loops — a hard, spurious "module not
+  found" (exit 2) on a module that demonstrably exists and compiles, for every single-module-
+  anchored capability, while 渾儀's own crate-wide walker (`resolve_child_modules`, maintained as
+  an independent function) resolved the identical layout without trouble. Two crates, opposite
+  failure directions (圭表 too permissive — silently governing nothing; 渾儀 too strict — hard-
+  erroring on a real module), the SAME root shape: a scan/check written for the ordinary case
+  silently assumed away a real one it was never tested against. Fixed by unioning `descend`'s
+  inline items regardless of `#[path]`, while still following an unconditional one to relocate
+  the base its own file-form children resolve from — matching `resolve_child_modules`'s existing,
+  correct handling of the identical syntax. Five rounds now, the same two-crate pattern each time:
+  closing a reported instance earns confidence only from the NEXT fresh adversarial pass, never
+  from the fix itself.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
