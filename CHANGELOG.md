@@ -70,7 +70,16 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   formula. The subtree walker backing `including_submodules()` reactions (async-exposure, and any
   future subtree-scoped capability) is also fixed to use the anchor's own resolved `#[path]` base
   directly instead of re-deriving it from the anchor's file — which silently substituted the wrong
-  base whenever the anchor itself was an inline module.
+  base whenever the anchor itself was an inline module. A fourth review round found the same
+  subtree walker still collapsing a mutually-exclusive `#[cfg]` split's several branches down to
+  one shared directory pair for *further descent*, even though it correctly unioned their items —
+  so a child declared only inside a non-first branch's own file silently resolved against the
+  wrong directory. The subtree walker now runs once per surviving branch, each seeded with only
+  that branch's own ancestor file, and merges every branch's own results. The same round also found
+  that two mutually-exclusive `#[cfg]` arms plainly declaring the identical name (no `#[path]`, so
+  both resolve to the one real backing file) produced a duplicate branch, inflating one real
+  violation into two apparently-distinct findings; file-form matches are now deduped by the
+  resolved file's canonical path.
 
 ## [0.2.1] - 2026-07-21
 

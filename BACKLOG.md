@@ -609,6 +609,26 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   on-disk path), so no rustc directory-base bookkeeping was needed beyond locating the inline body
   to re-scan; the fix generalizes `declared_modules_with_kind` to scan an arbitrary byte range.
   `crates/guibiao` only, no new capability.
+- **A missing plain `mod x;` file is a silent gap, not a scan error — ACCEPTED DEBT (cross-dimension
+  inconsistency, pre-existing).** **Pressure/source:** an 0.2.2 adversarial review comparing
+  `reachable_modules` against 渾儀's crate-wide walker (`scan::resolve_child_modules`) on the
+  identical layout found that a plain (non-`#[path]`) `mod x;` whose backing file is genuinely
+  absent leaves `x` reachable but ungoverned and returns `Ok`, while 渾儀's walker hard-errors (exit
+  2) on the same layout. **Current reaction:** silently ungoverned in 圭表 (predates 0.2.2 — the
+  prior `by_module`-based lookup had the identical gap; this review only newly *compared* it
+  against 渾儀, it did not introduce it). **Why not closed:** 渾儀 distinguishes an unconditional
+  declaration (hard error, a genuine broken reference) from a `#[cfg]`-gated one (tolerated, since
+  the file may legitimately not exist on this platform) because its AST descent reads `#[cfg]`.
+  圭表's hand-rolled scanner deliberately does **not** parse attributes beyond `#[path]` (the
+  dependency-light, `syn`-free core decision recorded in `PROJECT.md`), so it cannot make that same
+  distinction — adding the error unconditionally would misfire on a legitimately `#[cfg]`-excluded
+  missing file, trading a documented gap for a new false positive. **Risk:** low; an unconditional
+  plain `mod x;` with a genuinely absent file is a rustc compile error the crate could never have
+  shipped in the first place, so this is reachable only via test fixtures or a mid-edit tree, not
+  real published code. **Promotion trigger:** a real report of a missing-file plain `mod` masking a
+  boundary check in a *shipped* crate, or 圭表 gaining `#[cfg]` awareness for an unrelated reason
+  (at which point this closes for free). **Version:** not scheduled; reopen only on the trigger
+  above. **Authority:** the dependency-light scanner decision in `PROJECT.md`'s Decisions section.
 - **Multibyte char-literal lexing — documented robustness bound (not a known FN).** *From the
   v0.1.5 hidden-bug sweep.* The `use`/`mod` lexer's simple-char branch assumes a one-byte char
   body, so a multibyte char literal (`'é'`) in an adjacent-literal pattern can misparse a few bytes.
