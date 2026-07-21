@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::containment::matches_forbidden;
-use crate::crate_scope::{extern_resolution, resolve_principal};
+use crate::crate_scope::{extern_resolution, file_extern_scope, resolve_principal};
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
@@ -91,12 +91,19 @@ pub(crate) fn operand_module_findings(
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
-    let items: Vec<syn::Item> = items_with_files
-        .iter()
-        .map(|(item, _)| item.clone())
-        .collect();
     let uses_by_file = uses_by_file(&items_with_files);
-    let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names, &items)?;
+    // Per-file, not crate-wide: `externs_type`/`renames_bare` derive from a specific branch's own
+    // child-module names, so a #[cfg]-split module's several branches must never share one (see
+    // `file_extern_scope`'s doc — the identical conflation class round 6 fixed for the use-map).
+    let mut items_by_file: HashMap<&PathBuf, Vec<syn::Item>> = HashMap::new();
+    for (item, file) in &items_with_files {
+        items_by_file.entry(file).or_default().push(item.clone());
+    }
+    let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
+    let file_scopes: HashMap<&PathBuf, crate::crate_scope::FileExternScope> = items_by_file
+        .iter()
+        .map(|(file, file_items)| (*file, file_extern_scope(&resolution, file_items)))
+        .collect();
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposures: Vec<(ShapeExposure, PathBuf)> = Vec::new();
@@ -111,9 +118,10 @@ pub(crate) fn operand_module_findings(
         .into_iter()
         .filter(|(exposure, file)| {
             let uses = &uses_by_file[file];
+            let file_scope = &file_scopes[file];
             forbidden.is_empty()
                 || exposure.principals.iter().any(|path| {
-                    resolve_principal(path, uses, module, &resolution)
+                    resolve_principal(path, uses, module, &resolution, file_scope)
                         .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
                 })
         })

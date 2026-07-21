@@ -58,6 +58,11 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 - **WHEN** the governed module's public API exposes `Box<dyn std::error::Error>` *inline* (no `use std::error::Error;`) and the boundary forbids `["std::error::Error"]`
 - **THEN** the system resolves the principal trait through the external-crate oracle to `std::error::Error` and emits a violation — the same reaction the `use`-aliased spelling already produced, closing the false negative
 
+#### Scenario: A cfg-split branch's own child module does not shadow a sibling branch's extern principal
+
+- **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, one declaring a local child module with the same name as a real extern crate dependency, and the OTHER branch (with no such local child module) exposes a `dyn` whose principal trait is written with that extern crate's bare name
+- **THEN** the system resolves the second branch's own principal trait through the external-crate oracle to the real extern crate — never treating it as shadowed by a local child module that only the FIRST, mutually-exclusive branch declares
+
 #### Scenario: A dyn of an unlisted trait passes
 
 - **WHEN** the governed module's public API exposes `Box<dyn std::error::Error>` and the boundary forbids only `["crate::ports::Port"]`

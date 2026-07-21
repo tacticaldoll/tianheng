@@ -87,49 +87,26 @@ pub(crate) fn module_findings(
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
-    let items: Vec<syn::Item> = items_with_files
-        .iter()
-        .map(|(item, _)| item.clone())
-        .collect();
-    // A `use`-map per FILE, not one shared map over the flattened cross-branch union: two
-    // mutually-exclusive `#[cfg]` branches are never compiled together, so merging their `use`
-    // declarations into one map lets the branch unioned last silently overwrite an earlier
-    // branch's alias for the same local name (a realistic per-platform shim, e.g. `#[cfg(unix)]
-    // use libc::Foo as Handle;` / `#[cfg(windows)] use winapi::Bar as Handle;`) — misresolving a
-    // bare type reference in the FIRST branch through the SECOND branch's `use` and silently
-    // hiding a real forbidden-exposure finding (a confirmed false negative, found on a round-6
-    // adversarial review; see `PROJECT.md`'s Decisions).
+    // Grouped by FILE, not one shared computation over the flattened cross-branch union: two
+    // mutually-exclusive `#[cfg]` branches are never compiled together, so deriving a shadow set
+    // (a `use`-map, a child-module-name set, a rename map) from their UNION lets one branch's own
+    // declarations silently apply to the OTHER, mutually-exclusive branch's resolution — a
+    // confirmed false negative, found on round-6/7 adversarial reviews; see `PROJECT.md`'s
+    // Decisions. `uses_by_file` was fixed in round 6; `externs_type`/`externs_reexport`/
+    // `renames_bare` (all derived from each file's own child-module names) had the identical
+    // conflation left unfixed, found in round 7 — e.g. a branch with no local `mod net` had its
+    // genuine `pub use net::Something;` (the real extern crate) silently suppressed merely because
+    // a MUTUALLY-EXCLUSIVE sibling branch happened to declare its own local `mod net`.
     let mut items_by_file: HashMap<&PathBuf, Vec<syn::Item>> = HashMap::new();
     for (item, file) in &items_with_files {
         items_by_file.entry(file).or_default().push(item.clone());
     }
-    let uses_by_file: HashMap<&PathBuf, crate::resolve::UseMap> = items_by_file
-        .iter()
-        .map(|(file, file_items)| (*file, collect_uses(file_items)))
-        .collect();
     // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
     // the sysroot crates. A bare head in it denotes an external crate, so an inline extern path
     // resolves to itself verbatim and reacts — closing the extern-path false negative. Applied
     // only in the bare-fallback branch (after `use`-map / `crate`-relative), and only here + the
-    // re-export closure.
+    // re-export closure. Crate-wide, not per-file: dependencies are declared once for the crate.
     let externs = external_crate_set(dep_names);
-    // A bare **type-position** head may be a child module of the governed module (a local
-    // `mod serde` denotes `crate::…::serde`, not the dependency `serde`), so type positions use
-    // the set with the module's own child modules excluded. A bare **re-export** head is extern
-    // by edition-2018+ grammar even with a same-named local module, so re-exports use the raw
-    // set — resolving these differently is what keeps a subtree's real extern re-export reacting
-    // (no false negative) while a same-named local type is not misread (no false positive).
-    let externs_type: HashSet<String> = externs
-        .difference(&local_type_namespace_names(&items))
-        .cloned()
-        .collect();
-    // A bare `pub use HEAD::X;` head is shadowed by a same-named child `mod HEAD` of the
-    // re-exporting module (rustc resolves it to the local module, not the dependency), so the
-    // re-export head oracle subtracts the module's own child-module names — only modules, since a
-    // `pub use` head must be a module/crate (see `child_module_names`). A crate-root module is not
-    // in this module's `items`, so it does not suppress a child's re-export (no false negative).
-    let child_mods = child_module_names(&items);
-    let externs_reexport: HashSet<String> = externs.difference(&child_mods).cloned().collect();
     // The re-export and alias closures are crate-wide: a forbidden type exposed through a
     // `pub use` facade or a `type X = <path>;` alias must canonicalize to its defining path
     // before matching. The re-export closure retains an extern-headed target (raw set — a bare
@@ -140,21 +117,52 @@ pub(crate) fn module_findings(
     let aliases = scan.aliases;
     // Source-level crate-root `extern crate X as Y;` renames: a renamed head resolves to the real
     // crate before the extern check (the whole walk completes before we resolve, so the map is
-    // fully populated — no ordering hazard).
+    // fully populated — no ordering hazard). Crate-wide: such a rename binds via the extern
+    // prelude for the whole crate, not per-branch.
     let extern_renames = scan.extern_renames;
-    // A crate-root `extern crate X as Y;` binds `Y` crate-wide, but a governed submodule that
-    // declares its own child `mod Y` shadows the alias there (rustc: bare `Y::…` is the local
-    // module). So a **bare** head uses the rename map with this module's own child-module names
-    // removed — suppressing the rewrite only where a local `mod Y` shadows it, while every
-    // unshadowed module keeps the crate-wide rewrite (removing it there would be a false negative).
-    // The crate-relative (`crate::Y::…`) and leading-`::` forms are NOT shadowable, so they keep
-    // the full `extern_renames`.
-    let renames_bare = renames_shadowed(&extern_renames, &child_mods);
+    // Per-file: `uses` (a bare local `use … as <dep>` alias), `externs_type` (a bare
+    // **type-position** head may be a child module of THIS branch's own module — a local
+    // `mod serde` denotes `crate::…::serde`, not the dependency `serde` — so type positions use
+    // the set with THIS FILE's own child modules excluded; a bare **re-export** head is extern by
+    // edition-2018+ grammar even with a same-named local module, so re-exports use the raw set),
+    // `externs_reexport` (the re-export head oracle subtracts THIS FILE's own child-module names —
+    // only modules, since a `pub use` head must be a module/crate), and `renames_bare` (a
+    // crate-root `extern crate X as Y;` binds `Y` crate-wide, but a governed submodule that
+    // declares its OWN child `mod Y` shadows the alias there — so a bare head uses the rename map
+    // with THIS FILE's own child-module names removed). The crate-relative (`crate::Y::…`) and
+    // leading-`::` forms are NOT shadowable, so they keep the full `extern_renames` regardless.
+    struct FileScope {
+        uses: crate::resolve::UseMap,
+        externs_type: HashSet<String>,
+        externs_reexport: HashSet<String>,
+        renames_bare: crate::resolve::ExternRenameMap,
+    }
+    let scopes: HashMap<&PathBuf, FileScope> = items_by_file
+        .iter()
+        .map(|(file, file_items)| {
+            let child_mods = child_module_names(file_items);
+            let externs_type = externs
+                .difference(&local_type_namespace_names(file_items))
+                .cloned()
+                .collect();
+            let externs_reexport = externs.difference(&child_mods).cloned().collect();
+            let renames_bare = renames_shadowed(&extern_renames, &child_mods);
+            (
+                *file,
+                FileScope {
+                    uses: collect_uses(file_items),
+                    externs_type,
+                    externs_reexport,
+                    renames_bare,
+                },
+            )
+        })
+        .collect();
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposed = Vec::new();
     for (ordinal, (item, file)) in items_with_files.iter().enumerate() {
-        let uses = &uses_by_file[file];
+        let uses = &scopes[file].uses;
         let mut buf = Vec::new();
         collect_item_exposures(item, module, uses, ordinal, &mut buf);
         // Opt-in depth: also observe the module's trait `impl` blocks' impl-site-authored
@@ -169,7 +177,8 @@ pub(crate) fn module_findings(
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()
         .filter_map(|(exposure, file)| {
-            let uses = &uses_by_file[file];
+            let scope = &scopes[file];
+            let uses = &scope.uses;
             // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
             // `use`-map); the extern oracle then fires for an external-crate head, resolving
             // the inline extern path to itself. Ordering guarantees a local `use … as <dep>`
@@ -177,9 +186,9 @@ pub(crate) fn module_findings(
             // re-export head uses the child-module-excluded set (a same-named child `mod` shadows a
             // bare `pub use` head); a type-position head uses the full type-namespace-excluded set.
             let type_externs = if exposure.is_reexport {
-                &externs_reexport
+                &scope.externs_reexport
             } else {
-                &externs_type
+                &scope.externs_type
             };
             // A leading `::` is an unambiguous extern (edition 2018+): resolve against the RAW
             // extern set (with the crate-root `extern crate … as` rename applied, so a
@@ -201,7 +210,7 @@ pub(crate) fn module_findings(
                     // by this module's own child `mod Y` is not rewritten to the crate (rustc resolves
                     // it to the local module), while an unshadowed `Y::…` still rewrites (no FN).
                     .or_else(|| {
-                        extern_verbatim_renamed(&exposure.path, type_externs, &renames_bare)
+                        extern_verbatim_renamed(&exposure.path, type_externs, &scope.renames_bare)
                     })
             };
             resolved
@@ -219,7 +228,7 @@ pub(crate) fn module_findings(
                 // type-position form, which the extern oracle already rewrote), so rewrite a bare
                 // alias head here too. Uses `renames_bare` — a head shadowed by a local `mod Y` is
                 // left alone (rustc resolves bare `Y` to the local module there).
-                .map(|canonical| apply_bare_alias_rename(canonical, &renames_bare))
+                .map(|canonical| apply_bare_alias_rename(canonical, &scope.renames_bare))
                 .filter(|canonical| matches_forbidden(canonical, &forbidden))
                 // Seam-qualify: two distinct seams exposing the same forbidden type stay distinct
                 // findings, so baselining one never masks a new leak at another (the one forbidden
