@@ -319,6 +319,11 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 - **WHEN** a crate declares `#[path = "weird.rs"] mod foo;`, `weird.rs` is clean, and a conventional `foo.rs` also exists containing a forbidden import
 - **THEN** the system reports no violation for `foo.rs` — the orphan is not compiled as `crate::foo` and is never governed in the remap's place
 
+#### Scenario: A plain child of a path-remapped module is governed under its logical path
+
+- **WHEN** a crate declares `#[path = "other/weird.rs"] mod kernel;`, `other/weird.rs` declares a plain `mod child;`, and `other/child.rs` contains a forbidden import
+- **THEN** the system observes the import under `crate::kernel::child`, attributed to `other/child.rs` — even though `other/child.rs`'s own on-disk location does not structurally match its logical path
+
 #### Scenario: A missing unconditional path target is a scan error
 
 - **WHEN** a crate declares `#[path = "absent.rs"] mod foo;` and `absent.rs` does not exist

@@ -30,6 +30,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   "…")` written *before* an unconditional `#[path = "…"]` on the same `mod` declaration used to
   make the whole declaration excluded, dropping a module rustc genuinely compiles whenever `pred`
   is false. The unconditional attribute now wins regardless of which is scanned first.
+- A plain (`#[path]`-free) `mod child;` declared inside a file reached through an unconditional
+  `#[path]` remap is now governed under its logical path. Previously it was reachable but never
+  scanned or governed — the module's own on-disk location diverges from its logical path once
+  remapped, so the structural file index never had an entry for it, and a real `use` inside it
+  passed every boundary unobserved.
 
 ## [0.2.1] - 2026-07-21
 
