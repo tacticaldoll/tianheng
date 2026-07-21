@@ -2,7 +2,7 @@
 //! trait-object (`dyn`) syntax. Shape-only when no operands are named (react on the *presence* of a
 //! `dyn` node); operand-scoped when a forbidden set is given (resolve each `dyn`'s principal trait).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use xuanji::{Outcome, Violation};
@@ -59,17 +59,15 @@ pub(crate) fn check_dyn_trait_boundary(
     push_single_module_violations(
         violations,
         SingleModuleViolationContext {
-            src_dir,
-            root_file: &root_file,
             module: &boundary.module,
-            crate_package: &boundary.crate_package,
             rule: DYN_TRAIT_RULE,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
         },
         findings,
-    )
+    );
+    Ok(())
 }
 
 /// The pure heart of dyn-trait-boundary, testable without spawning `cargo`: resolve the
@@ -84,7 +82,7 @@ pub(crate) fn dyn_module_findings(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<SemanticFact>, String> {
+) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     shape_module_findings(
         src_dir,
         root_file,
@@ -113,7 +111,7 @@ pub(crate) fn dyn_operand_module_findings(
     forbidden: &[String],
     crate_package: &str,
     dep_names: &[String],
-) -> Result<Vec<SemanticFact>, String> {
+) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     operand_module_findings(
         src_dir,
         root_file,

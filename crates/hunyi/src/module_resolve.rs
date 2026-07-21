@@ -37,25 +37,43 @@ fn module_segments(module: &str) -> Vec<String> {
         .collect()
 }
 
-/// Resolve a module path to the items it owns, descending `mod` declarations from the crate
-/// root (inline `mod x { … }` and file-based `mod x;` both). An unknown segment is a
+/// Resolve a module path to its items, each paired with the **file its own branch was resolved
+/// from** — needed by a caller that must attribute EACH finding to the real file that produced it,
+/// rather than a single, first-branch file for the whole module. When `module` is ordinary
+/// (reached through exactly one branch), every item pairs with that one file, same as
+/// [`resolve_module_file`] would report. When `module` was reached through a mutually-exclusive
+/// `#[cfg]` split, an item pairs with the file its OWN branch actually lives in — so a finding
+/// produced from a non-first branch's item is never misattributed to a different branch's file
+/// (the false-attribution class [`resolve_module_root`]'s single-file shape cannot avoid, found on
+/// a round-5 adversarial review — see `PROJECT.md`'s Decisions). An unknown segment is a
 /// constitution error; a declared-but-fileless module is a scan error — never a silent pass.
-pub(crate) fn resolve_module_items(
+pub(crate) fn resolve_module_items_with_files(
     src_dir: &Path,
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<syn::Item>, String> {
-    resolve_module(src_dir, root_file, module, crate_package).map(|(items, _file)| items)
+) -> Result<Vec<(syn::Item, PathBuf)>, String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    let mut items = Vec::new();
+    for (branch_items, file, ..) in &branches {
+        items.extend(
+            branch_items
+                .iter()
+                .cloned()
+                .map(|item| (item, file.clone())),
+        );
+    }
+    Ok(items)
 }
 
 /// Resolve a module path to the **source file** its items live in — the crate root for `crate`
-/// or an inline module, or the located `<name>.rs` / `<name>/mod.rs` for a file module. This is
-/// the file a single-module semantic violation reports (`Violation::with_file`): the file the
-/// reaction already descends to in order to observe the module's items, where the offending
-/// seam is written (the finding names the canonicalized forbidden type, which may be *defined*
-/// elsewhere). It shares [`resolve_module`]'s one traversal with [`resolve_module_items`], so
-/// the reported file can never disagree with the items reacted on.
+/// or an inline module, or the located `<name>.rs` / `<name>/mod.rs` for a file module. Test-only
+/// (production callers all need per-finding attribution and use
+/// [`resolve_module_items_with_files`] instead — this single-file shape is exactly the false-
+/// attribution hazard its own doc warns about for a `#[cfg]`-split module, see `PROJECT.md`'s
+/// Decisions): a convenience for a resolver-level test that only cares which file one particular
+/// module path resolves to.
+#[cfg(test)]
 pub(crate) fn resolve_module_file(
     src_dir: &Path,
     root_file: &Path,
@@ -65,10 +83,11 @@ pub(crate) fn resolve_module_file(
     resolve_module(src_dir, root_file, module, crate_package).map(|(_items, file)| file)
 }
 
-/// The shared module resolution: the items a module owns **and** the file they live in, from
-/// one descent. [`resolve_module_items`] and [`resolve_module_file`] each keep one half, so the
-/// two views come from the same traversal and never drift (a `mod`-resolution divergence is the
-/// false-negative class the project forbids).
+/// The shared module resolution backing [`resolve_module_file`] (test-only): the items a module
+/// owns **and** the file they live in, from one descent, so the two views come from the same
+/// traversal and never drift (a `mod`-resolution divergence is the false-negative class the
+/// project forbids).
+#[cfg(test)]
 fn resolve_module(
     src_dir: &Path,
     root_file: &Path,
@@ -99,7 +118,11 @@ fn resolve_module(
 /// MUST NOT pair these unioned items with this single directory pair — a non-first branch's own
 /// child would then resolve against the wrong directory (a real false negative, found on
 /// adversarial review); such a caller should use [`resolve_module_branches`] instead, which keeps
-/// every branch's own items and directories together.
+/// every branch's own items and directories together. Test-only in production terms: every real
+/// caller needing a module's file now goes through [`resolve_module_items_with_files`] instead,
+/// for exactly the false-attribution reason above, generalized to any finding, not just a subtree
+/// walk's further descent.
+#[cfg(test)]
 pub(crate) fn resolve_module_root(
     src_dir: &Path,
     root_file: &Path,

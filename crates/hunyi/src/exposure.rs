@@ -4,7 +4,7 @@
 //! oracle before matching the forbidden set.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use xuanji::{Outcome, Violation};
@@ -18,8 +18,8 @@ use crate::driver::run_boundaries;
 use crate::dsl::SemanticBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
-use crate::finding::{ExposureKind, SemanticFact, sort_facts};
-use crate::module_resolve::resolve_module_items;
+use crate::finding::{ExposureKind, SemanticFact, sort_faceted_facts};
+use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{
     BareFallback, apply_bare_alias_rename, apply_crate_root_rename, bare_local_alias,
     canonical_path_str, canonicalize_through_aliases, collect_uses, extern_verbatim_renamed,
@@ -60,22 +60,22 @@ pub(crate) fn check_boundary(
     push_single_module_violations(
         violations,
         SingleModuleViolationContext {
-            src_dir,
-            root_file: &root_file,
             module: &boundary.module,
-            crate_package: &boundary.crate_package,
             rule: SIGNATURE_RULE,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
         },
         findings,
-    )
+    );
+    Ok(())
 }
 
 /// The pure heart, testable without spawning `cargo`: resolve the module's items, observe
 /// the exposed type paths, resolve each against the in-scope `use`s, and return the sorted,
-/// deduplicated canonical paths that fall within the forbidden set.
+/// deduplicated canonical paths that fall within the forbidden set. Each finding pairs with the
+/// real file its own item's branch was resolved from — never a single first-branch file for the
+/// whole module, which would misattribute a finding produced by a non-first `#[cfg]`-split branch.
 pub(crate) fn module_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -84,8 +84,13 @@ pub(crate) fn module_findings(
     crate_package: &str,
     include_trait_impls: bool,
     dep_names: &[String],
-) -> Result<Vec<SemanticFact>, String> {
-    let items = resolve_module_items(src_dir, root_file, module, crate_package)?;
+) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
+    let items_with_files =
+        resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
+    let items: Vec<syn::Item> = items_with_files
+        .iter()
+        .map(|(item, _)| item.clone())
+        .collect();
     let uses = collect_uses(&items);
     // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
     // the sysroot crates. A bare head in it denotes an external crate, so an inline extern path
@@ -133,19 +138,21 @@ pub(crate) fn module_findings(
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposed = Vec::new();
-    for (ordinal, item) in items.iter().enumerate() {
-        collect_item_exposures(item, module, &uses, ordinal, &mut exposed);
+    for (ordinal, (item, file)) in items_with_files.iter().enumerate() {
+        let mut buf = Vec::new();
+        collect_item_exposures(item, module, &uses, ordinal, &mut buf);
         // Opt-in depth: also observe the module's trait `impl` blocks' impl-site-authored
         // positions (`semantic-trait-impl-exposure`). The same resolve → canonicalize → match →
         // `{type} exposed by {seam}` pipeline below applies unchanged; only the seam differs.
         if include_trait_impls {
-            collect_trait_impl_exposures(item, module, &uses, ordinal, &mut exposed);
+            collect_trait_impl_exposures(item, module, &uses, ordinal, &mut buf);
         }
+        exposed.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
     }
 
-    let mut findings: Vec<SemanticFact> = exposed
+    let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()
-        .filter_map(|exposure| {
+        .filter_map(|(exposure, file)| {
             // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
             // `use`-map); the extern oracle then fires for an external-crate head, resolving
             // the inline extern path to itself. Ordering guarantees a local `use … as <dep>`
@@ -205,8 +212,9 @@ pub(crate) fn module_findings(
                     subject: canonical,
                     seam: exposure.seam.clone(),
                 })
+                .map(|fact| (fact, file.clone()))
         })
         .collect();
-    sort_facts(&mut findings);
+    sort_faceted_facts(&mut findings);
     Ok(findings)
 }

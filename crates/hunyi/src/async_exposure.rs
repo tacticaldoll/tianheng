@@ -2,7 +2,7 @@
 //! public API must not declare an `async fn`. Shape-only — observed from `sig.asyncness`, no name
 //! resolution.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
@@ -51,10 +51,7 @@ pub(crate) fn check_async_exposure_boundary(
         push_multi_module_violations(
             violations,
             MultiModuleViolationContext {
-                src_dir,
-                root_file: &root_file,
                 target: &boundary.module,
-                crate_package: &boundary.crate_package,
                 rule: ASYNC_EXPOSURE_RULE,
                 reason: &boundary.reason,
                 severity: boundary.severity,
@@ -76,34 +73,34 @@ pub(crate) fn check_async_exposure_boundary(
     push_single_module_violations(
         violations,
         SingleModuleViolationContext {
-            src_dir,
-            root_file: &root_file,
             module: &boundary.module,
-            crate_package: &boundary.crate_package,
             rule: ASYNC_EXPOSURE_RULE,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
         },
         findings,
-    )
+    );
+    Ok(())
 }
 
 /// The pure heart of the **subtree** async-exposure reaction: walk the anchored module's whole
-/// subtree and return the sorted, deduplicated `(finding, enclosing module)` pairs — every public
-/// `async fn` at or below the anchor, each attributed to the module that declares it. The subtree
-/// analogue of [`async_exposure_module_findings`]: same per-module collector
-/// ([`collect_item_async_exposures`], so a seam finding is byte-identical to the single-module
-/// path), applied at every module the subtree walk yields.
+/// subtree and return the sorted, deduplicated `(finding, enclosing module, file)` triples — every
+/// public `async fn` at or below the anchor, each attributed to the module that declares it AND
+/// the real file that module's own branch was resolved from (never re-resolved afterward from the
+/// module string alone, which misattributes a finding once two `#[cfg]`-split branches share one
+/// module path). The subtree analogue of [`async_exposure_module_findings`]: same per-module
+/// collector ([`collect_item_async_exposures`], so a seam finding is byte-identical to the
+/// single-module path), applied at every module the subtree walk yields.
 pub(crate) fn async_exposure_subtree_findings(
     src_dir: &Path,
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<(SemanticFact, String)>, String> {
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
-    let mut findings: Vec<(SemanticFact, String)> = Vec::new();
-    for (mod_path, items) in &modules {
+    let mut findings: Vec<(SemanticFact, String, PathBuf)> = Vec::new();
+    for (mod_path, items, file) in &modules {
         let uses = collect_uses(items);
         for (ordinal, item) in items.iter().enumerate() {
             let mut collected = Vec::new();
@@ -111,7 +108,7 @@ pub(crate) fn async_exposure_subtree_findings(
             findings.extend(
                 collected
                     .into_iter()
-                    .map(|finding| (finding, mod_path.clone())),
+                    .map(|finding| (finding, mod_path.clone(), file.clone())),
             );
         }
     }
@@ -129,7 +126,7 @@ pub(crate) fn async_exposure_module_findings(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<SemanticFact>, String> {
+) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     // async collectors emit owner-qualified `String` identities directly, so the shared shape heart
     // renders with the identity function (no `shape_finding` map, unlike the dyn / impl-trait path).
     shape_module_findings(

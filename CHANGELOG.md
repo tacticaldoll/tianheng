@@ -101,6 +101,21 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   an inline module's items regardless of any `#[path]`, while still following an unconditional
   one to relocate the base its own file-form children resolve from, matching the crate-wide
   walker's existing, correct handling.
+- 渾儀's `Violation.file` for a `#[cfg]`-split module used to always name the **first surviving
+  branch's** file, even when the actual finding came from a different branch's items — so a
+  violation genuinely written in the second `#[cfg]` arm could be reported at the first, innocent
+  arm's file, contradicting the CLI report's own documented promise that `file` names where the
+  offending seam is written. The same shape of bug hit the whole-crate-scan/subtree path one hop
+  further: two findings sharing one module string (a legitimate `#[cfg]`-split shim) resolved
+  their file through a cache keyed only by that string, so the second finding silently reused the
+  first's (possibly wrong) file. Both are closed by attributing file provenance **at collection
+  time**, not by re-resolving from a module string afterward: every module-resolved item now
+  carries the real file its own branch was read from (`resolve_module_items_with_files`), and
+  every crate-wide-scan site (`ImplSite`, `TypeDef`, `UnsafeSite`) and subtree-walk module now
+  carries its own real file directly, collected while the file is actually open. `seam_file` and
+  `per_finding_file`'s module-string-keyed re-resolution are removed entirely — there is no longer
+  a class of caller that resolves a finding's file from anything other than the exact branch that
+  produced it.
 
 ## [0.2.1] - 2026-07-21
 

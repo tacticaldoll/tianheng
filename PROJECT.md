@@ -305,6 +305,26 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   correct handling of the identical syntax. Five rounds now, the same two-crate pattern each time:
   closing a reported instance earns confidence only from the NEXT fresh adversarial pass, never
   from the fix itself.
+  The same round's fifth finding was different in KIND, not degree: `resolve_module_root`'s
+  single-file shape (branches[0]'s file, alongside every branch's unioned items — the deliberate,
+  documented choice from round 4) turned out to disagree with the CLI report's own published
+  promise (`openspec/specs/cli-check-runner/spec.md`: `file` names "where the offending seam is
+  written") once a `#[cfg]`-split module's finding genuinely came from a non-first branch — a real
+  violation could be reported at an innocent sibling's file. `push_multi_module_violations`'
+  `per_finding_file` cache had the identical hazard one hop further: two findings sharing one
+  module string (a legitimate cfg-split) resolved through a cache keyed only by that string, so
+  the second finding silently inherited the first's file. Unlike the four one-hop directory/dedup
+  fixes above, closing this one properly meant `Violation.file` could no longer be resolved from a
+  single module string AFTER the fact at all — it needed to be collected AT THE SITE, while the
+  real file is still open, and carried alongside every item/finding from there to the violation.
+  `resolve_module_items_with_files` now pairs every item with its own branch's file; `ImplSite`,
+  `TypeDef`, and `UnsafeSite` (the crate-wide scan's own site records) and the subtree walker's
+  per-module output now each carry their own real file directly. `seam_file` and `per_finding_file`
+  — the module-string-keyed re-resolution layer this whole hazard lived in — are gone; there is no
+  longer a caller that resolves a finding's file from anything other than the exact branch that
+  produced it. A genuine schema change, not a same-shape patch — confirmed as necessary rather than
+  deferred, since the disagreement was with a published, adopter-facing report guarantee, not an
+  internal implementation comment.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

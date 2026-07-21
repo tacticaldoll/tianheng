@@ -28,7 +28,12 @@ fn findings(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 /// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
@@ -53,7 +58,12 @@ fn findings_with_deps(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
@@ -76,7 +86,12 @@ fn findings_including_trait_impls(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", true, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 // --- extern-path exposure (the external-crate name set) -------------------
@@ -2590,10 +2605,10 @@ fn locality_findings(
     let root = src.join("lib.rs");
     let result = trait_impl_findings(&src, &root, trait_path, &allowed, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    // The pure-heart tests assert on findings only; drop the per-finding module here.
+    // The pure-heart tests assert on findings only; drop the per-finding module/file here.
     result.map(|v| {
         v.into_iter()
-            .map(|(finding, _module)| finding.to_string())
+            .map(|(finding, _module, _file)| finding.to_string())
             .collect()
     })
 }
@@ -3238,7 +3253,7 @@ fn unsafe_labels(
     let allowed: Vec<String> = allowed.iter().map(|a| a.to_string()).collect();
     let result = unsafe_findings(&src, &root, &allowed, "x").map(|fs| {
         fs.into_iter()
-            .map(|(finding, _)| finding.to_string())
+            .map(|(finding, _, _)| finding.to_string())
             .collect()
     });
     let _ = std::fs::remove_dir_all(&dir);
@@ -3723,7 +3738,12 @@ fn vis_findings_at(
     let root = src.join("lib.rs");
     let result = visibility_findings(&src, &root, module, "x", ceiling_rank);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 #[test]
@@ -4213,10 +4233,10 @@ fn marker_findings(
     let root = src.join("lib.rs");
     let result = forbidden_marker_findings(&src, &root, subtree, &forbidden, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    // The pure-heart tests assert on findings only; drop the per-finding module here.
+    // The pure-heart tests assert on findings only; drop the per-finding module/file here.
     result.map(|v| {
         v.into_iter()
-            .map(|(finding, _module)| finding.to_string())
+            .map(|(finding, _module, _file)| finding.to_string())
             .collect()
     })
 }
@@ -4694,7 +4714,12 @@ fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<
     let root = src.join("lib.rs");
     let result = dyn_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -4727,7 +4752,12 @@ fn dyn_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = dyn_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
@@ -4969,7 +4999,12 @@ fn impl_trait_findings(
     let root = src.join("lib.rs");
     let result = impl_trait_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5108,7 +5143,12 @@ fn impl_trait_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = impl_trait_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn impl_trait_operand_mod(
@@ -5310,7 +5350,12 @@ fn async_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Ve
     let root = src.join("lib.rs");
     let result = async_exposure_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5449,7 +5494,7 @@ fn async_subtree(
     result.map(|facts| {
         facts
             .into_iter()
-            .map(|(fact, module)| (fact.to_string(), module))
+            .map(|(fact, module, _file)| (fact.to_string(), module))
             .collect()
     })
 }
@@ -5583,6 +5628,57 @@ fn async_subtree_walks_every_branch_of_a_cfg_split_anchor_not_just_the_first() {
             "async fn crate::foo::bar::unix_leaf()",
             "async fn crate::foo::bar::win_leaf()",
         ],
+    );
+}
+
+#[test]
+fn async_subtree_violations_name_each_branchs_own_file_not_a_shared_module_string_cache() {
+    // Round-5 finding: async_exposure_subtree_findings correctly emits one finding per branch
+    // (fixed above), both tagged with the identical module string "crate::foo::bar" (a legitimate
+    // cfg-split: unix_leaf lives in foo/bar.rs, win_leaf in win/bar.rs). Before this redesign,
+    // push_multi_module_violations resolved each finding's file via per_finding_file, a cache
+    // keyed ONLY by that module string — so the first finding processed populated the cache with
+    // one branch's file, and the second finding (from the OTHER branch) silently reused it. Every
+    // multi-module finding now pairs with the real file its own branch was resolved from (from
+    // the subtree walker itself), so each violation's file must name its own real branch.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-split-anchor-file-attribution",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\n#[path = \"win/foo.rs\"]\npub mod foo;\n",
+            ),
+            ("foo.rs", "pub mod bar;\n"),
+            ("foo/bar.rs", "pub async fn unix_leaf() {}\n"),
+            ("win/foo.rs", "pub mod bar;\n"),
+            ("win/bar.rs", "pub async fn win_leaf() {}\n"),
+        ],
+    );
+    let boundary = AsyncExposureBoundary::in_crate("x")
+        .module("crate::foo")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("each branch's finding must name its own real file");
+    let mut violations = Vec::new();
+    check_async_exposure_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    let mut by_finding: std::collections::BTreeMap<String, &str> = Default::default();
+    for v in &violations {
+        by_finding.insert(
+            v.finding.clone(),
+            v.file
+                .as_deref()
+                .expect("a subtree finding carries its file"),
+        );
+    }
+    assert!(
+        by_finding["async fn crate::foo::bar::unix_leaf()"].ends_with("foo/bar.rs"),
+        "unix_leaf must name foo/bar.rs: {by_finding:?}"
+    );
+    assert!(
+        by_finding["async fn crate::foo::bar::win_leaf()"].ends_with("win/bar.rs"),
+        "win_leaf must name win/bar.rs, never foo/bar.rs (a shared-cache misattribution): {by_finding:?}"
     );
 }
 
@@ -6432,6 +6528,52 @@ fn cfg_mixed_plain_and_path_remapped_file_form_siblings_are_both_governed() {
         1,
         "the #[path]-remapped sibling's exposure must react even though a plain sibling was \
          declared first in source order: {violations:?}"
+    );
+}
+
+#[test]
+fn a_cfg_mixed_single_module_violation_names_the_offending_sibling_not_the_first_branch() {
+    // Round-5 finding: resolve_module_root unions every surviving branch's ITEMS (fixed above —
+    // the violation still fires) but used to always report `branches[0]`'s FILE regardless of
+    // which branch actually produced the finding. Here the plain, clean `platform;` arm is
+    // declared FIRST (branches[0]) and the offending #[path]-remapped `win_platform.rs` arm is
+    // declared second — before the fix, `.file` named platform.rs, which contains no reference to
+    // `crate::infra` at all. Every single-module finding now pairs with the real file its own
+    // item's branch was resolved from, so `.file` must name win_platform.rs, where the offending
+    // seam is actually written.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-file-names-offending-branch",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod platform;\n\
+                 #[cfg(feature = \"b\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("platform.rs", "pub fn open() -> u8 { 0 }\n"),
+            (
+                "win_platform.rs",
+                "pub fn open() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("the reported file must name the sibling that actually exposes infra");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a semantic exposure violation carries its source file");
+    assert!(
+        file.ends_with("win_platform.rs"),
+        "expected the offending sibling win_platform.rs, got {file} — a clean file must never \
+         be reported as the source of a real violation: {violations:?}"
     );
 }
 

@@ -528,22 +528,27 @@ impl SemanticFact {
     }
 }
 
-/// Deduplicate by typed identity, then restore the historical presentation order. Identity and
-/// display are deliberately separate: two distinct facts may one day share polished wording, and
-/// one fact must still collapse even if another display-equivalent fact was observed between its
-/// occurrences.
-pub(crate) fn sort_facts(findings: &mut Vec<SemanticFact>) {
-    findings.sort();
-    findings.dedup();
-    findings.sort_by_cached_key(ToString::to_string);
-}
-
-/// The attributed counterpart of [`sort_facts`]. The enclosing module rides beside a fact only for
-/// file lookup, so dedup remains fact-identity-only as it was when findings were strings.
-pub(crate) fn sort_attributed_facts(findings: &mut Vec<(SemanticFact, String)>) {
+/// Single-module counterpart: each fact rides beside the real file its own item was resolved from
+/// (never a single first-branch file for the whole module — see
+/// [`crate::module_resolve::resolve_module_items_with_files`]). Dedup stays fact-identity-only, as
+/// it was when findings carried no file; the first-appearing file for a given fact wins.
+pub(crate) fn sort_faceted_facts(findings: &mut Vec<(SemanticFact, std::path::PathBuf)>) {
     findings.sort_by(|a, b| a.0.cmp(&b.0));
     findings.dedup_by(|a, b| a.0 == b.0);
-    findings.sort_by_cached_key(|(finding, module)| (finding.to_string(), module.clone()));
+    findings.sort_by_cached_key(|(finding, _)| finding.to_string());
+}
+
+/// Multi-module counterpart: each fact rides beside the module it sits in (kept for the
+/// violation's stable metadata) AND the real file that module's own branch was resolved from
+/// (never a re-resolution keyed by the module string alone, which misattributes a finding when
+/// two `#[cfg]`-split branches share one module path — see `PROJECT.md`'s Decisions). Dedup
+/// remains fact-identity-only, as it was when findings carried only a module string.
+pub(crate) fn sort_attributed_facts(
+    findings: &mut Vec<(SemanticFact, String, std::path::PathBuf)>,
+) {
+    findings.sort_by(|a, b| a.0.cmp(&b.0));
+    findings.dedup_by(|a, b| a.0 == b.0);
+    findings.sort_by_cached_key(|(finding, module, _)| (finding.to_string(), module.clone()));
 }
 
 /// Render a shape exposure (`dyn …` / `impl …`) as its seam-qualified finding string — the
