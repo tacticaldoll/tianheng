@@ -22,6 +22,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   graph. Closes the one remaining cross-dimension divergence: a relocated module's imports are
   now observed by all three observation dimensions, not silently passed by the static one. A
   `cfg_attr`-wrapped `#[path]` remains excluded (cfg-conditional, never followed cfg-blind).
+- 圭表 no longer drops an inline module body's own nested declarations when a plain conventional
+  file or an unconditional `#[path]` remap of the same name also exists under a mutually-exclusive
+  `#[cfg]` arm — the standard per-platform shim pattern. Every declared source for a name is now
+  observed (cfg-blind), never only one of them.
 
 ## [0.2.1] - 2026-07-21
 

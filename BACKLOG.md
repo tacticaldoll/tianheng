@@ -581,6 +581,17 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
     error too (never a hang), mirroring 渾儀's ancestor-path (not monotonic whole-tree) cycle guard
     so two declarations legitimately sharing one target is never misreported. `crates/guibiao`
     only, no new capability — all three dimensions now agree on what rustc compiles.
+  - **cfg-dual file-form sources fully additive — BUILT (0.2.2), a false-negative closure the
+    parity work above surfaced.** An adversarial audit of the parity fix found it had made a
+    `#[path]` sibling additive with a plain-file or inline sibling of the same name, but the
+    *pre-existing* v0.1.4 plain-file-vs-inline bound still made a plain file win over an inline
+    sibling outright — silently dropping the inline body's OWN nested declarations whenever a
+    plain-file sibling also existed under a mutually-exclusive `#[cfg]` arm (verified against real
+    rustc: the inline arm's own file-backed child compiles under its own configuration regardless).
+    Every file-form source for a name is now additive with every other — plain file, inline body,
+    and `#[path]` remap all cfg-blind-union, never mutually exclusive — while `inline_only` (the
+    narrower orphan-shadow-exclusion flag) still correctly gates off once a plain file is genuinely
+    declared. `crates/guibiao` only, no new capability.
 - **Inline-module orphan-shadow**: **BUILT (v0.1.4)**. The inline twin of the `#[path]` orphan
   hazard: an inline-only `mod name { … }`'s same-named conventional file (`name.rs`/`name/mod.rs`)
   is now recognized as an orphan and excluded from the scanned file list, so an inline target stays
