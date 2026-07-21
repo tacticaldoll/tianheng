@@ -134,7 +134,7 @@ fn collect_scope_modules(
             cursor = skip_ascii_space(bytes, cursor);
             match bytes.get(cursor) {
                 Some(b';') => {
-                    let attrs = mod_preamble_attrs(bytes, i);
+                    let attrs = mod_preamble_attrs(bytes, start, i);
                     // Resolve either the unconditional `#[path = "…"]` target (followed to observe
                     // its probes) or, absent one, the conventional `<base>/name.rs|name/mod.rs`.
                     let resolved = match &attrs.path {
@@ -163,7 +163,7 @@ fn collect_scope_modules(
                 }
                 Some(b'{') => {
                     let close = balanced_brace_end(bytes, cursor, end);
-                    let attrs = mod_preamble_attrs(bytes, i);
+                    let attrs = mod_preamble_attrs(bytes, start, i);
                     // Descending an inline `mod x { … }`: x's children resolve from `inline_base` —
                     // `<child_base>/name`, or `<file_dir>/dir` for an inline `#[path = "dir"]` remap.
                     // rustc accumulates the inline-module name as a directory component, so this base
@@ -384,13 +384,29 @@ struct ModPreambleAttrs {
 /// coverage false negative, the worst outcome under FN-first). A `#[cfg_attr(.., path = ..)]`
 /// conditional relocation reads as `cfg` (its meta name is `cfg_attr`, not `path`), so an absent
 /// target is tolerated rather than errored.
-fn mod_preamble_attrs(bytes: &[u8], mod_index: usize) -> ModPreambleAttrs {
-    let mut start = 0;
-    for i in (0..mod_index).rev() {
+///
+/// `scope_start` bounds the search for the preamble's own start: it is the enclosing scope's own
+/// start (a real item/scope boundary, never inside a literal or comment), so scanning **forward**
+/// from it — skipping literals/comments exactly like the rest of this file's walkers — to find the
+/// last `;`/`{`/`}` outside of any literal/comment is well-defined. A backward raw-byte scan (the
+/// prior implementation) is NOT well-defined this way: it cannot tell whether a `;`/`{`/`}` byte it
+/// meets while walking backward sits inside a string/char literal or comment without first knowing
+/// where that literal started — so an EARLIER attribute's own string value containing one of those
+/// bytes (e.g. `#[doc = "Handles A; falls back to B."]`) stopped the old backward scan mid-literal,
+/// desyncing the subsequent forward attribute walk and silently losing a later `#[path = "…"]` on
+/// the same preamble (found on a round-9 adversarial review — see `PROJECT.md`'s Decisions).
+fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> ModPreambleAttrs {
+    let mut start = scope_start;
+    let mut i = scope_start;
+    while i < mod_index {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(mod_index);
+            continue;
+        }
         if matches!(bytes[i], b';' | b'{' | b'}') {
             start = i + 1;
-            break;
         }
+        i += 1;
     }
     let mut attrs = ModPreambleAttrs {
         path: None,
