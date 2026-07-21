@@ -69,7 +69,7 @@ pub(crate) fn check_module_boundary(
     let root_relative = crate_root_file(package)
         .and_then(|rf| rf.strip_prefix(&src_dir).ok().map(|p| p.to_path_buf()));
     let files = rust_files(&src_dir)?;
-    let (reachable, inline_only, remapped) =
+    let (reachable, inline_only, remapped, remap_shadowed) =
         reachable_modules(&src_dir, &files, root_relative.as_deref())?;
     // The crate-root module names (direct children of `crate`) feed bare-`use` resolution
     // (a root-relative `use foo::…` is the local module only if `foo` is one of them).
@@ -94,6 +94,7 @@ pub(crate) fn check_module_boundary(
         &reachable,
         &inline_only,
         &remapped,
+        &remap_shadowed,
         root_relative.as_deref(),
     );
     if governed.is_empty() {
@@ -164,6 +165,7 @@ pub(crate) fn check_module_boundary(
             &reachable,
             &inline_only,
             &remapped,
+            &remap_shadowed,
             root_relative.as_deref(),
         );
         // Collect `(importer module, offending file)` pairs *before* de-duplication: the file
@@ -271,6 +273,7 @@ pub(crate) fn check_module_boundary(
             &reachable,
             &inline_only,
             &remapped,
+            &remap_shadowed,
             root_relative.as_deref(),
         );
         // `(offending importer module, file)` collected before de-dup, for the same reason as
@@ -346,6 +349,7 @@ pub(crate) fn check_module_boundary(
             &reachable,
             &inline_only,
             &remapped,
+            &remap_shadowed,
             root_relative.as_deref(),
         );
         // The rename-aware declared-dependency import identifiers back the strict-external head

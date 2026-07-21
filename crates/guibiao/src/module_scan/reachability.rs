@@ -18,7 +18,12 @@ use std::path::{Path, PathBuf};
 /// source is scanned once per boundary. `remapped` is [`reachable_modules`]'s third return
 /// value — every `(target file, logical module path)` pair reached through an unconditional
 /// `#[path]` — added here alongside the structurally-derived files, since a remapped file's own
-/// on-disk path rarely coincides with its logical module path.
+/// on-disk path rarely coincides with its logical module path. `remap_shadowed` is its fourth:
+/// the module paths where a same-named conventional file really is an orphan (the `#[path]` is
+/// the ONLY file-form source for that name — no plain-file sibling under a different `#[cfg]`
+/// arm), so a structural file matching one of THOSE paths is excluded; membership in `remapped`
+/// alone is not enough, since a legitimate plain-file sibling can share a path with a remap.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn governed_files(
     src_dir: &Path,
     files: &[PathBuf],
@@ -26,10 +31,9 @@ pub(crate) fn governed_files(
     reachable: &std::collections::BTreeSet<String>,
     inline_only: &std::collections::BTreeSet<String>,
     remapped: &[(PathBuf, String)],
+    remap_shadowed: &std::collections::BTreeSet<String>,
     root_relative: Option<&Path>,
 ) -> Vec<(PathBuf, String)> {
-    let remapped_paths: std::collections::BTreeSet<&str> =
-        remapped.iter().map(|(_, path)| path.as_str()).collect();
     let structural = files.iter().filter_map(|file| {
         let relative = file.strip_prefix(src_dir).ok()?;
         let module_path = module_path_of(relative, root_relative);
@@ -40,11 +44,13 @@ pub(crate) fn governed_files(
         if inline_only.contains(&module_path) {
             return None;
         }
-        // A conventional file whose path coincides with a module remapped elsewhere by
-        // `#[path]` is the same orphan hazard: rustc compiles the remap's target, never this
-        // same-named file, so it must not be governed in the remap's place even though the
-        // logical module path IS now reachable (through its real target, below).
-        if remapped_paths.contains(module_path.as_str()) {
+        // A conventional file whose path coincides with a module remapped ELSEWHERE by
+        // `#[path]`, with no plain-file sibling of its own, is the same orphan hazard: rustc
+        // compiles the remap's target, never this same-named file, so it must not be governed in
+        // the remap's place even though the logical module path IS now reachable (through its
+        // real target, below). A plain-file sibling under a different `#[cfg]` arm is real,
+        // though — `remap_shadowed` (not mere membership in `remapped`) is the right test.
+        if remap_shadowed.contains(&module_path) {
             return None;
         }
         if !reachable.contains(&module_path) {
@@ -123,6 +129,7 @@ pub(crate) fn reachable_modules(
         std::collections::BTreeSet<String>,
         std::collections::BTreeSet<String>,
         Vec<(PathBuf, String)>,
+        std::collections::BTreeSet<String>,
     ),
     String,
 > {
@@ -155,6 +162,12 @@ pub(crate) fn reachable_modules(
     let mut reachable = std::collections::BTreeSet::new();
     let mut inline_only = std::collections::BTreeSet::new();
     let mut remapped: Vec<(PathBuf, String)> = Vec::new();
+    // A module path whose ONLY file-form source is an unconditional `#[path]` remap (no plain
+    // sibling declaration under any `#[cfg]` arm) — the case where a same-named conventional file
+    // really is the orphan-shadow hazard `governed_files` must exclude. When a plain-file sibling
+    // ALSO exists (the per-platform shim pattern), that file is real and must NOT be excluded, so
+    // this is tracked separately from mere membership in `remapped`.
+    let mut remap_shadowed = std::collections::BTreeSet::new();
     reachable.insert("crate".to_string());
     let mut sources: std::collections::BTreeMap<String, Vec<ScanSource>> = Default::default();
     // Every source file already opened on the path from the crate root to a given module — the
@@ -249,8 +262,13 @@ pub(crate) fn reachable_modules(
                     }
                     continue;
                 }
-                seen.1 = true;
                 let Some(eq_cleaned) = declared.direct_path_eq else {
+                    // A PLAIN file declaration (no `#[path]`) — resolved conventionally via
+                    // `by_module`. Kept a separate flag from a direct `#[path]` sibling below: the
+                    // two are additive (a `#[cfg]`-gated per-platform shim commonly pairs a plain
+                    // file on one platform with a `#[path]`-relocated one on another), never
+                    // mutually exclusive.
+                    seen.1 = true;
                     continue;
                 };
                 let Some(&orig_eq) = positions.get(eq_cleaned) else {
@@ -268,9 +286,23 @@ pub(crate) fn reachable_modules(
                 }
             }
         }
-        for (child, (seen_inline, seen_file)) in child_kinds {
+        for (child, (seen_inline, seen_plain_file)) in child_kinds {
             let child_path = format!("{module}::{child}");
-            if seen_inline && !seen_file {
+            let mut next_ancestors = module_ancestors.clone();
+            // The inline body is observed only when there is no PLAIN conventional file
+            // declaration of the same name in this scope — the existing cfg-blind bound (a path
+            // declared both inline and plain file-form, only possible under mutually-exclusive
+            // `#[cfg]`, is observed through its conventional file, never the inline sibling body).
+            // That bound is specifically about a conventional FILE (the two forms genuinely
+            // compete for the same on-disk path in the conventional-path model); it does NOT
+            // extend to a `#[path]` sibling, which relocates to an entirely different file and so
+            // never competes with the inline body's own path — the inline body and every `#[path]`
+            // target below are additive with each other, cfg-blind, never mutually exclusive
+            // (mirroring how multiple `#[path]` targets among themselves already union). Dropping
+            // the inline body whenever ANY `#[path]` sibling existed was a real false negative
+            // this condition fixes: a per-platform shim pairing an inline body with a `#[path]`-
+            // relocated sibling silently lost the inline body's own children.
+            if seen_inline && !seen_plain_file {
                 inline_only.insert(child_path.clone());
                 if let Some(bodies) = child_bodies.remove(&child) {
                     // rustc accumulates the inline-module name as a directory component: a
@@ -283,13 +315,31 @@ pub(crate) fn reachable_modules(
                             ScanSource::Body(file, start, end, base.join(&child))
                         }));
                 }
-                ancestors.insert(child_path.clone(), module_ancestors.clone());
-            } else if let Some(targets) = child_direct_paths.remove(&child) {
-                // Every unconditional `#[path]` target takes priority over any same-named
-                // conventional file — the orphan-shadow hazard `governed_files` also excludes.
-                // Followed cfg-blind (see the `child_direct_paths` doc above): each target is
-                // resolved and unioned into this one logical module path independently.
-                let mut next_ancestors = module_ancestors.clone();
+            }
+            if seen_plain_file {
+                if let Some(files) = by_module.get(&child_path) {
+                    for f in files {
+                        let base = f
+                            .parent()
+                            .map(Path::to_path_buf)
+                            .unwrap_or_else(|| src_dir.to_path_buf());
+                        sources
+                            .entry(child_path.clone())
+                            .or_default()
+                            .push(ScanSource::File((*f).clone(), base));
+                        if let Ok(canon) = std::fs::canonicalize(f) {
+                            next_ancestors.insert(canon);
+                        }
+                    }
+                }
+            }
+            if let Some(targets) = child_direct_paths.remove(&child) {
+                // Every unconditional `#[path]` target is followed cfg-blind (see the
+                // `child_direct_paths` doc above) and unioned alongside any plain-file sibling
+                // registered just above: each target is resolved independently.
+                if !seen_plain_file {
+                    remap_shadowed.insert(child_path.clone());
+                }
                 for (rel, base) in targets {
                     let target = base.join(&rel);
                     if !target.is_file() {
@@ -325,32 +375,14 @@ pub(crate) fn reachable_modules(
                         .push(ScanSource::File(target, own_dir));
                     next_ancestors.insert(canon);
                 }
-                ancestors.insert(child_path.clone(), next_ancestors);
-            } else if let Some(files) = by_module.get(&child_path) {
-                // File-only, or declared both ways under mutually-exclusive `#[cfg]`: observed
-                // through the conventional file, never the inline sibling body (cfg-blind bound).
-                let mut next_ancestors = module_ancestors.clone();
-                for f in files {
-                    let base = f
-                        .parent()
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| src_dir.to_path_buf());
-                    sources
-                        .entry(child_path.clone())
-                        .or_default()
-                        .push(ScanSource::File((*f).clone(), base));
-                    if let Ok(canon) = std::fs::canonicalize(f) {
-                        next_ancestors.insert(canon);
-                    }
-                }
-                ancestors.insert(child_path.clone(), next_ancestors);
             }
+            ancestors.insert(child_path.clone(), next_ancestors);
             if reachable.insert(child_path.clone()) {
                 queue.push(child_path);
             }
         }
     }
-    Ok((reachable, inline_only, remapped))
+    Ok((reachable, inline_only, remapped, remap_shadowed))
 }
 
 /// One `mod` declared at the top level of a byte range within already-cleaned (comment/string/
@@ -771,7 +803,7 @@ mod tests {
         .expect("write kernel/orphan.rs");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, _inline_only, _remapped) =
+        let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -816,7 +848,7 @@ mod tests {
 
         let files = rust_files(&src).expect("list files");
         let root_relative = std::path::PathBuf::from("core.rs");
-        let (reachable, _inline_only, _remapped) =
+        let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, Some(&root_relative)).expect("walk modules");
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -857,7 +889,7 @@ mod tests {
         std::fs::write(src.join("normal.rs"), "// normal module\n").expect("write normal.rs");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, inline_only, remapped) =
+        let (reachable, inline_only, remapped, remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let governed = governed_files(
             &src,
@@ -866,6 +898,7 @@ mod tests {
             &reachable,
             &inline_only,
             &remapped,
+            &remap_shadowed,
             None,
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -1025,9 +1058,9 @@ mod tests {
         std::fs::write(src.join("core.rs"), "pub mod sub;\n").expect("write core.rs");
         std::fs::write(src.join("sub.rs"), "// sub\n").expect("write sub.rs");
         let files = rust_files(&src).expect("list files");
-        let (with_root, _, _) =
+        let (with_root, _, _, _) =
             reachable_modules(&src, &files, Some(std::path::Path::new("core.rs"))).expect("walk");
-        let (without_root, _, _) = reachable_modules(&src, &files, None).expect("walk");
+        let (without_root, _, _, _) = reachable_modules(&src, &files, None).expect("walk");
         let _ = std::fs::remove_dir_all(&dir);
         assert!(
             with_root.contains("crate::sub"),
@@ -1074,7 +1107,7 @@ mod tests {
         .expect("write parent/child.rs");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, inline_only, _remapped) =
+        let (reachable, inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -1110,7 +1143,7 @@ mod tests {
         std::fs::write(&child_file, "use crate::projection::Thing;\n").expect("write child.rs");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, inline_only, remapped) =
+        let (reachable, inline_only, remapped, remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let governed = governed_files(
             &src,
@@ -1119,6 +1152,7 @@ mod tests {
             &reachable,
             &inline_only,
             &remapped,
+            &remap_shadowed,
             None,
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -1154,7 +1188,7 @@ mod tests {
         .expect("write the deep leaf file");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, _inline_only, _remapped) =
+        let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -1185,7 +1219,7 @@ mod tests {
         .expect("write parent/child/mod.rs");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, _inline_only, _remapped) =
+        let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -1223,7 +1257,7 @@ mod tests {
         .expect("write the conventional orphan Rust never compiles");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, inline_only, _remapped) =
+        let (reachable, inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -1263,7 +1297,7 @@ mod tests {
             .expect("write the conventional orphan the remap must not fall back to");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, inline_only, remapped) =
+        let (reachable, inline_only, remapped, remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
         let governed = governed_files(
             &src,
@@ -1272,6 +1306,7 @@ mod tests {
             &reachable,
             &inline_only,
             &remapped,
+            &remap_shadowed,
             None,
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -1380,8 +1415,10 @@ mod tests {
         std::fs::write(src.join("s.rs"), "// shared target\n").expect("write s.rs");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, _inline_only, remapped) = reachable_modules(&src, &files, None)
-            .expect("two modules sharing one #[path] target is not a cycle (rustc compiles it)");
+        let (reachable, _inline_only, remapped, _remap_shadowed) = reachable_modules(
+            &src, &files, None,
+        )
+        .expect("two modules sharing one #[path] target is not a cycle (rustc compiles it)");
         let _ = std::fs::remove_dir_all(&dir);
 
         assert!(reachable.contains("crate::a"), "{reachable:?}");
@@ -1415,7 +1452,7 @@ mod tests {
             .expect("write windows_impl.rs");
 
         let files = rust_files(&src).expect("list files");
-        let (reachable, _inline_only, remapped) =
+        let (reachable, _inline_only, remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("both cfg-gated targets are followed");
         let _ = std::fs::remove_dir_all(&dir);
 
@@ -1431,6 +1468,127 @@ mod tests {
         assert_eq!(
             targets, expected,
             "both platform targets are followed under crate::imp, cfg-blind: {remapped:?}"
+        );
+    }
+
+    #[test]
+    fn a_plain_file_sibling_of_a_path_remap_is_still_governed() {
+        // rustc ground truth (verified with a real `cargo build`): `#[cfg(unix)] pub mod x;` +
+        // `#[cfg(windows)] #[path = "windows_x.rs"] pub mod x;` compiles `x.rs` on unix — the
+        // standard per-platform shim pairing a PLAIN file on one platform with a `#[path]`-
+        // relocated one on another. A `#[path]` sibling must never suppress a same-named plain
+        // file's own registration (the false negative this test pins): both are cfg-blind and
+        // additive, never mutually exclusive, matching how multiple `#[path]` targets are already
+        // unioned above.
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-cfg-plain-path-sibling-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("create temp src");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[cfg(unix)]\npub mod x;\n#[cfg(windows)]\n#[path = \"windows_x.rs\"]\npub mod x;\n",
+        )
+        .expect("write lib.rs");
+        let plain = src.join("x.rs");
+        std::fs::write(&plain, "use crate::projection::Unix;\n").expect("write x.rs");
+        let remapped_target = src.join("windows_x.rs");
+        std::fs::write(&remapped_target, "use crate::projection::Windows;\n")
+            .expect("write windows_x.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only, remapped, remap_shadowed) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let governed = governed_files(
+            &src,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            &remapped,
+            &remap_shadowed,
+            None,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(reachable.contains("crate::x"), "{reachable:?}");
+        assert!(
+            governed.iter().any(|(f, _)| f == &plain),
+            "the plain-file sibling must still be governed, not suppressed by the #[path] \
+             sibling: {governed:?}"
+        );
+        assert!(
+            governed.iter().any(|(f, _)| f == &remapped_target),
+            "the #[path] sibling's real target must also be governed: {governed:?}"
+        );
+        assert!(
+            !remap_shadowed.contains("crate::x"),
+            "a plain-file sibling means x.rs is real, not an orphan-shadow: {remap_shadowed:?}"
+        );
+    }
+
+    #[test]
+    fn an_inline_sibling_of_a_path_remap_is_still_governed() {
+        // rustc ground truth (verified with a real `cargo build`): `#[cfg(unix)] pub mod x {
+        // pub mod y; }` + `#[cfg(windows)] #[path = "windows_x.rs"] pub mod x;` compiles the
+        // inline body (and its own file-backed child `y`) on unix. An inline sibling is not the
+        // plain-file-vs-inline cfg-blind bound (that bound is specifically about a same-named
+        // CONVENTIONAL file, which a `#[path]` remap is not) — it must be observed alongside the
+        // `#[path]` target, additively, the same as the plain-file case above.
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-cfg-inline-path-sibling-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("create temp src");
+        std::fs::create_dir_all(src.join("x")).expect("mkdir x");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[cfg(unix)]\npub mod x {\n    pub mod y;\n}\n#[cfg(windows)]\n#[path = \"windows_x.rs\"]\npub mod x;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(src.join("x/y.rs"), "use crate::projection::Unix;\n").expect("write x/y.rs");
+        let remapped_target = src.join("windows_x.rs");
+        std::fs::write(&remapped_target, "use crate::projection::Windows;\n")
+            .expect("write windows_x.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only, remapped, remap_shadowed) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let governed = governed_files(
+            &src,
+            &files,
+            "crate",
+            &reachable,
+            &inline_only,
+            &remapped,
+            &remap_shadowed,
+            None,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            reachable.contains("crate::x::y"),
+            "the inline sibling's own file-backed child must still be reachable: {reachable:?}"
+        );
+        assert!(
+            remapped
+                .iter()
+                .any(|(f, m)| f == &remapped_target && m == "crate::x"),
+            "the #[path] sibling's real target must also be followed: {remapped:?}"
+        );
+        // `crate::x` is directly targetable despite carrying no file of its own besides the
+        // remap target: `inline_only` marking it (there is no plain conventional file, so the
+        // bound applies) does not suppress the remap's own governance — the remap is
+        // unconditional in `governed_files`, never gated on `inline_only`.
+        assert!(
+            governed
+                .iter()
+                .any(|(f, m)| f == &remapped_target && m == "crate::x"),
+            "crate::x is governed via its #[path] target regardless of the inline sibling: {governed:?}"
         );
     }
 }
