@@ -479,6 +479,14 @@ complement — show, then tell.
   rather than a ninth positional. Behavior-preserving, internal-only (no model / adopter surface, so
   distinct from the variant-refactor debt above) — lands whenever the next input does, not a
   standalone task. Until then the 8 args are cohesive single-caller scan inputs (Gate-5-passed).
+- **`governed_files` positional-arg growth — same class, same threshold (internal, born-when-needed).**
+  0.2.2's `#[path]`-following work added `remapped` then `remap_shadowed` (the orphan-shadow fix
+  below), pushing the reachability walk's own selector to 8 positional args (now under
+  `#[allow(clippy::too_many_arguments)]`). Its *next* dimension input should tip it into a named
+  param struct (mirroring the `InlineScanRequest` direction above) rather than a ninth positional —
+  the two `reachable_modules`/`governed_files` outputs-as-inputs pairs (`reachable`+`inline_only`,
+  `remapped`+`remap_shadowed`) are exactly the kind of cohesive group such a struct would carry
+  together. Behavior-preserving, internal-only. Lands whenever the next input does, not standalone.
 - **Considered decline — a mechanical "policy adapter" importing an existing rule source into a
   `Constitution`.** The *goal* (low-friction adoption, do not reinvent governance syntax) is
   legitimate and is served by the **cookbook / examples** (track 1) that translate common governance
@@ -667,7 +675,7 @@ inline-`mod` name accumulated onto it, matching rustc for mod-rs and non-mod-rs 
 coverage false negative where a relocated module's items were dropped. A `cfg_attr`-wrapped `#[path]`
 stays a cfg-blind bound; an absent unconditional target fails loud (exit 2). (The v0.1.4 posture of
 keeping `#[path]` modules outside scope — governing neither the target nor a same-named orphan — is
-**superseded**; 圭表 still holds that older bound, see its section.)
+**superseded**; 圭表's own v0.1.4 posture is likewise superseded now, 0.2.2, see its section.)
 
 - **Public-API type leakage — signature-coupling** (flagship): **BUILT.** "A module's public
   API must not *expose* a forbidden type" — depending on a type internally is fine; leaking
