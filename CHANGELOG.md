@@ -58,7 +58,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   split point now resolves from whichever variant's own directory actually declared it, instead of
   always the inline variant's — previously a flat (non-`mod.rs`) file-form sibling's own `#[path]`
   was silently mis-resolved (or hard-failed) whenever it needed a different directory than the
-  inline accumulation.
+  inline accumulation. A third review round found the same resolver still conflating two directory
+  concepts in the opposite direction — a `#[path]`-loaded module's own CONVENTIONAL (non-`#[path]`)
+  children were resolved from a name-derived directory unrelated to where the file actually lives,
+  rather than the loaded file's own directory — and found that two non-inline (file-form) cfg
+  siblings, one plain and one `#[path]`-remapped, were still not unioned (first match won,
+  silently dropping whichever sibling lost the race), unlike the crate-wide walk's own
+  already-established policy of never stopping at one match. Both are fixed: every non-inline
+  declaration for a name now produces its own branch (matching the crate-wide walk), and each
+  branch's own child-continuation directory is computed from its own origin rather than a shared
+  formula. The subtree walker backing `including_submodules()` reactions (async-exposure, and any
+  future subtree-scoped capability) is also fixed to use the anchor's own resolved `#[path]` base
+  directly instead of re-deriving it from the anchor's file — which silently substituted the wrong
+  base whenever the anchor itself was an inline module.
 
 ## [0.2.1] - 2026-07-21
 
