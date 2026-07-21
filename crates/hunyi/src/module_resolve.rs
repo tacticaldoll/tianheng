@@ -40,13 +40,14 @@ fn module_segments(module: &str) -> Vec<String> {
 /// Resolve a module path to its items, each paired with the **file its own branch was resolved
 /// from** — needed by a caller that must attribute EACH finding to the real file that produced it,
 /// rather than a single, first-branch file for the whole module. When `module` is ordinary
-/// (reached through exactly one branch), every item pairs with that one file, same as
-/// [`resolve_module_file`] would report. When `module` was reached through a mutually-exclusive
-/// `#[cfg]` split, an item pairs with the file its OWN branch actually lives in — so a finding
-/// produced from a non-first branch's item is never misattributed to a different branch's file
-/// (the false-attribution class [`resolve_module_root`]'s single-file shape cannot avoid, found on
-/// a round-5 adversarial review — see `PROJECT.md`'s Decisions). An unknown segment is a
-/// constitution error; a declared-but-fileless module is a scan error — never a silent pass.
+/// (reached through exactly one branch), every item pairs with that one file, same as the
+/// test-only `resolve_module_file` would report. When `module` was reached through a
+/// mutually-exclusive `#[cfg]` split, an item pairs with the file its OWN branch actually lives
+/// in — so a finding produced from a non-first branch's item is never misattributed to a
+/// different branch's file (the false-attribution class the test-only `resolve_module_root`'s
+/// single-file shape cannot avoid, found on a round-5 adversarial review — see `PROJECT.md`'s
+/// Decisions). An unknown segment is a constitution error; a declared-but-fileless module is a
+/// scan error — never a silent pass.
 pub(crate) fn resolve_module_items_with_files(
     src_dir: &Path,
     root_file: &Path,
@@ -141,9 +142,9 @@ pub(crate) fn resolve_module_root(
 /// The full descent result: every surviving [`Branch`] on its own, each keeping its own items
 /// paired with the directories they must be resolved against. A subtree walk that continues
 /// descending below the anchor needs this — never the single, unioned-items/first-branch-only
-/// shape [`resolve_module_root`] returns, which is correct only for a single-module violation's
-/// "one file" report and actively wrong for further descent (a non-first branch's own child would
-/// resolve against a directory pair that isn't its own).
+/// shape the test-only `resolve_module_root` returns, which is correct only for a single-module
+/// violation's "one file" report and actively wrong for further descent (a non-first branch's own
+/// child would resolve against a directory pair that isn't its own).
 #[allow(clippy::type_complexity)]
 pub(crate) fn resolve_module_branches(
     src_dir: &Path,
@@ -176,7 +177,9 @@ pub(crate) fn resolve_module_branches(
 /// own correct directories for anything nested *beneath* the split — merging into one shared pair
 /// of directories silently mis-resolved a further segment whenever the file-form sibling's own
 /// directories differed from the inline accumulation (the false negative this design fixes).
-/// [`resolve_module_root`] merges every surviving branch's items back into one list at the leaf.
+/// The test-only `resolve_module_root` merges every surviving branch's items back into one list
+/// at the leaf; production callers use [`resolve_module_items_with_files`] instead, which keeps
+/// each item paired with its own branch's file rather than collapsing to the first.
 struct Branch {
     items: Vec<syn::Item>,
     current_file: PathBuf,

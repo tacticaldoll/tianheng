@@ -569,9 +569,10 @@ fn walk_module(
 
 /// Walk the anchored module's whole subtree — the module itself and every descendant (file-based
 /// `mod x;` and inline `mod x { … }` alike) — returning each module's path and the items it owns.
-/// The subtree analogue of [`crate::module_resolve::resolve_module_items`]: where that returns one
-/// module's items, this returns every module at or below the anchor, so a reaction can observe a
-/// "nowhere under here" property (e.g. no public `async fn` anywhere beneath a sans-I/O kernel).
+/// The subtree analogue of [`crate::module_resolve::resolve_module_items_with_files`]: where that
+/// returns one module's items, this returns every module at or below the anchor, so a reaction can
+/// observe a "nowhere under here" property (e.g. no public `async fn` anywhere beneath a
+/// sans-I/O kernel).
 ///
 /// Inherits the crate walk's guards, so a subtree reaction never silently under-reacts: an
 /// **unconditional** `#[path]`-remapped module is followed like any other descendant (matching
