@@ -46,12 +46,13 @@ use scan::scan_source;
 /// covering its seam, so a seam whose *only* probe is compiled out of the production binary
 /// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
 ///
-/// **Stated bound (`#[path]` relocation):** the file-input walk resolves reachable modules by the
-/// conventional `mod name;` → `name.rs`/`name/mod.rs` mapping and does **not** follow a
-/// `#[path = "…"]`-relocated `mod`. Probes inside a relocated module are therefore not counted:
-/// a seam covered *only* there is reported unprobed, and — the false-negative direction — an
-/// `assert_boundary!` on an *undeclared* seam inside it is not caught. Keep production probes out
-/// of `#[path]`-relocated modules, or declare and probe the seam in a conventionally located one.
+/// **`#[path]` relocation (followed, with a narrowed bound):** an **unconditional**
+/// `#[path = "…"] mod name;` is followed to its author-chosen file and its probes are counted — the
+/// base is the directory a conventional `mod name;` would use, and the loaded file is mod-rs-like,
+/// so its own children resolve from its directory. A **`cfg_attr`-wrapped** `#[path]` is
+/// cfg-conditional and is **not** followed (following it cfg-blind could read a file rustc does not
+/// compile in this configuration): such a module's probes are not counted — a stated bound, so keep
+/// a cfg-relocated module's production probes in a conventionally located module instead.
 ///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
 pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
