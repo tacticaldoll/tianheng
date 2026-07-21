@@ -2935,7 +2935,11 @@ fn a_glob_imported_trait_is_a_documented_bound() {
 }
 
 #[test]
-fn a_path_remapped_module_is_a_documented_bound() {
+fn an_unconditional_path_remapped_module_is_followed_and_its_impl_reacts() {
+    // An unconditional `#[path = "weird.rs"] mod domain;` is now *followed* to weird.rs: a
+    // disallowed impl there reacts, attributed to the module `crate::domain` (its declared path,
+    // regardless of the file it lives in). Previously the module was skipped — a false negative
+    // (a disallowed impl in a relocated module passing unobserved).
     let out = locality_findings(
         "path-remapped",
         &[
@@ -2953,9 +2957,10 @@ fn a_path_remapped_module_is_a_documented_bound() {
         &["crate::commands"],
     )
     .unwrap();
-    assert!(
-        out.is_empty(),
-        "a #[path]-remapped module is out of scope, not silently matched: {out:?}"
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"],
+        "the impl in the #[path]-relocated module is followed and reacts: {out:?}"
     );
 }
 
@@ -3451,6 +3456,201 @@ fn two_same_named_unsafe_trait_fns_stay_distinct() {
             "unsafe fn B::m in crate::net"
         ],
         "trait-declared unsafe fns must be qualified by their trait: {out:?}"
+    );
+}
+
+#[test]
+fn trait_impl_unsafe_fn_stays_distinct_from_inherent_and_other_traits() {
+    // A trait-impl `unsafe fn` is qualified by `<trait for self>`, not the self type alone: on ONE
+    // self type, an inherent `unsafe fn m`, `impl A for Foo { unsafe fn m }`, and
+    // `impl B for Foo { unsafe fn m }` are three distinct `unsafe` sites and MUST stay three
+    // findings — else a baseline of the inherent (or one trait-impl) silently accepts a later-added
+    // trait-impl `unsafe fn` on a *safe* trait (no independent `unsafe impl` finding): a new
+    // out-of-subtree `unsafe` site passing unobserved, the forbidden false negative. Self-type-only
+    // qualification (`unsafe fn Foo::m` for all three) collapsed them; this pins the fix.
+    let out = unsafe_labels(
+        "unsafe-fns-trait-impl",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "pub struct Foo;\npub trait A { fn m(&self); }\npub trait B { fn m(&self); }\n\
+                 impl Foo { unsafe fn m(&self) {} }\n\
+                 impl A for Foo { unsafe fn m(&self) {} }\n\
+                 impl B for Foo { unsafe fn m(&self) {} }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        [
+            "unsafe fn <A for Foo>::m in crate::net",
+            "unsafe fn <B for Foo>::m in crate::net",
+            "unsafe fn Foo::m in crate::net",
+        ],
+        "a trait-impl unsafe fn must be qualified by <trait for self>, distinct from the inherent \
+         method and other trait impls on the same type: {out:?}"
+    );
+}
+
+#[test]
+fn unsafe_in_an_unconditional_path_remapped_module_reacts() {
+    // An unconditional `#[path = "relocated.rs"] mod net;` is followed to relocated.rs (there is no
+    // conventional net.rs, so this only resolves by following the remap); its `unsafe fn`, outside
+    // the allowed subtree, reacts attributed to the declared module path `crate::net`. Previously
+    // the relocated module was skipped — a false negative (relocated `unsafe` passing unobserved).
+    let out = unsafe_labels(
+        "path-remap-unsafe",
+        &[
+            ("lib.rs", "#[path = \"relocated.rs\"]\npub mod net;\n"),
+            ("relocated.rs", "pub unsafe fn poke() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::net"],
+        "unsafe in an unconditional #[path] module is followed and reacts: {out:?}"
+    );
+}
+
+#[test]
+fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
+    // rustc 1.x ground truth: a non-inline `#[path="bar.rs"]` written INSIDE src/foo.rs (reached via
+    // `mod foo;`) resolves to src/bar.rs — the CONTAINING file's own directory — NOT src/foo/bar.rs.
+    // The real unsafe fn lives at the rustc-correct src/bar.rs; a decoy sits at the wrong src/foo/bar.rs
+    // the earlier (buggy) child_dir base would have read. Resolving from child_dir reads the decoy and
+    // drops the real unsafe (Ok([]) — the forbidden false negative); this pins the corrected base.
+    let out = unsafe_labels(
+        "path-nonmodrs",
+        &[
+            ("lib.rs", "pub mod foo;\n"),
+            ("foo.rs", "#[path = \"bar.rs\"]\npub mod bar;\n"),
+            ("bar.rs", "pub unsafe fn poke() {}\n"),
+            ("foo/bar.rs", "pub fn decoy() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::foo::bar"],
+        "a #[path] inside a non-mod.rs file resolves from that file's own dir (src/bar.rs), not \
+         src/foo/bar.rs: {out:?}"
+    );
+}
+
+#[test]
+fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir() {
+    // rustc ground truth (verified against rustc 1.96.0): a `#[path="other.rs"]` written INSIDE an
+    // inline `mod inline { … }` at the crate root resolves to src/inline/other.rs — rustc accumulates
+    // the inline-module name as a directory component onto the file's own dir. The real unsafe lives
+    // at the rustc-correct src/inline/other.rs; a decoy sits at src/other.rs, which threading the
+    // enclosing file_dir UNCHANGED through inline descent would have read (dropping the real unsafe,
+    // Ok([]) — the forbidden false negative). Pins the accumulated inline base.
+    let out = unsafe_labels(
+        "path-inline-modrs",
+        &[
+            (
+                "lib.rs",
+                "pub mod inline { #[path = \"other.rs\"] pub mod inner; }\n",
+            ),
+            ("inline/other.rs", "pub unsafe fn poke() {}\n"),
+            ("other.rs", "pub fn decoy() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::inline::inner"],
+        "a #[path] nested in an inline block resolves from <file_dir>/inline (src/inline/other.rs), \
+         not the src/other.rs orphan: {out:?}"
+    );
+}
+
+#[test]
+fn path_nested_in_an_inline_block_in_a_non_mod_rs_file_accumulates_both_components() {
+    // rustc ground truth (rustc 1.96.0): src/bar.rs (reached via `mod bar;`, a non-mod-rs file) with
+    // `pub mod inline { #[path="p.rs"] pub mod inner; }` resolves inner to src/bar/inline/p.rs — the
+    // base accumulates BOTH the non-mod-rs conventional-child dir (bar/) AND the inline name (inline/).
+    // Real unsafe at the rustc-correct src/bar/inline/p.rs; a decoy at src/p.rs (the enclosing
+    // file_dir base). Confirms the two components compose.
+    let out = unsafe_labels(
+        "path-inline-nonmodrs",
+        &[
+            ("lib.rs", "pub mod bar;\n"),
+            (
+                "bar.rs",
+                "pub mod inline { #[path = \"p.rs\"] pub mod inner; }\n",
+            ),
+            ("bar/inline/p.rs", "pub unsafe fn poke() {}\n"),
+            ("p.rs", "pub fn decoy() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::bar::inline::inner"],
+        "the #[path] base accumulates bar/ and inline/ (src/bar/inline/p.rs), not src/p.rs: {out:?}"
+    );
+}
+
+#[test]
+fn two_modules_sharing_one_path_target_are_not_a_false_cycle() {
+    // rustc ground truth (rustc 1.96.0): `#[path="shared.rs"] pub mod a; #[path="shared.rs"] pub mod
+    // b;` compiles cleanly — two sibling declarations legitimately resolving to one file is NOT a
+    // cycle. A monotonic whole-tree visited set misreported the second reach as a "symlink loop"
+    // (exit 2) on rustc-compilable input — a false positive and a 三儀 ⊥ 三儀 divergence (漏刻 accepts
+    // it). The ancestor-path guard must accept it: the unsafe in shared.rs reacts under BOTH paths.
+    let out = unsafe_labels(
+        "path-shared-target",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"shared.rs\"]\npub mod a;\n#[path = \"shared.rs\"]\npub mod b;\n",
+            ),
+            ("shared.rs", "pub unsafe fn poke() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .expect("two modules sharing one #[path] target is not a cycle (rustc compiles it)");
+    assert_eq!(
+        out,
+        ["unsafe fn poke in crate::a", "unsafe fn poke in crate::b",],
+        "a file shared by two #[path] declarations reacts under both module paths, no false cycle: \
+         {out:?}"
+    );
+}
+
+#[test]
+fn a_conventional_module_and_a_path_alias_to_it_are_not_a_false_cycle() {
+    // rustc ground truth (rustc 1.96.0): `pub mod foo; #[path="foo.rs"] pub mod bar;` compiles — one
+    // file (src/foo.rs) reached by a conventional decl and a #[path] alias is not a cycle. Pins the
+    // second, conventional-branch face of the ancestor-guard fix.
+    let out = unsafe_labels(
+        "path-alias-conventional",
+        &[
+            (
+                "lib.rs",
+                "pub mod foo;\n#[path = \"foo.rs\"]\npub mod bar;\n",
+            ),
+            ("foo.rs", "pub unsafe fn poke() {}\n"),
+        ],
+        &["crate::ffi"],
+    )
+    .expect("a conventional module and a #[path] alias to the same file is not a cycle");
+    assert_eq!(
+        out,
+        [
+            "unsafe fn poke in crate::bar",
+            "unsafe fn poke in crate::foo",
+        ],
+        "one file reached conventionally and via a #[path] alias reacts under both paths: {out:?}"
     );
 }
 
@@ -5834,6 +6034,23 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 1, "one exposure violation");
+    assert_eq!(violations[0].target, "crate::domain");
+    assert_eq!(violations[0].rule, SIGNATURE_RULE);
+    let id = violations[0].id();
+    let key = id
+        .finding_key()
+        .expect("a production violation has structured identity");
+    assert_eq!(key.namespace(), "hunyi");
+    assert_eq!(key.code(), "signature_exposure");
+    assert_eq!(
+        key.fields().collect::<Vec<_>>(),
+        vec![
+            ("seam_kind", "free_fn"),
+            ("seam_module", "crate::domain"),
+            ("seam_name", "leak"),
+            ("subject", "crate::infra::Db"),
+        ]
+    );
     let file = violations[0]
         .file
         .as_deref()
@@ -6141,8 +6358,12 @@ fn a_facade_chain_reexport_reports_the_governed_module_file_not_the_facades() {
 }
 
 #[test]
-fn path_remapped_module_file_is_not_resolved_via_a_conventional_orphan() {
-    let err = resolve_file(
+fn path_remapped_module_resolves_to_its_target_not_the_conventional_orphan() {
+    // `crate::domain` is `#[path = "weird.rs"]`, so it resolves to weird.rs — the file rustc
+    // compiles — and NEVER to the same-named conventional orphan `domain.rs` (which rustc does not
+    // compile). The FP-guard intent survives the switch from skip to follow: the target, not the
+    // orphan.
+    let file = resolve_file(
         "path-remap",
         &[
             (
@@ -6155,16 +6376,50 @@ fn path_remapped_module_file_is_not_resolved_via_a_conventional_orphan() {
         ],
         "crate::domain",
     )
-    .expect_err("a #[path]-remapped module is outside single-module resolution");
-    assert_eq!(
-        err,
-        unknown_module_error("crate::domain", "x"),
-        "the resolver must not govern the same-named conventional orphan"
+    .expect("an unconditional #[path] module now resolves to its target");
+    let file = file.display().to_string();
+    assert!(
+        file.ends_with("weird.rs"),
+        "the resolver follows #[path] to weird.rs, never the conventional orphan domain.rs: {file}"
     );
 }
 
 #[test]
-fn path_remapped_semantic_module_is_not_governed_via_a_conventional_orphan() {
+fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir_targeted() {
+    // The targeted resolver's twin of the whole-crate walk fix. rustc ground truth (rustc 1.96.0):
+    // `pub mod inline { #[path="other.rs"] pub mod inner; }` at the crate root resolves
+    // crate::inline::inner to src/inline/other.rs. The earlier `descend` used current_file.parent()
+    // (= src/) as the #[path] base, which drops the accumulated inline component — it would resolve
+    // to the src/other.rs decoy (governing a file rustc never compiles = FP, and missing the real
+    // src/inline/other.rs = FN). Pins the accumulated path_base.
+    let file = resolve_file(
+        "path-inline-targeted",
+        &[
+            (
+                "lib.rs",
+                "pub mod inline { #[path = \"other.rs\"] pub mod inner; }\n",
+            ),
+            ("inline/other.rs", "pub struct Real;\n"),
+            ("other.rs", "pub struct Decoy;\n"),
+        ],
+        "crate::inline::inner",
+    )
+    .expect("a #[path] nested in an inline block resolves to its accumulated target");
+    let file = file.display().to_string();
+    assert!(
+        file.replace('\\', "/").ends_with("inline/other.rs"),
+        "the resolver accumulates the inline name: src/inline/other.rs, not the src/other.rs decoy: \
+         {file}"
+    );
+}
+
+#[test]
+fn path_remapped_semantic_module_is_governed_at_its_target_not_the_orphan() {
+    // `crate::domain` is `#[path = "weird.rs"]`; the boundary is now evaluated against weird.rs
+    // (the compiled file), whose `real() -> crate::infra::Db` violates `must_not_expose`. The
+    // same-named conventional orphan `domain.rs` — which rustc does not compile — is never
+    // governed, so its `orphan()` exposure is neither the source of a violation nor masks the real
+    // one. Previously this was a constitution error (the module skipped) — a false negative.
     let (metadata, dir) = fixture_metadata(
         "semantic-path-remap",
         &[
@@ -6186,16 +6441,21 @@ fn path_remapped_semantic_module_is_not_governed_via_a_conventional_orphan() {
     let boundary = SemanticBoundary::in_crate("x")
         .module("crate::domain")
         .must_not_expose("crate::infra")
-        .because("path-remapped modules are outside single-module semantic resolution");
+        .because("an unconditional #[path] module is governed at its target file");
     let mut violations = Vec::new();
-    let err = check_boundary(&metadata, &boundary, &mut violations)
-        .expect_err("a #[path]-remapped governed module is a constitution error");
+    check_boundary(&metadata, &boundary, &mut violations)
+        .expect("the #[path] target resolves and is governed");
+    let file = violations
+        .first()
+        .and_then(|v| v.file.as_deref())
+        .map(str::to_string);
     let _ = std::fs::remove_dir_all(&dir);
 
-    assert_eq!(err, unknown_module_error("crate::domain", "x"));
+    assert_eq!(violations.len(), 1, "weird.rs's exposure of infra reacts");
+    let file = file.expect("a governed-module file");
     assert!(
-        violations.is_empty(),
-        "the same-named conventional orphan is not compiled and must not produce a violation"
+        file.ends_with("weird.rs"),
+        "the reaction is in the #[path] target weird.rs, never the conventional orphan domain.rs: {file}"
     );
 }
 

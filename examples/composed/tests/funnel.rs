@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use composed_app::governance::constitution;
-use tianheng::{BoundaryKind, Outcome, check_constitution};
+use tianheng::{check_constitution, BoundaryKind, Outcome};
 
 fn manifest() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")

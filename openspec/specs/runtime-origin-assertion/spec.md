@@ -241,3 +241,83 @@ NOT claim to verify installation.
 - **WHEN** a seam and its probe are escape-free (e.g. `"domain-entry"`) or the seam is written as a raw string (`r"…"`)
 - **THEN** `audit_probe_coverage` behaves exactly as before (the decoded value equals the raw value), so no existing adopter's coverage result or baseline identity changes
 
+### Requirement: Root-aware audit excludes unreachable source files
+
+When `audit_probe_coverage` receives a Rust target root file, it SHALL count probes only from that
+file and source files reachable through its lexical module declarations. An undeclared `.rs` file,
+or a conventional file shadowed by an inline-only module, SHALL NOT count as coverage. Every
+reachable selected source file SHALL be read fail-loud; an unreadable file SHALL produce a
+constitution error. The walker SHALL remain louke-local, std-only, and audit-feature-only. Directory
+inputs SHALL remain accepted as the legacy recursive corpus for source compatibility.
+
+A `mod name;` whose conventional file (`name.rs` or `name/mod.rs`) cannot be resolved SHALL be a
+constitution error **unless** the declaration carries a `#[cfg(...)]` or `#[cfg_attr(...)]` gate, in
+which case the module may legitimately have no file in the current configuration (an off feature or
+another platform) and SHALL be skipped rather than errored — the same cfg-tolerance the semantic
+dimension applies, reimplemented louke-locally (三儀 ⊥ 三儀). This does not evaluate `cfg`: a
+*resolvable* cfg-gated module is still scanned and its probes still counted; only an *absent* file
+for a cfg-gated declaration is tolerated. A resolution ambiguity (both `name.rs` and `name/mod.rs`
+present) remains a constitution error regardless of any gate.
+
+A `mod name;` carrying an **unconditional** `#[path = "..."]` relocation SHALL be recognized
+**structurally** — an outer attribute whose meta name is exactly `path` followed by `=` and a string
+literal, with comments and string literals skipped, and the literal's escapes decoded as rustc/syn
+decode them — and SHALL be **followed** to that author-chosen file, resolved relative to the
+containing file's own directory with each enclosing inline-`mod` name accumulated onto it (rustc's
+mod-rs-blind rule); for a non-mod-rs `name.rs` this differs from the conventional-child directory its
+own `mod y;` would use, and a `#[path]` nested inside an inline `mod { … }` block adds that block's
+name as a directory component. A `#[path]`-loaded file is itself mod-rs-like, so its own children
+resolve from its directory. Probes inside a relocated module are therefore counted, and an
+undeclared-seam probe there is caught. A declaration whose preamble merely
+*contains* the text `path` — a `// fast path` comment, a `#[cfg(feature = "fastpath")]` gate — SHALL
+NOT be read as a relocation and SHALL resolve conventionally, so no reachable module is dropped by a
+false substring match (which would silently drop every probe beneath it — a coverage false negative,
+the worst outcome under FN-first). A `cfg_attr`-wrapped `#[path]` is cfg-conditional and SHALL NOT be
+followed — following it cfg-blind could read a file rustc does not compile in this configuration — so
+such a module is not counted (a stated bound); an absent target for it is tolerated like any cfg-gated
+module, while an absent target for an unconditional `#[path]` is a fail-loud constitution error.
+
+#### Scenario: Orphan probe cannot cover a seam
+
+- **WHEN** a target root declares no module for `orphan.rs` and that orphan file contains the only probe for a declared seam
+- **THEN** the audit reports the seam unprobed because the compiler-unreachable file is absent from the root-aware corpus
+
+#### Scenario: Reachable external module covers a seam
+
+- **WHEN** a target root declares `mod adapter;` and the resolved `adapter.rs` or `adapter/mod.rs` contains the seam's probe
+- **THEN** the audit counts the probe as coverage
+
+#### Scenario: Inline module shadow does not activate a sibling file
+
+- **WHEN** a root declares only `mod adapter { ... }` and a sibling `adapter.rs` contains a probe
+- **THEN** the sibling file does not count because the inline body, not the conventional file, is the compiled module
+
+#### Scenario: Custom target root remains auditable
+
+- **WHEN** Cargo reports a custom library root filename and its reachable modules contain probes
+- **THEN** the audit starts from that exact file rather than guessing `src/lib.rs`
+
+#### Scenario: A cfg-gated module with no file is tolerated
+
+- **WHEN** a target root declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off) alongside a non-cfg `mod present;` that resolves normally
+- **THEN** the audit skips the absent cfg-gated module without a constitution error, while a non-cfg `mod missing;` with no file remains a fail-loud constitution error
+
+#### Scenario: An unconditional #[path] module is followed; an incidental "path" substring is not
+
+- **WHEN** a target root declares `#[path = "elsewhere.rs"] mod relocated;` (no conventional `relocated.rs`; `elsewhere.rs` holds a declared seam's probe) alongside a `// fast path` comment and `#[cfg(feature = "fastpath")] mod present;` whose conventional `present.rs` resolves normally
+- **THEN** the `#[path]`-relocated module is recognized structurally and **followed** to `elsewhere.rs`, so its probe counts as coverage (never dropped as off the conventional path), while `present` — matched by no `path` attribute despite the incidental substring — still resolves conventionally
+
+#### Scenario: A #[path] nested inside an inline module resolves from the accumulated directory
+
+- **WHEN** a target root declares `mod inline { #[path = "other.rs"] mod inner; }`, `inline/other.rs` holds an undeclared-seam probe, and a same-named `other.rs` decoy sits beside the root
+- **THEN** the audit resolves `inner` to `inline/other.rs` (the enclosing inline-`mod` name accumulated onto the base, as rustc compiles it) and reports the undeclared-seam probe, never reading the `other.rs` decoy and returning Clean at exit 0
+
+#### Scenario: A cfg_attr-wrapped #[path] relocation is not followed
+
+- **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_seam.rs")] mod plat;` with no conventional `plat.rs`, where the relocated file would hold the only probe for a declared seam
+- **THEN** the cfg-conditional relocation is not followed (a stated bound, tolerated as a cfg-gated absence, not a constitution error) and the seam is reported unprobed — never a silent claim that a file rustc may not compile here is covered
+
+#### Scenario: Legacy directory callers remain compatible
+
+- **WHEN** a direct caller passes a source directory instead of a target root file
+- **THEN** the audit retains the recursive directory scan and the caller requires no source change

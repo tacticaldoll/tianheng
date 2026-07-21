@@ -20,7 +20,7 @@ use crate::resolve::{
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
     resolve_path, strip_raw, type_to_string,
 };
-use crate::syn_util::has_path_attr;
+use crate::syn_util::{direct_path_value, has_path_attr};
 
 /// One impl site observed in the crate: its enclosing module path, the written trait
 /// path, the implemented-for type, and that module's `use`-map (for resolution).
@@ -129,24 +129,27 @@ pub(crate) fn scan_crate(
     // file-backed `mod x;` is located through the live filesystem, which follows symlinks, so a
     // cyclic symlinked module directory (`src/foo/foo -> src/foo`) would otherwise recurse forever
     // and stack-overflow (SIGABRT) — neither exit 0/1 nor the contract's exit 2. Re-reaching an
-    // already-visited canonical file is that cycle: "cannot judge" (exit 2), never a crash. The
-    // louke probe scanner guards the same hazard; the two dimensions keep parallel copies (三儀 ⊥
-    // 三儀). Seeded with the crate root so a submodule symlinking back to it is caught too.
-    let mut visited: HashSet<PathBuf> = HashSet::new();
-    visited.insert(canonicalize_source(root_file)?);
+    // canonical file already on the descent path is that cycle: "cannot judge" (exit 2), never a
+    // crash. The louke probe scanner guards the same hazard; the two dimensions keep parallel copies
+    // (三儀 ⊥ 三儀). Seeded with the crate root so a submodule looping back to it is caught too.
+    let mut ancestors: HashSet<PathBuf> = HashSet::new();
+    ancestors.insert(canonicalize_source(root_file)?);
     walk_module(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
+        // The crate root is mod-rs-like: its own directory (`src_dir`, the root file's parent) is the
+        // base for both its conventional children and any `#[path]` written in it.
+        src_dir.to_path_buf(),
         crate_package,
         externs,
-        &mut visited,
+        &ancestors,
         &mut scan,
     )?;
     Ok(scan)
 }
 
-/// Canonicalize a source file path (resolving symlinks) for the visited-set cycle guard; an
+/// Canonicalize a source file path (resolving symlinks) for the ancestor-set cycle guard; an
 /// unresolvable path is a scan error ("cannot judge"), never a silent skip.
 fn canonicalize_source(file: &Path) -> Result<PathBuf, String> {
     std::fs::canonicalize(file).map_err(|err| {
@@ -157,57 +160,152 @@ fn canonicalize_source(file: &Path) -> Result<PathBuf, String> {
     })
 }
 
+/// A module whose source file loops the current descent path back on itself — a symlinked module
+/// directory or a circular `#[path]` (rustc's "circular modules"). Diagnosed as "cannot judge"
+/// (exit 2) rather than recursing into a stack overflow; never a silent pass.
+fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String {
+    format!(
+        "cannot judge module '{module}' in package '{crate_package}': its source file '{}' forms a \
+         module cycle (a symlink loop or a circular `#[path]`)",
+        file.display()
+    )
+}
+
 /// Resolve a module's direct child `mod` declarations to the `(items, module path, child dir)` each
 /// subtree walk recurses into — the single copy of the descent skeleton and its false-negative-
 /// critical guards, shared by [`walk_module`], [`collect_subtree`] (`walk_subtree_modules`), and
 /// [`walk_unsafe`] (`scan_unsafe_sites`) so a fix to one guard cannot silently diverge across the
-/// three (the twin-drift bug class). Owns: the `#[path]` remap skip (a stated coverage bound, incl.
-/// the `cfg_attr`-wrapped spelling), the inline-vs-file dispatch, the symlink module-cycle guard (a
-/// re-reached canonical file is exit 2, never a stack overflow), and the `#[cfg]`-tolerance /
-/// non-cfg-missing-file guard (exit 2).
+/// three (the twin-drift bug class). Owns: the `#[path]` policy (an **unconditional** `#[path = "…"]`
+/// is followed to its author-chosen file/body; a `cfg_attr`-wrapped `#[path]` stays a cfg-conditional
+/// skip bound), the inline-vs-file dispatch, the symlink module-cycle guard (a re-reached canonical
+/// file is exit 2, never a stack overflow), and the `#[cfg]`-tolerance / non-cfg-missing-file guard
+/// (exit 2).
 ///
 /// Children are returned in source order; each caller does its own per-module work, then recurses
-/// over them. All direct children are resolved before the caller recurses; since `visited` is
-/// monotonic over the module tree, the same files are reached in the same order and a re-reach is
-/// exit 2 regardless. An inline module's body is cloned (callers borrow their items).
+/// over them, extending `ancestors` with the child's opened file (see below). `ancestors` is the set
+/// of source files on the current descent path (root → this module's file) — NOT a monotonic
+/// whole-tree set — so a re-reached file is diagnosed as a cycle only when it loops the path back on
+/// itself, never when two sibling/cousin modules legitimately share one `#[path]` target. An inline
+/// module's body is cloned (callers borrow their items).
+// Each child is `(items, module path, child_dir, file_dir, opened_file)`: `child_dir` is the base
+// for the child's own conventional `mod y;`, `file_dir` the directory a `#[path]` written in the
+// child resolves from (they differ for a non-mod-rs `name.rs`, and both accumulate an enclosing
+// inline-`mod` name); `opened_file` is the canonical path of the new source file this child opened
+// (`Some` for a file-based / `#[path]`-file child, `None` for an inline body that stays in the
+// parent's file) — the caller unions it into `ancestors` before recursing. A named struct would
+// obscure the by-position destructuring at the three call sites; the shape is documented here.
+#[allow(clippy::type_complexity)]
 fn resolve_child_modules(
     items: &[syn::Item],
     module: &str,
     child_dir: &Path,
+    file_dir: &Path,
     crate_package: &str,
-    visited: &mut HashSet<PathBuf>,
-) -> Result<Vec<(Vec<syn::Item>, String, PathBuf)>, String> {
+    ancestors: &HashSet<PathBuf>,
+) -> Result<Vec<(Vec<syn::Item>, String, PathBuf, PathBuf, Option<PathBuf>)>, String> {
     let mut children = Vec::new();
     for item in items {
         let syn::Item::Mod(module_item) = item else {
             continue;
         };
-        // A `#[path]`-remapped module is located off the conventional path; not observed (a stated
-        // coverage bound, incl. the `cfg_attr`-wrapped spelling), never a silent claim of cleanliness.
+        let name = strip_raw(&module_item.ident.to_string());
+        let child_module = format!("{module}::{name}");
+        // An **unconditional** `#[path = "…"]` remap is now *followed* — its file (or inline body)
+        // observed — closing the relocated-module coverage gap (its `unsafe` sites / items were
+        // previously dropped, a false negative). rustc resolves a non-inline `#[path]` relative to
+        // `file_dir` — the directory a `#[path]` in the current position resolves from: the
+        // containing file's own dir at file scope, but with each **enclosing inline `mod`** name
+        // accumulated onto it (rustc adds the inline-module chain as directory components, so
+        // `mod inline { #[path="p.rs"] mod inner; }` in `a.rs` loads `<a.rs child dir>/inline/p.rs`,
+        // never `<a.rs dir>/p.rs`). `child_dir` is the conventional-child base and differs from
+        // `file_dir` for a non-mod-rs `name.rs`. A `#[path]`-loaded file is itself mod-rs-like, so
+        // ITS children resolve from the loaded file's own directory. An inline
+        // `#[path = "dir"] mod x { … }` relocates x's base to `<file_dir>/dir` for BOTH its
+        // file-children and any `#[path]` nested in its body — so that becomes the body's `file_dir`.
+        if let Some(rel) = direct_path_value(&module_item.attrs) {
+            match &module_item.content {
+                // Inline body relocated by `#[path = "dir"]`: `<file_dir>/dir` is the base for the
+                // body's file-children AND any `#[path]` written inside it, so it is the body's
+                // `file_dir` too (not the enclosing `file_dir` — the relocation accumulates).
+                Some((_, inner)) => {
+                    let relocated = file_dir.join(&rel);
+                    children.push((
+                        inner.clone(),
+                        child_module,
+                        relocated.clone(),
+                        relocated,
+                        None,
+                    ))
+                }
+                None => {
+                    let file = file_dir.join(&rel);
+                    if !file.is_file() {
+                        // An unconditional `#[path]` target must exist (rustc errors otherwise), so
+                        // an absent one is a genuine broken reference: fail loud (exit 2), never a
+                        // silent skip. A cfg-conditional `#[path]` is the `has_path_attr` skip below.
+                        return Err(missing_module_file_error(&child_module, crate_package));
+                    }
+                    let canon = canonicalize_source(&file)?;
+                    if ancestors.contains(&canon) {
+                        return Err(module_cycle_error(&child_module, crate_package, &file));
+                    }
+                    let parsed = read_parse(&file)?;
+                    // mod-rs-like: the loaded file's own directory is the base for both its
+                    // conventional children and any nested `#[path]` beneath it.
+                    let own_dir = file
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| file_dir.to_path_buf());
+                    children.push((
+                        parsed.items,
+                        child_module,
+                        own_dir.clone(),
+                        own_dir,
+                        Some(canon),
+                    ));
+                }
+            }
+            continue;
+        }
+        // A `cfg_attr`-wrapped `#[path]` is cfg-conditional: following it cfg-blind could read a
+        // file rustc does not compile here, so it stays a stated skip bound — and the conventional
+        // file is never governed in its place.
         if has_path_attr(&module_item.attrs) {
             continue;
         }
-        let name = strip_raw(&module_item.ident.to_string());
-        let child_module = format!("{module}::{name}");
         let sub_dir = child_dir.join(&name);
         match &module_item.content {
-            // Inline `mod x { … }`: descend its lexical items; file-children under `x/`.
-            Some((_, inner)) => children.push((inner.clone(), child_module, sub_dir)),
-            // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`.
+            // Inline `mod x { … }`: descend its lexical items (same file). Its own children — both
+            // conventional `mod y;` AND any `#[path]` nested in the body — resolve from `<child_dir>/x`
+            // (rustc accumulates the inline-module name as a directory component), so that dir is the
+            // body's `file_dir` too, NOT the enclosing `file_dir`. Getting this wrong drops a
+            // `#[path]` relocated inside an inline block onto the wrong file — a false negative.
+            Some((_, inner)) => {
+                children.push((inner.clone(), child_module, sub_dir.clone(), sub_dir, None))
+            }
+            // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`; the child's own
+            // `file_dir` is the located file's directory (`<dir>` for `x.rs`, `<dir>/x` for
+            // `x/mod.rs`), which is where a `#[path]` inside it resolves from.
             None => match locate_module_file(child_dir, &name) {
                 Some(file) => {
-                    // A file already visited (by canonical, symlink-resolved path) is a module cycle
-                    // — a symlinked directory looping the `mod` graph back on itself. Stop with a
-                    // scan error (exit 2 "cannot judge") rather than recursing into a stack overflow.
-                    if !visited.insert(canonicalize_source(&file)?) {
-                        return Err(format!(
-                            "cannot judge module '{child_module}' in package '{crate_package}': \
-                             its source file '{}' forms a module cycle (a symlink loop)",
-                            file.display()
-                        ));
+                    // A file already on the current descent path (an ANCESTOR, by canonical
+                    // symlink-resolved path) is a genuine module cycle — a symlinked directory or a
+                    // circular `#[path]` looping the `mod` graph back on itself. Stop with a scan
+                    // error (exit 2 "cannot judge") rather than recursing into a stack overflow. Two
+                    // *sibling/cousin* declarations legitimately resolving to one file (e.g.
+                    // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
+                    // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
+                    // misreport them (that would be a false positive on compilable input).
+                    let canon = canonicalize_source(&file)?;
+                    if ancestors.contains(&canon) {
+                        return Err(module_cycle_error(&child_module, crate_package, &file));
                     }
                     let parsed = read_parse(&file)?;
-                    children.push((parsed.items, child_module, sub_dir));
+                    let own_dir = file
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| sub_dir.clone());
+                    children.push((parsed.items, child_module, sub_dir, own_dir, Some(canon)));
                 }
                 // A `#[cfg]`-gated module may legitimately have no source file when the feature is
                 // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
@@ -223,13 +321,17 @@ fn resolve_child_modules(
     Ok(children)
 }
 
+// `child_dir` and `file_dir` are distinct module-resolution bases (see `resolve_child_modules`), not
+// bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
+#[allow(clippy::too_many_arguments)]
 fn walk_module(
     items: Vec<syn::Item>,
     module: String,
     child_dir: PathBuf,
+    file_dir: PathBuf,
     crate_package: &str,
     externs: &HashSet<String>,
-    visited: &mut HashSet<PathBuf>,
+    ancestors: &HashSet<PathBuf>,
     scan: &mut CrateScan,
 ) -> Result<(), String> {
     let uses = collect_uses(&items);
@@ -355,18 +457,43 @@ fn walk_module(
         }
     }
 
-    for (child_items, child_module, sub_dir) in
-        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
-    {
-        walk_module(
-            child_items,
-            child_module,
-            sub_dir,
-            crate_package,
-            externs,
-            visited,
-            scan,
-        )?;
+    for (child_items, child_module, sub_dir, sub_file_dir, opened) in resolve_child_modules(
+        &items,
+        &module,
+        &child_dir,
+        &file_dir,
+        crate_package,
+        ancestors,
+    )? {
+        // Extend the ancestor path with the child's own file (an inline body stays in the parent's
+        // file, so it inherits `ancestors` unchanged); each sibling branches from the SAME parent
+        // path, so a file shared across siblings is never mistaken for a cycle.
+        match opened {
+            Some(canon) => {
+                let mut child_ancestors = ancestors.clone();
+                child_ancestors.insert(canon);
+                walk_module(
+                    child_items,
+                    child_module,
+                    sub_dir,
+                    sub_file_dir,
+                    crate_package,
+                    externs,
+                    &child_ancestors,
+                    scan,
+                )?;
+            }
+            None => walk_module(
+                child_items,
+                child_module,
+                sub_dir,
+                sub_file_dir,
+                crate_package,
+                externs,
+                ancestors,
+                scan,
+            )?,
+        }
     }
     Ok(())
 }
@@ -388,17 +515,23 @@ pub(crate) fn walk_subtree_modules(
     crate_package: &str,
 ) -> Result<Vec<(String, Vec<syn::Item>)>, String> {
     let (items, file, child_dir) = resolve_module_root(src_dir, root_file, module, crate_package)?;
-    // Seed the cycle guard with the anchor module's own file, so a descendant symlinking back to it
+    // Seed the ancestor path with the anchor module's own file, so a descendant looping back to it
     // is caught — the same discipline `scan_crate` applies from the crate root.
-    let mut visited: HashSet<PathBuf> = HashSet::new();
-    visited.insert(canonicalize_source(&file)?);
+    let mut ancestors: HashSet<PathBuf> = HashSet::new();
+    ancestors.insert(canonicalize_source(&file)?);
+    // The anchor's own directory (its file's parent) is the base for a `#[path]` written in it.
+    let file_dir = file
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| child_dir.clone());
     let mut out: Vec<(String, Vec<syn::Item>)> = Vec::new();
     collect_subtree(
         items,
         module.to_string(),
         child_dir,
+        file_dir,
         crate_package,
-        &mut visited,
+        &ancestors,
         &mut out,
     )?;
     Ok(out)
@@ -411,21 +544,43 @@ fn collect_subtree(
     items: Vec<syn::Item>,
     module: String,
     child_dir: PathBuf,
+    file_dir: PathBuf,
     crate_package: &str,
-    visited: &mut HashSet<PathBuf>,
+    ancestors: &HashSet<PathBuf>,
     out: &mut Vec<(String, Vec<syn::Item>)>,
 ) -> Result<(), String> {
-    for (child_items, child_module, sub_dir) in
-        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
-    {
-        collect_subtree(
-            child_items,
-            child_module,
-            sub_dir,
-            crate_package,
-            visited,
-            out,
-        )?;
+    for (child_items, child_module, sub_dir, sub_file_dir, opened) in resolve_child_modules(
+        &items,
+        &module,
+        &child_dir,
+        &file_dir,
+        crate_package,
+        ancestors,
+    )? {
+        match opened {
+            Some(canon) => {
+                let mut child_ancestors = ancestors.clone();
+                child_ancestors.insert(canon);
+                collect_subtree(
+                    child_items,
+                    child_module,
+                    sub_dir,
+                    sub_file_dir,
+                    crate_package,
+                    &child_ancestors,
+                    out,
+                )?;
+            }
+            None => collect_subtree(
+                child_items,
+                child_module,
+                sub_dir,
+                sub_file_dir,
+                crate_package,
+                ancestors,
+                out,
+            )?,
+        }
     }
     out.push((module, items));
     Ok(())
@@ -541,6 +696,12 @@ struct UnsafeSiteCollector {
     // second (a false negative), the same injectivity `unsafe impl` already guards.
     current_owner: Option<String>,
     current_trait: Option<String>,
+    // The trait of the enclosing *trait `impl`* (`None` for an inherent impl), so a trait-impl
+    // `unsafe fn` is qualified by `<trait for self>` — else `impl Foo { unsafe fn m }` and
+    // `impl A for Foo { unsafe fn m }` (same self type), or `impl A for Foo` and `impl B for Foo`
+    // (same self type, different trait), collapse to one `unsafe fn Foo::m` and a baseline of one
+    // masks the other (a false negative). Self-type alone only separates *different* self types.
+    current_impl_trait: Option<String>,
 }
 
 /// Render a trait path for an `unsafe impl` label — segment idents joined by `::` (raw-stripped),
@@ -578,11 +739,15 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         if node.sig.unsafety.is_some() {
             let name = strip_raw(&node.sig.ident.to_string());
-            // Owner-qualify by the enclosing impl's self type (set in `visit_item_impl`), so two
-            // inherent `unsafe fn m` on different types in one module stay distinct findings.
-            let label = match &self.current_owner {
-                Some(owner) => format!("unsafe fn {owner}::{name}"),
-                None => format!("unsafe fn {name}"),
+            // Qualify by the enclosing impl (set in `visit_item_impl`): a *trait* impl by
+            // `<trait for self>`, an inherent impl by its self type alone. Self-type alone only
+            // separates *different* self types, so a trait-impl method and an inherent (or
+            // other-trait) method with the same name on the *same* self type would otherwise
+            // collapse to one finding and a baseline of one mask the other (a false negative).
+            let label = match (&self.current_impl_trait, &self.current_owner) {
+                (Some(tr), Some(owner)) => format!("unsafe fn <{tr} for {owner}>::{name}"),
+                (_, Some(owner)) => format!("unsafe fn {owner}::{name}"),
+                (_, None) => format!("unsafe fn {name}"),
             };
             self.labels.push(label);
         }
@@ -615,18 +780,25 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
             self.unsafe_impl_ordinal += 1;
             label
         });
+        // The implemented trait (if any), rendered once — reused for the `unsafe impl` label and to
+        // qualify the impl's inner `unsafe fn` methods as `<trait for self>` (injectivity above).
+        let impl_trait = node
+            .trait_
+            .as_ref()
+            .map(|(_, path, _)| render_trait_path(path));
         if node.unsafety.is_some() {
-            let label = match &node.trait_ {
-                Some((_, path, _)) => {
-                    format!("unsafe impl {} for {}", render_trait_path(path), owner)
-                }
+            let label = match &impl_trait {
+                Some(tr) => format!("unsafe impl {tr} for {owner}"),
                 None => format!("unsafe impl {owner}"),
             };
             self.labels.push(label);
         }
-        let prev = self.current_owner.replace(owner);
+        let prev_owner = self.current_owner.replace(owner);
+        let prev_trait = self.current_impl_trait.take();
+        self.current_impl_trait = impl_trait;
         visit::visit_item_impl(self, node);
-        self.current_owner = prev;
+        self.current_owner = prev_owner;
+        self.current_impl_trait = prev_trait;
     }
 
     fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
@@ -648,9 +820,10 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
 }
 
 /// Walk the whole crate from its root and collect every `unsafe` site with its enclosing module.
-/// Mirrors [`scan_crate`]'s descent (file + inline modules, symlink-cycle guard → exit 2, `#[path]`
-/// skipped as a stated bound, a non-`#[cfg]` missing module file → exit 2, a cfg-gated missing file
-/// tolerated). A separate, lighter walk than `scan_crate` (no re-export/alias/type-def resolution).
+/// Mirrors [`scan_crate`]'s descent (file + inline modules, ancestor-path cycle guard → exit 2, an
+/// unconditional `#[path]` followed / a `cfg_attr`-wrapped one skipped as a stated bound, a
+/// non-`#[cfg]` missing module file → exit 2, a cfg-gated missing file tolerated). A separate,
+/// lighter walk than `scan_crate` (no re-export/alias/type-def resolution).
 pub(crate) fn scan_unsafe_sites(
     src_dir: &Path,
     root_file: &Path,
@@ -658,14 +831,16 @@ pub(crate) fn scan_unsafe_sites(
 ) -> Result<Vec<UnsafeSite>, String> {
     let root = read_parse(root_file)?;
     let mut sites = Vec::new();
-    let mut visited: HashSet<PathBuf> = HashSet::new();
-    visited.insert(canonicalize_source(root_file)?);
+    let mut ancestors: HashSet<PathBuf> = HashSet::new();
+    ancestors.insert(canonicalize_source(root_file)?);
     walk_unsafe(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
+        // The crate root is mod-rs-like: its own directory is the `#[path]` base too.
+        src_dir.to_path_buf(),
         crate_package,
-        &mut visited,
+        &ancestors,
         &mut sites,
     )?;
     Ok(sites)
@@ -675,8 +850,9 @@ fn walk_unsafe(
     items: Vec<syn::Item>,
     module: String,
     child_dir: PathBuf,
+    file_dir: PathBuf,
     crate_package: &str,
-    visited: &mut HashSet<PathBuf>,
+    ancestors: &HashSet<PathBuf>,
     sites: &mut Vec<UnsafeSite>,
 ) -> Result<(), String> {
     // Feed the collector this module's items minus top-level `mod`s (walk-owned); body-nested
@@ -695,17 +871,38 @@ fn walk_unsafe(
         });
     }
 
-    for (child_items, child_module, sub_dir) in
-        resolve_child_modules(&items, &module, &child_dir, crate_package, visited)?
-    {
-        walk_unsafe(
-            child_items,
-            child_module,
-            sub_dir,
-            crate_package,
-            visited,
-            sites,
-        )?;
+    for (child_items, child_module, sub_dir, sub_file_dir, opened) in resolve_child_modules(
+        &items,
+        &module,
+        &child_dir,
+        &file_dir,
+        crate_package,
+        ancestors,
+    )? {
+        match opened {
+            Some(canon) => {
+                let mut child_ancestors = ancestors.clone();
+                child_ancestors.insert(canon);
+                walk_unsafe(
+                    child_items,
+                    child_module,
+                    sub_dir,
+                    sub_file_dir,
+                    crate_package,
+                    &child_ancestors,
+                    sites,
+                )?;
+            }
+            None => walk_unsafe(
+                child_items,
+                child_module,
+                sub_dir,
+                sub_file_dir,
+                crate_package,
+                ancestors,
+                sites,
+            )?,
+        }
     }
     Ok(())
 }

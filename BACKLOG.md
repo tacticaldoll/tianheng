@@ -11,39 +11,28 @@ not APIs. A new observation dimension is **a crate, born when it is built** (nev
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
 `guibiao` core stays `serde_json`-only.
 
-## Version horizons — what a 0.1.x patch carries vs what earns 0.2.0
+## Version horizons — what 0.2.x carries vs what earns the next breaking window
 
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
-patch, breaking → minor**, and never a vanity minor bump. The admitted 三儀 layer is
-complete, so the near-term line is **0.1.x, a patch line**:
+patch, breaking → minor**, and never a vanity minor bump. Version `0.2.0` shipped the first
+deliberate breaking window; the current line is **0.2.x**:
 
-- **0.1.x (patch)** — additive depth on an existing observation source (a born-when-built
-  capability that widens nothing already public), packaging / CI / license-bundling hygiene,
-  and governance-doc corrections. Every *additive* forward item below lands here.
-- **0.2.0 (minor, in preparation)** — earned by the breaking structured-violation identity now
-  built on `release/0.2.0`: `Violation::new` takes a typed `ViolationId`, version-2 baselines match
-  dimension-owned `FindingKey`s, and 渾儀 derives named semantic fields plus human text from one
-  typed fact (including typed public seams). The line also deliberately kept and shaped `guibiao`'s
-  widened public surface (`baseline` / `coverage` / `projection` / `check_and_cover`, made `pub` as
-  the price of the crate split — see `PROJECT.md`, Decisions). These are one honest breaking window,
-  not vanity minors. **The `guibiao` item was demand-gated, not automatic** (see the
-  product-identity note below): whether its widened surface is *narrowed* (treated as internal) or
-  *deliberately kept and shaped* (as the standalone static-linter product) is decided by whether
-  guibiao draws standalone adopters — narrowing a face someone relies on would cut a product's
-  potential. A further **breaking** candidate rides the same window *only if the 三儀-as-products
-  reaction arrives*: sinking the run / projection (SARIF) machinery from `tianheng` into `xuanji` —
-  the reaction runtime beneath the model — so a single 儀 + `xuanji` is a complete standalone check,
-  possibly generalizing `xuanji`'s Tianheng-specific vocabulary (`BoundaryKind` / `Polarity`). It is
-  0.2.0-windowed because it is breaking, but it does not fire without the product reaction.
-  Additive adopter-facing work (the LSP crate, the
-  adopter-facing 潛移 generator) does **not** force a minor: it rides whatever release is
-  current, a patch unless bundled with that breaking refinement. **Guardrail (reference-consumer
-  steer):** the 0.2.0 break is quarantined to the *internal* surfaces — the `Baseline` data model,
-  the `Violation::new` newtype, `guibiao`'s widened `pub` face — and **must never break the
-  adopter-written builder** (`Constitution` / `CrateBoundary` / `run` / `prelude`). A real
-  consumer's adoption story is a **drop-in swap**; breaking the builder breaks the zero-pain-upgrade
-  promise and damages Tianheng's own adoption curve. A stable builder face is the *price* of the
-  0.2.0 cleanup, not a casualty of it.
+- **0.2.x (patch)** — additive depth on an existing observation source, false-negative closures
+  that preserve the published API and version-2 identity wire, packaging / CI / license hygiene,
+  compatibility reactions, and governance-doc corrections. Size alone never earns a minor.
+- **Next breaking window (`0.3.0` only if earned)** — candidates that must reshape the published
+  reaction-inspection or baseline wire wait here: unsafe-site fact decomposition, a decision on
+  whether an async seam's rendered signature belongs to identity, and separation of stable rule
+  identity from human rule presentation. These candidates do not promise a `0.3.0`; one is promoted
+  only when a real adopter or correctness pressure justifies the break, and then the break earns the
+  minor. The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded
+  drop-in surface unless a separately demonstrated forcing function says otherwise.
+
+**The `0.2.0` window — SHIPPED.** Structured violation identity moved live findings to
+dimension-owned `FindingKey`s and version-2 baselines; the widened `guibiao` projection / baseline
+surface was kept and shaped because modou consumes it standalone. The composed adopter surface was
+compile-reacted against pacta's usage. Those decisions and their rationale now live in `PROJECT.md`;
+the post-0.2 pressure points below are follow-ups, not unfinished 0.2.0 scope.
 
 ### The crate family as products — identity now, product weight on reaction
 
@@ -82,10 +71,10 @@ awareness; let demand deepen it.
 - a 儀 actually adopted standalone, or an API that actually hurts in use;
 - API convergence (no churn across several patch releases).
 
-Until a trigger fires, staying 0.1.x is a **deliberate hold** (waiting for reaction), not drift.
+Until the trigger fired, staying 0.1.x was a **deliberate hold** (waiting for reaction), not drift.
 
-**Trigger fired (2026-07) — 0.2.0 window now open; the bundle above is active, not deferred.** Two
-adopters, two shapes (verified against their source):
+**Trigger fired (2026-07) — the 0.2.0 window opened and has now shipped.** Two adopters, two shapes
+(verified against their source) earned that window:
 
 - **`../pacta` (composed)** depends on `tianheng` + `guibiao`, drives one `Constitution` through
   `tianheng::run` / `check_all` (+ `guibiao::check_and_cover` for coverage). This is the
@@ -108,23 +97,85 @@ What each unblocks — the two gates are **not** one:
   widened surface, not sinking it**: modou re-exports guibiao's projection, so the sink would *break*
   modou; and the sink's dedup payoff needs *multiple* standalone 儀 (a hunyi/louke standalone product),
   which no adopter shows. Revisit only when that arrives — not before.
-- **Structured-baseline / typed-identity bundle → active in the 0.2.0 window.** The crux is *where the
-  per-dimension `FindingKey` union lives* without up-hoisting dimension vocabulary into `xuanji`
-  (三儀 ⊥ 三儀) or growing a generic value model in `xuanji` (serde_json-only). This is a
-  `design-boundaries` question **deferred to when the 0.2.0 work is actually built** (born-when-built —
-  do not lay the identity design ahead of its implementation); `pacta` + `modou` are the two drop-in
-  reference consumers bounding how far `Violation`/`ViolationId`/projection may move. Guardrails on the
-  axis: `reason` stays prose (潛移); the text finding becomes `render(fact)`, never the sole identity;
-  no resolver internals exposed as facts.
+- **Structured-baseline / typed-identity bundle → BUILT (0.2.0).** The per-dimension union resolved
+  as dimension-owned typed facts projected into 璇璣's vocabulary-neutral, flat `FindingKey`
+  envelope; no dimension vocabulary or resolver internals moved into the shared model. `reason`
+  stays prose (潛移), while the human finding is rendered from the same fact but never becomes the
+  sole version-2 identity. `pacta` + `modou` remain the reference consumers bounding future changes
+  to `Violation` / `ViolationId` / baseline projection; the settled rationale lives in
+  `PROJECT.md`, and the residual pressure is recorded below.
 - **P3 (un-auditable-probe file-granular re-mask, below) — re-evaluated: no single-point miss.** Two
   co-existing non-literal probes in one file react as one file-level violation (neither masked); the
   only masking is the *temporal* stale-baseline re-mask already recorded below as low-risk (surfaced by
-  `Baseline::stale`), which rides the structured-baseline wire window if ever tightened. Not a coverage
-  false negative; nothing to fix in 0.1.x.
+  `Baseline::stale`). Not a coverage false negative; do not re-key it in 0.2.x absent a stronger
+  reaction that justifies a stable per-probe locator.
 
-### Product maturity in the 0.1.x hold — DX and trust, all convention / CI-reaction
+### Post-0.2 structured-identity pressure — preserve the wire, promote only on reaction
 
-Reading as a **mature product** during the deliberate hold above is not new capability — it is
+Version 2 closed the live presentation-as-identity failure, but publishing the key also made each
+dimension's namespace, fact code, field names, canonical values, and the outer `target` / `rule`
+roles compatibility-bearing. Keep the current line honest without treating every pressure point as
+an invitation to redesign the model:
+
+- **Published identity-schema compatibility reaction — BUILT (0.2.x).** Each dimension owns an
+  exhaustive test catalog for every shipped fact family and identity-bearing discriminator. The
+  catalogs pin the 0.2.0 namespace, code, named fields, representative canonical values, and a real
+  production-emitted target/rule/key wiring case per dimension — never an entire presentation JSON
+  snapshot. Adding a fact or nested discriminator now requires an explicit catalog decision, while
+  finding wording remains free. Key-producing canonicalizers (`DependencyKind::key_label`, semantic
+  path/type/signature rendering, and the runtime unregistered `TypeId` discriminant) are marked as
+  published wire; the runtime discriminant retains its honest build-local stability bound. This is
+  a compatibility reaction only: no production behavior, key, public API, manifest, or package
+  version changed. The unsafe-site decomposition, async-seam identity, and rule-key separation below
+  remain breaking-window questions rather than being smuggled into the catalog work.
+- **Unsafe-site fact decomposition — next breaking-window candidate (strengthened by 0.2.1).**
+  `SemanticFact::UnsafeSite` still stores a pre-rendered `label` as one opaque key field beside
+  `module`, despite the collector observing those roles separately. 0.2.1 **widened that opacity**:
+  closing the trait-impl identity-collapse FN made a trait-impl unsafe fn's label carry the trait
+  role too — `unsafe fn <Trait for Owner>::method` (an inherent one stays `unsafe fn Owner::method`;
+  an impl stays `unsafe impl Trait for Owner`) — so the trait is now **identity-bearing**, not
+  presentation, and the single string crams form / trait / owner / name. The existing flat envelope
+  can already represent form / trait / owner / name / module as named scalar fields; no richer shared
+  value model is needed. The concrete cost of keeping the key opaque is now visible: that
+  trait-qualification re-keyed a trait-impl unsafe fn, so a 0.2.0 baseline entry for one resurfaces on
+  upgrade and must be re-accepted — a named-field decomposition would have localized the change to a
+  new field rather than churning the whole key. Do not re-key published version-2 baselines in a
+  patch. Anonymous `unsafe {}` remains deliberately module-granular, never ordinal-keyed.
+- **Async seam identity — decide in the next breaking window, do not assume the answer.** The
+  owner-qualified module/trait/type plus item name already identifies an async public seam, while
+  the current key additionally stores the rendered signature tail. Decide whether the observed
+  architectural fact is the seam or its exact declaration. If it is the seam, parameter/return
+  refactors should change presentation but not identity; removing `signature` is nevertheless a
+  version-2 wire break and cannot ride 0.2.x.
+- **Rule identity is still presentation-bearing — next reaction-model window.** `rule` remains both
+  human text and a `ViolationId` component (and SARIF `ruleId`); the runtime prod face additionally
+  folds the complete allowed-origin set into that string, so an unrelated allowlist edit changes
+  event identity. Treat existing labels as wire identifiers throughout 0.2.x. Revisit a stable
+  `rule_key` separate from human rule presentation only with a deliberate model/baseline migration,
+  not wording polish.
+- **Baseline metadata parse strictness — BUILT (0.2.x).** Omitted or explicit-null `owner` /
+  `tracker` parse as absence, strings are preserved, and every other JSON type now invalidates the
+  baseline instead of silently erasing governance metadata. The shared parser reacts for standalone
+  and composed consumers alike; the gate exits 2, while the explicit `--write-baseline` recovery
+  path retains its warning-before-fresh-snapshot behavior. Identity, canonical output, and the
+  version-1/version-2 matching contracts are unchanged.
+- **Legacy migration communication — BUILT (documentation only).** Version 1 remains supported by
+  exact `(target, rule, finding)` matching. The adopter workflow now names the existing
+  `--write-baseline` action as the bounded opt-in upgrade, tells wording-sensitive V1 users to
+  rewrite before presentation changes when suppression or metadata preservation matters, and states
+  that exact live matches carry metadata while stale entries drop with the fresh snapshot. No
+  migration command, wall-clock window, automatic read rewrite, or perpetual warning was added.
+- **Flat-envelope pressure trigger — watch, do not pre-build.** `FindingKey` is intentionally the
+  public, vocabulary-neutral shared chokepoint for identity instances, while schemas stay in their
+  dimensions. Revisit its flat string-field representation only when a real observed fact cannot
+  retain role separation, injectivity, and presentation-independent stability through named scalar
+  fields plus dimension-local canonicalization. Its place in the 0.2.x reaction-inspection contract
+  makes in-place reshaping costly; prefer a dimension-local or additive path unless the forcing fact
+  proves those insufficient.
+
+### Product maturity from the 0.1.x hold — shipped history and remaining DX/trust work
+
+Reading as a **mature product** during the deliberate hold was not new capability — it was
 **lower friction (DX) and higher trust**. This is the drift law applied to go-to-market: build no
 shell without a reaction, but polish the packaging and on-ramp of the observation mechanisms that
 already react. Everything here is **convention / CI-reaction hygiene — zero constitution boundaries,
@@ -172,20 +223,20 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   snippet.** A footprint *is* the product claim (圭表 syn-free and light; 渾儀 the one that *carries*
   the quarantined `syn` — honest, not "light"; 漏刻 `xuanji`-only), and a composed member's
   `Cargo.toml` (whole family + `syn`) cannot show any of them. The `guibiao`-standalone example
-  commits `[dependencies] guibiao = "0.1"` alone (syn-free, light); the `hunyi`-standalone commits
-  `hunyi = "0.1"` (which honestly pulls `syn` — the point is that the semantic instrument is *where
+  commits `[dependencies] guibiao = "0.2"` alone (syn-free, light); the `hunyi`-standalone commits
+  `hunyi = "0.2"` (which honestly pulls `syn` — the point is that the semantic instrument is *where
   syn lives*, not that it is light) — each footprint *demonstrated, not asserted*. 漏刻 has no
   standalone example (a top-down depth), so its `xuanji`-only footprint stays a copy-paste
   README/docs.rs snippet. Every crate's README still carries a ~10-line Constitution + a copy-paste
   GitHub Actions snippet (`tianheng check` on PRs) as prose — a snippet, not a published composite
   action (more weight; defer to a reaction).
 - **Committed-honest, CI-local (one resolution, not two forms in tension).** Every example commits
-  the adopter's real form — `guibiao = "0.1"` — so its `Cargo.toml` is copy-paste-honest and, for the
+  the adopter's real form — currently `guibiao = "0.2"` — so its `Cargo.toml` is copy-paste-honest and, for the
   standalone examples, *is* the footprint demo. To also track HEAD in CI (catch a local regression
   before it publishes), the CI script injects the `--config patch.crates-io.<crate>.path=` resolution
   the `packaged-selftest` job already uses — committed file honest, resolution local. A raw `path =`
   dep is **not** used for the standalone examples: it would falsify the footprint demo (an adopter
-  writes `= "0.1"`, never `path =`). The composed example, whose footprint is not the pitch, may use
+  writes a crates.io requirement, never `path =`). The composed example, whose footprint is not the pitch, may use
   `path =` freely.
 - **Decided — three examples: `composed` + `guibiao`-standalone + `hunyi`-standalone.** The two
   CI-time instruments each get their own runnable standalone demo (check-against-source, no runtime),
@@ -193,6 +244,23 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   on-ramp, not just a README snippet. 漏刻 has **no** standalone example — it is a top-down *depth*,
   so it appears only inside `composed` (run-mode). The accepted cost is the largest example-set to
   maintain; the "dogfood does not rot" CI candidate below is what keeps that cost bounded.
+- **0.2.x dogfood refresh — BUILT.** The three examples above remain the adoption funnel;
+  `unsafe-confinement` and `sans-io-pure` are focused capability demonstrations added only where the
+  family itself cannot honestly carry the law. One explicitly non-tutorial `capability-catalog`
+  owns the remaining published-family breadth (dependency-source metadata, external-crate
+  confinement, trait-impl locality, forbidden markers, dyn exposure, and impl-trait exposure),
+  asserting stable rule/FindingKey identities through the real composed evaluator and shell.
+  Tianheng's genuine self-Constitution now also runs through `check_constitution`, so self-governance
+  dogfoods static → semantic → always-run runtime audit without inventing fake self-law. This is a
+  frozen 0.2.x coverage ledger, not permission to add an example per modifier.
+- **Published-family completeness reaction — BUILT (0.2.x).** The examples gate now compares one
+  repository-only inventory with fulfilled reaction owners, counting a family only after its real
+  evaluator and structured identity assertions succeed. Unknown claims and missing owners both
+  fail loud and name the family. The inventory remains test governance: no public
+  `PublishedBoundaryFamily`, production metadata, violation field, baseline identity component, or
+  serialized-report field was added. OpenSpec/API review still decides whether a future insertion
+  path is a family, depth, modifier, or shorthand; once declared as a family, the executable ledger
+  prevents it from landing ownerless.
 - **Worked shape (for imitation — the DSL is real).** `composed` grows its constitution by one
   `.boundary()` per stage: `ModuleBoundary::in_crate("app").module("crate::domain")
   .must_not_import("crate::infra")` (圭表) → `SemanticBoundary::in_crate("app").module("crate::api")
@@ -265,11 +333,26 @@ zero pre-built empty shells** (the class of the branching ritual and license-bun
   anchor its maintenance into the release SOP — the entry written **on the release branch before its
   squash to `main`**, never independently.
 
-**Future — may graduate to CI reactions (defer; do not pre-build).** Two hygiene invariants become
-gates only when their drift actually bites, the way license-bundling became the "License texts
-bundled" job: (i) every example still passes its expected reaction (the dogfood does not rot); (ii)
-every `release: X.Y.Z` carries a matching CHANGELOG entry. Named as candidates, not built — no
-reaction without the pain.
+**0.2.x hygiene reactions — promote independently.** The examples gate now owns both halves of
+"dogfood does not rot": its existing behavior checks run every isolated example and assert the
+declared Tianheng reaction, while the **BUILT (0.2.x)** quality matrix first runs format, all-target
+Clippy, and warning-denied rustdoc in each isolated workspace using the same execution-time local
+patches. A real warning fixture proves quality failure stops before reaction acceptance; the first
+live matrix also corrected two safe public raw-pointer wrappers while leaving their deliberate
+unsafe-confinement reaction intact. The gate's **BUILT (0.2.x)** example-set reaction now also
+derives every immediate `examples/*/Cargo.toml` workspace and requires a fulfilled owner after its
+quality and declared reaction assertions; a forgotten directory or nonexistent claim fails loudly,
+independently of the published-family ledger. All machine projections and generated baselines live
+under one invocation-local, failure-cleaned temporary root, so parallel runs cannot share evidence.
+Separately, the release-readiness review found an empty
+`[Unreleased]`, stale 0.1.x compatibility prose, and repeated lockfile/version friction. The
+repository-state release-coherence gate is now **BUILT (0.2.x)**: it derives development,
+release-ready, and snapshot state from the exact release-commit spine and relates manifests,
+internal pins, CHANGELOG, and release-time lock entries without a wall clock, warning window, or
+Tianheng constitution boundary. Development requires adopter-facing notes but does not manufacture
+lock churn; release-ready and snapshot states require every version surface to agree. Its dedicated
+full-history CI job preserves the distinct observation source and repair direction rather than
+folding release integrity into generic polish machinery.
 
 **Rests on the spectrum + triggers** (the product-identity note above): 圭表 genuinely standalone ·
 渾儀 semi-product (a distinct, only partly-overlapping library-author audience) · 漏刻 a *depth* of
@@ -352,8 +435,8 @@ complement — show, then tell.
 
 ### 0.1.5 — known-depth consolidation · **SHIPPED**
 
-0.1.5 has converged from scope map to shipped state (0.1.6 through 0.1.10 have since shipped on top
-of it; 0.1.10 is the current line). Its built items are recorded once in the dimension / 三司 sections
+0.1.5 has converged from scope map to shipped state (0.1.6 through 0.1.10 and 0.2.0 have since shipped
+on top of it; 0.2.x is the current line). Its built items are recorded once in the dimension / 三司 sections
 below; the remaining forward work stays there as forward depth. The 0.2.0 bundle above remains the
 only currently named breaking line.
 
@@ -411,6 +494,16 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   lib/bin `src_path` as the compiled source root, and `#[path]`-remapped modules stay outside the
   reachable graph instead of being governed through a same-named conventional orphan file. This is
   a false-negative closure / stated-bound repair, not a new capability.
+  - **Forward candidate — follow unconditional `#[path]` in 圭表 (0.3.x depth, non-breaking).** As of
+    0.2.1, 渾儀 and 漏刻 **follow** an unconditional `#[path = "…"] mod x;` to its target (base = the
+    containing file's own dir with each enclosing inline-`mod` name accumulated onto it, rustc's
+    mod-rs-blind rule; `cfg_attr` stays a bound). 圭表 still holds the v0.1.4 posture of keeping such
+    modules outside its reachable `use`-graph — so it is now the **one dimension that diverges**: a
+    `use` edge inside a `#[path]`-relocated module is not governed by an import/confinement rule. The
+    observation source already exists (圭表's own `use`/`mod` byte scan); following the relocation
+    there — reusing the rustc base-directory rule the other two now share, staying `syn`-free — would
+    close the divergence. A depth (additive, false-negative closure), promoted when a real adopter
+    relocates a governed module; the three-dimension agreement is the correctness pressure, not size.
 - **Inline-module orphan-shadow**: **BUILT (v0.1.4)**. The inline twin of the `#[path]` orphan
   hazard: an inline-only `mod name { … }`'s same-named conventional file (`name.rs`/`name/mod.rs`)
   is now recognized as an orphan and excluded from the scanned file list, so an inline target stays
@@ -490,8 +583,13 @@ The observation-source fork is **resolved**: `syn` was chosen (stable; its synta
 coverage — glob / cross-crate re-export / macro / inference blindness, while local `pub use`
 chains, incl. multi-hop and aliased, *are* followed — is *stated*, never silently passed),
 over `cargo rustdoc --output-format json` (nightly + unstable format).
-Single-module resolution keeps `#[path]`-remapped modules outside scope instead of governing a
-same-named conventional orphan file (v0.1.4 hardening; stated-bound repair, not a new capability).
+Single-module and whole-crate resolution now **follow** an unconditional `#[path = "…"] mod x;` to
+its author-chosen file (0.2.1; base = the containing file's own directory with each enclosing
+inline-`mod` name accumulated onto it, matching rustc for mod-rs and non-mod-rs files), closing the
+coverage false negative where a relocated module's items were dropped. A `cfg_attr`-wrapped `#[path]`
+stays a cfg-blind bound; an absent unconditional target fails loud (exit 2). (The v0.1.4 posture of
+keeping `#[path]` modules outside scope — governing neither the target nor a same-named orphan — is
+**superseded**; 圭表 still holds that older bound, see its section.)
 
 - **Public-API type leakage — signature-coupling** (flagship): **BUILT.** "A module's public
   API must not *expose* a forbidden type" — depending on a type internally is fine; leaking
@@ -645,8 +743,9 @@ Forward depths (born when built, same `syn` source):
   `#![forbid]`; this keeps it declarative-not-lint (governs *where* `unsafe` lives, not *whether* it
   exists). Findings are per-module, per-kind (anonymous blocks dedup per module; the trait is in an
   `unsafe impl` finding for injectivity). Stated bounds: `#[unsafe(...)]` attributes, bare `unsafe fn`
-  pointer types, plain `extern "C" {}` blocks (call sites still react), and the inherited macro /
-  `#[path]` whole-crate-scan bounds. Two adversarial-review rounds hardened it (the propose review
+  pointer types, plain `extern "C" {}` blocks (call sites still react), and the inherited macro
+  whole-crate-scan bound (an unconditional `#[path]` module is now followed as of 0.2.1; a
+  `cfg_attr`-wrapped `#[path]` stays the bound). Two adversarial-review rounds hardened it (the propose review
   caught a body-nested-`mod` false negative → `visit_item_mod` left at default + only top-level `mod`
   filtered). Shipped as the OpenSpec change `semantic-unsafe-confinement`.
 - **Visibility ceiling — `max_visibility(Crate|Super|Module)`**: **BUILT (v0.1.8).** Generalizes the
@@ -720,11 +819,59 @@ Deferred / forward:
     is not mistaken for a macro), so a probe in a never-invoked macro body no longer counts. Shipped
     as an OpenSpec change modifying `runtime-origin-assertion`; 三儀 ⊥ 三儀 kept (no `strip_macro_bodies`
     import).
-  - **Probe in an unreachable/orphan `.rs` file counts.** louke scans the src subtree lexically with
-    no module-graph reachability; a probe in a dead orphan file is counted. Closing it needs a
-    reachability walk louke does not have and cannot borrow from 圭表 (三儀 ⊥ 三儀), and louke's prod
-    weight forbids a syn/heavy walker — a design-bearing follow-up (a louke-local reachability walk,
-    or the shell passing reachable files).
+  - **Probe in an unreachable/orphan `.rs` file counts — CLOSED for root-aware/composed audit
+    (0.2.x).** 天衡 now preserves exact Cargo target roots through 星表 and passes those files to a
+    louke-local, audit-only module walk. Only the root, inline bodies in reachable files, and
+    conventionally resolved `mod name;` descendants count; undeclared or inline-shadow sibling
+    files cannot cover a seam. 漏刻 still imports neither 圭表 nor `syn`, and its production face
+    remains unchanged. Existing direct callers that pass directories retain the recursive corpus
+    for source compatibility; passing root files opts into reachability. An unconditional
+    `#[path]`-remapped module is now **followed** to its target (0.2.1, see the `#[path]` sub-bullets
+    below) rather than excluded; a `cfg_attr`-wrapped one stays an explicit bound. A shared
+    reachability substrate still waits for a second dimension proving genuinely shared semantics.
+    - **`#[path]` detection tightened — 0.2.1 adversarial review (CLOSED).** Detection was a raw
+      `path` substring scan of the module preamble, so a `// fast path` comment or a
+      `#[cfg(feature = "fastpath")]` misclassified a *reachable* module (mis-resolving its file) — a
+      **silent coverage FN** risk. Now detected structurally (an outer attribute whose meta name is
+      exactly `path`, comments and unrelated attributes skipped); `#[cfg_attr(.., path = ..)]` stays a
+      bound. Two pins guard it.
+    - **Unconditional `#[path]` followed with rustc fidelity — 0.2.1 re-review (CLOSED).** Beyond
+      detecting the attribute, 漏刻 (with 渾儀) now **follows** an unconditional `#[path]` to its file
+      so a relocated module's probes count (closing the drop-the-relocated-module FN). Three
+      rustc-fidelity corrections landed under adversarial review, each with a real-`rustc`-1.96
+      ground-truth test: (1) the base is the **containing file's own directory**, not the
+      conventional-child dir — mod-rs-blind; (2) with each enclosing **inline-`mod`** name accumulated
+      onto it, so a `#[path]` inside `mod inline { … }` reads `inline/p.rs`, never a same-named orphan
+      (the inline-nested base bug was a silent exit-0 drop — the forbidden FN); (3) the byte scanner
+      **decodes the path literal's escapes** (`\x`/`\u{}`, raw strings) as syn does, so 漏刻 and 渾儀
+      resolve the same file (twin-drift parity). 渾儀's whole-crate walk also stopped misreporting two
+      declarations sharing one `#[path]` target as a false module cycle (ancestor-path guard, not a
+      monotonic visited set); 漏刻 already accepted such input. `runtime-origin-assertion` and
+      `semantic-unsafe-confinement` carry the scenarios; louke stays `syn`-free (三儀 ⊥ 三儀).
+    - **`cfg`-gated module whose file is absent is now tolerated — 0.2.1 review, CLOSED.**
+      louke's walker errored on *any* unresolvable reachable module, so a `#[cfg(windows)] mod win;`
+      with no `win.rs` on a non-Windows checkout hard-failed the audit, breaking cross-platform
+      adopters. This was **not** a deliberate bound (an earlier triage wrongly kept it as one): 渾儀
+      already tolerates exactly this case (cfg-gated absent → skip; non-cfg absent → exit 2), so
+      louke was merely inconsistent with its sibling dimension. Fixed to match — a
+      `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module with no file is skipped (it compiles no probes in
+      this configuration, so skipping cannot silently cover a seam: no FN weakening), while a non-cfg
+      missing module and a resolution ambiguity stay fail-loud. Not `cfg` evaluation: a resolvable
+      cfg-gated module is still scanned. `runtime-origin-assertion` updated with a scenario; louke
+      stays `syn`-free (byte-level detection, 三儀 ⊥ 三儀).
+    - **Forward candidate — `cfg_attr(pred, path=…)` cfg-blindness, both directions (0.3.x depth).**
+      A `cfg_attr`-wrapped `#[path]` is a stated bound today (not followed, because following it
+      cfg-blind could read a file rustc does not compile in this configuration). The 0.2.1 re-review
+      confirmed the bound masks a genuine two-directional divergence when the predicate is *active*
+      (e.g. `unix` on a unix host): rustc compiles the relocated file and ignores the conventional
+      one, but (a) 渾儀's whole-crate walk **drops the whole module** (an in-domain FN — a real
+      `unsafe`/marker in the compiled relocated file goes unobserved), and (b) 漏刻 **scans the
+      conventional file** rustc never compiles (an FP on dead code, and an FN on the compiled file's
+      seam). Neither dimension evaluates `cfg` (by design, 三儀 ⊥ 三儀), so no single cfg-blind file is
+      universally correct. The **FN-safe design is observe-both**: union the relocated *and*
+      conventional files (a probe/`unsafe` in *either* configuration reacts), which neither dimension
+      does today. A depth, promoted only if a real adopter's `cfg_attr` relocation hides a site — the
+      current stated bound is honest, not silent. (`cfg` evaluation itself stays a permanent non-goal.)
   - **`member_src_dirs` silently skips a lib/bin-less member.** `crate_root_file` returns `None` for
     a member with no lib/bin target (proc-macro/test-only), genuinely out of the audit corpus; a
     lib/bin target always carries a `src_path`, so the "resolvable-but-absent" case is unreachable in

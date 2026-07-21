@@ -4,6 +4,7 @@
 //! presentation can change without silently changing baseline identity.
 
 use crate::resolve::{ShapeExposure, strip_raw, type_to_string};
+use crate::syn_util::VisibleItemKind;
 use xuanji::{Finding, FindingKey};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -375,7 +376,7 @@ pub(crate) enum SemanticFact {
     },
     Visibility {
         visibility: String,
-        item_kind: &'static str,
+        item_kind: VisibleItemKind,
         item_name: String,
     },
     UnsafeSite {
@@ -417,10 +418,14 @@ impl std::fmt::Display for SemanticFact {
                 visibility,
                 item_kind,
                 item_name,
-            } => match *item_kind {
-                "trait_alias" => write!(f, "{visibility} trait {item_name} (alias)"),
-                "extern_crate" => write!(f, "{visibility} extern crate {item_name}"),
-                kind => write!(f, "{visibility} {kind} {item_name}"),
+            } => match item_kind {
+                VisibleItemKind::TraitAlias => {
+                    write!(f, "{visibility} trait {item_name} (alias)")
+                }
+                VisibleItemKind::ExternCrate => {
+                    write!(f, "{visibility} extern crate {item_name}")
+                }
+                kind => write!(f, "{visibility} {} {item_name}", kind.as_str()),
             },
             Self::UnsafeSite { label, module } => write!(f, "{label} in {module}"),
         }
@@ -509,7 +514,7 @@ impl SemanticFact {
             } => (
                 "visibility_exposure",
                 vec![
-                    ("item_kind", item_kind),
+                    ("item_kind", item_kind.as_str()),
                     ("item_name", item_name),
                     ("visibility", visibility),
                 ],
@@ -650,10 +655,14 @@ pub(crate) fn member_label(index: usize, field: &syn::Field) -> String {
     }
 }
 
-/// Render a signature's `(params) -> ret` tail for an owner-qualified finding — for readability and
-/// extra collision-margin, NOT to represent the implicit future. Params render each input's type
-/// via [`type_to_string`] (a receiver as `self`/`&self`/`&mut self`); the return renders
-/// `sig.output`'s written type (empty for `-> ()`); an unrenderable type contributes `_`.
+/// Canonicalize a signature's `(params) -> ret` tail for an owner-qualified async fact.
+///
+/// The tail improves the human finding's readability and collision margin, but it is also stored in
+/// the version-2 `signature` key field. Its exact byte form is therefore published baseline wire;
+/// whitespace or type-rendering polish is an identity change even though this does NOT represent the
+/// compiler's implicit future. Params render each input's type via [`type_to_string`] (a receiver as
+/// `self`/`&self`/`&mut self`); the return renders `sig.output`'s written type (empty for `-> ()`);
+/// an unrenderable type contributes `_`.
 pub(crate) fn render_sig_tail(sig: &syn::Signature) -> String {
     let params: Vec<String> = sig
         .inputs
@@ -692,6 +701,214 @@ pub(crate) fn render_sig_tail(sig: &syn::Signature) -> String {
 #[cfg(test)]
 mod fact_tests {
     use super::*;
+
+    fn published_exposure_code(kind: ExposureKind) -> &'static str {
+        match kind {
+            ExposureKind::Signature => "signature_exposure",
+            ExposureKind::DynTrait => "dyn_trait_exposure",
+            ExposureKind::ImplTrait => "impl_trait_exposure",
+        }
+    }
+
+    fn published_item_kind(kind: &ItemKind) -> &'static str {
+        match kind {
+            ItemKind::Struct => "struct",
+            ItemKind::Enum => "enum",
+            ItemKind::Union => "union",
+            ItemKind::Type => "type",
+            ItemKind::Const => "const",
+            ItemKind::Static => "static",
+            ItemKind::Trait => "trait",
+        }
+    }
+
+    fn published_member_kind(kind: &MemberKind) -> &'static str {
+        match kind {
+            MemberKind::Field => "field",
+            MemberKind::Variant => "variant",
+        }
+    }
+
+    fn published_assoc_kind(kind: &AssocKind) -> &'static str {
+        match kind {
+            AssocKind::Const => "const",
+            AssocKind::Type => "type",
+        }
+    }
+
+    fn published_visibility_item_kind(kind: VisibleItemKind) -> &'static str {
+        match kind {
+            VisibleItemKind::Fn => "fn",
+            VisibleItemKind::Struct => "struct",
+            VisibleItemKind::Enum => "enum",
+            VisibleItemKind::Union => "union",
+            VisibleItemKind::Type => "type",
+            VisibleItemKind::Const => "const",
+            VisibleItemKind::Static => "static",
+            VisibleItemKind::Trait => "trait",
+            VisibleItemKind::TraitAlias => "trait_alias",
+            VisibleItemKind::Mod => "mod",
+            VisibleItemKind::ExternCrate => "extern_crate",
+            VisibleItemKind::Use => "use",
+        }
+    }
+
+    fn published_position_fields(position: &TraitImplPosition) -> Vec<(&'static str, &str)> {
+        match position {
+            TraitImplPosition::TraitArg => vec![("seam_position", "trait_arg")],
+            TraitImplPosition::SelfType => vec![("seam_position", "self")],
+            TraitImplPosition::Where(subject) => vec![
+                ("seam_position", "where"),
+                ("seam_position_subject", subject),
+            ],
+            TraitImplPosition::Assoc(name) => {
+                vec![("seam_position", "assoc"), ("seam_position_name", name)]
+            }
+            TraitImplPosition::MethodReturn(name) => vec![
+                ("seam_position", "method_return"),
+                ("seam_position_name", name),
+            ],
+        }
+    }
+
+    fn published_seam_fields(seam: &PublicSeam) -> Vec<(&'static str, &str)> {
+        match seam {
+            PublicSeam::FreeFn { module, name } => vec![
+                ("seam_kind", "free_fn"),
+                ("seam_module", module),
+                ("seam_name", name),
+            ],
+            PublicSeam::InherentMethod { owner, name } => vec![
+                ("seam_kind", "inherent_method"),
+                ("seam_owner", owner),
+                ("seam_name", name),
+            ],
+            PublicSeam::InherentAssoc { kind, owner, name } => vec![
+                ("seam_kind", "inherent_assoc"),
+                ("seam_item_kind", published_assoc_kind(kind)),
+                ("seam_owner", owner),
+                ("seam_name", name),
+            ],
+            PublicSeam::TraitMethod {
+                module,
+                trait_name,
+                name,
+            } => vec![
+                ("seam_kind", "trait_method"),
+                ("seam_module", module),
+                ("seam_trait", trait_name),
+                ("seam_name", name),
+            ],
+            PublicSeam::Item { kind, module, name } => vec![
+                ("seam_kind", "item"),
+                ("seam_item_kind", published_item_kind(kind)),
+                ("seam_module", module),
+                ("seam_name", name),
+            ],
+            PublicSeam::Member {
+                kind,
+                module,
+                owner,
+                member,
+            } => vec![
+                ("seam_kind", "member"),
+                ("seam_item_kind", published_member_kind(kind)),
+                ("seam_module", module),
+                ("seam_owner", owner),
+                ("seam_member", member),
+            ],
+            PublicSeam::TraitAssoc {
+                kind,
+                module,
+                trait_name,
+                name,
+            } => vec![
+                ("seam_kind", "trait_assoc"),
+                ("seam_item_kind", published_assoc_kind(kind)),
+                ("seam_module", module),
+                ("seam_trait", trait_name),
+                ("seam_name", name),
+            ],
+            PublicSeam::InherentGenerics { owner } => {
+                vec![("seam_kind", "inherent_generics"), ("seam_owner", owner)]
+            }
+            PublicSeam::Reexport { module, exported } => vec![
+                ("seam_kind", "reexport"),
+                ("seam_module", module),
+                ("seam_name", exported),
+            ],
+            PublicSeam::ExternCrate { name } => {
+                vec![("seam_kind", "extern_crate"), ("seam_name", name)]
+            }
+            PublicSeam::TraitImpl {
+                trait_ref,
+                owner,
+                position,
+            } => {
+                let mut fields = vec![
+                    ("seam_kind", "trait_impl"),
+                    ("seam_trait", trait_ref.as_str()),
+                    ("seam_owner", owner.as_str()),
+                ];
+                fields.extend(published_position_fields(position));
+                fields
+            }
+        }
+    }
+
+    fn assert_semantic_fact_is_cataloged(fact: &SemanticFact) {
+        match fact {
+            SemanticFact::Exposed {
+                kind,
+                subject: _,
+                seam,
+            } => {
+                published_exposure_code(*kind);
+                published_seam_fields(seam);
+            }
+            SemanticFact::MisplacedImpl {
+                module: _,
+                trait_ref: _,
+                owner: _,
+            }
+            | SemanticFact::ForbiddenImpl {
+                marker: _,
+                owner: _,
+                module: _,
+            } => {}
+            SemanticFact::ForbiddenDerive {
+                marker: _,
+                canonical: _,
+            } => {}
+            SemanticFact::AsyncFreeFn {
+                module: _,
+                name: _,
+                tail: _,
+            }
+            | SemanticFact::AsyncTraitMethod {
+                module: _,
+                trait_name: _,
+                name: _,
+                tail: _,
+            } => {}
+            SemanticFact::AsyncInherentMethod {
+                owner: _,
+                name: _,
+                tail: _,
+            } => {}
+            SemanticFact::Visibility {
+                visibility: _,
+                item_kind,
+                item_name: _,
+            } => {
+                published_visibility_item_kind(*item_kind);
+            }
+            SemanticFact::UnsafeSite {
+                label: _,
+                module: _,
+            } => {}
+        }
+    }
 
     fn exposure(kind: ExposureKind, module: &str, name: &str) -> SemanticFact {
         SemanticFact::Exposed {
@@ -860,16 +1077,21 @@ mod fact_tests {
         ];
         let keys: std::collections::BTreeSet<_> = seams
             .iter()
-            .cloned()
             .map(|seam| {
-                SemanticFact::Exposed {
+                let mut expected_fields = published_seam_fields(seam);
+                expected_fields.push(("subject", "Port"));
+                expected_fields.sort_by_key(|(name, _)| *name);
+                let fact = SemanticFact::Exposed {
                     kind: ExposureKind::Signature,
                     subject: "Port".into(),
-                    seam,
-                }
-                .into_finding()
-                .key()
-                .clone()
+                    seam: seam.clone(),
+                };
+                assert_semantic_fact_is_cataloged(&fact);
+                let finding = fact.into_finding();
+                assert_eq!(finding.key().namespace(), "hunyi");
+                assert_eq!(finding.key().code(), "signature_exposure");
+                assert_eq!(finding.key().fields().collect::<Vec<_>>(), expected_fields);
+                finding.key().clone()
             })
             .collect();
         assert_eq!(keys.len(), seams.len());
@@ -970,7 +1192,7 @@ mod fact_tests {
             (
                 SemanticFact::Visibility {
                     visibility: "pub".into(),
-                    item_kind: "fn",
+                    item_kind: VisibleItemKind::Fn,
                     item_name: "run".into(),
                 },
                 "visibility_exposure",
@@ -990,11 +1212,100 @@ mod fact_tests {
             ),
         ];
         for (fact, code, expected_fields) in cases {
+            assert_semantic_fact_is_cataloged(&fact);
             let finding = fact.into_finding();
             let fields: Vec<_> = finding.key().fields().collect();
+            assert_eq!(finding.key().namespace(), "hunyi");
             assert_eq!(finding.key().code(), code, "{}", finding.text());
             assert_eq!(fields, expected_fields, "{}", finding.text());
         }
+    }
+
+    #[test]
+    fn every_exposure_kind_has_its_exact_published_code() {
+        for kind in [
+            ExposureKind::Signature,
+            ExposureKind::DynTrait,
+            ExposureKind::ImplTrait,
+        ] {
+            let expected_code = published_exposure_code(kind);
+            let fact = exposure(kind, "crate::api", "run");
+            assert_semantic_fact_is_cataloged(&fact);
+            let finding = fact.into_finding();
+            assert_eq!(finding.key().namespace(), "hunyi");
+            assert_eq!(finding.key().code(), expected_code);
+            assert_eq!(
+                finding.key().fields().collect::<Vec<_>>(),
+                vec![
+                    ("seam_kind", "free_fn"),
+                    ("seam_module", "crate::api"),
+                    ("seam_name", "run"),
+                    ("subject", "Port"),
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn every_visibility_item_kind_has_its_exact_published_value() {
+        for kind in [
+            VisibleItemKind::Fn,
+            VisibleItemKind::Struct,
+            VisibleItemKind::Enum,
+            VisibleItemKind::Union,
+            VisibleItemKind::Type,
+            VisibleItemKind::Const,
+            VisibleItemKind::Static,
+            VisibleItemKind::Trait,
+            VisibleItemKind::TraitAlias,
+            VisibleItemKind::Mod,
+            VisibleItemKind::ExternCrate,
+            VisibleItemKind::Use,
+        ] {
+            assert_eq!(kind.as_str(), published_visibility_item_kind(kind));
+        }
+    }
+
+    #[test]
+    fn key_renderers_are_pinned_as_version_two_wire() {
+        let signature: syn::Signature =
+            syn::parse_str("async fn run(&self, value: crate::Port) -> crate::Reply").unwrap();
+        assert_eq!(
+            render_sig_tail(&signature),
+            "(&self, crate::Port) -> crate::Reply"
+        );
+
+        let ty: syn::Type = syn::parse_str("Vec<crate::Port>").unwrap();
+        assert_eq!(type_to_string(&ty).as_deref(), Some("Vec<crate::Port>"));
+
+        // canonical_self_owner + render_last_segment_args also produce the byte content of the
+        // version-2 owner / seam_owner / trait key fields (trait_impl / forbidden_marker /
+        // inherent-seam facts). Their exact form — including the positional `_#{ordinal}` fallback
+        // a maintainer might mistake for free presentation — is baseline wire too, so pin it.
+        let uses: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let owner: syn::Type = syn::parse_str("Repo<crate::Id>").unwrap();
+        assert_eq!(
+            crate::resolve::canonical_self_owner(&owner, &uses, "app::infra", 0),
+            "app::infra::Repo<crate::Id>"
+        );
+        // Base resolves but the generic arg is an unrenderable const expression: the readable base
+        // is kept and the arg disambiguated by the block's ordinal (injective, not a collapse).
+        let const_owner: syn::Type = syn::parse_str("Arr<{ N + 1 }>").unwrap();
+        assert_eq!(
+            crate::resolve::canonical_self_owner(&const_owner, &uses, "app::infra", 7),
+            "app::infra::Arr<_#7>"
+        );
+
+        let bare: syn::Path = syn::parse_str("Foo").unwrap();
+        assert_eq!(
+            crate::resolve::render_last_segment_args(&bare).as_deref(),
+            Some("")
+        );
+        let generics: syn::Path = syn::parse_str("Foo<u8, T>").unwrap();
+        assert_eq!(
+            crate::resolve::render_last_segment_args(&generics).as_deref(),
+            Some("<u8, T>")
+        );
     }
 
     #[test]

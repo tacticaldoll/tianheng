@@ -20,7 +20,9 @@ use scan::scan_source;
 
 /// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** (the
 /// authoritative seam set — the constitution, not a source scan for declarations) by scanning
-/// the workspace's `src_dirs` for `assert_boundary!` probes. Reacts, with the static
+/// the workspace's source inputs for `assert_boundary!` probes. A file input is treated as an
+/// exact Cargo target root and walked through reachable modules; a directory input retains the
+/// legacy recursive corpus for source compatibility. Reacts, with the static
 /// dimensions' exit-code contract, in both directions plus an un-auditable case:
 ///
 /// - **declared-but-unprobed** — a declared seam with no literal probe → a `Violation` at the
@@ -44,11 +46,22 @@ use scan::scan_source;
 /// covering its seam, so a seam whose *only* probe is compiled out of the production binary
 /// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
 ///
+/// **`#[path]` relocation (followed, with a narrowed bound):** an **unconditional**
+/// `#[path = "…"] mod name;` is followed to its author-chosen file and its probes are counted — the
+/// base is the directory a conventional `mod name;` would use, and the loaded file is mod-rs-like,
+/// so its own children resolve from its directory. A **`cfg_attr`-wrapped** `#[path]` is
+/// cfg-conditional and its relocation is **not** followed (following it cfg-blind could read a file
+/// rustc does not compile in this configuration): the *relocated* file's probes are not counted, and
+/// — being cfg-blind — the scan instead resolves the module conventionally, counting the
+/// conventional `name.rs` if one is present (even where an active predicate makes rustc compile the
+/// relocated file and ignore the conventional one). This is the same cfg-blindness as the
+/// `#[cfg(test)]` bound above, in both directions; it is a stated bound, not exact rustc fidelity.
+///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
-pub fn audit_probe_coverage(declared: &[RuntimeBoundary], src_dirs: &[PathBuf]) -> Outcome {
+pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
     let mut probes = Vec::new();
-    for dir in src_dirs {
-        if let Err(message) = collect_probes(dir, &mut probes) {
+    for input in source_inputs {
+        if let Err(message) = collect_probes(input, &mut probes) {
             return Outcome::ConstitutionError(message);
         }
     }

@@ -12,6 +12,59 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-21
+
+### Changed
+- Published finding schemas and their dimension-local canonicalizers are now exhaustively pinned as
+  compatibility reactions. Human finding wording remains presentation and is deliberately not
+  snapshot-frozen.
+- The baseline guide now documents the existing `--write-baseline` operation as the bounded,
+  explicit V1-to-V2 upgrade path, including metadata carry-forward and stale-entry removal.
+- 圭表 `must_not_import` now documents a stated partial-coverage bound: a `use`-glob of an
+  *ancestor* of the forbidden module (`use crate::*;` while forbidding `crate::secret`) is observed
+  at the glob's base, not as the forbidden descendant edge, so it does not react — forbid or confine
+  the parent. The narrow `use crate::secret;` / `use crate::secret::*;` forms are caught as before.
+
+### Fixed
+- 渾儀 unsafe-confinement now qualifies a **trait-impl** `unsafe fn` by `<trait for self>`
+  (`unsafe fn <A for Foo>::m`), not its self type alone: on one self type, an inherent `unsafe fn m`,
+  `impl A for Foo { unsafe fn m }`, and `impl B for Foo { unsafe fn m }` are three distinct sites and
+  now stay three findings. Previously all collapsed to `unsafe fn Foo::m`, so a baseline of one
+  silently accepted a later-added trait-impl `unsafe fn` on a safe trait — a false negative, the
+  trait-impl case 0.2.0's notes already claimed owner-qualified. *Baseline note:* this changes the
+  `finding_key` of a trait-impl `unsafe fn`, so a 0.2.0 baseline entry for one resurfaces on upgrade
+  and must be re-accepted (`--write-baseline`); unsafe-confinement is one release old, so the
+  affected surface is minimal.
+- Baseline `owner` / `tracker` metadata now rejects non-string JSON values instead of silently
+  erasing malformed governance data; the CLI gate fails as a constitution error and explicit
+  rewrite retains its warning-before-recovery behavior.
+- Runtime probe coverage now starts from every exact Cargo library and binary target root and walks
+  only module-reachable source, so an orphan `.rs` file can no longer satisfy a seam it never
+  enforces. Direct callers that pass a directory retain the legacy recursive corpus.
+- 渾儀 and 漏刻 now **follow** an unconditional `#[path = "…"] mod x;` to its author-chosen file,
+  closing a coverage false negative: a relocated module's `unsafe` sites, trait impls, and
+  `assert_boundary!` probes were previously dropped, so a disallowed impl or an undeclared-seam probe
+  in a relocated module passed unobserved (semantic single-module boundaries on such a module errored
+  loudly rather than governing it). The target is resolved with rustc fidelity — relative to the
+  containing file's own directory, accumulating each enclosing inline-`mod` name as a directory
+  component (so `mod inline { #[path="p.rs"] mod inner; }` reads `inline/p.rs`), with the path
+  literal's escapes decoded as rustc and syn do; the two independent dimensions resolve the same
+  file, and two declarations sharing one target (or a conventional `mod` plus a `#[path]` alias to
+  it) are governed under each path rather than misread as a module cycle. A `#[path]`-loaded file is
+  mod-rs-like, so its own children resolve from its directory. A `cfg_attr`-wrapped `#[path]` stays a
+  stated bound — not followed cfg-blind, since it could observe a file rustc does not compile in this
+  configuration — and an absent unconditional target is a fail-loud constitution error. Both
+  dimensions detect the attribute structurally, so an incidental `path` substring in a comment or a
+  `#[cfg(feature = "fastpath")]` gate is never mistaken for a relocation. As with any false-negative
+  closure, a downstream carrying a real violation inside a relocated module may see green CI turn red
+  on upgrade — adopt via `warn` / `Baseline` (the same patch-level precedent as the v0.1.3 re-export
+  closure).
+- The probe-coverage walker now tolerates a `#[cfg(...)]`/`#[cfg_attr(...)]`-gated module whose file
+  is absent in the current configuration (an off feature or another platform), skipping it instead
+  of failing the audit — matching the semantic dimension, so a cross-platform workspace no longer
+  hard-errors on a platform-specific module. A non-cfg missing module and a resolution ambiguity
+  remain fail-loud.
+
 ## [0.2.0] - 2026-07-20
 
 The first **breaking** window since `0.1.0` — a deliberate `0.2.0` minor (the `0.1.x` hold ended
@@ -228,7 +281,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.10...v0.2.0
 [0.1.10]: https://github.com/tacticaldoll/tianheng/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/tacticaldoll/tianheng/compare/v0.1.8...v0.1.9

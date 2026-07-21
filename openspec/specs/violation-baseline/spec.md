@@ -71,6 +71,39 @@ SHALL be an error.
 - **WHEN** a parsed version-1 baseline is serialized without rebuilding it from current violations
 - **THEN** it remains version 1 with the same legacy text identities rather than emitting fabricated structured keys
 
+### Requirement: Optional baseline metadata has a strict input type
+
+For every version-1 and version-2 baseline entry, the parser SHALL accept `owner` and `tracker` only
+when each field is absent, JSON null, or a JSON string. Absent and null fields SHALL represent no
+annotation, while a string SHALL be preserved as metadata. Any other JSON type SHALL make the
+baseline malformed rather than silently removing the annotation. Generated baselines SHALL continue
+to omit unset metadata fields.
+
+#### Scenario: Omitted and null metadata are absent
+
+- **WHEN** an entry omits `owner` or `tracker`, or supplies either field as JSON null
+- **THEN** the baseline parses with that annotation absent and serialization omits the unset field
+
+#### Scenario: String metadata is preserved
+
+- **WHEN** an entry supplies `owner` or `tracker` as a JSON string
+- **THEN** the baseline preserves that exact string across parse and serialization
+
+#### Scenario: Wrong-typed metadata invalidates the baseline
+
+- **WHEN** a present `owner` or `tracker` is a number, boolean, array, or object
+- **THEN** baseline parsing fails with an error identifying the malformed metadata field
+
+#### Scenario: Gating fails loud on malformed metadata
+
+- **WHEN** `tianheng check --baseline` reads a baseline containing wrong-typed optional metadata
+- **THEN** the command reports an invalid baseline and exits as a scan error rather than gating with the annotation silently absent
+
+#### Scenario: Explicit rewrite warns before metadata loss
+
+- **WHEN** `tianheng check --write-baseline` reads a prior baseline containing wrong-typed optional metadata
+- **THEN** it warns that the prior baseline could not be parsed and that metadata will not be carried forward before writing a fresh snapshot
+
 ### Requirement: Gate suppresses baselined violations and fails only on new ones
 
 In gate mode the system SHALL classify each current violation against the baseline. A current
@@ -160,3 +193,27 @@ standard error that metadata was not carried forward. A missing file SHALL NOT w
 
 - **WHEN** an existing baseline cannot be read or parsed during a write action
 - **THEN** the action warns that metadata is not carried forward, writes a fresh version-2 baseline, and exits 0
+
+### Requirement: Legacy baseline upgrade is a documented bounded operation
+
+Adopter-facing baseline documentation SHALL identify the existing `--write-baseline` action as the
+explicit opt-in upgrade from a readable version-1 text baseline to a version-2 structured snapshot.
+It SHALL explain that version-1 suppression depends on exact finding wording, that metadata is
+preserved only for exact current matches, and that stale legacy entries drop because rewriting is a
+fresh observation snapshot. The documentation SHALL NOT imply automatic migration, a dedicated
+migration command, a deprecation deadline, or a perpetual read warning.
+
+#### Scenario: Adopter prepares for presentation changes
+
+- **WHEN** an adopter with a version-1 baseline expects human finding wording to change and needs existing suppressions or metadata preserved
+- **THEN** the documentation directs them to run the existing `--write-baseline` operation before the wording change
+
+#### Scenario: Upgrade consequences are explicit
+
+- **WHEN** an adopter reviews the version-1 upgrade guidance
+- **THEN** it states that exact live matches retain metadata and stale entries are omitted from the version-2 snapshot
+
+#### Scenario: Continued version-1 support is not a deprecation
+
+- **WHEN** an adopter chooses not to rewrite a version-1 baseline
+- **THEN** the documentation still describes it as readable and exact-text matched without announcing a time-based removal or new warning

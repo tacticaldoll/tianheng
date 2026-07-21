@@ -24,8 +24,8 @@ fn main() -> std::process::ExitCode {
 Exit codes are the contract: `0` clean / warn-only / fully baselined · `1` enforced violation ·
 `2` constitution or scan error. Read a violation's **`reason`** first — it is the repair direction.
 
-> Experimental / pre-1.0. The boundary DSL (the surface these recipes use) does not break within
-> `0.1.x`; see [`CHANGELOG.md`](CHANGELOG.md).
+> Experimental / pre-1.0. The boundary DSL (the surface these recipes use) is patch-compatible
+> within `0.2.x`; a breaking change must earn a new minor. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 

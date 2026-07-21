@@ -20,6 +20,15 @@ use std::process::Command;
 
 use serde_json::Value;
 
+/// The Cargo target `kind` strings that denote a **library** crate root — every library crate type
+/// plus `proc-macro`. `cargo metadata` reports a target's `kind` as its crate type (a `cdylib`
+/// library is `["cdylib"]`, not `["lib"]`), so all must be recognized. This is the **single** source
+/// of truth for which targets carry a governable crate root: [`crate_root_file`] resolves a library
+/// root by this set (falling back to `bin`), and [`member_root_files`] observes this set plus `bin`.
+/// Both reference it so the two definitions cannot silently drift apart (the twin-drift bug class
+/// 星表 exists to prevent).
+const LIBRARY_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
+
 /// Run `cargo metadata --no-deps --format-version 1` for the workspace at `manifest_path`
 /// and parse its JSON. `--no-deps` restricts `packages` to the workspace members (no
 /// transitive dependencies). A non-zero `cargo` exit is returned as its trimmed stderr.
@@ -74,7 +83,6 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
 /// `example`, `bench`, or `custom-build` — resolves to `None` and is skipped; it carries no
 /// crate-root source to govern.
 pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
-    const LIB_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
     let targets = package["targets"].as_array()?;
     let has_kind = |target: &Value, wanted: &str| {
         target["kind"]
@@ -83,7 +91,7 @@ pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
     };
     let pick = targets
         .iter()
-        .find(|t| LIB_KINDS.iter().any(|k| has_kind(t, k)))
+        .find(|t| LIBRARY_KINDS.iter().any(|k| has_kind(t, k)))
         .or_else(|| targets.iter().find(|t| has_kind(t, "bin")))?;
     pick["src_path"].as_str().map(PathBuf::from)
 }
@@ -107,6 +115,44 @@ pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
     dirs.sort();
     dirs.dedup();
     dirs
+}
+
+/// Every workspace member library, proc-macro, and binary crate-root source file reported by Cargo.
+/// Roots are sorted and de-duplicated for a deterministic observation corpus; test, example, bench,
+/// and custom-build-only targets remain outside the governed runtime corpus.
+///
+/// Keep the filename when a caller needs module reachability: reducing a custom target root to its
+/// parent directory loses which sibling `.rs` file Cargo actually compiles.
+pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = metadata["packages"]
+        .as_array()
+        .map(|packages| {
+            packages
+                .iter()
+                .flat_map(|package| {
+                    package["targets"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|target| {
+                            // The library kinds (the single-source [`LIBRARY_KINDS`]) plus `bin`:
+                            // every governable crate root, so this cannot drift from
+                            // [`crate_root_file`]'s library set.
+                            target["kind"].as_array().is_some_and(|kinds| {
+                                kinds.iter().any(|kind| {
+                                    kind.as_str()
+                                        .is_some_and(|k| LIBRARY_KINDS.contains(&k) || k == "bin")
+                                })
+                            })
+                        })
+                        .filter_map(|target| target["src_path"].as_str().map(PathBuf::from))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    roots.sort();
+    roots.dedup();
+    roots
 }
 
 #[cfg(test)]
@@ -242,5 +288,26 @@ mod tests {
         let dirs = member_src_dirs(&metadata);
         // The lib target wins; both targets share the same src dir here, so one entry.
         assert_eq!(dirs, vec![PathBuf::from("/ws/both/src")], "{dirs:?}");
+    }
+
+    #[test]
+    fn member_root_files_preserves_exact_custom_roots_and_is_deterministic() {
+        let metadata = json!({ "packages": [
+            { "targets": [
+                { "kind": ["lib"], "src_path": "/ws/z/src/lib.rs" },
+                { "kind": ["bin"], "src_path": "/ws/z/src/main.rs" }
+            ] },
+            { "targets": [{ "kind": ["lib"], "src_path": "/ws/a/custom_root.rs" }] },
+            { "targets": [{ "kind": ["lib"], "src_path": "/ws/a/custom_root.rs" }] },
+            { "targets": [{ "kind": ["test"], "src_path": "/ws/t/test.rs" }] }
+        ]});
+        assert_eq!(
+            member_root_files(&metadata),
+            [
+                PathBuf::from("/ws/a/custom_root.rs"),
+                PathBuf::from("/ws/z/src/lib.rs"),
+                PathBuf::from("/ws/z/src/main.rs")
+            ]
+        );
     }
 }

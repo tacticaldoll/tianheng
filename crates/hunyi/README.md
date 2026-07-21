@@ -132,8 +132,8 @@ transitive effect-purity.
 
 ## Adoption & status
 
-**Experimental — pre-1.0.** Public faces may change until adoption settles them; within `0.1.x` no
-release intentionally breaks the adopter-written builder.
+**Experimental — pre-1.0.** The current `0.2.x` line is patch-compatible; a breaking public change
+must earn a new minor. The adopter-written boundary DSL remains the guarded surface.
 
 Adopt 渾儀 on its own — it carries the quarantined `syn`, the one place the AST dependency lives —
 or graduate to the composed constitution through the

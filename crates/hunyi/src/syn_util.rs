@@ -5,9 +5,13 @@
 
 use crate::resolve::strip_raw;
 
-/// Whether a module's attributes remap its source file off the conventional path — the stated
-/// `#[path]` coverage bound (such a module is not conventionally file-backed, so the whole-crate
-/// walks skip it rather than govern the wrong file). Recognizes **both** the direct
+/// Whether a module's attributes remap its source file off the conventional path. This is the
+/// broader "is it remapped at all" test: it stays `true` for the `cfg_attr`-wrapped spelling, which
+/// the whole-crate walks do **not** follow (cfg-conditional → following it cfg-blind could read a
+/// file rustc does not compile here) and must therefore skip rather than govern the wrong
+/// conventional file — a stated bound. The **unconditional** `#[path = "…"]` form is instead
+/// *followed* via [`direct_path_value`]; this predicate still reports `true` for it, but callers
+/// consult `direct_path_value` first. Recognizes **both** the direct
 /// `#[path = "…"]` and the combined `#[cfg_attr(<pred>, …, path = "…")]` spelling (equivalent to
 /// `#[cfg(<pred>)] #[path = "…"]`), including arbitrarily **nested** `cfg_attr`
 /// (`#[cfg_attr(a, cfg_attr(b, path = "…"))]`). Cfg-blind, like the rest of the scan: a
@@ -18,6 +22,33 @@ use crate::resolve::strip_raw;
 /// mistaken for a remap (which would drop a governed module — the inverse false negative).
 pub(crate) fn has_path_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(is_path_remap)
+}
+
+/// The file path of an **unconditional** `#[path = "…"]` remap (the direct name-value form only),
+/// or `None`. This is the value the whole-crate walks and the targeted resolver now *follow* to
+/// observe a relocated module's source (closing the coverage false negative where its `unsafe`
+/// sites / items were silently dropped). A `cfg_attr`-wrapped `path` is deliberately **excluded**:
+/// it is cfg-conditional, so following it cfg-blind could read a file rustc does not compile in
+/// this configuration — that form stays a skip bound via [`has_path_attr`], which remains the
+/// broader "is this remapped at all (so never govern the conventional file)" test. A module has at
+/// most one applied `#[path]`, so the first match is the value.
+pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
+    attrs.iter().find_map(|attr| {
+        if !attr.path().is_ident("path") {
+            return None;
+        }
+        match &attr.meta {
+            syn::Meta::NameValue(syn::MetaNameValue {
+                value:
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }),
+                ..
+            }) => Some(s.value()),
+            _ => None,
+        }
+    })
 }
 
 fn is_path_remap(attr: &syn::Attribute) -> bool {
@@ -130,8 +161,45 @@ fn vis_prefix(vis: &syn::Visibility) -> String {
 /// capability's domain).
 pub(crate) struct VisibleItem<'a> {
     pub(crate) visibility: &'a syn::Visibility,
-    pub(crate) kind: &'static str,
+    pub(crate) kind: VisibleItemKind,
     pub(crate) name: String,
+}
+
+/// The finite visibility-fact vocabulary. Its labels are published version-2 `item_kind` wire;
+/// keeping the variants typed makes a new governed item kind an explicit compatibility decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum VisibleItemKind {
+    Fn,
+    Struct,
+    Enum,
+    Union,
+    Type,
+    Const,
+    Static,
+    Trait,
+    TraitAlias,
+    Mod,
+    ExternCrate,
+    Use,
+}
+
+impl VisibleItemKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Fn => "fn",
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Union => "union",
+            Self::Type => "type",
+            Self::Const => "const",
+            Self::Static => "static",
+            Self::Trait => "trait",
+            Self::TraitAlias => "trait_alias",
+            Self::Mod => "mod",
+            Self::ExternCrate => "extern_crate",
+            Self::Use => "use",
+        }
+    }
 }
 
 fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
@@ -141,20 +209,52 @@ fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
         name,
     };
     match item {
-        syn::Item::Fn(i) => Some(observed(&i.vis, "fn", i.sig.ident.to_string())),
-        syn::Item::Struct(i) => Some(observed(&i.vis, "struct", i.ident.to_string())),
-        syn::Item::Enum(i) => Some(observed(&i.vis, "enum", i.ident.to_string())),
-        syn::Item::Union(i) => Some(observed(&i.vis, "union", i.ident.to_string())),
-        syn::Item::Type(i) => Some(observed(&i.vis, "type", i.ident.to_string())),
-        syn::Item::Const(i) => Some(observed(&i.vis, "const", i.ident.to_string())),
-        syn::Item::Static(i) => Some(observed(&i.vis, "static", i.ident.to_string())),
-        syn::Item::Trait(i) => Some(observed(&i.vis, "trait", i.ident.to_string())),
-        syn::Item::TraitAlias(i) => Some(observed(&i.vis, "trait_alias", i.ident.to_string())),
-        syn::Item::Mod(i) => Some(observed(&i.vis, "mod", i.ident.to_string())),
-        syn::Item::ExternCrate(i) => Some(observed(&i.vis, "extern_crate", i.ident.to_string())),
+        syn::Item::Fn(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Fn,
+            i.sig.ident.to_string(),
+        )),
+        syn::Item::Struct(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Struct,
+            i.ident.to_string(),
+        )),
+        syn::Item::Enum(i) => Some(observed(&i.vis, VisibleItemKind::Enum, i.ident.to_string())),
+        syn::Item::Union(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Union,
+            i.ident.to_string(),
+        )),
+        syn::Item::Type(i) => Some(observed(&i.vis, VisibleItemKind::Type, i.ident.to_string())),
+        syn::Item::Const(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Const,
+            i.ident.to_string(),
+        )),
+        syn::Item::Static(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Static,
+            i.ident.to_string(),
+        )),
+        syn::Item::Trait(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::Trait,
+            i.ident.to_string(),
+        )),
+        syn::Item::TraitAlias(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::TraitAlias,
+            i.ident.to_string(),
+        )),
+        syn::Item::Mod(i) => Some(observed(&i.vis, VisibleItemKind::Mod, i.ident.to_string())),
+        syn::Item::ExternCrate(i) => Some(observed(
+            &i.vis,
+            VisibleItemKind::ExternCrate,
+            i.ident.to_string(),
+        )),
         syn::Item::Use(i) => Some(observed(
             &i.vis,
-            "use",
+            VisibleItemKind::Use,
             format!(
                 "{}{}",
                 if i.leading_colon.is_some() { "::" } else { "" },
@@ -172,7 +272,7 @@ fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
 pub(crate) fn item_observation(
     item: &syn::Item,
     ceiling_rank: u8,
-) -> Option<(String, &'static str, String)> {
+) -> Option<(String, VisibleItemKind, String)> {
     let observed = item_observation_parts(item)?;
     (visibility_rank(observed.visibility) > ceiling_rank).then(|| {
         (

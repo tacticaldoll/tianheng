@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 
 /// What the source scan found for a probe occurrence (`assert_boundary!`).
 #[derive(Debug)]
@@ -11,7 +12,14 @@ pub(super) enum Probe {
     Unauditable { file: String },
 }
 
-pub(super) fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+pub(super) fn collect_probes(input: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+    if input.is_file() {
+        return collect_reachable_probes(input, probes);
+    }
+    collect_directory_probes(input, probes)
+}
+
+fn collect_directory_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
     let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
     // Sort entries so the scan order — and thus the violation order in the report — is
     // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
@@ -29,7 +37,7 @@ pub(super) fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), 
     paths.sort();
     for (is_dir, path) in paths {
         if is_dir {
-            collect_probes(&path, probes)?;
+            collect_directory_probes(&path, probes)?;
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
             let source = std::fs::read_to_string(&path)
                 .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
@@ -37,6 +45,436 @@ pub(super) fn collect_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), 
         }
     }
     Ok(())
+}
+
+fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+    let root_parent = root
+        .parent()
+        .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
+    let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
+    let mut visited = BTreeSet::new();
+    while let Some((file, child_base)) = pending.pop() {
+        if !visited.insert(file.clone()) {
+            continue;
+        }
+        let source = std::fs::read_to_string(&file)
+            .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
+        scan_source(&source, &file.display().to_string(), probes);
+        // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
+        // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
+        // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
+        let file_dir = file.parent().unwrap_or(child_base.as_path());
+        let mut children = external_module_files(&source, &child_base, file_dir)?;
+        children.sort();
+        children.reverse();
+        pending.extend(children);
+    }
+    Ok(())
+}
+
+fn external_module_files(
+    source: &str,
+    child_base: &Path,
+    file_dir: &Path,
+) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+    let mut modules = Vec::new();
+    collect_scope_modules(
+        source.as_bytes(),
+        0,
+        source.len(),
+        child_base,
+        file_dir,
+        &mut modules,
+    )?;
+    Ok(modules)
+}
+
+fn collect_scope_modules(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    child_base: &Path,
+    file_dir: &Path,
+    modules: &mut Vec<(PathBuf, PathBuf)>,
+) -> Result<(), String> {
+    let mut i = start;
+    while i < end {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(end);
+            continue;
+        }
+        if bytes[i] == b'!' && preceding_token_is_ident(bytes, i) {
+            if let Some(next) = foreign_macro_body_end(bytes, i) {
+                i = next.min(end);
+                continue;
+            }
+        }
+        if is_mod_keyword(bytes, i) {
+            let mut cursor = skip_ascii_space(bytes, i + 3);
+            let name_start = cursor;
+            if bytes.get(cursor..cursor + 2) == Some(b"r#") {
+                cursor += 2;
+            }
+            while cursor < end && is_ident_byte(bytes[cursor]) {
+                cursor += 1;
+            }
+            if cursor == name_start
+                || (cursor == name_start + 2 && &bytes[name_start..cursor] == b"r#")
+            {
+                i += 3;
+                continue;
+            }
+            let raw_name = &bytes[name_start..cursor];
+            let name = if raw_name.starts_with(b"r#") {
+                &raw_name[2..]
+            } else {
+                raw_name
+            };
+            let name = std::str::from_utf8(name).map_err(|e| e.to_string())?;
+            cursor = skip_ascii_space(bytes, cursor);
+            match bytes.get(cursor) {
+                Some(b';') => {
+                    let attrs = mod_preamble_attrs(bytes, i);
+                    // Resolve either the unconditional `#[path = "…"]` target (followed to observe
+                    // its probes) or, absent one, the conventional `<base>/name.rs|name/mod.rs`.
+                    let resolved = match &attrs.path {
+                        // A non-inline `#[path]` resolves from the containing file's OWN directory
+                        // (`file_dir`), not the conventional-child base — rustc's mod-rs-blind rule.
+                        Some(rel) => resolve_path_module(file_dir, rel),
+                        None => resolve_external_module(child_base, name),
+                    }?;
+                    match resolved {
+                        Some(resolved) => modules.push(resolved),
+                        // No file at the target/conventional location. A `#[cfg]`-gated declaration
+                        // (or a cfg-conditional relocation) may legitimately have none in this
+                        // configuration (an off feature / another platform), so tolerate it — it
+                        // compiles no probes here, so skipping it cannot silently cover a seam. A
+                        // non-cfg missing module is a real broken reference: fail loud (exit 2).
+                        None if attrs.cfg => {}
+                        None => {
+                            return Err(format!(
+                                "cannot resolve reachable module `{name}` under {}",
+                                child_base.display()
+                            ));
+                        }
+                    }
+                    i = cursor + 1;
+                    continue;
+                }
+                Some(b'{') => {
+                    let close = balanced_brace_end(bytes, cursor, end);
+                    let attrs = mod_preamble_attrs(bytes, i);
+                    // Descending an inline `mod x { … }`: x's children resolve from `inline_base` —
+                    // `<child_base>/name`, or `<file_dir>/dir` for an inline `#[path = "dir"]` remap.
+                    // rustc accumulates the inline-module name as a directory component, so this base
+                    // governs BOTH x's conventional file-children AND any `#[path]` nested in x's body
+                    // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
+                    // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
+                    // component and read a same-named orphan — a false negative.)
+                    let inline_base = match &attrs.path {
+                        Some(rel) => file_dir.join(rel),
+                        None => child_base.join(name),
+                    };
+                    collect_scope_modules(
+                        bytes,
+                        cursor + 1,
+                        close.saturating_sub(1),
+                        &inline_base,
+                        &inline_base,
+                        modules,
+                    )?;
+                    i = close;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if bytes[i] == b'{' {
+            i = balanced_brace_end(bytes, i, end);
+            continue;
+        }
+        i += 1;
+    }
+    Ok(())
+}
+
+/// Resolve a `mod name;` to its conventional file and the base directory for its own children:
+/// `Ok(Some(..))` for `<base>/name.rs` or `<base>/name/mod.rs`, `Ok(None)` when neither exists (the
+/// caller decides whether an absent file is a legitimate `#[cfg]`-gated skip or a hard error), and
+/// `Err` only for a genuine ambiguity (both files present).
+fn resolve_external_module(base: &Path, name: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
+    let flat = base.join(format!("{name}.rs"));
+    let nested = base.join(name).join("mod.rs");
+    let file = match (flat.is_file(), nested.is_file()) {
+        (true, false) => flat,
+        (false, true) => nested,
+        (true, true) => {
+            return Err(format!(
+                "module `{name}` resolves to both '{}' and '{}'",
+                flat.display(),
+                nested.display()
+            ));
+        }
+        (false, false) => return Ok(None),
+    };
+    let next_base = if file.file_name().and_then(|n| n.to_str()) == Some("mod.rs") {
+        file.parent().unwrap_or(base).to_path_buf()
+    } else {
+        file.parent().unwrap_or(base).join(name)
+    };
+    Ok(Some((file, next_base)))
+}
+
+/// Resolve an unconditional `#[path = "rel"] mod name;` to its author-chosen file and the base
+/// directory for its own children. `rel` is relative to `base` — the containing file's own directory
+/// (`file_dir`), with each enclosing inline-`mod` name already accumulated onto it by the caller;
+/// for a non-mod-rs `name.rs` this differs from the conventional-child directory a plain `mod name;`
+/// uses. A `#[path]`-loaded file is mod-rs-like, so its children resolve from the target file's
+/// **own** directory. `Ok(None)` when the target is absent (the caller tolerates a cfg-conditional
+/// absence and fails loud otherwise) — no ambiguity is possible (the path names one file), unlike the
+/// conventional `name.rs` / `name/mod.rs` pair.
+fn resolve_path_module(base: &Path, rel: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
+    let file = base.join(rel);
+    if !file.is_file() {
+        return Ok(None);
+    }
+    let next_base = file.parent().unwrap_or(base).to_path_buf();
+    Ok(Some((file, next_base)))
+}
+
+/// Read the string-literal value of a `#[path = "…"]` starting just past the `=` (`start`), bounded
+/// by `end`. Handles a normal `"…"` (with the standard escapes) and a raw `r"…"` / `r#…"…"#` string
+/// (content verbatim). Returns `None` when no string literal follows (a non-literal `path` argument
+/// is not a valid remap) — the caller then treats the module as non-relocated (conventional
+/// resolution or a loud missing-file error, never a silent skip). Bytes accumulate so a UTF-8
+/// filename round-trips.
+fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
+    // Advance past whitespace and comments to the value — but NOT over a string literal, which is
+    // exactly what we are here to read (`skip_preamble_trivia` would skip the literal as trivia).
+    let mut i = start;
+    while i < end {
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'/' && matches!(bytes.get(i + 1), Some(&b'/') | Some(&b'*')) {
+            if let Some(next) = skip_literal_or_comment(bytes, i) {
+                i = next.min(end);
+                continue;
+            }
+        }
+        break;
+    }
+    if bytes.get(i) == Some(&b'r') {
+        // Raw string `r#…"content"#…`: no escapes; the closing is `"` then the same `#` count.
+        let mut hashes = 0usize;
+        let mut j = i + 1;
+        while bytes.get(j) == Some(&b'#') {
+            hashes += 1;
+            j += 1;
+        }
+        if bytes.get(j) != Some(&b'"') {
+            return None;
+        }
+        j += 1;
+        let content_start = j;
+        while j < end {
+            if bytes[j] == b'"' {
+                let mut k = j + 1;
+                let mut seen = 0usize;
+                while seen < hashes && bytes.get(k) == Some(&b'#') {
+                    k += 1;
+                    seen += 1;
+                }
+                if seen == hashes {
+                    return String::from_utf8(bytes[content_start..j].to_vec()).ok();
+                }
+            }
+            j += 1;
+        }
+        return None;
+    }
+    if bytes.get(i) != Some(&b'"') {
+        return None;
+    }
+    i += 1;
+    let content_start = i;
+    while i < end {
+        match bytes[i] {
+            // Decode the literal's escapes through the crate's full decoder — the same set rustc
+            // and syn accept (incl. `\x` / `\u{}` / `\'`) — so 漏刻's `#[path]` value matches 渾儀's
+            // syn-derived `s.value()` on the same input (twin-drift parity). A residually
+            // undecodable form (e.g. a backslash-newline line continuation) yields `None` and the
+            // module falls back to non-relocated handling — fail-safe, never a mis-decoded path.
+            b'"' => return decode_str_escapes(&bytes[content_start..i]),
+            // Skip the escaped byte so an escaped quote `\"` (or `\\`) does not end the literal early.
+            b'\\' => i += 2,
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+fn is_mod_keyword(bytes: &[u8], i: usize) -> bool {
+    bytes.get(i..i + 3) == Some(b"mod")
+        && (i == 0 || !is_ident_byte(bytes[i - 1]))
+        && bytes.get(i + 3).is_none_or(|b| !is_ident_byte(*b))
+}
+
+fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
+    let mut end = bang;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    end > 0 && is_ident_byte(bytes[end - 1])
+}
+
+fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    i
+}
+
+fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < limit {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(limit);
+            continue;
+        }
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    limit
+}
+
+/// Outer attributes on the `mod name;` at `mod_index` that steer the walker.
+struct ModPreambleAttrs {
+    /// The target of an **unconditional** `#[path = "..."]` relocation (the direct string form): the
+    /// module lives at this author-chosen file, which the walker now *follows* to count its probes
+    /// (closing the relocated-module coverage gap). `None` when there is no such attribute. A
+    /// `cfg_attr`-wrapped `path` reads as `cfg` (below), not here — it is cfg-conditional, so it is
+    /// not followed cfg-blind and stays a stated skip bound.
+    path: Option<String>,
+    /// A `#[cfg(...)]` / `#[cfg_attr(...)]` gate: the module may legitimately have no file in the
+    /// current configuration (an off feature / another platform), so an absent file is tolerated
+    /// rather than a scan error — the same cfg-tolerance 渾儀 applies, reimplemented louke-locally
+    /// (三儀 ⊥ 三儀). This is not `cfg` evaluation: a resolvable cfg-gated module is still scanned
+    /// and its probes still counted; only an *absent* file for a cfg-gated declaration is tolerated.
+    cfg: bool,
+}
+
+/// Scan a `mod name;`'s preamble (the bytes since the previous item boundary) for the outer
+/// attributes that steer the walker. Detection is **structural, not a raw substring**: comments and
+/// string literals are skipped, and only an *outer attribute whose meta name is exactly* `path`
+/// (followed by `=`), `cfg`, or `cfg_attr` matches. A comment or unrelated attribute that merely
+/// contains the text (`// fast path`, `#[cfg(feature = "fastpath")]`) MUST NOT be read as a `path`
+/// relocation — a false match would drop a reachable module and every probe under it (a silent
+/// coverage false negative, the worst outcome under FN-first). A `#[cfg_attr(.., path = ..)]`
+/// conditional relocation reads as `cfg` (its meta name is `cfg_attr`, not `path`), so an absent
+/// target is tolerated rather than errored.
+fn mod_preamble_attrs(bytes: &[u8], mod_index: usize) -> ModPreambleAttrs {
+    let mut start = 0;
+    for i in (0..mod_index).rev() {
+        if matches!(bytes[i], b';' | b'{' | b'}') {
+            start = i + 1;
+            break;
+        }
+    }
+    let mut attrs = ModPreambleAttrs {
+        path: None,
+        cfg: false,
+    };
+    let mut i = start;
+    while i < mod_index {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(mod_index);
+            continue;
+        }
+        if bytes[i] == b'#' {
+            let mut open = i + 1;
+            if bytes.get(open) == Some(&b'!') {
+                open += 1;
+            }
+            if bytes.get(open) == Some(&b'[') {
+                // The attribute's meta name is the first identifier inside the brackets.
+                let name_start = skip_preamble_trivia(bytes, open + 1, mod_index);
+                let mut name_end = name_start;
+                while name_end < mod_index && is_ident_byte(bytes[name_end]) {
+                    name_end += 1;
+                }
+                match &bytes[name_start..name_end] {
+                    b"path" => {
+                        let eq = skip_preamble_trivia(bytes, name_end, mod_index);
+                        if bytes.get(eq) == Some(&b'=') {
+                            attrs.path = read_path_string(bytes, eq + 1, mod_index);
+                        }
+                    }
+                    b"cfg" | b"cfg_attr" => attrs.cfg = true,
+                    _ => {}
+                }
+                i = attr_group_end(bytes, open, mod_index);
+                continue;
+            }
+        }
+        i += 1;
+    }
+    attrs
+}
+
+/// Advance past whitespace, comments, and string/char literals to the next significant byte
+/// (bounded by `end`). Shared by the attribute walk so a comment or literal inside a preamble
+/// never derails the meta-name match.
+fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
+    while i < end {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(end);
+            continue;
+        }
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        break;
+    }
+    i
+}
+
+/// Index just past the `]` closing the attribute-bracket group opened at `open` (which indexes the
+/// `[`), tracking nested `[]` and skipping string/char literals and comments so a `]` inside a
+/// `#[path = "a]b.rs"]` literal does not close the group early. Mirrors [`balanced_brace_end`].
+fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < limit {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(limit);
+            continue;
+        }
+        match bytes[i] {
+            b'[' => depth += 1,
+            b']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    limit
 }
 
 /// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just

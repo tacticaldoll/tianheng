@@ -281,10 +281,13 @@ fn generic_argument_to_string(arg: &syn::GenericArgument) -> Option<String> {
     }
 }
 
-/// Render a `syn::Type` to a stable string for a finding, reusing path-segment joining —
-/// **never** `quote`/`syn`'s `printing` feature, which would breach 渾儀's dependency
-/// allowlist. Covers the common shapes; a shape it cannot render returns `None`, and the
-/// caller falls back to a location-only finding identity.
+/// Canonicalize a `syn::Type` for semantic finding text and identity, reusing path-segment joining.
+///
+/// Callers store this output in version-2 subject, owner, trait, signature, and label fields, so its
+/// exact byte form is published baseline wire rather than presentation-only rendering. It **never**
+/// uses `quote`/`syn`'s `printing` feature, which would breach 渾儀's dependency allowlist. Covers
+/// the common shapes; a shape it cannot render returns `None`, and the caller falls back to a
+/// location-only finding identity.
 pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
     match ty {
         syn::Type::Path(tp) => {
@@ -397,10 +400,10 @@ pub(crate) fn canonical_self_owner(
     type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}"))
 }
 
-/// Render a path's **last** segment's angle-bracketed generic arguments (`<u8, T>`), `""` when it
-/// has none, or `None` when any argument is unrenderable (a complex const-generic expression) or
+/// Canonicalize a path's **last** segment's angle-bracketed generic arguments (`<u8, T>`), `""` when
+/// it has none, or `None` when any argument is unrenderable (a complex const-generic expression) or
 /// the segment is parenthesized (`Fn(..)`). Used to append a self type's generics to its resolved
-/// base path in [`canonical_self_owner`].
+/// base path in [`canonical_self_owner`]; the result enters owner key fields and is version-2 wire.
 pub(crate) fn render_last_segment_args(path: &syn::Path) -> Option<String> {
     match &path.segments.last()?.arguments {
         syn::PathArguments::None => Some(String::new()),
@@ -413,8 +416,10 @@ pub(crate) fn render_last_segment_args(path: &syn::Path) -> Option<String> {
     }
 }
 
-/// Render a `syn::Path` (idents joined by `::`, with angle-bracketed type arguments) for
-/// a finding string. `None` for a shape it cannot render (e.g. parenthesized `Fn` args).
+/// Canonicalize a `syn::Path` (idents joined by `::`, with angle-bracketed type arguments) for
+/// semantic finding text and identity. The result enters version-2 subject, trait, marker, and owner
+/// fields, so its byte form is baseline wire. `None` for a shape it cannot render (e.g.
+/// parenthesized `Fn` args).
 pub(crate) fn path_to_string(path: &syn::Path) -> Option<String> {
     let mut segs = Vec::with_capacity(path.segments.len());
     if path.leading_colon.is_some() {

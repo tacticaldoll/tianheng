@@ -14,7 +14,14 @@ fn manifest() -> PathBuf {
 /// The core reaction: `api::connection` returns `infra::DbPool`, a leak → exit 1.
 #[test]
 fn the_api_leak_reacts_with_exit_1() {
-    assert_eq!(check(&constitution(), &manifest()).exit_code(), 1);
+    let Outcome::Violations(report) = check(&constitution(), &manifest()) else {
+        panic!("the deliberately exposed type must produce a structured violation");
+    };
+    assert!(report.violations.iter().any(|violation| {
+        violation.finding_key().namespace() == "hunyi"
+            && violation.finding_key().code() == "signature_exposure"
+    }));
+    assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }
 
 /// Precision: forbidding a type that is *not* named on any public surface does not react — the
@@ -40,8 +47,19 @@ fn an_over_pub_item_breaches_the_crate_visibility_ceiling() {
     let outcome = check_visibility(&boundary, &manifest());
     assert_eq!(outcome.exit_code(), 1);
     if let Outcome::Violations(report) = &outcome {
-        let findings: Vec<&str> = report.violations.iter().map(|v| v.finding.as_str()).collect();
-        assert!(findings.iter().any(|f| f.contains("Widget")), "{findings:?}");
+        assert!(report.violations.iter().any(|violation| {
+            violation.finding_key().namespace() == "hunyi"
+                && violation.finding_key().code() == "visibility_exposure"
+        }));
+        let findings: Vec<&str> = report
+            .violations
+            .iter()
+            .map(|v| v.finding.as_str())
+            .collect();
+        assert!(
+            findings.iter().any(|f| f.contains("Widget")),
+            "{findings:?}"
+        );
         assert!(
             !findings.iter().any(|f| f.contains("Gadget")),
             "a pub(crate) item is at the Crate ceiling and must not react: {findings:?}"
@@ -61,7 +79,11 @@ fn a_stricter_super_ceiling_reaches_the_pub_crate_item() {
     let outcome = check_visibility(&boundary, &manifest());
     assert_eq!(outcome.exit_code(), 1);
     if let Outcome::Violations(report) = &outcome {
-        let findings: Vec<&str> = report.violations.iter().map(|v| v.finding.as_str()).collect();
+        let findings: Vec<&str> = report
+            .violations
+            .iter()
+            .map(|v| v.finding.as_str())
+            .collect();
         assert!(
             findings.iter().any(|f| f.contains("Gadget")),
             "the pub(crate) item exceeds a Super ceiling and must react: {findings:?}"

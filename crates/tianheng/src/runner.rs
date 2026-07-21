@@ -27,9 +27,10 @@ use std::process::ExitCode;
 
 use guibiao::{
     Baseline, Coverage, Outcome, Report, ViolationId, apply_baseline, check_and_cover,
-    constitution_text, report_json, workspace_member_src_dirs,
+    constitution_text, report_json,
 };
 use louke::audit_probe_coverage;
+use xingbiao::{cargo_metadata, member_root_files};
 
 use crate::Constitution;
 
@@ -132,15 +133,22 @@ fn evaluate_constitution(
     // Audit even an empty runtime declaration: an orphan `assert_boundary!` probe must react.
     // Once an earlier dimension errors the verdict is untrustworthy, so evaluation stops.
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        match workspace_member_src_dirs(manifest_path) {
-            Ok(src_dirs) => {
+        match cargo_metadata(manifest_path) {
+            Ok(metadata) => {
+                let roots = member_root_files(&metadata);
                 outcome = merge_outcomes(
                     outcome,
-                    audit_probe_coverage(constitution.runtime_boundaries(), &src_dirs),
+                    audit_probe_coverage(constitution.runtime_boundaries(), &roots),
                 );
             }
             Err(message) => {
-                outcome = merge_outcomes(outcome, Outcome::ConstitutionError(message));
+                outcome = merge_outcomes(
+                    outcome,
+                    Outcome::ConstitutionError(format!(
+                        "cannot read workspace '{}': {message}",
+                        manifest_path.display()
+                    )),
+                );
             }
         }
     }

@@ -49,6 +49,16 @@ The system SHALL walk the whole target crate (descending file-based `mod x;` and
 - **WHEN** `crate::net` (outside the subtree) declares `unsafe impl Send for Foo {}` alongside either `unsafe impl Sync for Foo {}` (a different trait) or `unsafe impl Send for Bar {}` (the same trait, a different self type)
 - **THEN** the system emits two distinct findings (both the trait **and** the self type are part of the finding), so neither masks the other under the baseline
 
+#### Scenario: Two same-named unsafe fns on different owners stay distinct
+
+- **WHEN** `crate::net` (outside the subtree) declares `impl Foo { unsafe fn m(&self) {} }` alongside `impl Bar { unsafe fn m(&self) {} }` (the same method name, different owners), or two traits each declaring `unsafe fn m`
+- **THEN** the system emits two distinct findings — each `unsafe fn` finding is qualified by its enclosing owner (`unsafe fn Foo::m`, the inherent-impl self type, or `unsafe fn A::m`, the declaring trait) — so neither masks the other under the baseline, the `unsafe fn` counterpart of the `unsafe impl` distinctness above
+
+#### Scenario: A trait-impl unsafe fn stays distinct from the inherent method on the same type
+
+- **WHEN** `crate::net` (outside the subtree) declares, on the **same** self type `Foo`, an inherent `impl Foo { unsafe fn m(&self) {} }` alongside `impl A for Foo { unsafe fn m(&self) {} }` and `impl B for Foo { unsafe fn m(&self) {} }` (safe traits `A`/`B`, so no independent `unsafe impl` finding)
+- **THEN** the system emits three distinct findings — a trait-impl `unsafe fn` is qualified by `<trait for self>` (`unsafe fn <A for Foo>::m`, `unsafe fn <B for Foo>::m`), distinct from the inherent `unsafe fn Foo::m` and from each other — because self-type qualification alone separates only *different* self types, so on one self type a baseline of the inherent method would otherwise mask a later-added trait-impl `unsafe fn` (a false negative)
+
 #### Scenario: Unsafe in a body-nested module is attributed to the enclosing module
 
 - **WHEN** the crate has `only_under(["crate::ffi"])` and a function in `crate::net` declares `mod raw { pub unsafe fn poke() {} }` (a `mod` inside a fn body)
@@ -64,9 +74,19 @@ The system SHALL walk the whole target crate (descending file-based `mod x;` and
 - **WHEN** an `unsafe` site the scan observes lies outside every allowed subtree
 - **THEN** the system emits a violation, never exit 0 for that boundary
 
+#### Scenario: Unsafe in an unconditionally #[path]-relocated module reacts
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and `crate::net` declares `#[path = "net_raw.rs"] mod raw;` where `net_raw.rs` contains an `unsafe fn`
+- **THEN** the walk follows the `#[path]` to `net_raw.rs` and emits a violation for the `unsafe fn` attributed to `crate::net::raw`, never silently dropping it as off the conventional path — while a `cfg_attr`-wrapped relocation stays an unfollowed stated bound
+
+#### Scenario: Unsafe in a #[path] nested inside an inline module reacts at the accumulated file
+
+- **WHEN** the crate root declares `mod inline { #[path = "other.rs"] mod inner; }`, `inline/other.rs` holds an `unsafe fn`, and a same-named `other.rs` decoy sits beside the crate root
+- **THEN** the walk resolves `crate::inline::inner` to `inline/other.rs` (the enclosing inline-`mod` name accumulated onto the base, as rustc compiles it) and emits the `unsafe fn` violation, never reading the `other.rs` decoy and passing at exit 0 — the false negative this closes
+
 ### Requirement: Crate and subtree resolution
 
-For each boundary the system SHALL resolve the target crate to a workspace member and its source root before evaluating it. A target crate absent from the workspace, an unreadable/unparseable source file, or a non-`#[cfg]` missing module file encountered during the walk SHALL be a **constitution error** (exit 2), failing loud and distinct from a violation (exit 1), so an ungovernable target is never reported as an unsafe violation and never silently passed. A symlink module cycle SHALL be a constitution error, never a crash.
+For each boundary the system SHALL resolve the target crate to a workspace member and its source root before evaluating it. A target crate absent from the workspace, an unreadable/unparseable source file, or a non-`#[cfg]` missing module file encountered during the walk SHALL be a **constitution error** (exit 2), failing loud and distinct from a violation (exit 1), so an ungovernable target is never reported as an unsafe violation and never silently passed. A module whose source file loops the current descent path back on itself — a symlinked module directory or a circular `#[path]` — SHALL be a constitution error, never a crash; but two sibling/cousin declarations legitimately resolving to one file (which rustc compiles) SHALL NOT be misreported as a cycle.
 
 #### Scenario: Unknown crate is a constitution error
 
@@ -78,7 +98,7 @@ For each boundary the system SHALL resolve the target crate to a workspace membe
 The rule SHALL observe the executable-`unsafe` **code sites** (blocks, `fn`, `impl`, `trait`, `unsafe extern`); other lexical `unsafe` tokens and non-source `unsafe` SHALL be **stated bounds, never a silent claim of safety**:
 
 - **Peripheral `unsafe` keywords, out of scope by design:** an `unsafe(...)` **attribute** (`#[unsafe(no_mangle)]`, Rust 2024 — a linkage assertion, not a code region), a bare **`unsafe fn` pointer type** (`type H = unsafe fn(...)` — a type signature, not an execution), and a **plain `extern "C" { … }` block** carrying no `unsafe` keyword (only the `unsafe extern {}` form is a site; the plain block's foreign-fn *call sites* are `unsafe {}` and DO react). The rule confines executable-`unsafe` code sites, not every lexical `unsafe` token.
-- **Incidental bounds** (the dimension's inherited whole-crate-scan bounds): `unsafe` produced by a macro expansion or inside an unexpanded macro body is not observed; a module reached through a `#[path]` remap is not observed; a `#[cfg]`-gated module absent when its feature is off is tolerated, while cfg-present code is observed **as written** (cfg-blind); a distinct `[lib] name` is a bound.
+- **Incidental bounds** (the dimension's inherited whole-crate-scan bounds): `unsafe` produced by a macro expansion or inside an unexpanded macro body is not observed; a module reached through an **unconditional** `#[path = "…"]` remap **is** observed (the walk follows it to its author-chosen file), but a **`cfg_attr`-wrapped** `#[path]` is cfg-conditional and is not followed (a stated bound — following it cfg-blind could observe a file rustc does not compile here); a `#[cfg]`-gated module absent when its feature is off is tolerated, while cfg-present code is observed **as written** (cfg-blind); a distinct `[lib] name` is a bound.
 
 The system makes no claim about `unsafe` outside these observed sites.
 

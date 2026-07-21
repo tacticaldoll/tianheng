@@ -800,6 +800,55 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 }
 
 #[test]
+fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
+    let base = std::env::temp_dir().join(format!("tianheng-runtime-root-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    std::fs::write(
+        base.join("Cargo.toml"),
+        "[package]\nname='runtime-root-fixture'\nversion='0.0.0'\nedition='2021'\n\
+         [lib]\npath='custom_root.rs'\n[workspace]\n",
+    )
+    .unwrap();
+    std::fs::write(base.join("custom_root.rs"), "mod live;").unwrap();
+    std::fs::write(
+        base.join("live.rs"),
+        "fn f() { assert_boundary!(\"reachable\", o); }",
+    )
+    .unwrap();
+    std::fs::write(
+        base.join("orphan.rs"),
+        "fn f() { assert_boundary!(\"orphan\", o); }",
+    )
+    .unwrap();
+
+    let constitution = Constitution::new("root-aware")
+        .runtime(
+            RuntimeBoundary::at("reachable")
+                .only_origins(["o"])
+                .because("reachable probe remains covered"),
+        )
+        .runtime(
+            RuntimeBoundary::at("orphan")
+                .only_origins(["o"])
+                .because("an orphan file never enforces a runtime seam"),
+        );
+    let outcome = check_constitution(&constitution, &base.join("Cargo.toml"));
+    let violations = match outcome {
+        Outcome::Violations(report) => report.violations,
+        other => panic!("orphan-only coverage must react: {other:?}"),
+    };
+    assert_eq!(
+        violations.len(),
+        1,
+        "reachable custom-root module stays covered"
+    );
+    assert_eq!(violations[0].target, "orphan");
+
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
 fn list_document_covers_every_populated_dimension() {
     // The previous json-list test ran only an empty SemanticBoundaries, so the projection's
     // per-dimension key insertion was never exercised (a blind spot). Build one boundary of

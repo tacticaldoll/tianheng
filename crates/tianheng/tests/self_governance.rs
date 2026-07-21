@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use guibiao::check_and_cover;
 use tianheng::prelude::*;
-use tianheng::{Boundary, Rule, check_all, constitution_markdown};
+use tianheng::{Boundary, Rule, constitution_markdown};
 
 /// The Tianheng workspace manifest. `None` when it is absent — e.g. inside a published
 /// `.crate` tarball, which has no workspace root — so the self-governance gate SKIPS rather
@@ -140,12 +140,19 @@ fn tianheng_constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("tianheng")
-                .restrict_dependencies_to(["guibiao", "hunyi", "louke", "serde_json"])
+                .restrict_dependencies_to([
+                    "guibiao",
+                    "hunyi",
+                    "louke",
+                    "serde_json",
+                    "xingbiao",
+                ])
                 .because(
                     "the 天衡 shell composes the 三儀 into one reaction, so it depends on the 圭表 \
                      static core, the 渾儀 semantic dimension, and the 漏刻 runtime dimension (whose \
-                     CI probe-coverage face it composes into `check`), plus serde_json; the gate \
-                     stands on every dimension it gates",
+                     CI probe-coverage face it composes into `check`), reads exact Cargo target \
+                     roots through the shared 星表 substrate, and projects with serde_json; all \
+                     edges point to dimensions or shared bases beneath the shell",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on
@@ -168,34 +175,20 @@ fn tianheng_constitution() -> Constitution {
 
 #[test]
 fn tianheng_governs_itself() {
-    // The whole self-constitution reacts against the workspace. Any drift — a new
-    // external dependency, or the core depending on the shell — surfaces here as a
-    // `cargo test` failure, with the offending boundary's reason as the repair hint.
+    // The whole self-constitution reacts through the same composed evaluator an adopter calls.
+    // Static → semantic → runtime-audit ordering and constitution-error precedence therefore
+    // dogfood the public shell heart, including the always-run runtime audit when this law declares
+    // no runtime boundaries. Any drift surfaces with the producing boundary's reason.
     let Some(manifest) = workspace_manifest() else {
         return; // no workspace root (e.g. a packaged crate) — self-governance runs in-repo only
     };
     let constitution = tianheng_constitution();
-
-    // 圭表 (static): the crate dependency allowlists, plus 璇璣's sans-I/O clock boundary. Any
-    // drift — a new external dependency, the core depending on the shell, or an ambient
-    // `std::time::…::now` creeping into the reaction model — surfaces here, with the offending
-    // boundary's reason as the repair hint.
-    let static_outcome = check(constitution.static_boundaries(), &manifest);
+    let outcome = check_constitution(&constitution, &manifest);
     assert!(
-        matches!(static_outcome, Outcome::Clean),
-        "Tianheng's static self-law drifted: {static_outcome:?}"
+        matches!(outcome, Outcome::Clean),
+        "Tianheng's composed self-law drifted: {outcome:?}"
     );
-    assert_eq!(static_outcome.exit_code(), 0);
-
-    // 渾儀 (semantic): 璇璣's sans-I/O async-exposure boundary. Asserted as its own Clean gate,
-    // not merged with the static one — the dimensions are independent (三儀 ⊥ 三儀), so each stands
-    // as a non-bypassable gate on its own, and a drift names the dimension it broke.
-    let semantic_outcome = check_all(constitution.semantic_boundaries(), &manifest);
-    assert!(
-        matches!(semantic_outcome, Outcome::Clean),
-        "Tianheng's semantic self-law drifted: {semantic_outcome:?}"
-    );
-    assert_eq!(semantic_outcome.exit_code(), 0);
+    assert_eq!(outcome.exit_code(), 0);
 }
 
 /// The fixed preamble of the agent-loaded self-law projection (`AGENTS.self-law.md`). It is a

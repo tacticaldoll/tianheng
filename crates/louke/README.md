@@ -24,7 +24,9 @@ ways:
 - **CI face** (behind the non-default `audit` feature — the shell enables it; a prod dependency
   on louke compiles none of it) — `audit_probe_coverage` verifies at build/CI time that every
   declared seam has a probe and every probe references a declared seam (closing the "declared
-  but never enforced" gap). This face is composed into `tianheng check`.
+  but never enforced" gap). Pass exact Cargo target root files for module-reachable coverage that
+  excludes orphan `.rs` siblings; directory inputs retain the legacy recursive corpus. This face is
+  composed into `tianheng check`, which supplies exact roots automatically.
 
 ```rust
 // 1. declare the seam (part of your constitution)
@@ -52,8 +54,8 @@ predicates.
 
 ## Adoption & status
 
-**Experimental — pre-1.0.** Public faces may change until adoption settles them; within `0.1.x` no
-release intentionally breaks the adopter-written builder.
+**Experimental — pre-1.0.** The current `0.2.x` line is patch-compatible; a breaking public change
+must earn a new minor. The runtime declaration/probe surface remains guarded across patches.
 
 漏刻 is usually reached **top-down**, through the composed
 [`tianheng`](https://crates.io/crates/tianheng) constitution — runtime origin governance is a

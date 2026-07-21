@@ -19,8 +19,19 @@ fn the_stray_unsafe_reacts_with_exit_1() {
     // Self-sufficiently non-vacuous: the violation names the stray site in `crate::net`, never the
     // confined `crate::ffi` one — the confinement reacts on the right module.
     if let Outcome::Violations(report) = &outcome {
-        let findings: Vec<&str> = report.violations.iter().map(|v| v.finding.as_str()).collect();
-        assert!(findings.iter().any(|f| f.contains("crate::net")), "{findings:?}");
+        assert!(report.violations.iter().any(|violation| {
+            violation.finding_key().namespace() == "hunyi"
+                && violation.finding_key().code() == "unsafe_site"
+        }));
+        let findings: Vec<&str> = report
+            .violations
+            .iter()
+            .map(|v| v.finding.as_str())
+            .collect();
+        assert!(
+            findings.iter().any(|f| f.contains("crate::net")),
+            "{findings:?}"
+        );
         assert!(
             !findings.iter().any(|f| f.contains("crate::ffi")),
             "the confined ffi unsafe must not react: {findings:?}"
@@ -32,12 +43,13 @@ fn the_stray_unsafe_reacts_with_exit_1() {
 /// `ffi` unsafe was never a violation, so nothing else reacts (exit 0).
 #[test]
 fn confining_both_modules_is_clean() {
-    let boundary = vec![
-        UnsafeBoundary::in_crate("unsafe_confinement")
-            .only_under(["crate::ffi", "crate::net"])
-            .because("both modules may hold unsafe"),
-    ];
-    assert_eq!(check_unsafe_confinement(&boundary, &manifest()).exit_code(), 0);
+    let boundary = vec![UnsafeBoundary::in_crate("unsafe_confinement")
+        .only_under(["crate::ffi", "crate::net"])
+        .because("both modules may hold unsafe")];
+    assert_eq!(
+        check_unsafe_confinement(&boundary, &manifest()).exit_code(),
+        0
+    );
 }
 
 /// Confinement-only, enforced loud: an empty allowed set is NOT "ban unsafe crate-wide" (that is
@@ -45,10 +57,11 @@ fn confining_both_modules_is_clean() {
 /// never a silent no-op that would pass a crate full of `unsafe`.
 #[test]
 fn an_empty_allowed_set_is_a_constitution_error() {
-    let boundary = vec![
-        UnsafeBoundary::in_crate("unsafe_confinement")
-            .only_under(Vec::<&str>::new())
-            .because("this would be a crate-wide ban — use #![forbid(unsafe_code)] instead"),
-    ];
-    assert_eq!(check_unsafe_confinement(&boundary, &manifest()).exit_code(), 2);
+    let boundary = vec![UnsafeBoundary::in_crate("unsafe_confinement")
+        .only_under(Vec::<&str>::new())
+        .because("this would be a crate-wide ban — use #![forbid(unsafe_code)] instead")];
+    assert_eq!(
+        check_unsafe_confinement(&boundary, &manifest()).exit_code(),
+        2
+    );
 }

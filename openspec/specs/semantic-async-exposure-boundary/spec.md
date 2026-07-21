@@ -87,8 +87,9 @@ set — enabling it adds only new, deeper findings and never re-identifies a sea
 stability). A seam finding (one in the anchored module itself) under the opt-in SHALL be
 byte-identical to the same finding under the default scope.
 
-The subtree walk SHALL inherit the crate-scan family's guards so it never silently under-reacts: a
-`#[path]`-remapped module SHALL be a stated coverage bound (not observed); a `#[cfg]`-gated module
+The subtree walk SHALL inherit the crate-scan family's guards so it never silently under-reacts: an
+**unconditional** `#[path = "…"]` module SHALL be followed and observed, while a `cfg_attr`-wrapped
+`#[path]` SHALL remain a stated coverage bound (not followed cfg-blind); a `#[cfg]`-gated module
 absent when its feature is off SHALL be tolerated; a non-`#[cfg]` missing module file SHALL be a scan
 error (exit 2); a symlink module cycle SHALL be a scan error (exit 2), never a stack overflow. A
 `mod` declared inside a **function body** SHALL be a stated bound (not observed) — it is not part of

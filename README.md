@@ -12,10 +12,11 @@ independently-developed sibling project, not one Tianheng supersedes. It does no
 and it does not instruct your agent. Developers and agents propose change; Tianheng uses compiler/CI
 and runtime *reactions* to keep architectural shape from drifting.
 
-> **Status: experimental — pre-1.0.** The public faces are still settling; the family is held at
-> `0.1.x` deliberately (see [`CHANGELOG.md`](CHANGELOG.md)) until real adoption pressure says which
-> become long-term contracts. Within `0.1.x` no release intentionally breaks the adopter-written
-> builder (`Constitution` / the boundary DSL / `run`).
+> **Status: experimental — pre-1.0.** Real adopters ended the deliberate `0.1.x` hold and opened the
+> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The current `0.2.x` line preserves
+> its published API and version-2 identity wire across patches; a breaking change must earn the next
+> minor. The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded
+> drop-in surface.
 
 ## Why reaction, not instruction
 
@@ -134,7 +135,13 @@ with `--write-baseline` to remove resolved entries. Rewriting preserves hand-add
 `tracker` metadata for identities that still exist. New baselines are version 2: a violation's
 identity is `(target, rule, finding_key)`, while the human `finding`, `file`, `anchor`, reason, and
 severity do not churn it. Version-1 text baselines remain readable and match by their old exact
-`(target, rule, finding)` triple until the next write upgrades them.
+`(target, rule, finding)` triple until the next write upgrades them. That write is the bounded,
+opt-in migration: if you still use version 1 and plan to change finding wording, run the existing
+`--write-baseline` command **before** the wording change when you need those suppressions or their
+`owner` / `tracker` annotations carried forward. Exact live text matches keep their metadata and
+gain structured keys; entries with no exact live match are stale snapshot state and are omitted.
+There is no separate migration command or automatic read-time rewrite, and continued version-1
+support has no time-based deprecation window.
 
 **CI / agent visibility.** `check --format json` is the machine contract; `check --format sarif`
 emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
@@ -328,8 +335,10 @@ codebase never starts red: declare a boundary at `.warn()` (reported, never gati
 drift reacts), then tighten to `enforce`. Two axes — severity and baseline — either of which lands
 the law before you land the fixes. See the runnable [`examples/`](examples/): 圭表 and 渾儀
 standalone, the composed all-three funnel, plus focused demos of `unsafe`-confinement and the
-`sans_io_pure` profile — and [`COOKBOOK.md`](COOKBOOK.md) for common governance intents translated
-into boundaries.
+`sans_io_pure` profile. The [`capability-catalog`](examples/capability-catalog/) is breadth-only
+contract coverage for otherwise-unowned 0.2.x families, not a starting tutorial. See the
+[`examples` guide](examples/README.md) and [`COOKBOOK.md`](COOKBOOK.md) for common governance intents
+translated into boundaries.
 
 **What stays stable across the pre-1.0 line.**
 
@@ -341,8 +350,8 @@ into boundaries.
   code plus named observed values; the human `finding`, `file`, `anchor`, and `polarity` are
   *presentation/metadata*, not identity. Relocating code, attaching an anchor, or improving finding
   wording therefore does not turn a version-2 baselined violation new.
-- **The adopter-written builder does not break in `0.1.x`.** `Constitution`, the boundary DSL, and
-  `run` are the surface you write against; the pre-1.0 churn is quarantined to internal faces.
+- **The adopter-written builder does not break in `0.2.x`.** `Constitution`, the boundary DSL, and
+  `run` are the surface you write against; a breaking change must earn a new pre-1.0 minor.
 
 ## Non-goals
 
