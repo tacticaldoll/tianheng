@@ -52,12 +52,7 @@ fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), 
         .parent()
         .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
     let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
-    // Canonicalized, via the shared primitive 圭表/渾儀 already route their own module-graph
-    // cycle guards through — a symlinked directory (or a circular `#[path]` chain) reached via two
-    // distinct literal paths to the identical real file must be recognized as the same node, or
-    // this walk's explicit work-queue can grow without bound on a genuine cycle (a hang, not a
-    // stack overflow, since the walk is iterative). Previously deduped on the literal path alone —
-    // a pre-existing cross-dimension inconsistency (BACKLOG, 0.2.2 lesson).
+    // Uses canonicalized path visit tracking to prevent cycle loops on symlinks.
     let mut visited: HashSet<PathBuf> = HashSet::new();
     while let Some((file, child_base)) = pending.pop() {
         if !xingbiao::try_visit(&mut visited, &file)? {

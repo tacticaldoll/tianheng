@@ -1,17 +1,5 @@
-//! Module resolution — descend a `crate::a::b` path from the crate root to the items it owns
-//! **and** the source file they live in, in one traversal so the two views cannot drift (a
-//! `mod`-resolution divergence is the false-negative class the project forbids). Handles inline
-//! `mod x { … }` and file `mod x;` (`<name>.rs` / `<name>/mod.rs`); an **unconditional**
-//! `#[path = "…"]` file module is followed to its author-chosen file (matching `walk_module`'s
-//! crate-wide policy) — resolved from `path_base`, the containing file's own directory with each
-//! enclosing inline-`mod` name accumulated onto it (rustc's rule), so a `#[path]` relocated inside
-//! an inline block reads the file rustc compiles, not a same-named orphan. An unconditional
-//! `#[path]` preceding an INLINE module header is followed too — not for the header's own content
-//! (already inline, unaffected), but to relocate the base its own file-form children resolve
-//! from, matching `walk_module`'s crate-wide policy for the identical shape. A `cfg_attr`-wrapped
-//! `#[path]` on a FILE module remains a narrow **fail-loud** bound (`unknown_module_error`, exit
-//! 2) when it is the only declaration for a segment, never a silent pass and never governing a
-//! stale conventional file.
+//! Module resolution: descends a module path from crate root to its items and source files.
+//! Handles inline `mod x { ... }`, file `mod x;`, and `#[path]` remaps.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -23,9 +11,7 @@ use crate::errors::{
 use crate::resolve::strip_raw;
 use crate::syn_util::{direct_path_value, has_cfg_attr, has_path_attr};
 
-/// The path segments of a module relative to the crate root: `crate::domain::sub` →
-/// `["domain", "sub"]`; `crate` → `[]`. A leading `crate` is stripped; canonicalized so a
-/// raw-identifier segment (`r#type`) compares as its plain form.
+/// The path segments of a module relative to the crate root.
 fn module_segments(module: &str) -> Vec<String> {
     module
         .split("::")
@@ -37,23 +23,7 @@ fn module_segments(module: &str) -> Vec<String> {
         .collect()
 }
 
-/// Resolve a module path to its items, each paired with the **file its own branch was resolved
-/// from** and a **branch index** — needed by a caller that must attribute EACH finding to the real
-/// file that produced it, rather than a single, first-branch file for the whole module, AND must
-/// derive any per-branch resolution context (a `use`-map, a child-module shadow set) from exactly
-/// one branch's own items, never a union. When `module` is ordinary (reached through exactly one
-/// branch), every item pairs with that one file and index `0`, same as the test-only
-/// `resolve_module_file` would report. When `module` was reached through a mutually-exclusive
-/// `#[cfg]` split, an item pairs with the file its OWN branch actually lives in and that branch's
-/// own index — so a finding produced from a non-first branch's item is never misattributed to a
-/// different branch's file (the false-attribution class the test-only `resolve_module_root`'s
-/// single-file shape cannot avoid, found on a round-5 adversarial review — see `PROJECT.md`'s
-/// Decisions). The index is REQUIRED, not merely the file, because two mutually-exclusive **inline**
-/// `#[cfg]` siblings share one identical enclosing file — grouping a per-branch resolution context
-/// by file alone re-merges them, reproducing the identical cross-branch conflation one hop past
-/// item observation itself (found on a round-8 adversarial review — see `PROJECT.md`'s Decisions).
-/// An unknown segment is a constitution error; a declared-but-fileless module is a scan error —
-/// never a silent pass.
+/// Resolves a module path to its items, paired with the source file and branch index of origin.
 pub(crate) fn resolve_module_items_with_files(
     src_dir: &Path,
     root_file: &Path,
@@ -72,14 +42,7 @@ pub(crate) fn resolve_module_items_with_files(
     }
     Ok(items)
 }
-
-/// Resolve a module path to the **source file** its items live in — the crate root for `crate`
-/// or an inline module, or the located `<name>.rs` / `<name>/mod.rs` for a file module. Test-only
-/// (production callers all need per-finding attribution and use
-/// [`resolve_module_items_with_files`] instead — this single-file shape is exactly the false-
-/// attribution hazard its own doc warns about for a `#[cfg]`-split module, see `PROJECT.md`'s
-/// Decisions): a convenience for a resolver-level test that only cares which file one particular
-/// module path resolves to.
+/// Resolves a module path to its primary source file (test-only helper).
 #[cfg(test)]
 pub(crate) fn resolve_module_file(
     src_dir: &Path,
@@ -105,30 +68,7 @@ fn resolve_module(
         .map(|(items, file, _child_dir, _path_base)| (items, file))
 }
 
-/// Like [`resolve_module`] but also returns the module's **child directory** (where its
-/// file-based `mod x;` children live) and its `#[path]`-resolution **base** (where a `#[path]`
-/// written directly in it resolves from — the same two concepts [`Branch`] tracks throughout the
-/// descent). Needed by a subtree walk that must continue descending below the anchored module;
-/// the single descent already computes both, so returning them cannot drift from the resolved
-/// items/file. Callers MUST use the returned `path_base`, not re-derive it as `file.parent()`: an
-/// inline-module anchor's `path_base` is its accumulated directory, which differs from the
-/// *enclosing* file's own directory (the inline body stays in the parent's file) — re-deriving it
-/// from `file` alone silently substitutes the wrong base.
-///
-/// When `module` was reached through a mutually-exclusive `#[cfg]` split (an inline variant
-/// paired with a file-form sibling, or several same-named non-inline siblings, the standard
-/// per-platform shim), the returned **items** are the union of every surviving branch (see
-/// [`descend`]) — but the returned file/child-dir/path-base are the **first** branch's own, a
-/// stated, deterministic choice: a single-module violation carries one `file` field, not one per
-/// branch, so there is no way to report "the file" precisely when more than one legitimately
-/// backs the module. A caller that must keep descending *beneath* the anchor (a subtree walk)
-/// MUST NOT pair these unioned items with this single directory pair — a non-first branch's own
-/// child would then resolve against the wrong directory (a real false negative, found on
-/// adversarial review); such a caller should use [`resolve_module_branches`] instead, which keeps
-/// every branch's own items and directories together. Test-only in production terms: every real
-/// caller needing a module's file now goes through [`resolve_module_items_with_files`] instead,
-/// for exactly the false-attribution reason above, generalized to any finding, not just a subtree
-/// walk's further descent.
+/// Resolves a module path to its items, file, child directory, and path base (test-only helper).
 #[cfg(test)]
 pub(crate) fn resolve_module_root(
     src_dir: &Path,
