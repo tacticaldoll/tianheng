@@ -1,22 +1,14 @@
-//! The module-graph walk: from a crate's precomputed file list, resolve which modules Rust
-//! actually compiles — the `mod`-declared graph reachable from the crate root — and select the
-//! source files that belong to a governed module. An undeclared orphan file, an inline-only
-//! shadow, and a `#[path]`-remapped module are all excluded, matching the compiler. Depends
-//! downward on [`super::lexer`] (hygiene / token boundaries) and [`super::path_vocab`] (segment
-//! canonicalization, containment, the `mod`-keyword test); reads files via `std::fs`.
+//! The module-graph walk: resolves reachable compiled modules from the crate root and
+//! selects governed source files, excluding undeclared orphans, inline shadows, and
+//! remap-shadowed paths. Depends on [`super::lexer`] and [`super::path_vocab`].
 
 use super::lexer::{balanced_group_end, clean_with_positions, is_ident_byte, read_path_string};
 use super::path_vocab::{canonical_segment, is_mod_declaration_keyword, path_within};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-/// Every `(file, module path)` that belongs to the governed `module` (it *is* `module`
-/// or sits beneath it) **and** is reachable in the crate's module graph (see
-/// [`reachable_modules`]).
-///
-/// Excludes undeclared orphan files, inline-only shadows, and remap-shadowed paths because
-/// rustc never compiles them. Operates over precomputed file sets and deduplicates structural
-/// and remapped file targets.
+/// Selects file paths belonging to the governed module that are reachable in the module graph.
+/// Excludes undeclared orphan files, inline-only shadows, and remap-shadowed paths.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn governed_files(
     src_dir: &Path,
@@ -31,20 +23,7 @@ pub(crate) fn governed_files(
     let structural = files.iter().filter_map(|file| {
         let relative = file.strip_prefix(src_dir).ok()?;
         let module_path = module_path_of(relative, root_relative);
-        // A conventional file whose path is claimed by an inline-only module is an orphan Rust
-        // never compiles as that module (the inline body is the module), so it is not a
-        // governed source file — the same "not compiled ⇒ not governed" rule as an undeclared
-        // orphan, keyed on the inline shadow rather than mere unreachability.
-        if inline_only.contains(&module_path) {
-            return None;
-        }
-        // A conventional file whose path coincides with a module remapped ELSEWHERE by
-        // `#[path]`, with no plain-file sibling of its own, is the same orphan hazard: rustc
-        // compiles the remap's target, never this same-named file, so it must not be governed in
-        // the remap's place even though the logical module path IS now reachable (through its
-        // real target, below). A plain-file sibling under a different `#[cfg]` arm is real,
-        // though — `remap_shadowed` (not mere membership in `remapped`) is the right test.
-        if remap_shadowed.contains(&module_path) {
+        if inline_only.contains(&module_path) || remap_shadowed.contains(&module_path) {
             return None;
         }
         if !reachable.contains(&module_path) {
@@ -63,13 +42,6 @@ pub(crate) fn governed_files(
             None
         }
     });
-    // The two iterators can name the same `(file, module_path)` pair: a plain-file sibling can
-    // legitimately be the literal same file an unrelated `#[cfg]` arm's `#[path]` also targets
-    // (e.g. `#[cfg(unix)] pub mod a;` + `#[cfg(windows)] #[path = "a.rs"] pub mod a;`), so the
-    // structural iterator includes it (not shadowed — a real plain-file sibling exists) at the
-    // same time `remap_entries` unconditionally includes the remap target. Deduping here — rather
-    // than relying on every caller to dedup by finding identity, which happens to mask this today
-    // — keeps the "no duplicate governed pair" invariant this function's own contract implies.
     let mut seen = std::collections::BTreeSet::new();
     structural
         .chain(remap_entries)
@@ -77,64 +49,9 @@ pub(crate) fn governed_files(
         .collect()
 }
 
-/// The set of module paths reachable from the crate root via `mod` declarations — the
-/// crate's real module graph as Rust compiles it, observed from source. The walk seeds at
-/// `crate` (the crate-root file(s) `lib.rs` / `main.rs`), reads each reachable module's
-/// file(s) for their top-level `mod name;` / `mod name { … }` declarations, and adds the
-/// child `crate::…::name`.
-///
-/// A file's existence alone does **not** make it a module: an undeclared orphan file —
-/// at the crate root (`src/serde.rs` with no `mod serde;`) or in a subtree
-/// (`src/kernel/orphan.rs` that `kernel` never declares) — is never reached, so it is not
-/// governed and its imports are not observed, matching the compiler (which never compiles
-/// it). This realizes the spec's "a sibling `mod` is in scope" rule for the whole module
-/// tree, not just the crate root. A reachable file that cannot be read is a scan error
-/// ("cannot judge"), never a silent skip.
-///
-/// An inline `mod name { … }` is walked too: its own `mod` declarations — file-backed or
-/// further inline — sit at brace depth > 0 of the file that declares it, so they are found by
-/// re-scanning that declaration's own body span (see [`declared_modules_in`]), not the file's
-/// top level. A file-backed grandchild reached only through an inline parent
-/// (`mod parent { mod child; }`, compiling `parent/child.rs`) is therefore reachable like any
-/// other declared module; the file itself is already indexed by [`module_path_of`], which is
-/// purely structural (derived from the file's own path on disk), so no directory-base
-/// bookkeeping is needed beyond locating the inline body to re-scan. An **unconditional**
-/// `#[path = "…"]` preceding the inline header does NOT relocate the header's own content (the
-/// body already IS the module) but DOES relocate the base directory its own file-form children
-/// resolve from (rustc's rule, verified against a real build: `#[path = "d"] mod x { mod y; }`
-/// compiles `y` at `d/y.rs`, never the default `<parent's child_base>/x/y.rs`) — followed the
-/// same way an unconditional file-form `#[path]` is, below; a `cfg_attr`-wrapped one stays the
-/// same cfg-conditional skip bound.
-///
-/// An **unconditional** `#[path = "…"]` file declaration is now *followed* to its author-chosen
-/// target — closing the divergence from 渾儀/漏刻, which already follow it — resolved from
-/// `path_base`: the containing file's own directory, with each enclosing inline-`mod` name
-/// accumulated onto it (rustc's rule; the crate root's own directory is `src_dir`). A
-/// `#[path]`-loaded file is itself mod-rs-like, so its own children (and any `#[path]` written
-/// inside it) resolve from ITS OWN directory. A `cfg_attr`-wrapped `path` remains a stated,
-/// cfg-conditional skip bound (never followed cfg-blind); an absent unconditional target is a
-/// genuine broken reference and a scan error, never a silent skip; and a `#[path]` chain that
-/// cycles back to an already-open source file (only reachable through `#[path]`, since ordinary
-/// conventional/inline nesting is bounded by the crate's finite file list) is a scan error, never
-/// an unbounded walk — mirroring 渾儀's ancestor-path (not monotonic whole-tree) cycle guard, so
-/// two sibling declarations legitimately sharing one `#[path]` target is never misreported.
-///
-/// Returns `(reachable, inline_only, remapped, remap_shadowed)`. `inline_only` names every path
-/// declared **inline-only** — declared with an inline body and NOT ALSO declared plain file-form
-/// (`mod name;`) in its parent — so a same-named conventional file (`name.rs` / `name/mod.rs`)
-/// beside it is an orphan Rust never compiles as that module. The walk does not read such a file
-/// in place of the inline body, and [`governed_files`] excludes it, so an inline target remains
-/// the self-describing inline constitution error rather than silently governing the orphan. The
-/// inline body's OWN declarations are re-scanned regardless of `inline_only` — a plain-file or
-/// `#[path]` sibling of the same name (only possible under mutually-exclusive `#[cfg]`, the
-/// per-platform shim pattern) is additive with the inline body, cfg-blind, never mutually
-/// exclusive; `inline_only` governs only whether a *stray, undeclared* same-named conventional
-/// file is an orphan, which is moot once a plain file is genuinely declared. `remapped` is every
-/// `(target file, logical module path)` pair reached through an unconditional `#[path]`;
-/// `remap_shadowed` names the paths where that `#[path]` is the ONLY file-form source (no plain
-/// file also declared) — the genuine orphan-shadow hazard [`governed_files`] excludes, since a
-/// plain-file sibling under a different `#[cfg]` arm is real and must not be excluded merely for
-/// sharing a path with an unrelated remap.
+/// Resolves the set of module paths reachable from the crate root via `mod` declarations.
+/// Returns `(reachable, inline_only, remapped, remap_shadowed)`.
+/// Unreachable orphan files are excluded; unreadable reachable files return a scan error.
 #[allow(clippy::type_complexity)]
 pub(crate) fn reachable_modules(
     src_dir: &Path,
@@ -166,23 +83,7 @@ pub(crate) fn reachable_modules(
                 .push(file);
         }
     }
-    // Every file the crate-wide walk (`fs_walk::rust_files`) actually found, by LITERAL (never
-    // canonicalized) path — used below to tell whether a plain child's live-probed candidate is
-    // one `governed_files`' OWN structural iterator will find on its own, or one it never will.
-    // `rust_files` deliberately does not recurse into a symlinked DIRECTORY (its own cycle guard),
-    // so a file that is real, exists, and rustc genuinely compiles — but sits only behind a
-    // symlinked directory component — is absent from `files` even though `Path::is_file` (used by
-    // the live probe below) transparently follows that same symlink. Deliberately literal, NOT
-    // canonicalized: comparing canonical (symlink-resolved) identity instead would wrongly treat a
-    // candidate reached through a symlinked directory as "found" whenever that symlink happens to
-    // alias the same physical file some OTHER, genuinely-walked module path already resolves to
-    // (e.g. `mod real;` backed by `src/real/mod.rs`, plus a SEPARATE `mod kernel;` where
-    // `src/kernel` is a symlink to `src/real` — `canon(src/kernel/mod.rs) == canon(src/real/mod.rs)`
-    // even though `kernel`'s own candidate was never itself walked) — a real false negative found
-    // on a later adversarial review. Literal-path membership has no such aliasing hazard: two
-    // distinct on-disk paths are never literally equal merely because they resolve to the same
-    // target, so a stray file at a remapped module's naive location (a real class this check must
-    // also still reject) is unaffected.
+    // Indexed by literal path to check walk presence without symlink canonicalization aliasing.
     let files_literal: HashSet<&PathBuf> = files.iter().collect();
 
     // Where the walk finds a module's own `mod` declarations: either its file(s) (scanned at
