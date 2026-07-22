@@ -520,15 +520,15 @@ pub(super) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option
 }
 
 /// Decode a plain string literal's escapes — the set rustc and syn accept (`\n`/`\r`/`\t`/`\\`/
-/// `\0`/`\'`/`\"`/`\xHH`/`\u{…}`) — so a `#[path]` value read from raw source matches what syn
-/// would give. An unrecognized escape or a backslash-newline line continuation yields `None`
-/// (fail-safe: the caller treats the value as unreadable rather than guessing). Deliberately a
-/// standalone copy, not shared with 漏刻's identical decoder — 三儀 ⊥ 三儀, each dimension's lexer
-/// stands on its own.
+/// `\0`/`\'`/`\"`/`\xHH`/`\u{…}`/backslash-newline line continuation) — so a `#[path]` value read
+/// from raw source matches what syn would give. An unrecognized escape yields `None` (fail-safe:
+/// the caller treats the value as unreadable rather than guessing). Deliberately a standalone
+/// copy, not shared with 漏刻's identical decoder — 三儀 ⊥ 三儀, each dimension's lexer stands on
+/// its own.
 fn decode_str_escapes(inner: &[u8]) -> Option<String> {
     let s = std::str::from_utf8(inner).ok()?;
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
+    let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c != '\\' {
             out.push(c);
@@ -542,6 +542,17 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
             '0' => out.push('\0'),
             '\'' => out.push('\''),
             '"' => out.push('"'),
+            // A backslash immediately followed by a newline (`\n`, or `\r\n`) is a line
+            // continuation: it and every subsequent leading whitespace character on the
+            // continued line are stripped, contributing nothing to the decoded value — verified
+            // against a real `rustc` build (`"a\` + newline + indentation + `b"` decodes to
+            // `"ab"`). Never a literal `\r`/`\n` push; that would only apply to the plain `r`/`n`
+            // letter escapes above.
+            '\r' | '\n' => {
+                while matches!(chars.peek(), Some(' ' | '\t' | '\n' | '\r')) {
+                    chars.next();
+                }
+            }
             'x' => {
                 let hi = chars.next()?.to_digit(16)?;
                 let lo = chars.next()?.to_digit(16)?;

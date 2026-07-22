@@ -54,58 +54,6 @@ This index makes the current work discoverable without duplicating the detailed 
   async decision, and baseline v3 compatibility. **Authority:** the post-0.2 identity-pressure
   section below and the structured-identity decisions in `PROJECT.md`.
 
-### READY-PATCH
-
-- **A bare `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the same item is not
-  exempted before the "target must exist" check — 圭表 and 渾儀 both hard-error on a legitimate,
-  common per-platform `#[path]` shim.** **Pressure/source:** a v0.2.0..v0.2.1 diff sweep (the
-  release that introduced unconditional-`#[path]`-following in both dimensions) found neither
-  checks for a co-occurring bare `#[cfg]` before requiring the `#[path]` target to exist. Verified
-  against a real `rustc` build: `#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;` with NO
-  `windows_impl.rs` on disk compiles cleanly on a non-windows machine (rustc strips the whole item,
-  `#[path]` included, before ever resolving it) — the standard "write only the platforms you target"
-  per-platform shim shape. `crates/hunyi/src/module_resolve.rs` (`descend`, ~line 296-299) and its
-  crate-wide sibling in `scan.rs` unconditionally `Err(missing_module_file_error(...))` the moment
-  an unconditional `#[path]` target is missing, with no `has_cfg_attr`-style check for an
-  accompanying bare `#[cfg]` first; `crates/guibiao/src/module_scan/reachability.rs`'s analogous
-  direct-`#[path]`-target check has the identical unconditional shape. **Current reaction:** a
-  boundary scanning such a layout on the "wrong" platform hard-fails (exit 2) instead of tolerating
-  the absence, exactly the false-positive class `has_cfg_attr`'s plain-missing-file tolerance
-  already exists to prevent — just not extended to the `#[path]`-target-missing case. **Risk:**
-  moderate — this per-platform-shim-with-only-one-platform's-file-committed shape is plausible in a
-  real, actively-developed crate (not only a broken/mid-edit tree, unlike the sibling missing-file
-  debt entries below). **Fix:** before erroring on a missing unconditional `#[path]` target, check
-  `has_cfg_attr` on the same item's attributes (excluding the `#[path]` attribute itself) and
-  tolerate (skip) if present — mirroring the existing plain-missing-file tolerance shape, applied at
-  the same call sites in `hunyi::module_resolve::descend`, `hunyi::scan::resolve_child_modules`, and
-  `guibiao::module_scan::reachability`'s unconditional-`#[path]` check. **Version:** fits a focused
-  0.2.x maintenance PR — no public API, wire format, or baseline identity change. **Authority:** this
-  session's static review of v0.2.0..v0.2.1 plus direct `rustc` verification.
-- **Guibiao's and louke's independently hand-rolled string-literal decoders don't handle backslash-
-  newline line continuation, unlike `syn` (used by 渾儀) — a three-way divergence on an exotic but
-  valid `#[path]` value.** **Pressure/source:** the same v0.2.0..v0.2.1 sweep, checking whether the
-  three dimensions' independent `#[path]`-string decoders agree on rustc's full escape grammar.
-  Verified against a real `rustc` build: `#[path = "moved\` + a literal newline + `b.rs"]` (valid
-  Rust — backslash-newline strips to nothing, joining the two literal fragments into `movedb.rs`)
-  compiles and is followed by rustc. `crates/guibiao/src/module_scan/lexer.rs::decode_str_escapes`
-  and `crates/louke/src/audit/scan.rs::decode_str_escapes` (deliberately independent hand copies,
-  三儀 ⊥ 三儀) both fall through to their `_ => None` catch-all for a literal newline immediately
-  after a backslash — neither implements the continuation rule `syn::LitStr::value()` (hunyi's
-  decoder) gets for free. **Current reaction:** three different outcomes from the one input — 渾儀
-  follows the real target and governs it correctly; 圭表's `reachable_modules` silently drops the
-  module from `reachable` (no error, a silent coverage gap, since `direct_path_eq` was structurally
-  recognized as `Some` but the decode failed, so neither the plain-file nor the `#[path]`-target
-  branch runs); 漏刻 falls back to the conventional location (or hard-errors if that's also absent,
-  per the entry above) — none of the three agree with either of the others. **Risk:** low; a
-  backslash-newline continuation inside a `#[path]` string literal is exotic even by the standards
-  of this codebase's other accepted-debt entries, essentially never written in real code. **Fix:**
-  add the line-continuation rule to both `decode_str_escapes` copies (skip a backslash immediately
-  followed by `\n`/`\r\n`, then skip leading whitespace on the continued line, matching `syn`'s
-  `parse_lit_str_cooked`), or accept the gap explicitly if the value is judged not worth the
-  duplicated-decoder maintenance cost. **Version:** not scheduled; low real-world likelihood.
-  **Authority:** this session's static review of v0.2.0..v0.2.1 plus direct `rustc` verification of
-  both the compiling input and each decoder's current `None` fallthrough.
-
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:** judgment-neutral lexer/token extraction is now plausible, but the conformance work must
@@ -661,30 +609,32 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   on-disk path), so no rustc directory-base bookkeeping was needed beyond locating the inline body
   to re-scan; the fix generalizes `declared_modules_with_kind` to scan an arbitrary byte range.
   `crates/guibiao` only, no new capability.
-- **A missing plain `mod x;` file is a silent gap, not a scan error — ACCEPTED DEBT (cross-dimension
-  inconsistency, pre-existing).** **Pressure/source:** an 0.2.2 adversarial review comparing
+- **A missing plain `mod x;` file is a silent gap, not a scan error — BUILT (0.2.3).**
+  **Pressure/source:** an 0.2.2 adversarial review comparing
   `reachable_modules` against 渾儀's crate-wide walker (`scan::resolve_child_modules`) on the
   identical layout found that a plain (non-`#[path]`) `mod x;` whose backing file is genuinely
   absent leaves `x` reachable but ungoverned and returns `Ok`, while 渾儀's walker hard-errors (exit
-  2) on the same layout. **Current reaction:** silently ungoverned in 圭表 (predates 0.2.2 — the
-  prior `by_module`-based lookup had the identical gap; this review only newly *compared* it
-  against 渾儀, it did not introduce it). **Why not closed:** 渾儀 distinguishes an unconditional
-  declaration (hard error, a genuine broken reference) from a `#[cfg]`-gated one (tolerated, since
-  the file may legitimately not exist on this platform) because its AST descent reads `#[cfg]`.
-  圭表's hand-rolled scanner deliberately does **not** parse attributes beyond `#[path]` (the
-  dependency-light, `syn`-free core decision recorded in `PROJECT.md`), so it cannot make that same
-  distinction — adding the error unconditionally would misfire on a legitimately `#[cfg]`-excluded
-  missing file, trading a documented gap for a new false positive. **Risk:** low; an unconditional
-  plain `mod x;` with a genuinely absent file is a rustc compile error the crate could never have
-  shipped in the first place, so this is reachable only via test fixtures or a mid-edit tree, not
-  real published code. **Promotion trigger:** a real report of a missing-file plain `mod` masking a
-  boundary check in a *shipped* crate, or 圭表 gaining `#[cfg]` awareness for an unrelated reason
-  (at which point this closes for free). **Version:** targeted for reconsideration in the `0.3.0`
-  breaking window, bundled with any decision to give 圭表 `#[cfg]` awareness — a follow-up sweep
-  (this session) confirmed no lesser fix closes it: the sibling "dual-backed module" debt turned out
-  to be `#[cfg]`-independent and closeable now (BUILT below), but this one genuinely needs the
-  bigger call, not a local pattern. Not scheduled before then. **Authority:** the dependency-light
-  scanner decision in `PROJECT.md`'s Decisions section.
+  2) on the same layout. **Prior reaction:** silently ungoverned in 圭表 (predates 0.2.2 — the
+  prior `by_module`-based lookup had the identical gap; that review only newly *compared* it
+  against 渾儀, it did not introduce it). **Why this was previously thought to need a bigger call,
+  and why that turned out to be too cautious:** 渾儀 distinguishes an unconditional declaration
+  (hard error) from a `#[cfg]`-gated one (tolerated) because its AST descent reads `#[cfg]`
+  semantically (which predicate, evaluated or not); 圭表's hand-rolled scanner deliberately does
+  **not** parse attributes beyond `#[path]` (the dependency-light, `syn`-free core decision in
+  `PROJECT.md`), so a first pass assumed closing this needed that same semantic capability. A
+  follow-up sweep (this session) found the actual requirement is narrower: only the mere
+  **presence** of a bare `#[cfg(...)]` identifier is needed (never evaluating its predicate) — the
+  same syntactic-identifier-only shape guibiao already uses to detect `path`/`cfg_attr`, not a new
+  capability tier. **Fix:** `has_bare_cfg_attr_before_item` (byte-level, mirrors the existing
+  `path_attr_before_item` scan) threads a `has_bare_cfg: bool` through `DeclaredModule` and
+  `child_plain_bases`; a plain child with neither conventional file present now errors unless a
+  bare `#[cfg]` precedes it (tolerated, matching 渾儀's `has_cfg_attr`). A downstream
+  disambiguation bug this surfaced (`module_check.rs` assumed "reachable but ungoverned" always
+  meant "inline") was fixed alongside: a boundary anchored directly at a module whose sole
+  declaration was `#[cfg]`-tolerated away now reacts `unknown_module_error`, matching 渾儀's own
+  `descend` precedent (its empty-branches case falls to the identical error, never a vacuous clean
+  pass). **Authority:** round-5 adversarial review (0.2.2); this session's direct code
+  verification that presence-only detection suffices without semantic `#[cfg]` evaluation.
 - **`descend`'s file-form dedup silently disengages if `canonicalize` fails mid-scan — BUILT (0.2.3),
   superseded by the broader shared path-identity calibration entry below.**
   **Pressure/source:** a round-5 adversarial review of `crates/hunyi/src/module_resolve.rs::descend`'s

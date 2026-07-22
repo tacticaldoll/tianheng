@@ -38,6 +38,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `#[cfg_attr(pred, …)]` never removes the item — only conditionally applies its wrapped
   attribute — so a `#[cfg_attr(unix, allow(dead_code))] mod x;` with no backing file is a real,
   unconditional compile error (E0583) that was previously silently skipped by the audit.
+- 圭表 and 渾儀 now tolerate a missing unconditional `#[path]` target when the item also carries a
+  co-occurring bare `#[cfg(pred)]` — a standard per-platform shim (`#[cfg(windows)] #[path =
+  "windows_impl.rs"] mod imp;`) that previously hard-failed on any platform whose target file
+  wasn't committed, even though rustc itself strips the whole item, `#[path]` included, before
+  ever resolving it when `pred` is false (verified against a real build).
+- 圭表 now reacts (a constitution error), rather than silently dropping the module from
+  `reachable`, when a plain `mod x;` with no backing file carries no `#[cfg]` at all — closing a
+  longstanding cross-dimension coverage gap (渾儀 already hard-erred on the identical shape). A
+  `#[cfg]`-gated missing file is still tolerated, matching 渾儀. A boundary anchored directly at a
+  module whose sole declaration was `#[cfg]`-tolerated away now reacts as an unknown module
+  (never a vacuous clean pass), matching 渾儀's own resolver's identical precedent.
+- 圭表's and 漏刻's independent `#[path]`-string decoders now handle backslash-newline line
+  continuation (`"a\` + newline + `b"` decoding to `"ab"`), matching `syn` (used by 渾儀) and real
+  `rustc` behavior. Previously 圭表 silently dropped such a remapped module from `reachable` with
+  no error, and 漏刻 fell back to (or hard-errored on) the conventional location instead of
+  following the real target.
 
 ### Changed
 - Internal refactor: modularized crate internals across `xuanji`, `xingbiao`, `guibiao`, `hunyi`, `louke`, and the `tianheng` runner's projection layer (deduplicated JSON/text boundary-projection rendering) — no public API, JSON wire format, or self-governance boundary changed.

@@ -1028,11 +1028,15 @@ fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 
 /// Decode a plain-string literal's inner bytes (between the quotes, escapes still present) to the
 /// exact `&str` value the Rust compiler produces, so a probe seam matches the compiler-decoded
-/// declared seam (`RuntimeBoundary::seam()`) rather than the raw source bytes. Returns `None` on any
-/// escape the decoder does not reproduce exactly — a malformed or unrecognized escape, an
-/// out-of-range `\x`, an invalid `\u{…}`, or a backslash-newline **line continuation** (deliberately
-/// not decoded: it *strips* characters, the one escape class that could yield a wrong non-`None`
-/// value and reintroduce a false negative, and no real seam name spans lines). The caller routes
+/// declared seam (`RuntimeBoundary::seam()`) rather than the raw source bytes — and so a `#[path]`
+/// value (the OTHER caller, below) matches 渾儀's syn-derived `s.value()` on the same input. Returns
+/// `None` on any escape the decoder does not reproduce exactly — a malformed or unrecognized
+/// escape, an out-of-range `\x`, or an invalid `\u{…}`. Backslash-newline line continuation IS
+/// decoded (strips the backslash, the newline, and the continued line's leading whitespace,
+/// contributing nothing — verified against a real `rustc` build): a real, if rare, valid `#[path]`
+/// value shape, matching `syn`'s `LitStr::value()` fidelity (the fix a v0.2.0..v0.2.1 cross-
+/// dimension sweep found missing here and in 圭表's independent copy). No real seam name spans
+/// lines, so this never meaningfully changes the seam-name caller's behavior. The caller routes
 /// `None` to an un-auditable probe (a loud reaction), never a silent mismatch. The escape set is the
 /// `&str` string-literal set only; byte-string-only escapes never reach here (byte strings are
 /// already un-auditable).
@@ -1041,7 +1045,7 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
     // by `char` reconstructs any multi-byte content faithfully.
     let s = std::str::from_utf8(inner).ok()?;
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
+    let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c != '\\' {
             out.push(c);
@@ -1055,6 +1059,13 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
             '0' => out.push('\0'),
             '\'' => out.push('\''),
             '"' => out.push('"'),
+            // Backslash-newline line continuation (`\n` or `\r\n`): strip it and every
+            // subsequent leading whitespace character on the continued line.
+            '\r' | '\n' => {
+                while matches!(chars.peek(), Some(' ' | '\t' | '\n' | '\r')) {
+                    chars.next();
+                }
+            }
             // `\xHH`: exactly two hex digits, and (for a `&str`) a value in `0x00..=0x7F`.
             'x' => {
                 let hi = chars.next()?.to_digit(16)?;
@@ -1094,7 +1105,7 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
                 }
                 out.push(char::from_u32(value)?);
             }
-            // An unrecognized escape or a backslash-newline line continuation: react loud.
+            // An unrecognized escape: react loud.
             _ => return None,
         }
     }

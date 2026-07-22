@@ -87,6 +87,20 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
 - **kind**: module · **severity**: enforce · **crate**: guibiao
 
+### `crate::scan`
+
+> path canonicalization for this crate-wide walker's own cycle/dedup guard must go through the shared, fail-loud `xingbiao::canonicalize_or_fail`, never be re-hand-rolled inline here — a sibling instance of the 0.2.2 lesson found in this same crate's `module_resolve` (a second, independently hand-rolled wrapper here once carried its own disagreeing error-message policy)
+
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **kind**: module · **severity**: enforce · **crate**: hunyi
+
+### `crate::audit::scan`
+
+> this CI-only probe scanner's module-cycle guard must go through the shared, fail-loud `xingbiao::try_visit`, never be re-hand-rolled inline here — closes the same class of drift 圭表/渾儀's own guards were confined against, now that 漏刻's self-law permits the additive, `audit`-feature-gated `xingbiao` dependency this routes through
+
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **kind**: module · **severity**: enforce · **crate**: louke
+
 ## Async-exposure boundaries
 
 ### `crate`
