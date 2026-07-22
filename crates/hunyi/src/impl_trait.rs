@@ -87,7 +87,10 @@ pub(crate) fn impl_trait_module_findings(
         root_file,
         module,
         crate_package,
-        collect_item_return_impl_traits,
+        |item, module, uses, ordinal, out| {
+            collect_item_return_impl_traits(item, module, uses, ordinal, out);
+            Ok(())
+        },
         |exposure| shape_finding(exposure, ExposureKind::ImplTrait),
     )
 }

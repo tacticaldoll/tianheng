@@ -89,7 +89,10 @@ pub(crate) fn dyn_module_findings(
         root_file,
         module,
         crate_package,
-        collect_item_dyn_exposures,
+        |item, module, uses, ordinal, out| {
+            collect_item_dyn_exposures(item, module, uses, ordinal, out);
+            Ok(())
+        },
         |exposure| shape_finding(exposure, ExposureKind::DynTrait),
     )
 }

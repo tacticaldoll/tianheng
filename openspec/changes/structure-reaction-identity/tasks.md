@@ -17,7 +17,7 @@
 
 - [x] 3.1 Inventory every 渾儀 rule parameter and ordinal/index/placeholder fallback (`_#`, `trait_#`, impl/item ordinals and equivalents), classifying each as identity-bearing, presentation-only, an observed structural role, or an explicit scan error.
 - [x] 3.2 Decompose unsafe-site facts and their rule keys into form/module/owner/trait/name roles, preserve deliberate per-module anonymous-block coalescing, and add reorder/unrenderable injectivity reactions before its focused commit.
-- [ ] 3.3 Change async exposure and its rule key to module/owner-role/canonical-owner/item seam identity, retain full signatures as diagnosis, and add the self-contained Pacta-shaped signature-stability fixture before its focused commit.
+- [x] 3.3 Change async exposure and its rule key to module/owner-role/canonical-owner/item seam identity, retain full signatures as diagnosis, and add the self-contained Pacta-shaped signature-stability fixture before its focused commit.
 - [ ] 3.4 Migrate every remaining 渾儀 rule/fact production path with exhaustive schema catalogs and cfg-split/reorder/insertion tests; verify no public identity contains scan position before the remaining focused semantic commit(s).
 
 ## 4. 漏刻 rule and fact migration (`refactor(louke)!` commit boundary)

@@ -5729,6 +5729,77 @@ fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
     )
 }
 
+fn async_observations(name: &str, body: &str) -> Result<Vec<(FindingKey, String)>, String> {
+    let tree = TempSrcTree::new(&format!("async-observation-{name}"));
+    tree.write_all(&[("lib.rs", "pub mod registry;\n"), ("registry.rs", body)]);
+    async_exposure_module_findings(tree.src(), &tree.root(), "crate::registry", "x").map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _)| {
+                let finding = fact.into_finding();
+                (finding.key().clone(), finding.text().to_string())
+            })
+            .collect()
+    })
+}
+
+#[test]
+fn pacta_shaped_registry_signature_changes_preserve_async_seam_identity() {
+    let first = async_observations(
+        "pacta-v1",
+        "pub struct Registry;\npub struct Contract;\nimpl Registry { pub async fn register(&self, contract: Contract) {} }\n",
+    )
+    .unwrap();
+    let second = async_observations(
+        "pacta-v2",
+        "pub struct Registry;\npub struct Receipt;\nimpl Registry { pub async fn register(&mut self, name: &str, version: u64) -> Receipt { Receipt } }\n",
+    )
+    .unwrap();
+    assert_eq!(first.len(), 1);
+    assert_eq!(second.len(), 1);
+    assert_eq!(first[0].0, second[0].0);
+    assert_ne!(first[0].1, second[0].1);
+}
+
+#[test]
+fn async_production_violation_separates_target_rule_and_seam() {
+    let (metadata, _fixture) = fixture_metadata(
+        "async-identity",
+        &[
+            ("lib.rs", "pub mod registry;\n"),
+            ("registry.rs", "pub async fn register(name: &str) {}\n"),
+        ],
+    );
+    let boundary = AsyncExposureBoundary::in_crate("x")
+        .module("crate::registry")
+        .must_not_expose_async_fn()
+        .because("registry operations keep a synchronous seam");
+    let mut violations = Vec::new();
+    check_async_exposure_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+
+    let id = violations[0].id();
+    assert_eq!(id.target, "crate::registry");
+    let rule = id.rule_key().expect("async production rule is semantic");
+    assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/async-exposure");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![("including_submodules", "false")]
+    );
+    let fact = id.finding_key().expect("async production fact is semantic");
+    assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/async-exposure");
+    assert_eq!(fact.shape(), "async-free-function");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![
+            ("module", "crate::registry"),
+            ("name", "register"),
+            ("owner", "crate::registry"),
+            ("owner_kind", "module"),
+        ]
+    );
+}
+
 #[test]
 fn async_exposure_flags_a_public_async_free_fn() {
     assert_eq!(
@@ -5913,44 +5984,23 @@ fn async_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
 }
 
 #[test]
-fn async_subtree_and_seam_agree_on_the_owner_fallback_for_an_unrenderable_const_generic_self_type()
-{
-    // Round-11 finding: the subtree path's `ordinal` (fed to `collect_item_async_exposures`, and
-    // from there into `canonical_self_owner`'s `_#{ordinal}` fallback for an impl block whose
-    // self-type carries an unrenderable const-generic argument) used to reset to 0 for EACH
-    // `(module, items, file)` tuple `walk_subtree_modules` returns, while the seam path
-    // (`shape_module_findings`) enumerates continuously over the flattened branch union and never
-    // resets. For the anchor module's own items this desynced the two paths' owner-fallback
-    // strings for the identical impl block -- contradicting this function's own doc promise that a
-    // seam finding is "byte-identical to the single-module path". `ordinal` is now one counter
-    // incrementing continuously across every tuple the subtree walk visits, matching the seam
-    // path's own continuous enumerate.
+fn async_subtree_and_seam_both_fail_loud_on_an_unrenderable_owner() {
     let files = &[(
         "lib.rs",
         "pub struct Arr<const N: usize>;\npub struct Marker;\nimpl Marker { pub async fn before() {} }\nimpl<const N: usize> Arr<{ N + 1 }> { pub async fn unrenderable() {} }\n",
     )];
-    let seam = async_findings("const-generic-owner-parity-seam", files, "crate").unwrap();
-    let subtree = async_subtree_labels("const-generic-owner-parity-subtree", files, "crate");
-    assert_eq!(
-        seam, subtree,
-        "the seam and subtree paths must assign the identical owner-fallback string to the same \
-         impl block's unrenderable const-generic self type: seam={seam:?} subtree={subtree:?}"
+    let seam = async_findings("const-generic-owner-parity-seam", files, "crate").unwrap_err();
+    let subtree = async_subtree("const-generic-owner-parity-subtree", files, "crate").unwrap_err();
+    assert!(seam.contains("without a positional fallback"), "{seam}");
+    assert!(
+        subtree.contains("without a positional fallback"),
+        "{subtree}"
     );
+    assert!(!seam.contains("_#") && !subtree.contains("_#"));
 }
 
 #[test]
-fn async_subtree_does_not_collapse_two_cfg_split_branches_sharing_an_unrenderable_owner_fallback() {
-    // Round-11 finding (the severe half): because `AsyncInherentMethod`'s identity is `(owner,
-    // name, tail)` with no module field (unlike its `AsyncFreeFn`/`AsyncTraitMethod` siblings), and
-    // the shared fact-only dedup (`sort_attributed_facts`) never consults the carried module/file
-    // either, two mutually-exclusive `#[cfg]` branches of the SAME anchor module, each declaring a
-    // same-named type with an unrenderable const-generic self-type argument at the same
-    // per-branch position, used to collide on the identical `_#{ordinal}` owner-fallback string
-    // (ordinal reset to 0 for each branch's own tuple) -- collapsing two genuinely distinct async
-    // fns, compiled under two different, mutually-exclusive configs, into ONE reported finding. A
-    // continuously-incrementing ordinal across the whole subtree walk (never reset per branch)
-    // means two different branches' items can never share an ordinal, so their fallback labels can
-    // never collide by construction.
+fn async_cfg_branches_never_share_an_unrenderable_owner_fallback() {
     let files = &[
         (
             "lib.rs",
@@ -5965,14 +6015,9 @@ fn async_subtree_does_not_collapse_two_cfg_split_branches_sharing_an_unrenderabl
             "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 2 }> { pub async fn run() {} }\n",
         ),
     ];
-    let subtree = async_subtree_labels("cfg-split-owner-fallback-collision", files, "crate::m");
-    assert_eq!(
-        subtree.len(),
-        2,
-        "both cfg branches' own async fn are genuinely distinct violations and must not \
-         dedup-collapse into one merely because their unrenderable-self-type owner fallbacks \
-         previously collided: {subtree:?}"
-    );
+    let error = async_subtree("cfg-split-owner-fallback-collision", files, "crate::m").unwrap_err();
+    assert!(error.contains("without a positional fallback"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
 }
 
 #[test]

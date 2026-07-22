@@ -43,7 +43,8 @@ fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<u
 /// collect [`ShapeExposure`] and pass [`shape_finding`] as `render`; async collects owner-qualified
 /// `String` identities directly and passes the identity `render`. `uses` is collected because the
 /// collectors canonicalize an inherent impl's self-type owner in the seam (a finding-identity
-/// concern), even where the boundary itself needs no name resolution. Each finding pairs with the
+/// concern), even where the boundary itself needs no name resolution. A collector may fail loud
+/// when it cannot produce non-positional identity. Each finding pairs with the
 /// real file its own item's branch was resolved from — never a single first-branch file for the
 /// whole module, which would misattribute a finding produced by a non-first `#[cfg]`-split branch.
 pub(crate) fn shape_module_findings<E>(
@@ -51,7 +52,7 @@ pub(crate) fn shape_module_findings<E>(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-    collect: impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<E>),
+    collect: impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<E>) -> Result<(), String>,
     render: impl Fn(E) -> SemanticFact,
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
@@ -61,7 +62,7 @@ pub(crate) fn shape_module_findings<E>(
     for (ordinal, (item, file, branch)) in items_with_files.iter().enumerate() {
         let uses = &uses_by_branch[branch];
         let mut buf = Vec::new();
-        collect(item, module, uses, ordinal, &mut buf);
+        collect(item, module, uses, ordinal, &mut buf)?;
         collected.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
     }
     let mut findings: Vec<(SemanticFact, PathBuf)> = collected

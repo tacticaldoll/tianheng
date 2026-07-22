@@ -367,6 +367,7 @@ pub(crate) enum SemanticFact {
     },
     /// `async fn <{owner}>::{name}{tail}` — a public inherent `async fn` method, owner-qualified.
     AsyncInherentMethod {
+        module: String,
         owner: String,
         name: String,
         tail: String,
@@ -497,7 +498,9 @@ impl std::fmt::Display for SemanticFact {
                 name,
                 tail,
             } => write!(f, "async fn trait {module}::{trait_name}::{name}{tail}"),
-            Self::AsyncInherentMethod { owner, name, tail } => {
+            Self::AsyncInherentMethod {
+                owner, name, tail, ..
+            } => {
                 write!(f, "async fn <{owner}>::{name}{tail}")
             }
             Self::Visibility {
@@ -567,6 +570,64 @@ impl SemanticFact {
     }
 
     fn into_finding_with_text(self, text: String) -> Finding {
+        match &self {
+            SemanticFact::AsyncFreeFn { module, name, .. } => {
+                return Finding::new(
+                    text,
+                    StructuredFactIdentity::of(
+                        "tianheng.fact/hunyi/async-exposure",
+                        "async-free-function",
+                        [
+                            ("module", module.clone()),
+                            ("name", name.clone()),
+                            ("owner", module.clone()),
+                            ("owner_kind", "module".to_string()),
+                        ],
+                    ),
+                );
+            }
+            SemanticFact::AsyncTraitMethod {
+                module,
+                trait_name,
+                name,
+                ..
+            } => {
+                return Finding::new(
+                    text,
+                    StructuredFactIdentity::of(
+                        "tianheng.fact/hunyi/async-exposure",
+                        "async-trait-method",
+                        [
+                            ("module", module.clone()),
+                            ("name", name.clone()),
+                            ("owner", format!("{module}::{trait_name}")),
+                            ("owner_kind", "trait".to_string()),
+                        ],
+                    ),
+                );
+            }
+            SemanticFact::AsyncInherentMethod {
+                module,
+                owner,
+                name,
+                ..
+            } => {
+                return Finding::new(
+                    text,
+                    StructuredFactIdentity::of(
+                        "tianheng.fact/hunyi/async-exposure",
+                        "async-inherent-method",
+                        [
+                            ("module", module.clone()),
+                            ("name", name.clone()),
+                            ("owner", owner.clone()),
+                            ("owner_kind", "inherent".to_string()),
+                        ],
+                    ),
+                );
+            }
+            _ => {}
+        }
         if let SemanticFact::UnsafeSite { module, site } = &self {
             return Finding::new(
                 text,
@@ -612,39 +673,9 @@ impl SemanticFact {
                     ("owner", owner),
                 ],
             ),
-            SemanticFact::AsyncFreeFn { module, name, tail } => (
-                "async_exposure",
-                vec![
-                    ("form", "free_fn"),
-                    ("module", module),
-                    ("name", name),
-                    ("signature", tail),
-                ],
-            ),
-            SemanticFact::AsyncTraitMethod {
-                module,
-                trait_name,
-                name,
-                tail,
-            } => (
-                "async_exposure",
-                vec![
-                    ("form", "trait_method"),
-                    ("module", module),
-                    ("name", name),
-                    ("signature", tail),
-                    ("trait", trait_name),
-                ],
-            ),
-            SemanticFact::AsyncInherentMethod { owner, name, tail } => (
-                "async_exposure",
-                vec![
-                    ("form", "inherent_method"),
-                    ("name", name),
-                    ("owner", owner),
-                    ("signature", tail),
-                ],
-            ),
+            SemanticFact::AsyncFreeFn { .. } => unreachable!("handled above"),
+            SemanticFact::AsyncTraitMethod { .. } => unreachable!("handled above"),
+            SemanticFact::AsyncInherentMethod { .. } => unreachable!("handled above"),
             SemanticFact::Visibility {
                 visibility,
                 item_kind,
@@ -798,12 +829,10 @@ pub(crate) fn member_label(index: usize, field: &syn::Field) -> String {
 
 /// Canonicalize a signature's `(params) -> ret` tail for an owner-qualified async fact.
 ///
-/// The tail improves the human finding's readability and collision margin, but it is also stored in
-/// the version-2 `signature` key field. Its exact byte form is therefore published baseline wire;
-/// whitespace or type-rendering polish is an identity change even though this does NOT represent the
-/// compiler's implicit future. Params render each input's type via [`type_to_string`] (a receiver as
-/// `self`/`&self`/`&mut self`); the return renders `sig.output`'s written type (empty for `-> ()`);
-/// an unrenderable type contributes `_`.
+/// The tail is diagnosis only: structured async identity names the seam independently, so
+/// parameter, return-type, generic, or rendering changes do not re-key it. Params render each
+/// input's type via [`type_to_string`] (a receiver as `self`/`&self`/`&mut self`); the return
+/// renders `sig.output`'s written type (empty for `-> ()`); an unrenderable type contributes `_`.
 pub(crate) fn render_sig_tail(sig: &syn::Signature) -> String {
     let params: Vec<String> = sig
         .inputs
@@ -1033,6 +1062,7 @@ mod fact_tests {
                 tail: _,
             } => {}
             SemanticFact::AsyncInherentMethod {
+                module: _,
                 owner: _,
                 name: _,
                 tail: _,
@@ -1305,50 +1335,6 @@ mod fact_tests {
                 ],
             ),
             (
-                SemanticFact::AsyncFreeFn {
-                    module: "crate::m".into(),
-                    name: "run".into(),
-                    tail: "()".into(),
-                },
-                "async_exposure",
-                vec![
-                    ("form", "free_fn"),
-                    ("module", "crate::m"),
-                    ("name", "run"),
-                    ("signature", "()"),
-                ],
-            ),
-            (
-                SemanticFact::AsyncTraitMethod {
-                    module: "crate::m".into(),
-                    trait_name: "Port".into(),
-                    name: "run".into(),
-                    tail: "()".into(),
-                },
-                "async_exposure",
-                vec![
-                    ("form", "trait_method"),
-                    ("module", "crate::m"),
-                    ("name", "run"),
-                    ("signature", "()"),
-                    ("trait", "Port"),
-                ],
-            ),
-            (
-                SemanticFact::AsyncInherentMethod {
-                    owner: "crate::Api".into(),
-                    name: "run".into(),
-                    tail: "()".into(),
-                },
-                "async_exposure",
-                vec![
-                    ("form", "inherent_method"),
-                    ("name", "run"),
-                    ("owner", "crate::Api"),
-                    ("signature", "()"),
-                ],
-            ),
-            (
                 SemanticFact::Visibility {
                     visibility: "pub".into(),
                     item_kind: VisibleItemKind::Fn,
@@ -1505,6 +1491,66 @@ mod fact_tests {
             assert_semantic_fact_is_cataloged(&fact);
             let finding = fact.into_finding();
             assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
+            assert_eq!(finding.key().shape(), shape);
+            assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
+        }
+    }
+
+    #[test]
+    fn every_async_seam_form_has_exact_structured_identity() {
+        let cases = vec![
+            (
+                SemanticFact::AsyncFreeFn {
+                    module: "crate::api".into(),
+                    name: "register".into(),
+                    tail: "(&str)".into(),
+                },
+                "async-free-function",
+                vec![
+                    ("module", "crate::api"),
+                    ("name", "register"),
+                    ("owner", "crate::api"),
+                    ("owner_kind", "module"),
+                ],
+            ),
+            (
+                SemanticFact::AsyncTraitMethod {
+                    module: "crate::api".into(),
+                    trait_name: "Registry".into(),
+                    name: "register".into(),
+                    tail: "(&self, &str)".into(),
+                },
+                "async-trait-method",
+                vec![
+                    ("module", "crate::api"),
+                    ("name", "register"),
+                    ("owner", "crate::api::Registry"),
+                    ("owner_kind", "trait"),
+                ],
+            ),
+            (
+                SemanticFact::AsyncInherentMethod {
+                    module: "crate::api".into(),
+                    owner: "crate::api::Registry".into(),
+                    name: "register".into(),
+                    tail: "(&mut self, &str)".into(),
+                },
+                "async-inherent-method",
+                vec![
+                    ("module", "crate::api"),
+                    ("name", "register"),
+                    ("owner", "crate::api::Registry"),
+                    ("owner_kind", "inherent"),
+                ],
+            ),
+        ];
+        for (fact, shape, fields) in cases {
+            assert_semantic_fact_is_cataloged(&fact);
+            let finding = fact.into_finding();
+            assert_eq!(
+                finding.key().fact_type(),
+                "tianheng.fact/hunyi/async-exposure"
+            );
             assert_eq!(finding.key().shape(), shape);
             assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
         }

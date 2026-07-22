@@ -431,6 +431,26 @@ pub(crate) fn canonical_self_owner(
     type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}"))
 }
 
+/// Canonicalize an impl self type without inventing traversal-position identity.
+///
+/// An unsupported self type returns `None`; a caller observing a seam that needs the owner can
+/// then fail loud instead of publishing `_#ordinal`.
+pub(crate) fn canonical_self_owner_without_fallback(
+    self_ty: &syn::Type,
+    uses: &UseMap,
+    module: &str,
+    impl_type_params: &std::collections::HashSet<String>,
+) -> Option<String> {
+    if let syn::Type::Path(tp) = self_ty {
+        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
+            if let Some(base) = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule) {
+                return Some(format!("{base}{}", render_last_segment_args(&tp.path)?));
+            }
+        }
+    }
+    type_to_string(self_ty)
+}
+
 /// Canonicalize a path's **last** segment's angle-bracketed generic arguments (`<u8, T>`), `""` when
 /// it has none, or `None` when any argument is unrenderable (a complex const-generic expression) or
 /// the segment is parenthesized (`Fn(..)`). Used to append a self type's generics to its resolved
