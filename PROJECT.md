@@ -528,6 +528,28 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   the seam path's own continuous enumerate and, by construction, guaranteeing two different tuples'
   items can never share a fallback string. All three findings confirmed with a real, executed,
   then-reverted repro during the adversarial verify phase.
+  A **round-12** re-review of round 11's fixes found the qself and ordinal fixes solid (a fresh
+  pass specifically hunting for a fourth self-type-shadow vector, and for an ordinal/sort
+  interaction, both came back clean) — but found the round-11 guibiao fix itself too narrowly
+  scoped: it excluded a crate's own self-referential dependency (Cargo's legal `[dev-dependencies]
+  main = { path = "." }` doctest/dogfooding pattern) ONLY inside `Rule::RestrictWorkspaceDependenciesTo`'s
+  own arm, leaving the IDENTICAL false positive live in every sibling rule reading the same shared
+  `dependencies()` / `dependencies_with_disallowed_source()` observation — confirmed to still
+  false-positive under `RestrictDependenciesTo` and `RestrictDependencySourcesTo`, and (a lower-
+  confidence but real variant) under `ForbidDependencyOn`/`RestrictFeaturesOf`/`ForbidFeaturesOf`
+  whenever a boundary happens to name the target's own crate. This is the identical "fix the
+  reported instance, not the shared model" shape the whole 0.2.2 lesson opened with, now surfacing
+  in a THIRD codebase area (圭表's crate rules, after 渾儀's module resolution and 漏刻's probe
+  scanner): a false positive was real and root-caused, but the fix was written against one
+  consuming rule instead of the shared observation those rules all read. Closed properly this time
+  by moving the exclusion below every consumer, into `cargo_metadata.rs` itself (`is_self_dependency`,
+  used by `dependencies`, `dependencies_with_disallowed_source`, and `declared_features`), so a
+  self-referential edge is invisible to EVERY crate rule at once — never a cross-crate concern any
+  of them exist to govern — and the now-redundant local exclusion inside
+  `RestrictWorkspaceDependenciesTo`'s own arm was removed rather than left as a harmless-but-
+  misleading duplicate. Twelve rounds now: the lesson that a fix must target the shared model, not
+  the one instance that triggered the report, applies as much to a fresh, single-round finding as
+  to the eight-round cfg-branch saga it was first named from.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction
