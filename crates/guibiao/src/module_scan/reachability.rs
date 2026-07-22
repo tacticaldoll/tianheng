@@ -12,17 +12,11 @@ use std::path::{Path, PathBuf};
 
 /// Every `(file, module path)` that belongs to the governed `module` (it *is* `module`
 /// or sits beneath it) **and** is reachable in the crate's module graph (see
-/// [`reachable_modules`]). An undeclared orphan file is not a governed source file even
-/// when its path would map under the module, because Rust never compiles it — so its
-/// imports must not be observed. Operates on a precomputed file list so the crate's
-/// source is scanned once per boundary. `remapped` is [`reachable_modules`]'s third return
-/// value — every `(target file, logical module path)` pair reached through an unconditional
-/// `#[path]` — added here alongside the structurally-derived files, since a remapped file's own
-/// on-disk path rarely coincides with its logical module path. `remap_shadowed` is its fourth:
-/// the module paths where a same-named conventional file really is an orphan (the `#[path]` is
-/// the ONLY file-form source for that name — no plain-file sibling under a different `#[cfg]`
-/// arm), so a structural file matching one of THOSE paths is excluded; membership in `remapped`
-/// alone is not enough, since a legitimate plain-file sibling can share a path with a remap.
+/// [`reachable_modules`]).
+///
+/// Excludes undeclared orphan files, inline-only shadows, and remap-shadowed paths because
+/// rustc never compiles them. Operates over precomputed file sets and deduplicates structural
+/// and remapped file targets.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn governed_files(
     src_dir: &Path,
