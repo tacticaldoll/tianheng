@@ -25,6 +25,15 @@ pub(crate) fn canonical_module_path(path: &str) -> String {
         .join("::")
 }
 
+/// Fold a Cargo package name to its Rust import identifier: `-` → `_` (`windows-sys` →
+/// `windows_sys`). Cargo maps a hyphenated package name to an underscore identifier in source, and
+/// a `use` path can never contain `-`, so every site matching a declared package name against an
+/// observed import head needs this fold. The single home of it, so a dependency-name-matching site
+/// and a confined-crate-name site cannot silently diverge on the rule.
+pub(crate) fn package_name_to_import_ident(name: &str) -> String {
+    name.replace('-', "_")
+}
+
 /// Sibling-safe `::`-delimited path containment: `path` is `prefix` itself or lies strictly
 /// beneath it (`crate::a` contains `crate::a::b`, never the prefix-colliding sibling
 /// `crate::ab`). The single home of the containment rule every module boundary's inbound /
