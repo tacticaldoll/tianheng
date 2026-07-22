@@ -25,127 +25,131 @@ fn anchor_line(anchor: Option<&str>) -> String {
         None => String::new(),
     }
 }
-/// The shared `[severity] module M in K / rule / reason` text block every per-module boundary
-/// projection emits — one skeleton so the callers cannot drift byte-for-byte. `rule_line` is the
-/// fully-composed rule segment: a bare rule, or one a caller prebuilt by folding its opt-in / scope
-/// / operand detail into the rule string.
-fn module_block(
-    severity: &str,
-    module: &str,
-    krate: &str,
-    rule_line: &str,
-    reason: &str,
-) -> String {
-    format!(
-        "\n[{severity}] module {module} in {krate}\n  rule:   {rule_line}\n  reason: {reason}\n"
-    )
+
+/// Projection data for one module-scoped boundary text block. The `target` field encodes the
+/// kind-specific prefix ("module X in Y", "trait X in Y", "subtree X in Y", "crate X"), so a
+/// single `render_section` skeleton handles all eight boundary types — the format string is
+/// written once, not eight times.
+struct ModuleBlockSpec<'a> {
+    severity: &'a str,
+    target: String,
+    rule_line: String,
+    reason: &'a str,
+    anchor: Option<&'a str>,
 }
-/// The text projection of the semantic boundaries.
-pub(in crate::runner) fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
-    if boundaries.is_empty() {
+
+/// The single render skeleton shared by all module-scoped boundary projections. `runtime_text`
+/// is deliberately excluded — its extra `posture:` field makes it a permanent exception.
+fn render_section(title: &str, blocks: &[ModuleBlockSpec<'_>]) -> String {
+    if blocks.is_empty() {
         return String::new();
     }
-    let mut out = text_section("Semantic", boundaries.len());
-    for boundary in boundaries {
-        // The opt-in deepening changes the reaction, so the projected law must show it.
-        let opt_in = if boundary.including_trait_impls() {
-            " (including trait impls)"
-        } else {
-            ""
-        };
-        let rule_line = format!(
-            "{}: {}{}",
-            SIGNATURE_RULE,
-            boundary.forbidden().join(", "),
-            opt_in
-        );
-        out.push_str(&module_block(
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            &rule_line,
-            boundary.reason(),
+    let mut out = text_section(title, blocks.len());
+    for b in blocks {
+        out.push_str(&format!(
+            "\n[{}] {}\n  rule:   {}\n  reason: {}\n",
+            b.severity, b.target, b.rule_line, b.reason
         ));
-        out.push_str(&anchor_line(boundary.anchor()));
+        out.push_str(&anchor_line(b.anchor));
     }
     out
+}
+
+/// The text projection of the semantic boundaries.
+pub(in crate::runner) fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
+    render_section(
+        "Semantic",
+        &boundaries
+            .iter()
+            .map(|b| {
+                let opt_in = if b.including_trait_impls() {
+                    " (including trait impls)"
+                } else {
+                    ""
+                };
+                ModuleBlockSpec {
+                    severity: b.severity().as_str(),
+                    target: format!("module {} in {}", b.module(), b.crate_package()),
+                    rule_line: format!(
+                        "{}: {}{}",
+                        SIGNATURE_RULE,
+                        b.forbidden().join(", "),
+                        opt_in
+                    ),
+                    reason: b.reason(),
+                    anchor: b.anchor(),
+                }
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 /// The text projection of the trait-impl-locality boundaries.
 pub(in crate::runner) fn trait_impl_text(boundaries: &[TraitImplBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let mut out = text_section("Trait-impl-locality", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] trait {} in {}\n  rule:   {} (declared: {})\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.trait_(),
-            boundary.crate_package(),
-            TRAIT_IMPL_RULE,
-            boundary.allowed_locations().join(", "),
-            boundary.reason(),
-        ));
-        out.push_str(&anchor_line(boundary.anchor()));
-    }
-    out
+    render_section(
+        "Trait-impl-locality",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("trait {} in {}", b.trait_(), b.crate_package()),
+                rule_line: format!(
+                    "{} (declared: {})",
+                    TRAIT_IMPL_RULE,
+                    b.allowed_locations().join(", ")
+                ),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 /// The text projection of the visibility boundaries.
 pub(in crate::runner) fn visibility_text(boundaries: &[VisibilityBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let mut out = text_section("Visibility", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&module_block(
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            boundary.ceiling().rule(),
-            boundary.reason(),
-        ));
-        out.push_str(&anchor_line(boundary.anchor()));
-    }
-    out
+    render_section(
+        "Visibility",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("module {} in {}", b.module(), b.crate_package()),
+                rule_line: b.ceiling().rule().to_string(),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 /// The text projection of the forbidden-marker boundaries.
 pub(in crate::runner) fn forbidden_marker_text(boundaries: &[ForbiddenMarkerBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let mut out = text_section("Forbidden-marker", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] subtree {} in {}\n  rule:   {}: {}\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            FORBIDDEN_MARKER_RULE,
-            boundary.forbidden().join(", "),
-            boundary.reason(),
-        ));
-        out.push_str(&anchor_line(boundary.anchor()));
-    }
-    out
+    render_section(
+        "Forbidden-marker",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("subtree {} in {}", b.module(), b.crate_package()),
+                rule_line: format!("{}: {}", FORBIDDEN_MARKER_RULE, b.forbidden().join(", ")),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 /// The text projection of the dyn-trait boundaries.
 pub(in crate::runner) fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let mut out = text_section("Dyn-trait", boundaries.len());
-    for boundary in boundaries {
-        let rule_line = shape_rule_text(DYN_TRAIT_RULE, boundary.forbidden_operands());
-        out.push_str(&module_block(
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            &rule_line,
-            boundary.reason(),
-        ));
-        out.push_str(&anchor_line(boundary.anchor()));
-    }
-    out
+    render_section(
+        "Dyn-trait",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("module {} in {}", b.module(), b.crate_package()),
+                rule_line: shape_rule_text(DYN_TRAIT_RULE, b.forbidden_operands()),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 /// The text rule line for a shape/existential boundary: the bare shape rule when shape-only, or
 /// `… of: A, B` when operand-scoped — so `list --format text` surfaces the operand set the JSON
@@ -158,66 +162,63 @@ pub(in crate::runner) fn shape_rule_text(rule: &str, operands: &[String]) -> Str
     }
 }
 pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let mut out = text_section("Impl-trait", boundaries.len());
-    for boundary in boundaries {
-        let rule_line = shape_rule_text(IMPL_TRAIT_RULE, boundary.forbidden_operands());
-        out.push_str(&module_block(
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            &rule_line,
-            boundary.reason(),
-        ));
-        out.push_str(&anchor_line(boundary.anchor()));
-    }
-    out
+    render_section(
+        "Impl-trait",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("module {} in {}", b.module(), b.crate_package()),
+                rule_line: shape_rule_text(IMPL_TRAIT_RULE, b.forbidden_operands()),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 pub(in crate::runner) fn async_exposure_text(boundaries: &[AsyncExposureBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let mut out = text_section("Async-exposure", boundaries.len());
-    for boundary in boundaries {
-        // The subtree opt-in changes the reaction, so the projected law shows it (parity with the
-        // JSON/Markdown projections); a bare boundary's text stays byte-identical.
-        let scope = if boundary.including_submodules() {
-            " (including submodules)"
-        } else {
-            ""
-        };
-        let rule_line = format!("{}{}", ASYNC_EXPOSURE_RULE, scope);
-        out.push_str(&module_block(
-            boundary.severity().as_str(),
-            boundary.module(),
-            boundary.crate_package(),
-            &rule_line,
-            boundary.reason(),
-        ));
-        out.push_str(&anchor_line(boundary.anchor()));
-    }
-    out
+    render_section(
+        "Async-exposure",
+        &boundaries
+            .iter()
+            .map(|b| {
+                // The subtree opt-in changes the reaction, so the projected law shows it (parity
+                // with the JSON/Markdown projections); a bare boundary's text stays byte-identical.
+                let scope = if b.including_submodules() {
+                    " (including submodules)"
+                } else {
+                    ""
+                };
+                ModuleBlockSpec {
+                    severity: b.severity().as_str(),
+                    target: format!("module {} in {}", b.module(), b.crate_package()),
+                    rule_line: format!("{}{}", ASYNC_EXPOSURE_RULE, scope),
+                    reason: b.reason(),
+                    anchor: b.anchor(),
+                }
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 /// The text projection of the unsafe-confinement boundaries.
 pub(in crate::runner) fn unsafe_text(boundaries: &[UnsafeBoundary]) -> String {
-    if boundaries.is_empty() {
-        return String::new();
-    }
-    let mut out = text_section("Unsafe-confinement", boundaries.len());
-    for boundary in boundaries {
-        out.push_str(&format!(
-            "\n[{}] crate {}\n  rule:   {} (allowed: {})\n  reason: {}\n",
-            boundary.severity().as_str(),
-            boundary.crate_package(),
-            UNSAFE_CONFINEMENT_RULE,
-            boundary.allowed_locations().join(", "),
-            boundary.reason(),
-        ));
-        out.push_str(&anchor_line(boundary.anchor()));
-    }
-    out
+    render_section(
+        "Unsafe-confinement",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("crate {}", b.crate_package()),
+                rule_line: format!(
+                    "{} (allowed: {})",
+                    UNSAFE_CONFINEMENT_RULE,
+                    b.allowed_locations().join(", ")
+                ),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
 }
 /// The text projection of the runtime (漏刻) boundaries, appended to `list`. Empty when there
 /// are none, so a project not using the dimension sees unchanged output.

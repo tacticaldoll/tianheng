@@ -121,42 +121,48 @@ pub(in crate::runner) fn forbidden_marker_boundary_json(
     object["forbidden"] = serde_json::json!(boundary.forbidden());
     object
 }
+/// Shared body for an operand-scoped shape boundary (dyn-trait or impl-trait): builds the
+/// `semantic_module_json` base and emits `"forbidden"` only when the operand set is non-empty —
+/// a shape-only boundary (empty set) projects unchanged, with no `forbidden` param.
+fn shape_operand_boundary_json(
+    module: &str,
+    krate: &str,
+    rule: &str,
+    severity: &str,
+    reason: &str,
+    anchor: Option<&str>,
+    operands: &[String],
+) -> Value {
+    let mut object = semantic_module_json(module, krate, rule, severity, reason, anchor);
+    if !operands.is_empty() {
+        object["forbidden"] = serde_json::json!(operands);
+    }
+    object
+}
 /// The JSON projection of one dyn-trait boundary, mirroring a semantic boundary's shape (`kind`,
 /// `target`, `crate`, `rule`, `severity`, `reason`). An operand-scoped boundary additionally
 /// carries the `forbidden` operand set; a shape-only boundary (empty set) emits no such field.
 pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
-    let mut object = semantic_module_json(
+    shape_operand_boundary_json(
         boundary.module(),
         boundary.crate_package(),
         DYN_TRAIT_RULE,
         boundary.severity().as_str(),
         boundary.reason(),
         boundary.anchor(),
-    );
-    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
-    // (empty set) projects unchanged, with no `forbidden` param.
-    let operands = boundary.forbidden_operands();
-    if !operands.is_empty() {
-        object["forbidden"] = serde_json::json!(operands);
-    }
-    object
+        boundary.forbidden_operands(),
+    )
 }
 pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    let mut object = semantic_module_json(
+    shape_operand_boundary_json(
         boundary.module(),
         boundary.crate_package(),
         IMPL_TRAIT_RULE,
         boundary.severity().as_str(),
         boundary.reason(),
         boundary.anchor(),
-    );
-    // The operand set surfaces only for an operand-scoped boundary; a shape-only boundary
-    // (empty set) projects unchanged, with no `forbidden` param.
-    let operands = boundary.forbidden_operands();
-    if !operands.is_empty() {
-        object["forbidden"] = serde_json::json!(operands);
-    }
-    object
+        boundary.forbidden_operands(),
+    )
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
     let mut object = semantic_module_json(
