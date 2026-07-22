@@ -14,206 +14,63 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ### Fixed
 - 圭表 module reachability now walks into an inline `mod parent { … }` body to find its own
-  declarations, closing a false negative where a file-backed child reached only through an inline
-  parent (`mod parent { mod child; }`, compiling `parent/child.rs`) was never marked reachable —
-  so a real import in that file went unobserved and could pass a boundary check silently.
+  file-backed declarations, so a child reached only through an inline parent (`mod parent { mod
+  child; }`, compiling `parent/child.rs`) is observed and its imports are checked.
 - 圭表 now follows an unconditional, direct `#[path = "…"]` module declaration to its real target
-  (matching 渾儀 and 漏刻, which already did), instead of excluding it from the reachable module
-  graph. Closes the one remaining cross-dimension divergence: a relocated module's imports are
-  now observed by all three observation dimensions, not silently passed by the static one. A
-  `cfg_attr`-wrapped `#[path]` remains excluded (cfg-conditional, never followed cfg-blind).
-- 圭表 no longer drops an inline module body's own nested declarations when a plain conventional
-  file or an unconditional `#[path]` remap of the same name also exists under a mutually-exclusive
-  `#[cfg]` arm — the standard per-platform shim pattern. Every declared source for a name is now
-  observed (cfg-blind), never only one of them.
-- 圭表's `#[path]`-attribute scan no longer depends on attribute order: a `cfg_attr(pred, path =
-  "…")` written *before* an unconditional `#[path = "…"]` on the same `mod` declaration used to
-  make the whole declaration excluded, dropping a module rustc genuinely compiles whenever `pred`
-  is false. The unconditional attribute now wins regardless of which is scanned first.
-- A plain (`#[path]`-free) `mod child;` declared inside a file reached through an unconditional
-  `#[path]` remap is now governed under its logical path. Previously it was reachable but never
-  scanned or governed — the module's own on-disk location diverges from its logical path once
-  remapped, so the structural file index never had an entry for it, and a real `use` inside it
-  passed every boundary unobserved.
-- A `#[path]` inside one mutually-exclusive `#[cfg]` arm's target — or inside a *plain* child of
-  that arm — that legitimately references a sibling arm's own target (the two are never
-  simultaneously open in any real build) is no longer misreported as a cycle. Plain-child
-  resolution was redesigned so every source now carries its own ancestor set and its own
-  `child_base` (where its plain/inline children live — a different directory from where a
-  `#[path]` written in it resolves, whenever the source is an ordinary flat file), replacing the
-  global structural index previously used to resolve a plain child. This closes three related
-  gaps found by a second adversarial-review round on the first fix: the cross-arm cycle false
-  positive recurring one hop through a plain child (not just directly at a `#[path]` target); a
-  stray, wholly uncompiled file coincidentally sitting at a remapped module's naive structural
-  location no longer being phantom-governed alongside the real one; and a plain child's own
-  further plain children (a grandchild reached only through a `#[path]` remap) now being resolved
-  and governed at all, closing a real false negative.
+  (matching 渾儀 and 漏刻), so a relocated module's imports are observed by all three observation
+  dimensions. A `cfg_attr`-wrapped `#[path]` remains excluded (cfg-conditional, never followed
+  cfg-blind).
+- Every declared source for a module name is now observed, cfg-blind: an inline module body's own
+  nested declarations, a plain conventional file, and an unconditional `#[path]` remap of the same
+  name under mutually-exclusive `#[cfg]` arms (the standard per-platform shim) are all governed,
+  regardless of attribute order or which source is scanned first. A plain (`#[path]`-free) `mod
+  child;` declared inside a file reached through an unconditional `#[path]` remap is now governed
+  under its logical path.
+- A `#[path]` inside one mutually-exclusive `#[cfg]` arm's target — or inside a plain child of that
+  arm — that legitimately references a sibling arm's own target (the two are never simultaneously
+  open in any real build) is no longer misreported as a module cycle. Plain-child resolution now
+  tracks each source's own directory context (where a `#[path]` written in it resolves, and
+  separately, where its own plain/inline children live) instead of resolving through a shared
+  structural index.
+- A plain child reached only through a **symlinked directory** component, and an inline module
+  preceded by an unconditional `#[path]` header (which relocates the base its own file-form
+  children resolve from), are both now followed and governed correctly.
 - 渾儀's single-module resolver (backing signature-coupling, visibility, dyn/impl-trait, and
-  async-exposure anchors) no longer stops at the first same-named `mod` variant it finds: a
-  mutually-exclusive `#[cfg]` arm pairing an inline body with a file-form sibling (the standard
-  per-platform shim) previously returned only the inline variant's items, never even reading the
-  file-form sibling's own file. Both variants' items are now unioned, matching the resolver's
-  existing cfg-blind policy for two same-named inline variants. A follow-up fix closes a further
-  gap a second review round found in the same mixed-sibling case: a segment nested *beneath* the
-  split point now resolves from whichever variant's own directory actually declared it, instead of
-  always the inline variant's — previously a flat (non-`mod.rs`) file-form sibling's own `#[path]`
-  was silently mis-resolved (or hard-failed) whenever it needed a different directory than the
-  inline accumulation. A third review round found the same resolver still conflating two directory
-  concepts in the opposite direction — a `#[path]`-loaded module's own CONVENTIONAL (non-`#[path]`)
-  children were resolved from a name-derived directory unrelated to where the file actually lives,
-  rather than the loaded file's own directory — and found that two non-inline (file-form) cfg
-  siblings, one plain and one `#[path]`-remapped, were still not unioned (first match won,
-  silently dropping whichever sibling lost the race), unlike the crate-wide walk's own
-  already-established policy of never stopping at one match. Both are fixed: every non-inline
-  declaration for a name now produces its own branch (matching the crate-wide walk), and each
-  branch's own child-continuation directory is computed from its own origin rather than a shared
-  formula. The subtree walker backing `including_submodules()` reactions (async-exposure, and any
-  future subtree-scoped capability) is also fixed to use the anchor's own resolved `#[path]` base
-  directly instead of re-deriving it from the anchor's file — which silently substituted the wrong
-  base whenever the anchor itself was an inline module. A fourth review round found the same
-  subtree walker still collapsing a mutually-exclusive `#[cfg]` split's several branches down to
-  one shared directory pair for *further descent*, even though it correctly unioned their items —
-  so a child declared only inside a non-first branch's own file silently resolved against the
-  wrong directory. The subtree walker now runs once per surviving branch, each seeded with only
-  that branch's own ancestor file, and merges every branch's own results. The same round also found
-  that two mutually-exclusive `#[cfg]` arms plainly declaring the identical name (no `#[path]`, so
-  both resolve to the one real backing file) produced a duplicate branch, inflating one real
-  violation into two apparently-distinct findings; file-form matches are now deduped by the
-  resolved file's canonical path.
-- A fifth adversarial review round, focused on the newest surface area above plus a fresh
-  cross-crate consistency pass, found two further false negatives in 圭表's plain-child live
-  probe. A plain child reached only through a **symlinked directory** component was marked
-  reachable and read (`fs_walk::rust_files` never recurses into a symlinked directory, its own
-  cycle guard, so such a file is absent from the structural file list `governed_files` scans
-  from — but the live probe's `is_file`/`canonicalize` calls transparently follow it) yet was
-  absent from every `governed_files` output, silently passing its real imports. And an
-  unconditional `#[path = "…"]` preceding an **inline** module header (`#[path = "d"] pub mod x {
-  pub mod y; }`) was treated as a pure no-op, when rustc actually uses it to relocate the base
-  directory the inline body's own file-form children resolve from — so such a child's real file
-  was never found at its relocated location and its imports went unobserved. Both are now
-  followed/governed correctly, verified against real `cargo check` builds of each shape. The same
-  round found 渾儀's single-module resolver (`descend`) mishandling the identical inline-`#[path]`
-  shape in the opposite direction: it dropped such a module from both its inline-union and
-  file-form loops entirely, so any single-module-anchored capability (signature-coupling-exposure,
-  dyn-trait-boundary, impl-trait-boundary, visibility-boundary, async-exposure's non-subtree seam)
-  hard-failed with a spurious "module not found" (exit 2) on a module that demonstrably exists and
-  compiles — while 渾儀's own crate-wide walker resolved it without trouble. `descend` now unions
-  an inline module's items regardless of any `#[path]`, while still following an unconditional
-  one to relocate the base its own file-form children resolve from, matching the crate-wide
-  walker's existing, correct handling.
-- 渾儀's `Violation.file` for a `#[cfg]`-split module used to always name the **first surviving
-  branch's** file, even when the actual finding came from a different branch's items — so a
-  violation genuinely written in the second `#[cfg]` arm could be reported at the first, innocent
-  arm's file, contradicting the CLI report's own documented promise that `file` names where the
-  offending seam is written. The same shape of bug hit the whole-crate-scan/subtree path one hop
-  further: two findings sharing one module string (a legitimate `#[cfg]`-split shim) resolved
-  their file through a cache keyed only by that string, so the second finding silently reused the
-  first's (possibly wrong) file. Both are closed by attributing file provenance **at collection
-  time**, not by re-resolving from a module string afterward: every module-resolved item now
-  carries the real file its own branch was read from (`resolve_module_items_with_files`), and
-  every crate-wide-scan site (`ImplSite`, `TypeDef`, `UnsafeSite`) and subtree-walk module now
-  carries its own real file directly, collected while the file is actually open. `seam_file` and
-  `per_finding_file`'s module-string-keyed re-resolution are removed entirely — there is no longer
-  a class of caller that resolves a finding's file from anything other than the exact branch that
-  produced it.
-- A sixth adversarial review round, focused on the round-5 changes above, found that the
-  symlinked-directory fix itself introduced a narrower false negative: it compared a live-probed
-  candidate's **canonical** (symlink-resolved) identity against the crate-wide walk's own file set,
-  so a module reached through a symlinked directory that happened to alias the same physical file
-  as some OTHER, unrelated, genuinely-walked module (`mod real;` backed directly by `src/real/mod.rs`,
-  plus a separate `mod kernel;` where `src/kernel` is a symlink to `src/real`) was wrongly treated
-  as "already found," even though the `kernel` candidate itself was never walked — silently
-  un-governing it. Comparing **literal** (never canonicalized) path identity instead closes this:
-  two on-disk paths are never literally equal merely because they resolve to the same target.
-- The same round found 渾儀's signature-coupling and shape/existential (dyn-trait, impl-trait)
-  single-module resolvers computing their `use`-map ONCE over the flattened union of every
-  `#[cfg]`-split branch's items, so two mutually-exclusive branches each declaring `use <different
-  path> as Handle;` (a realistic per-platform shim) collided in one shared map — the branch unioned
-  last silently overwrote the earlier branch's alias, misresolving the first branch's own bare
-  reference through the second branch's `use` and hiding a real forbidden-exposure violation. The
-  `use`-map is now computed per file, looked up by each item's own branch file.
-- The same round found `scan.rs`'s `resolve_child_modules` (the whole-crate scan's shared descent
-  skeleton) never received the same-file dedup `module_resolve.rs::descend` gained in 0.2.2: two
-  mutually-exclusive `#[cfg]` arms plainly declaring the identical name, resolving to one real
-  file, produced a duplicate `ImplSite`/`TypeDef` scan entry. This was normally absorbed by the
-  final fact-identity dedup, but a self-type whose generic argument cannot be rendered falls back
-  to a positional ordinal computed from the scan's own position — so the two duplicates got
-  different ordinals and escaped dedup, inflating one real trait-impl-locality or forbidden-marker
-  finding into two. Fixed with the identical dedup, keyed on (declared name, canonical file) so two
-  different names legitimately `#[path]`-remapped to the same file are never conflated.
-- A seventh round found the sibling gap the round-6 `use`-map fix had explicitly flagged but not
-  yet confirmed: `exposure.rs::module_findings` fixed its `use`-map per `#[cfg]`-branch file, but
-  still computed `child_mods`/`externs_type`/`externs_reexport`/`renames_bare` once over the
-  flattened cross-branch union — a branch with no local `mod net;` had its own genuine `pub use
-  net::Something;` (the real extern crate) silently suppressed merely because a
-  mutually-exclusive sibling branch happened to declare its own local `mod net`. The identical gap
-  existed in `crate_scope.rs::extern_resolution` (feeding `shape_scan.rs::operand_module_findings`,
-  backing the dyn-trait/impl-trait operand-scoped boundaries). Both are now computed per file,
-  looked up by each exposure's own branch, never shared across mutually-exclusive branches.
-- An eighth round found the round-6/7 "per file" fix above was itself structurally a no-op for two
-  mutually-exclusive **inline** `#[cfg]` siblings sharing one enclosing file
-  (`#[cfg(a)] mod x { .. } #[cfg(b)] mod x { .. }`, the standard per-platform shim): `descend()`
-  still merged every same-named inline occurrence into one shared branch before the per-file
-  grouping ever ran, so the two arms' `use`-maps and child-module shadow sets were still merged one
-  hop further in, unnoticed because no earlier round's repro used two purely-inline siblings.
-  `descend()` now gives every inline occurrence its own branch, matching the file-form loop's
-  existing policy; and since two inline siblings still share one identical file even once split,
-  `resolve_module_items_with_files` now pairs each item with a **branch index**, and every consumer
-  (signature-coupling's `use`-map/shadow sets, the dyn-trait/impl-trait operand resolvers) groups
-  by that index instead of by file alone. The async-exposure subtree walker needed no matching
-  change — its own child walker already gave each inline occurrence its own entry and never grouped
-  sibling entries by file.
-- A round-9 review found `forbidden_marker.rs`'s marker-acquisition gate resolving a bare `impl`
-  self type with no awareness that it might be the impl block's own declared generic type parameter:
-  a blanket `impl<T> Marker for T {}` in a module with an unrelated `use ... as T` alias resolved
-  `T` through that alias, fabricating a marker finding on a type the source never actually impls the
-  marker for. The sibling exposure collectors already shadowed an impl's own generic-param names for
-  every other position, but the crate-wide scan's `ImplSite` never carried them and the self-type
-  gate never consulted them. Fixed by giving `ImplSite` its own declared generic-param names and
-  dropping a bare self type that matches one of them before any resolution is attempted.
-- The same round found 漏刻's `mod_preamble_attrs` locating a `mod` declaration's own attribute
-  preamble via a backward raw-byte scan for `;`/`{`/`}` — the only traversal in that file not
-  literal/comment-aware. An earlier attribute's own string value containing a bare `;` in ordinary
-  prose (e.g. a `#[doc = "..."]`) desynced the scan, silently swallowing a later `#[path = "..."]`
-  attribute and either hard-failing on a module that genuinely compiles or silently substituting the
-  wrong file. Fixed by replacing it with a forward, literal-aware scan from the enclosing scope's
-  own start, matching every other traversal in the file.
-- A round-10 review, re-checking round 9's own two fixes one hop further, found both incomplete.
-  `resolve_self_type`'s shadow check only recognized a bare single-segment self type, so `impl<T>
-  Marker for T::Assoc {}` (a projection off the impl's own parameter) still resolved through a
-  same-named alias one segment deeper — fixed by sharing the sibling exposure collector's own
-  leading-segment shadow check (`is_shadowed_param_path`) between both instead of a narrower copy.
-  `canonical_self_owner` (the self-type label used in `trait_impl.rs`'s `MisplacedImpl` finding
-  identity) had received no shadow at all, so a blanket impl's own parameter resolving through an
-  alias to the same owner string a genuine direct impl also produced silently dedup-collapsed two
-  distinct trait-impl-locality violations into one — a real false negative, not a cosmetic mislabel
-  — fixed by giving it the identical shadow, threaded through its seven call sites. And 漏刻's
-  `mod_preamble_attrs` forward scan (round 9) was literal-aware but not attribute-group-aware: a
-  brace-delimited attribute argument (`#[foo({ 1 })]`) between an earlier real `#[path = "..."]` and
-  the `mod` keyword had its own internal braces mistaken for item boundaries, reproducing round 9's
-  bug through a different vector — fixed by skipping a whole attribute group as one atomic unit.
-- A round-11 review found the self-type shadow gap a THIRD time: neither `resolve_self_type` nor
-  `is_shadowed_param_path` ever checked a self type's `qself` — a qualified-path self type
-  (`<T>::Item`, `<T as Trait>::Item`) stores its own dependent type outside `path.segments`
-  entirely, so a self type dependent on the impl's own generic parameter written this way still
-  bypassed the shadow and resolved through a same-named alias. `canonical_self_owner` already
-  guarded on `qself.is_none()`; `resolve_self_type` never had the matching guard — fixed by adding
-  it, mirroring the sibling function exactly.
-- The same round found two unrelated bugs on previously under-reviewed surfaces. `圭表`'s
-  `RestrictWorkspaceDependenciesTo`/`forbid_all_workspace_dependencies` flagged a crate's own
-  legitimate self-referential `[dev-dependencies]` path dependency on itself (a real, Cargo-legal
-  doctest/dogfooding pattern `cargo metadata` emits verbatim) as an "unlisted workspace dependency"
-  — a false positive on a pattern naming no other crate at all. Fixed by excluding the target's own
-  name from the workspace-scoped rule's match. And `async_exposure_subtree_findings`'s `ordinal`
-  (feeding the owner-fallback for an impl with a genuinely unrenderable const-generic self-type
-  argument) reset to 0 for each module the subtree walker visited rather than incrementing
-  continuously, so the anchor module's own items could get a different owner-fallback string
-  between seam and subtree mode, and — more seriously — two mutually-exclusive `#[cfg]` branches of
-  the identical anchor module could collide on the same fallback string and silently dedup-collapse
-  two genuinely distinct async fns into one reported finding, a real false negative. Fixed by making
-  `ordinal` one counter incrementing continuously across the whole subtree walk, never reset per
-  module.
-- `圭表`'s crate-boundary rules (`forbid_dependency_on`, `restrict_dependencies_to`,
+  async-exposure anchors) now unions every mutually-exclusive `#[cfg]` variant of a module — inline
+  and file-form alike — instead of stopping at the first match, and resolves a segment nested
+  beneath a split point, or a `#[path]`-loaded module's own conventional children, from that
+  variant's own directory rather than a name-derived or shared one. Two `#[cfg]` arms plainly
+  declaring the identical name (resolving to one real file) are deduped by canonical path so they
+  never inflate one violation into two.
+- A `use`-map, and the child-module/re-export/rename tables it depends on, are now computed **per
+  branch** of a `#[cfg]`-split module rather than once over the flattened cross-branch union —
+  closing false negatives where one branch's own `use` alias or genuine re-export was silently
+  shadowed or overwritten by an unrelated, mutually-exclusive sibling branch. Two purely-inline
+  `#[cfg]` siblings sharing one enclosing file are split into their own branches for this purpose,
+  not just file-form ones.
+- A finding's reported `file` is now attributed **at collection time**, carried from the exact
+  `#[cfg]` branch that produced it, rather than re-resolved afterward from a module-path string —
+  so a violation written in a non-first branch is reported at its own file, never an innocent
+  sibling's.
+- The subtree walker backing `.including_submodules()` now descends every surviving `#[cfg]` branch
+  independently, each from its own resolved `#[path]` base, instead of collapsing several branches
+  to one shared directory pair for further descent.
+- A self type that resolves to the enclosing `impl`'s own declared generic type parameter —
+  written as a bare identifier, a projection (`T::Assoc`), or a qualified path (`<T>::Item`) — is
+  no longer resolved through a same-named `use` alias, in both the forbidden-marker acquisition
+  gate and the trait-impl-locality owner label. This closes a false-positive marker finding and a
+  dedup-collapse false negative where two distinct `MisplacedImpl` violations were silently
+  reported as one.
+- `async_exposure`'s subtree scan now assigns a continuously-incrementing ordinal across the whole
+  walk, never reset per module — closing a dedup-collapse false negative where two
+  mutually-exclusive `#[cfg]` branches of one async fn, each carrying an unrenderable const-generic
+  self type, collided on the same fallback identity and were reported as a single finding.
+- 漏刻's probe-coverage scanner now locates a `mod` declaration's own attribute preamble with a
+  forward, literal- and attribute-group-aware scan, replacing a backward raw-byte scan that could
+  desync on a bare `;`/`{`/`}` inside an earlier attribute's string value or a brace-delimited
+  attribute argument — closing false hard-fails and wrong-file substitutions on valid, compiling
+  code.
+- 圭表's crate-boundary rules (`forbid_dependency_on`, `restrict_dependencies_to`,
   `restrict_workspace_dependencies_to`, `restrict_dependency_sources_to`, and the
   feature-granularity rules) no longer observe a crate's own self-referential dependency on
   itself — a real, Cargo-legal pattern (e.g. a `[dev-dependencies]` path dependency on `.`, used
