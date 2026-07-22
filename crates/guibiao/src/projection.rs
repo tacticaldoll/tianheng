@@ -45,13 +45,14 @@ pub fn report_json(
                 "rule": entry.rule,
                 "finding": entry.finding,
                 "rule_key": entry.id.rule_key().to_json(),
-                "finding_key": entry.id.fact().to_json(),
+                "fact": entry.id.fact().to_json(),
                 "owner": entry.owner,
                 "tracker": entry.tracker,
             })
         })
         .collect();
     let mut document = serde_json::json!({
+        "format": "tianheng.reaction/structured-facts",
         "outcome": label,
         "exit_code": outcome.exit_code(),
         "violations": violations,
@@ -127,6 +128,7 @@ pub fn constitution_json(constitution: &Constitution) -> String {
         .map(boundary_json)
         .collect();
     let document = serde_json::json!({
+        "format": "tianheng.constitution/declared-boundaries",
         "constitution": constitution.name(),
         "boundaries": boundaries,
     });

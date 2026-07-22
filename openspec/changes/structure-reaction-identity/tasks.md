@@ -42,12 +42,12 @@
 
 ## 7. Facade and machine projections (`feat(tianheng)!` commit boundary)
 
-- [ ] 7.1 Re-export the vocabulary-neutral identity inspection types through each promised standalone surface and the composed prelude; add external compile-contract coverage.
-- [ ] 7.2 Update baseline, reaction, and constitution JSON to project their existing data plus the exact semantic formats `tianheng.baseline/structured-facts`, `tianheng.reaction/structured-facts`, and `tianheng.constitution/declared-boundaries`.
-- [ ] 7.3 Derive SARIF partial fingerprints solely from canonical violation identity under `tianheng/structured-fact-identity`, remove `tianhengViolationId/v1`, and prove presentation/result-order stability.
-- [ ] 7.4 Make `--baseline` fail with exit 2 on unsupported files and make `--write-baseline` refuse to overwrite them with actionable preserve/move-or-delete/regenerate guidance.
-- [ ] 7.5 Verify standalone instrument reactions and `check_constitution` feed the same projection/gating implementation without adding a dimension/plugin trait or testing DSL.
-- [ ] 7.6 Run focused CLI, JSON, SARIF, baseline safety, adopter-surface, and composed-check tests before committing the facade increment.
+- [x] 7.1 Re-export the vocabulary-neutral identity inspection types through each promised standalone surface and the composed prelude; add external compile-contract coverage.
+- [x] 7.2 Update baseline, reaction, and constitution JSON to project their existing data plus the exact semantic formats `tianheng.baseline/structured-facts`, `tianheng.reaction/structured-facts`, and `tianheng.constitution/declared-boundaries`.
+- [x] 7.3 Derive SARIF partial fingerprints solely from canonical violation identity under `tianheng/structured-fact-identity`, remove `tianhengViolationId/v1`, and prove presentation/result-order stability.
+- [x] 7.4 Make `--baseline` fail with exit 2 on unsupported files and make `--write-baseline` refuse to overwrite them with actionable preserve/move-or-delete/regenerate guidance.
+- [x] 7.5 Verify standalone instrument reactions and `check_constitution` feed the same projection/gating implementation without adding a dimension/plugin trait or testing DSL.
+- [x] 7.6 Run focused CLI, JSON, SARIF, baseline safety, adopter-surface, and composed-check tests before committing the facade increment.
 
 ## 8. Documentation and compatibility evidence (`docs` commit boundary)
 

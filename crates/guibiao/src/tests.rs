@@ -1683,6 +1683,7 @@ fn must_not_be_imported_by_projects_its_importer() {
     );
 
     let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["format"], "tianheng.constitution/declared-boundaries");
     assert_eq!(
         doc["boundaries"][0]["rule"],
         "module must not be imported by"
@@ -2023,14 +2024,16 @@ fn report_json_projects_a_violation_with_its_kind() {
     assert_eq!(doc["outcome"], "violations");
     assert_eq!(doc["exit_code"], 1);
     let violation = &doc["violations"][0];
+    assert_eq!(doc["format"], "tianheng.reaction/structured-facts");
     assert_eq!(violation["kind"], "crate");
     assert_eq!(violation["finding"], "serde");
     assert_eq!(
-        violation["finding_key"]["type"],
+        violation["fact"]["type"],
         "tianheng.fact/guibiao/dependency"
     );
-    assert_eq!(violation["finding_key"]["shape"], "dependency-edge");
-    assert_eq!(violation["finding_key"]["fields"]["package"], "serde");
+    assert_eq!(violation["fact"]["shape"], "dependency-edge");
+    assert_eq!(violation["fact"]["fields"]["package"], "serde");
+    assert!(violation["rule_key"].is_object());
     assert_eq!(violation["severity"], "enforce");
     assert_eq!(violation["baselined"], false);
     // `reason` is the repair hint; there is no separate field.
@@ -2082,7 +2085,7 @@ fn report_json_reflects_baseline_and_stale_in_gate() {
     assert_eq!(doc["exit_code"], 0, "a fully baselined run does not fail");
     assert_eq!(doc["violations"][0]["baselined"], true);
     assert_eq!(doc["stale_baseline"][0]["finding"], "gone");
-    assert!(doc["stale_baseline"][0]["finding_key"].is_object());
+    assert!(doc["stale_baseline"][0]["fact"].is_object());
 }
 
 #[test]

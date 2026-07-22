@@ -40,6 +40,15 @@ impl ViolationId {
     pub fn fact(&self) -> &StructuredFactIdentity {
         &self.fact
     }
+
+    /// Project the complete semantic identity into canonical JSON.
+    pub fn to_json(&self) -> Value {
+        serde_json::json!({
+            "target": self.target,
+            "rule_key": self.rule_key.to_json(),
+            "fact": self.fact.to_json(),
+        })
+    }
 }
 
 /// One recorded baseline entry.

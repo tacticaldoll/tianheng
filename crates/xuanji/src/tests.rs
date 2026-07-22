@@ -105,6 +105,11 @@ fn structured_path_uses_target_rule_key_and_fact_only() {
         old.rule_key().rule_type(),
         "tianheng.rule/test/deny-dependency"
     );
+    assert_eq!(
+        old.to_json().to_string(),
+        r#"{"fact":{"fields":{"package":"serde"},"shape":"dependency-edge","type":"tianheng.fact/test/dependency"},"rule_key":{"fields":{"dependency":"serde"},"type":"tianheng.rule/test/deny-dependency"},"target":"core"}"#,
+        "the canonical identity serialization is a machine-contract input"
+    );
 }
 
 #[test]

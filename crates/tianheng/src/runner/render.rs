@@ -175,15 +175,10 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
                     "level": level,
                     "message": { "text": format!("{} (found: {})", v.reason, v.finding) },
                 });
-                // A violation's identity is (target, rule, finding) — but SARIF's `ruleId`/message
-                // carry only rule and finding. For a file-less violation (a dependency edge, a
-                // runtime seam) `target` is the SOLE discriminator, so two violations differing only
-                // in target would otherwise render byte-identical and a fingerprint-deduping ingester
-                // (GitHub code scanning) would collapse them — masking the second in the SARIF surface
-                // even though exit/JSON/text keep both. Emit the full identity as a partialFingerprint
-                // so distinct violations stay distinct alerts.
+                let canonical_identity = serde_json::to_string(&v.id().to_json())
+                    .expect("canonical violation identity is JSON-serializable");
                 result["partialFingerprints"] = json!({
-                    "tianhengViolationId/v1": format!("{}\u{1f}{}\u{1f}{}", v.target, v.rule, v.finding),
+                    "tianheng/structured-fact-identity": fingerprint(&canonical_identity),
                 });
                 if let Some(file) = &v.file {
                     // File-level only: artifactLocation.uri, no `region` (line is not observed).
@@ -233,6 +228,22 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
         "runs": [run],
     });
     serde_json::to_string_pretty(&doc).expect("a serde_json::Value is always serializable")
+}
+
+/// Stable dependency-free FNV-1a 128-bit digest for the canonical identity document.
+///
+/// Rust's default hasher deliberately does not promise a stable algorithm, while SARIF
+/// fingerprints must survive process and tool upgrades. This fixed algorithm is presentation-free
+/// and remains in the facade, leaving the serde_json-only reaction model unchanged.
+fn fingerprint(canonical_identity: &str) -> String {
+    const OFFSET: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
+    const PRIME: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013b;
+    let mut digest = OFFSET;
+    for byte in canonical_identity.bytes() {
+        digest ^= u128::from(byte);
+        digest = digest.wrapping_mul(PRIME);
+    }
+    format!("{digest:032x}")
 }
 
 // A GitHub-specific `::error::` workflow-command format is deliberately NOT a built-in: it would

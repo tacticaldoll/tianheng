@@ -320,11 +320,8 @@ fn report_sarif_merges_anchor_and_polarity_into_one_property_bag() {
 
 #[test]
 fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
-    // SARIF v1 fingerprints retain the human triple for wire compatibility, but SARIF's
-    // ruleId/message carry only rule and finding. For a file-less violation `target` is the sole
-    // discriminator, so two violations differing ONLY in target rendered byte-identical and a
-    // fingerprint-deduping ingester (GitHub code scanning) collapsed them. Each now carries a
-    // partialFingerprint over the full identity, keeping distinct violations distinct.
+    // SARIF presentation carries no target, so target-differing file-less violations need the
+    // canonical structured identity fingerprint to remain distinct alerts.
     let same_rule = "deny external dependencies";
     let same_finding = "serde";
     let same_reason = "keep the graph lean";
@@ -349,7 +346,7 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
         "two violations differing only in target are two results: {results:?}"
     );
     let fp = |r: &Value| {
-        r["partialFingerprints"]["tianhengViolationId/v1"]
+        r["partialFingerprints"]["tianheng/structured-fact-identity"]
             .as_str()
             .expect("a fingerprint string")
             .to_string()
@@ -359,11 +356,73 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
         fp0, fp1,
         "target-differing violations must get distinct fingerprints: {fp0} vs {fp1}"
     );
-    // Both targets appear across the fingerprints (message alone could not distinguish them).
-    let joined = format!("{fp0}{fp1}");
+    assert_eq!(fp0.len(), 32);
+    assert_eq!(fp1.len(), 32);
     assert!(
-        joined.contains("web") && joined.contains("cli"),
-        "the fingerprint carries the discriminating target: {joined}"
+        results.iter().all(|result| result["partialFingerprints"]
+            .get("tianhengViolationId/v1")
+            .is_none()),
+        "the presentation-derived fingerprint property is removed"
+    );
+}
+
+#[test]
+fn sarif_fingerprint_ignores_presentation_diagnostics_and_result_order() {
+    let identity = ViolationId::new(
+        "core",
+        RuleKey::of("tianheng.rule/test/deny", [("policy", "external")]),
+        StructuredFactIdentity::of(
+            "tianheng.fact/test/dependency",
+            "dependency-edge",
+            [("package", "serde")],
+        ),
+    );
+    let old = Violation::new(
+        BoundaryKind::Crate,
+        identity.clone(),
+        "old rule",
+        "old finding",
+        "old reason".to_string(),
+        Severity::Warn,
+    );
+    let changed = Violation::new(
+        BoundaryKind::Runtime,
+        identity,
+        "new rule",
+        "new finding with signature diagnostics",
+        "new reason".to_string(),
+        Severity::Enforce,
+    )
+    .with_file(Some("src/new.rs".to_string()))
+    .with_anchor(Some("law".to_string()))
+    .with_polarity(Polarity::AllowlistGap);
+    let unrelated = violation("other", "other rule", "other fact", None);
+
+    let fingerprint_of = |report: Report, index: usize| {
+        let sarif: Value =
+            serde_json::from_str(&report_sarif(&Outcome::Violations(report))).unwrap();
+        sarif["runs"][0]["results"][index]["partialFingerprints"]
+            ["tianheng/structured-fact-identity"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let first = fingerprint_of(Report::new(vec![old, unrelated.clone()]), 0);
+    let reordered = fingerprint_of(Report::new(vec![unrelated, changed]), 1);
+    assert_eq!(first, reordered);
+
+    let changed_identity = Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "old rule", "tokio"),
+        "old rule",
+        "old finding",
+        "old reason".to_string(),
+        Severity::Warn,
+    );
+    assert_ne!(
+        first,
+        fingerprint_of(Report::new(vec![changed_identity]), 0),
+        "an identity-bearing fact change must change the fingerprint"
     );
 }
 
@@ -893,6 +952,7 @@ fn list_document_covers_every_populated_dimension() {
     // adds no key (the static-only projection stays byte-identical).
     let empty = Constitution::new("empty");
     let doc = list_document(&empty);
+    assert_eq!(doc["format"], "tianheng.constitution/declared-boundaries");
     assert!(
         doc.get("semantic_boundaries").is_none(),
         "empty adds no key: {doc}"
@@ -1929,8 +1989,9 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     assert_eq!(super::write_baseline(&outcome, path_str), 0);
     let first = std::fs::read_to_string(path).expect("baseline written");
     let first_doc: Value = serde_json::from_str(&first).unwrap();
-    assert_eq!(first_doc["version"], 2);
-    assert!(first_doc["violations"][0]["finding_key"].is_object());
+    assert_eq!(first_doc["format"], "tianheng.baseline/structured-facts");
+    assert!(first_doc.get("version").is_none());
+    assert!(first_doc["violations"][0]["fact"].is_object());
     assert!(
         !first.contains("owner"),
         "fresh baseline has no metadata: {first}"
@@ -1952,26 +2013,29 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
 }
 
 #[test]
-fn write_baseline_upgrades_version_one_and_preserves_exact_match_metadata() {
+fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_it() {
     let path = TempPath::new(std::env::temp_dir().join(format!(
         "tianheng-baseline-v1-upgrade-{}.json",
         std::process::id()
     )));
     let path = path.path();
     let path_str = path.to_str().expect("utf-8 temp path");
-    let legacy = r#"{"version":1,"violations":[{
-        "target":"core","rule":"rule","finding":"serde",
-        "owner":"team-core","tracker":"ISSUE-8"
-    }]}"#;
-    std::fs::write(path, legacy).expect("write legacy baseline");
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
-
-    assert_eq!(super::write_baseline(&outcome, path_str), 0);
-    let rewritten: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(rewritten["version"], 2);
-    assert!(rewritten["violations"][0]["finding_key"].is_object());
-    assert_eq!(rewritten["violations"][0]["owner"], "team-core");
-    assert_eq!(rewritten["violations"][0]["tracker"], "ISSUE-8");
+    for unsupported in [
+        r#"{"version":1,"violations":[]}"#,
+        r#"{"version":2,"violations":[]}"#,
+        r#"{"violations":[]}"#,
+        r#"{"format":"tianheng.baseline/unknown","violations":[]}"#,
+        "{ malformed",
+    ] {
+        std::fs::write(path, unsupported).expect("write unsupported baseline");
+        assert_eq!(super::write_baseline(&outcome, path_str), 2);
+        assert_eq!(
+            std::fs::read_to_string(path).unwrap(),
+            unsupported,
+            "refusal must preserve the existing file byte-for-byte"
+        );
+    }
 }
 
 #[test]

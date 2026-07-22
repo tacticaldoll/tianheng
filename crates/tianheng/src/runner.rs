@@ -421,28 +421,29 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
         Outcome::Violations(report) => report,
         _ => &empty,
     };
-    // Metadata-preserving merge: carry each surviving entry's owner/tracker forward by identity, so
-    // re-running --write-baseline never silently wipes hand-added governance records. A missing file
-    // is the normal first write (no warning); an existing-but-unreadable/unparseable file falls back
-    // to a fresh baseline but WARNS, so the metadata loss is visible rather than silent.
+    // Metadata-preserving merge applies only to a supported semantic baseline. Unsupported or
+    // unreadable content is preserved byte-for-byte: presentation cannot reconstruct identity, and
+    // overwriting would silently destroy annotations the adopter may still need to carry manually.
     let baseline = match std::fs::read_to_string(path) {
         Ok(text) => match Baseline::from_json(&text) {
             Ok(existing) => Baseline::of_preserving(report, &existing),
             Err(err) => {
                 eprintln!(
-                    "Tianheng: existing baseline {path} could not be parsed ({err}); writing a \
-                     fresh baseline — owner/tracker metadata is not carried forward"
+                    "Tianheng: refusing to overwrite unsupported baseline {path} ({err}). Preserve \
+                     any desired owner/tracker annotations, move or delete the unsupported file, \
+                     then run `tianheng check --write-baseline {path}` again."
                 );
-                Baseline::of(report)
+                return EXIT_CANNOT_JUDGE;
             }
         },
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Baseline::of(report),
         Err(err) => {
             eprintln!(
-                "Tianheng: existing baseline {path} could not be read ({err}); writing a fresh \
-                 baseline — owner/tracker metadata is not carried forward"
+                "Tianheng: refusing to overwrite unreadable baseline {path} ({err}). Preserve any \
+                 desired owner/tracker annotations, move or delete the unsupported file, then run \
+                 `tianheng check --write-baseline {path}` again."
             );
-            Baseline::of(report)
+            return EXIT_CANNOT_JUDGE;
         }
     };
     match std::fs::write(path, baseline.to_json()) {
