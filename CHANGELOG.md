@@ -18,6 +18,20 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   exact-repeat check — closing a real unbounded-loop gap (a divergent, non-cycling alias rewrite
   chain the exact-repeat guard alone cannot catch) and, as a side effect, an alias-resolution false
   negative (a member reached through an aliased *prefix*, not just an exact alias key, now lands).
+- 圭表 now reacts (a constitution error) when a plain `mod x;` resolves to BOTH `x.rs` and
+  `x/mod.rs` at once — a genuine `rustc` compile error (E0761) it previously accepted silently as
+  two separate sources, dual-governing one module path. Matches 漏刻's own probe scanner, which
+  already reacted on this exact shape.
+- 渾儀's single-module-anchored resolver (`descend`) now tolerates a `#[cfg]`-gated `mod x;` with
+  no backing file, matching its own crate-wide walker's (`resolve_child_modules`) existing policy —
+  the two previously disagreed, so a boundary anchored directly at a `#[cfg]`-gated module hard-
+  failed even when a mutually-exclusive per-platform sibling (e.g. an inline arm) legitimately
+  resolved it.
+- 漏刻's CI probe-coverage scanner now canonicalizes its module-cycle dedup guard (via a new,
+  additive `xingbiao` dependency gated behind the non-default `audit` feature — never reaches the
+  production hot path), matching 圭表/渾儀's own guards. Previously deduped on the literal path
+  only, so a symlinked directory or circular `#[path]` chain reached via two distinct literal paths
+  to the same real file could make the scan misbehave instead of terminating cleanly.
 
 ### Changed
 - Internal refactor: modularized crate internals across `xuanji`, `xingbiao`, `guibiao`, `hunyi`, `louke`, and the `tianheng` runner's projection layer (deduplicated JSON/text boundary-projection rendering) — no public API, JSON wire format, or self-governance boundary changed.

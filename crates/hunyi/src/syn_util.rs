@@ -51,6 +51,18 @@ pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
     })
 }
 
+/// Whether any attribute is (or contains, via `cfg_attr`) a `#[cfg(...)]` — the conservative,
+/// predicate-blind "might legitimately be absent on this build" signal a missing conventional file
+/// is checked against: a `#[cfg]`-gated `mod x;` whose file genuinely doesn't exist on this
+/// platform/feature set is expected, not broken, so a walker tolerates it; an **unconditional**
+/// `mod x;` with no backing file is a real, unrecoverable compile error. Shared by both of this
+/// crate's module walkers ([`crate::scan::resolve_child_modules`] and
+/// [`crate::module_resolve::descend`]) so they agree on this policy rather than silently drifting
+/// — the 0.2.2 lesson (found once as an unnoticed divergence between the two).
+pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| attr.path().is_ident("cfg"))
+}
+
 fn is_path_remap(attr: &syn::Attribute) -> bool {
     if attr.path().is_ident("path") {
         return true;

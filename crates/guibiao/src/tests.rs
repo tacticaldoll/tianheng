@@ -728,6 +728,34 @@ fn a_cross_root_same_named_submodule_is_a_documented_bound() {
     );
 }
 
+/// A plain `mod child;` backed by BOTH `child.rs` and `child/mod.rs` at once is a genuine rustc
+/// compile error (E0761) — closes a pre-existing debt: both forms were previously silently
+/// accepted as separate sources (dual-governed), the mirror image of the missing-file gap.
+/// Mirrors 漏刻's own `resolve_external_module`'s identical hard error (see
+/// `dual_backed_module_conformance.rs` for the cross-dimension agreement pin).
+#[test]
+fn a_dual_backed_module_is_a_scan_error_not_silently_accepted() {
+    let (result, _violations) = run_module_check(
+        "dual-backed",
+        &[
+            ("lib.rs", "pub mod child;\n"),
+            ("child.rs", "// flat form\n"),
+            ("child/mod.rs", "// nested form\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("child must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "both conventional forms present is a genuine ambiguity, never a silent accept",
+    );
+    assert!(
+        err.contains("resolves to both") && err.contains("child.rs") && err.contains("mod.rs"),
+        "the error must name the ambiguity and both real files: {err}"
+    );
+}
+
 /// A `#[cfg_attr(cond, path = …)]` IS recognized as a (conditional) remap, the same
 /// stated `#[path]` bound as the separate `#[cfg(cond)] #[path = …]` spelling. Not recognizing it
 /// would govern the conventionally-named file — a cfg-blind mishandling that is a
