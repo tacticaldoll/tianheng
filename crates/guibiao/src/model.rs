@@ -465,23 +465,20 @@ impl Rule {
                 .into_iter()
                 .filter(|dependency| !allowed.contains(dependency))
                 .collect(),
-            Rule::RestrictWorkspaceDependenciesTo { allowed } => {
-                // A dependency on the TARGET'S OWN name is never a cross-crate layering
-                // violation — Cargo allows (and dogfooding/doctest patterns genuinely use) a
-                // crate listing itself as a dev-dependency path on itself, which
-                // `cargo metadata --no-deps` emits verbatim. Excluded here, not by filtering
-                // `workspace_members` itself, since that set is shared read-only observation
-                // data (`workspace_member_names`) other rules may consult unfiltered.
-                let own_name = package["name"].as_str();
-                dependencies(package, kind)
-                    .into_iter()
-                    .filter(|dependency| {
-                        Some(dependency.as_str()) != own_name
-                            && workspace_members.contains(dependency)
-                            && !allowed.contains(dependency)
-                    })
-                    .collect()
-            }
+            // A dependency on the TARGET'S OWN name is never a cross-crate layering violation —
+            // Cargo allows (and dogfooding/doctest patterns genuinely use) a crate listing
+            // itself as a dev-dependency path on itself. `dependencies()` itself now excludes
+            // this self-referential edge (see `cargo_metadata.rs::is_self_dependency`), a
+            // round-12 fix that closed the identical gap for every OTHER rule reading the same
+            // observation too — round 11's own fix filtered it only HERE, leaving every sibling
+            // rule (`ForbidDependencyOn`, `RestrictDependenciesTo`, `RestrictDependencySourcesTo`)
+            // still vulnerable; see `PROJECT.md`'s Decisions.
+            Rule::RestrictWorkspaceDependenciesTo { allowed } => dependencies(package, kind)
+                .into_iter()
+                .filter(|dependency| {
+                    workspace_members.contains(dependency) && !allowed.contains(dependency)
+                })
+                .collect(),
             Rule::RestrictDependencySourcesTo { allowed } => {
                 dependencies_with_disallowed_source(package, kind, allowed)
             }

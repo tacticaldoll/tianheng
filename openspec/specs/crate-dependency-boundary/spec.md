@@ -222,10 +222,10 @@ A boundary SHALL support a rule that restricts the target crate's dependencies o
 - **WHEN** the target crate declares a normal dependency on any other workspace member and the boundary forbids all workspace dependencies (an empty allowlist)
 - **THEN** the system emits a violation for that workspace dependency
 
-#### Scenario: A crate's own self-referential dependency is never a workspace-dependency violation
+#### Scenario: A crate's own self-referential dependency is never a violation under any crate rule
 
-- **WHEN** the target crate declares a dependency on ITSELF (its own package name) in its selected table — a real, Cargo-legal pattern (e.g. a `[dev-dependencies]` path dependency on `.`, used for doctest/dogfooding), and the boundary forbids all workspace dependencies (an empty allowlist)
-- **THEN** the system reports no violation for the crate's own name — a self-dependency names no OTHER crate, so it can never be the cross-crate layering violation this rule exists to catch, regardless of workspace-membership set inclusion
+- **WHEN** the target crate declares a dependency on ITSELF (its own package name) in its selected table — a real, Cargo-legal pattern (e.g. a `[dev-dependencies]` path dependency on `.`, used for doctest/dogfooding) — and a boundary using ANY crate rule (forbid-dependency-on, restrict-dependencies-to, restrict-workspace-dependencies-to, restrict-dependency-sources-to, or a feature-granularity rule naming the target's own crate) governs the target
+- **THEN** the system reports no violation arising from that self-referential edge under any of these rules — a self-dependency names no OTHER crate, so it can never be the cross-crate concern any of them exist to govern, regardless of workspace-membership set inclusion or declared source kind
 
 #### Scenario: A newly added workspace member is governed without a constitution edit
 

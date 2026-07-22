@@ -213,6 +213,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   two genuinely distinct async fns into one reported finding, a real false negative. Fixed by making
   `ordinal` one counter incrementing continuously across the whole subtree walk, never reset per
   module.
+- `圭表`'s crate-boundary rules (`forbid_dependency_on`, `restrict_dependencies_to`,
+  `restrict_workspace_dependencies_to`, `restrict_dependency_sources_to`, and the
+  feature-granularity rules) no longer observe a crate's own self-referential dependency on
+  itself — a real, Cargo-legal pattern (e.g. a `[dev-dependencies]` path dependency on `.`, used
+  for doctest/dogfooding) that names no other crate at all, so it can never be the cross-crate
+  concern any of these rules exist to govern. The exclusion lives in the shared dependency
+  observation itself, so every crate rule is covered at once.
 
 ## [0.2.1] - 2026-07-21
 

@@ -1980,6 +1980,69 @@ fn workspace_rule_never_flags_a_crates_own_self_referential_dev_dependency() {
 }
 
 #[test]
+fn no_dependency_rule_ever_flags_a_crates_own_self_referential_dependency() {
+    // Round-12 finding: round 11 excluded a crate's own self-referential dependency (Cargo's
+    // legal `[dev-dependencies] main = { path = "." }` doctest/dogfooding pattern) ONLY inside
+    // Rule::RestrictWorkspaceDependenciesTo's own arm — leaving the IDENTICAL false positive live
+    // in every sibling rule reading the same `dependencies()` / `dependencies_with_disallowed_source()`
+    // observation (ForbidDependencyOn, RestrictDependenciesTo, RestrictDependencySourcesTo, and
+    // the feature-granularity rules when the boundary happens to name the target's own crate).
+    // A self-dependency is never a CROSS-crate concern any of these rules exist to govern, so the
+    // exclusion is now at the shared observation source (`cargo_metadata.rs::is_self_dependency`),
+    // closing every rule at once rather than one at a time.
+    let package = serde_json::json!({
+        "name": "main",
+        "dependencies": [
+            { "name": "main", "source": null, "kind": "dev", "features": ["x"] },
+        ]
+    });
+    let workspace = vec!["main".to_string()];
+
+    assert_eq!(
+        Rule::ForbidDependencyOn {
+            crates: vec!["main".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "ForbidDependencyOn must not flag the crate's own self-dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependenciesTo {
+            allowed: vec!["serde".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "RestrictDependenciesTo must not flag the crate's own self-dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "RestrictDependencySourcesTo must not flag the crate's own self-dependency's Path source"
+    );
+    assert_eq!(
+        Rule::RestrictFeaturesOf {
+            crate_: "main".to_string(),
+            allowed: vec![]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "RestrictFeaturesOf must not observe the crate's own self-dependency's declared features"
+    );
+    assert_eq!(
+        Rule::ForbidFeaturesOf {
+            crate_: "main".to_string(),
+            forbidden: vec!["x".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "ForbidFeaturesOf must not observe the crate's own self-dependency's declared features"
+    );
+}
+
+#[test]
 fn coverage_counts_a_module_only_covered_crate_as_covered() {
     let members = vec!["app".to_string(), "core".to_string(), "memory".to_string()];
     let constitution = Constitution::new("c")
