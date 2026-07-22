@@ -13,7 +13,7 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Changed
-- Modularized `xuanji` (璇璣) internal entities into dedicated submodules (`model`, `finding`, `violation`, `baseline`, `util`, `tests`) while preserving all public re-exports at crate root.
+- Internal refactor: modularized crate internals across `xuanji`, `xingbiao`, `guibiao`, `hunyi`, `louke`, and the `tianheng` runner's projection layer (deduplicated JSON/text boundary-projection rendering) — no public API, JSON wire format, or self-governance boundary changed.
 
 ## [0.2.2] - 2026-07-22
 
