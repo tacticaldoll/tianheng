@@ -48,7 +48,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   longstanding cross-dimension coverage gap (渾儀 already hard-erred on the identical shape). A
   `#[cfg]`-gated missing file is still tolerated, matching 渾儀. A boundary anchored directly at a
   module whose sole declaration was `#[cfg]`-tolerated away now reacts as an unknown module
-  (never a vacuous clean pass), matching 渾儀's own resolver's identical precedent.
+  (never a vacuous clean pass), matching 渾儀's own resolver's identical precedent — unless an
+  inline sibling arm of the same name exists, in which case the self-describing inline-target
+  error still applies (never misreported as a generic "unknown module, check the path" error).
 - 圭表's and 漏刻's independent `#[path]`-string decoders now handle backslash-newline line
   continuation (`"a\` + newline + `b"` decoding to `"ab"`), matching `syn` (used by 渾儀) and real
   `rustc` behavior. Previously 圭表 silently dropped such a remapped module from `reachable` with
