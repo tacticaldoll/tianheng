@@ -298,10 +298,8 @@ fn descend(
                     if !file.is_file() {
                         return Err(missing_module_file_error(module, crate_package));
                     }
-                    if let Ok(canon) = std::fs::canonicalize(&file) {
-                        if !seen_files.insert(canon) {
-                            continue;
-                        }
+                    if !xingbiao::try_visit(&mut seen_files, &file)? {
+                        continue;
                     }
                     let parsed = read_parse(&file)?;
                     let next_dir = file
@@ -316,10 +314,8 @@ fn descend(
                 }
                 let file = locate_module_file(&branch.child_dir, seg)
                     .ok_or_else(|| missing_module_file_error(module, crate_package))?;
-                if let Ok(canon) = std::fs::canonicalize(&file) {
-                    if !seen_files.insert(canon) {
-                        continue;
-                    }
+                if !xingbiao::try_visit(&mut seen_files, &file)? {
+                    continue;
                 }
                 let parsed = read_parse(&file)?;
                 // The loaded file's own directory is the base for a `#[path]` written at its top
