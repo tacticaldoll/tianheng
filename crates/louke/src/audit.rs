@@ -8,6 +8,7 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use xuanji::RuleKey;
 
 use crate::finding::RuntimeFact;
 use crate::registry::UNDECLARED_SEAM_REPAIR_HINT;
@@ -15,6 +16,29 @@ use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation,
 
 mod scan;
 use scan::{Probe, collect_probes};
+
+#[derive(Clone, Copy)]
+enum AuditRule {
+    UniqueSeamDeclaration,
+    DeclaredSeamProbed,
+    ProbeDeclaredSeam,
+    LiteralProbeSeam,
+}
+
+impl AuditRule {
+    fn rule_type(self) -> &'static str {
+        match self {
+            Self::UniqueSeamDeclaration => "tianheng.rule/louke/unique-seam-declaration",
+            Self::DeclaredSeamProbed => "tianheng.rule/louke/declared-seam-probed",
+            Self::ProbeDeclaredSeam => "tianheng.rule/louke/probe-declared-seam",
+            Self::LiteralProbeSeam => "tianheng.rule/louke/literal-probe-seam",
+        }
+    }
+
+    fn key(self) -> RuleKey {
+        RuleKey::of(self.rule_type(), std::iter::empty::<(&str, &str)>())
+    }
+}
 
 #[cfg(test)]
 use scan::scan_source;
@@ -87,9 +111,10 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
             violations.push(
                 Violation::new(
                     BoundaryKind::Runtime,
-                    ViolationId::new(
+                    ViolationId::structured(
                         seam,
                         "each runtime seam must be declared exactly once",
+                        AuditRule::UniqueSeamDeclaration.key(),
                         RuntimeFact::DuplicateSeam {
                             seam: seam.to_string(),
                         }
@@ -113,9 +138,10 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
             violations.push(
                 Violation::new(
                     BoundaryKind::Runtime,
-                    ViolationId::new(
+                    ViolationId::structured(
                         seam,
                         "every declared runtime seam must be probed",
+                        AuditRule::DeclaredSeamProbed.key(),
                         RuntimeFact::UnprobedSeam {
                             seam: seam.to_string(),
                         }
@@ -136,9 +162,10 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
             if !declared_set.contains(seam.as_str()) && seen_probe.insert(seam.as_str()) {
                 violations.push(Violation::new(
                     BoundaryKind::Runtime,
-                    ViolationId::new(
+                    ViolationId::structured(
                         seam,
                         "every probe must reference a declared seam",
+                        AuditRule::ProbeDeclaredSeam.key(),
                         RuntimeFact::UndeclaredProbe { seam: seam.clone() }.into_finding(),
                     ),
                     format!("an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"),
@@ -167,9 +194,10 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
         violations.push(
             Violation::new(
                 BoundaryKind::Runtime,
-                ViolationId::new(
+                ViolationId::structured(
                     "<un-auditable probe>",
                     "an assert_boundary! seam must be a string literal to be auditable",
+                    AuditRule::LiteralProbeSeam.key(),
                     RuntimeFact::UnauditableProbe {
                         file: file.to_string(),
                     }

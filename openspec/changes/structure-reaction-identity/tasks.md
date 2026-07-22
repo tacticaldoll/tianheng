@@ -22,9 +22,9 @@
 
 ## 4. 漏刻 rule and fact migration (`refactor(louke)!` commit boundary)
 
-- [ ] 4.1 Catalog all 漏刻 rule/fact families and classify rule parameters and fact fields as identity-bearing or presentation-only.
-- [ ] 4.2 Migrate every production emission path to dimension-owned structured identity with catalog, production-emission, reorder, and injectivity reactions.
-- [ ] 4.3 Verify audit-off, audit-on, and standalone 漏刻 builds/tests, then commit the runtime increment independently.
+- [x] 4.1 Catalog all 漏刻 rule/fact families and classify rule parameters and fact fields as identity-bearing or presentation-only.
+- [x] 4.2 Migrate every production emission path to dimension-owned structured identity with catalog, production-emission, reorder, and injectivity reactions.
+- [x] 4.3 Verify audit-off, audit-on, and standalone 漏刻 builds/tests, then commit the runtime increment independently.
 
 ## 5. Contract the shared model (`feat(xuanji)!` commit boundary)
 

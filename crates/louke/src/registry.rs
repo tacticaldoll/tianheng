@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 use xuanji::{BoundaryKind, Polarity, Severity, Violation, ViolationId};
 
-use crate::dsl::{OriginEntry, Posture, RuntimeBoundary};
+use crate::dsl::{OriginEntry, Posture, RuntimeBoundary, runtime_rule_key};
 use crate::finding;
 use crate::runtime_seam_rule_line;
 use crate::tracked::TidMap;
@@ -143,7 +143,7 @@ pub(crate) fn check_crossing(
         // seam produce distinct structured identities — otherwise baselining one
         // silently masks the other (a false negative). The `<unregistered origin>` prefix is kept so
         // the substring the prod contract/tests depend on still holds. The Debug bytes become the
-        // published version-2 `type_id` key field: they are identity wire and stable only within a
+        // published semantic `type_id` field: the bytes are identity wire and stable only within a
         // build (a hash of the type's identity), not a promised cross-toolchain type name.
         None => finding::RuntimeFact::UnregisteredCrossing {
             type_id: format!("{type_id:?}"),
@@ -156,7 +156,12 @@ pub(crate) fn check_crossing(
     Ok(Some((
         Violation::new(
             BoundaryKind::Runtime,
-            ViolationId::new(seam, rule, finding.into_finding()),
+            ViolationId::structured(
+                seam,
+                rule,
+                runtime_rule_key(&s.allowed),
+                finding.into_finding(),
+            ),
             s.reason.clone(),
             s.severity,
         )

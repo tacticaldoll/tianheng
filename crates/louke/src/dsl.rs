@@ -1,6 +1,6 @@
 use std::any::TypeId;
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// How a violated boundary reacts in production. `Event` (the default) emits a structured
 /// `Violation`; `Panic` additionally aborts — opt-in only, never the default.
@@ -36,6 +36,11 @@ pub struct RuntimeBoundary {
 }
 
 impl RuntimeBoundary {
+    /// Stable semantic identity for the runtime-seam allowlist rule.
+    pub fn rule_key(&self) -> RuleKey {
+        runtime_rule_key(&self.allowed)
+    }
+
     /// Begin a boundary at the named runtime seam.
     pub fn at(seam: &'static str) -> RuntimeSeamDraft {
         RuntimeSeamDraft { seam }
@@ -81,6 +86,20 @@ impl RuntimeBoundary {
     pub fn posture(&self) -> Posture {
         self.posture
     }
+}
+
+pub(crate) fn runtime_rule_key(allowed: &[&str]) -> RuleKey {
+    let mut allowed = allowed.to_vec();
+    allowed.sort_unstable();
+    allowed.dedup();
+    RuleKey::new(
+        "tianheng.rule/louke/runtime-seam",
+        allowed
+            .into_iter()
+            .enumerate()
+            .map(|(index, origin)| (format!("allowed_origin_{index}"), origin)),
+    )
+    .expect("canonical allowlist field names are non-empty and unique")
 }
 
 /// A boundary awaiting its allowed-origin set.

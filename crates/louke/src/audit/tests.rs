@@ -24,6 +24,33 @@ fn literal_seams(probes: &[Probe]) -> Vec<String> {
         .collect()
 }
 
+#[test]
+fn every_audit_rule_family_has_exact_semantic_identity() {
+    let cases = [
+        (
+            AuditRule::UniqueSeamDeclaration,
+            "tianheng.rule/louke/unique-seam-declaration",
+        ),
+        (
+            AuditRule::DeclaredSeamProbed,
+            "tianheng.rule/louke/declared-seam-probed",
+        ),
+        (
+            AuditRule::ProbeDeclaredSeam,
+            "tianheng.rule/louke/probe-declared-seam",
+        ),
+        (
+            AuditRule::LiteralProbeSeam,
+            "tianheng.rule/louke/literal-probe-seam",
+        ),
+    ];
+    for (rule, expected_type) in cases {
+        let key = rule.key();
+        assert_eq!(key.rule_type(), expected_type);
+        assert_eq!(key.fields().count(), 0);
+    }
+}
+
 /// A unique, self-cleaning temp base directory for an `assert_boundary!`-probe source fixture:
 /// write source files under it, then hand its root (or a derived path) to `audit_probe_coverage`
 /// — replaces the hand-rolled `temp_dir().join(format!(...))` + manual `remove_dir_all` at both
@@ -1016,6 +1043,30 @@ fn audit_probe_coverage_reacts_both_directions() {
     // probed but undeclared (a typo) → react at CI, not a prod panic (exit 1)
     let typo = tb.dir("typo", "fn f() { assert_boundary!(\"ghost\", o); }");
     assert_eq!(audit_probe_coverage(&[], &[typo]).exit_code(), 1);
+}
+
+#[test]
+fn audit_production_violation_separates_target_rule_and_fact_roles() {
+    let tb = TempBase::new("audit-structured-identity");
+    let dir = tb.dir("unprobed", "fn f() {}");
+    let outcome = audit_probe_coverage(&[boundary("checkout", Severity::Enforce)], &[dir]);
+    let report = match outcome {
+        Outcome::Violations(report) => report,
+        other => panic!("expected an unprobed-seam violation, got {other:?}"),
+    };
+    let violation = report.violations.first().expect("one unprobed seam");
+    let id = violation.id();
+    assert_eq!(violation.target, "checkout");
+    let rule = id.rule_key().expect("audit rule identity is structured");
+    assert_eq!(rule.rule_type(), "tianheng.rule/louke/declared-seam-probed");
+    assert_eq!(rule.fields().count(), 0);
+    let fact = id.finding_key().expect("audit fact identity is structured");
+    assert_eq!(fact.fact_type(), "tianheng.fact/louke/runtime-seam-audit");
+    assert_eq!(fact.shape(), "unprobed-declaration");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![("seam", "checkout")]
+    );
 }
 
 #[test]

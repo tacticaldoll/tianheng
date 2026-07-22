@@ -45,6 +45,7 @@ fn registry(
 
 struct Domain;
 struct Infra;
+struct Unrelated;
 
 #[test]
 fn an_allowed_origin_passes() {
@@ -75,8 +76,16 @@ fn a_disallowed_origin_reacts() {
     let key = id
         .finding_key()
         .expect("a production violation has structured identity");
-    assert_eq!(key.namespace(), "louke");
-    assert_eq!(key.code(), "registered_crossing");
+    let rule = id
+        .rule_key()
+        .expect("a production violation has a structured rule");
+    assert_eq!(rule.rule_type(), "tianheng.rule/louke/runtime-seam");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![("allowed_origin_0", "app::domain")]
+    );
+    assert_eq!(key.fact_type(), "tianheng.fact/louke/runtime-crossing");
+    assert_eq!(key.shape(), "registered-origin");
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![("origin", "app::infra"), ("type_name", "Infra")]
@@ -148,6 +157,38 @@ fn distinct_unregistered_types_stay_distinct_findings() {
 }
 
 #[test]
+fn registered_crossing_identity_survives_registry_reorder_and_unrelated_insertion() {
+    let first = registry(
+        &[("seam", &["app::domain"], Severity::Enforce)],
+        &[
+            (TypeId::of::<Infra>(), "app::infra", "Infra"),
+            (TypeId::of::<Domain>(), "app::domain", "Domain"),
+        ],
+    );
+    let reordered = registry(
+        &[("seam", &["app::domain"], Severity::Enforce)],
+        &[
+            (TypeId::of::<Unrelated>(), "app::other", "Unrelated"),
+            (TypeId::of::<Domain>(), "app::domain", "Domain"),
+            (TypeId::of::<Infra>(), "app::infra", "Infra"),
+        ],
+    );
+    let first_id = check_crossing("seam", TypeId::of::<Infra>(), &first)
+        .unwrap()
+        .unwrap()
+        .0
+        .id()
+        .clone();
+    let reordered_id = check_crossing("seam", TypeId::of::<Infra>(), &reordered)
+        .unwrap()
+        .unwrap()
+        .0
+        .id()
+        .clone();
+    assert_eq!(first_id, reordered_id);
+}
+
+#[test]
 fn an_undeclared_seam_is_a_constitution_error() {
     let reg = registry(&[], &[]);
     let err = check_crossing("ghost", TypeId::of::<Domain>(), &reg).unwrap_err();
@@ -163,6 +204,32 @@ fn the_builder_carries_posture_and_severity() {
         .because("r");
     assert_eq!(b.seam(), "s");
     assert_eq!(b.allowed_origins(), &["app::domain"]);
+}
+
+#[test]
+fn runtime_rule_identity_is_set_order_stable_and_policy_sensitive() {
+    let left = RuntimeBoundary::at("seam-a")
+        .only_origins(["app::domain", "app::api"])
+        .because("first wording");
+    let reordered = RuntimeBoundary::at("seam-b")
+        .only_origins(["app::api", "app::domain", "app::domain"])
+        .panic_on_violation()
+        .warn()
+        .because("different wording")
+        .with_anchor("GOV-1");
+    let expanded = RuntimeBoundary::at("seam-a")
+        .only_origins(["app::domain", "app::api", "app::infra"])
+        .because("first wording");
+
+    assert_eq!(left.rule_key(), reordered.rule_key());
+    assert_ne!(left.rule_key(), expanded.rule_key());
+    assert_eq!(
+        left.rule_key().fields().collect::<Vec<_>>(),
+        vec![
+            ("allowed_origin_0", "app::api"),
+            ("allowed_origin_1", "app::domain"),
+        ]
+    );
 }
 
 #[test]
