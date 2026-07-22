@@ -1,6 +1,6 @@
 //! The 渾儀 finding vocabulary and seam labels — how a semantic finding and the public **seam**
 //! it sits at are rendered and identified, in one place. A typed semantic fact owns the stable
-//! named values used by `(target, rule, finding_key)` and renders its human text separately, so
+//! named values used by `(target, rule key, structured fact)` and renders its human text separately, so
 //! presentation can change without silently changing baseline identity.
 
 use crate::resolve::{ShapeExposure, strip_raw, type_to_string};
@@ -302,7 +302,7 @@ impl std::fmt::Display for PublicSeam {
 /// One exposed type path (signature-coupling), tagged with the public **seam** it was exposed at
 /// — the `syn::Path` counterpart of [`ShapeExposure`]'s `seam`. The seam becomes part of the
 /// fact key so two distinct seams exposing the *same* forbidden type never collapse to one
-/// `(target, rule, finding_key)` baseline entry and mask a new leak (the one forbidden bug).
+/// `(target, rule key, structured fact)` baseline entry and mask a new leak (the one forbidden bug).
 pub(crate) struct PathExposure {
     pub(crate) seam: PublicSeam,
     pub(crate) path: syn::Path,
@@ -346,7 +346,7 @@ pub(crate) enum SemanticFact {
     /// hand-written `impl`. `marker` is the written trait path (with generic args), `owner` the self
     /// type (with generic args), and `module` the impl site — together injective, so two distinct
     /// acquisitions (`impl Marker<u8>`/`impl Marker<u16>`, or the same leaf from different modules)
-    /// never collapse to one `(target, rule, finding_key)` and mask a new one.
+    /// never collapse to one `(target, rule key, structured fact)` and mask a new one.
     ForbiddenImpl {
         marker: String,
         owner: String,
@@ -1612,7 +1612,7 @@ mod fact_tests {
     }
 
     #[test]
-    fn key_renderers_are_pinned_as_version_two_wire() {
+    fn semantic_renderers_and_rejected_sentinels_are_pinned() {
         let signature: syn::Signature =
             syn::parse_str("async fn run(&self, value: crate::Port) -> crate::Reply").unwrap();
         assert_eq!(
@@ -1623,10 +1623,9 @@ mod fact_tests {
         let ty: syn::Type = syn::parse_str("Vec<crate::Port>").unwrap();
         assert_eq!(type_to_string(&ty).as_deref(), Some("Vec<crate::Port>"));
 
-        // canonical_self_owner + render_last_segment_args also produce the byte content of the
-        // version-2 owner / seam_owner / trait key fields (trait_impl / forbidden_marker /
-        // inherent-seam facts). Their exact form — including the positional `_#{ordinal}` fallback
-        // a maintainer might mistake for free presentation — is baseline wire too, so pin it.
+        // canonical_self_owner + render_last_segment_args feed semantic owner / seam-owner / trait
+        // fields. Renderable forms are public identity; the positional sentinel is pinned only so
+        // the shared observation reaction can recognize and reject unsupported syntax.
         let uses: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         let no_params: std::collections::HashSet<String> = std::collections::HashSet::new();
         let owner: syn::Type = syn::parse_str("Repo<crate::Id>").unwrap();
@@ -1635,7 +1634,7 @@ mod fact_tests {
             "app::infra::Repo<crate::Id>"
         );
         // Base resolves but the generic arg is an unrenderable const expression: the readable base
-        // is kept and the arg disambiguated by the block's ordinal (injective, not a collapse).
+        // is retained beside the internal sentinel that must never reach public identity.
         let const_owner: syn::Type = syn::parse_str("Arr<{ N + 1 }>").unwrap();
         assert_eq!(
             crate::resolve::canonical_self_owner(&const_owner, &uses, "app::infra", 7, &no_params),

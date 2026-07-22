@@ -51,7 +51,7 @@ pub(crate) fn push_single_module_violations(
 
 pub(crate) struct MultiModuleViolationContext<'a> {
     /// The violation `target` — the boundary's anchored module, kept stable so identity
-    /// `(target, rule, finding_key)` does not shift as the governed subtree grows.
+    /// `(target, rule key, structured fact)` does not shift as the governed subtree grows.
     pub(crate) target: &'a str,
     pub(crate) rule: &'a str,
     pub(crate) rule_key: RuleKey,

@@ -114,7 +114,7 @@ This change will begin with an inventory of every current ordinal/fallback path 
 
 Tianheng-owned JSON machine contracts receive explicit semantic formats: `tianheng.baseline/structured-facts` for baseline snapshots, `tianheng.reaction/structured-facts` for reaction reports, and `tianheng.constitution/declared-boundaries` for constitution projections. Existing substantive fields and exit behavior remain intact; adding a compatible field must not imply a second version axis.
 
-SARIF remains version 2.1.0. Its partial fingerprint property changes from `tianhengViolationId/v1` to `tianheng/structured-fact-identity`, with the digest derived solely from canonical `ViolationId` serialization. SARIF rule presentation and messages remain diagnostic.
+SARIF remains version 2.1.0. Its partial fingerprint property changes from `tianhengViolationId/v1` to `tianheng/structured-fact-identity`, with the canonical `ViolationId` serialization used directly as the value so no extra hash can collapse distinct identities. SARIF rule presentation and messages remain diagnostic.
 
 ### 9. Standalone instruments and the composer keep distinct promises
 

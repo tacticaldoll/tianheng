@@ -111,8 +111,8 @@ pub(crate) fn forbidden_marker_findings(
                     // A derive sits in the defining type's module — its source file, not any
                     // impl site's. Render the marker from the WRITTEN derive path so two distinct
                     // forbidden derives sharing a leaf on one type (`#[derive(a::Marker, b::Marker)]`)
-                    // stay distinct findings; an unrenderable path falls back to the config entry
-                    // plus the derive's position, never collapsing (finding-identity injectivity).
+                    // stay distinct findings. An unrenderable path carries an internal positional
+                    // sentinel that the shared sorting reaction rejects before emission.
                     let marker =
                         path_to_string(derived).unwrap_or_else(|| format!("{entry}<_#{ordinal}>"));
                     findings.push((
@@ -170,8 +170,8 @@ pub(crate) fn forbidden_marker_findings(
             // generic args (owner-qualified like the seam owner), and the impl-site module. Two
             // distinct acquisitions — `impl Marker<u8>`/`impl Marker<u16>`, or the same leaf from
             // different modules — thus stay distinct findings, so a baseline cannot mask a new one.
-            // An unrenderable trait arg falls back to the config entry PLUS the impl's position
-            // (never the bare entry alone), keeping distinct unrenderable-arg impls distinct.
+            // An unrenderable trait arg carries the config entry plus an internal positional
+            // sentinel; the shared sorting reaction rejects it before public identity emission.
             let marker =
                 path_to_string(&site.trait_path).unwrap_or_else(|| format!("{entry}<_#{ordinal}>"));
             let owner = canonical_self_owner(

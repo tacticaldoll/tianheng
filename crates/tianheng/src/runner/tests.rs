@@ -356,8 +356,10 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
         fp0, fp1,
         "target-differing violations must get distinct fingerprints: {fp0} vs {fp1}"
     );
-    assert_eq!(fp0.len(), 32);
-    assert_eq!(fp1.len(), 32);
+    let identity0: Value = serde_json::from_str(&fp0).expect("canonical identity JSON");
+    let identity1: Value = serde_json::from_str(&fp1).expect("canonical identity JSON");
+    assert_eq!(identity0["target"], "web");
+    assert_eq!(identity1["target"], "cli");
     assert!(
         results.iter().all(|result| result["partialFingerprints"]
             .get("tianhengViolationId/v1")
@@ -2036,6 +2038,25 @@ fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_
             "refusal must preserve the existing file byte-for-byte"
         );
     }
+}
+
+#[test]
+fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
+    let path = TempPath::new(std::env::temp_dir().join(format!(
+        "tianheng-baseline-create-race-{}.json",
+        std::process::id()
+    )));
+    let path = path.path();
+    std::fs::write(path, "appeared concurrently").unwrap();
+
+    let err = super::create_baseline_file(path.to_str().unwrap(), "replacement")
+        .expect_err("create-new write must refuse an existing path");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+    assert_eq!(
+        std::fs::read_to_string(path).unwrap(),
+        "appeared concurrently"
+    );
 }
 
 #[test]

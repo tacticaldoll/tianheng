@@ -661,7 +661,8 @@ pub(crate) fn collect_trait_impl_exposures(
     };
     // Seam prefix `impl {Trait} for {SelfTy}`. The Self label is canonicalized (parity with the
     // inherent-impl / locality seam owner); the trait label is the written path (a rendering-
-    // granularity choice — its generic args distinguish `From<Vec<X>>` from `From<Box<X>>`).
+    // granularity choice — its generic args distinguish `From<Vec<X>>` from `From<Box<X>>`). An
+    // unrenderable path carries an internal sentinel rejected before fact emission.
     let trait_label = path_to_string(trait_path).unwrap_or_else(|| format!("trait_#{ordinal}"));
     // The impl block's own generic type parameters are in scope in every position below; shadow
     // them so a bare parameter use is not misresolved through a same-named `use … as <param>` alias

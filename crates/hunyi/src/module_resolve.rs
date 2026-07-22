@@ -209,8 +209,8 @@ fn descend(
         // `locate_module_file` lookup) are the same real file compiled twice by neither build —
         // pushing a branch per occurrence would duplicate that file's items in the merged result,
         // inflating one real violation into two apparently-distinct findings with no way for
-        // exact-string finding dedup to collapse them back (their owner labels can differ when an
-        // impl-Trait self type falls back to a positional ordinal marker).
+        // exact-string finding dedup to collapse them back (their internal unsupported-syntax
+        // sentinels can differ before the public observation path rejects them).
         let mut seen_files: HashSet<PathBuf> = HashSet::new();
         for item in &branch.items {
             if let syn::Item::Mod(module_item) = item {

@@ -178,7 +178,7 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
                 let canonical_identity = serde_json::to_string(&v.id().to_json())
                     .expect("canonical violation identity is JSON-serializable");
                 result["partialFingerprints"] = json!({
-                    "tianheng/structured-fact-identity": fingerprint(&canonical_identity),
+                    "tianheng/structured-fact-identity": canonical_identity,
                 });
                 if let Some(file) = &v.file {
                     // File-level only: artifactLocation.uri, no `region` (line is not observed).
@@ -228,22 +228,6 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
         "runs": [run],
     });
     serde_json::to_string_pretty(&doc).expect("a serde_json::Value is always serializable")
-}
-
-/// Stable dependency-free FNV-1a 128-bit digest for the canonical identity document.
-///
-/// Rust's default hasher deliberately does not promise a stable algorithm, while SARIF
-/// fingerprints must survive process and tool upgrades. This fixed algorithm is presentation-free
-/// and remains in the facade, leaving the serde_json-only reaction model unchanged.
-fn fingerprint(canonical_identity: &str) -> String {
-    const OFFSET: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
-    const PRIME: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013b;
-    let mut digest = OFFSET;
-    for byte in canonical_identity.bytes() {
-        digest ^= u128::from(byte);
-        digest = digest.wrapping_mul(PRIME);
-    }
-    format!("{digest:032x}")
 }
 
 // A GitHub-specific `::error::` workflow-command format is deliberately NOT a built-in: it would

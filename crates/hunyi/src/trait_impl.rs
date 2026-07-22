@@ -120,8 +120,8 @@ pub(crate) fn trait_impl_findings(
         // instantiations for the same self type — `impl Convert<u8> for Foo` and
         // `impl Convert<u16> for Foo`, both legal and coherent — as distinct findings, so a baseline
         // accepting one cannot mask the other (finding-identity injectivity). The self type is
-        // likewise disambiguated even under an unrenderable const-generic expression (then keyed by
-        // the impl's position). Stated label bound: a trait impl's self type MAY be foreign
+        // likewise retained when renderable; an unrenderable expression carries an internal
+        // positional sentinel that the shared sorting reaction rejects. Stated label bound: a trait impl's self type MAY be foreign
         // (`impl LocalTrait for Box<Foo>`), which the module-relative canonicalization over-qualifies
         // (`crate::m::Box<…>`) — a stable identity label, not a resolved-path claim; the actionable
         // part (the module location) is exact.
@@ -133,8 +133,8 @@ pub(crate) fn trait_impl_findings(
             &site.type_params,
         );
         // The canonical anchor (spelling-stable across `use`/rename/relative forms) plus the
-        // written generic arguments; an unrenderable arg (a complex const-generic expression) falls
-        // back to the impl's position, so two such impls still stay distinct rather than collapsing.
+        // written generic arguments. An unrenderable arg carries the same rejected internal
+        // sentinel, so it fails loud rather than becoming public positional identity.
         let trait_ref = format!(
             "{canonical}{}",
             render_last_segment_args(&site.trait_path).unwrap_or_else(|| format!("<_#{ordinal}>"))
