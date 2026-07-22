@@ -189,8 +189,17 @@ fn production_sources_have_no_presentation_derived_identity_bridge() {
     }
 
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let crates = workspace.join("crates");
+    if !crates.exists() {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "workspace crates expected but absent while TIANHENG_WORKSPACE_TESTS is set — \
+             the production-source reaction must not silently skip in CI"
+        );
+        return;
+    }
     let mut offenders = Vec::new();
-    visit(&workspace.join("crates"), &mut offenders);
+    visit(&crates, &mut offenders);
     assert!(
         offenders.is_empty(),
         "legacy identity construction remains in production sources: {offenders:?}"
