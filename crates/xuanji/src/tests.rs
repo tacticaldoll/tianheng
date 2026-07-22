@@ -13,7 +13,12 @@ fn test_finding(text: &str) -> Finding {
 }
 
 fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
-    ViolationId::new(target, rule, test_finding(finding))
+    ViolationId::structured(
+        target,
+        rule,
+        RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
+        test_finding(finding),
+    )
 }
 
 #[test]
@@ -153,36 +158,6 @@ fn structured_path_round_trips_through_the_temporary_baseline_bridge() {
     assert!(reparsed.contains(&report.violations[0]));
 }
 
-#[test]
-fn structured_identity_ignores_presentation_and_stays_disjoint_from_legacy() {
-    let key = FindingKey::new("crate", "dependency", [("package", "serde")]).unwrap();
-    let old = ViolationId::new("core", "deny", Finding::new("old wording", key.clone()));
-    let new = ViolationId::new("core", "deny", Finding::new("new wording", key));
-    let legacy = ViolationId::legacy(
-        "core".to_string(),
-        "deny".to_string(),
-        "old wording".to_string(),
-    );
-    assert_eq!(old, new, "presentation is not structured identity");
-    assert_ne!(old, legacy, "identity provenances stay disjoint");
-    assert_ne!(new, legacy, "equality remains transitive");
-}
-
-#[test]
-#[should_panic(expected = "a live violation requires a structured finding")]
-fn a_legacy_baseline_id_cannot_be_reused_as_a_live_violation() {
-    let legacy = Baseline::from_json(
-        r#"{"version":1,"violations":[{"target":"core","rule":"deny","finding":"serde"}]}"#,
-    )
-    .unwrap();
-    Violation::new(
-        BoundaryKind::Module,
-        legacy.entries().next().unwrap().id.clone(),
-        "reason".to_string(),
-        Severity::Enforce,
-    );
-}
-
 fn sample_violation() -> Violation {
     Violation::new(
         BoundaryKind::Module,
@@ -196,7 +171,15 @@ fn wording_violation(text: &str) -> Violation {
     let key = FindingKey::new("test", "dependency", [("package", "serde")]).unwrap();
     Violation::new(
         BoundaryKind::Crate,
-        ViolationId::new("core", "deny", Finding::new(text, key)),
+        ViolationId::structured(
+            "core",
+            "deny",
+            RuleKey::of(
+                "tianheng.rule/test/deny-dependency",
+                std::iter::empty::<(&str, &str)>(),
+            ),
+            Finding::new(text, key),
+        ),
         "reason".to_string(),
         Severity::Enforce,
     )
@@ -274,8 +257,12 @@ fn baseline_round_trips_through_json() {
     ]);
     let original = Baseline::of(&report);
     let document: Value = serde_json::from_str(&original.to_json()).unwrap();
-    assert_eq!(document["version"], 2);
-    assert!(document["violations"][0]["finding_key"].is_object());
+    assert_eq!(document["format"], "tianheng.baseline/structured-facts");
+    assert!(document.get("version").is_none());
+    assert!(document["violations"][0]["rule_key"].is_object());
+    assert!(document["violations"][0]["fact"].is_object());
+    assert!(document["violations"][0]["fact"]["type"].is_string());
+    assert!(document["violations"][0]["fact"]["shape"].is_string());
     let reparsed = Baseline::from_json(&original.to_json()).expect("round-trips");
     assert!(reparsed.contains(&sample_violation()));
     assert!(
@@ -286,11 +273,12 @@ fn baseline_round_trips_through_json() {
 }
 
 #[test]
-fn version_two_matches_and_preserves_metadata_across_wording_changes() {
+fn semantic_baseline_matches_and_preserves_metadata_across_wording_changes() {
     let previous = Baseline::from_json(
-        r#"{"version":2,"violations":[{
-            "target":"core","rule":"deny","finding":"old wording",
-            "finding_key":{"namespace":"test","code":"dependency","fields":{"package":"serde"}},
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"old rule wording","finding":"old finding wording",
+            "rule_key":{"type":"tianheng.rule/test/deny-dependency","fields":{}},
+            "fact":{"type":"test","shape":"dependency","fields":{"package":"serde"}},
             "owner":"team-core","tracker":"ISSUE-9"
         }]}"#,
     )
@@ -305,29 +293,45 @@ fn version_two_matches_and_preserves_metadata_across_wording_changes() {
 }
 
 #[test]
-fn version_one_matches_only_the_exact_legacy_text() {
-    let legacy = Baseline::from_json(
-        r#"{"version":1,"violations":[{
-            "target":"core","rule":"deny","finding":"old wording"
+fn equal_presentation_cannot_substitute_for_a_different_fact_identity() {
+    let accepted = Baseline::from_json(
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"deny","finding":"same wording",
+            "rule_key":{"type":"tianheng.rule/test/deny-dependency","fields":{}},
+            "fact":{"type":"test","shape":"dependency","fields":{"package":"serde"}}
         }]}"#,
     )
     .unwrap();
-    assert!(legacy.contains(&wording_violation("old wording")));
-    assert!(!legacy.contains(&wording_violation("new wording")));
-    assert_eq!(
-        legacy.stale(&Report::new(vec![wording_violation("new wording")]))[0].finding_key(),
-        None
+    let current = Violation::new(
+        BoundaryKind::Crate,
+        ViolationId::structured(
+            "core",
+            "deny",
+            RuleKey::of(
+                "tianheng.rule/test/deny-dependency",
+                std::iter::empty::<(&str, &str)>(),
+            ),
+            Finding::new(
+                "same wording",
+                StructuredFactIdentity::of("test", "dependency", [("package", "tokio")]),
+            ),
+        ),
+        "r".to_string(),
+        Severity::Enforce,
     );
+    assert!(!accepted.contains(&current));
 }
 
 #[test]
-fn version_two_deduplicates_by_key_and_keeps_the_first_presentation() {
+fn semantic_baseline_deduplicates_by_identity_and_keeps_the_first_entry() {
     let baseline = Baseline::from_json(
-        r#"{"version":2,"violations":[
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[
             {"target":"core","rule":"deny","finding":"first","owner":"first",
-             "finding_key":{"namespace":"test","code":"dependency","fields":{"package":"serde"}}},
-            {"target":"core","rule":"deny","finding":"second","owner":"second",
-             "finding_key":{"namespace":"test","code":"dependency","fields":{"package":"serde"}}}
+             "rule_key":{"type":"tianheng.rule/test/deny-dependency","fields":{}},
+             "fact":{"type":"test","shape":"dependency","fields":{"package":"serde"}}},
+            {"target":"core","rule":"changed wording","finding":"second","owner":"second",
+             "rule_key":{"type":"tianheng.rule/test/deny-dependency","fields":{}},
+             "fact":{"type":"test","shape":"dependency","fields":{"package":"serde"}}}
         ]}"#,
     )
     .unwrap();
@@ -338,12 +342,17 @@ fn version_two_deduplicates_by_key_and_keeps_the_first_presentation() {
 }
 
 #[test]
-fn owner_and_tracker_round_trip_and_are_some_only() {
-    let json = r#"{"version":1,"violations":[
-        {"target":"core","rule":"r","finding":"serde","owner":"team-core","tracker":"ISSUE-7"},
-        {"target":"zeta","rule":"r","finding":"tokio"}
+fn owner_and_tracker_round_trip_and_are_emitted_only_when_set() {
+    let json = r#"{"format":"tianheng.baseline/structured-facts","violations":[
+        {"target":"core","rule":"r","finding":"serde",
+         "rule_key":{"type":"tianheng.rule/test/policy","fields":{"policy":"r"}},
+         "fact":{"type":"test","shape":"fact","fields":{"value":"serde"}},
+         "owner":"team-core","tracker":"ISSUE-7"},
+        {"target":"zeta","rule":"r","finding":"tokio",
+         "rule_key":{"type":"tianheng.rule/test/policy","fields":{"policy":"r"}},
+         "fact":{"type":"test","shape":"fact","fields":{"value":"tokio"}}}
     ]}"#;
-    let baseline = Baseline::from_json(json).expect("parses (old + annotated entries)");
+    let baseline = Baseline::from_json(json).expect("semantic annotations parse");
     let entries: Vec<&BaselineEntry> = baseline.entries().collect();
     assert_eq!(entries[0].id.target, "core");
     assert_eq!(entries[0].owner.as_deref(), Some("team-core"));
@@ -351,11 +360,6 @@ fn owner_and_tracker_round_trip_and_are_some_only() {
     assert_eq!(entries[1].owner, None);
     assert_eq!(entries[1].tracker, None);
     let out = baseline.to_json();
-    assert_eq!(
-        serde_json::from_str::<Value>(&out).unwrap()["version"],
-        1,
-        "re-serializing a legacy snapshot cannot invent structured keys"
-    );
     assert_eq!(Baseline::from_json(&out).unwrap().to_json(), out);
     let doc: Value = serde_json::from_str(&out).unwrap();
     let zeta = &doc["violations"][1];
@@ -365,70 +369,77 @@ fn owner_and_tracker_round_trip_and_are_some_only() {
 
 #[test]
 fn optional_baseline_metadata_accepts_only_absent_null_or_string() {
-    for version in [1, 2] {
-        let mut entry = serde_json::json!({
-            "target": "core",
-            "rule": "deny",
-            "finding": "serde",
+    let entry = serde_json::json!({
+        "target": "core",
+        "rule": "deny",
+        "finding": "serde",
+        "rule_key": {"type": "tianheng.rule/test/deny", "fields": {}},
+        "fact": {"type": "tianheng.fact/test/dependency", "shape": "edge", "fields": {"package": "serde"}},
+    });
+
+    for field in ["owner", "tracker"] {
+        let absent = serde_json::json!({
+            "format": "tianheng.baseline/structured-facts",
+            "violations": [entry.clone()]
         });
-        if version == 2 {
-            entry["finding_key"] = serde_json::json!({
-                "namespace": "test",
-                "code": "dependency",
-                "fields": {"package": "serde"},
-            });
-        }
+        let parsed = Baseline::from_json(&absent.to_string()).expect("omission is absence");
+        assert_eq!(parsed.entries().next().unwrap().owner.as_deref(), None);
+        assert_eq!(parsed.entries().next().unwrap().tracker.as_deref(), None);
 
-        for field in ["owner", "tracker"] {
-            let absent = serde_json::json!({"version": version, "violations": [entry.clone()]});
-            let parsed = Baseline::from_json(&absent.to_string()).expect("omission is absence");
-            assert_eq!(parsed.entries().next().unwrap().owner.as_deref(), None);
-            assert_eq!(parsed.entries().next().unwrap().tracker.as_deref(), None);
+        let mut null_entry = entry.clone();
+        null_entry[field] = Value::Null;
+        let parsed = Baseline::from_json(
+            &serde_json::json!({
+                "format": "tianheng.baseline/structured-facts",
+                "violations": [null_entry]
+            })
+            .to_string(),
+        )
+        .expect("explicit null is absence");
+        let serialized: Value = serde_json::from_str(&parsed.to_json()).unwrap();
+        assert!(
+            serialized["violations"][0].get(field).is_none(),
+            "explicit-null {field} stays canonical omission"
+        );
 
-            let mut null_entry = entry.clone();
-            null_entry[field] = Value::Null;
-            let parsed = Baseline::from_json(
-                &serde_json::json!({"version": version, "violations": [null_entry]}).to_string(),
+        let mut string_entry = entry.clone();
+        string_entry[field] = serde_json::json!("recorded");
+        let parsed = Baseline::from_json(
+            &serde_json::json!({
+                "format": "tianheng.baseline/structured-facts",
+                "violations": [string_entry]
+            })
+            .to_string(),
+        )
+        .expect("string metadata parses");
+        let parsed_entry = parsed.entries().next().unwrap();
+        let actual = match field {
+            "owner" => parsed_entry.owner.as_deref(),
+            "tracker" => parsed_entry.tracker.as_deref(),
+            _ => unreachable!(),
+        };
+        assert_eq!(actual, Some("recorded"));
+
+        for wrong in [
+            serde_json::json!(7),
+            serde_json::json!(true),
+            serde_json::json!(["team-core"]),
+            serde_json::json!({"name": "team-core"}),
+        ] {
+            let mut wrong_entry = entry.clone();
+            wrong_entry[field] = wrong;
+            let error = Baseline::from_json(
+                &serde_json::json!({
+                    "format": "tianheng.baseline/structured-facts",
+                    "violations": [wrong_entry]
+                })
+                .to_string(),
             )
-            .expect("explicit null is absence");
-            let serialized: Value = serde_json::from_str(&parsed.to_json()).unwrap();
+            .expect_err("wrong-typed metadata must invalidate the baseline");
             assert!(
-                serialized["violations"][0].get(field).is_none(),
-                "version {version} explicit-null {field} stays canonical omission"
+                error.contains(field),
+                "error must identify {field}: {error}"
             );
-
-            let mut string_entry = entry.clone();
-            string_entry[field] = serde_json::json!("recorded");
-            let parsed = Baseline::from_json(
-                &serde_json::json!({"version": version, "violations": [string_entry]}).to_string(),
-            )
-            .expect("string metadata parses");
-            let parsed_entry = parsed.entries().next().unwrap();
-            let actual = match field {
-                "owner" => parsed_entry.owner.as_deref(),
-                "tracker" => parsed_entry.tracker.as_deref(),
-                _ => unreachable!(),
-            };
-            assert_eq!(actual, Some("recorded"));
-
-            for wrong in [
-                serde_json::json!(7),
-                serde_json::json!(true),
-                serde_json::json!(["team-core"]),
-                serde_json::json!({"name": "team-core"}),
-            ] {
-                let mut wrong_entry = entry.clone();
-                wrong_entry[field] = wrong;
-                let error = Baseline::from_json(
-                    &serde_json::json!({"version": version, "violations": [wrong_entry]})
-                        .to_string(),
-                )
-                .expect_err("wrong-typed metadata must invalidate the baseline");
-                assert!(
-                    error.contains(field),
-                    "version {version} error must identify {field}: {error}"
-                );
-            }
         }
     }
 }
@@ -436,9 +447,13 @@ fn optional_baseline_metadata_accepts_only_absent_null_or_string() {
 #[test]
 fn of_preserving_carries_surviving_metadata_drops_stale_and_none_for_new() {
     let previous = Baseline::from_json(
-        r#"{"version":1,"violations":[
-            {"target":"core","rule":"r","finding":"serde","owner":"team-core","tracker":"ISSUE-7"},
-            {"target":"gone","rule":"r","finding":"old","owner":"team-x"}
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[
+            {"target":"core","rule":"old wording","finding":"old finding","owner":"team-core","tracker":"ISSUE-7",
+             "rule_key":{"type":"tianheng.rule/test/policy","fields":{"policy":"r"}},
+             "fact":{"type":"test","shape":"fact","fields":{"value":"serde"}}},
+            {"target":"gone","rule":"r","finding":"old","owner":"team-x",
+             "rule_key":{"type":"tianheng.rule/test/policy","fields":{"policy":"r"}},
+             "fact":{"type":"test","shape":"fact","fields":{"value":"old"}}}
         ]}"#,
     )
     .unwrap();
@@ -466,43 +481,65 @@ fn of_preserving_carries_surviving_metadata_drops_stale_and_none_for_new() {
 }
 
 #[test]
-fn a_duplicate_identity_keeps_the_first_entry() {
-    let baseline = Baseline::from_json(
-        r#"{"version":1,"violations":[
-            {"target":"core","rule":"r","finding":"serde","owner":"first"},
-            {"target":"core","rule":"r","finding":"serde","owner":"second"}
-        ]}"#,
-    )
-    .unwrap();
-    let entries: Vec<&BaselineEntry> = baseline.entries().collect();
-    assert_eq!(entries.len(), 1, "de-duplicated by identity");
-    assert_eq!(
-        entries[0].owner.as_deref(),
-        Some("first"),
-        "keep-first tie-break"
-    );
-}
-
-#[test]
-fn a_malformed_or_unknown_version_baseline_is_an_error_not_empty() {
+fn unsupported_or_malformed_baseline_formats_fail_loud() {
     assert!(
         Baseline::from_json("{ not json").is_err(),
         "malformed JSON is an error"
     );
     assert!(
-        Baseline::from_json(r#"{"version": 3, "violations": []}"#).is_err(),
-        "an unknown version is an error, not a silently-empty baseline"
+        Baseline::from_json(r#"{"version": 1, "violations": []}"#).is_err(),
+        "numeric v1 is unsupported"
+    );
+    assert!(
+        Baseline::from_json(r#"{"version": 2, "violations": []}"#).is_err(),
+        "numeric v2 is unsupported"
     );
     assert!(
         Baseline::from_json(r#"{"violations": []}"#).is_err(),
-        "a missing version is an error"
+        "an unmarked document is unsupported"
     );
     assert!(
-        Baseline::from_json(r#"{"version": 1, "violations": []}"#)
-            .expect("valid empty baseline")
-            .stale(&Report::empty())
-            .is_empty()
+        Baseline::from_json(r#"{"format":"tianheng.baseline/other","violations":[]}"#).is_err(),
+        "an unknown semantic format is unsupported"
     );
+    assert!(
+        Baseline::from_json(
+            r#"{"format":"tianheng.baseline/structured-facts","violations":"none"}"#
+        )
+        .is_err(),
+        "wrong-typed violations are malformed"
+    );
+
+    for malformed in [
+        serde_json::json!({
+            "target": "core", "rule": "deny", "finding": "serde",
+            "fact": {"type": "test", "shape": "edge", "fields": {}}
+        }),
+        serde_json::json!({
+            "target": "core", "rule": "deny", "finding": "serde",
+            "rule_key": {"type": "tianheng.rule/test/deny", "fields": {}},
+            "fact": {"type": "test", "fields": {}}
+        }),
+        serde_json::json!({
+            "target": "core", "rule": "deny", "finding": "serde",
+            "rule_key": {"type": "tianheng.rule/test/deny", "fields": {"mode": 7}},
+            "fact": {"type": "test", "shape": "edge", "fields": {}}
+        }),
+        serde_json::json!({
+            "target": "core", "rule": "deny", "finding": "serde",
+            "rule_key": {"type": "tianheng.rule/test/deny", "fields": {}},
+            "fact": {"type": "test", "shape": "edge", "fields": {"package": ["serde"]}}
+        }),
+    ] {
+        let document = serde_json::json!({
+            "format": "tianheng.baseline/structured-facts",
+            "violations": [malformed]
+        });
+        assert!(
+            Baseline::from_json(&document.to_string()).is_err(),
+            "malformed structured entry must fail: {document}"
+        );
+    }
 }
 
 #[test]

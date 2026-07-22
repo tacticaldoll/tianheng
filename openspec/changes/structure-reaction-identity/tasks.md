@@ -35,10 +35,10 @@
 
 ## 6. Semantic baseline (`feat(xuanji)!` commit boundary)
 
-- [ ] 6.1 Replace numeric `BaselineFormat` and legacy entries with the concrete `tianheng.baseline/structured-facts` snapshot and exact structured matching.
-- [ ] 6.2 Preserve strict optional owner/tracker annotations, first-occurrence de-duplication, identity sorting, stale reporting, and annotation carry-forward for supported exact matches.
-- [ ] 6.3 Reject numeric, unmarked, unknown-format, malformed, and wrong-typed baseline documents with focused parse/match/round-trip tests.
-- [ ] 6.4 Run focused baseline tests/clippy/doc checks and commit the removal of baseline compatibility as a separate breaking governance increment.
+- [x] 6.1 Replace numeric `BaselineFormat` and legacy entries with the concrete `tianheng.baseline/structured-facts` snapshot and exact structured matching.
+- [x] 6.2 Preserve strict optional owner/tracker annotations, first-occurrence de-duplication, identity sorting, stale reporting, and annotation carry-forward for supported exact matches.
+- [x] 6.3 Reject numeric, unmarked, unknown-format, malformed, and wrong-typed baseline documents with focused parse/match/round-trip tests.
+- [x] 6.4 Run focused baseline tests/clippy/doc checks and commit the removal of baseline compatibility as a separate breaking governance increment.
 
 ## 7. Facade and machine projections (`feat(tianheng)!` commit boundary)
 

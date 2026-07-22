@@ -182,10 +182,18 @@ impl StructuredFactIdentity {
         })
     }
 
-    pub(crate) fn from_json(value: &Value) -> Result<Self, String> {
+    pub(crate) fn semantic_json(&self) -> Value {
+        serde_json::json!({
+            "type": self.fact_type,
+            "shape": self.shape,
+            "fields": self.fields,
+        })
+    }
+
+    pub(crate) fn from_semantic_json(value: &Value) -> Result<Self, String> {
         Self::new(
-            required_string(value, "fact identity", "namespace")?,
-            required_string(value, "fact identity", "code")?,
+            required_string(value, "fact identity", "type")?,
+            required_string(value, "fact identity", "shape")?,
             json_fields(value, "fact identity")?,
         )
     }

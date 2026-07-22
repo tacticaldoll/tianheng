@@ -2,8 +2,11 @@
 
 use serde_json::Value;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
-use crate::{Finding, FindingKey, Report, RuleKey, Violation, pretty_json};
+use crate::{Finding, FindingKey, Report, RuleKey, StructuredFactIdentity, Violation, pretty_json};
+
+const BASELINE_FORMAT: &str = "tianheng.baseline/structured-facts";
 
 /// A violation's baseline identity and human finding text.
 #[derive(Debug, Clone)]
@@ -47,16 +50,6 @@ impl ViolationId {
             finding: finding.text,
             rule_key: Some(rule_key),
             finding_key: Some(finding.key),
-        }
-    }
-
-    pub(crate) fn legacy(target: String, rule: String, finding: String) -> Self {
-        Self {
-            target,
-            rule,
-            finding,
-            rule_key: None,
-            finding_key: None,
         }
     }
 
@@ -140,22 +133,15 @@ pub struct BaselineEntry {
 }
 
 fn sort_dedup_by_id(entries: &mut Vec<BaselineEntry>) {
+    let mut seen = BTreeSet::new();
+    entries.retain(|entry| seen.insert(entry.id.clone()));
     entries.sort_by(|a, b| a.id.cmp(&b.id));
-    entries.dedup_by(|a, b| a.id == b.id);
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-enum BaselineFormat {
-    V1,
-    #[default]
-    V2,
 }
 
 /// Recorded set of accepted violations.
 #[derive(Debug, Default)]
 pub struct Baseline {
     entries: Vec<BaselineEntry>,
-    format: BaselineFormat,
 }
 
 impl Baseline {
@@ -183,10 +169,7 @@ impl Baseline {
             })
             .collect();
         sort_dedup_by_id(&mut entries);
-        Baseline {
-            entries,
-            format: BaselineFormat::V2,
-        }
+        Baseline { entries }
     }
 
     /// Iterator over recorded baseline entries.
@@ -222,16 +205,13 @@ impl Baseline {
                     "target": entry.id.target,
                     "rule": entry.id.rule,
                     "finding": entry.id.finding,
+                    "rule_key": entry.id.rule_key().expect(
+                        "a semantic baseline entry requires a structured rule key"
+                    ).to_json(),
+                    "fact": entry.id.finding_key().expect(
+                        "a semantic baseline entry requires a structured fact identity"
+                    ).semantic_json(),
                 });
-                if self.format == BaselineFormat::V2 {
-                    object["finding_key"] =
-                        entry.id.finding_key().map(FindingKey::to_json).expect(
-                            "a version-2 baseline entry must carry a structured finding key",
-                        );
-                    if let Some(rule_key) = entry.id.rule_key() {
-                        object["rule_key"] = rule_key.to_json();
-                    }
-                }
                 if let Some(owner) = &entry.owner {
                     object["owner"] = serde_json::json!(owner);
                 }
@@ -241,23 +221,24 @@ impl Baseline {
                 object
             })
             .collect();
-        let version = match self.format {
-            BaselineFormat::V1 => 1,
-            BaselineFormat::V2 => 2,
-        };
-        let doc = serde_json::json!({ "version": version, "violations": violations });
+        let doc = serde_json::json!({ "format": BASELINE_FORMAT, "violations": violations });
         pretty_json(&doc)
     }
 
     /// Parse baseline from JSON document string.
     pub fn from_json(text: &str) -> Result<Self, String> {
         let doc: Value = serde_json::from_str(text).map_err(|err| err.to_string())?;
-        let format = match doc["version"].as_i64() {
-            Some(1) => BaselineFormat::V1,
-            Some(2) => BaselineFormat::V2,
-            Some(other) => return Err(format!("unsupported baseline version {other}")),
-            None => return Err("baseline is missing a numeric `version`".to_string()),
-        };
+        match doc.get("format") {
+            Some(Value::String(format)) if format == BASELINE_FORMAT => {}
+            Some(Value::String(format)) => {
+                return Err(format!("unsupported baseline format `{format}`"));
+            }
+            Some(_) => return Err("baseline `format` must be a string".to_string()),
+            None if doc.get("version").is_some() => {
+                return Err("numeric baseline versions are unsupported".to_string());
+            }
+            None => return Err("baseline is missing string `format`".to_string()),
+        }
         let array = doc["violations"]
             .as_array()
             .ok_or_else(|| "baseline `violations` must be an array".to_string())?;
@@ -281,15 +262,12 @@ impl Baseline {
             let target = field("target")?;
             let rule = field("rule")?;
             let finding = field("finding")?;
-            let id = match format {
-                BaselineFormat::V1 => ViolationId::legacy(target, rule, finding),
-                BaselineFormat::V2 => ViolationId {
-                    target,
-                    rule,
-                    finding,
-                    rule_key: item.get("rule_key").map(RuleKey::from_json).transpose()?,
-                    finding_key: Some(FindingKey::from_json(&item["finding_key"])?),
-                },
+            let id = ViolationId {
+                target,
+                rule,
+                finding,
+                rule_key: Some(RuleKey::from_json(&item["rule_key"])?),
+                finding_key: Some(StructuredFactIdentity::from_semantic_json(&item["fact"])?),
             };
             entries.push(BaselineEntry {
                 id,
@@ -298,19 +276,12 @@ impl Baseline {
             });
         }
         sort_dedup_by_id(&mut entries);
-        Ok(Baseline { entries, format })
+        Ok(Baseline { entries })
     }
 }
 
 fn baseline_id_matches(baseline: &ViolationId, current: &ViolationId) -> bool {
-    match baseline.finding_key() {
-        Some(_) => baseline == current,
-        None => {
-            baseline.target == current.target
-                && baseline.rule == current.rule
-                && baseline.finding == current.finding
-        }
-    }
+    baseline == current
 }
 
 /// Mark each violation recorded in baseline as baselined.
