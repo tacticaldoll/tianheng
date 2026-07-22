@@ -136,11 +136,12 @@ Rust architecture tests are the existing composed/standalone pure check APIs plu
 ## Migration Plan
 
 1. Land this proposal as one reviewed OpenSpec documentation commit.
-2. During apply, introduce the `xuanji` identity primitives and semantic baseline document first, with compile/serialization reactions.
-3. Give rule families semantic keys and migrate each instrument's fact emission in independently verifiable commits; remove ordinal fallbacks with their behavioral tests.
-4. Switch `tianheng` JSON/baseline/SARIF projections and overwrite behavior to canonical identity.
-5. Run the Pacta-shaped conformance fixture, external adopter compile checks where available, self-governance, and the full Definition of Done.
-6. Document the 0.3.0 break: users preserve desired annotations, move/delete the unsupported baseline, then run `tianheng check --write-baseline <file>`.
+2. Expand `xuanji` first with the validated identity primitives and a temporary structured construction path while retaining the old construction path only as migration scaffolding. This expansion commit does not claim the final breaking invariant.
+3. Migrate 圭表, 渾儀, and 漏刻 production emission in independently verifiable commits; remove ordinal fallbacks with their behavioral tests. Each intermediate checkout remains buildable and the temporary path is visible debt, not a compatibility promise.
+4. After every production emitter uses structured target/rule/fact roles, contract `xuanji`: remove `FindingKey` and the old presentation-derived construction path, make the typed algebra the only live `ViolationId`, and verify no caller can regress.
+5. Replace the baseline document and matching, then switch `tianheng` JSON/SARIF projections and overwrite behavior to canonical identity.
+6. Run the Pacta-shaped conformance fixture, external adopter compile checks where available, self-governance, and the full Definition of Done.
+7. Document the 0.3.0 break: users preserve desired annotations, move/delete the unsupported baseline, then run `tianheng check --write-baseline <file>`.
 
 Rollback is a git revert before 0.3.0 release. There is no mixed-format runtime mode and no post-release automatic downgrade path.
 
