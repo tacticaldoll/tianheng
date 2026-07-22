@@ -174,21 +174,30 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
     // fold collapses them by id and keeps the more-severe reaction, so a warn duplicate never masks
     // an enforce one and the fact is reported once (parity with the 圭表 static dimension's dedup).
     let mk = |sev| {
+        let finding = crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::Signature,
+            subject: "crate::infra::Db".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::m".to_string(),
+                name: "f".to_string(),
+            },
+        }
+        .into_finding();
         Violation::new(
             BoundaryKind::Semantic,
             ViolationId::new(
                 "crate::m",
-                SIGNATURE_RULE,
-                crate::finding::SemanticFact::Exposed {
-                    kind: crate::finding::ExposureKind::Signature,
-                    subject: "crate::infra::Db".to_string(),
-                    seam: crate::finding::PublicSeam::FreeFn {
-                        module: "crate::m".to_string(),
-                        name: "f".to_string(),
-                    },
-                }
-                .into_finding(),
+                RuleKey::of(
+                    "tianheng.rule/hunyi/signature-exposure",
+                    [
+                        ("forbidden", "[\"crate::infra::Db\"]"),
+                        ("including_trait_impls", "false"),
+                    ],
+                ),
+                finding.key().clone(),
             ),
+            SIGNATURE_RULE,
+            finding.text(),
             "reason".to_string(),
             sev,
         )
@@ -3519,7 +3528,7 @@ fn unsafe_labels(
     })
 }
 
-fn unsafe_keys(name: &str, source: &str) -> Result<Vec<FindingKey>, String> {
+fn unsafe_keys(name: &str, source: &str) -> Result<Vec<StructuredFactIdentity>, String> {
     let tree = TempSrcTree::new(&format!("unsafe-keys-{name}"));
     tree.write_all(&[("lib.rs", "pub mod net;\n"), ("net.rs", source)]);
     unsafe_findings(tree.src(), &tree.root(), &["crate::ffi".to_string()], "x").map(|findings| {
@@ -3574,16 +3583,14 @@ fn unsafe_production_violation_separates_target_rule_and_fact_roles() {
     assert_eq!(violations.len(), 1);
 
     let id = violations[0].id();
-    assert_eq!(id.target, "x");
-    let rule = id.rule_key().expect("unsafe production rule is semantic");
+    assert_eq!(id.target(), "x");
+    let rule = id.rule_key();
     assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/unsafe-confinement");
     assert_eq!(
         rule.fields().collect::<Vec<_>>(),
         vec![("allowed", "[\"crate::ffi\",\"crate::raw\"]")]
     );
-    let fact = id
-        .finding_key()
-        .expect("unsafe production fact is semantic");
+    let fact = id.fact();
     assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/unsafe-site");
     assert_eq!(fact.shape(), "unsafe-free-function");
     assert_eq!(
@@ -5838,7 +5845,10 @@ fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
     )
 }
 
-fn async_observations(name: &str, body: &str) -> Result<Vec<(FindingKey, String)>, String> {
+fn async_observations(
+    name: &str,
+    body: &str,
+) -> Result<Vec<(StructuredFactIdentity, String)>, String> {
     let tree = TempSrcTree::new(&format!("async-observation-{name}"));
     tree.write_all(&[("lib.rs", "pub mod registry;\n"), ("registry.rs", body)]);
     async_exposure_module_findings(tree.src(), &tree.root(), "crate::registry", "x").map(|facts| {
@@ -5888,14 +5898,14 @@ fn async_production_violation_separates_target_rule_and_seam() {
     assert_eq!(violations.len(), 1);
 
     let id = violations[0].id();
-    assert_eq!(id.target, "crate::registry");
-    let rule = id.rule_key().expect("async production rule is semantic");
+    assert_eq!(id.target(), "crate::registry");
+    let rule = id.rule_key();
     assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/async-exposure");
     assert_eq!(
         rule.fields().collect::<Vec<_>>(),
         vec![("including_submodules", "false")]
     );
-    let fact = id.finding_key().expect("async production fact is semantic");
+    let fact = id.fact();
     assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/async-exposure");
     assert_eq!(fact.shape(), "async-free-function");
     assert_eq!(
@@ -6884,12 +6894,8 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     assert_eq!(violations[0].target, "crate::domain");
     assert_eq!(violations[0].rule, SIGNATURE_RULE);
     let id = violations[0].id();
-    let key = id
-        .finding_key()
-        .expect("a production violation has structured identity");
-    let rule = id
-        .rule_key()
-        .expect("a production semantic violation has a structured rule");
+    let key = id.fact();
+    let rule = id.rule_key();
     assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/signature-exposure");
     assert_eq!(
         rule.fields().collect::<Vec<_>>(),

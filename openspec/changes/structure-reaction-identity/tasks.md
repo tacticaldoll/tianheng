@@ -28,10 +28,10 @@
 
 ## 5. Contract the shared model (`feat(xuanji)!` commit boundary)
 
-- [ ] 5.1 Confirm every workspace production emitter uses the structured constructor; add a reaction that fails if the temporary presentation-derived path remains in production use.
-- [ ] 5.2 Make governed target + `RuleKey` + `StructuredFactIdentity` the only live `ViolationId` construction/equality/ordering path; remove `FindingKey`, legacy identity provenance, and the temporary bridge.
-- [ ] 5.3 Keep presentation and diagnostics on `Finding`/`Violation` outside identity and prove wording, reason, severity, file, anchor, polarity, and diagnostic changes do not re-key.
-- [ ] 5.4 Run focused `xuanji`, workspace compile, clippy, and doc checks; adversarially verify presentation cannot enter identity; then commit the breaking contraction with its migration footer.
+- [x] 5.1 Confirm every workspace production emitter uses the structured constructor; add a reaction that fails if the temporary presentation-derived path remains in production use.
+- [x] 5.2 Make governed target + `RuleKey` + `StructuredFactIdentity` the only live `ViolationId` construction/equality/ordering path; remove `FindingKey`, legacy identity provenance, and the temporary bridge.
+- [x] 5.3 Keep presentation and diagnostics on `Finding`/`Violation` outside identity and prove wording, reason, severity, file, anchor, polarity, and diagnostic changes do not re-key.
+- [x] 5.4 Run focused `xuanji`, workspace compile, clippy, and doc checks; adversarially verify presentation cannot enter identity; then commit the breaking contraction with its migration footer.
 
 ## 6. Semantic baseline (`feat(xuanji)!` commit boundary)
 

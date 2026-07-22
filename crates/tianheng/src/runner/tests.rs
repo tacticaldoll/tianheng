@@ -44,11 +44,8 @@ impl Drop for TempPath {
 fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
     ViolationId::new(
         target,
-        rule,
-        Finding::new(
-            finding,
-            FindingKey::new("tianheng-test", "fact", [("value", finding)]).unwrap(),
-        ),
+        RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
+        StructuredFactIdentity::new("tianheng-test", "fact", [("value", finding)]).unwrap(),
     )
 }
 
@@ -56,6 +53,8 @@ fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Vio
     Violation::new(
         BoundaryKind::Crate,
         test_id(target, rule, finding),
+        rule,
+        finding,
         format!("reason-for-{target}"),
         Severity::Enforce,
     )
@@ -66,6 +65,8 @@ fn enforce_violation(kind: BoundaryKind, finding: &str) -> Violation {
     Violation::new(
         kind,
         test_id("target", "rule", finding),
+        "rule",
+        finding,
         "reason".to_string(),
         Severity::Enforce,
     )
@@ -331,6 +332,8 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
         Violation::new(
             BoundaryKind::Crate,
             test_id(target, same_rule, same_finding),
+            same_rule,
+            same_finding,
             same_reason.to_string(),
             Severity::Enforce,
         )
@@ -1458,6 +1461,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
             "must not expose",
             "crate::infra::Db exposed by fn crate::domain::leak",
         ),
+        "must not expose",
+        "crate::infra::Db exposed by fn crate::domain::leak",
         "domain must not expose infra".to_string(),
         Severity::Enforce,
     )
@@ -1469,6 +1474,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
             "must be implemented only in the allowed locations",
             "crate::plugins (impl for crate::plugins::P)",
         ),
+        "must be implemented only in the allowed locations",
+        "crate::plugins (impl for crate::plugins::P)",
         "Command impls live in crate::allowed".to_string(),
         Severity::Enforce,
     )
@@ -1476,6 +1483,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
     let file_less = Violation::new(
         BoundaryKind::Crate,
         test_id("dep-crate", "deny external", "serde"),
+        "deny external",
+        "serde",
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     );

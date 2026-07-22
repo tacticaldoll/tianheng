@@ -28,16 +28,17 @@ pub(crate) fn push_single_module_violations(
     let anchor = context.anchor.map(str::to_string);
     for (finding, file) in findings {
         let finding = finding.into_finding();
-        let id = ViolationId::structured(
+        let id = ViolationId::new(
             context.module,
-            context.rule,
             context.rule_key.clone(),
-            finding,
+            finding.key().clone(),
         );
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
                 id,
+                context.rule,
+                finding.text(),
                 context.reason.to_string(),
                 context.severity,
             )
@@ -81,16 +82,17 @@ pub(crate) fn push_multi_module_violations(
     let anchor = context.anchor.map(str::to_string);
     for (finding, _module, file) in findings {
         let finding = finding.into_finding();
-        let id = ViolationId::structured(
+        let id = ViolationId::new(
             context.target,
-            context.rule,
             context.rule_key.clone(),
-            finding,
+            finding.key().clone(),
         );
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
                 id,
+                context.rule,
+                finding.text(),
                 context.reason.to_string(),
                 context.severity,
             )

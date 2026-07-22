@@ -73,12 +73,8 @@ fn a_disallowed_origin_reacts() {
     assert_eq!(v.target, "seam");
     assert_eq!(v.rule, runtime_seam_rule_line(&["app::domain"]));
     let id = v.id();
-    let key = id
-        .finding_key()
-        .expect("a production violation has structured identity");
-    let rule = id
-        .rule_key()
-        .expect("a production violation has a structured rule");
+    let key = id.fact();
+    let rule = id.rule_key();
     assert_eq!(rule.rule_type(), "tianheng.rule/louke/runtime-seam");
     assert_eq!(
         rule.fields().collect::<Vec<_>>(),

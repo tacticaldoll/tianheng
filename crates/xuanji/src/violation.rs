@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::{BoundaryKind, FindingKey, Polarity, RuleKey, Severity, ViolationId};
+use crate::{BoundaryKind, Polarity, RuleKey, Severity, StructuredFactIdentity, ViolationId};
 
 /// One violated boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,10 +16,10 @@ pub struct Violation {
     pub rule: String,
     /// The offending finding text.
     pub finding: String,
-    /// Structured identity key.
-    pub(crate) finding_key: FindingKey,
-    /// Semantic rule identity during the 0.3 instrument migration.
-    pub(crate) rule_key: Option<RuleKey>,
+    /// Structured observed-fact identity.
+    pub(crate) fact: StructuredFactIdentity,
+    /// Semantic rule identity.
+    pub(crate) rule_key: RuleKey,
     /// The boundary's reason / repair hint.
     pub reason: String,
     /// Severity level.
@@ -36,23 +36,26 @@ pub struct Violation {
 
 impl Violation {
     /// Build a violation observed during evaluation.
-    pub fn new(kind: BoundaryKind, id: ViolationId, reason: String, severity: Severity) -> Self {
+    pub fn new(
+        kind: BoundaryKind,
+        id: ViolationId,
+        rule: impl Into<String>,
+        finding: impl Into<String>,
+        reason: String,
+        severity: Severity,
+    ) -> Self {
         let ViolationId {
             target,
-            rule,
-            finding,
             rule_key,
-            finding_key,
+            fact,
         } = id;
         Violation {
             kind,
             target,
-            rule,
-            finding,
+            rule: rule.into(),
+            finding: finding.into(),
             rule_key,
-            finding_key: finding_key.expect(
-                "a live violation requires a structured finding; a version-1 baseline id is legacy data, not an observed fact",
-            ),
+            fact,
             reason,
             severity,
             baselined: false,
@@ -63,13 +66,13 @@ impl Violation {
     }
 
     /// The stable key for this observed finding.
-    pub fn finding_key(&self) -> &FindingKey {
-        &self.finding_key
+    pub fn fact(&self) -> &StructuredFactIdentity {
+        &self.fact
     }
 
-    /// Semantic rule identity, when the producing instrument has migrated.
-    pub fn rule_key(&self) -> Option<&RuleKey> {
-        self.rule_key.as_ref()
+    /// Semantic rule identity.
+    pub fn rule_key(&self) -> &RuleKey {
+        &self.rule_key
     }
 
     /// Attach source file metadata.
@@ -94,10 +97,8 @@ impl Violation {
     pub fn id(&self) -> ViolationId {
         ViolationId {
             target: self.target.clone(),
-            rule: self.rule.clone(),
-            finding: self.finding.clone(),
             rule_key: self.rule_key.clone(),
-            finding_key: Some(self.finding_key.clone()),
+            fact: self.fact.clone(),
         }
     }
 
@@ -108,7 +109,7 @@ impl Violation {
             "target": self.target,
             "rule": self.rule,
             "finding": self.finding,
-            "finding_key": self.finding_key.to_json(),
+            "finding_key": self.fact.to_json(),
             "reason": self.reason,
             "severity": self.severity.as_str(),
             "baselined": self.baselined,

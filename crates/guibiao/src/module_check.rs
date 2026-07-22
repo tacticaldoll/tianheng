@@ -41,10 +41,13 @@ fn push_module_violation(
     file: String,
     boundary: &ModuleBoundary,
 ) {
+    let finding = fact.into_finding();
     violations.push(
         Violation::new(
             BoundaryKind::Module,
-            ViolationId::structured(target, rule, boundary.rule.key(), fact.into_finding()),
+            ViolationId::new(target, boundary.rule.key(), finding.key().clone()),
+            rule,
+            finding.text(),
             boundary.reason.clone(),
             boundary.severity,
         )

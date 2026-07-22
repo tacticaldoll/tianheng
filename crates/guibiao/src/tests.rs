@@ -16,13 +16,19 @@ fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
         None => crate::finding::CrateFact::dependency(finding.to_string(), DependencyKind::Normal)
             .into_finding(),
     };
-    ViolationId::new(target, rule, finding)
+    ViolationId::new(
+        target,
+        RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
+        finding.key().clone(),
+    )
 }
 
 fn one_enforce_violation() -> Report {
     Report::new(vec![Violation::new(
         BoundaryKind::Crate,
         test_id("core", "deny external dependencies", "serde"),
+        "deny external dependencies",
+        "serde",
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     )])
@@ -185,7 +191,7 @@ fn rule_set_order_is_canonical_and_presentation_is_not_identity() {
 
 #[test]
 fn dependency_fact_identity_survives_reorder_and_unrelated_insertion() {
-    fn identities(package: &serde_json::Value) -> Vec<FindingKey> {
+    fn identities(package: &serde_json::Value) -> Vec<StructuredFactIdentity> {
         Rule::RestrictDependencySourcesTo {
             allowed: vec![SourceKind::Registry],
         }
@@ -517,18 +523,14 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
     assert_eq!(violations[0].rule, "module must not import");
     assert_eq!(violations[0].finding, "crate::sink");
     let id = violations[0].id();
-    assert_eq!(id.target, "crate::foo::lib");
-    let rule = id
-        .rule_key()
-        .expect("a production rule has semantic identity");
+    assert_eq!(id.target(), "crate::foo::lib");
+    let rule = id.rule_key();
     assert_eq!(rule.rule_type(), "tianheng.rule/guibiao/must-not-import");
     assert_eq!(
         rule.fields().collect::<Vec<_>>(),
         vec![("module", "crate::sink")]
     );
-    let key = id
-        .finding_key()
-        .expect("a production violation has structured identity");
+    let key = id.fact();
     assert_eq!(key.fact_type(), "tianheng.fact/guibiao/imported-path");
     assert_eq!(key.shape(), "module-path");
     assert_eq!(
@@ -1981,10 +1983,14 @@ fn a_baselined_enforce_violation_does_not_fail() {
 
 #[test]
 fn a_new_enforce_violation_fails_against_a_baseline() {
-    let baseline = Baseline::from_json(
-            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"other"}]}"#,
-        )
-        .unwrap();
+    let baseline = Baseline::of(&Report::new(vec![Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "deny external dependencies", "other"),
+        "deny external dependencies",
+        "other",
+        "core must stay dependency-light".to_string(),
+        Severity::Enforce,
+    )]));
     let mut report = one_enforce_violation();
     apply_baseline(&mut report, &baseline);
     assert!(
@@ -1997,10 +2003,14 @@ fn a_new_enforce_violation_fails_against_a_baseline() {
 #[test]
 fn stale_finds_entries_with_no_current_match() {
     let report = one_enforce_violation();
-    let baseline = Baseline::from_json(
-            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"gone"}]}"#,
-        )
-        .unwrap();
+    let baseline = Baseline::of(&Report::new(vec![Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "deny external dependencies", "gone"),
+        "deny external dependencies",
+        "gone",
+        "core must stay dependency-light".to_string(),
+        Severity::Enforce,
+    )]));
     let stale = baseline.stale(&report);
     assert_eq!(stale.len(), 1);
     assert_eq!(stale[0].finding, "gone");
@@ -2016,10 +2026,10 @@ fn report_json_projects_a_violation_with_its_kind() {
     assert_eq!(violation["kind"], "crate");
     assert_eq!(violation["finding"], "serde");
     assert_eq!(
-        violation["finding_key"]["namespace"],
+        violation["finding_key"]["type"],
         "tianheng.fact/guibiao/dependency"
     );
-    assert_eq!(violation["finding_key"]["code"], "dependency-edge");
+    assert_eq!(violation["finding_key"]["shape"], "dependency-edge");
     assert_eq!(violation["finding_key"]["fields"]["package"], "serde");
     assert_eq!(violation["severity"], "enforce");
     assert_eq!(violation["baselined"], false);
@@ -2054,29 +2064,25 @@ fn report_json_reflects_baseline_and_stale_in_gate() {
     let baseline = Baseline::of(&report);
     apply_baseline(&mut report, &baseline);
     // A baseline entry that no current violation matches is stale.
-    let stale = vec![test_id("core", "deny external dependencies", "gone")];
+    let stale_baseline = Baseline::from_json(
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"deny external dependencies","finding":"gone",
+            "rule_key":{"type":"tianheng.rule/test/policy","fields":{"policy":"deny external dependencies"}},
+            "fact":{"type":"tianheng.fact/guibiao/dependency","shape":"declared-dependency","fields":{"kind":"normal","package":"gone"}}
+        }]}"#,
+    )
+    .unwrap();
+    let stale: Vec<BaselineEntry> = stale_baseline
+        .stale(&Report::empty())
+        .into_iter()
+        .cloned()
+        .collect();
     let doc: serde_json::Value =
         serde_json::from_str(&report_json(&Outcome::Violations(report), &stale, None)).unwrap();
     assert_eq!(doc["exit_code"], 0, "a fully baselined run does not fail");
     assert_eq!(doc["violations"][0]["baselined"], true);
     assert_eq!(doc["stale_baseline"][0]["finding"], "gone");
     assert!(doc["stale_baseline"][0]["finding_key"].is_object());
-
-    let legacy = Baseline::from_json(
-        r#"{"version":1,"violations":[{
-            "target":"core","rule":"deny external dependencies","finding":"legacy-gone"
-        }]}"#,
-    )
-    .unwrap();
-    let legacy_stale: Vec<ViolationId> = legacy
-        .stale(&Report::empty())
-        .into_iter()
-        .cloned()
-        .collect();
-    let legacy_doc: serde_json::Value =
-        serde_json::from_str(&report_json(&Outcome::Clean, &legacy_stale, None)).unwrap();
-    assert_eq!(legacy_doc["stale_baseline"][0]["finding"], "legacy-gone");
-    assert_eq!(legacy_doc["stale_baseline"][0]["finding_key"], Value::Null);
 }
 
 #[test]
@@ -2741,14 +2747,12 @@ fn source_boundary_carries_its_severity_and_gates_against_the_baseline() {
     assert_eq!(violations[0].rule, "restrict dependency sources to");
     assert_eq!(violations[0].finding, "gitdep");
     let id = violations[0].id();
-    assert_eq!(id.target, "infra");
+    assert_eq!(id.target(), "infra");
     assert_eq!(
-        id.rule_key().expect("production rule identity").rule_type(),
+        id.rule_key().rule_type(),
         "tianheng.rule/guibiao/restrict-dependency-sources-to"
     );
-    let fact = id
-        .finding_key()
-        .expect("a production fact has semantic identity");
+    let fact = id.fact();
     assert_eq!(fact.fact_type(), "tianheng.fact/guibiao/dependency-source");
     assert_eq!(fact.shape(), "declared-source");
     assert_eq!(

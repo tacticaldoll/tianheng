@@ -1057,10 +1057,10 @@ fn audit_production_violation_separates_target_rule_and_fact_roles() {
     let violation = report.violations.first().expect("one unprobed seam");
     let id = violation.id();
     assert_eq!(violation.target, "checkout");
-    let rule = id.rule_key().expect("audit rule identity is structured");
+    let rule = id.rule_key();
     assert_eq!(rule.rule_type(), "tianheng.rule/louke/declared-seam-probed");
     assert_eq!(rule.fields().count(), 0);
-    let fact = id.finding_key().expect("audit fact identity is structured");
+    let fact = id.fact();
     assert_eq!(fact.fact_type(), "tianheng.fact/louke/runtime-seam-audit");
     assert_eq!(fact.shape(), "unprobed-declaration");
     assert_eq!(

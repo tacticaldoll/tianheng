@@ -40,6 +40,25 @@ impl AuditRule {
     }
 }
 
+fn audit_violation(
+    target: &str,
+    rule: &str,
+    rule_key: RuleKey,
+    fact: RuntimeFact,
+    reason: String,
+    severity: Severity,
+) -> Violation {
+    let finding = fact.into_finding();
+    Violation::new(
+        BoundaryKind::Runtime,
+        ViolationId::new(target, rule_key, finding.key().clone()),
+        rule,
+        finding.text(),
+        reason,
+        severity,
+    )
+}
+
 #[cfg(test)]
 use scan::scan_source;
 
@@ -109,17 +128,13 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
         let seam = boundary.seam();
         if !seen_decl.insert(seam) && dup_reported.insert(seam) {
             violations.push(
-                Violation::new(
-                    BoundaryKind::Runtime,
-                    ViolationId::structured(
-                        seam,
-                        "each runtime seam must be declared exactly once",
-                        AuditRule::UniqueSeamDeclaration.key(),
-                        RuntimeFact::DuplicateSeam {
-                            seam: seam.to_string(),
-                        }
-                        .into_finding(),
-                    ),
+                audit_violation(
+                    seam,
+                    "each runtime seam must be declared exactly once",
+                    AuditRule::UniqueSeamDeclaration.key(),
+                    RuntimeFact::DuplicateSeam {
+                        seam: seam.to_string(),
+                    },
                     "a duplicate declaration would silently shadow the earlier boundary at install"
                         .to_string(),
                     Severity::Enforce,
@@ -136,17 +151,13 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
         let seam = boundary.seam();
         if !probed_set.contains(seam) && seen.insert(seam) {
             violations.push(
-                Violation::new(
-                    BoundaryKind::Runtime,
-                    ViolationId::structured(
-                        seam,
-                        "every declared runtime seam must be probed",
-                        AuditRule::DeclaredSeamProbed.key(),
-                        RuntimeFact::UnprobedSeam {
-                            seam: seam.to_string(),
-                        }
-                        .into_finding(),
-                    ),
+                audit_violation(
+                    seam,
+                    "every declared runtime seam must be probed",
+                    AuditRule::DeclaredSeamProbed.key(),
+                    RuntimeFact::UnprobedSeam {
+                        seam: seam.to_string(),
+                    },
                     "a RuntimeBoundary with no probe is never enforced at runtime".to_string(),
                     boundary.severity(),
                 )
@@ -160,14 +171,11 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
     for probe in &probes {
         if let Probe::Literal(seam) = probe {
             if !declared_set.contains(seam.as_str()) && seen_probe.insert(seam.as_str()) {
-                violations.push(Violation::new(
-                    BoundaryKind::Runtime,
-                    ViolationId::structured(
-                        seam,
-                        "every probe must reference a declared seam",
-                        AuditRule::ProbeDeclaredSeam.key(),
-                        RuntimeFact::UndeclaredProbe { seam: seam.clone() }.into_finding(),
-                    ),
+                violations.push(audit_violation(
+                    seam,
+                    "every probe must reference a declared seam",
+                    AuditRule::ProbeDeclaredSeam.key(),
+                    RuntimeFact::UndeclaredProbe { seam: seam.clone() },
                     format!("an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"),
                     Severity::Enforce,
                 ));
@@ -192,17 +200,13 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
         // reporting `null` would be a dishonest null. This is the one runtime violation with a
         // source location — the seam-level ones above name a seam, not a file.
         violations.push(
-            Violation::new(
-                BoundaryKind::Runtime,
-                ViolationId::structured(
-                    "<un-auditable probe>",
-                    "an assert_boundary! seam must be a string literal to be auditable",
-                    AuditRule::LiteralProbeSeam.key(),
-                    RuntimeFact::UnauditableProbe {
-                        file: file.to_string(),
-                    }
-                    .into_finding(),
-                ),
+            audit_violation(
+                "<un-auditable probe>",
+                "an assert_boundary! seam must be a string literal to be auditable",
+                AuditRule::LiteralProbeSeam.key(),
+                RuntimeFact::UnauditableProbe {
+                    file: file.to_string(),
+                },
                 "spell the seam as a string literal so probe coverage can be verified".to_string(),
                 Severity::Enforce,
             )

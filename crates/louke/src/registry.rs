@@ -153,15 +153,13 @@ pub(crate) fn check_crossing(
     // per-boundary detail appended here, so the prod reaction and the `list` projection share one
     // rule label (the shell's `runtime` projection references the same const).
     let rule = runtime_seam_rule_line(&s.allowed);
+    let finding = finding.into_finding();
     Ok(Some((
         Violation::new(
             BoundaryKind::Runtime,
-            ViolationId::structured(
-                seam,
-                rule,
-                runtime_rule_key(&s.allowed),
-                finding.into_finding(),
-            ),
+            ViolationId::new(seam, runtime_rule_key(&s.allowed), finding.key().clone()),
+            rule,
+            finding.text(),
             s.reason.clone(),
             s.severity,
         )

@@ -1,23 +1,23 @@
 use serde_json::Value;
+use std::path::Path;
 
 use crate::{
-    Baseline, BaselineEntry, BoundaryKind, Finding, FindingKey, Polarity, Report, RuleKey,
-    Severity, StructuredFactIdentity, Violation, ViolationId,
+    Baseline, BaselineEntry, BoundaryKind, Finding, Polarity, Report, RuleKey, Severity,
+    StructuredFactIdentity, Violation, ViolationId,
 };
 
 fn test_finding(text: &str) -> Finding {
     Finding::new(
         text,
-        FindingKey::new("test", "fact", [("value", text)]).unwrap(),
+        StructuredFactIdentity::new("test", "fact", [("value", text)]).unwrap(),
     )
 }
 
 fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
-    ViolationId::structured(
+    ViolationId::new(
         target,
-        rule,
         RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
-        test_finding(finding),
+        test_finding(finding).key().clone(),
     )
 }
 
@@ -30,8 +30,8 @@ fn boundary_kind_labels_cover_every_dimension() {
 }
 
 #[test]
-fn finding_key_validates_and_canonicalizes_its_envelope() {
-    let key = FindingKey::new(
+fn structured_fact_identity_validates_and_canonicalizes_its_envelope() {
+    let key = StructuredFactIdentity::new(
         "module",
         "forbidden_import",
         [("module", "crate::z"), ("importer", "crate::a")],
@@ -41,10 +41,12 @@ fn finding_key_validates_and_canonicalizes_its_envelope() {
         key.fields().collect::<Vec<_>>(),
         vec![("importer", "crate::a"), ("module", "crate::z")]
     );
-    assert!(FindingKey::new("", "fact", [("value", "x")]).is_err());
-    assert!(FindingKey::new("module", "", [("value", "x")]).is_err());
-    assert!(FindingKey::new("module", "fact", [("", "x")]).is_err());
-    assert!(FindingKey::new("module", "fact", [("value", "x"), ("value", "y")]).is_err());
+    assert!(StructuredFactIdentity::new("", "fact", [("value", "x")]).is_err());
+    assert!(StructuredFactIdentity::new("module", "", [("value", "x")]).is_err());
+    assert!(StructuredFactIdentity::new("module", "fact", [("", "x")]).is_err());
+    assert!(
+        StructuredFactIdentity::new("module", "fact", [("value", "x"), ("value", "y")]).is_err()
+    );
 }
 
 #[test]
@@ -95,55 +97,120 @@ fn structured_path_uses_target_rule_key_and_fact_only() {
         "dependency-edge",
         [("package", "serde")],
     );
-    let old = ViolationId::structured(
-        "core",
-        "old rule wording",
-        rule.clone(),
-        Finding::new("old finding wording", fact.clone()),
-    );
-    let new = ViolationId::structured(
-        "core",
-        "new rule wording",
-        rule,
-        Finding::new("new finding wording", fact),
-    );
-    let transitional = ViolationId::new(
-        "core",
-        "old rule wording",
-        test_finding("old finding wording"),
-    );
+    let old = ViolationId::new("core", rule.clone(), fact.clone());
+    let new = ViolationId::new("core", rule, fact);
 
     assert_eq!(old, new, "presentation stays outside the typed algebra");
-    assert_ne!(
-        old, transitional,
-        "migration provenances never compare equal"
-    );
     assert_eq!(
-        old.rule_key().unwrap().rule_type(),
+        old.rule_key().rule_type(),
         "tianheng.rule/test/deny-dependency"
     );
 }
 
 #[test]
-fn structured_path_round_trips_through_the_temporary_baseline_bridge() {
+fn presentation_and_diagnostics_cannot_rekey_a_violation() {
+    let id = ViolationId::new(
+        "core",
+        RuleKey::of("tianheng.rule/test/deny", [("policy", "external")]),
+        StructuredFactIdentity::of(
+            "tianheng.fact/test/dependency",
+            "dependency-edge",
+            [("package", "serde")],
+        ),
+    );
+    let original = Violation::new(
+        BoundaryKind::Crate,
+        id.clone(),
+        "old rule wording",
+        "old finding wording",
+        "old reason".to_string(),
+        Severity::Warn,
+    );
+    let mut changed = Violation::new(
+        BoundaryKind::Runtime,
+        id,
+        "new rule wording",
+        "new finding wording and diagnostic signature",
+        "new reason".to_string(),
+        Severity::Enforce,
+    )
+    .with_file(Some("src/new.rs".to_string()))
+    .with_anchor(Some("new-anchor".to_string()))
+    .with_polarity(Polarity::AllowlistGap);
+    changed.baselined = true;
+
+    assert_ne!(original, changed, "diagnostic records really did change");
+    assert_eq!(
+        original.id(),
+        changed.id(),
+        "kind, wording, diagnostics, reason, severity, file, anchor, polarity, and baseline state stay outside identity"
+    );
+
+    let changed_fact = ViolationId::new(
+        "core",
+        original.rule_key().clone(),
+        StructuredFactIdentity::of(
+            "tianheng.fact/test/dependency",
+            "dependency-edge",
+            [("package", "tokio")],
+        ),
+    );
+    assert_ne!(
+        original.id(),
+        changed_fact,
+        "an identity scalar must re-key"
+    );
+}
+
+#[test]
+fn production_sources_have_no_presentation_derived_identity_bridge() {
+    fn visit(path: &Path, offenders: &mut Vec<String>) {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                visit(&path, offenders);
+            } else if path.extension().and_then(|value| value.to_str()) == Some("rs")
+                && path.file_name().and_then(|value| value.to_str()) != Some("tests.rs")
+                && !path.components().any(|part| part.as_os_str() == "tests")
+            {
+                let source = std::fs::read_to_string(&path).unwrap();
+                let old_constructor = ["ViolationId::", "structured("].concat();
+                let old_alias = ["Finding", "Key"].concat();
+                if source.contains(&old_constructor) || source.contains(&old_alias) {
+                    offenders.push(path.display().to_string());
+                }
+            }
+        }
+    }
+
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut offenders = Vec::new();
+    visit(&workspace.join("crates"), &mut offenders);
+    assert!(
+        offenders.is_empty(),
+        "legacy identity construction remains in production sources: {offenders:?}"
+    );
+}
+
+#[test]
+fn structured_path_round_trips_through_baseline() {
+    let fact = StructuredFactIdentity::of(
+        "tianheng.fact/test/dependency",
+        "dependency-edge",
+        [("package", "serde")],
+    );
     let violation = Violation::new(
         BoundaryKind::Crate,
-        ViolationId::structured(
+        ViolationId::new(
             "core",
-            "deny dependency on serde",
             RuleKey::of(
                 "tianheng.rule/test/deny-dependency",
                 [("dependency", "serde")],
             ),
-            Finding::new(
-                "serde",
-                StructuredFactIdentity::of(
-                    "tianheng.fact/test/dependency",
-                    "dependency-edge",
-                    [("package", "serde")],
-                ),
-            ),
+            fact,
         ),
+        "deny dependency on serde",
+        "serde",
         "core stays independent".to_string(),
         Severity::Enforce,
     );
@@ -162,24 +229,27 @@ fn sample_violation() -> Violation {
     Violation::new(
         BoundaryKind::Module,
         test_id("crate::kernel", "must not import", "crate::projection"),
+        "must not import",
+        "crate::projection",
         "the kernel must not depend on a projection".to_string(),
         Severity::Enforce,
     )
 }
 
 fn wording_violation(text: &str) -> Violation {
-    let key = FindingKey::new("test", "dependency", [("package", "serde")]).unwrap();
+    let key = StructuredFactIdentity::new("test", "dependency", [("package", "serde")]).unwrap();
     Violation::new(
         BoundaryKind::Crate,
-        ViolationId::structured(
+        ViolationId::new(
             "core",
-            "deny",
             RuleKey::of(
                 "tianheng.rule/test/deny-dependency",
                 std::iter::empty::<(&str, &str)>(),
             ),
-            Finding::new(text, key),
+            key,
         ),
+        "deny",
+        text,
         "reason".to_string(),
         Severity::Enforce,
     )
@@ -251,6 +321,8 @@ fn baseline_round_trips_through_json() {
         Violation::new(
             BoundaryKind::Crate,
             test_id("core", "deny external dependencies", "serde"),
+            "deny external dependencies",
+            "serde",
             "core stays dependency-light".to_string(),
             Severity::Enforce,
         ),
@@ -287,7 +359,7 @@ fn semantic_baseline_matches_and_preserves_metadata_across_wording_changes() {
     assert!(previous.contains(&report.violations[0]));
     let rewritten = Baseline::of_preserving(&report, &previous);
     let entry = rewritten.entries().next().unwrap();
-    assert_eq!(entry.id.finding, "new wording");
+    assert_eq!(entry.finding, "new wording");
     assert_eq!(entry.owner.as_deref(), Some("team-core"));
     assert_eq!(entry.tracker.as_deref(), Some("ISSUE-9"));
 }
@@ -304,18 +376,16 @@ fn equal_presentation_cannot_substitute_for_a_different_fact_identity() {
     .unwrap();
     let current = Violation::new(
         BoundaryKind::Crate,
-        ViolationId::structured(
+        ViolationId::new(
             "core",
-            "deny",
             RuleKey::of(
                 "tianheng.rule/test/deny-dependency",
                 std::iter::empty::<(&str, &str)>(),
             ),
-            Finding::new(
-                "same wording",
-                StructuredFactIdentity::of("test", "dependency", [("package", "tokio")]),
-            ),
+            StructuredFactIdentity::of("test", "dependency", [("package", "tokio")]),
         ),
+        "deny",
+        "same wording",
         "r".to_string(),
         Severity::Enforce,
     );
@@ -337,7 +407,7 @@ fn semantic_baseline_deduplicates_by_identity_and_keeps_the_first_entry() {
     .unwrap();
     let entries: Vec<_> = baseline.entries().collect();
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].id.finding, "first");
+    assert_eq!(entries[0].finding, "first");
     assert_eq!(entries[0].owner.as_deref(), Some("first"));
 }
 
@@ -354,7 +424,7 @@ fn owner_and_tracker_round_trip_and_are_emitted_only_when_set() {
     ]}"#;
     let baseline = Baseline::from_json(json).expect("semantic annotations parse");
     let entries: Vec<&BaselineEntry> = baseline.entries().collect();
-    assert_eq!(entries[0].id.target, "core");
+    assert_eq!(entries[0].id.target(), "core");
     assert_eq!(entries[0].owner.as_deref(), Some("team-core"));
     assert_eq!(entries[0].tracker.as_deref(), Some("ISSUE-7"));
     assert_eq!(entries[1].owner, None);
@@ -461,6 +531,8 @@ fn of_preserving_carries_surviving_metadata_drops_stale_and_none_for_new() {
         Violation::new(
             BoundaryKind::Crate,
             test_id(t, "r", f),
+            "r",
+            f,
             "x".to_string(),
             Severity::Enforce,
         )
@@ -469,13 +541,13 @@ fn of_preserving_carries_surviving_metadata_drops_stale_and_none_for_new() {
     let next = Baseline::of_preserving(&report, &previous);
     let entries: Vec<&BaselineEntry> = next.entries().collect();
     assert_eq!(entries.len(), 2);
-    let core = entries.iter().find(|e| e.id.target == "core").unwrap();
+    let core = entries.iter().find(|e| e.id.target() == "core").unwrap();
     assert_eq!(core.owner.as_deref(), Some("team-core"));
     assert_eq!(core.tracker.as_deref(), Some("ISSUE-7"));
-    let new = entries.iter().find(|e| e.id.target == "new").unwrap();
+    let new = entries.iter().find(|e| e.id.target() == "new").unwrap();
     assert_eq!(new.owner, None);
     assert!(
-        entries.iter().all(|e| e.id.target != "gone"),
+        entries.iter().all(|e| e.id.target() != "gone"),
         "a resolved violation's entry (and metadata) drops"
     );
 }
@@ -551,5 +623,7 @@ fn a_fixed_violation_leaves_a_stale_baseline_entry() {
         1,
         "the fixed violation's entry is reported stale"
     );
-    assert_eq!(stale[0], &sample_violation().id());
+    assert_eq!(stale[0].id, sample_violation().id());
+    assert_eq!(stale[0].rule, "must not import");
+    assert_eq!(stale[0].finding, "crate::projection");
 }

@@ -14,18 +14,20 @@ pub(crate) fn check_crate_boundary(
         .ok_or_else(|| crate_not_found_error(&boundary.target.package))?;
 
     for fact in boundary.rule.facts(package, workspace, boundary.kind) {
+        let finding = fact.into_finding();
         // No `with_file`: a crate-dependency violation is an edge in the dependency graph
         // (a `Cargo.toml` manifest relation), not a single source line, so its `file` is a
         // faithful `None` — the location already lives in `(target, finding)`.
         violations.push(
             Violation::new(
                 BoundaryKind::Crate,
-                ViolationId::structured(
+                ViolationId::new(
                     boundary.target.package.clone(),
-                    boundary.rule.label(),
                     boundary.rule.key(),
-                    fact.into_finding(),
+                    finding.key().clone(),
                 ),
+                boundary.rule.label(),
+                finding.text(),
                 boundary.reason.clone(),
                 boundary.severity,
             )

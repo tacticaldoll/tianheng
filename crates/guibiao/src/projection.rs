@@ -16,7 +16,7 @@ use xuanji::pretty_json;
 /// baseline entries matching no current violation (empty outside gate mode).
 pub fn report_json(
     outcome: &Outcome,
-    stale: &[ViolationId],
+    stale: &[BaselineEntry],
     coverage: Option<&Coverage>,
 ) -> String {
     let (label, violations, error) = match outcome {
@@ -39,12 +39,15 @@ pub fn report_json(
     };
     let stale_baseline: Vec<Value> = stale
         .iter()
-        .map(|id| {
+        .map(|entry| {
             serde_json::json!({
-                "target": id.target,
-                "rule": id.rule,
-                "finding": id.finding,
-                "finding_key": id.finding_key().map(xuanji::FindingKey::to_json),
+                "target": entry.id.target(),
+                "rule": entry.rule,
+                "finding": entry.finding,
+                "rule_key": entry.id.rule_key().to_json(),
+                "finding_key": entry.id.fact().to_json(),
+                "owner": entry.owner,
+                "tracker": entry.tracker,
             })
         })
         .collect();

@@ -52,8 +52,8 @@ pub use model::*;
 // (PROJECT.md). Only the per-type vocabulary moved; the report/constitution *assembly*
 // (projection.rs), which folds in the static `Coverage`, stays in this crate.
 pub use xuanji::{
-    Baseline, BaselineEntry, BoundaryKind, Finding, FindingKey, Outcome, Polarity, Report,
-    Severity, Violation, ViolationId, apply_baseline,
+    Baseline, BaselineEntry, BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, Severity,
+    StructuredFactIdentity, Violation, ViolationId, apply_baseline,
 };
 
 /// Run the constitution's boundaries against the Cargo workspace at `manifest_path`.

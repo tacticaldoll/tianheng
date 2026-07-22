@@ -32,9 +32,6 @@ mod tests;
 pub use baseline::{Baseline, BaselineEntry, ViolationId, apply_baseline};
 pub use finding::Finding;
 pub use identity::{RuleKey, StructuredFactIdentity};
-/// Temporary migration alias for the 0.2 structured finding envelope.
-#[doc(hidden)]
-pub type FindingKey = StructuredFactIdentity;
 pub use model::{BoundaryKind, Outcome, Polarity, Severity};
 pub use util::pretty_json;
 pub use violation::{Report, Violation};

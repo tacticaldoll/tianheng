@@ -170,19 +170,8 @@ impl StructuredFactIdentity {
             .map(|(name, value)| (name.as_str(), value.as_str()))
     }
 
-    /// Project the fact identity into the temporary 0.2 finding-key JSON shape.
-    ///
-    /// The semantic `type` / `shape` machine projection is introduced only after all
-    /// instruments migrate, so this additive expansion does not silently rewrite baselines.
+    /// Project the fact identity into canonical JSON.
     pub fn to_json(&self) -> Value {
-        serde_json::json!({
-            "namespace": self.fact_type,
-            "code": self.shape,
-            "fields": self.fields,
-        })
-    }
-
-    pub(crate) fn semantic_json(&self) -> Value {
         serde_json::json!({
             "type": self.fact_type,
             "shape": self.shape,
@@ -196,17 +185,5 @@ impl StructuredFactIdentity {
             required_string(value, "fact identity", "shape")?,
             json_fields(value, "fact identity")?,
         )
-    }
-
-    /// Temporary 0.2 migration accessor for the former dimension namespace role.
-    #[doc(hidden)]
-    pub fn namespace(&self) -> &str {
-        self.fact_type()
-    }
-
-    /// Temporary 0.2 migration accessor for the former fact-code role.
-    #[doc(hidden)]
-    pub fn code(&self) -> &str {
-        self.shape()
     }
 }

@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use guibiao::{
-    Baseline, Coverage, Outcome, Report, ViolationId, apply_baseline, check_and_cover,
+    Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
     constitution_text, report_json,
 };
 use louke::audit_probe_coverage;
@@ -507,7 +507,7 @@ fn gate(
         Outcome::Violations(report) => report,
         _ => &empty,
     };
-    let stale: Vec<ViolationId> = baseline.stale(report).into_iter().cloned().collect();
+    let stale: Vec<BaselineEntry> = baseline.stale(report).into_iter().cloned().collect();
     match format {
         ReportFormat::Json => println!("{}", report_json(outcome, &stale, coverage)),
         ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
@@ -516,7 +516,9 @@ fn gate(
             for entry in &stale {
                 eprintln!(
                     "Tianheng: stale baseline entry (no longer violated): {} / {} / {}",
-                    entry.target, entry.rule, entry.finding
+                    entry.id.target(),
+                    entry.rule,
+                    entry.finding
                 );
             }
             if let Some(coverage) = coverage {
