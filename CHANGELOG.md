@@ -12,6 +12,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+### Documentation
+- Refined core project documentation density (`PROJECT.md`, `BACKLOG.md`) to archive verbose historical post-mortems and prune redundant release ledgers, reducing context token overhead.
+
 ## [0.2.3] - 2026-07-22
 
 ### Fixed
