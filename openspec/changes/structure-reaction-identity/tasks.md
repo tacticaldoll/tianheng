@@ -8,10 +8,10 @@
 
 ## 2. 圭表 rule and fact migration (`refactor(guibiao)!` commit boundary)
 
-- [ ] 2.1 Catalog every shipped 圭表 rule/fact family and classify each rule parameter and fact field as identity-bearing or presentation-only.
-- [ ] 2.2 Emit validated semantic rule keys and dimension-owned fact identities from every production builder/observation path while keeping the existing builder roles.
-- [ ] 2.3 Add catalog, production-emission, reorder, insertion, and injectivity reactions proving presentation is free while changed law/fact meaning re-keys identity.
-- [ ] 2.4 Run focused rule-model, standalone 圭表, and external compile checks, then commit the independently verified static increment.
+- [x] 2.1 Catalog every shipped 圭表 rule/fact family and classify each rule parameter and fact field as identity-bearing or presentation-only.
+- [x] 2.2 Emit validated semantic rule keys and dimension-owned fact identities from every production builder/observation path while keeping the existing builder roles.
+- [x] 2.3 Add catalog, production-emission, reorder, insertion, and injectivity reactions proving presentation is free while changed law/fact meaning re-keys identity.
+- [x] 2.4 Run focused rule-model, standalone 圭表, and external compile checks, then commit the independently verified static increment.
 
 ## 3. 渾儀 rule and fact migration (focused `refactor(hunyi)!` commit boundaries)
 

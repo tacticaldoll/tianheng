@@ -20,9 +20,10 @@ pub(crate) fn check_crate_boundary(
         violations.push(
             Violation::new(
                 BoundaryKind::Crate,
-                ViolationId::new(
+                ViolationId::structured(
                     boundary.target.package.clone(),
                     boundary.rule.label(),
+                    boundary.rule.key(),
                     fact.into_finding(),
                 ),
                 boundary.reason.clone(),
