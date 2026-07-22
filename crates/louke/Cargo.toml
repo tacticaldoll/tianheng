@@ -9,7 +9,7 @@ documentation = "https://docs.rs/louke"
 readme = "README.md"
 # 漏刻 (Lòukè) — the runtime dimension. A coined / narrative name (like 圭表, 渾儀, 璇璣):
 # the clepsydra, the instrument of flow/time. Meaning lives here in the SSOT.
-description = "漏刻 (Louke) — the runtime observation dimension of Tianheng: declare which concrete-type origins may cross a runtime seam, probe live dyn objects in production fail-closed, react as a structured event (panic opt-in), and audit probe coverage at CI time. Ships into the production binary; hot path is std-only, depends on 璇璣 only."
+description = "漏刻 (Louke) — the runtime observation dimension of Tianheng: declare which concrete-type origins may cross a runtime seam, probe live dyn objects in production fail-closed, react as a structured event (panic opt-in), and audit probe coverage at CI time. Ships into the production binary; hot path is std-only, depends on 璇璣 only (星表 is an additive, audit-feature-gated exception that never reaches the production hot path)."
 keywords = ["governance", "architecture", "boundary", "runtime", "ci"]
 categories = ["development-tools"]
 
