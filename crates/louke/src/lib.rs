@@ -1,32 +1,15 @@
 //! 漏刻 (Lòukè) — the **runtime** observation dimension of Tianheng.
 //!
-//! Where 圭表 reads imports and 渾儀 reads the AST — both at CI time, against source —
-//! 漏刻 reacts at **runtime, in your binary**, against **live objects**: it sees the
-//! concrete type behind a `dyn Trait` crossing an architectural seam, which static and
-//! semantic analysis structurally cannot.
+//! Where 圭表 reads imports and 渾儀 reads the AST — both at CI time — 漏刻 reacts at
+//! **runtime, in your binary**, against **live objects**: it sees the concrete type behind
+//! a `dyn Trait` crossing an architectural seam, which static and semantic analysis structurally
+//! cannot.
 //!
 //! Two faces:
-//! - **Prod face.** Declare `RuntimeBoundary::at("seam").only_origins([…])` and
-//!   [`install`] it once at startup; opt a type into an **observed** origin with
-//!   [`register_origin!`] (it captures `module_path!()` at the registration site — the
-//!   origin is *where the type is registered*, not a free label); place
-//!   [`assert_boundary!`]`("seam", obj)` at the seam. The probe reads the live object's
-//!   concrete origin and reacts **fail-closed** (an unknown origin is not in the allowlist,
-//!   so it reacts). The default reaction emits a [`xuanji::Violation`] event; `panic` is
-//!   opt-in — a governance tool must never crash production on a false positive.
-//! - **CI face** (the non-default `audit` feature). `audit_probe_coverage` takes the **declared
-//!   `RuntimeBoundary` objects** as
-//!   the authoritative seam set and scans the workspace's source for `assert_boundary!` probes,
-//!   so every declared seam has a probe (and every probe a declared seam) — closing the
-//!   "declared but never enforced" gap at CI time. A non-literal probe seam is reacted to, not
-//!   silently skipped. Declarations come from the objects, never a source scan, so an
-//!   unconventionally spelled declaration cannot hide a seam. It lives in a dedicated `audit`
-//!   module, compiled only under the feature.
-//!
-//! The hot path is std-only and lock-free (a write-once registry); the `TypeId`→origin lookup
-//! uses a fold-hasher rather than the default SipHash, while the tiny fixed seam-name map is an
-//! ordinary `std` map (its cost is negligible against the `TypeId` lookup). `serde_json` (via
-//! 璇璣) is used only on the cold path (emitting an event). 漏刻 depends on 璇璣 (`xuanji`) alone.
+//! - **Prod face.** Declare `RuntimeBoundary::at("seam").only_origins([…])` and [`install`]
+//!   it once at startup. Probes read live type origins and react fail-closed.
+//! - **CI face** (the non-default `audit` feature). Audits workspace source for `assert_boundary!`
+//!   probes to guarantee every declared seam has a probe and every probe a declared seam.
 //!
 //! Govern by reaction, not instruction.
 
