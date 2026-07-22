@@ -96,3 +96,13 @@ parallel to dyn-trait. The implementation SHALL keep the `syn` dependency quaran
 
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** the impl-trait boundary appears with its target, module, rule, severity, and reason — through its own projection section, parallel to the dyn-trait boundary
+
+### Requirement: Impl-trait facts preserve shape and seam separately
+
+Impl-trait violations SHALL encode the canonical forbidden shape/subject and public seam as
+separate fact roles under a structured rule key. Rendered `impl ...` presentation and traversal
+position SHALL NOT enter identity.
+
+#### Scenario: The same shape at two seams stays distinct
+- **WHEN** one impl-trait shape is exposed at two public seams
+- **THEN** their structured seam roles produce distinct identities

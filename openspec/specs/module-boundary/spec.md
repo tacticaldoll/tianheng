@@ -455,3 +455,12 @@ The finding SHALL be the importing module path, deduplicated so one offending im
 
 - **WHEN** a boundary declares `must_only_be_imported_by([x])` on `crate` (the crate root)
 - **THEN** the system emits a self-describing constitution error and exits 2 — distinct from a boundary violation, never a silent pass — because every internal import would be within the protected subtree and the rule could never react as an inbound rule
+
+### Requirement: Module violations de-duplicate by semantic identity
+
+Module-boundary findings SHALL de-duplicate by governed target, structured rule key, and structured
+observed fact. Source file, rendered import text, and traversal order SHALL NOT affect identity.
+
+#### Scenario: Repeated imports remain one fact
+- **WHEN** the same governed module observes the same violating import in multiple files or lines
+- **THEN** it emits one identity while a structurally different import remains distinct

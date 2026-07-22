@@ -161,3 +161,13 @@ A visibility violation report SHALL identify the governed module anchor, the rul
 
 - **WHEN** the module `crate::internal` of crate `app` declares `pub struct Pool` under a `Crate`-ceiling visibility boundary
 - **THEN** the report names the anchor `crate::internal`, the rule (that it must not declare `pub` items), the finding identifying `pub struct Pool`, the boundary's reason, and indicates CI failed
+
+### Requirement: Visibility violations identify the declared item structurally
+
+A visibility violation SHALL encode item kind, module, owner, and item name where observed under a
+structured visibility rule key. Rendered visibility/item text and declaration order SHALL NOT enter
+identity.
+
+#### Scenario: Same-named items on different owners stay distinct
+- **WHEN** two violating public items share a name but differ by module or owner
+- **THEN** their structured facts remain distinct
