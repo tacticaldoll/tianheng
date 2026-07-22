@@ -12,6 +12,8 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-22
+
 ### Fixed
 - 渾儀's forbidden-marker self-type resolver (`resolve_self_type`) now routes through the crate's
   own hop-capped alias/re-export fixpoint instead of a second, hand-rolled loop guarded only by an
@@ -397,7 +399,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.10...v0.2.0
