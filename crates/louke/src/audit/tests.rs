@@ -24,53 +24,78 @@ fn literal_seams(probes: &[Probe]) -> Vec<String> {
         .collect()
 }
 
-// Write a one-file crate dir under a unique base and return it.
-fn write_dir(base: &Path, name: &str, body: &str) -> PathBuf {
-    let dir = base.join(name);
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("a.rs"), body).unwrap();
-    dir
+/// A unique, self-cleaning temp base directory for an `assert_boundary!`-probe source fixture:
+/// write source files under it, then hand its root (or a derived path) to `audit_probe_coverage`
+/// — replaces the hand-rolled `temp_dir().join(format!(...))` + manual `remove_dir_all` at both
+/// ends that every test in this file otherwise repeated.
+struct TempBase(PathBuf);
+
+impl TempBase {
+    fn new(label: &str) -> Self {
+        let base = std::env::temp_dir().join(format!("louke-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        Self(base)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    /// Write a one-file crate dir (`<name>/a.rs`) under this base and return the dir path.
+    fn dir(&self, name: &str, body: &str) -> PathBuf {
+        let dir = self.0.join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.rs"), body).unwrap();
+        dir
+    }
+
+    /// Write a source file at `relative` (relative to this base), creating parent dirs as
+    /// needed. Returns the file's absolute path.
+    fn source(&self, relative: &str, body: &str) -> PathBuf {
+        let path = self.0.join(relative);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    /// Symlink `target` at `link_rel` (relative to this base).
+    #[cfg(unix)]
+    fn symlink(&self, target: impl AsRef<Path>, link_rel: &str) {
+        std::os::unix::fs::symlink(target, self.0.join(link_rel)).expect("create symlink");
+    }
 }
 
-fn write_source(base: &Path, relative: &str, body: &str) -> PathBuf {
-    let path = base.join(relative);
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(&path, body).unwrap();
-    path
+impl Drop for TempBase {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 #[test]
 fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
-    let base = std::env::temp_dir().join(format!("louke-root-walk-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("root-walk");
 
-    let root = write_source(
-        &base,
+    let root = tb.source(
         "custom_root.rs",
         "mod adapter; mod nested { mod child; } mod inline { fn live() {} }",
     );
-    write_source(
-        &base,
+    tb.source(
         "adapter.rs",
         "fn live() { assert_boundary!(\"adapter\", o); } mod deep;",
     );
-    write_source(
-        &base,
+    tb.source(
         "adapter/deep.rs",
         "fn live() { assert_boundary!(\"deep\", o); }",
     );
-    write_source(
-        &base,
+    tb.source(
         "nested/child.rs",
         "fn live() { assert_boundary!(\"nested\", o); }",
     );
-    write_source(
-        &base,
+    tb.source(
         "orphan.rs",
         "fn dead() { assert_boundary!(\"orphan\", o); }",
     );
-    write_source(
-        &base,
+    tb.source(
         "inline.rs",
         "fn dead() { assert_boundary!(\"inline-shadow\", o); }",
     );
@@ -92,40 +117,54 @@ fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
     let mut targets: Vec<_> = violations.iter().map(|v| v.target.as_str()).collect();
     targets.sort_unstable();
     assert_eq!(targets, ["inline-shadow", "orphan"]);
+}
 
-    let _ = std::fs::remove_dir_all(base);
+#[test]
+fn a_cfg_attr_gated_missing_module_still_fails_loud_not_tolerated() {
+    // `#[cfg_attr(unix, allow(dead_code))] mod gated;` with no `gated.rs` is a REAL rustc compile
+    // error (E0583) on every platform: `cfg_attr`'s predicate only gates whether `allow(dead_code)`
+    // is applied, never whether the `mod` item itself exists — unlike a bare `#[cfg(...)]`, which
+    // genuinely removes the item when its predicate is false. Verified against a real `rustc`
+    // invocation of this exact fixture shape (E0583, unconditionally, regardless of the
+    // `cfg_attr`'s predicate value). The scanner must not conflate the two: tolerating this would
+    // silently skip auditing a module that always compiles and is always genuinely broken.
+    let tb = TempBase::new("cfg-attr-not-cfg-tolerant");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, allow(dead_code))]\nmod gated;\nfn f() { assert_boundary!(\"a\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("gated")),
+        "a cfg_attr-decorated (not cfg-gated) missing module must still fail loud: {outcome:?}"
+    );
 }
 
 #[test]
 fn root_aware_audit_fails_loud_on_an_unresolvable_reachable_module() {
-    let base = std::env::temp_dir().join(format!("louke-root-missing-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let root = write_source(&base, "lib.rs", "mod missing;");
+    let tb = TempBase::new("root-missing");
+    let root = tb.source("lib.rs", "mod missing;");
     let outcome = audit_probe_coverage(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("missing")),
         "a declared source module cannot disappear silently: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn a_cfg_gated_module_with_no_file_is_skipped_not_errored() {
-    let base = std::env::temp_dir().join(format!("louke-cfg-absent-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("cfg-absent");
     // `#[cfg(feature = "never")] mod optional;` with no `optional.rs` is legal Rust when the
     // feature is off; the walk must skip it rather than fail the audit (exit 2), matching 渾儀's
     // cfg-tolerance. The non-cfg `mod present;` resolves normally and carries the only probe, so a
     // clean outcome proves the cfg-gated module was tolerated, not that the walk simply stopped.
     // Its counterpart — a non-cfg `mod missing;` with no file — still fails loud (see
     // `root_aware_audit_fails_loud_on_an_unresolvable_reachable_module`).
-    let root = write_source(
-        &base,
+    let root = tb.source(
         "lib.rs",
         "#[cfg(feature = \"never\")]\nmod optional;\nmod present;",
     );
-    write_source(
-        &base,
+    tb.source(
         "present.rs",
         "fn live() { assert_boundary!(\"present\", o); }",
     );
@@ -135,52 +174,43 @@ fn a_cfg_gated_module_with_no_file_is_skipped_not_errored() {
         0,
         "a cfg-gated module with no file is skipped, not errored: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn root_aware_audit_fails_loud_on_non_utf8_reachable_source() {
-    let base = std::env::temp_dir().join(format!("louke-root-unreadable-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let root = write_source(&base, "lib.rs", "mod broken;");
-    std::fs::write(base.join("broken.rs"), [0xff, 0xfe]).unwrap();
+    let tb = TempBase::new("root-unreadable");
+    let root = tb.source("lib.rs", "mod broken;");
+    std::fs::write(tb.path().join("broken.rs"), [0xff, 0xfe]).unwrap();
     let outcome = audit_probe_coverage(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("broken.rs")),
         "a selected source that cannot be decoded must fail loud: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn root_aware_audit_does_not_follow_a_mod_token_inside_a_macro_body() {
-    let base = std::env::temp_dir().join(format!("louke-root-macro-mod-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let root = write_source(
-        &base,
+    let tb = TempBase::new("root-macro-mod");
+    let root = tb.source(
         "lib.rs",
         "macro_rules! generated { () => { mod phantom; } } fn live() {}",
     );
     let outcome = audit_probe_coverage(&[], &[root]);
     assert_eq!(outcome, Outcome::Clean, "macro tokens are not live modules");
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
-    let base = std::env::temp_dir().join(format!("louke-path-substr-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("path-substr");
     // The preamble contains the substring "path" twice — a line comment and an unrelated cfg
     // feature name — but neither is a `#[path]` attribute, so the module must still be followed
     // and its probe seen. A raw-substring detector would misclassify it as relocated and drop
     // the module (a silent coverage false negative).
-    let root = write_source(
-        &base,
+    let root = tb.source(
         "lib.rs",
         "// fast path to the adapter\n#[cfg(feature = \"fastpath\")]\nmod adapter;",
     );
-    write_source(
-        &base,
+    tb.source(
         "adapter.rs",
         "fn live() { assert_boundary!(\"adapter\", o); }",
     );
@@ -190,24 +220,20 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
         0,
         "a `path` substring in a comment/attr must not drop a reachable module: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn an_unconditional_path_attribute_is_followed_to_its_target() {
-    let base = std::env::temp_dir().join(format!("louke-path-attr-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("path-attr");
     // A genuine unconditional `#[path = "..."]` relocation (with a `]` inside the literal to
     // exercise bracket matching) is now FOLLOWED to its author-chosen file, and its probe counts;
     // the conventional name (`relocated.rs`) is never consulted. Previously the module was skipped
     // — a coverage false negative for a seam probed only in a relocated file.
-    let root = write_source(
-        &base,
+    let root = tb.source(
         "lib.rs",
         "#[path = \"generated/a]b.rs\"]\nmod relocated;\nfn live() {}",
     );
-    write_source(
-        &base,
+    tb.source(
         "generated/a]b.rs",
         "fn inner() { assert_boundary!(\"relocated-seam\", o); }",
     );
@@ -217,7 +243,6 @@ fn an_unconditional_path_attribute_is_followed_to_its_target() {
         0,
         "an unconditional #[path] module is followed and its probe counts: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
@@ -232,16 +257,13 @@ fn a_semicolon_inside_an_earlier_doc_attributes_string_does_not_hide_a_later_pat
     // new string, swallowing the real `#[path = "..."]` attribute's own `#` inside it. The scanner
     // then never saw the #[path] attribute at all, so it fell back to the conventional (nonexistent)
     // location and failed loud on a module that is genuinely `#[path]`-relocated and compiles fine.
-    let base = std::env::temp_dir().join(format!("louke-doc-semicolon-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let root = write_source(&base, "lib.rs", "mod worker;\nfn live() {}");
-    write_source(
-        &base,
+    let tb = TempBase::new("doc-semicolon");
+    let root = tb.source("lib.rs", "mod worker;\nfn live() {}");
+    tb.source(
         "worker.rs",
         "#[doc = \"Handles A; falls back to B.\"]\n#[path = \"relocated.rs\"]\nmod inner;\n",
     );
-    write_source(
-        &base,
+    tb.source(
         "relocated.rs",
         "fn f() { assert_boundary!(\"relocated-seam\", o); }",
     );
@@ -252,7 +274,6 @@ fn a_semicolon_inside_an_earlier_doc_attributes_string_does_not_hide_a_later_pat
         "the #[path] attribute must still be found and followed despite the earlier #[doc] \
          attribute's own semicolon: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
@@ -268,16 +289,13 @@ fn a_brace_delimited_attribute_argument_does_not_hide_an_earlier_path_attribute(
     // different vector. Fixed by skipping a whole `#[...]` group as one atomic unit (via the same
     // attr_group_end already used by the second, attribute-matching pass) when scanning for the
     // preamble's own start, so its internal bytes are never examined as boundary candidates.
-    let base = std::env::temp_dir().join(format!("louke-brace-attr-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let root = write_source(&base, "lib.rs", "mod worker;\nfn live() {}");
-    write_source(
-        &base,
+    let tb = TempBase::new("brace-attr");
+    let root = tb.source("lib.rs", "mod worker;\nfn live() {}");
+    tb.source(
         "worker.rs",
         "#[path = \"relocated.rs\"]\n#[foo({ 1 })]\nmod inner;\n",
     );
-    write_source(
-        &base,
+    tb.source(
         "relocated.rs",
         "fn f() { assert_boundary!(\"relocated-seam\", o); }",
     );
@@ -288,26 +306,23 @@ fn a_brace_delimited_attribute_argument_does_not_hide_an_earlier_path_attribute(
         "the #[path] attribute must still be found and followed despite the later brace-delimited \
          #[foo({{ 1 }})] attribute argument: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
-    let base = std::env::temp_dir().join(format!("louke-path-nonmodrs-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("path-nonmodrs");
     // rustc ground truth: a non-inline `#[path="bar.rs"]` inside foo.rs (reached via `mod foo;`)
     // resolves to <root>/bar.rs — foo.rs's OWN directory — not <root>/foo/bar.rs. bar.rs probes an
     // UNDECLARED seam, so the rustc-correct verdict is a probed-but-undeclared enforce violation
     // (exit 1). A decoy at foo/bar.rs (the buggy child_base location) has no probe: reading it would
     // return Clean/exit 0 — the forbidden false negative. This pins the corrected containing-file dir.
-    let root = write_source(&base, "lib.rs", "mod foo;");
-    write_source(&base, "foo.rs", "#[path = \"bar.rs\"]\nmod bar;");
-    write_source(
-        &base,
+    let root = tb.source("lib.rs", "mod foo;");
+    tb.source("foo.rs", "#[path = \"bar.rs\"]\nmod bar;");
+    tb.source(
         "bar.rs",
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
-    write_source(&base, "foo/bar.rs", "fn decoy() {}");
+    tb.source("foo/bar.rs", "fn decoy() {}");
     let outcome = audit_probe_coverage(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
@@ -315,30 +330,23 @@ fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
         "a #[path] inside a non-mod.rs file resolves from its own dir (bar.rs, undeclared seam -> \
          exit 1), never the foo/bar.rs decoy (which would be a silent exit-0 FN): {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir() {
-    let base = std::env::temp_dir().join(format!("louke-path-inline-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("path-inline");
     // rustc ground truth (rustc 1.96.0): `mod inline { #[path="other.rs"] mod inner; }` at the crate
     // root resolves inner to <root>/inline/other.rs — the base accumulates the inline-module name.
     // inline/other.rs probes an UNDECLARED seam (rustc-correct verdict: exit 1). A decoy at
     // <root>/other.rs (the enclosing file_dir base, no probe) is what threading file_dir UNCHANGED
     // through the inline recursion would have read — returning Clean/exit 0, the forbidden false
     // negative. Pins the accumulated inline base.
-    let root = write_source(
-        &base,
-        "lib.rs",
-        "mod inline { #[path = \"other.rs\"] mod inner; }",
-    );
-    write_source(
-        &base,
+    let root = tb.source("lib.rs", "mod inline { #[path = \"other.rs\"] mod inner; }");
+    tb.source(
         "inline/other.rs",
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
-    write_source(&base, "other.rs", "fn decoy() {}");
+    tb.source("other.rs", "fn decoy() {}");
     let outcome = audit_probe_coverage(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
@@ -346,25 +354,22 @@ fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir() {
         "a #[path] nested in an inline block resolves from <root>/inline (undeclared seam -> exit 1), \
          never the <root>/other.rs decoy (a silent exit-0 FN): {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn a_hex_escape_in_a_path_literal_decodes_to_the_same_file_syn_reads() {
-    let base = std::env::temp_dir().join(format!("louke-path-escape-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("path-escape");
     // rustc ground truth (rustc 1.96.0): `#[path = "f\x6fo.rs"] mod name;` compiles foo.rs (\x6f =
     // 'o') and ignores a conventional name.rs. 渾儀 decodes the escape via syn's `s.value()`; 漏刻 must
     // decode it identically (twin-drift parity) rather than bail to conventional resolution. foo.rs
     // probes an UNDECLARED seam (rustc-correct verdict exit 1); the name.rs decoy has no probe, so a
     // bail-to-conventional would read it and return Clean/exit 0 — the compound false negative.
-    let root = write_source(&base, "lib.rs", "#[path = \"f\\x6fo.rs\"]\nmod name;");
-    write_source(
-        &base,
+    let root = tb.source("lib.rs", "#[path = \"f\\x6fo.rs\"]\nmod name;");
+    tb.source(
         "foo.rs",
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
-    write_source(&base, "name.rs", "fn decoy() {}");
+    tb.source("name.rs", "fn decoy() {}");
     let outcome = audit_probe_coverage(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
@@ -372,17 +377,14 @@ fn a_hex_escape_in_a_path_literal_decodes_to_the_same_file_syn_reads() {
         "a \\x escape in a #[path] literal decodes to foo.rs (undeclared seam -> exit 1), matching \
          syn, never the name.rs decoy (a silent exit-0 FN): {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn an_absent_unconditional_path_target_is_a_constitution_error() {
-    let base = std::env::temp_dir().join(format!("louke-path-absent-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("path-absent");
     // An unconditional `#[path]` whose target file is absent is a genuine broken reference (rustc
     // errors too): fail loud (exit 2), never a silent skip that could hide a seam.
-    let root = write_source(
-        &base,
+    let root = tb.source(
         "lib.rs",
         "#[path = \"missing.rs\"]\nmod relocated;\nfn live() {}",
     );
@@ -392,44 +394,40 @@ fn an_absent_unconditional_path_target_is_a_constitution_error() {
         2,
         "an absent unconditional #[path] target fails loud (exit 2): {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
-fn a_cfg_attr_path_relocation_is_not_followed_a_stated_bound() {
-    let base = std::env::temp_dir().join(format!("louke-cfgattr-path-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    // `#[cfg_attr(unix, path = "...")]` is cfg-conditional: it reads as `cfg`, not a followed path,
-    // so an absent target is tolerated (not a constitution error) rather than followed cfg-blind
-    // into a file rustc may not compile here — the stated cfg-relocation bound.
-    let root = write_source(
-        &base,
+fn a_cfg_attr_path_relocation_with_no_resolution_anywhere_fails_loud() {
+    // `#[cfg_attr(unix, path = "...")]`'s relocation target is cfg-conditional, so it is NOT
+    // followed cfg-blind (a stated bound — the scan instead falls back to the conventional file,
+    // documented on `audit_probe_coverage`). But `cfg_attr` never conditionally REMOVES the `mod`
+    // item itself (unlike a bare `#[cfg]`): verified against a real `rustc` build on this (unix)
+    // machine — `#[cfg_attr(unix, path = "unix_seam.rs")] mod plat;` with `unix_seam.rs` absent is
+    // a genuine compile error (rustc does NOT fall back to a conventional `plat.rs` even when one
+    // is present, since `cfg(unix)` is true here and the relocation is authoritative) — so when
+    // NEITHER the relocation target NOR the conventional file exists, this must fail loud, never
+    // silently tolerate. (A prior version of this test asserted `Outcome::Clean` here; corrected
+    // after empirically verifying against `rustc` that this is always a real broken reference.)
+    let tb = TempBase::new("cfgattr-path");
+    let root = tb.source(
         "lib.rs",
         "#[cfg_attr(unix, path = \"unix_seam.rs\")]\nmod plat;\nfn live() {}",
     );
     let outcome = audit_probe_coverage(&[], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
-        "a cfg_attr #[path] with an absent target is tolerated, not followed: {outcome:?}"
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("plat")),
+        "cfg_attr-wrapped #[path] with no resolution anywhere must fail loud: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn directory_input_retains_the_recursive_compatibility_corpus() {
-    let base = std::env::temp_dir().join(format!("louke-dir-compat-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(
-        &base,
-        "legacy",
-        "fn f() { assert_boundary!(\"legacy\", o); }",
-    );
+    let tb = TempBase::new("dir-compat");
+    let dir = tb.dir("legacy", "fn f() { assert_boundary!(\"legacy\", o); }");
     assert_eq!(
         audit_probe_coverage(&[boundary("legacy", Severity::Enforce)], &[dir]).exit_code(),
         0
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
@@ -680,11 +678,9 @@ fn capture_probe_decodes_string_escapes_to_the_compiler_value() {
 }
 
 #[test]
-fn an_undecodable_escape_or_line_continuation_is_unauditable() {
+fn an_undecodable_escape_is_unauditable() {
     // The decoder's `None` contract: anything it cannot reproduce EXACTLY reacts loud, never a
-    // silently mismatched literal. A backslash-newline line continuation is the reachable
-    // real-source case (it compiles); the malformed forms are the defensive backstop.
-    let line_continuation = "fn f() { assert_boundary!(\"a\\\nb\", o); }";
+    // silently mismatched literal.
     let malformed = [
         "fn f() { assert_boundary!(\"bad\\q\", o); }", // unknown escape
         "fn f() { assert_boundary!(\"trunc\\x\", o); }", // truncated \x
@@ -692,7 +688,7 @@ fn an_undecodable_escape_or_line_continuation_is_unauditable() {
         "fn f() { assert_boundary!(\"emptyu\\u{}\", o); }", // \u with no digits
         "fn f() { assert_boundary!(\"leadus\\u{_41}\", o); }", // leading `_` — rustc rejects
     ];
-    for src in std::iter::once(line_continuation).chain(malformed) {
+    for src in malformed {
         let mut probes = Vec::new();
         scan_source(src, "test.rs", &mut probes);
         assert!(
@@ -709,15 +705,29 @@ fn an_undecodable_escape_or_line_continuation_is_unauditable() {
 }
 
 #[test]
+fn a_backslash_newline_line_continuation_now_decodes_like_rustc() {
+    // Verified against a real `rustc` build: `"a\` + newline + `b"` decodes to `"ab"` (the
+    // backslash, the newline, and the continued line's leading whitespace are stripped). This
+    // decoder now matches `syn`'s `LitStr::value()` fidelity instead of treating the shape as
+    // un-auditable — the fix a v0.2.0..v0.2.1 cross-dimension sweep found missing here (and in
+    // 圭表's independent copy).
+    let src = "fn f() { assert_boundary!(\"a\\\nb\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert!(
+        matches!(&probes[..], [Probe::Literal(seam)] if seam == "ab"),
+        "a line continuation must decode to the joined value, matching rustc: {probes:?}"
+    );
+}
+
+#[test]
 fn audit_matches_an_escaped_seam_against_its_escaped_probe() {
     // Regression guard for the both-direction false pair: a declared seam containing a newline
     // (the compiler-decoded `RuntimeBoundary::at("a\n")`) is covered by a source probe written
     // `assert_boundary!("a\n", o)` — the scanner now decodes the probe to the same value.
-    let base = std::env::temp_dir().join(format!("louke-audit-esc-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(&base, "esc", "fn f() { assert_boundary!(\"a\\n\", o); }");
+    let tb = TempBase::new("audit-esc");
+    let dir = tb.dir("esc", "fn f() { assert_boundary!(\"a\\n\", o); }");
     let outcome = audit_probe_coverage(&[boundary("a\n", Severity::Enforce)], &[dir]);
-    let _ = std::fs::remove_dir_all(&base);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -731,11 +741,9 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
     // the only probe is `"a\n"` (two chars: a, newline) is a real runtime mismatch — the probe
     // would panic on an undeclared seam. Comparing raw bytes counted it covered; decoding
     // catches it. Expect BOTH directions: declared-unprobed and probed-undeclared.
-    let base = std::env::temp_dir().join(format!("louke-audit-esc2-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(&base, "esc2", "fn f() { assert_boundary!(\"a\\n\", o); }");
+    let tb = TempBase::new("audit-esc2");
+    let dir = tb.dir("esc2", "fn f() { assert_boundary!(\"a\\n\", o); }");
     let outcome = audit_probe_coverage(&[boundary("a\\n", Severity::Enforce)], &[dir]);
-    let _ = std::fs::remove_dir_all(&base);
     match outcome {
         Outcome::Violations(report) => {
             assert!(
@@ -875,15 +883,12 @@ fn a_declared_seam_probed_only_inside_a_macro_body_reacts_unprobed() {
     // End-to-end: a declared seam whose ONLY probe is inside a macro body is never enforced at
     // runtime, so the audit must report it declared-but-unprobed (exit 1 at enforce), not
     // silently covered.
-    let base = std::env::temp_dir().join(format!("louke-audit-macro-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(
-        &base,
+    let tb = TempBase::new("audit-macro");
+    let dir = tb.dir(
         "m",
         "macro_rules! g { () => { assert_boundary!(\"seam\", o); }; }",
     );
     let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[dir]);
-    let _ = std::fs::remove_dir_all(&base);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -951,9 +956,8 @@ fn audit_reacts_to_a_duplicate_declared_seam() {
     // A seam declared twice is a constitution error: prod `install` fails loud on it, and the
     // CI face must react too (enforce) so it surfaces before a running binary. Probe the seam
     // so the ONLY finding is the duplicate, not a declared-unprobed gap.
-    let base = std::env::temp_dir().join(format!("louke-audit-dup-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(&base, "m", "fn f() { assert_boundary!(\"twice\", o); }");
+    let tb = TempBase::new("audit-dup");
+    let dir = tb.dir("m", "fn f() { assert_boundary!(\"twice\", o); }");
     let outcome = audit_probe_coverage(
         &[
             boundary("twice", Severity::Enforce),
@@ -961,7 +965,6 @@ fn audit_reacts_to_a_duplicate_declared_seam() {
         ],
         &[dir],
     );
-    let _ = std::fs::remove_dir_all(&base);
     match outcome {
         Outcome::Violations(report) => assert!(
             report
@@ -994,35 +997,31 @@ fn a_nested_comment_between_bang_and_paren_does_not_drop_the_probe() {
 
 #[test]
 fn audit_probe_coverage_reacts_both_directions() {
-    let base = std::env::temp_dir().join(format!("louke-audit-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("audit");
 
     // declared + probed match → clean (exit 0)
-    let clean = write_dir(&base, "clean", "fn f() { assert_boundary!(\"s\", o); }");
+    let clean = tb.dir("clean", "fn f() { assert_boundary!(\"s\", o); }");
     assert_eq!(
         audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[clean]).exit_code(),
         0
     );
 
     // declared but unprobed (enforce) → react (exit 1)
-    let unprobed = write_dir(&base, "unprobed", "fn f() {}");
+    let unprobed = tb.dir("unprobed", "fn f() {}");
     assert_eq!(
         audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[unprobed]).exit_code(),
         1
     );
 
     // probed but undeclared (a typo) → react at CI, not a prod panic (exit 1)
-    let typo = write_dir(&base, "typo", "fn f() { assert_boundary!(\"ghost\", o); }");
+    let typo = tb.dir("typo", "fn f() { assert_boundary!(\"ghost\", o); }");
     assert_eq!(audit_probe_coverage(&[], &[typo]).exit_code(), 1);
-
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn a_warn_severity_unprobed_seam_is_advisory_not_a_failure() {
-    let base = std::env::temp_dir().join(format!("louke-audit-warn-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(&base, "warn", "fn f() {}");
+    let tb = TempBase::new("audit-warn");
+    let dir = tb.dir("warn", "fn f() {}");
     // A warn boundary with no probe reacts (a Violation) but does not by itself fail CI.
     let outcome = audit_probe_coverage(&[boundary("soft", Severity::Warn)], &[dir]);
     assert_eq!(outcome.exit_code(), 0, "warn-only is advisory: {outcome:?}");
@@ -1030,20 +1029,14 @@ fn a_warn_severity_unprobed_seam_is_advisory_not_a_failure() {
         matches!(outcome, Outcome::Violations(_)),
         "it still reports the advisory: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn coverage_spans_the_workspace_corpus() {
-    let base = std::env::temp_dir().join(format!("louke-audit-corpus-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
+    let tb = TempBase::new("audit-corpus");
     // Declared once; its only probe lives in a *different* member dir.
-    let decl_only = write_dir(&base, "crate_a", "fn f() {}");
-    let probe_only = write_dir(
-        &base,
-        "crate_b",
-        "fn g() { assert_boundary!(\"shared\", o); }",
-    );
+    let decl_only = tb.dir("crate_a", "fn f() {}");
+    let probe_only = tb.dir("crate_b", "fn g() { assert_boundary!(\"shared\", o); }");
     let outcome = audit_probe_coverage(
         &[boundary("shared", Severity::Enforce)],
         &[decl_only, probe_only],
@@ -1053,15 +1046,12 @@ fn coverage_spans_the_workspace_corpus() {
         0,
         "the corpus is the union of all dirs: {outcome:?}"
     );
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn an_unauditable_probe_reacts() {
-    let base = std::env::temp_dir().join(format!("louke-audit-unaud-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(
-        &base,
+    let tb = TempBase::new("audit-unaud");
+    let dir = tb.dir(
         "unaud",
         "const SEAM: &str = \"s\"; fn f() { assert_boundary!(SEAM, o); }",
     );
@@ -1086,16 +1076,14 @@ fn an_unauditable_probe_reacts() {
         file.ends_with("a.rs"),
         "file names the probe's source: {file}"
     );
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn a_seam_level_runtime_violation_has_no_file() {
     // A declared-but-never-probed seam names a seam, not a source location, so its `file`
     // is a faithful `None` — distinct from the un-auditable case, which does have a file.
-    let base = std::env::temp_dir().join(format!("louke-audit-seamnull-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let dir = write_dir(&base, "unprobed", "fn f() {}");
+    let tb = TempBase::new("audit-seamnull");
+    let dir = tb.dir("unprobed", "fn f() {}");
     let outcome = audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[dir]);
     let violations = match &outcome {
         Outcome::Violations(report) => &report.violations,
@@ -1105,27 +1093,20 @@ fn a_seam_level_runtime_violation_has_no_file() {
         violations.iter().all(|v| v.file.is_none()),
         "a seam-level runtime violation has no source file: {violations:?}"
     );
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
 fn finder_repro_nonmodrs_path_base() {
-    let base = std::env::temp_dir().join(format!("louke-finder-base-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let root = write_source(&base, "lib.rs", "pub mod app;\n");
-    write_source(
-        &base,
-        "app.rs",
-        "#[path = \"relocated.rs\"]\npub mod worker;\n",
-    );
+    let tb = TempBase::new("finder-base");
+    let root = tb.source("lib.rs", "pub mod app;\n");
+    tb.source("app.rs", "#[path = \"relocated.rs\"]\npub mod worker;\n");
     // The REAL compiled target (rustc uses this)
-    write_source(
-        &base,
+    tb.source(
         "relocated.rs",
         "fn inner() { assert_boundary!(\"relocated-seam\", o); }\n",
     );
     // An orphan at louke's wrong join path (src/app/relocated.rs)
-    write_source(&base, "app/relocated.rs", "fn inner() {}\n");
+    tb.source("app/relocated.rs", "fn inner() {}\n");
     // Only the REAL target is compiled and has the probe -> must be caught.
     let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
@@ -1133,29 +1114,47 @@ fn finder_repro_nonmodrs_path_base() {
         0,
         "Coverage should pass as the probe is matched"
     );
-    let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
 fn finder_repro_fn_orphan() {
-    let base = std::env::temp_dir().join(format!("louke-finder-fn-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    let root = write_source(&base, "lib.rs", "pub mod app;\n");
-    write_source(
-        &base,
-        "app.rs",
-        "#[path = \"relocated.rs\"]\npub mod worker;\n",
-    );
+    let tb = TempBase::new("finder-fn");
+    let root = tb.source("lib.rs", "pub mod app;\n");
+    tb.source("app.rs", "#[path = \"relocated.rs\"]\npub mod worker;\n");
     // The REAL compiled target (rustc uses this): has an assert on an UNDECLARED seam -> should react.
-    write_source(
-        &base,
+    tb.source(
         "relocated.rs",
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }\n",
     );
     // An orphan at louke's wrong join path (src/app/relocated.rs): louke scans THIS instead. No probe.
-    write_source(&base, "app/relocated.rs", "fn inner() {}\n");
+    tb.source("app/relocated.rs", "fn inner() {}\n");
     // No declared boundaries: an assert on "undeclared-seam" in the REAL target must be caught.
     let outcome = audit_probe_coverage(&[], &[root]);
     assert_eq!(outcome.exit_code(), 1, "Should catch undeclared seam");
-    let _ = std::fs::remove_dir_all(base);
+}
+
+#[cfg(unix)]
+#[test]
+fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
+    // `loop_mod` is a directory symlink back to the base itself, and the root declares `mod
+    // loop_mod;` — so each descent generates a NEW, ever-longer LITERAL path
+    // (`loop_mod/mod.rs`, `loop_mod/loop_mod/mod.rs`, …) that always canonicalizes to the same
+    // real file. Deduping on the literal path alone (as this scanner's `visited` set did before
+    // routing through `xingbiao::try_visit`) never recognizes the repeat, so the walk keeps
+    // descending — empirically, until the accumulated path trips an OS path-length limit and the
+    // scan spuriously fails on a structure that is not actually broken (never a true unbounded
+    // hang here, since the OS bounds it first, but still a real, wrong reaction). Canonicalizing
+    // closes it in two visits instead, matching 圭表/渾儀's own analogous symlink-cycle tests.
+    let tb = TempBase::new("symlink-cycle");
+    let root = tb.source(
+        "mod.rs",
+        "mod loop_mod;\nfn f() { assert_boundary!(\"a\", o); }\n",
+    );
+    tb.symlink(tb.path(), "loop_mod");
+    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a real, declared, and probed seam must be covered, not hang or error: {outcome:?}"
+    );
 }

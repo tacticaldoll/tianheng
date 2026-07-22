@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// What the source scan found for a probe occurrence (`assert_boundary!`).
@@ -52,9 +52,15 @@ fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), 
         .parent()
         .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
     let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
-    let mut visited = BTreeSet::new();
+    // Canonicalized, via the shared primitive 圭表/渾儀 already route their own module-graph
+    // cycle guards through — a symlinked directory (or a circular `#[path]` chain) reached via two
+    // distinct literal paths to the identical real file must be recognized as the same node, or
+    // this walk's explicit work-queue can grow without bound on a genuine cycle (a hang, not a
+    // stack overflow, since the walk is iterative). Previously deduped on the literal path alone —
+    // a pre-existing cross-dimension inconsistency (BACKLOG, 0.2.2 lesson).
+    let mut visited: HashSet<PathBuf> = HashSet::new();
     while let Some((file, child_base)) = pending.pop() {
-        if !visited.insert(file.clone()) {
+        if !xingbiao::try_visit(&mut visited, &file)? {
             continue;
         }
         let source = std::fs::read_to_string(&file)
@@ -469,7 +475,16 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
                             attrs.path = read_path_string(bytes, eq + 1, mod_index);
                         }
                     }
-                    b"cfg" | b"cfg_attr" => attrs.cfg = true,
+                    // A BARE `#[cfg(pred)]` genuinely removes the whole item when `pred` is false
+                    // — the file may legitimately be absent. `cfg_attr` does NOT: it only
+                    // conditionally applies its wrapped attribute(s); the `mod` item itself always
+                    // exists regardless of the predicate (verified against a real `rustc` build:
+                    // `#[cfg_attr(unix, allow(dead_code))] mod x;` with no `x.rs` is E0583 on every
+                    // platform). A `cfg_attr`-wrapped `path` is a different, already-handled case
+                    // (the `path` arm above, `has_path_attr`'s broader test in the syn-based
+                    // dimensions) — this bare-`cfg` scope is only for the plain-missing-file
+                    // tolerance, so a `cfg_attr` sighting here must never grant it.
+                    b"cfg" => attrs.cfg = true,
                     _ => {}
                 }
                 i = attr_group_end(bytes, open, mod_index);
@@ -1013,11 +1028,15 @@ fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 
 /// Decode a plain-string literal's inner bytes (between the quotes, escapes still present) to the
 /// exact `&str` value the Rust compiler produces, so a probe seam matches the compiler-decoded
-/// declared seam (`RuntimeBoundary::seam()`) rather than the raw source bytes. Returns `None` on any
-/// escape the decoder does not reproduce exactly — a malformed or unrecognized escape, an
-/// out-of-range `\x`, an invalid `\u{…}`, or a backslash-newline **line continuation** (deliberately
-/// not decoded: it *strips* characters, the one escape class that could yield a wrong non-`None`
-/// value and reintroduce a false negative, and no real seam name spans lines). The caller routes
+/// declared seam (`RuntimeBoundary::seam()`) rather than the raw source bytes — and so a `#[path]`
+/// value (the OTHER caller, below) matches 渾儀's syn-derived `s.value()` on the same input. Returns
+/// `None` on any escape the decoder does not reproduce exactly — a malformed or unrecognized
+/// escape, an out-of-range `\x`, or an invalid `\u{…}`. Backslash-newline line continuation IS
+/// decoded (strips the backslash, the newline, and the continued line's leading whitespace,
+/// contributing nothing — verified against a real `rustc` build): a real, if rare, valid `#[path]`
+/// value shape, matching `syn`'s `LitStr::value()` fidelity (the fix a v0.2.0..v0.2.1 cross-
+/// dimension sweep found missing here and in 圭表's independent copy). No real seam name spans
+/// lines, so this never meaningfully changes the seam-name caller's behavior. The caller routes
 /// `None` to an un-auditable probe (a loud reaction), never a silent mismatch. The escape set is the
 /// `&str` string-literal set only; byte-string-only escapes never reach here (byte strings are
 /// already un-auditable).
@@ -1026,7 +1045,7 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
     // by `char` reconstructs any multi-byte content faithfully.
     let s = std::str::from_utf8(inner).ok()?;
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
+    let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c != '\\' {
             out.push(c);
@@ -1040,6 +1059,13 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
             '0' => out.push('\0'),
             '\'' => out.push('\''),
             '"' => out.push('"'),
+            // Backslash-newline line continuation (`\n` or `\r\n`): strip it and every
+            // subsequent leading whitespace character on the continued line.
+            '\r' | '\n' => {
+                while matches!(chars.peek(), Some(' ' | '\t' | '\n' | '\r')) {
+                    chars.next();
+                }
+            }
             // `\xHH`: exactly two hex digits, and (for a `&str`) a value in `0x00..=0x7F`.
             'x' => {
                 let hi = chars.next()?.to_digit(16)?;
@@ -1079,7 +1105,7 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
                 }
                 out.push(char::from_u32(value)?);
             }
-            // An unrecognized escape or a backslash-newline line continuation: react loud.
+            // An unrecognized escape: react loud.
             _ => return None,
         }
     }

@@ -1,6 +1,8 @@
 //! White-box unit tests for the crate-private machinery — the baseline, the JSON
 //! and text projections, and the source scanner. Black-box behavior (running
 //! `check` against fixture workspaces) lives in `tests/dogfood.rs`.
+use std::path::{Path, PathBuf};
+
 use super::*;
 
 fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
@@ -26,21 +28,104 @@ fn one_enforce_violation() -> Report {
     )])
 }
 
+/// A unique, self-cleaning temp Cargo-package-shaped `src/` tree: write source files, add
+/// symlinks, then build the `cargo metadata`-shaped JSON `check_module_boundary` reads — replaces
+/// the hand-rolled `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends that
+/// `run_module_check` and the symlink regression tests below otherwise each repeat.
+struct TempWorkspace {
+    dir: PathBuf,
+    src: PathBuf,
+}
+
+impl TempWorkspace {
+    fn new(label: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("guibiao-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("mkdir src");
+        Self { dir, src }
+    }
+
+    /// Write a source file at `rel` (relative to `src/`), creating parent dirs as needed.
+    /// Returns the file's absolute path.
+    fn write(&self, rel: &str, contents: &str) -> PathBuf {
+        let path = self.src.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent"))
+            .expect("create src dirs");
+        std::fs::write(&path, contents).expect("write source file");
+        path
+    }
+
+    /// Write a file at a workspace-root-relative path (e.g. outside `src/`, for a symlink
+    /// target), creating parent dirs as needed. Returns the file's absolute path.
+    fn write_at(&self, rel: &str, contents: &str) -> PathBuf {
+        let path = self.dir.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent"))
+            .expect("create parent dirs");
+        std::fs::write(&path, contents).expect("write file");
+        path
+    }
+
+    /// Symlink `target` (an absolute path, or a raw relative string resolved from the link's own
+    /// directory — passed through verbatim either way) at `link_rel` (relative to `src/`).
+    #[cfg(unix)]
+    fn symlink(&self, target: impl AsRef<Path>, link_rel: &str) -> &Self {
+        std::os::unix::fs::symlink(target, self.src.join(link_rel)).expect("create symlink");
+        self
+    }
+
+    fn src(&self) -> &Path {
+        &self.src
+    }
+
+    fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// The `cargo metadata`-shaped JSON `check_module_boundary` reads, for package `name` with no
+    /// declared dependencies.
+    fn metadata(&self, name: &str) -> serde_json::Value {
+        self.metadata_with_deps(name, &[])
+    }
+
+    /// Like [`Self::metadata`], but with declared dependencies — `(name, rename)`, `rename` is the
+    /// Cargo `pkg = { package = "…" }` alias when `Some` (the `-`→`_` fold is applied by the
+    /// reader under test, so pass names verbatim).
+    fn metadata_with_deps(&self, name: &str, deps: &[(&str, Option<&str>)]) -> serde_json::Value {
+        let manifest = self.dir.join("Cargo.toml");
+        let dependencies: Vec<serde_json::Value> = deps
+            .iter()
+            .map(|(dep_name, rename)| match rename {
+                Some(rename) => serde_json::json!({ "name": dep_name, "rename": rename }),
+                None => serde_json::json!({ "name": dep_name }),
+            })
+            .collect();
+        serde_json::json!({
+            "packages": [{
+                "name": name,
+                "manifest_path": manifest.to_string_lossy().into_owned(),
+                "dependencies": dependencies,
+            }]
+        })
+    }
+}
+
+impl Drop for TempWorkspace {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn rust_files_does_not_recurse_into_a_symlinked_directory_cycle() {
     // A directory symlink pointing back at an ancestor would make a symlink-following walk recurse
     // forever (stack overflow). `rust_files` decides recursion from `file_type()` (no symlink
     // follow), so the cycle is not entered and the real source file is still found.
-    use std::os::unix::fs::symlink;
-    let dir = std::env::temp_dir().join(format!("guibiao-symlink-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("mkdir src");
-    std::fs::write(src.join("lib.rs"), "// root\n").expect("write lib.rs");
-    symlink(&src, src.join("loop")).expect("create a directory symlink cycle");
-    let files = crate::module_scan::rust_files(&src);
-    let _ = std::fs::remove_dir_all(&dir);
+    let ws = TempWorkspace::new("symlink-cycle");
+    ws.write("lib.rs", "// root\n");
+    ws.symlink(ws.src(), "loop");
+    let files = crate::module_scan::rust_files(ws.src());
     let files = files.expect("rust_files must not error on a symlink cycle");
     assert_eq!(
         files.len(),
@@ -55,18 +140,11 @@ fn rust_files_governs_a_symlinked_source_file() {
     // A symlink whose target is a real `.rs` file is compiled by rustc (once `mod`-declared) and
     // must be governed — it must NOT be dropped as a non-`is_file()` symlink, which would silently
     // miss its imports. Only the directory branch is symlink-blind (for cycle safety).
-    use std::os::unix::fs::symlink;
-    let dir = std::env::temp_dir().join(format!("guibiao-symlink-file-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    let ext = dir.join("external");
-    std::fs::create_dir_all(&src).expect("mkdir src");
-    std::fs::create_dir_all(&ext).expect("mkdir external");
-    std::fs::write(src.join("lib.rs"), "// root\n").expect("write lib.rs");
-    std::fs::write(ext.join("shared.rs"), "// shared\n").expect("write symlink target");
-    symlink(ext.join("shared.rs"), src.join("shared.rs")).expect("symlink a source file in");
-    let files = crate::module_scan::rust_files(&src);
-    let _ = std::fs::remove_dir_all(&dir);
+    let ws = TempWorkspace::new("symlink-file");
+    ws.write("lib.rs", "// root\n");
+    let shared = ws.write_at("external/shared.rs", "// shared\n");
+    ws.symlink(&shared, "shared.rs");
+    let files = crate::module_scan::rust_files(ws.src());
     let files = files.expect("rust_files must not error");
     assert_eq!(
         files.len(),
@@ -87,40 +165,22 @@ fn a_plain_child_reached_only_through_a_symlinked_directory_is_governed() {
     // structural iterator, which never walked it, nor `remapped`, since its naive path
     // structurally agreed with its own module path). Verified against a real `cargo check`: this
     // exact layout compiles `real_target/child.rs` as `crate::mymod::child` through the symlink.
-    use std::os::unix::fs::symlink;
-    let dir = std::env::temp_dir().join(format!("guibiao-symlinked-child-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("mkdir src");
-    std::fs::create_dir_all(dir.join("real_target")).expect("mkdir real_target");
-    std::fs::write(
-        src.join("lib.rs"),
+    let ws = TempWorkspace::new("symlinked-child");
+    ws.write(
+        "lib.rs",
         "pub mod mymod;\npub mod secret { pub struct Thing; }\n",
-    )
-    .expect("write lib.rs");
-    std::fs::write(src.join("mymod.rs"), "pub mod child;\n").expect("write mymod.rs");
-    std::fs::write(
-        dir.join("real_target").join("child.rs"),
-        "use crate::secret::Thing;\n",
-    )
-    .expect("write real_target/child.rs");
-    symlink(dir.join("real_target"), src.join("mymod")).expect("symlink src/mymod -> real_target");
+    );
+    ws.write("mymod.rs", "pub mod child;\n");
+    let target = ws.write_at("real_target/child.rs", "use crate::secret::Thing;\n");
+    ws.symlink(target.parent().expect("target has a parent"), "mymod");
 
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
         .module("crate::mymod")
         .must_not_import("crate::secret")
         .because("a symlinked-directory child must still be governed, not silently invisible");
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
 
     result.expect("a symlinked-directory-reached child is a valid, governable target");
     assert_eq!(violations.len(), 1, "{violations:?}");
@@ -151,31 +211,17 @@ fn a_symlinked_module_aliasing_an_unrelated_walked_file_is_still_governed_under_
     // distinct modules, each observing `use crate::secret::Thing;`. Comparing LITERAL (not
     // canonical) path identity closes this: two on-disk paths are never literally equal merely
     // because they resolve to the same target.
-    use std::os::unix::fs::symlink;
-    let dir = std::env::temp_dir().join(format!("guibiao-symlink-alias-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(src.join("real")).expect("mkdir src/real");
-    std::fs::write(
-        src.join("lib.rs"),
+    let ws = TempWorkspace::new("symlink-alias");
+    ws.write(
+        "lib.rs",
         "pub mod real;\npub mod kernel;\npub mod secret { pub struct Thing; }\n",
-    )
-    .expect("write lib.rs");
-    std::fs::write(
-        src.join("real").join("mod.rs"),
-        "use crate::secret::Thing;\n",
-    )
-    .expect("write src/real/mod.rs");
-    symlink("real", src.join("kernel")).expect("symlink src/kernel -> real");
+    );
+    ws.write("real/mod.rs", "use crate::secret::Thing;\n");
+    // A raw relative symlink target ("real", not an absolute path) — verbatim, matching the
+    // original regression's exact on-disk shape.
+    ws.symlink("real", "kernel");
 
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
         .module("crate::kernel")
         .must_not_import("crate::secret")
@@ -184,7 +230,6 @@ fn a_symlinked_module_aliasing_an_unrelated_walked_file_is_still_governed_under_
         );
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
 
     result.expect(
         "crate::kernel is a valid, governable target even though it aliases crate::real's file",
@@ -298,30 +343,18 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
 fn unreadable_governed_file_is_a_scan_error() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = std::env::temp_dir().join(format!("guibiao-unreadable-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    let file = src.join("lib.rs");
-    std::fs::write(&file, "use crate::forbidden::Thing;\n").expect("write governed file");
+    let ws = TempWorkspace::new("unreadable");
+    let file = ws.write("lib.rs", "use crate::forbidden::Thing;\n");
     std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000))
         .expect("drop read permission");
 
     // Self-calibrating root guard: if mode 0 is still readable, permissions do
     // not bite here, so the premise cannot hold — skip rather than false-pass.
     if std::fs::read_to_string(&file).is_ok() {
-        let _ = std::fs::remove_dir_all(&dir);
         return;
     }
 
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
         .module("crate")
         .must_not_import("crate::forbidden")
@@ -331,7 +364,6 @@ fn unreadable_governed_file_is_a_scan_error() {
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
 
     let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644));
-    let _ = std::fs::remove_dir_all(&dir);
 
     assert!(
         result.is_err(),
@@ -348,14 +380,10 @@ fn unreadable_governed_file_is_a_scan_error() {
 fn unreadable_governed_directory_is_a_scan_error() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = std::env::temp_dir().join(format!("guibiao-unreadable-dir-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(src.join("lib.rs"), "// nothing\n").expect("write lib.rs");
-    let sub = src.join("sub");
-    std::fs::create_dir_all(&sub).expect("create sub dir");
-    std::fs::write(sub.join("inner.rs"), "use crate::forbidden::Thing;\n").expect("write inner");
+    let ws = TempWorkspace::new("unreadable-dir");
+    ws.write("lib.rs", "// nothing\n");
+    ws.write("sub/inner.rs", "use crate::forbidden::Thing;\n");
+    let sub = ws.src().join("sub");
     std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000))
         .expect("drop dir read/exec permission");
 
@@ -363,18 +391,10 @@ fn unreadable_governed_directory_is_a_scan_error() {
     // premise cannot hold — skip rather than false-pass.
     if std::fs::read_dir(&sub).is_ok() {
         let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
-        let _ = std::fs::remove_dir_all(&dir);
         return;
     }
 
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
         .module("crate")
         .must_not_import("crate::forbidden")
@@ -384,7 +404,6 @@ fn unreadable_governed_directory_is_a_scan_error() {
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
 
     let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
-    let _ = std::fs::remove_dir_all(&dir);
 
     assert!(
         result.is_err(),
@@ -398,21 +417,11 @@ fn unreadable_governed_directory_is_a_scan_error() {
 /// form (`crate::type`) and still matches the raw-identifier source.
 #[test]
 fn a_raw_identifier_module_is_governed_and_its_import_observed() {
-    let dir = std::env::temp_dir().join(format!("guibiao-rawid-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(src.join("lib.rs"), "pub mod r#type;\n").expect("write lib.rs");
-    std::fs::write(src.join("type.rs"), "use crate::r#mod::Thing;\n").expect("write type.rs");
+    let ws = TempWorkspace::new("rawid");
+    ws.write("lib.rs", "pub mod r#type;\n");
+    ws.write("type.rs", "use crate::r#mod::Thing;\n");
 
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
         .module("crate::type")
         .must_not_import("crate::mod")
@@ -420,7 +429,6 @@ fn a_raw_identifier_module_is_governed_and_its_import_observed() {
 
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
 
     assert!(
         result.is_ok(),
@@ -437,14 +445,11 @@ fn a_raw_identifier_module_is_governed_and_its_import_observed() {
 
 #[test]
 fn module_boundary_uses_the_package_target_src_path() {
-    let dir = std::env::temp_dir().join(format!("guibiao-custom-lib-path-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create temp crate");
-    let root = dir.join("lib.rs");
-    std::fs::write(&root, "pub mod kernel;\n").expect("write custom lib root");
-    std::fs::write(dir.join("kernel.rs"), "use crate::io::Sink;\n").expect("write custom module");
+    let ws = TempWorkspace::new("custom-lib-path");
+    let root = ws.write_at("lib.rs", "pub mod kernel;\n");
+    ws.write_at("kernel.rs", "use crate::io::Sink;\n");
 
-    let manifest = dir.join("Cargo.toml");
+    let manifest = ws.dir().join("Cargo.toml");
     let metadata = serde_json::json!({
         "packages": [{
             "name": "x",
@@ -463,7 +468,6 @@ fn module_boundary_uses_the_package_target_src_path() {
 
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
 
     assert!(
         result.is_ok(),
@@ -560,24 +564,13 @@ fn an_unconditional_path_on_an_inline_module_relocates_its_own_file_form_childre
 /// unknown module still gets the "not found" message.
 #[test]
 fn an_inline_module_target_is_a_self_describing_constitution_error() {
-    let dir = std::env::temp_dir().join(format!("guibiao-inline-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(
-            src.join("lib.rs"),
-            "pub mod kernel { use crate::projection::Thing; }\npub mod projection { pub struct Thing; }\n",
-        )
-        .expect("write lib.rs");
+    let ws = TempWorkspace::new("inline");
+    ws.write(
+        "lib.rs",
+        "pub mod kernel { use crate::projection::Thing; }\npub mod projection { pub struct Thing; }\n",
+    );
 
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "app",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("app");
 
     let inline = ModuleBoundary::in_crate("app")
         .module("crate::kernel")
@@ -601,7 +594,6 @@ fn an_inline_module_target_is_a_self_describing_constitution_error() {
         .because("typo");
     let typo_err = check_module_boundary(&metadata, &typo, &mut violations)
         .expect_err("an unknown module is a constitution error");
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(typo_err, unknown_module_error("crate::ghost", "app"));
 }
 
@@ -736,6 +728,196 @@ fn a_cross_root_same_named_submodule_is_a_documented_bound() {
     );
 }
 
+/// A plain `mod child;` backed by BOTH `child.rs` and `child/mod.rs` at once is a genuine rustc
+/// compile error (E0761) — closes a pre-existing debt: both forms were previously silently
+/// accepted as separate sources (dual-governed), the mirror image of the missing-file gap.
+/// Mirrors 漏刻's own `resolve_external_module`'s identical hard error (see
+/// `dual_backed_module_conformance.rs` for the cross-dimension agreement pin).
+#[test]
+fn a_dual_backed_module_is_a_scan_error_not_silently_accepted() {
+    let (result, _violations) = run_module_check(
+        "dual-backed",
+        &[
+            ("lib.rs", "pub mod child;\n"),
+            ("child.rs", "// flat form\n"),
+            ("child/mod.rs", "// nested form\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("child must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "both conventional forms present is a genuine ambiguity, never a silent accept",
+    );
+    assert!(
+        err.contains("resolves to both") && err.contains("child.rs") && err.contains("mod.rs"),
+        "the error must name the ambiguity and both real files: {err}"
+    );
+}
+
+/// A plain `mod child;` with NEITHER `child.rs` NOR `child/mod.rs` present, and no `#[cfg]`
+/// anywhere on the declaration, is a genuine rustc compile error — closes the longstanding
+/// "missing plain mod file is a silent gap" debt (BACKLOG: "圭表 gaining `#[cfg]` awareness for an
+/// unrelated reason... closes this for free"). Previously `child` silently vanished from
+/// `reachable` with no error, an undetected coverage gap; now matches 渾儀's own hard error for
+/// the identical shape.
+#[test]
+fn an_unconditional_missing_plain_module_file_is_a_scan_error_not_a_silent_gap() {
+    let (result, _violations) = run_module_check(
+        "missing-plain-unconditional",
+        &[("lib.rs", "pub mod child;\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("child must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "an unconditional plain mod with no backing file must fail loud, never silently vanish",
+    );
+    assert!(
+        err.contains("crate::child") && err.contains("could not be located"),
+        "the error must name the module and the missing-file cause: {err}"
+    );
+}
+
+/// A BARE `#[cfg(...)]`-gated plain `mod child;` with no backing file is tolerated BY THE
+/// SCANNER — an unrelated sibling boundary still resolves cleanly rather than the whole scan
+/// erroring merely because one cfg-gated module has no file on this build/feature set (matching
+/// 渾儀's `has_cfg_attr` tolerance and 漏刻's own `a_cfg_gated_module_with_no_file_is_skipped_not_errored`).
+#[test]
+fn a_cfg_gated_missing_plain_module_file_does_not_fail_an_unrelated_boundary() {
+    let (result, violations) = run_module_check(
+        "missing-plain-cfg-gated",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(feature = \"absent\")]\npub mod child;\npub mod present;\n",
+            ),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("a #[cfg]-gated missing sibling must not fail an unrelated boundary");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
+/// A boundary anchored DIRECTLY at a module whose sole declaration was `#[cfg]`-tolerated away
+/// (no surviving file) is "cannot judge," not a vacuous clean pass — matching 渾儀's own `descend`
+/// precedent for the identical shape (its empty-branches case also falls to
+/// `unknown_module_error`, never silently reporting zero violations for something never checked).
+#[test]
+fn a_boundary_anchored_directly_at_a_cfg_gated_missing_module_is_unknown_not_clean() {
+    let (result, _violations) = run_module_check(
+        "missing-plain-cfg-gated-anchor",
+        &[("lib.rs", "#[cfg(feature = \"absent\")]\npub mod child;\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("child must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "anchoring directly at a module absent on this build must fail loud, never vacuously pass",
+    );
+    assert_eq!(err, unknown_module_error("crate::child", "x"));
+}
+
+/// A mutually-exclusive `#[cfg]` shim pairing an inline arm with a plain-file arm whose file is
+/// tolerated-away-missing must still report the SELF-DESCRIBING `inline_module_target_error`
+/// ("declared inline... move it into its own file"), not the generic `unknown_module_error`
+/// ("check the path", which wrongly implies a typo). Found on this session's own round-2
+/// adversarial review: the bare-`#[cfg]` tolerance above made it newly possible for a plain
+/// declaration to be *declared* yet resolve to nothing, and `inline_only`'s gating on mere
+/// declaration presence (rather than actual resolution) then wrongly excluded this module from
+/// `inline_only`, misreporting which error applies.
+#[test]
+fn an_inline_arm_paired_with_a_tolerated_away_plain_arm_still_reports_the_inline_error() {
+    let (result, _violations) = run_module_check(
+        "inline-plus-tolerated-plain",
+        &[(
+            "lib.rs",
+            "#[cfg(unix)]\npub mod engine { pub struct A; }\n\
+             #[cfg(windows)]\npub mod engine;\n",
+        )],
+        ModuleBoundary::in_crate("x")
+            .module("crate::engine")
+            .must_not_import("crate::forbidden")
+            .because("engine must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "an inline arm alongside a tolerated-away plain arm is still an inline target, not unknown",
+    );
+    assert_eq!(
+        err,
+        inline_module_target_error("crate::engine", "x", "engine")
+    );
+}
+
+/// A BARE `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the same item
+/// removes the whole item, `#[path]` included, when `pred` is false — a standard per-platform
+/// shim (`#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) that must not hard-error an
+/// unrelated boundary merely because this platform's target file was never written. Verified
+/// against a real `rustc` build: this compiles cleanly with the target entirely absent.
+#[test]
+fn a_cfg_gated_unconditional_path_target_does_not_fail_an_unrelated_boundary_when_missing() {
+    let (result, violations) = run_module_check(
+        "cfg-gated-path-target-missing",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod present;\n",
+            ),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("a #[cfg]-gated #[path] target with no file must not fail an unrelated boundary");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
+/// The bare-`#[cfg]` tolerance for a missing unconditional `#[path]` target must not depend on
+/// attribute order: `#[path]` written BEFORE `#[cfg]` (the reverse of the sibling test above)
+/// must be tolerated identically — mirroring the existing
+/// `an_unconditional_path_attr_wins_regardless_of_cfg_attr_order` guarantee for the `#[path]`
+/// detector itself.
+#[test]
+fn a_cfg_gated_unconditional_path_target_is_tolerated_regardless_of_attribute_order() {
+    let (result, violations) = run_module_check(
+        "cfg-gated-path-target-order",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"windows_impl.rs\"]\n#[cfg(windows)]\npub mod imp;\npub mod present;\n",
+            ),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("attribute order must not affect the bare-#[cfg] tolerance");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
 /// A `#[cfg_attr(cond, path = …)]` IS recognized as a (conditional) remap, the same
 /// stated `#[path]` bound as the separate `#[cfg(cond)] #[path = …]` spelling. Not recognizing it
 /// would govern the conventionally-named file — a cfg-blind mishandling that is a
@@ -779,26 +961,13 @@ fn run_module_check(
     files: &[(&str, &str)],
     boundary: ModuleBoundary,
 ) -> (Result<(), String>, Vec<Violation>) {
-    let dir = std::env::temp_dir().join(format!("guibiao-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
+    let ws = TempWorkspace::new(name);
     for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent"))
-            .expect("create src dirs");
-        std::fs::write(&path, contents).expect("write source file");
+        ws.write(rel, contents);
     }
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("x");
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
     (result, violations)
 }
 
@@ -813,33 +982,13 @@ fn run_module_check_with_deps(
     deps: &[(&str, Option<&str>)],
     boundary: ModuleBoundary,
 ) -> (Result<(), String>, Vec<Violation>) {
-    let dir = std::env::temp_dir().join(format!("guibiao-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
+    let ws = TempWorkspace::new(name);
     for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent"))
-            .expect("create src dirs");
-        std::fs::write(&path, contents).expect("write source file");
+        ws.write(rel, contents);
     }
-    let manifest = dir.join("Cargo.toml");
-    let dependencies: Vec<serde_json::Value> = deps
-        .iter()
-        .map(|(dep_name, rename)| match rename {
-            Some(rename) => serde_json::json!({ "name": dep_name, "rename": rename }),
-            None => serde_json::json!({ "name": dep_name }),
-        })
-        .collect();
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": dependencies,
-        }]
-    });
+    let metadata = ws.metadata_with_deps("x", deps);
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
     (result, violations)
 }
 
@@ -3263,29 +3412,18 @@ fn an_unreadable_utf8_governed_source_file_is_a_scan_error() {
     // which skip under a privileged user): invalid UTF-8 makes `read_to_string` fail,
     // so a reachable governed-crate source file that cannot be read is a scan error
     // (exit 2), never a silent skip — the core-contract "cannot judge" rule.
-    let dir = std::env::temp_dir().join(format!("guibiao-utf8-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(src.join("lib.rs"), "pub mod kernel;\n").expect("write lib.rs");
+    let ws = TempWorkspace::new("utf8");
+    ws.write("lib.rs", "pub mod kernel;\n");
     // 0xFF / 0xFE are not valid UTF-8; read_to_string returns Err on all platforms.
-    std::fs::write(src.join("kernel.rs"), [0xFF, 0xFE, 0x00, 0x80]).expect("write kernel.rs");
+    std::fs::write(ws.src().join("kernel.rs"), [0xFF, 0xFE, 0x00, 0x80]).expect("write kernel.rs");
 
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
+    let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
         .module("crate::kernel")
         .must_not_import("crate::forbidden")
         .because("kernel must not import forbidden");
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
     assert!(
         result.is_err(),
         "an unreadable (invalid-UTF-8) governed source file must be a scan error"

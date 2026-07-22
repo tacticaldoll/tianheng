@@ -1,11 +1,78 @@
 use super::*;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::containment::leaf_of;
 use crate::crate_scope::dependency_names;
-use crate::errors::{unknown_module_error, unknown_trait_error};
+use crate::errors::{missing_module_file_error, unknown_module_error, unknown_trait_error};
 use crate::module_resolve::resolve_module_file;
+
+/// A unique, self-cleaning temp `src/` tree: write source files (and, where needed, a symlink),
+/// then hand its root/src paths to a pure entrypoint under test — replaces the hand-rolled
+/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends that this file's many
+/// fixture-building helpers otherwise each repeat.
+struct TempSrcTree {
+    dir: PathBuf,
+    src: PathBuf,
+}
+
+impl TempSrcTree {
+    fn new(label: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("hunyi-{label}-{}", std::process::id()));
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("mkdir src");
+        Self { dir, src }
+    }
+
+    /// Write a source file at `rel` (relative to `src/`), creating parent dirs as needed.
+    /// Returns the file's absolute path.
+    fn write(&self, rel: &str, contents: &str) -> PathBuf {
+        let path = self.src.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
+        std::fs::write(&path, contents).expect("write source");
+        path
+    }
+
+    /// Write every `(relative path, contents)` pair under `src/`.
+    fn write_all(&self, files: &[(&str, &str)]) {
+        for (rel, contents) in files {
+            self.write(rel, contents);
+        }
+    }
+
+    fn src(&self) -> &Path {
+        &self.src
+    }
+
+    fn root(&self) -> PathBuf {
+        self.src.join("lib.rs")
+    }
+
+    #[cfg(unix)]
+    fn symlink(&self, target: impl AsRef<Path>, link_rel_to_src: &str) -> &Self {
+        std::os::unix::fs::symlink(target, self.src.join(link_rel_to_src)).expect("create symlink");
+        self
+    }
+
+    /// The `cargo metadata`-shaped JSON some private `check_*_boundary` reads (needed only by the
+    /// `fixture_metadata` call sites), for a single package "x" whose lib root is this tree's
+    /// `src/lib.rs`.
+    fn metadata(&self) -> Value {
+        serde_json::json!({
+            "packages": [{
+                "name": "x",
+                "dependencies": [],
+                "targets": [{ "kind": ["lib"], "src_path": self.root().to_string_lossy().into_owned() }],
+            }],
+        })
+    }
+}
+
+impl Drop for TempSrcTree {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
 
 /// Write `files` (each `(relative path, contents)`) under a unique temp `src` dir, then
 /// return the findings for `module` against `forbidden`. Exercises the whole evaluator
@@ -16,18 +83,18 @@ fn findings(
     module: &str,
     forbidden: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
+    let tree = TempSrcTree::new(name);
+    tree.write_all(files);
     let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-    let root = src.join("lib.rs");
-    let result = module_findings(&src, &root, module, &forbidden, "x", false, &[]);
-    let _ = std::fs::remove_dir_all(&dir);
+    let result = module_findings(
+        tree.src(),
+        &tree.root(),
+        module,
+        &forbidden,
+        "x",
+        false,
+        &[],
+    );
     result.map(|facts| {
         facts
             .into_iter()
@@ -45,19 +112,19 @@ fn findings_with_deps(
     forbidden: &[&str],
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
+    let tree = TempSrcTree::new(name);
+    tree.write_all(files);
     let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
     let deps: Vec<String> = deps.iter().map(|s| s.to_string()).collect();
-    let root = src.join("lib.rs");
-    let result = module_findings(&src, &root, module, &forbidden, "x", false, &deps);
-    let _ = std::fs::remove_dir_all(&dir);
+    let result = module_findings(
+        tree.src(),
+        &tree.root(),
+        module,
+        &forbidden,
+        "x",
+        false,
+        &deps,
+    );
     result.map(|facts| {
         facts
             .into_iter()
@@ -74,18 +141,10 @@ fn findings_including_trait_impls(
     module: &str,
     forbidden: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
+    let tree = TempSrcTree::new(name);
+    tree.write_all(files);
     let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-    let root = src.join("lib.rs");
-    let result = module_findings(&src, &root, module, &forbidden, "x", true, &[]);
-    let _ = std::fs::remove_dir_all(&dir);
+    let result = module_findings(tree.src(), &tree.root(), module, &forbidden, "x", true, &[]);
     result.map(|facts| {
         facts
             .into_iter()
@@ -780,6 +839,37 @@ fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
     assert!(
         !out.is_empty(),
         "canonicalization must terminate on a key⊂value reexport entry: {out:?}"
+    );
+}
+
+#[test]
+fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value() {
+    // The sibling of the reexports test above, at `resolve_self_type`'s own resolver: before it
+    // was routed through the shared, hop-capped `canonicalize_through_aliases`, its hand-rolled
+    // outer loop re-ran the (already-capped) inner `canonicalize_through_reexports` call every
+    // iteration, so a key⊂value reexport entry made the outer `landing` grow by a bounded amount
+    // each iteration, never exactly repeating — the outer exact-repeat `seen` guard alone could
+    // not catch that. The assertion is simply that this terminates.
+    use crate::containment::resolve_self_type;
+    use crate::resolve::{AliasMap, ReexportMap, UseMap};
+    use std::collections::HashSet;
+
+    let self_ty: syn::Type = syn::parse_str("Foo").unwrap();
+    let uses = UseMap::new();
+    let aliases = AliasMap::new();
+    let mut reexports = ReexportMap::new();
+    reexports.insert("crate::a::Foo".to_string(), "crate::a::Foo::b".to_string());
+    let landing = resolve_self_type(
+        &self_ty,
+        &uses,
+        "crate::a",
+        &aliases,
+        &reexports,
+        &HashSet::new(),
+    );
+    assert!(
+        landing.is_some(),
+        "canonicalization must terminate on a key⊂value reexport entry: {landing:?}"
     );
 }
 
@@ -2593,18 +2683,10 @@ fn locality_findings(
     trait_path: &str,
     allowed: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-loc-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
+    let tree = TempSrcTree::new(&format!("loc-{name}"));
+    tree.write_all(files);
     let allowed: Vec<String> = allowed.iter().map(|s| s.to_string()).collect();
-    let root = src.join("lib.rs");
-    let result = trait_impl_findings(&src, &root, trait_path, &allowed, "x");
-    let _ = std::fs::remove_dir_all(&dir);
+    let result = trait_impl_findings(tree.src(), &tree.root(), trait_path, &allowed, "x");
     // The pure-heart tests assert on findings only; drop the per-finding module/file here.
     result.map(|v| {
         v.into_iter()
@@ -3311,23 +3393,14 @@ fn unsafe_labels(
     files: &[(&str, &str)],
     allowed: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-unsafe-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
+    let tree = TempSrcTree::new(&format!("unsafe-{name}"));
+    tree.write_all(files);
     let allowed: Vec<String> = allowed.iter().map(|a| a.to_string()).collect();
-    let result = unsafe_findings(&src, &root, &allowed, "x").map(|fs| {
+    unsafe_findings(tree.src(), &tree.root(), &allowed, "x").map(|fs| {
         fs.into_iter()
             .map(|(finding, _, _)| finding.to_string())
             .collect()
-    });
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+    })
 }
 
 #[test]
@@ -3797,17 +3870,9 @@ fn vis_findings_at(
     module: &str,
     ceiling_rank: u8,
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-vis-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
-    let result = visibility_findings(&src, &root, module, "x", ceiling_rank);
-    let _ = std::fs::remove_dir_all(&dir);
+    let tree = TempSrcTree::new(&format!("vis-{name}"));
+    tree.write_all(files);
+    let result = visibility_findings(tree.src(), &tree.root(), module, "x", ceiling_rank);
     result.map(|facts| {
         facts
             .into_iter()
@@ -4291,18 +4356,10 @@ fn marker_findings(
     subtree: &str,
     forbidden: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-mark-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
+    let tree = TempSrcTree::new(&format!("mark-{name}"));
+    tree.write_all(files);
     let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-    let root = src.join("lib.rs");
-    let result = forbidden_marker_findings(&src, &root, subtree, &forbidden, "x");
-    let _ = std::fs::remove_dir_all(&dir);
+    let result = forbidden_marker_findings(tree.src(), &tree.root(), subtree, &forbidden, "x");
     // The pure-heart tests assert on findings only; drop the per-finding module/file here.
     result.map(|v| {
         v.into_iter()
@@ -4801,18 +4858,12 @@ fn a_symlinked_module_cycle_is_a_scan_error_not_a_stack_overflow() {
     // forever. The scan must stop with a scan error ("cannot judge", exit 2), never recurse into a
     // stack overflow (SIGABRT). Driven through `forbidden_marker_findings`, which runs `scan_crate`
     // (the whole-crate walk) first.
-    use std::os::unix::fs::symlink;
-    let dir = std::env::temp_dir().join(format!("hunyi-symcycle-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(src.join("foo")).expect("mkdir src/foo");
-    std::fs::write(src.join("lib.rs"), "pub mod foo;\n").expect("write lib.rs");
-    std::fs::write(src.join("foo").join("mod.rs"), "pub mod foo;\n").expect("write foo/mod.rs");
+    let tree = TempSrcTree::new("symcycle");
+    tree.write("lib.rs", "pub mod foo;\n");
+    tree.write("foo/mod.rs", "pub mod foo;\n");
     // src/foo/foo -> src/foo : crate::foo::foo resolves back through the symlink to foo/mod.rs.
-    symlink("../foo", src.join("foo").join("foo")).expect("symlink");
-    let root = src.join("lib.rs");
-    let result = forbidden_marker_findings(&src, &root, "crate", &[], "x");
-    let _ = std::fs::remove_dir_all(&dir);
+    tree.symlink("../foo", "foo/foo");
+    let result = forbidden_marker_findings(tree.src(), &tree.root(), "crate", &[], "x");
     let err =
         result.expect_err("a symlinked module cycle must be a scan error, not a hang/overflow");
     assert!(
@@ -4901,17 +4952,9 @@ fn the_forbidden_marker_builder_carries_severity() {
 /// Like [`findings`] but for the dyn-trait capability: write `files`, return the rendered
 /// `dyn` shapes exposed by `module`. Shape-only, so it takes no forbidden set.
 fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-dyn-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
-    let result = dyn_module_findings(&src, &root, module, "x");
-    let _ = std::fs::remove_dir_all(&dir);
+    let tree = TempSrcTree::new(&format!("dyn-{name}"));
+    tree.write_all(files);
+    let result = dyn_module_findings(tree.src(), &tree.root(), module, "x");
     result.map(|facts| {
         facts
             .into_iter()
@@ -4937,19 +4980,12 @@ fn dyn_operand_findings(
     forbidden: &[&str],
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-dynop-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
+    let tree = TempSrcTree::new(&format!("dynop-{name}"));
+    tree.write_all(files);
     let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
-    let result = dyn_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
-    let _ = std::fs::remove_dir_all(&dir);
+    let result =
+        dyn_operand_module_findings(tree.src(), &tree.root(), module, &forbidden, "x", &deps);
     result.map(|facts| {
         facts
             .into_iter()
@@ -5259,17 +5295,9 @@ fn impl_trait_findings(
     files: &[(&str, &str)],
     module: &str,
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-impl-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
-    let result = impl_trait_module_findings(&src, &root, module, "x");
-    let _ = std::fs::remove_dir_all(&dir);
+    let tree = TempSrcTree::new(&format!("impl-{name}"));
+    tree.write_all(files);
+    let result = impl_trait_module_findings(tree.src(), &tree.root(), module, "x");
     result.map(|facts| {
         facts
             .into_iter()
@@ -5401,19 +5429,18 @@ fn impl_trait_operand_findings(
     forbidden: &[&str],
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-implop-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
+    let tree = TempSrcTree::new(&format!("implop-{name}"));
+    tree.write_all(files);
     let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
-    let result = impl_trait_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
-    let _ = std::fs::remove_dir_all(&dir);
+    let result = impl_trait_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        module,
+        &forbidden,
+        "x",
+        &deps,
+    );
     result.map(|facts| {
         facts
             .into_iter()
@@ -5610,17 +5637,9 @@ fn impl_trait_operand_boundary_carries_operands_and_severity() {
 // --- async-exposure -------------------------------------------------------
 
 fn async_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-async-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
-    let result = async_exposure_module_findings(&src, &root, module, "x");
-    let _ = std::fs::remove_dir_all(&dir);
+    let tree = TempSrcTree::new(&format!("async-{name}"));
+    tree.write_all(files);
+    let result = async_exposure_module_findings(tree.src(), &tree.root(), module, "x");
     result.map(|facts| {
         facts
             .into_iter()
@@ -5751,17 +5770,9 @@ fn async_subtree(
     files: &[(&str, &str)],
     module: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-async-sub-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
-    let result = async_exposure_subtree_findings(&src, &root, module, "x");
-    let _ = std::fs::remove_dir_all(&dir);
+    let tree = TempSrcTree::new(&format!("async-sub-{name}"));
+    tree.write_all(files);
+    let result = async_exposure_subtree_findings(tree.src(), &tree.root(), module, "x");
     result.map(|facts| {
         facts
             .into_iter()
@@ -5975,7 +5986,7 @@ fn async_subtree_violations_name_each_branchs_own_file_not_a_shared_module_strin
     // one branch's file, and the second finding (from the OTHER branch) silently reused it. Every
     // multi-module finding now pairs with the real file its own branch was resolved from (from
     // the subtree walker itself), so each violation's file must name its own real branch.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "cfg-split-anchor-file-attribution",
         &[
             (
@@ -5995,7 +6006,6 @@ fn async_subtree_violations_name_each_branchs_own_file_not_a_shared_module_strin
         .because("each branch's finding must name its own real file");
     let mut violations = Vec::new();
     check_async_exposure_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 2, "{violations:?}");
     let mut by_finding: std::collections::BTreeMap<String, &str> = Default::default();
     for v in &violations {
@@ -6415,18 +6425,9 @@ fn dyn_unknown_module_is_a_constitution_error() {
 /// (the file a single-module semantic violation reports), and return it. Cleans up; the
 /// returned path is asserted by suffix, not existence.
 fn resolve_file(name: &str, files: &[(&str, &str)], module: &str) -> Result<PathBuf, String> {
-    let dir = std::env::temp_dir().join(format!("hunyi-file-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root = src.join("lib.rs");
-    let result = resolve_module_file(&src, &root, module, "x");
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+    let tree = TempSrcTree::new(&format!("file-{name}"));
+    tree.write_all(files);
+    resolve_module_file(tree.src(), &tree.root(), module, "x")
 }
 
 #[test]
@@ -6447,6 +6448,105 @@ fn module_file_is_the_file_module_source() {
     )
     .unwrap();
     assert!(file.ends_with("domain.rs"), "got {}", file.display());
+}
+
+/// A mutually-exclusive `#[cfg]` per-platform shim — an inline arm plus a file-form sibling
+/// arm whose file is absent on this build — now resolves via the inline arm instead of hard
+/// erroring on the sibling's missing file, aligning `descend` with `scan::resolve_child_modules`'s
+/// identical `#[cfg]`-tolerance for a missing plain module file (previously the two walkers
+/// silently disagreed on this exact shape — the 0.2.2 lesson).
+#[test]
+fn descend_tolerates_a_cfg_gated_missing_sibling_when_an_inline_arm_resolves() {
+    let file = resolve_file(
+        "cfg-shim",
+        &[(
+            "lib.rs",
+            "#[cfg(unix)]\npub mod shared { pub struct A; }\n\
+             #[cfg(windows)]\npub mod shared;\n",
+        )],
+        "crate::shared",
+    )
+    .expect("the inline arm resolves even though the windows-only file-form sibling has no file");
+    assert!(file.ends_with("lib.rs"), "got {}", file.display());
+}
+
+/// When EVERY declaration for the anchored module is `#[cfg]`-gated and none resolves (no inline
+/// sibling to fall back on), resolution still fails loud — never a silent, vacuous "zero items"
+/// pass. `descend`'s own `next_branches.is_empty()` guard (which already existed for the ordinary
+/// "no branch survived this segment" case) catches this for free: cfg-tolerance only ever removes
+/// candidates, so an entirely-eliminated segment reads the same as an always-had genuinely unknown
+/// one.
+#[test]
+fn descend_still_errors_when_every_candidate_for_a_module_is_cfg_gated_missing() {
+    let err = resolve_file(
+        "cfg-only-missing",
+        &[("lib.rs", "#[cfg(feature = \"absent\")]\npub mod gated;\n")],
+        "crate::gated",
+    )
+    .expect_err("a module with no surviving branch must be a scan error, never a vacuous pass");
+    assert_eq!(err, unknown_module_error("crate::gated", "x"));
+}
+
+/// A BARE `#[cfg]`-gated missing file is tolerated (the sibling test above), but a
+/// `#[cfg_attr(pred, …)]`-decorated one is NOT: unlike a bare `#[cfg]`, `cfg_attr` never removes
+/// the `mod` item itself — it only conditionally applies its wrapped attribute — so the file must
+/// always exist regardless of the predicate. Verified against a real `rustc` build: this exact
+/// shape (`#[cfg_attr(unix, allow(dead_code))] mod gated;` with no `gated.rs`) is E0583 on every
+/// platform. `has_cfg_attr` deliberately does not match `cfg_attr` for this reason.
+#[test]
+fn descend_does_not_tolerate_a_cfg_attr_decorated_missing_file_only_bare_cfg() {
+    let err = resolve_file(
+        "cfg-attr-not-tolerated",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(unix, allow(dead_code))]\npub mod gated;\n",
+        )],
+        "crate::gated",
+    )
+    .expect_err("a cfg_attr-decorated (not cfg-gated) missing file must still be a scan error");
+    assert_eq!(err, missing_module_file_error("crate::gated", "x"));
+}
+
+/// A BARE `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the SAME item
+/// removes the whole item, `#[path]` included, when `pred` is false — a standard per-platform
+/// shim (`#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) that must not hard-error `descend`
+/// merely because this platform's target file was never written. Verified against a real `rustc`
+/// build: this compiles cleanly with the target entirely absent. The mutually-exclusive inline
+/// sibling arm (always present, no file needed) still resolves.
+#[test]
+fn descend_tolerates_a_cfg_gated_unconditional_path_target_when_missing() {
+    let file = resolve_file(
+        "cfg-path-shim",
+        &[(
+            "lib.rs",
+            "#[cfg(unix)]\npub mod shared { pub struct A; }\n\
+             #[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod shared;\n",
+        )],
+        "crate::shared",
+    )
+    .expect("the inline arm resolves even though the windows-only #[path] target has no file");
+    assert!(file.ends_with("lib.rs"), "got {}", file.display());
+}
+
+/// The crate-wide walker (`scan::resolve_child_modules`, backing `semantic-unsafe-confinement`,
+/// which has no single-module anchor mode) must tolerate the identical shape: a cfg-gated
+/// unconditional `#[path]` target with no file must not fail the whole scan, so an unrelated
+/// module's real `unsafe` site is still observed.
+#[test]
+fn resolve_child_modules_tolerates_a_cfg_gated_unconditional_path_target_when_missing() {
+    let out = unsafe_labels(
+        "cfg-path-shim-crate-wide",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod live;\n",
+            ),
+            ("live.rs", "unsafe fn f() {}\n"),
+        ],
+        &["crate::allowed_elsewhere"],
+    )
+    .expect("a cfg-gated #[path] target with no file must not fail the crate-wide scan");
+    assert_eq!(out, ["unsafe fn f in crate::live"]);
 }
 
 #[test]
@@ -6523,33 +6623,20 @@ fn module_file_follows_an_unconditional_path_on_an_inline_module_to_its_relocate
 
 /// Build fixtures under a temp `src` plus synthetic `cargo metadata --no-deps` for a single
 /// crate `x` whose lib root is that `src/lib.rs`, so a private `check_*_boundary` can run
-/// without spawning `cargo`. Returns `(metadata, tempdir)`; the caller removes `tempdir`
-/// **after** the check (the check reads the fixtures from disk).
-fn fixture_metadata(name: &str, files: &[(&str, &str)]) -> (Value, PathBuf) {
-    let dir = std::env::temp_dir().join(format!("hunyi-meta-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    for (rel, contents) in files {
-        let path = src.join(rel);
-        std::fs::create_dir_all(path.parent().expect("file has a parent")).expect("mkdir");
-        std::fs::write(&path, contents).expect("write source");
-    }
-    let root_str = src.join("lib.rs").to_string_lossy().into_owned();
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "dependencies": [],
-            "targets": [{ "kind": ["lib"], "src_path": root_str }],
-        }],
-    });
-    (metadata, dir)
+/// without spawning `cargo`. Returns `(metadata, tree)`; the tree's `Drop` removes the fixtures
+/// once the caller drops it — hold it alive until after the check (the check reads the fixtures
+/// from disk).
+fn fixture_metadata(name: &str, files: &[(&str, &str)]) -> (Value, TempSrcTree) {
+    let tree = TempSrcTree::new(&format!("meta-{name}"));
+    tree.write_all(files);
+    (tree.metadata(), tree)
 }
 
 #[test]
 fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     // The forbidden type `crate::infra::Db` is *defined* in infra.rs; the exposing seam is in
     // domain.rs. The reported `file` is the seam's module (domain.rs), the actionable one.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "seam",
         &[
             ("lib.rs", "pub mod infra;\npub mod domain;\n"),
@@ -6566,7 +6653,6 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
         .because("domain must not expose infra");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 1, "one exposure violation");
     assert_eq!(violations[0].target, "crate::domain");
     assert_eq!(violations[0].rule, SIGNATURE_RULE);
@@ -6597,7 +6683,7 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
 
 #[test]
 fn the_semantic_file_is_not_part_of_the_baseline_identity() {
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "baseline",
         &[
             ("lib.rs", "pub mod infra;\npub mod domain;\n"),
@@ -6614,7 +6700,6 @@ fn the_semantic_file_is_not_part_of_the_baseline_identity() {
         .because("r");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     let v = &violations[0];
     assert!(v.file.is_some(), "the violation now carries a file");
     // `file` is metadata, not identity: a violation baselined while `file` was null still
@@ -6629,7 +6714,7 @@ fn cfg_duplicated_inline_modules_are_all_governed() {
     // resolving only the source-first variant let a forbidden exposure in the other pass unobserved
     // (exit 0) — a mod-resolution divergence, the forbidden false-negative class. Matches the
     // crate-wide scan's observe-all policy for same-named modules.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "cfg-dup-platform",
         &[
             (
@@ -6647,7 +6732,6 @@ fn cfg_duplicated_inline_modules_are_all_governed() {
         .because("platform must not expose infra in any cfg variant");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         violations.len(),
         1,
@@ -6666,7 +6750,7 @@ fn cfg_mixed_inline_and_file_form_siblings_are_both_governed() {
     // silently missing the file-form arm's — a real false negative (the resolver never even
     // opened platform.rs). Both must react now, matching the crate-wide scan's own cfg-blind,
     // observe-all policy for same-named children.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "cfg-mixed-inline-file",
         &[
             (
@@ -6688,7 +6772,6 @@ fn cfg_mixed_inline_and_file_form_siblings_are_both_governed() {
         .because("platform must not expose infra in any cfg variant, inline or file-form");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         violations.len(),
         1,
@@ -6706,7 +6789,7 @@ fn a_semantic_boundary_anchored_at_an_inline_module_with_an_unconditional_path_r
     // though hunyi's own crate-wide walker (`walk_subtree_modules`/`resolve_child_modules`)
     // resolved the identical layout without trouble. This asserts the single-module path now
     // agrees with the crate-wide one: the boundary must react on the real exposure, not error.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "inline-path-boundary",
         &[
             (
@@ -6727,7 +6810,6 @@ fn a_semantic_boundary_anchored_at_an_inline_module_with_an_unconditional_path_r
         .because("an inline module's own #[path] must not make its children unresolvable");
     let mut violations = Vec::new();
     let result = check_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
     result.expect("crate::thread::local_data must resolve, not hard-error as an unknown module");
     assert_eq!(
         violations.len(),
@@ -6746,7 +6828,7 @@ fn a_further_segment_beneath_a_flat_file_form_cfg_sibling_resolves_from_its_own_
     // unconditionally continued a further segment from the INLINE sibling's accumulated
     // directory, which only coincides with a `mod.rs`-style file-form sibling's own directory —
     // silently misresolving (or hard-erroring on) the real target for a flat one instead.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "cfg-mixed-flat-further-segment",
         &[
             (
@@ -6774,7 +6856,6 @@ fn a_further_segment_beneath_a_flat_file_form_cfg_sibling_resolves_from_its_own_
         );
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         violations.len(),
         1,
@@ -6793,7 +6874,7 @@ fn a_plain_child_of_a_path_remapped_module_resolves_from_the_remaps_own_director
     // CONVENTIONAL-child continuation still computed as the naive `<child_dir>/<seg>` regardless
     // of origin — silently resolving a plain child of a #[path]-remapped module at the wrong,
     // uncompiled location.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "path-remap-plain-child",
         &[
             (
@@ -6814,7 +6895,6 @@ fn a_plain_child_of_a_path_remapped_module_resolves_from_the_remaps_own_director
         .because("net::inner must not expose infra even though net is #[path]-remapped");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         violations.len(),
         1,
@@ -6833,7 +6913,7 @@ fn cfg_mixed_plain_and_path_remapped_file_form_siblings_are_both_governed() {
     // silently dropping whichever variant did not win the race. Matching
     // `resolve_child_modules`'s own crate-wide policy (which never breaks after one match),
     // EVERY non-inline declaration for a segment now produces its own branch.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "cfg-mixed-plain-and-remapped-file-form",
         &[
             (
@@ -6856,7 +6936,6 @@ fn cfg_mixed_plain_and_path_remapped_file_form_siblings_are_both_governed() {
         .because("platform must not expose infra in either the plain or #[path]-remapped arm");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         violations.len(),
         1,
@@ -6875,7 +6954,7 @@ fn a_cfg_mixed_single_module_violation_names_the_offending_sibling_not_the_first
     // `crate::infra` at all. Every single-module finding now pairs with the real file its own
     // item's branch was resolved from, so `.file` must name win_platform.rs, where the offending
     // seam is actually written.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "cfg-mixed-file-names-offending-branch",
         &[
             (
@@ -6898,7 +6977,6 @@ fn a_cfg_mixed_single_module_violation_names_the_offending_sibling_not_the_first
         .because("the reported file must name the sibling that actually exposes infra");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 1, "{violations:?}");
     let file = violations[0]
         .file
@@ -6922,7 +7000,7 @@ fn a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others() {
     // their own respective feature. A control fixture with the identical platform.rs but no cfg
     // split correctly reports 1 violation, confirming this is a cfg-split-specific regression,
     // not a general resolution gap.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "cfg-split-use-alias-collision",
         &[
             (
@@ -6949,7 +7027,6 @@ fn a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others() {
         .because("the unix arm's own Handle alias must resolve to infra, not the windows arm's");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(
         violations.len(),
         1,
@@ -7098,7 +7175,7 @@ fn async_subtree_observes_both_arms_of_a_two_inline_sibling_cfg_split_anchor() {
 
 #[test]
 fn a_visibility_violation_carries_its_module_file() {
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "vis",
         &[
             ("lib.rs", "pub mod internal;\n"),
@@ -7111,7 +7188,6 @@ fn a_visibility_violation_carries_its_module_file() {
         .because("internal exposes no pub");
     let mut violations = Vec::new();
     check_visibility_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert!(!violations.is_empty(), "a pub item in internal violates");
     let file = violations[0]
         .file
@@ -7122,7 +7198,7 @@ fn a_visibility_violation_carries_its_module_file() {
 
 #[test]
 fn a_trait_impl_locality_violation_carries_its_impl_site_file() {
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "locality",
         &[
             ("lib.rs", "pub mod plugins;\npub trait Command {}\n"),
@@ -7138,7 +7214,6 @@ fn a_trait_impl_locality_violation_carries_its_impl_site_file() {
         .because("Command impls live in crate::allowed");
     let mut violations = Vec::new();
     check_trait_impl_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 1, "the misplaced impl violates");
     let file = violations[0].file.as_deref().expect("the impl site's file");
     assert!(file.ends_with("plugins.rs"), "got {file}");
@@ -7151,7 +7226,7 @@ fn a_trait_impl_locality_violation_carries_its_impl_site_file() {
 
 #[test]
 fn a_trait_impl_in_a_nested_module_resolves_to_mod_rs() {
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "locality-nested",
         &[
             ("lib.rs", "pub mod plugins;\npub trait Command {}\n"),
@@ -7167,7 +7242,6 @@ fn a_trait_impl_in_a_nested_module_resolves_to_mod_rs() {
         .because("Command impls live in crate::allowed");
     let mut violations = Vec::new();
     check_trait_impl_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     let file = violations[0].file.as_deref().expect("the impl site's file");
     assert!(file.ends_with("plugins/mod.rs"), "got {file}");
 }
@@ -7177,7 +7251,7 @@ fn forbidden_marker_impl_and_derive_each_name_their_own_module_file() {
     // A forbidden `impl` sits in internal.rs; a forbidden `#[derive]` sits on a type in
     // models.rs. Each finding must name its OWN module's file — the derive names the
     // defining type's file (models.rs), never the impl site's (internal.rs).
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "marker",
         &[
             (
@@ -7197,7 +7271,6 @@ fn forbidden_marker_impl_and_derive_each_name_their_own_module_file() {
         .because("nothing may acquire Secret");
     let mut violations = Vec::new();
     check_forbidden_marker_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 2, "one impl finding + one derive finding");
     let impl_v = violations
         .iter()
@@ -7221,7 +7294,7 @@ fn forbidden_marker_impl_and_derive_each_name_their_own_module_file() {
 
 #[test]
 fn a_dyn_trait_violation_carries_its_module_file() {
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "dyn",
         &[
             ("lib.rs", "pub mod api;\npub trait Port {}\n"),
@@ -7237,7 +7310,6 @@ fn a_dyn_trait_violation_carries_its_module_file() {
         .because("the api seam is statically dispatched");
     let mut violations = Vec::new();
     check_dyn_trait_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert!(!violations.is_empty(), "the exposed dyn violates");
     let file = violations[0]
         .file
@@ -7248,7 +7320,7 @@ fn a_dyn_trait_violation_carries_its_module_file() {
 
 #[test]
 fn an_impl_trait_violation_carries_its_module_file() {
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "impltrait",
         &[
             ("lib.rs", "pub mod api;\n"),
@@ -7264,7 +7336,6 @@ fn an_impl_trait_violation_carries_its_module_file() {
         .because("the api seam returns no existential");
     let mut violations = Vec::new();
     check_impl_trait_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert!(!violations.is_empty(), "the returned impl Trait violates");
     let file = violations[0]
         .file
@@ -7275,7 +7346,7 @@ fn an_impl_trait_violation_carries_its_module_file() {
 
 #[test]
 fn an_async_exposure_violation_carries_its_module_file() {
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "async",
         &[
             ("lib.rs", "pub mod api;\n"),
@@ -7288,7 +7359,6 @@ fn an_async_exposure_violation_carries_its_module_file() {
         .because("the api seam exposes no async fn");
     let mut violations = Vec::new();
     check_async_exposure_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert!(!violations.is_empty(), "the async fn violates");
     let file = violations[0]
         .file
@@ -7302,7 +7372,7 @@ fn a_facade_chain_reexport_reports_the_governed_module_file_not_the_facades() {
     // The exposing seam (`pub use crate::facade::Db;`) is in domain.rs; the type is defined in
     // infra.rs and hopped through facade.rs. The reported file is the seam's module
     // (domain.rs) — the actionable one — never the type's or the intermediate facade's file.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "facade",
         &[
             (
@@ -7320,7 +7390,6 @@ fn a_facade_chain_reexport_reports_the_governed_module_file_not_the_facades() {
         .because("domain must not re-export infra");
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(violations.len(), 1, "the facade-chain re-export violates");
     let file = violations[0]
         .file
@@ -7395,7 +7464,7 @@ fn path_remapped_semantic_module_is_governed_at_its_target_not_the_orphan() {
     // same-named conventional orphan `domain.rs` — which rustc does not compile — is never
     // governed, so its `orphan()` exposure is neither the source of a violation nor masks the real
     // one. Previously this was a constitution error (the module skipped) — a false negative.
-    let (metadata, dir) = fixture_metadata(
+    let (metadata, _fixture) = fixture_metadata(
         "semantic-path-remap",
         &[
             (
@@ -7424,7 +7493,6 @@ fn path_remapped_semantic_module_is_governed_at_its_target_not_the_orphan() {
         .first()
         .and_then(|v| v.file.as_deref())
         .map(str::to_string);
-    let _ = std::fs::remove_dir_all(&dir);
 
     assert_eq!(violations.len(), 1, "weird.rs's exposure of infra reacts");
     let file = file.expect("a governed-module file");

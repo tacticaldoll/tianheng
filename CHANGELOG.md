@@ -12,6 +12,56 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-07-22
+
+### Fixed
+- 渾儀's forbidden-marker self-type resolver (`resolve_self_type`) now routes through the crate's
+  own hop-capped alias/re-export fixpoint instead of a second, hand-rolled loop guarded only by an
+  exact-repeat check — closing a real unbounded-loop gap (a divergent, non-cycling alias rewrite
+  chain the exact-repeat guard alone cannot catch) and, as a side effect, an alias-resolution false
+  negative (a member reached through an aliased *prefix*, not just an exact alias key, now lands).
+- 圭表 now reacts (a constitution error) when a plain `mod x;` resolves to BOTH `x.rs` and
+  `x/mod.rs` at once — a genuine `rustc` compile error (E0761) it previously accepted silently as
+  two separate sources, dual-governing one module path. Matches 漏刻's own probe scanner, which
+  already reacted on this exact shape.
+- 渾儀's single-module-anchored resolver (`descend`) now tolerates a `#[cfg]`-gated `mod x;` with
+  no backing file, matching its own crate-wide walker's (`resolve_child_modules`) existing policy —
+  the two previously disagreed, so a boundary anchored directly at a `#[cfg]`-gated module hard-
+  failed even when a mutually-exclusive per-platform sibling (e.g. an inline arm) legitimately
+  resolved it.
+- 漏刻's CI probe-coverage scanner now canonicalizes its module-cycle dedup guard (via a new,
+  additive `xingbiao` dependency gated behind the non-default `audit` feature — never reaches the
+  production hot path), matching 圭表/渾儀's own guards. Previously deduped on the literal path
+  only, so a symlinked directory or circular `#[path]` chain reached via two distinct literal paths
+  to the same real file could make the scan misbehave instead of terminating cleanly.
+- 漏刻's CI probe-coverage scanner no longer tolerates a missing conventional module file merely
+  because the item carries ANY `#[cfg]`/`#[cfg_attr]` attribute. Verified against a real `rustc`
+  build: unlike a bare `#[cfg(pred)]` (which genuinely removes the item when `pred` is false),
+  `#[cfg_attr(pred, …)]` never removes the item — only conditionally applies its wrapped
+  attribute — so a `#[cfg_attr(unix, allow(dead_code))] mod x;` with no backing file is a real,
+  unconditional compile error (E0583) that was previously silently skipped by the audit.
+- 圭表 and 渾儀 now tolerate a missing unconditional `#[path]` target when the item also carries a
+  co-occurring bare `#[cfg(pred)]` — a standard per-platform shim (`#[cfg(windows)] #[path =
+  "windows_impl.rs"] mod imp;`) that previously hard-failed on any platform whose target file
+  wasn't committed, even though rustc itself strips the whole item, `#[path]` included, before
+  ever resolving it when `pred` is false (verified against a real build).
+- 圭表 now reacts (a constitution error), rather than silently dropping the module from
+  `reachable`, when a plain `mod x;` with no backing file carries no `#[cfg]` at all — closing a
+  longstanding cross-dimension coverage gap (渾儀 already hard-erred on the identical shape). A
+  `#[cfg]`-gated missing file is still tolerated, matching 渾儀. A boundary anchored directly at a
+  module whose sole declaration was `#[cfg]`-tolerated away now reacts as an unknown module
+  (never a vacuous clean pass), matching 渾儀's own resolver's identical precedent — unless an
+  inline sibling arm of the same name exists, in which case the self-describing inline-target
+  error still applies (never misreported as a generic "unknown module, check the path" error).
+- 圭表's and 漏刻's independent `#[path]`-string decoders now handle backslash-newline line
+  continuation (`"a\` + newline + `b"` decoding to `"ab"`), matching `syn` (used by 渾儀) and real
+  `rustc` behavior. Previously 圭表 silently dropped such a remapped module from `reachable` with
+  no error, and 漏刻 fell back to (or hard-errored on) the conventional location instead of
+  following the real target.
+
+### Changed
+- Internal refactor: modularized crate internals across `xuanji`, `xingbiao`, `guibiao`, `hunyi`, `louke`, and the `tianheng` runner's projection layer (deduplicated JSON/text boundary-projection rendering) — no public API, JSON wire format, or self-governance boundary changed.
+
 ## [0.2.2] - 2026-07-22
 
 ### Fixed
@@ -349,7 +399,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.10...v0.2.0

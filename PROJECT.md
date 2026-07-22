@@ -134,7 +134,9 @@ selects governance by depending on the dimensions they want:
   declared seam's `only_origins` allowlist), in two faces — the prod probe
   (`assert_boundary!`, fail-closed, a structured event by default, panic opt-in) and the
   `audit_probe_coverage` CI face, composed into `tianheng check`. Ships into the production
-  binary; hot path is std-only, depends on 璇璣 only. (Design gate resolved — see Decisions.)
+  binary; hot path is std-only, depends on 璇璣 only — 星表 is an additive, `audit`-feature-gated
+  exception that never reaches the production hot path (0.2.3). (Design gate resolved — see
+  Decisions.)
 
 **The observatory vocabulary (manifested in governance).** The three observation
 dimensions — 圭表 (static), 渾儀 (semantic), 漏刻 (runtime) — are the **三儀** (the three

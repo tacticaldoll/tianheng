@@ -12,17 +12,11 @@ use std::path::{Path, PathBuf};
 
 /// Every `(file, module path)` that belongs to the governed `module` (it *is* `module`
 /// or sits beneath it) **and** is reachable in the crate's module graph (see
-/// [`reachable_modules`]). An undeclared orphan file is not a governed source file even
-/// when its path would map under the module, because Rust never compiles it — so its
-/// imports must not be observed. Operates on a precomputed file list so the crate's
-/// source is scanned once per boundary. `remapped` is [`reachable_modules`]'s third return
-/// value — every `(target file, logical module path)` pair reached through an unconditional
-/// `#[path]` — added here alongside the structurally-derived files, since a remapped file's own
-/// on-disk path rarely coincides with its logical module path. `remap_shadowed` is its fourth:
-/// the module paths where a same-named conventional file really is an orphan (the `#[path]` is
-/// the ONLY file-form source for that name — no plain-file sibling under a different `#[cfg]`
-/// arm), so a structural file matching one of THOSE paths is excluded; membership in `remapped`
-/// alone is not enough, since a legitimate plain-file sibling can share a path with a remap.
+/// [`reachable_modules`]).
+///
+/// Excludes undeclared orphan files, inline-only shadows, and remap-shadowed paths because
+/// rustc never compiles them. Operates over precomputed file sets and deduplicates structural
+/// and remapped file targets.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn governed_files(
     src_dir: &Path,
@@ -224,9 +218,7 @@ pub(crate) fn reachable_modules(
     if let Some(root_files) = by_module.get("crate") {
         let mut root_ancestors = HashSet::new();
         for f in root_files {
-            if let Ok(canon) = std::fs::canonicalize(f) {
-                root_ancestors.insert(canon);
-            }
+            root_ancestors.insert(xingbiao::canonicalize_or_fail(f)?);
         }
         sources.insert(
             "crate".to_string(),
@@ -284,7 +276,7 @@ pub(crate) fn reachable_modules(
         // variant's imports — a false negative this design avoids.
         let mut child_direct_paths: std::collections::BTreeMap<
             String,
-            Vec<(PathBuf, PathBuf, HashSet<PathBuf>)>,
+            Vec<(PathBuf, PathBuf, HashSet<PathBuf>, bool)>,
         > = Default::default();
         // Every `child_base` (NOT `path_base` — see the `ScanSource` doc above) a PLAIN
         // (`#[path]`-free) declaration for a name was seen under, each paired with the DECLARING
@@ -293,7 +285,7 @@ pub(crate) fn reachable_modules(
         // never leak into a sibling arm's plain child.
         let mut child_plain_bases: std::collections::BTreeMap<
             String,
-            Vec<(PathBuf, HashSet<PathBuf>)>,
+            Vec<(PathBuf, HashSet<PathBuf>, bool)>,
         > = Default::default();
         for source in &scan_sources {
             let (file, text, cleaned, positions, range, path_base, child_base, source_ancestors) =
@@ -366,10 +358,11 @@ pub(crate) fn reachable_modules(
                     // `#[cfg]`-gated per-platform shim commonly pairs a plain file on one platform
                     // with a `#[path]`-relocated one on another), never mutually exclusive.
                     seen.1 = true;
-                    child_plain_bases
-                        .entry(declared.name)
-                        .or_default()
-                        .push((child_base.clone(), source_ancestors.clone()));
+                    child_plain_bases.entry(declared.name).or_default().push((
+                        child_base.clone(),
+                        source_ancestors.clone(),
+                        declared.has_bare_cfg,
+                    ));
                     continue;
                 };
                 let Some(&orig_eq) = positions.get(eq_cleaned) else {
@@ -384,6 +377,7 @@ pub(crate) fn reachable_modules(
                         PathBuf::from(rel),
                         path_base.clone(),
                         source_ancestors.clone(),
+                        declared.has_bare_cfg,
                     ));
                 }
             }
@@ -437,15 +431,16 @@ pub(crate) fn reachable_modules(
                         ));
                 }
             }
-            // `inline_only` is narrower than "inline was declared": it drives ONLY the
-            // orphan-shadow exclusion for a STRAY same-named conventional file that no
-            // declaration brings into scope. That question is live only when no plain file is
-            // ALSO declared (a declared plain file is real, not stray) — independent of whether a
-            // `#[path]` sibling also exists, since a `#[path]` target relocates to an entirely
-            // different file and never competes with `x`'s own conventional path.
-            if seen_inline && !seen_plain_file {
-                inline_only.insert(child_path.clone());
-            }
+            // Whether at least one plain declaration for this child actually resolved to a real
+            // file — NOT merely whether one was declared: a bare-`#[cfg]`-tolerated declaration
+            // (see below) can now be declared yet resolve to nothing, and that must not count as
+            // "a real plain file exists" for the `inline_only` decision just below (a false
+            // negative found on this session's own round-2 adversarial review — an inline arm
+            // paired with an entirely-tolerated-away plain arm was wrongly excluded from
+            // `inline_only`, misreporting the self-describing `inline_module_target_error` as a
+            // generic `unknown_module_error`). Defaults to `false` (matching the original
+            // `!seen_plain_file` semantics) when no plain declaration exists at all.
+            let mut plain_file_resolved = false;
             if seen_plain_file {
                 // Resolved by a live probe from EACH declaring source's own directory —
                 // uniformly for every plain child, whether its module sits at its own
@@ -466,19 +461,49 @@ pub(crate) fn reachable_modules(
                 // location is a true orphan (see `remap_shadowed` below), exactly like the
                 // existing #[path]-target exclusion, generalized to a probed plain child.
                 let mut any_structural_match = false;
-                for (base, source_ancestors) in
+                for (base, source_ancestors, has_bare_cfg) in
                     child_plain_bases.remove(&child).into_iter().flatten()
                 {
-                    for candidate in [
-                        base.join(format!("{child}.rs")),
-                        base.join(&child).join("mod.rs"),
-                    ] {
+                    let flat = base.join(format!("{child}.rs"));
+                    let nested = base.join(&child).join("mod.rs");
+                    // A plain `mod {child};` backed by BOTH conventional file forms at once is a
+                    // genuine rustc compile error (E0761, "found at both … and …") independent of
+                    // any `#[cfg]` — unlike a missing file, this ambiguity needs no `#[cfg]`
+                    // awareness to detect: two real files at one source's own base is never
+                    // legitimate, cfg-gated or not. 漏刻's own `resolve_external_module` already
+                    // hard-errors on this exact shape; mirrored here rather than silently
+                    // accepting both as separate sources.
+                    if flat.is_file() && nested.is_file() {
+                        return Err(format!(
+                            "module '{child_path}' resolves to both '{}' and '{}' — a plain \
+                             `mod {child}` must be backed by exactly one file",
+                            flat.display(),
+                            nested.display()
+                        ));
+                    }
+                    if !flat.is_file() && !nested.is_file() {
+                        // A BARE `#[cfg(pred)]` on this declaration means the whole item is
+                        // removed when `pred` is false — a missing file is then expected, not
+                        // broken (matching 渾儀's `has_cfg_attr` tolerance for the identical
+                        // shape). An unconditional plain `mod {child};` with no backing file is a
+                        // real, unrecoverable compile error: fail loud rather than silently drop
+                        // the module from `reachable` (the false negative this closes — BACKLOG's
+                        // longstanding "圭表 gaining #[cfg] awareness... closes this for free").
+                        if has_bare_cfg {
+                            continue;
+                        }
+                        return Err(format!(
+                            "module '{child_path}' is declared (`mod {child};`) but its source \
+                             file could not be located (expected '{}' or '{}')",
+                            flat.display(),
+                            nested.display()
+                        ));
+                    }
+                    for candidate in [flat, nested] {
                         if !candidate.is_file() {
                             continue;
                         }
-                        let Ok(canon) = std::fs::canonicalize(&candidate) else {
-                            continue;
-                        };
+                        let canon = xingbiao::canonicalize_or_fail(&candidate)?;
                         if !already_sourced.insert(canon.clone()) {
                             continue;
                         }
@@ -532,6 +557,7 @@ pub(crate) fn reachable_modules(
                             .push(ScanSource::File(candidate, own_dir, new_child_base, anc));
                     }
                 }
+                plain_file_resolved = !already_sourced.is_empty();
                 if !already_sourced.is_empty() && !any_structural_match {
                     // Every real source for this child was reached only through a divergent
                     // (remap-derived) path, so any OTHER file that merely happens to sit at the
@@ -541,6 +567,16 @@ pub(crate) fn reachable_modules(
                     remap_shadowed.insert(child_path.clone());
                 }
             }
+            // `inline_only` is narrower than "inline was declared": it drives ONLY the
+            // orphan-shadow exclusion for a STRAY same-named conventional file that no
+            // declaration brings into scope. That question is live only when no plain file
+            // ACTUALLY RESOLVED (a merely-declared-but-tolerated-away plain arm is not real) —
+            // independent of whether a `#[path]` sibling also exists, since a `#[path]` target
+            // relocates to an entirely different file and never competes with `x`'s own
+            // conventional path.
+            if seen_inline && !plain_file_resolved {
+                inline_only.insert(child_path.clone());
+            }
             if let Some(targets) = child_direct_paths.remove(&child) {
                 // Every unconditional `#[path]` target is followed cfg-blind (see the
                 // `child_direct_paths` doc above) and unioned alongside any plain-file sibling
@@ -548,17 +584,26 @@ pub(crate) fn reachable_modules(
                 if !seen_plain_file {
                     remap_shadowed.insert(child_path.clone());
                 }
-                for (rel, base, target_ancestors) in targets {
+                for (rel, base, target_ancestors, has_bare_cfg) in targets {
                     let target = base.join(&rel);
                     if !target.is_file() {
+                        // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
+                        // (e.g. `#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) removes
+                        // the whole item, `#[path]` included, when `pred` is false — rustc never
+                        // attempts to resolve the target on such a build (verified against a real
+                        // build: this compiles cleanly with the target entirely absent). Tolerate
+                        // exactly like the plain-missing-file case below; an unconditional item
+                        // with no accompanying `#[cfg]` still fails loud.
+                        if has_bare_cfg {
+                            continue;
+                        }
                         return Err(format!(
                             "module '{child_path}' is remapped by #[path = \"{}\"] to a file that does not exist: '{}'",
                             rel.display(),
                             target.display()
                         ));
                     }
-                    let canon = std::fs::canonicalize(&target)
-                        .map_err(|err| format!("cannot resolve '{}': {err}", target.display()))?;
+                    let canon = xingbiao::canonicalize_or_fail(&target)?;
                     // Checked against THIS target's own declaring source's ancestor set
                     // (`target_ancestors`), never a set merged across a mutually-exclusive
                     // `#[cfg]` sibling's own target — two such targets are never simultaneously
@@ -613,6 +658,11 @@ struct DeclaredModule {
     is_inline: bool,
     body: Option<(usize, usize)>,
     direct_path_eq: Option<usize>,
+    /// Whether a BARE `#[cfg(...)]` (never `cfg_attr`) precedes this declaration — see
+    /// [`has_bare_cfg_attr_before_item`]. Only meaningful for a non-inline (file-form) declaration
+    /// with no resolvable file: it is the "might legitimately be absent on this build" signal, the
+    /// same one hunyi's `has_cfg_attr` checks.
+    has_bare_cfg: bool,
 }
 
 /// The test-only `declared_modules_with_kind` generalized to scan `cleaned[range]` instead of a
@@ -680,29 +730,35 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
                                 is_inline: true,
                                 body: Some((k + 1, close.saturating_sub(1))),
                                 direct_path_eq,
+                                has_bare_cfg: false,
                             });
                             i = close;
                             continue;
                         }
-                        Some(b';') => match path_attr_before_item(bytes, i) {
-                            PathAttrKind::Excluded => {}
-                            PathAttrKind::None => {
-                                declared.push(DeclaredModule {
-                                    name: canonical_segment(ident).to_string(),
-                                    is_inline: false,
-                                    body: None,
-                                    direct_path_eq: None,
-                                });
+                        Some(b';') => {
+                            let has_bare_cfg = has_bare_cfg_attr_before_item(bytes, i);
+                            match path_attr_before_item(bytes, i) {
+                                PathAttrKind::Excluded => {}
+                                PathAttrKind::None => {
+                                    declared.push(DeclaredModule {
+                                        name: canonical_segment(ident).to_string(),
+                                        is_inline: false,
+                                        body: None,
+                                        direct_path_eq: None,
+                                        has_bare_cfg,
+                                    });
+                                }
+                                PathAttrKind::Direct(eq) => {
+                                    declared.push(DeclaredModule {
+                                        name: canonical_segment(ident).to_string(),
+                                        is_inline: false,
+                                        body: None,
+                                        direct_path_eq: Some(eq),
+                                        has_bare_cfg,
+                                    });
+                                }
                             }
-                            PathAttrKind::Direct(eq) => {
-                                declared.push(DeclaredModule {
-                                    name: canonical_segment(ident).to_string(),
-                                    is_inline: false,
-                                    body: None,
-                                    direct_path_eq: Some(eq),
-                                });
-                            }
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -837,6 +893,58 @@ fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
     } else {
         PathAttrKind::None
     }
+}
+
+/// Whether a BARE `#[cfg(...)]` attribute (never `cfg_attr`) is among the attribute prefix
+/// immediately preceding an item — the same "might legitimately be absent on this build" signal
+/// hunyi's `has_cfg_attr` checks via `syn` (`crate::syn_util::has_cfg_attr`), hand-rolled here for
+/// this crate's syn-free scanner. Deliberately narrow: this detects mere PRESENCE of the `cfg`
+/// identifier, never evaluates a predicate — the same syntactic-identifier-only shape already used
+/// above to detect `path`/`cfg_attr`, not a new capability tier or a step toward general attribute
+/// evaluation. `cfg_attr` is deliberately excluded (verified against a real `rustc` build): unlike
+/// a bare `#[cfg(pred)]`, which removes the whole item when `pred` is false, `#[cfg_attr(pred, …)]`
+/// never removes the item — it only conditionally applies its wrapped attribute — so it must never
+/// grant this tolerance (`#[cfg_attr(unix, allow(dead_code))] mod x;` with no backing file is a
+/// genuine compile error, E0583, on every platform).
+fn has_bare_cfg_attr_before_item(bytes: &[u8], mod_index: usize) -> bool {
+    let mut start = 0;
+    for i in (0..mod_index).rev() {
+        if matches!(bytes[i], b';' | b'{' | b'}') {
+            start = i + 1;
+            break;
+        }
+    }
+    attr_prefix_has_bare_cfg(&bytes[start..mod_index])
+}
+
+fn attr_prefix_has_bare_cfg(bytes: &[u8]) -> bool {
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'#' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if bytes.get(i) != Some(&b'[') {
+            continue;
+        }
+        i += 1;
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        // The byte immediately after `cfg` must not continue the identifier (excludes `cfg_attr`,
+        // whose next byte is `_`).
+        if bytes[i..].starts_with(b"cfg")
+            && bytes.get(i + 3).is_none_or(|byte| !is_ident_byte(*byte))
+        {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
 
 /// Whether a `cfg_attr(…)` attribute — `bytes` positioned just after the `cfg_attr` identifier —
@@ -1644,6 +1752,61 @@ mod tests {
         assert!(
             !governed.iter().any(|(file, _)| file == &orphan),
             "the conventional orphan must not be governed in the remap's place: {governed:?}"
+        );
+    }
+
+    #[test]
+    fn a_path_remap_value_with_a_backslash_newline_continuation_is_followed() {
+        // A backslash immediately followed by a newline is a valid Rust string-literal line
+        // continuation: it and the following line's leading whitespace are stripped, joining the
+        // two fragments — verified against a real `rustc` build (`"moved\` + newline + indentation
+        // + `b.rs"` decodes to `"movedb.rs"`, and rustc follows it). `decode_str_escapes` must
+        // decode this the same way `syn` (used by 渾儀) does, or this crate silently drops the
+        // remapped module from `reachable` instead of following it — a coverage gap found on a
+        // v0.2.0..v0.2.1 cross-dimension sweep.
+        let dir = std::env::temp_dir().join(format!(
+            "guibiao-path-remap-line-continuation-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).expect("create temp src");
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[path = \"moved\\\n    b.rs\"]\npub mod kernel;\n",
+        )
+        .expect("write lib.rs");
+        std::fs::write(src.join("movedb.rs"), "// the continuation-named target\n")
+            .expect("write movedb.rs");
+
+        let files = rust_files(&src).expect("list files");
+        let (reachable, inline_only, remapped, remap_shadowed) =
+            reachable_modules(&src, &files, None).expect("walk modules");
+        let governed = governed_files(
+            &src,
+            &files,
+            "crate::kernel",
+            &reachable,
+            &inline_only,
+            &remapped,
+            &remap_shadowed,
+            None,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // A weak `reachable.contains(..)` check alone would pass even if decoding silently
+        // failed: `child_kinds`/`reachable` gain an entry for a declared name regardless of
+        // whether its `#[path]` value ever decodes, so the real proof is that the DECODED
+        // TARGET FILE is what actually governs `crate::kernel` — never a same-named orphan, and
+        // never simply absent from `governed`.
+        assert_eq!(
+            governed.len(),
+            1,
+            "crate::kernel must be governed by exactly the continuation-decoded target: {governed:?}"
+        );
+        assert!(
+            governed[0].0.ends_with("movedb.rs"),
+            "the governing file must be the continuation-decoded target, not a stale orphan: {governed:?}"
         );
     }
 

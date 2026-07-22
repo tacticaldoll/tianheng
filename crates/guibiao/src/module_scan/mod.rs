@@ -17,7 +17,7 @@ mod symbol_scan;
 mod use_scan;
 
 pub(crate) use fs_walk::rust_files;
-pub(crate) use path_vocab::{canonical_module_path, path_within};
+pub(crate) use path_vocab::{canonical_module_path, package_name_to_import_ident, path_within};
 pub(crate) use reachability::{governed_files, reachable_modules};
 pub(crate) use symbol_scan::{InlineFinding, inline_symbol_findings};
 pub(crate) use use_scan::{

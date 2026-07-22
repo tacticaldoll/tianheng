@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::finding::RuntimeFact;
+use crate::registry::UNDECLARED_SEAM_REPAIR_HINT;
 use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation, ViolationId};
 
 mod scan;
@@ -140,7 +141,7 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
                         "every probe must reference a declared seam",
                         RuntimeFact::UndeclaredProbe { seam: seam.clone() }.into_finding(),
                     ),
-                    "an undeclared seam panics at runtime — declare the RuntimeBoundary or fix the probe's seam name".to_string(),
+                    format!("an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"),
                     Severity::Enforce,
                 ));
             }

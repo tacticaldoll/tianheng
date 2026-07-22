@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "guibiao"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "serde_json",
  "xingbiao",
@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "hunyi"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "serde_json",
  "syn",
@@ -29,8 +29,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "louke"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
+ "xingbiao",
  "xuanji",
 ]
 
@@ -113,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "tianheng"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "guibiao",
  "hunyi",
@@ -130,14 +131,14 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "xingbiao"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "xuanji"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "serde_json",
 ]

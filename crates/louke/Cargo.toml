@@ -9,7 +9,7 @@ documentation = "https://docs.rs/louke"
 readme = "README.md"
 # 漏刻 (Lòukè) — the runtime dimension. A coined / narrative name (like 圭表, 渾儀, 璇璣):
 # the clepsydra, the instrument of flow/time. Meaning lives here in the SSOT.
-description = "漏刻 (Louke) — the runtime observation dimension of Tianheng: declare which concrete-type origins may cross a runtime seam, probe live dyn objects in production fail-closed, react as a structured event (panic opt-in), and audit probe coverage at CI time. Ships into the production binary; hot path is std-only, depends on 璇璣 only."
+description = "漏刻 (Louke) — the runtime observation dimension of Tianheng: declare which concrete-type origins may cross a runtime seam, probe live dyn objects in production fail-closed, react as a structured event (panic opt-in), and audit probe coverage at CI time. Ships into the production binary; hot path is std-only, depends on 璇璣 only (星表 is an additive, audit-feature-gated exception that never reaches the production hot path)."
 keywords = ["governance", "architecture", "boundary", "runtime", "ci"]
 categories = ["development-tools"]
 
@@ -23,7 +23,12 @@ all-features = true
 # The CI face (`audit_probe_coverage` + the hand-rolled source scanner). OFF by default so a
 # production binary depending on louke for the runtime hot path compiles zero scanner code.
 # The `tianheng` shell enables it to run the audit inside `check`. (See PROJECT.md.)
-audit = []
+audit = ["dep:xingbiao"]
 
 [dependencies]
 xuanji = { workspace = true }
+# CI-only (pulled in only by the `audit` feature): the shared path-identity canonicalize/cycle-
+# guard primitives 圭表 and 渾儀 already route their own module-graph cycle guards through, so
+# 漏刻's probe scanner stops carrying a third, independently hand-rolled (and previously
+# non-canonicalizing) copy of the identical guard. Never reaches the production hot path.
+xingbiao = { workspace = true, optional = true }

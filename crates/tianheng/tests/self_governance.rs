@@ -128,14 +128,18 @@ fn tianheng_constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("louke")
-                .restrict_dependencies_to(["xuanji"])
+                .restrict_dependencies_to(["xuanji", "xingbiao"])
                 .because(
                     "漏刻 is the runtime dimension and ships into the user's production binary, \
-                     so it stays production-light: it depends on 璇璣 (the reaction model) only \
-                     — no syn, no static engine, no sibling dimension. 三儀 ⊥ 三儀: naming no \
-                     sibling, it cannot depend on the 圭表/渾儀 dimensions, and it reacts in prod \
-                     independently of the 天衡 shell (serde_json reaches it only transitively via \
-                     璇璣, cold-path only)",
+                     so its hot path stays production-light: it depends on 璇璣 (the reaction \
+                     model) only — no syn, no static engine, no sibling dimension. 星表 is an \
+                     additive, `audit`-feature-gated exception (never reaches the production hot \
+                     path): the CI-only probe scanner's own cycle guard routes through 星表's \
+                     shared canonicalize/cycle-guard primitives, the same ones 圭表/渾儀 already \
+                     use, rather than carrying a third independently hand-rolled copy. 三儀 ⊥ 三儀: \
+                     naming no sibling, it cannot depend on the 圭表/渾儀 dimensions, and it reacts \
+                     in prod independently of the 天衡 shell (serde_json reaches it only \
+                     transitively via 璇璣, cold-path only)",
                 ),
         )
         .boundary(
@@ -169,6 +173,64 @@ fn tianheng_constitution() -> Constitution {
                      above it, never the model itself. The clock axis reacts via 圭表 \
                      (must-not-call-inline `std::time::…::now`), the async axis via 渾儀 \
                      (must-not-expose an async public fn)",
+                ),
+        )
+        // 圭表's own inline-symbol-path confinement, reused against 渾儀 and 圭表's own module-graph
+        // walkers (not just 璇璣): the 0.2.2 lesson found the same canonicalize-before-cycle-guard
+        // step hand-rolled at multiple call sites with disagreeing failure policies (three in one
+        // `reachability.rs` file alone). Both walkers now route through the shared,
+        // fail-loud `xingbiao::canonicalize_or_fail`/`try_visit`; these boundaries confine the raw
+        // call so a future reintroduced inline `std::fs::…::canonicalize` fails CI instead of
+        // waiting for the next adversarial round to notice.
+        .boundary(
+            ModuleBoundary::in_crate("hunyi")
+                .module("crate::module_resolve")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "path canonicalization for this resolver's own cycle/dedup guard must go \
+                     through the shared, fail-loud `xingbiao::try_visit`, never be re-hand-rolled \
+                     inline here — the 0.2.2 lesson (a canonicalize-failure policy hand-rolled per \
+                     call site drifted to disagreeing behavior across this crate)",
+                ),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("guibiao")
+                .module("crate::module_scan::reachability")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "path canonicalization for this walker's own cycle/dedup guard must go \
+                     through the shared, fail-loud `xingbiao::canonicalize_or_fail`/`try_visit`, \
+                     never be re-hand-rolled inline here — the 0.2.2 lesson (this exact file once \
+                     carried three disagreeing canonicalize-failure policies at once)",
+                ),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("hunyi")
+                .module("crate::scan")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "path canonicalization for this crate-wide walker's own cycle/dedup guard \
+                     must go through the shared, fail-loud `xingbiao::canonicalize_or_fail`, \
+                     never be re-hand-rolled inline here — a sibling instance of the 0.2.2 lesson \
+                     found in this same crate's `module_resolve` (a second, independently \
+                     hand-rolled wrapper here once carried its own disagreeing error-message \
+                     policy)",
+                ),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("louke")
+                .module("crate::audit::scan")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "this CI-only probe scanner's module-cycle guard must go through the shared, \
+                     fail-loud `xingbiao::try_visit`, never be re-hand-rolled inline here — closes \
+                     the same class of drift 圭表/渾儀's own guards were confined against, now that \
+                     漏刻's self-law permits the additive, `audit`-feature-gated `xingbiao` \
+                     dependency this routes through",
                 ),
         )
 }

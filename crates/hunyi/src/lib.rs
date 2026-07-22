@@ -1,33 +1,13 @@
 //! 渾儀 (Húnyí) — the **semantic** observation dimension of Tianheng.
 //!
-//! Where the gnomon 圭表 observes *imports* (does `domain` import `infra`?), 渾儀
-//! observes *meaning* via the AST (`syn`): does a module's **public API expose** a
-//! forbidden type? That is the complement of import-governance — a type imported for
-//! internal use is fine; a type named in a `pub` signature is a leak, and one named via a
-//! fully-qualified path with no `use` is invisible to a token scanner but caught here.
+//! Where the gnomon 圭表 observes *imports*, 渾儀 observes *meaning* via the AST (`syn`):
+//! does a module's **public API expose** a forbidden type? That is the complement of
+//! import-governance — a type imported for internal use is fine, but a type named in a `pub`
+//! signature or alias chain is observed.
 //!
 //! Declare a [`SemanticBoundary`] in Rust, [`check`] it against a Cargo workspace, and get
-//! an [`Outcome`] with the same exit-code contract (0/1/2) and reaction model as the static
-//! dimension — both express findings in the shared 璇璣 (`xuanji`) crate. The heavy `syn`
-//! dependency is quarantined to this crate, never the core (`self_governance.rs`).
-//!
-//! **Observed surface and its honest bounds.** The exposed surface of a module anchor is
-//! its `pub` free functions (params/returns), `pub` struct/enum/union field types, `pub`
-//! type-alias targets, `pub` const/static types, `pub` trait method signatures and
-//! associated-type bounds (and supertraits), the generic bounds / `where`-clauses of those
-//! items, the `pub` methods of **inherent** `impl` blocks, and **named public re-exports**
-//! (a `pub use crate::infra::X;` republishes the forbidden type on the module's surface — observed
-//! by default; a glob re-export reacts when its root is in/under the forbidden set). A **trait**
-//! `impl` block's impl-site-authored positions are out of scope by default but observable via the opt-in
-//! `.including_trait_impls()` depth (`semantic-trait-impl-exposure`): the trait ref's generic
-//! args, the `Self` type, associated-type bindings, the impl's own generics/`where`-clause, and
-//! the method **return** type as written (its params/receiver stay trait-dictated). Out of scope
-//! (stated bounds, not silent passes): a type reachable only through a **glob** import or a
-//! **macro**; and a type knowable only through **inference** (a return-position `impl Trait` that
-//! *hides* a concrete type, or a **complex-target or generic** type alias — `type X = Vec<Db>` /
-//! `type X<T> = …`). A **resolvable single-path** `type X = a::b::C;` alias chain, by contrast, *is*
-//! followed to its defining path and reacts (v0.1.4). Within the resolved scope there is no false
-//! negative: a forbidden type that *is* resolvable always reacts.
+//! an [`Outcome`]. The heavy `syn` parser is quarantined to this crate, keeping the functional
+//! core dependency-light (`self_governance.rs`).
 //!
 //! Govern by reaction, not instruction.
 //!
