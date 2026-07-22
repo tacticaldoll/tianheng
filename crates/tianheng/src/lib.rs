@@ -225,7 +225,7 @@ impl From<GnomonConstitution> for Constitution {
 ///
 /// # Compatibility contract
 ///
-/// The wildcard prelude has two usage tiers with the same 0.2.x compatibility status:
+/// The wildcard prelude has two usage tiers:
 ///
 /// - **Declaration and execution:** `Constitution`, the terminal boundary and composed-profile
 ///   types, their selector enums, [`Severity`], and [`run`]. This is the normal adopter path.

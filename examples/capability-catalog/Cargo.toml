@@ -1,4 +1,4 @@
-# Contract-coverage catalog for public 0.2.x boundary families that do not belong in a focused
+# Contract-coverage catalog for published boundary families that do not belong in a focused
 # teaching example. This intentionally violating crate is an isolated workspace; the examples gate
 # patches the honestly declared crates.io dependency to Tianheng's local source.
 [package]

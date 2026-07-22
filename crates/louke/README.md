@@ -54,12 +54,16 @@ predicates.
 
 ## Adoption & status
 
-**Experimental — pre-1.0.** The current `0.2.x` line is patch-compatible; a breaking public change
-must earn a new minor. The runtime declaration/probe surface remains guarded across patches.
+**Experimental — pre-1.0.** The 0.3.0 line intentionally replaces presentation-derived identity
+with `RuleKey` + `StructuredFactIdentity`. The runtime declaration/probe surface remains guarded
+across patches, and event consumers can inspect the shared structured `Violation` directly.
 
-漏刻 is usually reached **top-down**, through the composed
+漏刻 can be adopted independently for runtime seam governance, though it is usually reached
+**top-down** through the composed
 [`tianheng`](https://crates.io/crates/tianheng) constitution — runtime origin governance is a
-*depth* you add once the static and semantic instruments are in place, not a standalone on-ramp.
+*depth* you add once the static and semantic instruments are in place. Its direct pattern is the
+explicit `install` / `set_sink` / `assert_boundary!` surface above; Tianheng adds composition, not
+a second runtime observation engine.
 The prod reaction is an **event by default** (`panic` is opt-in), so it never crashes production on
 a false positive. See the runtime mode of the `composed` example under the workspace `examples/`.
 

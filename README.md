@@ -13,10 +13,10 @@ and it does not instruct your agent. Developers and agents propose change; Tianh
 and runtime *reactions* to keep architectural shape from drifting.
 
 > **Status: experimental — pre-1.0.** Real adopters ended the deliberate `0.1.x` hold and opened the
-> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The current `0.2.x` line preserves
-> its published API and version-2 identity wire across patches; a breaking change must earn the next
-> minor. The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded
-> drop-in surface.
+> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The upcoming `0.3.0` deliberately
+> spends the next breaking window on semantic rule/fact identity and rejects numeric baselines.
+> The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded drop-in
+> surface.
 
 ## Why reaction, not instruction
 
@@ -132,18 +132,22 @@ your-binary check --manifest-path Cargo.toml \
 
 When a violation is fixed, gate mode reports its baseline entry as stale; regenerate the snapshot
 with `--write-baseline` to remove resolved entries. Rewriting preserves hand-added `owner` and
-`tracker` metadata for identities that still exist. New baselines are version 2: a violation's
-identity is `(target, rule, finding_key)`, while the human `finding`, `file`, `anchor`, reason, and
-severity do not churn it. Version-1 text baselines remain readable and match by their old exact
-`(target, rule, finding)` triple until the next write upgrades them. That write is the bounded,
-opt-in migration: if you still use version 1 and plan to change finding wording, run the existing
-`--write-baseline` command **before** the wording change when you need those suppressions or their
-`owner` / `tracker` annotations carried forward. Exact live text matches keep their metadata and
-gain structured keys; entries with no exact live match are stale snapshot state and are omitted.
-There is no separate migration command or automatic read-time rewrite, and continued version-1
-support has no time-based deprecation window.
+`tracker` metadata for identities that still exist. New baselines declare
+`format: "tianheng.baseline/structured-facts"`; identity is exactly governed `target` + semantic
+`rule_key` + structured `fact`. Human rule/finding wording, complete signature diagnostics, reason,
+severity, file, anchor, polarity, owner, and tracker do not re-key it.
 
-**CI / agent visibility.** `check --format json` is the machine contract; `check --format sarif`
+0.3.0 intentionally provides no numeric-baseline adapter. Before upgrading, preserve any desired
+`owner` / `tracker` annotations outside the old file. Then move or delete the unsupported baseline,
+run the same `--write-baseline` command to observe a fresh semantic snapshot, and restore the
+annotations onto the corresponding observed facts. Both `--baseline` and `--write-baseline` exit 2
+on an unsupported existing file; write mode never overwrites it.
+
+**CI / agent visibility.** Baseline, reaction JSON, and constitution JSON identify their semantics
+as `tianheng.baseline/structured-facts`, `tianheng.reaction/structured-facts`, and
+`tianheng.constitution/declared-boundaries`. A compatible new fact family does not create a global
+v3/v4; an incompatible fact-local identity change receives a new semantic fact shape.
+`check --format sarif`
 emits a vendor-neutral SARIF 2.1.0 document that GitHub code-scanning (and other tools) inline
 onto a PR. In every machine projection a violation's **`reason` is the repair direction** an agent
 fixes toward — the declared intent the boundary protects — *not* the `rule` label (the rule names
@@ -168,6 +172,10 @@ printf '%s\n' "$report" \
   | jq -r '.violations[] | "::error::\(.reason) (rule: \(.rule), found: \(.finding))"'
 exit "$status"   # 0 clean · 1 enforced violation · 2 constitution/scan error
 ```
+
+Each instrument also exposes the shared structured `Outcome` for direct Rust architecture tests.
+Tianheng is the sole built-in composer of the 三儀; 0.3.0 does not promise a plugin trait, runtime
+plugin loading, or a `tianheng::testing` macro layer.
 
 > The published `tianheng` binary is a *demo* bound to a sample constitution (it governs a
 > crate named `example-core`). Tianheng is consumed as a **library**: declare your own
@@ -336,22 +344,19 @@ drift reacts), then tighten to `enforce`. Two axes — severity and baseline —
 the law before you land the fixes. See the runnable [`examples/`](examples/): 圭表 and 渾儀
 standalone, the composed all-three funnel, plus focused demos of `unsafe`-confinement and the
 `sans_io_pure` profile. The [`capability-catalog`](examples/capability-catalog/) is breadth-only
-contract coverage for otherwise-unowned 0.2.x families, not a starting tutorial. See the
+contract coverage for otherwise-unowned families, not a starting tutorial. See the
 [`examples` guide](examples/README.md) and [`COOKBOOK.md`](COOKBOOK.md) for common governance intents
 translated into boundaries.
 
 **What stays stable across the pre-1.0 line.**
 
-- **The wire contract is `xuanji`.** Every dimension reacts in one shared model, and its JSON — the
-  `--format json` report and the `Baseline` snapshot — is the versioned, machine-facing contract (a
-  `Baseline` *is* a JSON snapshot). Presentation changes — a coloured terminal render, the SARIF
-  projection — never change the verdict or the exit code.
-- **A violation's identity is `(target, rule, finding_key)`.** The key is a dimension-owned fact
-  code plus named observed values; the human `finding`, `file`, `anchor`, and `polarity` are
-  *presentation/metadata*, not identity. Relocating code, attaching an anchor, or improving finding
-  wording therefore does not turn a version-2 baselined violation new.
-- **The adopter-written builder does not break in `0.2.x`.** `Constitution`, the boundary DSL, and
-  `run` are the surface you write against; a breaking change must earn a new pre-1.0 minor.
+- **The wire contract is `xuanji`.** Every dimension reacts in one shared model. Tianheng-owned JSON
+  names semantics with stable format strings; compatible fact additions do not create global
+  numeric generations. Presentation changes never change the verdict or exit code.
+- **A violation's identity is target + `RuleKey` + `StructuredFactIdentity`.** Human rule/finding
+  wording, diagnostics, `file`, `anchor`, and `polarity` remain available outside identity.
+- **The adopter-written builder is the guarded surface.** `Constitution`, the boundary DSL, and
+  `run` are what adopters write; 0.3.0 spends a deliberate breaking window on reaction identity.
 
 ## Non-goals
 

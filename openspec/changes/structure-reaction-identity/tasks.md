@@ -51,9 +51,9 @@
 
 ## 8. Documentation and compatibility evidence (`docs` commit boundary)
 
-- [ ] 8.1 Update adopter documentation and changelog with the 0.3.0 break, semantic identity contract, annotation-preservation steps, and explicit absence of automatic migration.
-- [ ] 8.2 Update package/API documentation to distinguish standalone instruments, `tianheng` composition, structured Outcome inspection, and deferred testing/plugin conveniences.
-- [ ] 8.3 Check Pacta and other available reference consumers against local crates where feasible; record exactly which external consumers were checked and keep required CI independent of sibling repositories.
+- [x] 8.1 Update adopter documentation and changelog with the 0.3.0 break, semantic identity contract, annotation-preservation steps, and explicit absence of automatic migration.
+- [x] 8.2 Update package/API documentation to distinguish standalone instruments, `tianheng` composition, structured Outcome inspection, and deferred testing/plugin conveniences.
+- [x] 8.3 Check Pacta and other available reference consumers against local crates where feasible; record exactly which external consumers were checked and keep required CI independent of sibling repositories.
 
 ## 9. Apply-stage adversarial review and release gates
 

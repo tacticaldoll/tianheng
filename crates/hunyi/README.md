@@ -132,8 +132,9 @@ transitive effect-purity.
 
 ## Adoption & status
 
-**Experimental — pre-1.0.** The current `0.2.x` line is patch-compatible; a breaking public change
-must earn a new minor. The adopter-written boundary DSL remains the guarded surface.
+**Experimental — pre-1.0.** The 0.3.0 line intentionally replaces presentation-derived identity
+with `RuleKey` + `StructuredFactIdentity`. The adopter-written boundary DSL remains the guarded
+surface; callers may inspect the returned structured `Outcome` directly through this crate.
 
 Adopt 渾儀 on its own — it carries the quarantined `syn`, the one place the AST dependency lives —
 or graduate to the composed constitution through the

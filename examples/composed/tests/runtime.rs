@@ -14,8 +14,11 @@ fn a_rogue_origin_reacts_at_runtime_and_a_blessed_one_does_not() {
     set_sink(|violation| {
         assert_eq!(violation.kind, louke::BoundaryKind::Runtime);
         assert_eq!(violation.target, "adapter-seam");
-        assert_eq!(violation.finding_key().namespace(), "louke");
-        assert_eq!(violation.finding_key().code(), "registered_crossing");
+        assert_eq!(
+            violation.fact().fact_type(),
+            "tianheng.fact/louke/runtime-crossing"
+        );
+        assert_eq!(violation.fact().shape(), "registered-origin");
         REACTIONS.fetch_add(1, Ordering::SeqCst);
     });
     install(
