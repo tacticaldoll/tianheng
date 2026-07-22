@@ -73,6 +73,20 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: inline symbol path confined to module (confined_prefix: std::time; ending_with: now)
 - **kind**: module · **severity**: enforce · **crate**: xuanji
 
+### `crate::module_resolve`
+
+> path canonicalization for this resolver's own cycle/dedup guard must go through the shared, fail-loud `xingbiao::try_visit`, never be re-hand-rolled inline here — the 0.2.2 lesson (a canonicalize-failure policy hand-rolled per call site drifted to disagreeing behavior across this crate)
+
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **kind**: module · **severity**: enforce · **crate**: hunyi
+
+### `crate::module_scan::reachability`
+
+> path canonicalization for this walker's own cycle/dedup guard must go through the shared, fail-loud `xingbiao::canonicalize_or_fail`/`try_visit`, never be re-hand-rolled inline here — the 0.2.2 lesson (this exact file once carried three disagreeing canonicalize-failure policies at once)
+
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **kind**: module · **severity**: enforce · **crate**: guibiao
+
 ## Async-exposure boundaries
 
 ### `crate`
