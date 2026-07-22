@@ -120,6 +120,27 @@ fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
 }
 
 #[test]
+fn a_cfg_attr_gated_missing_module_still_fails_loud_not_tolerated() {
+    // `#[cfg_attr(unix, allow(dead_code))] mod gated;` with no `gated.rs` is a REAL rustc compile
+    // error (E0583) on every platform: `cfg_attr`'s predicate only gates whether `allow(dead_code)`
+    // is applied, never whether the `mod` item itself exists — unlike a bare `#[cfg(...)]`, which
+    // genuinely removes the item when its predicate is false. Verified against a real `rustc`
+    // invocation of this exact fixture shape (E0583, unconditionally, regardless of the
+    // `cfg_attr`'s predicate value). The scanner must not conflate the two: tolerating this would
+    // silently skip auditing a module that always compiles and is always genuinely broken.
+    let tb = TempBase::new("cfg-attr-not-cfg-tolerant");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, allow(dead_code))]\nmod gated;\nfn f() { assert_boundary!(\"a\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("gated")),
+        "a cfg_attr-decorated (not cfg-gated) missing module must still fail loud: {outcome:?}"
+    );
+}
+
+#[test]
 fn root_aware_audit_fails_loud_on_an_unresolvable_reachable_module() {
     let tb = TempBase::new("root-missing");
     let root = tb.source("lib.rs", "mod missing;");
@@ -376,20 +397,26 @@ fn an_absent_unconditional_path_target_is_a_constitution_error() {
 }
 
 #[test]
-fn a_cfg_attr_path_relocation_is_not_followed_a_stated_bound() {
+fn a_cfg_attr_path_relocation_with_no_resolution_anywhere_fails_loud() {
+    // `#[cfg_attr(unix, path = "...")]`'s relocation target is cfg-conditional, so it is NOT
+    // followed cfg-blind (a stated bound — the scan instead falls back to the conventional file,
+    // documented on `audit_probe_coverage`). But `cfg_attr` never conditionally REMOVES the `mod`
+    // item itself (unlike a bare `#[cfg]`): verified against a real `rustc` build on this (unix)
+    // machine — `#[cfg_attr(unix, path = "unix_seam.rs")] mod plat;` with `unix_seam.rs` absent is
+    // a genuine compile error (rustc does NOT fall back to a conventional `plat.rs` even when one
+    // is present, since `cfg(unix)` is true here and the relocation is authoritative) — so when
+    // NEITHER the relocation target NOR the conventional file exists, this must fail loud, never
+    // silently tolerate. (A prior version of this test asserted `Outcome::Clean` here; corrected
+    // after empirically verifying against `rustc` that this is always a real broken reference.)
     let tb = TempBase::new("cfgattr-path");
-    // `#[cfg_attr(unix, path = "...")]` is cfg-conditional: it reads as `cfg`, not a followed path,
-    // so an absent target is tolerated (not a constitution error) rather than followed cfg-blind
-    // into a file rustc may not compile here — the stated cfg-relocation bound.
     let root = tb.source(
         "lib.rs",
         "#[cfg_attr(unix, path = \"unix_seam.rs\")]\nmod plat;\nfn live() {}",
     );
     let outcome = audit_probe_coverage(&[], &[root]);
-    assert_eq!(
-        outcome,
-        Outcome::Clean,
-        "a cfg_attr #[path] with an absent target is tolerated, not followed: {outcome:?}"
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("plat")),
+        "cfg_attr-wrapped #[path] with no resolution anywhere must fail loud: {outcome:?}"
     );
 }
 

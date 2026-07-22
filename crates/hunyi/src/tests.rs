@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::containment::leaf_of;
 use crate::crate_scope::dependency_names;
-use crate::errors::{unknown_module_error, unknown_trait_error};
+use crate::errors::{missing_module_file_error, unknown_module_error, unknown_trait_error};
 use crate::module_resolve::resolve_module_file;
 
 /// A unique, self-cleaning temp `src/` tree: write source files (and, where needed, a symlink),
@@ -6485,6 +6485,26 @@ fn descend_still_errors_when_every_candidate_for_a_module_is_cfg_gated_missing()
     )
     .expect_err("a module with no surviving branch must be a scan error, never a vacuous pass");
     assert_eq!(err, unknown_module_error("crate::gated", "x"));
+}
+
+/// A BARE `#[cfg]`-gated missing file is tolerated (the sibling test above), but a
+/// `#[cfg_attr(pred, …)]`-decorated one is NOT: unlike a bare `#[cfg]`, `cfg_attr` never removes
+/// the `mod` item itself — it only conditionally applies its wrapped attribute — so the file must
+/// always exist regardless of the predicate. Verified against a real `rustc` build: this exact
+/// shape (`#[cfg_attr(unix, allow(dead_code))] mod gated;` with no `gated.rs`) is E0583 on every
+/// platform. `has_cfg_attr` deliberately does not match `cfg_attr` for this reason.
+#[test]
+fn descend_does_not_tolerate_a_cfg_attr_decorated_missing_file_only_bare_cfg() {
+    let err = resolve_file(
+        "cfg-attr-not-tolerated",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(unix, allow(dead_code))]\npub mod gated;\n",
+        )],
+        "crate::gated",
+    )
+    .expect_err("a cfg_attr-decorated (not cfg-gated) missing file must still be a scan error");
+    assert_eq!(err, missing_module_file_error("crate::gated", "x"));
 }
 
 #[test]

@@ -32,6 +32,12 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   production hot path), matching 圭表/渾儀's own guards. Previously deduped on the literal path
   only, so a symlinked directory or circular `#[path]` chain reached via two distinct literal paths
   to the same real file could make the scan misbehave instead of terminating cleanly.
+- 漏刻's CI probe-coverage scanner no longer tolerates a missing conventional module file merely
+  because the item carries ANY `#[cfg]`/`#[cfg_attr]` attribute. Verified against a real `rustc`
+  build: unlike a bare `#[cfg(pred)]` (which genuinely removes the item when `pred` is false),
+  `#[cfg_attr(pred, …)]` never removes the item — only conditionally applies its wrapped
+  attribute — so a `#[cfg_attr(unix, allow(dead_code))] mod x;` with no backing file is a real,
+  unconditional compile error (E0583) that was previously silently skipped by the audit.
 
 ### Changed
 - Internal refactor: modularized crate internals across `xuanji`, `xingbiao`, `guibiao`, `hunyi`, `louke`, and the `tianheng` runner's projection layer (deduplicated JSON/text boundary-projection rendering) — no public API, JSON wire format, or self-governance boundary changed.
