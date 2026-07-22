@@ -694,10 +694,10 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   "must stay in sync" twins carry **zero** automated verification: `path_within` is independently
   hand-written in `guibiao::module_scan::path_vocab` (`pub(crate)`) and `hunyi::containment`
   (private) — the doc comment on the 圭表 copy says outright "the two dimensions... agree by using
-  the same rule, not the same function," an unenforced promise — and six `errors.rs` builder pairs
-  (`unreadable_workspace_error`, `crate_not_found_error`, `missing_src_error`, `unknown_module_error`,
-  and two more) are commented "MUST stay byte-identical" / "parallel twin" between `guibiao` and
-  `hunyi` with no test checking it. By contrast, the sibling lexical-hygiene duplication
+  the same rule, not the same function," an unenforced promise — and four `errors.rs` builder pairs
+  (`unreadable_workspace_error`, `crate_not_found_error`, `missing_src_error`, `unknown_module_error`)
+  are commented "MUST stay byte-identical" / "parallel twin" between `guibiao` and `hunyi` with no
+  test checking it. By contrast, the sibling lexical-hygiene duplication
   (`decode_str_escapes`/`is_rust_keyword` in `guibiao::module_scan::lexer` vs
   `louke::audit::scan`) already graduated from the same comment-only-promise stage to a real gate —
   `crates/tianheng/tests/lexical_conformance.rs`, BUILT 0.2.2 — proving the fix shape already works
@@ -716,8 +716,11 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   `enforce` only after (1) lands clean, never as the first commit (or the boundary fails on its own
   introduction). (3) Two new conformance tests mirroring `lexical_conformance.rs`'s black-box
   pattern (through each side's real public `check` surface, not the private internals): one pinning
-  `path_within` agreement on `::`-boundary edge cases, one pinning the six `errors.rs` twins' message
-  text. (4) Bundled, lower-severity style consolidations the same sweep surfaced, no shared-model
+  `path_within` agreement on `::`-boundary edge cases, one pinning three of the four `errors.rs`
+  twins' message text (`missing_src_error`'s twin needs a fixture shape neither dimension's public
+  surface makes easy to construct without tripping a different, unrelated constitution error first
+  — a stated gap, recorded in the test file, not a silent one). (4) Bundled, lower-severity style
+  consolidations the same sweep surfaced, no shared-model
   risk beyond "could silently drift," not "already disagrees": `guibiao::use_scan.rs`'s
   `normalize_module_path`/`external_crate_head` each reimplement the same segment-split pipeline
   (the latter's doc comment claims a shared self/super resolution that its body does not actually
