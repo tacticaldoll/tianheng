@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The 漏刻 (runtime) dimension's first capability: declare which concrete-type **origins** may cross a named runtime **seam**, and probe live `dyn` objects in production to catch a forbidden-origin type slipping through a `dyn Trait` into a layer it must not reach — what static and semantic analysis structurally cannot see. It has two faces: a **prod face** (the probe reacts fail-closed, emitting a `Violation` event by default, panic opt-in) and a **CI face** (`audit_probe_coverage` verifies every declared seam is probed and every probe references a declared seam). Origin is **observed** (`module_path!()` at the registration site), not self-asserted; the hot path is std-only and lock-free; the crate depends on 璇璣 (`xuanji`) only.
+The 漏刻 (runtime) dimension's first capability: declare which concrete-type **origins** may cross a named runtime **seam**, and probe live `dyn` objects in production to catch a forbidden-origin type slipping through a `dyn Trait` into a layer it must not reach — what static and semantic analysis structurally cannot see. It has two faces: a **prod face** (the probe reacts fail-closed, emitting a `Violation` event by default, panic opt-in) and a **CI face** (`audit_probe_coverage` verifies every declared seam is probed and every probe references a declared seam). Origin is **observed** (`module_path!()` at the registration site), not self-asserted; the hot path is std-only and lock-free; the crate depends on 璇璣 (`xuanji`) only — 星表 (`xingbiao`) is an additive, `audit`-feature-gated exception for the CI face's own cycle guard that never reaches the production hot path.
 ## Requirements
 ### Requirement: Runtime boundary declared in Rust and installed write-once
 
@@ -144,11 +144,14 @@ unprobed and its probe as undeclared) and, when a declaration and a probe decode
 by different spellings, silently count a seam as covered whose runtime probe would panic on an
 undeclared seam — the forbidden false negative. A raw-string seam (`r"…"` / `r#"…"#`) keeps its
 verbatim value (raw strings have no escapes, so their bytes already equal the compiler value). A
-plain-string seam whose escape the std-only scanner cannot decode — including a backslash-newline
-**line continuation**, which is routed here rather than decoded so a mis-stripped continuation can
-never produce a wrong non-matching value — SHALL react as an un-auditable probe rather than a
-silently mismatched literal. A probe whose seam argument is
-**not** a string literal (a constant or other expression) cannot be traced to a declared seam, and
+backslash-newline **line continuation** in a plain-string seam SHALL be decoded exactly as
+rustc/`syn` decode it (stripping the backslash, the newline, and the continued line's leading
+whitespace), so a seam literal written across a line continuation still matches its
+compiler-decoded declared seam. A plain-string seam whose escape the std-only scanner cannot
+decode — a malformed or unrecognized escape, an out-of-range `\x`, or an invalid `\u{…}` — SHALL
+react as an un-auditable probe rather than a silently mismatched literal. A probe whose seam
+argument is **not** a string literal (a constant or other expression) cannot be traced to a
+declared seam, and
 the system SHALL react to it (an enforce `Violation` naming the un-auditable probe site) rather than
 silently skip it — a silent skip would be a false negative, and erring toward a loud reaction is the
 project's forbidden-bug trade.
@@ -231,10 +234,15 @@ NOT claim to verify installation.
 - **WHEN** a seam is declared `RuntimeBoundary::at("a\\n")` (decoded: `a`, backslash, `n`) but the only probe is `assert_boundary!("a\n", obj)` (decoded: `a`, newline)
 - **THEN** `audit_probe_coverage` reacts (the declared seam is reported unprobed and the probe references an undeclared seam), so the runtime mismatch is caught at CI rather than silently counted as coverage — the forbidden false negative is avoided
 
-#### Scenario: An un-decodable escape or line continuation reacts as un-auditable
+#### Scenario: An un-decodable escape reacts as un-auditable
 
-- **WHEN** a probe's plain-string seam literal carries an escape the std-only scanner cannot decode, or a backslash-newline line continuation
+- **WHEN** a probe's plain-string seam literal carries an escape the std-only scanner cannot decode (a malformed or unrecognized escape, an out-of-range `\x`, or an invalid `\u{…}`)
 - **THEN** `audit_probe_coverage` emits an enforce un-auditable violation naming the probe site, never recording a silently mismatched literal (erring toward a loud reaction, the project's forbidden-bug trade)
+
+#### Scenario: A backslash-newline line continuation decodes like rustc
+
+- **WHEN** a probe's plain-string seam literal contains a backslash-newline line continuation (e.g. `"a\` + newline + `b"`)
+- **THEN** `audit_probe_coverage` decodes it to the joined value (matching rustc/`syn`), rather than reacting as un-auditable
 
 #### Scenario: An escape-free or raw-string seam is unaffected
 
