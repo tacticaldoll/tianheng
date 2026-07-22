@@ -59,5 +59,5 @@
 
 - [x] 9.1 Conduct an adversarial implementation review: try to prove presentation still leaks into identity, fact-local evolution forces a global format change, or an ordinal was merely renamed; verify every finding against production paths and fix or explicitly reject it.
 - [x] 9.2 Challenge boundaries: confirm `xuanji` remains measure-only, 三儀 remain mutually independent and standalone, `tianheng` is the only composer, and no testing/plugin promise or self-law weakening slipped into the change.
-- [ ] 9.3 Run every Definition of Done command from `AGENTS.md`, including self-governance/projection freshness, release coherence, examples, docs, deny, and all feature/default-feature configurations.
-- [ ] 9.4 Confirm each checked task has its named evidence, the apply commits follow governance granularity with curated provenance/migration bodies, and no task was checked before verification.
+- [x] 9.3 Run every Definition of Done command from `AGENTS.md`, including self-governance/projection freshness, release coherence, examples, docs, deny, and all feature/default-feature configurations.
+- [x] 9.4 Confirm each checked task has its named evidence, the apply commits follow governance granularity with curated provenance/migration bodies, and no task was checked before verification.
