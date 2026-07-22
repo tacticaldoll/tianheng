@@ -12,6 +12,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+### Changed
+- Modularized `xuanji` (璇璣) internal entities into dedicated submodules (`model`, `finding`, `violation`, `baseline`, `util`, `tests`) while preserving all public re-exports at crate root.
+
 ## [0.2.2] - 2026-07-22
 
 ### Fixed
