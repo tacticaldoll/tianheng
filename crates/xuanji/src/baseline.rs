@@ -3,7 +3,7 @@
 use serde_json::Value;
 use std::cmp::Ordering;
 
-use crate::{Finding, FindingKey, Report, Violation, pretty_json};
+use crate::{Finding, FindingKey, Report, RuleKey, Violation, pretty_json};
 
 /// A violation's baseline identity and human finding text.
 #[derive(Debug, Clone)]
@@ -15,6 +15,7 @@ pub struct ViolationId {
     pub rule: String,
     /// Offending finding text.
     pub finding: String,
+    pub(crate) rule_key: Option<RuleKey>,
     pub(crate) finding_key: Option<FindingKey>,
 }
 
@@ -25,6 +26,26 @@ impl ViolationId {
             target: target.into(),
             rule: rule.into(),
             finding: finding.text,
+            rule_key: None,
+            finding_key: Some(finding.key),
+        }
+    }
+
+    /// Build identity from semantic rule and fact roles during the instrument migration.
+    ///
+    /// This coexists with [`Self::new`] only until every production emitter migrates.
+    #[doc(hidden)]
+    pub fn structured(
+        target: impl Into<String>,
+        rule: impl Into<String>,
+        rule_key: RuleKey,
+        finding: Finding,
+    ) -> Self {
+        Self {
+            target: target.into(),
+            rule: rule.into(),
+            finding: finding.text,
+            rule_key: Some(rule_key),
             finding_key: Some(finding.key),
         }
     }
@@ -34,8 +55,14 @@ impl ViolationId {
             target,
             rule,
             finding,
+            rule_key: None,
             finding_key: None,
         }
+    }
+
+    /// Semantic rule identity, when this emitter has migrated to the 0.3 model.
+    pub fn rule_key(&self) -> Option<&RuleKey> {
+        self.rule_key.as_ref()
     }
 
     /// Stable finding key, or `None` for legacy V1 baselines.
@@ -44,17 +71,39 @@ impl ViolationId {
     }
 
     fn identity_cmp(&self, other: &Self) -> Ordering {
-        match (&self.finding_key, &other.finding_key) {
-            (Some(left), Some(right)) => {
-                (&self.target, &self.rule, left).cmp(&(&other.target, &other.rule, right))
+        let provenance = |id: &Self| match (&id.rule_key, &id.finding_key) {
+            (None, None) => 0,
+            (None, Some(_)) => 1,
+            (Some(_), Some(_)) => 2,
+            (Some(_), None) => {
+                unreachable!("a semantic rule key always accompanies a structured fact")
             }
-            (None, None) => (&self.target, &self.rule, &self.finding).cmp(&(
-                &other.target,
-                &other.rule,
-                &other.finding,
-            )),
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
+        };
+        match provenance(self).cmp(&provenance(other)) {
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Equal => match (
+                &self.rule_key,
+                &self.finding_key,
+                &other.rule_key,
+                &other.finding_key,
+            ) {
+                (Some(left_rule), Some(left_fact), Some(right_rule), Some(right_fact)) => (
+                    &self.target,
+                    left_rule,
+                    left_fact,
+                )
+                    .cmp(&(&other.target, right_rule, right_fact)),
+                (None, Some(left), None, Some(right)) => {
+                    (&self.target, &self.rule, left).cmp(&(&other.target, &other.rule, right))
+                }
+                (None, None, None, None) => (&self.target, &self.rule, &self.finding).cmp(&(
+                    &other.target,
+                    &other.rule,
+                    &other.finding,
+                )),
+                _ => unreachable!("equal provenance has the same identity shape"),
+            },
         }
     }
 }
@@ -179,6 +228,9 @@ impl Baseline {
                         entry.id.finding_key().map(FindingKey::to_json).expect(
                             "a version-2 baseline entry must carry a structured finding key",
                         );
+                    if let Some(rule_key) = entry.id.rule_key() {
+                        object["rule_key"] = rule_key.to_json();
+                    }
                 }
                 if let Some(owner) = &entry.owner {
                     object["owner"] = serde_json::json!(owner);
@@ -235,6 +287,7 @@ impl Baseline {
                     target,
                     rule,
                     finding,
+                    rule_key: item.get("rule_key").map(RuleKey::from_json).transpose()?,
                     finding_key: Some(FindingKey::from_json(&item["finding_key"])?),
                 },
             };

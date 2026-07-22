@@ -1,10 +1,10 @@
 ## 1. Expand the shared identity model (`feat(xuanji)` commit boundary)
 
-- [ ] 1.1 Inventory every `FindingKey`, `ViolationId`, baseline-version, canonicalization, production constructor, and public re-export use; record the migration surface in the implementation commit body.
-- [ ] 1.2 Add validated vocabulary-neutral `RuleKey` and `StructuredFactIdentity` types with private canonical storage, scalar fields, semantic identifiers, and rejection tests.
-- [ ] 1.3 Add an explicitly temporary structured `ViolationId` construction path beside the old path so instruments can migrate one at a time without breaking intermediate checkouts; do not expose this bridge as a compatibility promise.
-- [ ] 1.4 Add compile-time and unit reactions proving the new primitives are immutable and `xuanji` remains observation-vocabulary-free and serde_json-only.
-- [ ] 1.5 Run focused `xuanji` tests/clippy/doc checks and commit the additive expansion without claiming the final breaking invariant.
+- [x] 1.1 Inventory every `FindingKey`, `ViolationId`, baseline-version, canonicalization, production constructor, and public re-export use; record the migration surface in the implementation commit body.
+- [x] 1.2 Add validated vocabulary-neutral `RuleKey` and `StructuredFactIdentity` types with private canonical storage, scalar fields, semantic identifiers, and rejection tests.
+- [x] 1.3 Add an explicitly temporary structured `ViolationId` construction path beside the old path so instruments can migrate one at a time without breaking intermediate checkouts; do not expose this bridge as a compatibility promise.
+- [x] 1.4 Add compile-time and unit reactions proving the new primitives are immutable and `xuanji` remains observation-vocabulary-free and serde_json-only.
+- [x] 1.5 Run focused `xuanji` tests/clippy/doc checks and commit the additive expansion without claiming the final breaking invariant.
 
 ## 2. 圭表 rule and fact migration (`refactor(guibiao)!` commit boundary)
 

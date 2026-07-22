@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::{BoundaryKind, FindingKey, Polarity, Severity, ViolationId};
+use crate::{BoundaryKind, FindingKey, Polarity, RuleKey, Severity, ViolationId};
 
 /// One violated boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +18,8 @@ pub struct Violation {
     pub finding: String,
     /// Structured identity key.
     pub(crate) finding_key: FindingKey,
+    /// Semantic rule identity during the 0.3 instrument migration.
+    pub(crate) rule_key: Option<RuleKey>,
     /// The boundary's reason / repair hint.
     pub reason: String,
     /// Severity level.
@@ -39,6 +41,7 @@ impl Violation {
             target,
             rule,
             finding,
+            rule_key,
             finding_key,
         } = id;
         Violation {
@@ -46,6 +49,7 @@ impl Violation {
             target,
             rule,
             finding,
+            rule_key,
             finding_key: finding_key.expect(
                 "a live violation requires a structured finding; a version-1 baseline id is legacy data, not an observed fact",
             ),
@@ -61,6 +65,11 @@ impl Violation {
     /// The stable key for this observed finding.
     pub fn finding_key(&self) -> &FindingKey {
         &self.finding_key
+    }
+
+    /// Semantic rule identity, when the producing instrument has migrated.
+    pub fn rule_key(&self) -> Option<&RuleKey> {
+        self.rule_key.as_ref()
     }
 
     /// Attach source file metadata.
@@ -87,6 +96,7 @@ impl Violation {
             target: self.target.clone(),
             rule: self.rule.clone(),
             finding: self.finding.clone(),
+            rule_key: self.rule_key.clone(),
             finding_key: Some(self.finding_key.clone()),
         }
     }

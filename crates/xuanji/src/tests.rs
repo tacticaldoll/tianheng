@@ -1,8 +1,8 @@
 use serde_json::Value;
 
 use crate::{
-    Baseline, BaselineEntry, BoundaryKind, Finding, FindingKey, Polarity, Report, Severity,
-    Violation, ViolationId,
+    Baseline, BaselineEntry, BoundaryKind, Finding, FindingKey, Polarity, Report, RuleKey,
+    Severity, StructuredFactIdentity, Violation, ViolationId,
 };
 
 fn test_finding(text: &str) -> Finding {
@@ -40,6 +40,117 @@ fn finding_key_validates_and_canonicalizes_its_envelope() {
     assert!(FindingKey::new("module", "", [("value", "x")]).is_err());
     assert!(FindingKey::new("module", "fact", [("", "x")]).is_err());
     assert!(FindingKey::new("module", "fact", [("value", "x"), ("value", "y")]).is_err());
+}
+
+#[test]
+fn semantic_identity_primitives_validate_and_canonicalize_scalar_fields() {
+    let rule = RuleKey::new(
+        "tianheng.rule/test/deny-dependency",
+        [("target", "serde"), ("kind", "normal")],
+    )
+    .unwrap();
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![("kind", "normal"), ("target", "serde")]
+    );
+    assert_eq!(rule.rule_type(), "tianheng.rule/test/deny-dependency");
+
+    let fact = StructuredFactIdentity::new(
+        "tianheng.fact/test/dependency",
+        "dependency-edge",
+        [("package", "serde"), ("kind", "normal")],
+    )
+    .unwrap();
+    assert_eq!(fact.fact_type(), "tianheng.fact/test/dependency");
+    assert_eq!(fact.shape(), "dependency-edge");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![("kind", "normal"), ("package", "serde")]
+    );
+
+    assert!(RuleKey::new("", [("value", "x")]).is_err());
+    assert!(RuleKey::new("rule", [("", "x")]).is_err());
+    assert!(RuleKey::new("rule", [("value", "x"), ("value", "y")]).is_err());
+    assert!(StructuredFactIdentity::new("", "shape", [("value", "x")]).is_err());
+    assert!(StructuredFactIdentity::new("fact", "", [("value", "x")]).is_err());
+    assert!(StructuredFactIdentity::new("fact", "shape", [("", "x")]).is_err());
+    assert!(
+        StructuredFactIdentity::new("fact", "shape", [("value", "x"), ("value", "y")]).is_err()
+    );
+}
+
+#[test]
+fn structured_path_uses_target_rule_key_and_fact_only() {
+    let rule = RuleKey::of(
+        "tianheng.rule/test/deny-dependency",
+        [("dependency", "serde")],
+    );
+    let fact = StructuredFactIdentity::of(
+        "tianheng.fact/test/dependency",
+        "dependency-edge",
+        [("package", "serde")],
+    );
+    let old = ViolationId::structured(
+        "core",
+        "old rule wording",
+        rule.clone(),
+        Finding::new("old finding wording", fact.clone()),
+    );
+    let new = ViolationId::structured(
+        "core",
+        "new rule wording",
+        rule,
+        Finding::new("new finding wording", fact),
+    );
+    let transitional = ViolationId::new(
+        "core",
+        "old rule wording",
+        test_finding("old finding wording"),
+    );
+
+    assert_eq!(old, new, "presentation stays outside the typed algebra");
+    assert_ne!(
+        old, transitional,
+        "migration provenances never compare equal"
+    );
+    assert_eq!(
+        old.rule_key().unwrap().rule_type(),
+        "tianheng.rule/test/deny-dependency"
+    );
+}
+
+#[test]
+fn structured_path_round_trips_through_the_temporary_baseline_bridge() {
+    let violation = Violation::new(
+        BoundaryKind::Crate,
+        ViolationId::structured(
+            "core",
+            "deny dependency on serde",
+            RuleKey::of(
+                "tianheng.rule/test/deny-dependency",
+                [("dependency", "serde")],
+            ),
+            Finding::new(
+                "serde",
+                StructuredFactIdentity::of(
+                    "tianheng.fact/test/dependency",
+                    "dependency-edge",
+                    [("package", "serde")],
+                ),
+            ),
+        ),
+        "core stays independent".to_string(),
+        Severity::Enforce,
+    );
+    let report = Report::new(vec![violation]);
+    let baseline = Baseline::of(&report);
+    let document: Value = serde_json::from_str(&baseline.to_json()).unwrap();
+    assert_eq!(
+        document["violations"][0]["rule_key"]["type"],
+        "tianheng.rule/test/deny-dependency"
+    );
+    let reparsed = Baseline::from_json(&baseline.to_json()).unwrap();
+    assert!(reparsed.contains(&report.violations[0]));
 }
 
 #[test]
