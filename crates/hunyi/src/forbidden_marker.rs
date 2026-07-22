@@ -52,7 +52,7 @@ pub(crate) fn check_forbidden_marker_boundary(
         MultiModuleViolationContext {
             target: &boundary.module,
             rule: FORBIDDEN_MARKER_RULE,
-            rule_key: None,
+            rule_key: boundary.rule_key(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -194,6 +194,6 @@ pub(crate) fn forbidden_marker_findings(
     }
     // Dedup BY FINDING (keep the first module), so the count is identical to before — `file` is
     // metadata attached to a finding, never a second identity key.
-    sort_attributed_facts(&mut findings);
+    sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }

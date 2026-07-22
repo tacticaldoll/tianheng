@@ -1,6 +1,6 @@
 //! Async-exposure declaration DSL — [`AsyncExposureBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// An async-exposure boundary: a module's public API must not declare an `async fn`. The
 /// **implicit-existential** complement of [`ImplTraitBoundary`]: an `async fn` leaks a
@@ -31,6 +31,17 @@ pub struct AsyncExposureBoundary {
 }
 
 impl AsyncExposureBoundary {
+    /// Stable semantic identity for this async-exposure rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/async-exposure",
+            [(
+                "including_submodules",
+                self.including_submodules.to_string(),
+            )],
+        )
+    }
+
     /// Begin an async-exposure boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> AsyncExposureCrateDraft {
         AsyncExposureCrateDraft {

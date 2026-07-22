@@ -5,7 +5,7 @@
 
 use crate::resolve::{ShapeExposure, strip_raw, type_to_string};
 use crate::syn_util::VisibleItemKind;
-use xuanji::{Finding, FindingKey, StructuredFactIdentity};
+use xuanji::{Finding, StructuredFactIdentity};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ExposureKind {
@@ -15,11 +15,11 @@ pub(crate) enum ExposureKind {
 }
 
 impl ExposureKind {
-    fn code(self) -> &'static str {
+    fn fact_type(self) -> &'static str {
         match self {
-            Self::Signature => "signature_exposure",
-            Self::DynTrait => "dyn_trait_exposure",
-            Self::ImplTrait => "impl_trait_exposure",
+            Self::Signature => "tianheng.fact/hunyi/signature-exposure",
+            Self::DynTrait => "tianheng.fact/hunyi/dyn-trait-exposure",
+            Self::ImplTrait => "tianheng.fact/hunyi/impl-trait-exposure",
         }
     }
 }
@@ -638,7 +638,7 @@ impl SemanticFact {
                 ),
             );
         }
-        let (code, fields): (&str, Vec<(&str, &str)>) = match &self {
+        let (fact_type, shape, fields): (&str, &str, Vec<(&str, &str)>) = match &self {
             SemanticFact::Exposed {
                 kind,
                 subject,
@@ -646,18 +646,20 @@ impl SemanticFact {
             } => {
                 let mut fields = seam.key_fields();
                 fields.push(("subject", subject));
-                (kind.code(), fields)
+                (kind.fact_type(), "public-seam", fields)
             }
             SemanticFact::MisplacedImpl {
                 module,
                 trait_ref,
                 owner,
             } => (
-                "trait_impl_site",
+                "tianheng.fact/hunyi/trait-impl-site",
+                "misplaced-implementation",
                 vec![("module", module), ("owner", owner), ("trait", trait_ref)],
             ),
             SemanticFact::ForbiddenDerive { marker, canonical } => (
-                "forbidden_marker_acquisition",
+                "tianheng.fact/hunyi/forbidden-marker-acquisition",
+                "derive",
                 vec![("form", "derive"), ("marker", marker), ("owner", canonical)],
             ),
             SemanticFact::ForbiddenImpl {
@@ -665,7 +667,8 @@ impl SemanticFact {
                 owner,
                 module,
             } => (
-                "forbidden_marker_acquisition",
+                "tianheng.fact/hunyi/forbidden-marker-acquisition",
+                "impl",
                 vec![
                     ("form", "impl"),
                     ("marker", marker),
@@ -681,7 +684,8 @@ impl SemanticFact {
                 item_kind,
                 item_name,
             } => (
-                "visibility_exposure",
+                "tianheng.fact/hunyi/visibility-exposure",
+                "declared-item-visibility",
                 vec![
                     ("item_kind", item_kind.as_str()),
                     ("item_name", item_name),
@@ -690,7 +694,7 @@ impl SemanticFact {
             ),
             SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
         };
-        let key = FindingKey::of("hunyi", code, fields);
+        let key = StructuredFactIdentity::of(fact_type, shape, fields);
         Finding::new(text, key)
     }
 }
@@ -699,10 +703,14 @@ impl SemanticFact {
 /// (never a single first-branch file for the whole module — see
 /// [`crate::module_resolve::resolve_module_items_with_files`]). Dedup stays fact-identity-only, as
 /// it was when findings carried no file; the first-appearing file for a given fact wins.
-pub(crate) fn sort_faceted_facts(findings: &mut Vec<(SemanticFact, std::path::PathBuf)>) {
+pub(crate) fn sort_faceted_facts(
+    findings: &mut Vec<(SemanticFact, std::path::PathBuf)>,
+) -> Result<(), String> {
+    reject_positional_identity(findings.iter().map(|(fact, _)| fact))?;
     findings.sort_by(|a, b| a.0.cmp(&b.0));
     findings.dedup_by(|a, b| a.0 == b.0);
     findings.sort_by_cached_key(|(finding, _)| finding.to_string());
+    Ok(())
 }
 
 /// Multi-module counterpart: each fact rides beside the module it sits in (kept for the
@@ -712,10 +720,30 @@ pub(crate) fn sort_faceted_facts(findings: &mut Vec<(SemanticFact, std::path::Pa
 /// remains fact-identity-only, as it was when findings carried only a module string.
 pub(crate) fn sort_attributed_facts(
     findings: &mut Vec<(SemanticFact, String, std::path::PathBuf)>,
-) {
+) -> Result<(), String> {
+    reject_positional_identity(findings.iter().map(|(fact, _, _)| fact))?;
     findings.sort_by(|a, b| a.0.cmp(&b.0));
     findings.dedup_by(|a, b| a.0 == b.0);
     findings.sort_by_cached_key(|(finding, module, _)| (finding.to_string(), module.clone()));
+    Ok(())
+}
+
+fn reject_positional_identity<'a>(
+    facts: impl IntoIterator<Item = &'a SemanticFact>,
+) -> Result<(), String> {
+    for fact in facts {
+        let identity = fact.clone().into_finding();
+        if identity
+            .key()
+            .fields()
+            .any(|(_, value)| value.contains("_#") || value.contains("trait_#"))
+        {
+            return Err(
+                "cannot identify semantic fact without a stable structural label".to_string(),
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Render a shape exposure (`dyn …` / `impl …`) as its seam-qualified finding string — the
@@ -872,11 +900,11 @@ pub(crate) fn render_sig_tail(sig: &syn::Signature) -> String {
 mod fact_tests {
     use super::*;
 
-    fn published_exposure_code(kind: ExposureKind) -> &'static str {
+    fn published_exposure_type(kind: ExposureKind) -> &'static str {
         match kind {
-            ExposureKind::Signature => "signature_exposure",
-            ExposureKind::DynTrait => "dyn_trait_exposure",
-            ExposureKind::ImplTrait => "impl_trait_exposure",
+            ExposureKind::Signature => "tianheng.fact/hunyi/signature-exposure",
+            ExposureKind::DynTrait => "tianheng.fact/hunyi/dyn-trait-exposure",
+            ExposureKind::ImplTrait => "tianheng.fact/hunyi/impl-trait-exposure",
         }
     }
 
@@ -1033,7 +1061,7 @@ mod fact_tests {
                 subject: _,
                 seam,
             } => {
-                published_exposure_code(*kind);
+                published_exposure_type(*kind);
                 published_seam_fields(seam);
             }
             SemanticFact::MisplacedImpl {
@@ -1277,8 +1305,11 @@ mod fact_tests {
                 };
                 assert_semantic_fact_is_cataloged(&fact);
                 let finding = fact.into_finding();
-                assert_eq!(finding.key().namespace(), "hunyi");
-                assert_eq!(finding.key().code(), "signature_exposure");
+                assert_eq!(
+                    finding.key().fact_type(),
+                    "tianheng.fact/hunyi/signature-exposure"
+                );
+                assert_eq!(finding.key().shape(), "public-seam");
                 assert_eq!(finding.key().fields().collect::<Vec<_>>(), expected_fields);
                 finding.key().clone()
             })
@@ -1301,7 +1332,8 @@ mod fact_tests {
                     trait_ref: "crate::Port".into(),
                     owner: "crate::Api".into(),
                 },
-                "trait_impl_site",
+                "tianheng.fact/hunyi/trait-impl-site",
+                "misplaced-implementation",
                 vec![
                     ("module", "crate::m"),
                     ("owner", "crate::Api"),
@@ -1313,7 +1345,8 @@ mod fact_tests {
                     marker: "Marker".into(),
                     canonical: "crate::Api".into(),
                 },
-                "forbidden_marker_acquisition",
+                "tianheng.fact/hunyi/forbidden-marker-acquisition",
+                "derive",
                 vec![
                     ("form", "derive"),
                     ("marker", "Marker"),
@@ -1326,7 +1359,8 @@ mod fact_tests {
                     owner: "crate::Api".into(),
                     module: "crate::m".into(),
                 },
-                "forbidden_marker_acquisition",
+                "tianheng.fact/hunyi/forbidden-marker-acquisition",
+                "impl",
                 vec![
                     ("form", "impl"),
                     ("marker", "Marker"),
@@ -1340,7 +1374,8 @@ mod fact_tests {
                     item_kind: VisibleItemKind::Fn,
                     item_name: "run".into(),
                 },
-                "visibility_exposure",
+                "tianheng.fact/hunyi/visibility-exposure",
+                "declared-item-visibility",
                 vec![
                     ("item_kind", "fn"),
                     ("item_name", "run"),
@@ -1348,12 +1383,12 @@ mod fact_tests {
                 ],
             ),
         ];
-        for (fact, code, expected_fields) in cases {
+        for (fact, fact_type, shape, expected_fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
             let finding = fact.into_finding();
             let fields: Vec<_> = finding.key().fields().collect();
-            assert_eq!(finding.key().namespace(), "hunyi");
-            assert_eq!(finding.key().code(), code, "{}", finding.text());
+            assert_eq!(finding.key().fact_type(), fact_type, "{}", finding.text());
+            assert_eq!(finding.key().shape(), shape, "{}", finding.text());
             assert_eq!(fields, expected_fields, "{}", finding.text());
         }
 
@@ -1372,18 +1407,18 @@ mod fact_tests {
     }
 
     #[test]
-    fn every_exposure_kind_has_its_exact_published_code() {
+    fn every_exposure_kind_has_its_exact_published_type_and_shape() {
         for kind in [
             ExposureKind::Signature,
             ExposureKind::DynTrait,
             ExposureKind::ImplTrait,
         ] {
-            let expected_code = published_exposure_code(kind);
+            let expected_type = published_exposure_type(kind);
             let fact = exposure(kind, "crate::api", "run");
             assert_semantic_fact_is_cataloged(&fact);
             let finding = fact.into_finding();
-            assert_eq!(finding.key().namespace(), "hunyi");
-            assert_eq!(finding.key().code(), expected_code);
+            assert_eq!(finding.key().fact_type(), expected_type);
+            assert_eq!(finding.key().shape(), "public-seam");
             assert_eq!(
                 finding.key().fields().collect::<Vec<_>>(),
                 vec![

@@ -66,7 +66,7 @@ pub(crate) fn check_trait_impl_boundary(
         MultiModuleViolationContext {
             target: &target,
             rule: TRAIT_IMPL_RULE,
-            rule_key: None,
+            rule_key: boundary.rule_key(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -152,6 +152,6 @@ pub(crate) fn trait_impl_findings(
             site.file.clone(),
         ));
     }
-    sort_attributed_facts(&mut findings);
+    sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }

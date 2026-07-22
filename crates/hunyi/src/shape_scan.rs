@@ -69,7 +69,7 @@ pub(crate) fn shape_module_findings<E>(
         .into_iter()
         .map(|(exposure, file)| (render(exposure), file))
         .collect();
-    sort_faceted_facts(&mut findings);
+    sort_faceted_facts(&mut findings)?;
     Ok(findings)
 }
 
@@ -143,6 +143,6 @@ pub(crate) fn operand_module_findings(
         })
         .map(|(exposure, file, _branch)| (shape_finding(exposure, fact_kind), file))
         .collect();
-    sort_faceted_facts(&mut findings);
+    sort_faceted_facts(&mut findings)?;
     Ok(findings)
 }

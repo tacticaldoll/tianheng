@@ -62,7 +62,7 @@ pub(crate) fn check_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: SIGNATURE_RULE,
-            rule_key: None,
+            rule_key: boundary.rule_key(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -253,6 +253,6 @@ pub(crate) fn module_findings(
                 .map(|fact| (fact, file.clone()))
         })
         .collect();
-    sort_faceted_facts(&mut findings);
+    sort_faceted_facts(&mut findings)?;
     Ok(findings)
 }

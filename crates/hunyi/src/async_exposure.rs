@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
-use xuanji::{Outcome, Polarity, RuleKey, Violation};
+use xuanji::{Outcome, Polarity, Violation};
 
 use crate::collect::collect_item_async_exposures;
 use crate::driver::run_boundaries;
@@ -38,13 +38,7 @@ pub(crate) fn check_async_exposure_boundary(
 ) -> Result<(), String> {
     let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
     let src_dir = src_dir.as_path();
-    let rule_key = RuleKey::of(
-        "tianheng.rule/hunyi/async-exposure",
-        [(
-            "including_submodules",
-            boundary.including_submodules().to_string(),
-        )],
-    );
+    let rule_key = boundary.rule_key();
 
     // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
     // The default path governs only the anchored module's own seam (byte-identical to before).
@@ -60,7 +54,7 @@ pub(crate) fn check_async_exposure_boundary(
             MultiModuleViolationContext {
                 target: &boundary.module,
                 rule: ASYNC_EXPOSURE_RULE,
-                rule_key: Some(rule_key),
+                rule_key,
                 reason: &boundary.reason,
                 severity: boundary.severity,
                 anchor: boundary.anchor(),
@@ -83,7 +77,7 @@ pub(crate) fn check_async_exposure_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: ASYNC_EXPOSURE_RULE,
-            rule_key: Some(rule_key),
+            rule_key,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -125,7 +119,7 @@ pub(crate) fn async_exposure_subtree_findings(
             );
         }
     }
-    sort_attributed_facts(&mut findings);
+    sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }
 

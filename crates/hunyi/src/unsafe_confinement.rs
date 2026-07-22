@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
-use xuanji::{Outcome, Polarity, RuleKey, Violation};
+use xuanji::{Outcome, Polarity, Violation};
 
 use crate::containment::matches_allowed;
 use crate::driver::run_boundaries;
@@ -43,11 +43,6 @@ pub(crate) fn check_unsafe_boundary(
         .map(|a| canonical_path_str(a))
         .collect();
     let findings = unsafe_findings(src_dir, &root_file, &allowed, &boundary.crate_package)?;
-    let mut key_allowed = allowed.clone();
-    key_allowed.sort_unstable();
-    key_allowed.dedup();
-    let allowed_key = serde_json::to_string(&key_allowed)
-        .expect("a list of canonical module paths always serializes");
 
     // Human rule text stays fixed, while the semantic rule key carries the canonical allowed set:
     // changing where unsafe is permitted changes the law and therefore re-keys the reaction. The
@@ -59,10 +54,7 @@ pub(crate) fn check_unsafe_boundary(
         MultiModuleViolationContext {
             target: &boundary.crate_package,
             rule: UNSAFE_CONFINEMENT_RULE,
-            rule_key: Some(RuleKey::of(
-                "tianheng.rule/hunyi/unsafe-confinement",
-                [("allowed", allowed_key)],
-            )),
+            rule_key: boundary.rule_key(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -108,6 +100,6 @@ pub(crate) fn unsafe_findings(
             )
         })
         .collect();
-    sort_attributed_facts(&mut findings);
+    sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }

@@ -2757,11 +2757,9 @@ fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_impl_fin
     // Round-6 finding: resolve_child_modules (scan.rs, backing the whole-crate scan) had no
     // canonical-file dedup for two mutually-exclusive #[cfg] arms plainly declaring the IDENTICAL
     // name resolving to the ONE real file -- unlike module_resolve.rs's descend(), which gained
-    // exactly this dedup in 0.2.2. Because the self-type's generic argument here is an
-    // unrenderable const-generic block expression, canonical_self_owner falls back to a positional
-    // `_#{ordinal}` marker computed from the scan Vec's own position -- so the two duplicate scan
-    // entries got DIFFERENT ordinals and escaped the eventual fact-identity dedup, inflating one
-    // real impl into two findings. Verified against real rustc: both `cargo check --features u`
+    // exactly this dedup in 0.2.2. A renderable const-generic owner keeps this test focused on the
+    // cfg/file de-duplication contract; unrenderable identity is covered separately by a fail-loud
+    // reaction. Verified against real rustc: both `cargo check --features u`
     // and `--features w` compile cleanly with exactly one `impl Command for Arr<2>`.
     let out = locality_findings(
         "cfg-dual-same-file",
@@ -2771,10 +2769,7 @@ fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_impl_fin
                 "pub trait Command {}\npub struct Arr<const N: usize>;\n\
                  #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
             ),
-            (
-                "foo.rs",
-                "impl crate::Command for crate::Arr<{ 1 + 1 }> {}\n",
-            ),
+            ("foo.rs", "impl crate::Command for crate::Arr<2> {}\n"),
         ],
         "crate::Command",
         &["crate::allowed_elsewhere"],
@@ -3261,14 +3256,10 @@ fn two_impls_in_one_module_are_distinct_findings_by_self_type() {
 }
 
 #[test]
-fn const_generic_expr_self_types_stay_distinct_owners() {
-    // Two inherent impls whose self types differ ONLY in a complex const-generic
-    // *expression* argument (`Arr<{ 1 + 1 }>` vs `Arr<{ 2 + 2 }>`). The expression is
-    // unrenderable, so the owner falls back to `{base}<_#{ordinal}>` keyed on the impl
-    // block's position among the module's items — keeping the two blocks INJECTIVE.
-    // Previously both collapsed to `fn <_>::a`, masking one leak behind the other.
-    // Items in `domain`: 0 = `struct Arr`, 1 = first impl, 2 = second impl.
-    let out = findings(
+fn const_generic_expr_self_types_fail_loud_without_positional_identity() {
+    // The ordinary owner renderer cannot distinguish these complex const expressions. Publishing
+    // scan position would make identity drift under reorder/insertion, so observation must fail.
+    let error = findings(
         "const-generic-expr",
         &[
             ("lib.rs", "pub mod domain;\n"),
@@ -3282,15 +3273,9 @@ fn const_generic_expr_self_types_stay_distinct_owners() {
         "crate::domain",
         &["crate::infra"],
     )
-    .unwrap();
-    assert_eq!(
-        out,
-        [
-            "crate::infra::T exposed by fn <crate::domain::Arr<_#1>>::a",
-            "crate::infra::T exposed by fn <crate::domain::Arr<_#2>>::a",
-        ],
-        "two const-generic-expr self types yield two distinct positional owners, not one",
-    );
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
 }
 
 #[test]
@@ -3384,6 +3369,137 @@ fn the_builder_carries_severity() {
         .only_implemented_in("crate::commands")
         .because("enforced");
     assert_eq!(enforce.severity(), Severity::Enforce);
+}
+
+#[test]
+fn every_hunyi_rule_family_has_exact_semantic_identity() {
+    fn assert_rule(rule: xuanji::RuleKey, expected_type: &str, expected_fields: &[(&str, &str)]) {
+        assert_eq!(rule.rule_type(), expected_type);
+        assert_eq!(rule.fields().collect::<Vec<_>>(), expected_fields);
+    }
+
+    let signature = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("r#crate::infra")
+        .and_not_expose("crate::storage")
+        .including_trait_impls()
+        .because("presentation only");
+    assert_rule(
+        signature.rule_key(),
+        "tianheng.rule/hunyi/signature-exposure",
+        &[
+            ("forbidden", "[\"crate::infra\",\"crate::storage\"]"),
+            ("including_trait_impls", "true"),
+        ],
+    );
+
+    let dyn_trait = DynTraitBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose_dyn_of(["crate::Port", "crate::Other"])
+        .because("r");
+    assert_rule(
+        dyn_trait.rule_key(),
+        "tianheng.rule/hunyi/dyn-trait-exposure",
+        &[("forbidden_operands", "[\"crate::Other\",\"crate::Port\"]")],
+    );
+
+    let impl_trait = ImplTraitBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose_impl_trait_of(["crate::Port"])
+        .because("r");
+    assert_rule(
+        impl_trait.rule_key(),
+        "tianheng.rule/hunyi/impl-trait-exposure",
+        &[("forbidden_operands", "[\"crate::Port\"]")],
+    );
+
+    let locality = TraitImplBoundary::in_crate("x")
+        .trait_("r#crate::Port")
+        .only_implemented_in("crate::adapter")
+        .and_in("crate::infra")
+        .because("r");
+    assert_rule(
+        locality.rule_key(),
+        "tianheng.rule/hunyi/trait-impl-locality",
+        &[
+            ("allowed_locations", "[\"crate::adapter\",\"crate::infra\"]"),
+            ("trait", "crate::Port"),
+        ],
+    );
+
+    let marker = ForbiddenMarkerBoundary::in_crate("x")
+        .module("crate::domain")
+        .must_not_acquire("serde::Serialize")
+        .and_not_acquire("serde::Deserialize")
+        .because("r");
+    assert_rule(
+        marker.rule_key(),
+        "tianheng.rule/hunyi/forbidden-marker",
+        &[("forbidden", "[\"serde::Deserialize\",\"serde::Serialize\"]")],
+    );
+
+    let visibility = VisibilityBoundary::in_crate("x")
+        .module("crate::internal")
+        .max_visibility(VisibilityCeiling::Super)
+        .because("r");
+    assert_rule(
+        visibility.rule_key(),
+        "tianheng.rule/hunyi/visibility-ceiling",
+        &[("ceiling", "super")],
+    );
+
+    let async_exposure = AsyncExposureBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("r");
+    assert_rule(
+        async_exposure.rule_key(),
+        "tianheng.rule/hunyi/async-exposure",
+        &[("including_submodules", "true")],
+    );
+
+    let unsafe_confinement = UnsafeBoundary::in_crate("x")
+        .only_under(["crate::ffi", "crate::platform"])
+        .because("r");
+    assert_rule(
+        unsafe_confinement.rule_key(),
+        "tianheng.rule/hunyi/unsafe-confinement",
+        &[("allowed", "[\"crate::ffi\",\"crate::platform\"]")],
+    );
+}
+
+#[test]
+fn hunyi_rule_identity_is_set_order_stable_and_parameter_sensitive() {
+    let left = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("crate::infra")
+        .and_not_expose("crate::storage")
+        .because("first wording");
+    let reordered = SemanticBoundary::in_crate("other")
+        .module("crate::elsewhere")
+        .must_not_expose("crate::storage")
+        .and_not_expose("crate::infra")
+        .and_not_expose("crate::infra")
+        .warn()
+        .because("different wording")
+        .with_anchor("GOV-1");
+    let expanded = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("crate::infra")
+        .and_not_expose("crate::storage")
+        .and_not_expose("crate::transport")
+        .because("first wording");
+    let deeper = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("crate::infra")
+        .and_not_expose("crate::storage")
+        .including_trait_impls()
+        .because("first wording");
+
+    assert_eq!(left.rule_key(), reordered.rule_key());
+    assert_ne!(left.rule_key(), expanded.rule_key());
+    assert_ne!(left.rule_key(), deeper.rule_key());
 }
 
 // --- unsafe confinement --------------------------------------------------
@@ -4582,11 +4698,10 @@ fn distinct_generic_marker_instantiations_stay_distinct_findings() {
 }
 
 #[test]
-fn unrenderable_generic_marker_instantiations_stay_distinct() {
-    // Round-2 fix: even when the trait's generic arg is an unrenderable const expression, two
-    // distinct impls on one type must stay distinct (positional fallback), not collapse to the
-    // config leaf `Marker` (which had no ordinal, so both rendered identically).
-    let out = marker_findings(
+fn unrenderable_generic_marker_instantiations_fail_loud_without_positional_identity() {
+    // The ordinary trait renderer cannot distinguish these const expressions. Failing loud keeps
+    // either acquisition from being hidden behind scan-order-derived public identity.
+    let error = marker_findings(
         "const-marker",
         &[
             ("lib.rs", "pub mod domain;\n"),
@@ -4598,12 +4713,9 @@ fn unrenderable_generic_marker_instantiations_stay_distinct() {
         "crate::domain",
         &["Marker"],
     )
-    .unwrap();
-    assert_eq!(
-        out.len(),
-        2,
-        "two unrenderable-const-arg acquisitions must stay distinct: {out:?}"
-    );
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
 }
 
 #[test]
@@ -4981,9 +5093,9 @@ fn two_same_named_types_in_different_submodules_stay_distinct() {
 fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_marker_finding() {
     // The forbidden-marker impl form shares resolve_child_modules/scan.impls with trait-impl-
     // locality, so it has the identical round-6 duplication hazard: two mutually-exclusive
-    // #[cfg] arms declaring the same name resolving to one real file, whose self-type generic
-    // argument is unrenderable (falling back to a positional ordinal), used to inflate one real
-    // marker acquisition into two findings.
+    // #[cfg] arms declaring the same name resolving to one real file used to inflate one real
+    // marker acquisition into two findings. Keep the owner renderable so this test isolates cfg
+    // de-duplication; positional fallback rejection has its own reaction.
     let out = marker_findings(
         "cfg-dual-same-file",
         &[
@@ -4992,10 +5104,7 @@ fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_marker_f
                 "pub struct Arr<const N: usize>;\n\
                  #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
             ),
-            (
-                "foo.rs",
-                "impl crate::Marker for crate::Arr<{ 1 + 1 }> {}\n",
-            ),
+            ("foo.rs", "impl crate::Marker for crate::Arr<2> {}\n"),
         ],
         "crate",
         &["crate::Marker"],
@@ -6778,8 +6887,19 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     let key = id
         .finding_key()
         .expect("a production violation has structured identity");
-    assert_eq!(key.namespace(), "hunyi");
-    assert_eq!(key.code(), "signature_exposure");
+    let rule = id
+        .rule_key()
+        .expect("a production semantic violation has a structured rule");
+    assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/signature-exposure");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![
+            ("forbidden", "[\"crate::infra\"]"),
+            ("including_trait_impls", "false"),
+        ]
+    );
+    assert_eq!(key.fact_type(), "tianheng.fact/hunyi/signature-exposure");
+    assert_eq!(key.shape(), "public-seam");
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![
