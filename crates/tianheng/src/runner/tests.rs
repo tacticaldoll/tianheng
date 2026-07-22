@@ -7,7 +7,39 @@ use super::{
 };
 use crate::prelude::*;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// A unique temp path, cleaned up (as a directory tree or a lone file, whichever this test
+/// builds) before use and on drop — replaces the hand-rolled `remove_dir_all`/`remove_file`
+/// pre/post pairs this file's fixture tests otherwise each repeat. Doesn't create anything
+/// itself; each test still builds its own directory tree or file content under the path.
+struct TempPath(PathBuf);
+
+impl TempPath {
+    fn new(path: PathBuf) -> Self {
+        let guard = Self(path);
+        guard.clean();
+        guard
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn clean(&self) {
+        if self.0.is_dir() {
+            let _ = std::fs::remove_dir_all(&self.0);
+        } else {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+}
+
+impl Drop for TempPath {
+    fn drop(&mut self) {
+        self.clean();
+    }
+}
 
 fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
     ViolationId::new(
@@ -801,9 +833,11 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 
 #[test]
 fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
-    let base = std::env::temp_dir().join(format!("tianheng-runtime-root-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(&base).unwrap();
+    let base = TempPath::new(
+        std::env::temp_dir().join(format!("tianheng-runtime-root-{}", std::process::id())),
+    );
+    let base = base.path();
+    std::fs::create_dir_all(base).unwrap();
     std::fs::write(
         base.join("Cargo.toml"),
         "[package]\nname='runtime-root-fixture'\nversion='0.0.0'\nedition='2021'\n\
@@ -1835,8 +1869,10 @@ fn warn_uncovered_never_changes_the_exit_code() {
 fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // `check` defaults its target to the nearest `Cargo.toml`, cargo-style. Drive the pure
     // ascent over a real temp tree so the walk is proven without touching the process cwd.
-    let root = std::env::temp_dir().join(format!("tianheng-nearest-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let root = TempPath::new(
+        std::env::temp_dir().join(format!("tianheng-nearest-{}", std::process::id())),
+    );
+    let root = root.path();
     let outer = root.join("outer");
     let inner = outer.join("inner");
     let leaf = inner.join("a").join("b");
@@ -1865,25 +1901,24 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
         Some(inner.join("Cargo.toml")),
         "the start dir counts as its own nearest manifest",
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
 fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     // The metadata-preserving merge, driven through the real write path + a temp file: write a
     // baseline, hand-annotate an entry, re-write from the same report — the annotation survives.
-    let path = std::env::temp_dir().join(format!(
+    let path = TempPath::new(std::env::temp_dir().join(format!(
         "tianheng-baseline-merge-{}.json",
         std::process::id()
-    ));
+    )));
+    let path = path.path();
     let path_str = path.to_str().expect("utf-8 temp path");
-    let _ = std::fs::remove_file(&path);
 
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
 
     // First write: no metadata yet.
     assert_eq!(super::write_baseline(&outcome, path_str), 0);
-    let first = std::fs::read_to_string(&path).expect("baseline written");
+    let first = std::fs::read_to_string(path).expect("baseline written");
     let first_doc: Value = serde_json::from_str(&first).unwrap();
     assert_eq!(first_doc["version"], 2);
     assert!(first_doc["violations"][0]["finding_key"].is_object());
@@ -1897,50 +1932,47 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
         "\"finding\": \"serde\"",
         "\"finding\": \"serde\",\n      \"owner\": \"team-core\",\n      \"tracker\": \"ISSUE-7\"",
     );
-    std::fs::write(&path, &annotated).expect("annotate");
+    std::fs::write(path, &annotated).expect("annotate");
     assert_eq!(super::write_baseline(&outcome, path_str), 0);
 
     // The re-written baseline still carries the hand-added owner/tracker (merged by identity).
-    let rewritten = std::fs::read_to_string(&path).expect("baseline rewritten");
+    let rewritten = std::fs::read_to_string(path).expect("baseline rewritten");
     let doc: Value = serde_json::from_str(&rewritten).expect("valid baseline json");
     assert_eq!(doc["violations"][0]["owner"], "team-core");
     assert_eq!(doc["violations"][0]["tracker"], "ISSUE-7");
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn write_baseline_upgrades_version_one_and_preserves_exact_match_metadata() {
-    let path = std::env::temp_dir().join(format!(
+    let path = TempPath::new(std::env::temp_dir().join(format!(
         "tianheng-baseline-v1-upgrade-{}.json",
         std::process::id()
-    ));
+    )));
+    let path = path.path();
     let path_str = path.to_str().expect("utf-8 temp path");
     let legacy = r#"{"version":1,"violations":[{
         "target":"core","rule":"rule","finding":"serde",
         "owner":"team-core","tracker":"ISSUE-8"
     }]}"#;
-    std::fs::write(&path, legacy).expect("write legacy baseline");
+    std::fs::write(path, legacy).expect("write legacy baseline");
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
 
     assert_eq!(super::write_baseline(&outcome, path_str), 0);
-    let rewritten: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let rewritten: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert_eq!(rewritten["version"], 2);
     assert!(rewritten["violations"][0]["finding_key"].is_object());
     assert_eq!(rewritten["violations"][0]["owner"], "team-core");
     assert_eq!(rewritten["violations"][0]["tracker"], "ISSUE-8");
-
-    let _ = std::fs::remove_file(&path);
 }
 
 #[test]
 fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
     // Pass `bless` as a bool (the helper reads no environment), so this test mutates no
     // process-global state and cannot race the parallel self-law gate.
-    let dir = std::env::temp_dir().join(format!("tianheng-gate-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir =
+        TempPath::new(std::env::temp_dir().join(format!("tianheng-gate-{}", std::process::id())));
     // A not-yet-existing subdir, so bless must `create_dir_all` the parent.
-    let path = dir.join("sub").join("law.md");
+    let path = dir.path().join("sub").join("law.md");
     let hint = "BLESS=1 cargo test";
 
     // Missing file, no bless → Err naming both the path and the regenerate hint.
@@ -1963,6 +1995,4 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
         err.contains("law.md") && err.contains(hint) && err.contains("stale"),
         "stale must name path + hint: {err}"
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
