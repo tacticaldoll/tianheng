@@ -1,81 +1,53 @@
 //! Baseline identity, entry, and baseline snapshot operations.
 
 use serde_json::Value;
-use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
-use crate::{Finding, FindingKey, Report, Violation, pretty_json};
+use crate::{Report, RuleKey, StructuredFactIdentity, Violation, pretty_json};
 
-/// A violation's baseline identity and human finding text.
-#[derive(Debug, Clone)]
+const BASELINE_FORMAT: &str = "tianheng.baseline/structured-facts";
+
+/// A violation's stable semantic identity.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[non_exhaustive]
 pub struct ViolationId {
-    /// Governed target.
-    pub target: String,
-    /// Violated rule label.
-    pub rule: String,
-    /// Offending finding text.
-    pub finding: String,
-    pub(crate) finding_key: Option<FindingKey>,
+    pub(crate) target: String,
+    pub(crate) rule_key: RuleKey,
+    pub(crate) fact: StructuredFactIdentity,
 }
 
 impl ViolationId {
-    /// Build identity from a dimension-owned typed finding.
-    pub fn new(target: impl Into<String>, rule: impl Into<String>, finding: Finding) -> Self {
+    /// Build identity from governed target, semantic rule, and observed fact roles.
+    pub fn new(target: impl Into<String>, rule_key: RuleKey, fact: StructuredFactIdentity) -> Self {
         Self {
             target: target.into(),
-            rule: rule.into(),
-            finding: finding.text,
-            finding_key: Some(finding.key),
+            rule_key,
+            fact,
         }
     }
 
-    pub(crate) fn legacy(target: String, rule: String, finding: String) -> Self {
-        Self {
-            target,
-            rule,
-            finding,
-            finding_key: None,
-        }
+    /// Governed target.
+    pub fn target(&self) -> &str {
+        &self.target
     }
 
-    /// Stable finding key, or `None` for legacy V1 baselines.
-    pub fn finding_key(&self) -> Option<&FindingKey> {
-        self.finding_key.as_ref()
+    /// Semantic rule identity.
+    pub fn rule_key(&self) -> &RuleKey {
+        &self.rule_key
     }
 
-    fn identity_cmp(&self, other: &Self) -> Ordering {
-        match (&self.finding_key, &other.finding_key) {
-            (Some(left), Some(right)) => {
-                (&self.target, &self.rule, left).cmp(&(&other.target, &other.rule, right))
-            }
-            (None, None) => (&self.target, &self.rule, &self.finding).cmp(&(
-                &other.target,
-                &other.rule,
-                &other.finding,
-            )),
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
-        }
+    /// Structured observed-fact identity.
+    pub fn fact(&self) -> &StructuredFactIdentity {
+        &self.fact
     }
-}
 
-impl PartialEq for ViolationId {
-    fn eq(&self, other: &Self) -> bool {
-        self.identity_cmp(other) == Ordering::Equal
-    }
-}
-
-impl Eq for ViolationId {}
-
-impl PartialOrd for ViolationId {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for ViolationId {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.identity_cmp(other)
+    /// Project the complete semantic identity into canonical JSON.
+    pub fn to_json(&self) -> Value {
+        serde_json::json!({
+            "target": self.target,
+            "rule_key": self.rule_key.to_json(),
+            "fact": self.fact.to_json(),
+        })
     }
 }
 
@@ -84,6 +56,10 @@ impl Ord for ViolationId {
 pub struct BaselineEntry {
     /// Accepted violation identity.
     pub id: ViolationId,
+    /// Human-readable violated rule presentation.
+    pub rule: String,
+    /// Human-readable finding presentation.
+    pub finding: String,
     /// Accepted debt owner (optional metadata).
     pub owner: Option<String>,
     /// External tracking issue (optional metadata).
@@ -91,22 +67,15 @@ pub struct BaselineEntry {
 }
 
 fn sort_dedup_by_id(entries: &mut Vec<BaselineEntry>) {
+    let mut seen = BTreeSet::new();
+    entries.retain(|entry| seen.insert(entry.id.clone()));
     entries.sort_by(|a, b| a.id.cmp(&b.id));
-    entries.dedup_by(|a, b| a.id == b.id);
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-enum BaselineFormat {
-    V1,
-    #[default]
-    V2,
 }
 
 /// Recorded set of accepted violations.
 #[derive(Debug, Default)]
 pub struct Baseline {
     entries: Vec<BaselineEntry>,
-    format: BaselineFormat,
 }
 
 impl Baseline {
@@ -127,6 +96,8 @@ impl Baseline {
                     .iter()
                     .find(|entry| baseline_id_matches(&entry.id, &id));
                 BaselineEntry {
+                    rule: violation.rule.clone(),
+                    finding: violation.finding.clone(),
                     owner: prior.and_then(|entry| entry.owner.clone()),
                     tracker: prior.and_then(|entry| entry.tracker.clone()),
                     id,
@@ -134,10 +105,7 @@ impl Baseline {
             })
             .collect();
         sort_dedup_by_id(&mut entries);
-        Baseline {
-            entries,
-            format: BaselineFormat::V2,
-        }
+        Baseline { entries }
     }
 
     /// Iterator over recorded baseline entries.
@@ -154,12 +122,11 @@ impl Baseline {
     }
 
     /// Baseline entries matching no current violation.
-    pub fn stale(&self, report: &Report) -> Vec<&ViolationId> {
+    pub fn stale(&self, report: &Report) -> Vec<&BaselineEntry> {
         let current: Vec<ViolationId> = report.violations.iter().map(Violation::id).collect();
         self.entries
             .iter()
             .filter(|entry| !current.iter().any(|id| baseline_id_matches(&entry.id, id)))
-            .map(|entry| &entry.id)
             .collect()
     }
 
@@ -170,16 +137,12 @@ impl Baseline {
             .iter()
             .map(|entry| {
                 let mut object = serde_json::json!({
-                    "target": entry.id.target,
-                    "rule": entry.id.rule,
-                    "finding": entry.id.finding,
+                    "target": entry.id.target(),
+                    "rule": entry.rule,
+                    "finding": entry.finding,
+                    "rule_key": entry.id.rule_key().to_json(),
+                    "fact": entry.id.fact().to_json(),
                 });
-                if self.format == BaselineFormat::V2 {
-                    object["finding_key"] =
-                        entry.id.finding_key().map(FindingKey::to_json).expect(
-                            "a version-2 baseline entry must carry a structured finding key",
-                        );
-                }
                 if let Some(owner) = &entry.owner {
                     object["owner"] = serde_json::json!(owner);
                 }
@@ -189,23 +152,24 @@ impl Baseline {
                 object
             })
             .collect();
-        let version = match self.format {
-            BaselineFormat::V1 => 1,
-            BaselineFormat::V2 => 2,
-        };
-        let doc = serde_json::json!({ "version": version, "violations": violations });
+        let doc = serde_json::json!({ "format": BASELINE_FORMAT, "violations": violations });
         pretty_json(&doc)
     }
 
     /// Parse baseline from JSON document string.
     pub fn from_json(text: &str) -> Result<Self, String> {
         let doc: Value = serde_json::from_str(text).map_err(|err| err.to_string())?;
-        let format = match doc["version"].as_i64() {
-            Some(1) => BaselineFormat::V1,
-            Some(2) => BaselineFormat::V2,
-            Some(other) => return Err(format!("unsupported baseline version {other}")),
-            None => return Err("baseline is missing a numeric `version`".to_string()),
-        };
+        match doc.get("format") {
+            Some(Value::String(format)) if format == BASELINE_FORMAT => {}
+            Some(Value::String(format)) => {
+                return Err(format!("unsupported baseline format `{format}`"));
+            }
+            Some(_) => return Err("baseline `format` must be a string".to_string()),
+            None if doc.get("version").is_some() => {
+                return Err("numeric baseline versions are unsupported".to_string());
+            }
+            None => return Err("baseline is missing string `format`".to_string()),
+        }
         let array = doc["violations"]
             .as_array()
             .ok_or_else(|| "baseline `violations` must be an array".to_string())?;
@@ -229,35 +193,26 @@ impl Baseline {
             let target = field("target")?;
             let rule = field("rule")?;
             let finding = field("finding")?;
-            let id = match format {
-                BaselineFormat::V1 => ViolationId::legacy(target, rule, finding),
-                BaselineFormat::V2 => ViolationId {
-                    target,
-                    rule,
-                    finding,
-                    finding_key: Some(FindingKey::from_json(&item["finding_key"])?),
-                },
-            };
+            let id = ViolationId::new(
+                target,
+                RuleKey::from_json(&item["rule_key"])?,
+                StructuredFactIdentity::from_semantic_json(&item["fact"])?,
+            );
             entries.push(BaselineEntry {
                 id,
+                rule,
+                finding,
                 owner: optional("owner")?,
                 tracker: optional("tracker")?,
             });
         }
         sort_dedup_by_id(&mut entries);
-        Ok(Baseline { entries, format })
+        Ok(Baseline { entries })
     }
 }
 
 fn baseline_id_matches(baseline: &ViolationId, current: &ViolationId) -> bool {
-    match baseline.finding_key() {
-        Some(_) => baseline == current,
-        None => {
-            baseline.target == current.target
-                && baseline.rule == current.rule
-                && baseline.finding == current.finding
-        }
-    }
+    baseline == current
 }
 
 /// Mark each violation recorded in baseline as baselined.

@@ -82,7 +82,7 @@ fulfill_family hunyi/unsafe
 fulfill_example unsafe-confinement
 
 # ---------------------------------------------------------------- capability-catalog
-# Breadth-only contract coverage for the published 0.2.x families that have no honest home in the
+# Breadth-only contract coverage for published families that have no honest home in the
 # focused teaching examples. Bind stable structured identity, never the human finding sentence.
 cd "$WS/examples/capability-catalog"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
@@ -94,11 +94,11 @@ cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml 
 expect "$got" 1 "capability-catalog shell reacts"
 for identity in \
     '"rule": "restrict dependency sources to"' \
-    '"code": "external_importer"' \
-    '"code": "trait_impl_site"' \
-    '"code": "forbidden_marker_acquisition"' \
-    '"code": "dyn_trait_exposure"' \
-    '"code": "impl_trait_exposure"'
+    '"type": "tianheng.fact/guibiao/external-importer"' \
+    '"type": "tianheng.fact/hunyi/trait-impl-site"' \
+    '"type": "tianheng.fact/hunyi/forbidden-marker-acquisition"' \
+    '"type": "tianheng.fact/hunyi/dyn-trait-exposure"' \
+    '"type": "tianheng.fact/hunyi/impl-trait-exposure"'
 do
     grep -q "$identity" "$EXAMPLE_ARTIFACT_ROOT/capability_catalog.json" \
         || { echo "::error::capability catalog missing structured identity $identity"; exit 1; }
@@ -159,10 +159,10 @@ got=0
 cargo run --quiet --bin check "${PATCH[@]}" -- check --manifest-path Cargo.toml \
     --write-baseline "$BASELINE_PATH" >"$EXAMPLE_ARTIFACT_ROOT/composed_baseline_write.txt" 2>&1 || got=$?
 expect "$got" 0 "composed baseline write records existing drift"
-grep -q '"version": 2' "$BASELINE_PATH" \
-    || { echo "::error::composed baseline missing version 2"; exit 1; }
-grep -q '"finding_key"' "$BASELINE_PATH" \
-    || { echo "::error::composed baseline missing structured finding keys"; exit 1; }
+grep -q '"format": "tianheng.baseline/structured-facts"' "$BASELINE_PATH" \
+    || { echo "::error::composed baseline missing semantic format"; exit 1; }
+grep -q '"fact"' "$BASELINE_PATH" \
+    || { echo "::error::composed baseline missing structured facts"; exit 1; }
 grep -q '"violations"' "$BASELINE_PATH" \
     || { echo "::error::composed baseline missing violations"; exit 1; }
 

@@ -1,6 +1,6 @@
 //! Signature-coupling declaration DSL — [`SemanticBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// A semantic boundary: the public API of a module must not **expose** any forbidden
 /// type. Declared in Rust (the single source of truth), alongside — and composed with —
@@ -20,6 +20,20 @@ pub struct SemanticBoundary {
 }
 
 impl SemanticBoundary {
+    /// Stable semantic identity for this signature-coupling rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/signature-exposure",
+            [
+                ("forbidden", super::canonical_path_set(&self.forbidden)),
+                (
+                    "including_trait_impls",
+                    self.including_trait_impls.to_string(),
+                ),
+            ],
+        )
+    }
+
     /// Begin a semantic boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> SemanticCrateDraft {
         SemanticCrateDraft {

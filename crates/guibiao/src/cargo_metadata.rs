@@ -182,8 +182,8 @@ fn classify_source(dependency: &Value) -> SourceKind {
     }
 }
 
-/// The **real package names** (not local renames) of the target's dependencies in the
-/// selected table whose classified [`SourceKind`] is not in `allowed`. The observation
+/// The **real package names** (not local renames) and declared source kinds of the target's
+/// dependencies in the selected table whose classified [`SourceKind`] is not in `allowed`. The observation
 /// for [`Rule::RestrictDependencySourcesTo`]. Same conventions as [`dependencies`]:
 /// walks every declared dependency of the kind (path/internal included, since `Path` is
 /// a governed source), reports the package name (a renamed dep by its real name), and
@@ -196,21 +196,26 @@ pub(crate) fn dependencies_with_disallowed_source(
     package: &Value,
     kind: DependencyKind,
     allowed: &[SourceKind],
-) -> Vec<String> {
+) -> Vec<(String, SourceKind)> {
     let mut found = Vec::new();
     if let Some(deps) = package["dependencies"].as_array() {
         for dependency in deps {
             if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
                 continue;
             }
-            if !allowed.contains(&classify_source(dependency)) {
+            let source = classify_source(dependency);
+            if !allowed.contains(&source) {
                 if let Some(name) = dependency["name"].as_str() {
-                    found.push(name.to_string());
+                    found.push((name.to_string(), source));
                 }
             }
         }
     }
-    found.sort();
+    found.sort_by(|(left_name, left_source), (right_name, right_source)| {
+        left_name
+            .cmp(right_name)
+            .then_with(|| left_source.label().cmp(right_source.label()))
+    });
     found.dedup();
     found
 }

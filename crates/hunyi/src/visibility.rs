@@ -45,6 +45,7 @@ pub(crate) fn check_visibility_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: boundary.ceiling().rule(),
+            rule_key: boundary.rule_key(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -85,6 +86,6 @@ pub(crate) fn visibility_findings(
             )
         })
         .collect();
-    sort_faceted_facts(&mut findings);
+    sort_faceted_facts(&mut findings)?;
     Ok(findings)
 }

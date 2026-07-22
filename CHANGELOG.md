@@ -12,6 +12,38 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+### Added
+- Semantic `RuleKey` and `StructuredFactIdentity` inspection across 圭表, 渾儀, 漏刻, 璇璣, and
+  `tianheng::prelude::*`; all three instruments remain directly adoptable and return the same
+  structured reaction model.
+- Explicit machine-contract formats: `tianheng.baseline/structured-facts`,
+  `tianheng.reaction/structured-facts`, and `tianheng.constitution/declared-boundaries`.
+
+### Changed
+- **Breaking:** violation and baseline identity is now exactly governed target + semantic rule key
+  + structured fact identity. Rule/finding wording and all diagnostics remain available but cannot
+  affect matching, ordering, or SARIF fingerprints.
+- **Breaking:** SARIF partial fingerprints now use `tianheng/structured-fact-identity`, derived
+  solely from canonical semantic identity; `tianhengViolationId/v1` is no longer emitted.
+
+### Removed
+- **Breaking:** `FindingKey`, presentation-derived `ViolationId` construction, numeric baseline
+  generations, legacy text matching, and automatic baseline upgrade behavior.
+
+### Migration
+- Preserve desired `owner` / `tracker` annotations externally, move or delete the old baseline,
+  run `tianheng check --write-baseline <file>`, then restore annotations onto the newly observed
+  facts. Unsupported existing files are never overwritten. There is no automatic adapter.
+- Architecture tests should call an existing standalone `check*` function or
+  `check_constitution`, then assert on `Violation::rule_key()` and `Violation::fact()`. This release
+  adds no plugin protocol or `tianheng::testing` DSL.
+
+### Compatibility evidence
+- Pacta `d3e24df`'s unpublished `pacta-governance` consumer compiled against this checkout's local
+  `tianheng` and `guibiao` crates (`cargo check -p pacta-governance`) from a temporary copy; no
+  Pacta source migration was required. This is recorded external evidence, not a sibling-repository
+  dependency of Tianheng's required CI.
+
 ### Documentation
 - Refined core project documentation density (`PROJECT.md`, `BACKLOG.md`) to archive verbose historical post-mortems and prune redundant release ledgers, reducing context token overhead.
 

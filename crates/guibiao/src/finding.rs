@@ -1,8 +1,8 @@
 //! Dimension-owned observed facts and their shared reaction projection.
 
-use xuanji::{Finding, FindingKey};
+use xuanji::{Finding, StructuredFactIdentity};
 
-use crate::DependencyKind;
+use crate::{DependencyKind, SourceKind};
 
 pub(crate) enum CrateFact {
     Dependency {
@@ -12,6 +12,11 @@ pub(crate) enum CrateFact {
     Feature {
         package: String,
         feature: String,
+        kind: DependencyKind,
+    },
+    Source {
+        package: String,
+        source: SourceKind,
         kind: DependencyKind,
     },
 }
@@ -29,12 +34,21 @@ impl CrateFact {
         }
     }
 
+    pub(crate) fn source(package: String, source: SourceKind, kind: DependencyKind) -> Self {
+        Self::Source {
+            package,
+            source,
+            kind,
+        }
+    }
+
     pub(crate) fn into_finding(self) -> Finding {
         match self {
             CrateFact::Dependency { package, kind } => Finding::new(
                 format!("{package}{}", kind.finding_suffix()),
-                key(
+                fact(
                     "dependency",
+                    "dependency-edge",
                     [("kind", kind.key_label()), ("package", package.as_str())],
                 ),
             ),
@@ -44,12 +58,29 @@ impl CrateFact {
                 kind,
             } => Finding::new(
                 format!("{package}/{feature}{}", kind.finding_suffix()),
-                key(
-                    "dependency_feature",
+                fact(
+                    "dependency-feature",
+                    "declared-feature",
                     [
                         ("feature", feature.as_str()),
                         ("kind", kind.key_label()),
                         ("package", package.as_str()),
+                    ],
+                ),
+            ),
+            CrateFact::Source {
+                package,
+                source,
+                kind,
+            } => Finding::new(
+                format!("{package}{}", kind.finding_suffix()),
+                fact(
+                    "dependency-source",
+                    "declared-source",
+                    [
+                        ("kind", kind.key_label()),
+                        ("package", package.as_str()),
+                        ("source", source.label()),
                     ],
                 ),
             ),
@@ -70,28 +101,38 @@ impl ModuleFact {
     pub(crate) fn into_finding(self) -> Finding {
         match self {
             ModuleFact::ImportedPath(path) => {
-                let key = key("imported_path", [("path", path.as_str())]);
+                let key = fact("imported-path", "module-path", [("path", path.as_str())]);
                 Finding::new(path, key)
             }
             ModuleFact::ImporterModule(module) => {
-                let key = key("importer_module", [("module", module.as_str())]);
+                let key = fact(
+                    "importer-module",
+                    "module-path",
+                    [("module", module.as_str())],
+                );
                 Finding::new(module, key)
             }
             ModuleFact::ExternalImporter(module) => {
-                let key = key("external_importer", [("module", module.as_str())]);
+                let key = fact(
+                    "external-importer",
+                    "module-path",
+                    [("module", module.as_str())],
+                );
                 Finding::new(module, key)
             }
             ModuleFact::InlinePath { path, module } => Finding::new(
                 format!("{path} in {module}"),
-                key(
-                    "inline_path",
+                fact(
+                    "inline-path",
+                    "path-in-module",
                     [("module", module.as_str()), ("path", path.as_str())],
                 ),
             ),
             ModuleFact::InlineGlob { path, module } => Finding::new(
                 format!("glob {path} in {module}"),
-                key(
-                    "inline_glob",
+                fact(
+                    "inline-glob",
+                    "path-in-module",
                     [("module", module.as_str()), ("path", path.as_str())],
                 ),
             ),
@@ -99,19 +140,29 @@ impl ModuleFact {
     }
 }
 
-fn key<const N: usize>(code: &str, fields: [(&str, &str); N]) -> FindingKey {
-    FindingKey::of("guibiao", code, fields)
+fn fact<const N: usize>(
+    family: &str,
+    shape: &str,
+    fields: [(&str, &str); N],
+) -> StructuredFactIdentity {
+    StructuredFactIdentity::of(format!("tianheng.fact/guibiao/{family}"), shape, fields)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    type KeyCase<F> = (F, &'static str, Vec<(&'static str, &'static str)>);
+    type KeyCase<F> = (F, Vec<(&'static str, &'static str)>);
 
     fn assert_dependency_kind_is_cataloged(kind: DependencyKind) {
         match kind {
             DependencyKind::Normal | DependencyKind::Dev | DependencyKind::Build => {}
+        }
+    }
+
+    fn assert_source_kind_is_cataloged(source: SourceKind) {
+        match source {
+            SourceKind::Registry | SourceKind::Git | SourceKind::Path => {}
         }
     }
 
@@ -123,6 +174,14 @@ mod tests {
                 feature: _,
                 kind,
             } => assert_dependency_kind_is_cataloged(*kind),
+            CrateFact::Source {
+                package: _,
+                source,
+                kind,
+            } => {
+                assert_dependency_kind_is_cataloged(*kind);
+                assert_source_kind_is_cataloged(*source);
+            }
         }
     }
 
@@ -136,10 +195,13 @@ mod tests {
         }
     }
 
-    fn assert_key(fact: impl IntoFinding, code: &str, fields: &[(&str, &str)]) {
+    fn assert_key(fact: impl IntoFinding, family: &str, shape: &str, fields: &[(&str, &str)]) {
         let finding = fact.into_finding();
-        assert_eq!(finding.key().namespace(), "guibiao");
-        assert_eq!(finding.key().code(), code);
+        assert_eq!(
+            finding.key().fact_type(),
+            format!("tianheng.fact/guibiao/{family}")
+        );
+        assert_eq!(finding.key().shape(), shape);
         assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
     }
 
@@ -169,14 +231,36 @@ mod tests {
         for (kind, label) in dependency_cases {
             let fact = CrateFact::dependency("serde".to_string(), kind);
             assert_crate_fact_is_cataloged(&fact);
-            assert_key(fact, "dependency", &[("kind", label), ("package", "serde")]);
+            assert_key(
+                fact,
+                "dependency",
+                "dependency-edge",
+                &[("kind", label), ("package", "serde")],
+            );
 
             let fact = CrateFact::feature("serde".to_string(), "derive".to_string(), kind);
             assert_crate_fact_is_cataloged(&fact);
             assert_key(
                 fact,
-                "dependency_feature",
+                "dependency-feature",
+                "declared-feature",
                 &[("feature", "derive"), ("kind", label), ("package", "serde")],
+            );
+        }
+
+        let source_cases = [
+            (SourceKind::Registry, "registry"),
+            (SourceKind::Git, "git"),
+            (SourceKind::Path, "path"),
+        ];
+        for (source, label) in source_cases {
+            let fact = CrateFact::source("serde".to_string(), source, DependencyKind::Normal);
+            assert_crate_fact_is_cataloged(&fact);
+            assert_key(
+                fact,
+                "dependency-source",
+                "declared-source",
+                &[("kind", "normal"), ("package", "serde"), ("source", label)],
             );
         }
     }
@@ -186,17 +270,14 @@ mod tests {
         let cases: Vec<KeyCase<ModuleFact>> = vec![
             (
                 ModuleFact::ImportedPath("crate::ports".to_string()),
-                "imported_path",
                 vec![("path", "crate::ports")],
             ),
             (
                 ModuleFact::ImporterModule("crate::api".to_string()),
-                "importer_module",
                 vec![("module", "crate::api")],
             ),
             (
                 ModuleFact::ExternalImporter("crate::ffi".to_string()),
-                "external_importer",
                 vec![("module", "crate::ffi")],
             ),
             (
@@ -204,7 +285,6 @@ mod tests {
                     path: "std::time::SystemTime::now".to_string(),
                     module: "crate::kernel".to_string(),
                 },
-                "inline_path",
                 vec![
                     ("module", "crate::kernel"),
                     ("path", "std::time::SystemTime::now"),
@@ -215,13 +295,19 @@ mod tests {
                     path: "std::time::*".to_string(),
                     module: "crate::kernel".to_string(),
                 },
-                "inline_glob",
                 vec![("module", "crate::kernel"), ("path", "std::time::*")],
             ),
         ];
-        for (fact, code, fields) in cases {
+        let shapes = [
+            ("imported-path", "module-path"),
+            ("importer-module", "module-path"),
+            ("external-importer", "module-path"),
+            ("inline-path", "path-in-module"),
+            ("inline-glob", "path-in-module"),
+        ];
+        for ((fact, fields), (family, shape)) in cases.into_iter().zip(shapes) {
             assert_module_fact_is_cataloged(&fact);
-            assert_key(fact, code, &fields);
+            assert_key(fact, family, shape, &fields);
         }
     }
 
@@ -255,5 +341,23 @@ mod tests {
             .key()
             .clone();
         assert_ne!(import, importer);
+    }
+
+    #[test]
+    fn unrelated_construction_order_does_not_change_fact_identity() {
+        let before = ModuleFact::ImportedPath("crate::ports".to_string())
+            .into_finding()
+            .key()
+            .clone();
+        let _unrelated = ModuleFact::InlinePath {
+            path: "std::time::SystemTime::now".to_string(),
+            module: "crate::adapter".to_string(),
+        }
+        .into_finding();
+        let after = ModuleFact::ImportedPath("crate::ports".to_string())
+            .into_finding()
+            .key()
+            .clone();
+        assert_eq!(before, after);
     }
 }

@@ -38,6 +38,7 @@ pub(crate) fn check_async_exposure_boundary(
 ) -> Result<(), String> {
     let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
     let src_dir = src_dir.as_path();
+    let rule_key = boundary.rule_key();
 
     // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
     // The default path governs only the anchored module's own seam (byte-identical to before).
@@ -53,6 +54,7 @@ pub(crate) fn check_async_exposure_boundary(
             MultiModuleViolationContext {
                 target: &boundary.module,
                 rule: ASYNC_EXPOSURE_RULE,
+                rule_key,
                 reason: &boundary.reason,
                 severity: boundary.severity,
                 anchor: boundary.anchor(),
@@ -75,6 +77,7 @@ pub(crate) fn check_async_exposure_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: ASYNC_EXPOSURE_RULE,
+            rule_key,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -93,22 +96,9 @@ pub(crate) fn check_async_exposure_boundary(
 /// collector ([`collect_item_async_exposures`], so a seam finding is byte-identical to the
 /// single-module path), applied at every module the subtree walk yields.
 ///
-/// `ordinal` is ONE counter incrementing continuously across every `(module, items, file)` tuple
-/// `walk_subtree_modules` returns — never reset per tuple. `canonical_self_owner` falls back to a
-/// positional `_#{ordinal}` label when an impl block's self-type is genuinely unrenderable (a
-/// complex const-generic argument), and that label is `SemanticFact::AsyncInherentMethod`'s ONLY
-/// disambiguator (unlike its `AsyncFreeFn`/`AsyncTraitMethod` siblings, which embed `module`
-/// directly) — so two DIFFERENT tuples (two `#[cfg]`-split branches of the same anchor, or two
-/// distinct descendant modules) each producing the SAME same-named-method-at-the-same-position
-/// unrenderable self type must never be assigned the SAME ordinal, or their facts become
-/// byte-identical and the shared fact-only dedup (`sort_attributed_facts`) silently collapses two
-/// genuinely distinct violations into one — a real false negative (found on a round-11 adversarial
-/// review; see `PROJECT.md`'s Decisions). Resetting per tuple (the prior behavior) also disagreed
-/// with the seam path's own continuous `enumerate()` over the flattened branch union
-/// (`shape_module_findings`), assigning the anchor module's own items a DIFFERENT ordinal — and
-/// thus a different owner-fallback string — depending on which path observed them, contradicting
-/// this function's own "byte-identical to the single-module path" doc promise for exactly the
-/// unrenderable-self-type case that promise exists to cover.
+/// Owner identity is structural and never position-derived. If a public async inherent method's
+/// owner cannot use the ordinary canonical renderer, collection fails loud; cfg branch or subtree
+/// order therefore cannot become public identity.
 pub(crate) fn async_exposure_subtree_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -117,13 +107,11 @@ pub(crate) fn async_exposure_subtree_findings(
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
     let mut findings: Vec<(SemanticFact, String, PathBuf)> = Vec::new();
-    let mut ordinal = 0usize;
     for (mod_path, items, file) in &modules {
         let uses = collect_uses(items);
         for item in items {
             let mut collected = Vec::new();
-            collect_item_async_exposures(item, mod_path, &uses, ordinal, &mut collected);
-            ordinal += 1;
+            collect_item_async_exposures(item, mod_path, &uses, 0, &mut collected)?;
             findings.extend(
                 collected
                     .into_iter()
@@ -131,7 +119,7 @@ pub(crate) fn async_exposure_subtree_findings(
             );
         }
     }
-    sort_attributed_facts(&mut findings);
+    sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }
 

@@ -20,8 +20,8 @@ fn the_stray_unsafe_reacts_with_exit_1() {
     // confined `crate::ffi` one — the confinement reacts on the right module.
     if let Outcome::Violations(report) = &outcome {
         assert!(report.violations.iter().any(|violation| {
-            violation.finding_key().namespace() == "hunyi"
-                && violation.finding_key().code() == "unsafe_site"
+            violation.fact().fact_type() == "tianheng.fact/hunyi/unsafe-site"
+                && violation.fact().shape() == "unsafe-block"
         }));
         let findings: Vec<&str> = report
             .violations

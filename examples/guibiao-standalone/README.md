@@ -30,9 +30,8 @@ cargo test               # asserts the reaction + the adoption ladder + the stab
 - **the reaction** — the `domain → infra` import trips the enforce boundary (exit 1);
 - **the adoption ladder** — `warn` reports without gating (exit 0); a `Baseline` grandfathers
   existing violations (exit 0) while an un-baselined one still reacts (exit 1);
-- **identity ⊥ presentation/metadata** — version-2 identity is
-  `(target, rule, finding_key)`, so finding wording and `file` relocation do not churn the
-  baseline; version-1 baselines keep exact-text matching only for migration.
+- **identity ⊥ presentation/metadata** — semantic identity is governed target + `RuleKey` +
+  `StructuredFactIdentity`, so finding wording and `file` relocation do not churn the baseline.
 
 > Most adopters graduate from one 儀 to the composed constitution via the
 > [`tianheng`](https://crates.io/crates/tianheng) shell — see the `composed` example.

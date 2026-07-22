@@ -86,8 +86,9 @@ conventional orphan file.
 
 ## Adoption & status
 
-**Experimental — pre-1.0.** The current `0.2.x` line is patch-compatible; a breaking public change
-must earn a new minor. The adopter-written boundary DSL remains the guarded surface.
+**Experimental — pre-1.0.** The 0.3.0 line intentionally replaces presentation-derived identity
+with `RuleKey` + `StructuredFactIdentity`. The adopter-written boundary DSL remains the guarded
+surface; callers may inspect the returned structured `Outcome` directly through this crate.
 
 Adopt 圭表 on its own — the footprint is just `guibiao` (+ `serde_json`), no `syn` — or graduate to
 the composed constitution through the [`tianheng`](https://crates.io/crates/tianheng) shell (which

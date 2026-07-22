@@ -390,11 +390,10 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
 /// the written token form); its generic arguments are appended as rendered, so `Foo<u8>` and
 /// `Foo<u16>` stay distinct. When a part cannot render — a **complex const-generic expression**
 /// argument (`Arr<{ N + 1 }>`), or a non-path / `verbatim` / impl-Trait self type — the label
-/// falls back to a positional marker `_#{ordinal}` (the impl block's index among the module's
-/// items / the scanned impl sites), which stays injective for two otherwise-indistinguishable
-/// blocks. `ordinal` is reached only by these rare unrenderable self types and is stable unless
-/// the items are reordered — this is the render-granularity bound, injective rather than a
-/// silent collapse.
+/// produces an internal positional sentinel `_#{ordinal}`. Every public observation path routes
+/// that sentinel through `reject_positional_identity`, so unsupported syntax fails loud instead of
+/// publishing traversal position. The sentinel exists only to carry renderer failure to that
+/// shared reaction without silently collapsing two sites.
 pub(crate) fn canonical_self_owner(
     self_ty: &syn::Type,
     uses: &UseMap,
@@ -420,15 +419,35 @@ pub(crate) fn canonical_self_owner(
             if let Some(base) = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule) {
                 return match render_last_segment_args(&tp.path) {
                     Some(args) => format!("{base}{args}"),
-                    // Base resolved but a generic arg is unrenderable: keep the readable base,
-                    // disambiguate the arg by the block's position so two blocks stay distinct.
+                    // Base resolved but a generic arg is unrenderable: preserve the readable base
+                    // beside the internal sentinel that the observation path rejects.
                     None => format!("{base}<_#{ordinal}>"),
                 };
             }
         }
     }
-    // A non-path self type: render it if the hand-rolled renderer can, else a positional marker.
+    // A non-path self type: render it if possible, else return the rejected internal sentinel.
     type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}"))
+}
+
+/// Canonicalize an impl self type without inventing traversal-position identity.
+///
+/// An unsupported self type returns `None`; a caller observing a seam that needs the owner can
+/// then fail loud instead of publishing `_#ordinal`.
+pub(crate) fn canonical_self_owner_without_fallback(
+    self_ty: &syn::Type,
+    uses: &UseMap,
+    module: &str,
+    impl_type_params: &std::collections::HashSet<String>,
+) -> Option<String> {
+    if let syn::Type::Path(tp) = self_ty {
+        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
+            if let Some(base) = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule) {
+                return Some(format!("{base}{}", render_last_segment_args(&tp.path)?));
+            }
+        }
+    }
+    type_to_string(self_ty)
 }
 
 /// Canonicalize a path's **last** segment's angle-bracketed generic arguments (`<u8, T>`), `""` when

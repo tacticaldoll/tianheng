@@ -37,8 +37,7 @@ fn main() -> std::process::ExitCode {
 
 ### The adopter surface
 
-`tianheng::prelude::*` is the supported composed entrypoint, with two purpose-only tiers that carry
-the same `0.2.x` compatibility promise:
+`tianheng::prelude::*` is the supported composed entrypoint, with two purpose-only tiers:
 
 - **Declare and run:** `Constitution`, the terminal static/semantic/runtime boundary types,
   `SansIoPure`, their selector enums, `Severity`, and `run`.
@@ -60,7 +59,12 @@ use tianheng::prelude::*;
 let law = Constitution::new("my-project");
 let outcome = check_constitution(&law, Path::new("Cargo.toml"));
 match outcome {
-    Outcome::Violations(report) => assert!(!report.violations.is_empty()),
+    Outcome::Violations(report) => {
+        let violation = &report.violations[0];
+        assert!(!violation.id().target().is_empty());
+        assert!(!violation.rule_key().rule_type().is_empty());
+        assert!(!violation.fact().fact_type().is_empty());
+    }
     Outcome::Clean => {}
     Outcome::ConstitutionError(message) => panic!("cannot evaluate the law: {message}"),
     _ => unreachable!("Outcome is non-exhaustive"),
@@ -70,6 +74,12 @@ match outcome {
 `check_constitution` requires an explicit manifest and returns the raw, unbaselined `Outcome`. It
 does run Cargo metadata and source observation. Use `run` for nearest-manifest discovery, baseline
 gate/write modes, coverage advisories, text/JSON/SARIF presentation, and process exit handling.
+
+The same reaction model is available directly from `guibiao`, `hunyi`, and `louke`; each
+instrument can be adopted and inspected without importing this facade. Tianheng is the one
+built-in cross-instrument composer. This release adds neither a dimension/plugin trait nor a
+`tianheng::testing` assertion DSL: architecture tests call the existing pure check functions and
+assert on structured `Outcome` values.
 
 `your-binary check --manifest-path path/to/Cargo.toml` reacts against *your* constitution:
 exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`

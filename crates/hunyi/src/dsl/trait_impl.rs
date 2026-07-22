@@ -1,6 +1,6 @@
 //! Trait-impl-locality declaration DSL — [`TraitImplBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// A trait-impl-locality boundary: within a target crate, the named trait may be
 /// implemented **only** inside the declared allowed module location(s). An
@@ -22,6 +22,20 @@ pub struct TraitImplBoundary {
 }
 
 impl TraitImplBoundary {
+    /// Stable semantic identity for this trait-implementation locality rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/trait-impl-locality",
+            [
+                (
+                    "allowed_locations",
+                    super::canonical_path_set(&self.allowed_locations),
+                ),
+                ("trait", super::canonical_path(&self.trait_path)),
+            ],
+        )
+    }
+
     /// Begin a trait-impl-locality boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> TraitImplCrateDraft {
         TraitImplCrateDraft {

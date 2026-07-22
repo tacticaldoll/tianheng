@@ -21,6 +21,7 @@
 
 mod baseline;
 mod finding;
+mod identity;
 mod model;
 mod util;
 mod violation;
@@ -29,7 +30,8 @@ mod violation;
 mod tests;
 
 pub use baseline::{Baseline, BaselineEntry, ViolationId, apply_baseline};
-pub use finding::{Finding, FindingKey};
+pub use finding::Finding;
+pub use identity::{RuleKey, StructuredFactIdentity};
 pub use model::{BoundaryKind, Outcome, Polarity, Severity};
 pub use util::pretty_json;
 pub use violation::{Report, Violation};

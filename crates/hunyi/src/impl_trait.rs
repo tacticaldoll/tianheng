@@ -60,6 +60,7 @@ pub(crate) fn check_impl_trait_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: IMPL_TRAIT_RULE,
+            rule_key: boundary.rule_key(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -86,7 +87,10 @@ pub(crate) fn impl_trait_module_findings(
         root_file,
         module,
         crate_package,
-        collect_item_return_impl_traits,
+        |item, module, uses, ordinal, out| {
+            collect_item_return_impl_traits(item, module, uses, ordinal, out);
+            Ok(())
+        },
         |exposure| shape_finding(exposure, ExposureKind::ImplTrait),
     )
 }

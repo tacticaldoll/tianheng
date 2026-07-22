@@ -128,3 +128,13 @@ A forbidden-marker violation report SHALL identify the governed subtree anchor, 
 
 - **WHEN** `crate::domain::order` declares `#[derive(serde::Serialize)] pub struct Order;` under a boundary forbidding `serde::Serialize` on `crate::domain`
 - **THEN** the report names the anchor `crate::domain`, the rule "must not acquire trait", the finding `derive serde::Serialize on crate::domain::order::Order` (canonical-path-keyed), the boundary's reason, and indicates CI failed
+
+### Requirement: Forbidden-marker acquisitions are structured facts
+
+A marker-acquisition violation SHALL encode acquisition form, marker, module, owner/type, and item
+roles where observed under a structured rule key. Rendered acquisition text and scan position SHALL
+NOT define identity.
+
+#### Scenario: Different acquisitions stay distinct
+- **WHEN** two forbidden acquisitions differ by form, marker, module, or owner
+- **THEN** their structured facts differ in that observed role

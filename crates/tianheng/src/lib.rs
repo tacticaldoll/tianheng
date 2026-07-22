@@ -34,8 +34,8 @@ mod sans_io;
 
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
-    Finding, FindingKey, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, Severity,
-    SourceKind, Violation, ViolationId, check, workspace_member_src_dirs,
+    Finding, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, RuleKey, Severity,
+    SourceKind, StructuredFactIdentity, Violation, ViolationId, check, workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
@@ -225,7 +225,7 @@ impl From<GnomonConstitution> for Constitution {
 ///
 /// # Compatibility contract
 ///
-/// The wildcard prelude has two usage tiers with the same 0.2.x compatibility status:
+/// The wildcard prelude has two usage tiers:
 ///
 /// - **Declaration and execution:** `Constitution`, the terminal boundary and composed-profile
 ///   types, their selector enums, [`Severity`], and [`run`]. This is the normal adopter path.
@@ -240,10 +240,10 @@ impl From<GnomonConstitution> for Constitution {
 pub mod prelude {
     pub use super::{
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
-        CrateBoundary, DependencyKind, DynTraitBoundary, Finding, FindingKey,
-        ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, ModuleRule, Outcome, Polarity,
-        Report, Rule, RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
-        TraitImplBoundary, UnsafeBoundary, Violation, ViolationId, VisibilityBoundary,
-        VisibilityCeiling, check, check_constitution, run,
+        CrateBoundary, DependencyKind, DynTraitBoundary, Finding, ForbiddenMarkerBoundary,
+        ImplTraitBoundary, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, RuleKey,
+        RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
+        StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation, ViolationId,
+        VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
     };
 }

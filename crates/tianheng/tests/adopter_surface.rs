@@ -39,7 +39,8 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<Baseline>();
     assert_public_type::<BaselineEntry>();
     assert_public_type::<Finding>();
-    assert_public_type::<FindingKey>();
+    assert_public_type::<RuleKey>();
+    assert_public_type::<StructuredFactIdentity>();
     assert_public_type::<Outcome>();
     assert_public_type::<Polarity>();
     assert_public_type::<Report>();

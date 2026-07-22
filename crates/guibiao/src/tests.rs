@@ -16,16 +16,217 @@ fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
         None => crate::finding::CrateFact::dependency(finding.to_string(), DependencyKind::Normal)
             .into_finding(),
     };
-    ViolationId::new(target, rule, finding)
+    ViolationId::new(
+        target,
+        RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
+        finding.key().clone(),
+    )
 }
 
 fn one_enforce_violation() -> Report {
     Report::new(vec![Violation::new(
         BoundaryKind::Crate,
         test_id("core", "deny external dependencies", "serde"),
+        "deny external dependencies",
+        "serde",
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     )])
+}
+
+#[test]
+fn every_static_rule_has_an_exact_semantic_key() {
+    let crate_rules = vec![
+        (
+            Rule::DenyExternalDependencies {
+                allowed: vec!["serde".to_string()],
+            },
+            "tianheng.rule/guibiao/deny-external-dependencies",
+            vec![("allowed", "[\"serde\"]")],
+        ),
+        (
+            Rule::ForbidDependencyOn {
+                crates: vec!["serde".to_string()],
+            },
+            "tianheng.rule/guibiao/forbid-dependency-on",
+            vec![("crates", "[\"serde\"]")],
+        ),
+        (
+            Rule::RestrictDependenciesTo {
+                allowed: vec!["serde".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-dependencies-to",
+            vec![("allowed", "[\"serde\"]")],
+        ),
+        (
+            Rule::RestrictWorkspaceDependenciesTo {
+                allowed: vec!["domain".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-workspace-dependencies-to",
+            vec![("allowed", "[\"domain\"]")],
+        ),
+        (
+            Rule::RestrictDependencySourcesTo {
+                allowed: vec![SourceKind::Registry],
+            },
+            "tianheng.rule/guibiao/restrict-dependency-sources-to",
+            vec![("allowed", "[\"registry\"]")],
+        ),
+        (
+            Rule::RestrictFeaturesOf {
+                crate_: "serde".to_string(),
+                allowed: vec!["derive".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-features-of",
+            vec![("allowed", "[\"derive\"]"), ("crate", "serde")],
+        ),
+        (
+            Rule::ForbidFeaturesOf {
+                crate_: "serde".to_string(),
+                forbidden: vec!["unstable".to_string()],
+            },
+            "tianheng.rule/guibiao/forbid-features-of",
+            vec![("crate", "serde"), ("forbidden", "[\"unstable\"]")],
+        ),
+    ];
+    for (rule, expected, fields) in crate_rules {
+        assert_eq!(rule.key().rule_type(), expected);
+        assert_eq!(rule.key().fields().collect::<Vec<_>>(), fields);
+    }
+
+    let module_rules = vec![
+        (
+            ModuleRule::MustNotImport {
+                module: "crate::adapter".to_string(),
+            },
+            "tianheng.rule/guibiao/must-not-import",
+            vec![("module", "crate::adapter")],
+        ),
+        (
+            ModuleRule::RestrictImportsTo {
+                allowed: vec!["crate::types".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-imports-to",
+            vec![("allowed", "[\"crate::types\"]")],
+        ),
+        (
+            ModuleRule::MustNotBeImportedBy {
+                importer: "crate::http".to_string(),
+            },
+            "tianheng.rule/guibiao/must-not-be-imported-by",
+            vec![("importer", "crate::http")],
+        ),
+        (
+            ModuleRule::MustOnlyBeImportedBy {
+                allowed: vec!["crate::facade".to_string()],
+            },
+            "tianheng.rule/guibiao/must-only-be-imported-by",
+            vec![("allowed", "[\"crate::facade\"]")],
+        ),
+        (
+            ModuleRule::ConfineExternalCrate {
+                crate_name: "libc".to_string(),
+            },
+            "tianheng.rule/guibiao/confine-external-crate",
+            vec![("crate", "libc")],
+        ),
+        (
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix: "std::time".to_string(),
+                ending_with: Some(vec!["now".to_string()]),
+                strict: false,
+                strict_external: false,
+            },
+            "tianheng.rule/guibiao/confine-inline-symbol-path",
+            vec![
+                ("ending_with", "[\"now\"]"),
+                ("prefix", "std::time"),
+                ("strict", "false"),
+            ],
+        ),
+    ];
+    for (rule, expected, fields) in module_rules {
+        assert_eq!(rule.key().rule_type(), expected);
+        assert_eq!(rule.key().fields().collect::<Vec<_>>(), fields);
+    }
+}
+
+#[test]
+fn rule_set_order_is_canonical_and_presentation_is_not_identity() {
+    let left = Rule::ForbidDependencyOn {
+        crates: vec!["serde".to_string(), "tokio".to_string()],
+    };
+    let right = Rule::ForbidDependencyOn {
+        crates: vec!["tokio".to_string(), "serde".to_string()],
+    };
+    assert_eq!(left.key(), right.key());
+    let changed_law = Rule::ForbidDependencyOn {
+        crates: vec!["serde".to_string(), "tracing".to_string()],
+    };
+    assert_ne!(left.key(), changed_law.key());
+
+    let default = ModuleRule::ConfineInlineSymbolPath {
+        prefix: "std::time".to_string(),
+        ending_with: Some(vec!["now".to_string()]),
+        strict: false,
+        strict_external: false,
+    };
+    let strict_external = ModuleRule::ConfineInlineSymbolPath {
+        prefix: "std::time".to_string(),
+        ending_with: Some(vec!["now".to_string()]),
+        strict: false,
+        strict_external: true,
+    };
+    assert_ne!(default.text(), strict_external.text());
+    assert_eq!(default.key(), strict_external.key());
+
+    let raw = ModuleRule::MustNotImport {
+        module: "crate::r#type".to_string(),
+    };
+    let plain = ModuleRule::MustNotImport {
+        module: "crate::type".to_string(),
+    };
+    assert_eq!(raw.key(), plain.key());
+}
+
+#[test]
+fn dependency_fact_identity_survives_reorder_and_unrelated_insertion() {
+    fn identities(package: &serde_json::Value) -> Vec<StructuredFactIdentity> {
+        Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry],
+        }
+        .facts(package, &[], DependencyKind::Normal)
+        .into_iter()
+        .map(|fact| fact.into_finding().key().clone())
+        .collect()
+    }
+
+    let before = serde_json::json!({
+        "dependencies": [
+            { "name": "blocked", "source": "git+https://example.invalid/blocked", "kind": null }
+        ]
+    });
+    let after = serde_json::json!({
+        "dependencies": [
+            { "name": "allowed", "source": "registry+https://example.invalid/index", "kind": null },
+            { "name": "blocked", "source": "git+https://example.invalid/blocked", "kind": null }
+        ]
+    });
+    assert_eq!(identities(&before), identities(&after));
+
+    let distinct_sources = serde_json::json!({
+        "dependencies": [
+            { "name": "same", "source": null, "kind": null },
+            { "name": "same", "source": "git+https://example.invalid/same", "kind": null }
+        ]
+    });
+    let facts = Rule::RestrictDependencySourcesTo { allowed: vec![] }
+        .facts(&distinct_sources, &[], DependencyKind::Normal)
+        .into_iter()
+        .map(|fact| fact.into_finding().key().clone())
+        .collect::<Vec<_>>();
+    assert_eq!(facts.len(), 2);
+    assert_ne!(facts[0], facts[1]);
 }
 
 /// A unique, self-cleaning temp Cargo-package-shaped `src/` tree: write source files, add
@@ -322,11 +523,16 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
     assert_eq!(violations[0].rule, "module must not import");
     assert_eq!(violations[0].finding, "crate::sink");
     let id = violations[0].id();
-    let key = id
-        .finding_key()
-        .expect("a production violation has structured identity");
-    assert_eq!(key.namespace(), "guibiao");
-    assert_eq!(key.code(), "imported_path");
+    assert_eq!(id.target(), "crate::foo::lib");
+    let rule = id.rule_key();
+    assert_eq!(rule.rule_type(), "tianheng.rule/guibiao/must-not-import");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![("module", "crate::sink")]
+    );
+    let key = id.fact();
+    assert_eq!(key.fact_type(), "tianheng.fact/guibiao/imported-path");
+    assert_eq!(key.shape(), "module-path");
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![("path", "crate::sink")]
@@ -1223,7 +1429,7 @@ fn restrict_imports_to_honors_warn_severity_and_its_distinct_label() {
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert_eq!(violations[0].severity, Severity::Warn);
-    // A label distinct from `must not import`, so baseline identity does not collide.
+    // A distinct rule family and semantic key prevent baseline identity collision.
     assert_eq!(violations[0].rule, "restrict imports to");
 }
 
@@ -1477,6 +1683,7 @@ fn must_not_be_imported_by_projects_its_importer() {
     );
 
     let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["format"], "tianheng.constitution/declared-boundaries");
     assert_eq!(
         doc["boundaries"][0]["rule"],
         "module must not be imported by"
@@ -1777,10 +1984,14 @@ fn a_baselined_enforce_violation_does_not_fail() {
 
 #[test]
 fn a_new_enforce_violation_fails_against_a_baseline() {
-    let baseline = Baseline::from_json(
-            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"other"}]}"#,
-        )
-        .unwrap();
+    let baseline = Baseline::of(&Report::new(vec![Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "deny external dependencies", "other"),
+        "deny external dependencies",
+        "other",
+        "core must stay dependency-light".to_string(),
+        Severity::Enforce,
+    )]));
     let mut report = one_enforce_violation();
     apply_baseline(&mut report, &baseline);
     assert!(
@@ -1793,10 +2004,14 @@ fn a_new_enforce_violation_fails_against_a_baseline() {
 #[test]
 fn stale_finds_entries_with_no_current_match() {
     let report = one_enforce_violation();
-    let baseline = Baseline::from_json(
-            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"gone"}]}"#,
-        )
-        .unwrap();
+    let baseline = Baseline::of(&Report::new(vec![Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "deny external dependencies", "gone"),
+        "deny external dependencies",
+        "gone",
+        "core must stay dependency-light".to_string(),
+        Severity::Enforce,
+    )]));
     let stale = baseline.stale(&report);
     assert_eq!(stale.len(), 1);
     assert_eq!(stale[0].finding, "gone");
@@ -1809,11 +2024,16 @@ fn report_json_projects_a_violation_with_its_kind() {
     assert_eq!(doc["outcome"], "violations");
     assert_eq!(doc["exit_code"], 1);
     let violation = &doc["violations"][0];
+    assert_eq!(doc["format"], "tianheng.reaction/structured-facts");
     assert_eq!(violation["kind"], "crate");
     assert_eq!(violation["finding"], "serde");
-    assert_eq!(violation["finding_key"]["namespace"], "guibiao");
-    assert_eq!(violation["finding_key"]["code"], "dependency");
-    assert_eq!(violation["finding_key"]["fields"]["package"], "serde");
+    assert_eq!(
+        violation["fact"]["type"],
+        "tianheng.fact/guibiao/dependency"
+    );
+    assert_eq!(violation["fact"]["shape"], "dependency-edge");
+    assert_eq!(violation["fact"]["fields"]["package"], "serde");
+    assert!(violation["rule_key"].is_object());
     assert_eq!(violation["severity"], "enforce");
     assert_eq!(violation["baselined"], false);
     // `reason` is the repair hint; there is no separate field.
@@ -1847,29 +2067,25 @@ fn report_json_reflects_baseline_and_stale_in_gate() {
     let baseline = Baseline::of(&report);
     apply_baseline(&mut report, &baseline);
     // A baseline entry that no current violation matches is stale.
-    let stale = vec![test_id("core", "deny external dependencies", "gone")];
+    let stale_baseline = Baseline::from_json(
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"deny external dependencies","finding":"gone",
+            "rule_key":{"type":"tianheng.rule/test/policy","fields":{"policy":"deny external dependencies"}},
+            "fact":{"type":"tianheng.fact/guibiao/dependency","shape":"declared-dependency","fields":{"kind":"normal","package":"gone"}}
+        }]}"#,
+    )
+    .unwrap();
+    let stale: Vec<BaselineEntry> = stale_baseline
+        .stale(&Report::empty())
+        .into_iter()
+        .cloned()
+        .collect();
     let doc: serde_json::Value =
         serde_json::from_str(&report_json(&Outcome::Violations(report), &stale, None)).unwrap();
     assert_eq!(doc["exit_code"], 0, "a fully baselined run does not fail");
     assert_eq!(doc["violations"][0]["baselined"], true);
     assert_eq!(doc["stale_baseline"][0]["finding"], "gone");
-    assert!(doc["stale_baseline"][0]["finding_key"].is_object());
-
-    let legacy = Baseline::from_json(
-        r#"{"version":1,"violations":[{
-            "target":"core","rule":"deny external dependencies","finding":"legacy-gone"
-        }]}"#,
-    )
-    .unwrap();
-    let legacy_stale: Vec<ViolationId> = legacy
-        .stale(&Report::empty())
-        .into_iter()
-        .cloned()
-        .collect();
-    let legacy_doc: serde_json::Value =
-        serde_json::from_str(&report_json(&Outcome::Clean, &legacy_stale, None)).unwrap();
-    assert_eq!(legacy_doc["stale_baseline"][0]["finding"], "legacy-gone");
-    assert_eq!(legacy_doc["stale_baseline"][0]["finding_key"], Value::Null);
+    assert!(doc["stale_baseline"][0]["fact"].is_object());
 }
 
 #[test]
@@ -2533,6 +2749,19 @@ fn source_boundary_carries_its_severity_and_gates_against_the_baseline() {
     assert_eq!(violations[0].severity, Severity::Warn);
     assert_eq!(violations[0].rule, "restrict dependency sources to");
     assert_eq!(violations[0].finding, "gitdep");
+    let id = violations[0].id();
+    assert_eq!(id.target(), "infra");
+    assert_eq!(
+        id.rule_key().rule_type(),
+        "tianheng.rule/guibiao/restrict-dependency-sources-to"
+    );
+    let fact = id.fact();
+    assert_eq!(fact.fact_type(), "tianheng.fact/guibiao/dependency-source");
+    assert_eq!(fact.shape(), "declared-source");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![("kind", "normal"), ("package", "gitdep"), ("source", "git")]
+    );
     assert!(
         violations[0].file.is_none(),
         "a source violation is a manifest relation, not a source line",
@@ -3106,13 +3335,13 @@ fn two_forbidden_features_of_the_same_crate_stay_distinct() {
     // Baseline records ONLY C/unstable (a prior accepted state). Re-applying it must mark
     // C/unstable baselined while leaving C/nightly live — the finding, not the (target, rule)
     // pair, is the baseline key, so one feature's acceptance never masks another's.
+    let accepted = v
+        .iter()
+        .find(|violation| violation.finding == "C/unstable")
+        .expect("C/unstable present")
+        .clone();
     let mut report = Report::new(v);
-    let baseline = Baseline::of(&Report::new(vec![Violation::new(
-        BoundaryKind::Crate,
-        test_id("target", "forbid features of", "C/unstable"),
-        "no unstable/nightly features of C".to_string(),
-        Severity::Enforce,
-    )]));
+    let baseline = Baseline::of(&Report::new(vec![accepted]));
     apply_baseline(&mut report, &baseline);
 
     let unstable = report
@@ -3143,7 +3372,7 @@ fn two_forbidden_features_of_the_same_crate_stay_distinct() {
 }
 
 #[test]
-fn the_two_feature_rule_labels_are_distinct_and_keep_identity_injective() {
+fn the_two_feature_rule_families_keep_identity_injective() {
     // A restrict and a forbid rule that both flag C/unstable on the same target stay distinct
     // triples, because their `rule` labels differ.
     assert_ne!(
@@ -3207,13 +3436,13 @@ fn the_two_feature_rule_labels_are_distinct_and_keep_identity_injective() {
     assert_eq!(rules, vec!["forbid features of", "restrict features of"]);
 
     // Baseline ONLY the restrict-rule C/unstable; the forbid-rule C/unstable must stay live.
+    let accepted = v
+        .iter()
+        .find(|violation| violation.rule == "restrict features of")
+        .expect("restrict violation present")
+        .clone();
     let mut report = Report::new(v);
-    let baseline = Baseline::of(&Report::new(vec![Violation::new(
-        BoundaryKind::Crate,
-        test_id("target", "restrict features of", "C/unstable"),
-        "C's feature surface is closed".to_string(),
-        Severity::Enforce,
-    )]));
+    let baseline = Baseline::of(&Report::new(vec![accepted]));
     apply_baseline(&mut report, &baseline);
     let restrict_v = report
         .violations
@@ -3667,7 +3896,7 @@ fn must_only_be_imported_by_authorizes_an_allowed_inline_importer() {
 #[test]
 fn must_only_be_imported_by_flags_a_disallowed_inline_importer_by_its_true_identity() {
     // A disallowed INLINE importer is flagged with its true identity `crate::rogue` (not the file's
-    // `crate`), so the finding — and thus the baseline identity `(target, rule, finding)` — is
+    // `crate`), so the structured fact — and thus `(target, rule key, fact)` identity — is
     // correct rather than shifted onto the file module.
     let (result, violations) = run_module_check(
         "only-inline-disallowed",
@@ -5035,7 +5264,7 @@ fn inline_strict_external_adds_nothing_to_paths_that_already_react() {
 fn inline_strict_external_preserves_identity_no_baseline_churn() {
     // 4.10 Baseline-churn guard: a sysroot `std::time::…::now()` finding must have byte-identical
     // (target, rule, finding) whether or not `.strict_external()` is added — so a baselined finding
-    // survives the flag (identity parity, task 1.3). Locks label()/target/finding.
+    // survives the flag (identity parity, task 1.3). Locks target/rule-key/fact.
     let files: &[(&str, &str)] = &[
         ("lib.rs", "pub mod core;\n"),
         (
@@ -5069,7 +5298,7 @@ fn inline_strict_external_preserves_identity_no_baseline_churn() {
     assert_eq!(plain[0].finding, flagged[0].finding, "finding parity");
     assert_eq!(
         plain[0].rule, "inline symbol path confined to module",
-        "the identity label is unchanged by the flag"
+        "the presentation label is unchanged by the flag"
     );
 }
 

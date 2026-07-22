@@ -12,7 +12,7 @@ use crate::finding::{
 };
 use crate::resolve::{
     DynCollector, ImplTraitCollector, PathCollector, ShapeExposure, UseMap, canonical_self_owner,
-    path_to_string, stamp_seam, strip_raw, type_to_string,
+    canonical_self_owner_without_fallback, path_to_string, stamp_seam, strip_raw, type_to_string,
 };
 use crate::syn_util::is_public;
 
@@ -78,9 +78,9 @@ pub(crate) fn collect_item_async_exposures(
     item: &syn::Item,
     module: &str,
     uses: &UseMap,
-    ordinal: usize,
+    _ordinal: usize,
     out: &mut Vec<SemanticFact>,
-) {
+) -> Result<(), String> {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             if item.sig.asyncness.is_some() {
@@ -107,32 +107,44 @@ pub(crate) fn collect_item_async_exposures(
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            // Owner-qualify by the impl's canonical self type (via the shared `canonical_self_owner`,
-            // as the other three collectors do) so `impl A`/`impl B` async methods of the same name
-            // never collide under the (target, rule, finding) baseline (a false negative). Generics
-            // stay distinct (`Foo<u8>` vs `Foo<u16>`); a self type with an unrenderable const-generic
-            // expression is disambiguated by the impl's position, never collapsed.
-            let owner = canonical_self_owner(
+            let async_methods: Vec<&syn::ImplItemFn> = item
+                .items
+                .iter()
+                .filter_map(|impl_item| match impl_item {
+                    syn::ImplItem::Fn(method)
+                        if is_public(&method.vis) && method.sig.asyncness.is_some() =>
+                    {
+                        Some(method)
+                    }
+                    _ => None,
+                })
+                .collect();
+            if async_methods.is_empty() {
+                return Ok(());
+            }
+            let owner = canonical_self_owner_without_fallback(
                 &item.self_ty,
                 uses,
                 module,
-                ordinal,
                 &type_param_names(&item.generics),
-            );
-            for impl_item in &item.items {
-                if let syn::ImplItem::Fn(method) = impl_item {
-                    if is_public(&method.vis) && method.sig.asyncness.is_some() {
-                        out.push(SemanticFact::AsyncInherentMethod {
-                            owner: owner.clone(),
-                            name: strip_raw(&method.sig.ident.to_string()),
-                            tail: render_sig_tail(&method.sig),
-                        });
-                    }
-                }
+            )
+            .ok_or_else(|| {
+                format!(
+                    "cannot identify public async method owner in {module} without a positional fallback"
+                )
+            })?;
+            for method in async_methods {
+                out.push(SemanticFact::AsyncInherentMethod {
+                    module: module.to_string(),
+                    owner: owner.clone(),
+                    name: strip_raw(&method.sig.ident.to_string()),
+                    tail: render_sig_tail(&method.sig),
+                });
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
 /// The generic **type-parameter** names declared by `generics` — the names that, used bare, are
@@ -649,7 +661,8 @@ pub(crate) fn collect_trait_impl_exposures(
     };
     // Seam prefix `impl {Trait} for {SelfTy}`. The Self label is canonicalized (parity with the
     // inherent-impl / locality seam owner); the trait label is the written path (a rendering-
-    // granularity choice — its generic args distinguish `From<Vec<X>>` from `From<Box<X>>`).
+    // granularity choice — its generic args distinguish `From<Vec<X>>` from `From<Box<X>>`). An
+    // unrenderable path carries an internal sentinel rejected before fact emission.
     let trait_label = path_to_string(trait_path).unwrap_or_else(|| format!("trait_#{ordinal}"));
     // The impl block's own generic type parameters are in scope in every position below; shadow
     // them so a bare parameter use is not misresolved through a same-named `use … as <param>` alias

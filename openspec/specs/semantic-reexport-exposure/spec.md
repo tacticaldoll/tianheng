@@ -436,3 +436,13 @@ AST + declared manifest:
 
 - **WHEN** the governed module declares both `pub use worklane_core::spi::Foo;` and a local child `mod worklane_core { … }` (which rustc lets shadow the extern head — E0432 if the path is absent there), under `must_not_expose("worklane_core::spi")`
 - **THEN** the system does not misattribute the `worklane_core` head to the dependency: the re-exporting module's own child module `worklane_core` is excluded from its re-export extern set, so the head is not resolved as the dependency and no violation is emitted (a genuine extern re-export coexisting with the local module is still reachable via `pub use ::worklane_core::spi::Foo;`)
+
+### Requirement: Re-export identity is the exported public seam
+
+A re-export exposure fact SHALL encode its forbidden subject and exported module/name path as
+separate structured roles. Private source path spelling and human rendering SHALL NOT define the
+public seam identity.
+
+#### Scenario: Two exported names stay distinct
+- **WHEN** the same subject is re-exported under two public names
+- **THEN** the exported-path fields produce two identities

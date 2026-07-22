@@ -24,9 +24,10 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
-    Baseline, Coverage, Outcome, Report, ViolationId, apply_baseline, check_and_cover,
+    Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
     constitution_text, report_json,
 };
 use louke::audit_probe_coverage;
@@ -421,31 +422,38 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
         Outcome::Violations(report) => report,
         _ => &empty,
     };
-    // Metadata-preserving merge: carry each surviving entry's owner/tracker forward by identity, so
-    // re-running --write-baseline never silently wipes hand-added governance records. A missing file
-    // is the normal first write (no warning); an existing-but-unreadable/unparseable file falls back
-    // to a fresh baseline but WARNS, so the metadata loss is visible rather than silent.
-    let baseline = match std::fs::read_to_string(path) {
+    // Metadata-preserving merge applies only to a supported semantic baseline. Unsupported or
+    // unreadable content is preserved byte-for-byte: presentation cannot reconstruct identity, and
+    // overwriting would silently destroy annotations the adopter may still need to carry manually.
+    let (baseline, create_new) = match std::fs::read_to_string(path) {
         Ok(text) => match Baseline::from_json(&text) {
-            Ok(existing) => Baseline::of_preserving(report, &existing),
+            Ok(existing) => (Baseline::of_preserving(report, &existing), false),
             Err(err) => {
                 eprintln!(
-                    "Tianheng: existing baseline {path} could not be parsed ({err}); writing a \
-                     fresh baseline — owner/tracker metadata is not carried forward"
+                    "Tianheng: refusing to overwrite unsupported baseline {path} ({err}). Preserve \
+                     any desired owner/tracker annotations, move or delete the unsupported file, \
+                     then run `tianheng check --write-baseline {path}` again."
                 );
-                Baseline::of(report)
+                return EXIT_CANNOT_JUDGE;
             }
         },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Baseline::of(report),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (Baseline::of(report), true),
         Err(err) => {
             eprintln!(
-                "Tianheng: existing baseline {path} could not be read ({err}); writing a fresh \
-                 baseline — owner/tracker metadata is not carried forward"
+                "Tianheng: refusing to overwrite unreadable baseline {path} ({err}). Preserve any \
+                 desired owner/tracker annotations, move or delete the unsupported file, then run \
+                 `tianheng check --write-baseline {path}` again."
             );
-            Baseline::of(report)
+            return EXIT_CANNOT_JUDGE;
         }
     };
-    match std::fs::write(path, baseline.to_json()) {
+    let document = baseline.to_json();
+    let write_result = if create_new {
+        create_baseline_file(path, &document)
+    } else {
+        std::fs::write(path, document)
+    };
+    match write_result {
         Ok(()) => {
             eprintln!(
                 "Tianheng: wrote {} violation(s) to baseline {path}",
@@ -453,11 +461,26 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
             );
             EXIT_OK
         }
+        Err(err) if create_new && err.kind() == std::io::ErrorKind::AlreadyExists => {
+            eprintln!(
+                "Tianheng: refusing to overwrite baseline {path} because it appeared while the \
+                 new snapshot was being prepared. Inspect the file, then rerun the command."
+            );
+            EXIT_CANNOT_JUDGE
+        }
         Err(err) => {
             eprintln!("Tianheng: cannot write baseline {path}: {err}");
             EXIT_CANNOT_JUDGE
         }
     }
+}
+
+fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .and_then(|mut file| file.write_all(document.as_bytes()))
 }
 
 /// Gate against a baseline: suppress recorded violations, fail only on new ones,
@@ -507,7 +530,7 @@ fn gate(
         Outcome::Violations(report) => report,
         _ => &empty,
     };
-    let stale: Vec<ViolationId> = baseline.stale(report).into_iter().cloned().collect();
+    let stale: Vec<BaselineEntry> = baseline.stale(report).into_iter().cloned().collect();
     match format {
         ReportFormat::Json => println!("{}", report_json(outcome, &stale, coverage)),
         ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
@@ -516,7 +539,9 @@ fn gate(
             for entry in &stale {
                 eprintln!(
                     "Tianheng: stale baseline entry (no longer violated): {} / {} / {}",
-                    entry.target, entry.rule, entry.finding
+                    entry.id.target(),
+                    entry.rule,
+                    entry.finding
                 );
             }
             if let Some(coverage) = coverage {

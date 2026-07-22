@@ -1,6 +1,6 @@
 //! Impl-trait-boundary declaration DSL — [`ImplTraitBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// An impl-trait boundary: a module's public API must not **return** a written `impl Trait`
 /// (return-position `impl Trait` / RPIT). The **existential** complement of [`DynTraitBoundary`]:
@@ -32,6 +32,17 @@ pub struct ImplTraitBoundary {
 }
 
 impl ImplTraitBoundary {
+    /// Stable semantic identity for this impl-trait exposure rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/impl-trait-exposure",
+            [(
+                "forbidden_operands",
+                super::canonical_path_set(&self.forbidden_operands),
+            )],
+        )
+    }
+
     /// Begin an impl-trait boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> ImplTraitCrateDraft {
         ImplTraitCrateDraft {

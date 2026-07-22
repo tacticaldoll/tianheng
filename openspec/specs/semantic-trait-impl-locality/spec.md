@@ -182,3 +182,13 @@ A trait-impl-locality violation report SHALL identify the governed trait anchor,
 
 - **WHEN** the crate `app` defines `impl Command for Foo` in `crate::domain` under a boundary allowing only `crate::commands`
 - **THEN** the report names the trait anchor `crate::command::Command`, the rule "must only be implemented in the declared location(s)", the finding identifying `crate::domain` / `Foo`, the boundary's reason, and indicates CI failed (the allowed locations themselves are surfaced in the `list` projection and the reason, not embedded in the rule identity)
+
+### Requirement: Trait-impl locality uses structured law and fact roles
+
+Locality violations SHALL encode the governed target, a structured locality rule key, and a fact
+containing impl module, trait, and canonical self type. Rule configuration SHALL be canonically
+classified as identity-bearing or presentation-only; rendered impl text SHALL NOT define identity.
+
+#### Scenario: Two impls stay distinct
+- **WHEN** two misplaced impls differ by module, trait, or self type
+- **THEN** their structured facts differ in the corresponding role

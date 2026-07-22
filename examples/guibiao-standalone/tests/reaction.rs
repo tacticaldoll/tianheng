@@ -25,8 +25,8 @@ fn the_import_violation_reacts_with_exit_1() {
     let report = report_of(check(&constitution(), &manifest()));
     assert!(report.violations.iter().any(|violation| {
         violation.kind == guibiao::BoundaryKind::Module
-            && violation.finding_key().namespace() == "guibiao"
-            && violation.finding_key().code() == "imported_path"
+            && violation.fact().fact_type() == "tianheng.fact/guibiao/imported-path"
+            && violation.fact().shape() == "module-path"
     }));
     assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }
