@@ -784,6 +784,37 @@ fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
 }
 
 #[test]
+fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value() {
+    // The sibling of the reexports test above, at `resolve_self_type`'s own resolver: before it
+    // was routed through the shared, hop-capped `canonicalize_through_aliases`, its hand-rolled
+    // outer loop re-ran the (already-capped) inner `canonicalize_through_reexports` call every
+    // iteration, so a key⊂value reexport entry made the outer `landing` grow by a bounded amount
+    // each iteration, never exactly repeating — the outer exact-repeat `seen` guard alone could
+    // not catch that. The assertion is simply that this terminates.
+    use crate::containment::resolve_self_type;
+    use crate::resolve::{AliasMap, ReexportMap, UseMap};
+    use std::collections::HashSet;
+
+    let self_ty: syn::Type = syn::parse_str("Foo").unwrap();
+    let uses = UseMap::new();
+    let aliases = AliasMap::new();
+    let mut reexports = ReexportMap::new();
+    reexports.insert("crate::a::Foo".to_string(), "crate::a::Foo::b".to_string());
+    let landing = resolve_self_type(
+        &self_ty,
+        &uses,
+        "crate::a",
+        &aliases,
+        &reexports,
+        &HashSet::new(),
+    );
+    assert!(
+        landing.is_some(),
+        "canonicalization must terminate on a key⊂value reexport entry: {landing:?}"
+    );
+}
+
+#[test]
 fn a_self_similar_reexport_is_dropped_and_the_real_type_still_reacts() {
     // Build-time guard: `pub use self::sub::sub;` re-exports the value `sub` from
     // a same-named child module, yielding a `crate::sub -> crate::sub::sub` map entry (key ⊂ value).

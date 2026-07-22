@@ -171,6 +171,37 @@ fn tianheng_constitution() -> Constitution {
                      (must-not-expose an async public fn)",
                 ),
         )
+        // 圭表's own inline-symbol-path confinement, reused against 渾儀 and 圭表's own module-graph
+        // walkers (not just 璇璣): the 0.2.2 lesson found the same canonicalize-before-cycle-guard
+        // step hand-rolled at multiple call sites with disagreeing failure policies (three in one
+        // `reachability.rs` file alone). Both walkers now route through the shared,
+        // fail-loud `xingbiao::canonicalize_or_fail`/`try_visit`; these boundaries confine the raw
+        // call so a future reintroduced inline `std::fs::…::canonicalize` fails CI instead of
+        // waiting for the next adversarial round to notice.
+        .boundary(
+            ModuleBoundary::in_crate("hunyi")
+                .module("crate::module_resolve")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "path canonicalization for this resolver's own cycle/dedup guard must go \
+                     through the shared, fail-loud `xingbiao::try_visit`, never be re-hand-rolled \
+                     inline here — the 0.2.2 lesson (a canonicalize-failure policy hand-rolled per \
+                     call site drifted to disagreeing behavior across this crate)",
+                ),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("guibiao")
+                .module("crate::module_scan::reachability")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "path canonicalization for this walker's own cycle/dedup guard must go \
+                     through the shared, fail-loud `xingbiao::canonicalize_or_fail`/`try_visit`, \
+                     never be re-hand-rolled inline here — the 0.2.2 lesson (this exact file once \
+                     carried three disagreeing canonicalize-failure policies at once)",
+                ),
+        )
 }
 
 #[test]

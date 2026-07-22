@@ -9,6 +9,13 @@ use crate::finding;
 use crate::runtime_seam_rule_line;
 use crate::tracked::TidMap;
 
+/// The repair hint shared between the prod runtime panic-path error below and the CI-audit's
+/// `UndeclaredProbe` violation reason (`audit.rs`) — a probe naming a seam that was never
+/// declared. Written once so the two "aligned" wordings cannot drift the way an unenforced,
+/// hand-copied claim of alignment otherwise risks.
+pub(crate) const UNDECLARED_SEAM_REPAIR_HINT: &str =
+    "declare the RuntimeBoundary or fix the probe's seam name";
+
 // --- Private internals -------------------------------------------------------
 
 pub(crate) struct Seam {
@@ -109,12 +116,12 @@ pub(crate) fn check_crossing(
     registry: &Registry,
 ) -> Result<Option<(Violation, Posture)>, String> {
     let s = registry.seams.get(seam).ok_or_else(|| {
-        // Reason-led, aligned with the CI-audit twin: name the intent (an undeclared seam is
-        // never enforced) before the mechanics. Keeps the `undeclared runtime seam '{seam}'`
-        // substring the prod contract and tests depend on.
+        // Reason-led, aligned with the CI-audit twin (shared repair hint): name the intent (an
+        // undeclared seam is never enforced) before the mechanics. Keeps the `undeclared runtime
+        // seam '{seam}'` substring the prod contract and tests depend on.
         format!(
-            "an undeclared seam is never enforced — declare the RuntimeBoundary or fix the \
-                 probe's seam name: probe references undeclared runtime seam '{seam}'"
+            "an undeclared seam is never enforced — {UNDECLARED_SEAM_REPAIR_HINT}: probe \
+                 references undeclared runtime seam '{seam}'"
         )
     })?;
 

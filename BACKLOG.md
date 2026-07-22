@@ -54,6 +54,37 @@ This index makes the current work discoverable without duplicating the detailed 
   async decision, and baseline v3 compatibility. **Authority:** the post-0.2 identity-pressure
   section below and the structured-identity decisions in `PROJECT.md`.
 
+### READY-PATCH
+
+- **`resolve_self_type`'s alias/reexport fixpoint has no hop cap — a real unbounded-loop gap, not
+  a style duplication.** `crates/hunyi/src/containment.rs::resolve_self_type` reimplements the same
+  alias+re-export fixpoint shape as `resolve/mod.rs::canonicalize_through_aliases`, but carries only
+  the exact-repeat `seen`-set guard, not the numeric `cap = aliases.len() + reexports.len() + 1` the
+  sibling function added specifically because, per its own doc comment, "the cap hard-guarantees
+  termination against a divergent rewrite the exact-repeat `seen` set cannot catch." No test
+  cross-checks the two resolvers agree. See the full entry in 渾儀's Reaction-phase section below.
+  **Authority:** this session's static review + direct code verification (`containment.rs:108-119`
+  vs `resolve/mod.rs:449-476`); `PROJECT.md` Decisions (0.2.2 lesson: divergent-rewrite protection
+  applied at one call site and missed at a structurally-identical sibling).
+- **Shared path-identity calibration + confinement — closing the 0.2.2 lesson's broader footprint.**
+  A follow-up sweep (prompted by re-examining the 0.2.2 saga) found the same "a fix closes the
+  reported instance, not the shared model" pattern still live in several more places, none
+  previously recorded — inside `guibiao::reachability.rs` itself (three disagreeing `canonicalize`
+  policies in one file), between `guibiao` and `hunyi`'s independently hand-written `path_within`,
+  between the six `guibiao`/`hunyi` `errors.rs` twin pairs, and — lower severity, style-only —
+  a duplicated path-segment pipeline and package-name fold inside `guibiao::use_scan.rs` /
+  `cargo_metadata.rs` / `module_check.rs`, an unused-import-shadowing duplicate of
+  `canonical_segment` in `guibiao::symbol_scan.rs:372`, and a hand-copied repair-hint string across
+  `louke::registry.rs` / `audit.rs` / `finding.rs`. See the full entry in 圭表's ACCEPTED DEBT list
+  below (it supersedes the narrower canonicalize-TOCTOU entry there) for the fix shape: a shared
+  `try_visit`-style guarded-visit combinator in 星表, routing 渾儀's `descend` and 圭表's
+  `reachability.rs` through it, backed by two `must_not_call_inline` self-governance boundaries,
+  two new conformance tests pinning `path_within` and the `errors.rs` twins the way
+  `lexical_conformance.rs` already pins lexical hygiene, and the smaller `guibiao`/`louke`
+  consolidations bundled into the same patch. **Authority:** this session's static review + direct
+  code verification (three independent sweep passes over `guibiao`/`hunyi`/`louke`/`xingbiao`/
+  `xuanji`/`tianheng`); `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds).
+
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:** judgment-neutral lexer/token extraction is now plausible, but the conformance work must
@@ -652,6 +683,58 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   a duplicated violation count from a scan racing external file churn (e.g. a codegen step running
   concurrently with CI). **Version:** not scheduled. **Authority:** round-5 adversarial review,
   `PROJECT.md` Decisions (0.2.2 lesson).
+- **Shared path-identity calibration + confinement — READY-PATCH, supersedes the TOCTOU entry
+  above with a broader fix.** **Pressure/source:** a follow-up sweep found the TOCTOU entry above is
+  one instance of a wider pattern, not an isolated one. `crates/guibiao/src/module_scan/
+  reachability.rs` alone carries **three** disagreeing `canonicalize`-failure policies in one file:
+  a silent skip seeding `root_ancestors` (`if let Ok(canon) = ... { insert }`, no `else`), a
+  skip-and-drop live-probe dedup (`let Ok(canon) = ... else { continue }`), and a correct fail-loud
+  `#[path]`-remap check (`.map_err(...)?`) — the same three-way spread the TOCTOU entry found across
+  `hunyi`'s two `descend` sites, now confirmed inside a single file too. Separately, two more
+  "must stay in sync" twins carry **zero** automated verification: `path_within` is independently
+  hand-written in `guibiao::module_scan::path_vocab` (`pub(crate)`) and `hunyi::containment`
+  (private) — the doc comment on the 圭表 copy says outright "the two dimensions... agree by using
+  the same rule, not the same function," an unenforced promise — and four `errors.rs` builder pairs
+  (`unreadable_workspace_error`, `crate_not_found_error`, `missing_src_error`, `unknown_module_error`)
+  are commented "MUST stay byte-identical" / "parallel twin" between `guibiao` and `hunyi` with no
+  test checking it. By contrast, the sibling lexical-hygiene duplication
+  (`decode_str_escapes`/`is_rust_keyword` in `guibiao::module_scan::lexer` vs
+  `louke::audit::scan`) already graduated from the same comment-only-promise stage to a real gate —
+  `crates/tianheng/tests/lexical_conformance.rs`, BUILT 0.2.2 — proving the fix shape already works
+  here. **Fix:** (1) a shared `try_visit`-style guarded-visit combinator (canonicalize, cycle-check,
+  and registration behind one continuation, so a caller cannot advance past an unvisited node
+  without going through it) in 星表 (`xingbiao`) — zero new dependency edges, since `guibiao` and
+  `hunyi` already depend on it; route `hunyi::module_resolve::descend`'s two sites and `guibiao`'s
+  three `reachability.rs` sites through it. `louke`'s own probe-scanner cycle guard (the sibling
+  ACCEPTED DEBT below, non-canonicalized) stays a documented local twin, or a deliberate amendment to
+  its `xuanji`-only dependency restriction — out of this patch's scope either way. (2) Two
+  `must_not_call_inline("std::fs").ending_with(["canonicalize"])` module boundaries added to
+  `self_governance.rs`'s `tianheng_constitution()`, targeting `hunyi::module_resolve` and
+  `guibiao::module_scan::reachability` — reusing 圭表's existing inline-symbol-path-confinement
+  capability (already proven there against `xuanji`'s `std::time`), so a future reintroduced inline
+  `canonicalize` call fails CI instead of waiting for the next adversarial round to notice. Land as
+  `enforce` only after (1) lands clean, never as the first commit (or the boundary fails on its own
+  introduction). (3) Two new conformance tests mirroring `lexical_conformance.rs`'s black-box
+  pattern (through each side's real public `check` surface, not the private internals): one pinning
+  `path_within` agreement on `::`-boundary edge cases, one pinning three of the four `errors.rs`
+  twins' message text (`missing_src_error`'s twin needs a fixture shape neither dimension's public
+  surface makes easy to construct without tripping a different, unrelated constitution error first
+  — a stated gap, recorded in the test file, not a silent one). (4) Bundled, lower-severity style
+  consolidations the same sweep surfaced, no shared-model
+  risk beyond "could silently drift," not "already disagrees": `guibiao::use_scan.rs`'s
+  `normalize_module_path`/`external_crate_head` each reimplement the same segment-split pipeline
+  (the latter's doc comment claims a shared self/super resolution that its body does not actually
+  call); the Cargo package-name hyphen→underscore fold is duplicated between `cargo_metadata.rs` and
+  `module_check.rs` with no shared `fn`; `symbol_scan.rs:372` hand-rolls a raw-identifier strip
+  identical to the crate's own `canonical_segment`, already imported and used elsewhere in the same
+  file; and `louke::registry.rs` (prod panic text) / `audit.rs` (CI-audit violation reason) /
+  `finding.rs` (a third, already-differently-worded site) hand-copy the same repair-hint string with
+  a comment claiming alignment but no test. **Risk:** low — every triggering condition (a race, a malformed tree) matches the sibling
+  ACCEPTED DEBT entries' own low-risk reasoning; the value is closing the broader footprint before
+  it resurfaces the same way across a future round. **Version:** fits a focused 0.2.x maintenance PR
+  or OpenSpec change — no public API, wire format, or baseline identity changes. **Authority:** this
+  session's static review and direct code verification (`grep` across `guibiao`/`hunyi`/`louke`
+  source); `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds); the TOCTOU entry above.
 - **A conventional module backed by both `name.rs` and `name/mod.rs` is silently dual-governed
   instead of erroring — ACCEPTED DEBT (pre-existing, cross-dimension inconsistency).**
   **Pressure/source:** a round-5 review found that when a plain `mod x;`'s probed base directory
@@ -982,6 +1065,35 @@ canonical path/shape remains the observed `subject` value rather than growing a 
 AST. This closes the live gap where 渾儀's nominally structured key was still one rendered
 `descriptor`, so presentation polish would re-identify a baseline entry. See `PROJECT.md`,
 "Structure semantic observation facts".
+
+- **`resolve_self_type`'s fixpoint lacks the hop cap its sibling resolver carries — READY-PATCH.**
+  **Pressure/source:** a follow-up sweep of the 0.2.2 lesson (divergent-rewrite protection applied at
+  one call site, missed at a structurally-identical sibling) found a third instance, this time a real
+  safety gap rather than a style duplication. `containment.rs::resolve_self_type` (108-119) hand-rolls
+  its own alias+re-export fixpoint loop — `alias_targets.get(&landing)` (an exact full-path lookup)
+  interleaved with a full `canonicalize_through_reexports` pass per outer iteration — guarded only by
+  `let mut seen = HashSet::new(); while seen.insert(landing.clone())`. The crate's actual shared
+  fixpoint, `resolve/mod.rs::canonicalize_through_aliases` (449-476), tries alias-then-reexport at
+  *each single step* (not a full reexport pass per iteration) and additionally bounds the loop with
+  `let cap = aliases.len() + reexports.len() + 1; if seen.len() > cap { break; }` — its own doc
+  comment (437-438) states the two canonicalizers "share one fixpoint / hop-cap implementation and
+  cannot drift," a guarantee that does not extend to this third, independent reimplementation. Per
+  that same doc comment, the cap exists because "the exact-repeat `seen` set cannot catch" **a
+  divergent rewrite** (a chain of landings that never exactly repeats). **Current reaction:** none —
+  `resolve_self_type` has no test exercising a divergent (non-cycling) alias chain, so a construction
+  that recreates the shape `canonicalize_through_aliases`'s cap was hardened against would loop until
+  the alias map is exhausted of *new* strings to produce, which is not itself bounded the way a
+  cycle is. **Fix:** route `resolve_self_type` through `canonicalize_through_aliases` (or an
+  equivalent shared helper taking the same alias/reexport maps), retiring the hand-rolled loop, so
+  the two resolvers share the one hop-capped implementation `resolve/mod.rs` already claims they do;
+  add a regression test constructing a divergent (non-cycling) alias chain to prove the cap actually
+  bounds `resolve_self_type`'s termination, not just `canonicalize_through_aliases`'s own. **Risk:**
+  low likelihood in practice (needs a specific alias-map shape to construct a genuinely divergent,
+  non-cycling rewrite chain) but high severity if hit (an unbounded loop in a CI scan, not a wrong
+  answer) — matches the 0.2.2-lesson risk class exactly. **Version:** fits a focused 0.2.x
+  maintenance PR — no public API, wire format, or baseline identity change. **Authority:** this
+  session's static review + direct code verification; `PROJECT.md` Decisions (0.2.2 lesson, in eight
+  rounds).
 
 Explicitly **rejected** (essential gap — would be a false-negative engine, see `PROJECT.md`):
 `Send`/`Sync` constraints (inferred auto-traits), external trait sealing (downstream crates),

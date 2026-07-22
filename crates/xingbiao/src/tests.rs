@@ -136,3 +136,47 @@ fn member_root_files_preserves_exact_custom_roots_and_is_deterministic() {
         ]
     );
 }
+
+#[test]
+fn canonicalize_or_fail_resolves_a_real_file_and_errors_on_a_missing_one() {
+    let dir = std::env::temp_dir().join(format!("xingbiao-canonicalize-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("real.rs");
+    std::fs::write(&file, "").unwrap();
+
+    assert!(canonicalize_or_fail(&file).is_ok());
+
+    let missing = dir.join("does_not_exist.rs");
+    let err = canonicalize_or_fail(&missing).unwrap_err();
+    assert!(
+        err.contains("cannot resolve"),
+        "a missing path must fail loud, not silently skip: {err}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn try_visit_reports_first_visit_then_repeat_and_fails_loud_on_an_unresolvable_path() {
+    let dir = std::env::temp_dir().join(format!("xingbiao-try-visit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "").unwrap();
+
+    let mut visited = std::collections::HashSet::new();
+    assert_eq!(
+        try_visit(&mut visited, &file),
+        Ok(true),
+        "the first visit to a real file is new"
+    );
+    assert_eq!(
+        try_visit(&mut visited, &file),
+        Ok(false),
+        "a repeat visit to the same canonical file is not new"
+    );
+    assert!(try_visit(&mut visited, &dir.join("missing.rs")).is_err());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

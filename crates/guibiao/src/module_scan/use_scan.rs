@@ -230,6 +230,16 @@ fn expand_use_tree_depth(tree: &str, depth: usize) -> Vec<String> {
 /// crate or a compile error), so it is external. A path written with a leading `::`
 /// (`use ::foo::…`) is explicitly the external/global crate and is always external. Any
 /// other first segment is external (`None`).
+/// Split `path` on `::` into canonicalized (raw-identifier-stripped, trimmed), non-empty
+/// segments — the shared pipeline [`normalize_module_path`] and [`external_crate_head`] both
+/// start from, so a canonicalization fix cannot land in one and not the other.
+fn split_canonical_segments(path: &str) -> Vec<&str> {
+    path.split("::")
+        .map(|segment| canonical_segment(segment.trim()))
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
 fn normalize_module_path(
     path: &str,
     current_module: &str,
@@ -241,11 +251,7 @@ fn normalize_module_path(
     if path.trim_start().starts_with("::") {
         return None;
     }
-    let segments: Vec<&str> = path
-        .split("::")
-        .map(|segment| canonical_segment(segment.trim()))
-        .filter(|segment| !segment.is_empty())
-        .collect();
+    let segments = split_canonical_segments(path);
     let (first, _rest) = segments.split_first()?;
     match *first {
         "crate" => Some(segments.join("::")),
@@ -288,17 +294,12 @@ fn external_crate_head(
     // first real segment, external even when a crate-root module shares the name — the exact
     // mirror of the early-return `normalize_module_path` makes for the same marker.
     if path.trim_start().starts_with("::") {
-        return path
-            .split("::")
-            .map(|segment| canonical_segment(segment.trim()))
-            .find(|segment| !segment.is_empty())
+        return split_canonical_segments(path)
+            .into_iter()
+            .next()
             .map(str::to_string);
     }
-    let segments: Vec<&str> = path
-        .split("::")
-        .map(|segment| canonical_segment(segment.trim()))
-        .filter(|segment| !segment.is_empty())
-        .collect();
+    let segments = split_canonical_segments(path);
     let (first, _rest) = segments.split_first()?;
     match *first {
         // Internal roots (or a degenerate/over-popped `super`) — never an external crate.

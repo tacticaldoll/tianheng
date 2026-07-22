@@ -1,6 +1,8 @@
 use super::*;
 use serde_json::Value;
 
+use crate::module_scan::package_name_to_import_ident;
+
 // The dimension-agnostic cargo-metadata reads (`cargo_metadata`, `find_package`, `crate_root_file`,
 // and `member_src_dirs`, a pure derivation of the latter) live in 星表 (`xingbiao`), the shared
 // substrate below the 三儀 — one reader, so the static and semantic dimensions cannot drift apart on
@@ -145,7 +147,7 @@ pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
                     dep["rename"]
                         .as_str()
                         .or_else(|| dep["name"].as_str())
-                        .map(|name| name.replace('-', "_"))
+                        .map(package_name_to_import_ident)
                 })
                 .collect()
         })

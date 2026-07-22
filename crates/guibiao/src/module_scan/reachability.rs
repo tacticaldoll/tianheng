@@ -218,9 +218,7 @@ pub(crate) fn reachable_modules(
     if let Some(root_files) = by_module.get("crate") {
         let mut root_ancestors = HashSet::new();
         for f in root_files {
-            if let Ok(canon) = std::fs::canonicalize(f) {
-                root_ancestors.insert(canon);
-            }
+            root_ancestors.insert(xingbiao::canonicalize_or_fail(f)?);
         }
         sources.insert(
             "crate".to_string(),
@@ -470,9 +468,7 @@ pub(crate) fn reachable_modules(
                         if !candidate.is_file() {
                             continue;
                         }
-                        let Ok(canon) = std::fs::canonicalize(&candidate) else {
-                            continue;
-                        };
+                        let canon = xingbiao::canonicalize_or_fail(&candidate)?;
                         if !already_sourced.insert(canon.clone()) {
                             continue;
                         }
@@ -551,8 +547,7 @@ pub(crate) fn reachable_modules(
                             target.display()
                         ));
                     }
-                    let canon = std::fs::canonicalize(&target)
-                        .map_err(|err| format!("cannot resolve '{}': {err}", target.display()))?;
+                    let canon = xingbiao::canonicalize_or_fail(&target)?;
                     // Checked against THIS target's own declaring source's ancestor set
                     // (`target_ancestors`), never a set merged across a mutually-exclusive
                     // `#[cfg]` sibling's own target — two such targets are never simultaneously

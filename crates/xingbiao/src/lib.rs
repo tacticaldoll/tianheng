@@ -2,7 +2,10 @@
 //!
 //! Reads `cargo metadata --no-deps` and looks up packages and their crate-root source files:
 //! the tabulated catalog every observation dimension references before it observes. Spawns
-//! `cargo` and parses its JSON (`serde_json` + std only, no `syn`).
+//! `cargo` and parses its JSON (`serde_json` + std only, no `syn`). Also carries the shared
+//! path-identity primitives ([`canonicalize_or_fail`], [`try_visit`]) a module-graph cycle/dedup
+//! guard needs — the same "single reader of truth" role, one file-identity notch finer than
+//! which file is a crate root.
 //!
 //! Sits beneath static (圭表) and semantic (渾儀) dimensions as a single reader of truth,
 //! preventing twin-drift in target resolution across observation dimensions.
@@ -14,8 +17,12 @@ use std::process::Command;
 
 use serde_json::Value;
 
+mod path_identity;
+
 #[cfg(test)]
 mod tests;
+
+pub use path_identity::{canonicalize_or_fail, try_visit};
 
 /// Target `kind` strings that denote a library crate root (library types + `proc-macro`).
 const LIBRARY_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];

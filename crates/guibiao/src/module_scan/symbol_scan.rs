@@ -369,7 +369,7 @@ fn normalize_segments(span: &[u8]) -> String {
         } else if is_ident_byte(span[k]) || (span[k] == b'r' && span.get(k + 1) == Some(&b'#')) {
             let s = end_of_ident(span, k);
             let seg = String::from_utf8_lossy(&span[k..s]).into_owned();
-            segs.push(seg.strip_prefix("r#").unwrap_or(&seg).to_string());
+            segs.push(canonical_segment(&seg).to_string());
             k = s;
         } else {
             k += 1;

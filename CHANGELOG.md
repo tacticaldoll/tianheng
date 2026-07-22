@@ -12,6 +12,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+### Fixed
+- 渾儀's forbidden-marker self-type resolver (`resolve_self_type`) now routes through the crate's
+  own hop-capped alias/re-export fixpoint instead of a second, hand-rolled loop guarded only by an
+  exact-repeat check — closing a real unbounded-loop gap (a divergent, non-cycling alias rewrite
+  chain the exact-repeat guard alone cannot catch) and, as a side effect, an alias-resolution false
+  negative (a member reached through an aliased *prefix*, not just an exact alias key, now lands).
+
 ### Changed
 - Internal refactor: modularized crate internals across `xuanji`, `xingbiao`, `guibiao`, `hunyi`, `louke`, and the `tianheng` runner's projection layer (deduplicated JSON/text boundary-projection rendering) — no public API, JSON wire format, or self-governance boundary changed.
 

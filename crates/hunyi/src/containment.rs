@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::resolve::{
-    BareFallback, ReexportMap, UseMap, canonicalize_through_reexports, is_shadowed_param_path,
+    BareFallback, ReexportMap, UseMap, canonicalize_through_aliases, is_shadowed_param_path,
     resolve_path, strip_raw,
 };
 
@@ -63,13 +63,16 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 /// The canonicalization is folded in **here** so a self-type is canonical *by construction*: a
 /// caller cannot resolve a self-type and forget to close the re-export/alias hop (the sibling
 /// capabilities' shared-canonicalizer discipline, made structural at the one self-type resolver).
-/// The two maps are interleaved to a fixpoint — a re-export of an alias, or an alias of a
-/// re-export, both terminate (each distinct path is visited once). `alias_targets` carries the
-/// `CurrentModule`-fallback landing, so an alias to a bare local struct (`type Bar = Real`) is
-/// caught — which the `Ignore`-built exposure alias map deliberately does not, the reason this is
-/// not the exposure canonicalizer. A defining path is never a key in either map (an alias/re-export
-/// name cannot clash with a definition in its module), so the fixpoint never over-follows past a
-/// definition — dropping the old inline `defined`-stop changes no landing.
+/// Routed through the crate's own [`canonicalize_through_aliases`] rather than a second hand-rolled
+/// fixpoint, so this resolver shares that function's hop cap (bounding a divergent, non-cycling
+/// rewrite chain that an exact-repeat guard alone cannot catch — a gap a hand-rolled loop here once
+/// had) and its longest-prefix alias rewrite (so a member reached *through* an aliased prefix, not
+/// just an exact alias key, still lands — closing a second, narrower false negative the same swap
+/// fixed). `alias_targets` carries the `CurrentModule`-fallback landing, so an alias to a bare local
+/// struct (`type Bar = Real`) is caught — which the `Ignore`-built exposure alias map deliberately
+/// does not, the reason this is not the exposure canonicalizer. A defining path is never a key in
+/// either map (an alias/re-export name cannot clash with a definition in its module), so the
+/// fixpoint never over-follows past a definition.
 pub(crate) fn resolve_self_type(
     self_ty: &syn::Type,
     uses: &UseMap,
@@ -106,21 +109,11 @@ pub(crate) fn resolve_self_type(
         }
         _ => return None,
     };
-    let mut landing = base;
-    let mut seen = HashSet::new();
-    while seen.insert(landing.clone()) {
-        let via_reexport = canonicalize_through_reexports(&landing, reexports);
-        if via_reexport != landing {
-            landing = via_reexport;
-            continue;
-        }
-        if let Some(next) = alias_targets.get(&landing) {
-            landing = next.clone();
-            continue;
-        }
-        break;
-    }
-    Some(landing)
+    Some(canonicalize_through_aliases(
+        &base,
+        alias_targets,
+        reexports,
+    ))
 }
 
 /// `::`-delimited containment: a canonical path is forbidden when it equals a forbidden

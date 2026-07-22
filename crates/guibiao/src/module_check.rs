@@ -13,8 +13,8 @@ use crate::errors::{
 use crate::finding::ModuleFact;
 use crate::module_scan::{
     InlineFinding, canonical_module_path, external_imports_with_importers, governed_files,
-    imported_module_paths, imports_with_importers, inline_symbol_findings, path_within,
-    reachable_modules, rust_files,
+    imported_module_paths, imports_with_importers, inline_symbol_findings,
+    package_name_to_import_ident, path_within, reachable_modules, rust_files,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -265,7 +265,7 @@ pub(crate) fn check_module_boundary(
         // and the scanner only ever sees the identifier (a `use` path cannot contain `-`). Without
         // the fold, confining the hyphenated FFI/platform crates this rule targets would silently
         // never react. A boundary may thus be written with either the package or identifier form.
-        let confined = canonical_module_path(crate_name).replace('-', "_");
+        let confined = package_name_to_import_ident(&canonical_module_path(crate_name));
         let all_files = governed_files(
             &src_dir,
             &files,
