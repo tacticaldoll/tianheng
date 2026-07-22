@@ -137,33 +137,55 @@ fn member_root_files_preserves_exact_custom_roots_and_is_deterministic() {
     );
 }
 
+/// A unique, self-cleaning temp directory for a path-identity fixture: replaces the hand-rolled
+/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two tests below
+/// otherwise each repeat.
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new(label: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("xingbiao-{label}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Self(dir)
+    }
+
+    fn write(&self, name: &str, contents: &str) -> PathBuf {
+        let path = self.0.join(name);
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+
+    fn path(&self, name: &str) -> PathBuf {
+        self.0.join(name)
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
 fn canonicalize_or_fail_resolves_a_real_file_and_errors_on_a_missing_one() {
-    let dir = std::env::temp_dir().join(format!("xingbiao-canonicalize-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("real.rs");
-    std::fs::write(&file, "").unwrap();
+    let dir = TempDir::new("canonicalize");
+    let file = dir.write("real.rs", "");
 
     assert!(canonicalize_or_fail(&file).is_ok());
 
-    let missing = dir.join("does_not_exist.rs");
+    let missing = dir.path("does_not_exist.rs");
     let err = canonicalize_or_fail(&missing).unwrap_err();
     assert!(
         err.contains("cannot resolve"),
         "a missing path must fail loud, not silently skip: {err}"
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn try_visit_reports_first_visit_then_repeat_and_fails_loud_on_an_unresolvable_path() {
-    let dir = std::env::temp_dir().join(format!("xingbiao-try-visit-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("a.rs");
-    std::fs::write(&file, "").unwrap();
+    let dir = TempDir::new("try-visit");
+    let file = dir.write("a.rs", "");
 
     let mut visited = std::collections::HashSet::new();
     assert_eq!(
@@ -176,7 +198,5 @@ fn try_visit_reports_first_visit_then_repeat_and_fails_loud_on_an_unresolvable_p
         Ok(false),
         "a repeat visit to the same canonical file is not new"
     );
-    assert!(try_visit(&mut visited, &dir.join("missing.rs")).is_err());
-
-    let _ = std::fs::remove_dir_all(&dir);
+    assert!(try_visit(&mut visited, &dir.path("missing.rs")).is_err());
 }

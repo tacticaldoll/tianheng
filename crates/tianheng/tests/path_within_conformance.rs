@@ -11,29 +11,14 @@
 //! `must_not_import`, 渾儀's `UnsafeBoundary::only_under`) rather than the private `path_within`
 //! internals, matching `lexical_conformance.rs`'s black-box-through-the-public-surface style.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use guibiao::{Constitution as GnomonConstitution, ModuleBoundary, Outcome as GnomonOutcome};
 use hunyi::{Outcome as HunyiOutcome, UnsafeBoundary, check_unsafe_confinement};
 
-/// Write a minimal, dependency-free crate (so `cargo metadata --no-deps` never touches the
-/// network) with `lib.rs` set to `body`, and return its manifest path.
-fn write_fixture(name: &str, body: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "tianheng-path-within-conformance-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(
-        dir.join("Cargo.toml"),
-        format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n"),
-    )
-    .expect("write Cargo.toml");
-    std::fs::write(src.join("lib.rs"), body).expect("write lib.rs");
-    dir.join("Cargo.toml")
-}
+#[path = "support/mod.rs"]
+mod support;
+use support::TempFixture;
 
 fn guibiao_forbids_domain(package: &str, manifest: &Path) -> GnomonOutcome {
     let constitution = GnomonConstitution::new(package).boundary(
@@ -54,24 +39,23 @@ fn hunyi_confines_unsafe_to_domain(package: &str, manifest: &Path) -> HunyiOutco
 
 #[test]
 fn guibiao_and_hunyi_agree_a_descendant_of_the_governed_subtree_is_contained() {
-    let manifest = write_fixture(
+    let fixture = TempFixture::new(
         "path-within-descendant-guibiao",
         "pub mod domain { pub mod inner { pub struct Thing; } }\nuse crate::domain::inner::Thing;\n",
     );
-    let outcome = guibiao_forbids_domain("path-within-descendant-guibiao", &manifest);
-    let _ = std::fs::remove_dir_all(manifest.parent().expect("fixture has a parent"));
+    let outcome = guibiao_forbids_domain("path-within-descendant-guibiao", fixture.manifest());
     assert_eq!(
         outcome.exit_code(),
         1,
         "圭表: a descendant of the forbidden subtree must react: {outcome:?}"
     );
 
-    let manifest = write_fixture(
+    let fixture = TempFixture::new(
         "path-within-descendant-hunyi",
         "pub mod domain { pub mod inner { pub fn f() { unsafe {} } } }\n",
     );
-    let outcome = hunyi_confines_unsafe_to_domain("path-within-descendant-hunyi", &manifest);
-    let _ = std::fs::remove_dir_all(manifest.parent().expect("fixture has a parent"));
+    let outcome =
+        hunyi_confines_unsafe_to_domain("path-within-descendant-hunyi", fixture.manifest());
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -81,24 +65,22 @@ fn guibiao_and_hunyi_agree_a_descendant_of_the_governed_subtree_is_contained() {
 
 #[test]
 fn guibiao_and_hunyi_agree_a_namesake_sibling_is_not_contained() {
-    let manifest = write_fixture(
+    let fixture = TempFixture::new(
         "path-within-sibling-guibiao",
         "pub mod domainish { pub struct Thing; }\nuse crate::domainish::Thing;\n",
     );
-    let outcome = guibiao_forbids_domain("path-within-sibling-guibiao", &manifest);
-    let _ = std::fs::remove_dir_all(manifest.parent().expect("fixture has a parent"));
+    let outcome = guibiao_forbids_domain("path-within-sibling-guibiao", fixture.manifest());
     assert_eq!(
         outcome.exit_code(),
         0,
         "圭表: importing a namesake sibling of the forbidden subtree must NOT react: {outcome:?}"
     );
 
-    let manifest = write_fixture(
+    let fixture = TempFixture::new(
         "path-within-sibling-hunyi",
         "pub mod domainish { pub fn f() { unsafe {} } }\n",
     );
-    let outcome = hunyi_confines_unsafe_to_domain("path-within-sibling-hunyi", &manifest);
-    let _ = std::fs::remove_dir_all(manifest.parent().expect("fixture has a parent"));
+    let outcome = hunyi_confines_unsafe_to_domain("path-within-sibling-hunyi", fixture.manifest());
     assert_eq!(
         outcome.exit_code(),
         1,

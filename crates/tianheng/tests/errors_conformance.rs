@@ -21,22 +21,9 @@ use guibiao::{
 };
 use hunyi::{AsyncExposureBoundary, Outcome as HunyiOutcome, UnsafeBoundary, check_async_exposure};
 
-fn write_fixture(name: &str, body: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "tianheng-errors-conformance-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(
-        dir.join("Cargo.toml"),
-        format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n"),
-    )
-    .expect("write Cargo.toml");
-    std::fs::write(src.join("lib.rs"), body).expect("write lib.rs");
-    dir.join("Cargo.toml")
-}
+#[path = "support/mod.rs"]
+mod support;
+use support::TempFixture;
 
 fn gnomon_error(outcome: GnomonOutcome) -> String {
     match outcome {
@@ -72,7 +59,8 @@ fn guibiao_and_hunyi_agree_verbatim_on_an_unreadable_workspace() {
 
 #[test]
 fn guibiao_and_hunyi_agree_verbatim_on_a_crate_not_in_the_workspace() {
-    let manifest = write_fixture("errors-crate-not-found", "pub fn f() {}\n");
+    let fixture = TempFixture::new("errors-crate-not-found", "pub fn f() {}\n");
+    let manifest = fixture.manifest();
 
     let guibiao_message = gnomon_error(guibiao::check(
         &GnomonConstitution::new("errors-crate-not-found").boundary(
@@ -80,10 +68,9 @@ fn guibiao_and_hunyi_agree_verbatim_on_a_crate_not_in_the_workspace() {
                 .restrict_dependencies_to(["serde_json"])
                 .because("conformance: a nonexistent crate target must fail loud identically"),
         ),
-        &manifest,
+        manifest,
     ));
-    let hunyi_message = hunyi_error(check_unsafe_confinement_on("nonexistent-crate", &manifest));
-    let _ = std::fs::remove_dir_all(manifest.parent().expect("fixture has a parent"));
+    let hunyi_message = hunyi_error(check_unsafe_confinement_on("nonexistent-crate", manifest));
 
     assert_eq!(
         guibiao_message, hunyi_message,
@@ -100,7 +87,8 @@ fn check_unsafe_confinement_on(package: &str, manifest: &Path) -> HunyiOutcome {
 
 #[test]
 fn guibiao_and_hunyi_agree_on_the_parallel_unknown_module_wording() {
-    let manifest = write_fixture("errors-unknown-module", "pub fn f() {}\n");
+    let fixture = TempFixture::new("errors-unknown-module", "pub fn f() {}\n");
+    let manifest = fixture.manifest();
 
     let guibiao_message = gnomon_error(guibiao::check(
         &GnomonConstitution::new("errors-unknown-module").boundary(
@@ -109,16 +97,15 @@ fn guibiao_and_hunyi_agree_on_the_parallel_unknown_module_wording() {
                 .must_not_import("crate::y")
                 .because("conformance: an unreachable module target must fail loud identically"),
         ),
-        &manifest,
+        manifest,
     ));
     let hunyi_message = hunyi_error(check_async_exposure(
         &[AsyncExposureBoundary::in_crate("errors-unknown-module")
             .module("crate::does_not_exist")
             .must_not_expose_async_fn()
             .because("conformance: an unreachable module target must fail loud identically")],
-        &manifest,
+        manifest,
     ));
-    let _ = std::fs::remove_dir_all(manifest.parent().expect("fixture has a parent"));
 
     // Declared a *parallel*, not verbatim, twin: same principle preamble and "check the path"
     // tail, differing only in the dimension-accurate detail. Pin the shared spine, not the whole
