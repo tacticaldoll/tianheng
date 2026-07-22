@@ -45,6 +45,7 @@ pub(crate) fn check_visibility_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: boundary.ceiling().rule(),
+            rule_key: None,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),

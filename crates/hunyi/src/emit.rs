@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
-use xuanji::{BoundaryKind, Polarity, Severity, Violation, ViolationId};
+use xuanji::{BoundaryKind, Polarity, RuleKey, Severity, Violation, ViolationId};
 
 use crate::finding::SemanticFact;
 
 pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) module: &'a str,
     pub(crate) rule: &'a str,
+    pub(crate) rule_key: Option<RuleKey>,
     pub(crate) reason: &'a str,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
@@ -17,7 +18,9 @@ pub(crate) struct SingleModuleViolationContext<'a> {
 /// [`crate::module_resolve::resolve_module_items_with_files`]) — never a single, first-branch file
 /// for the whole module, which would misattribute a finding produced by a non-first `#[cfg]`-split
 /// branch (a real defect found on a round-5 adversarial review; see `PROJECT.md`'s Decisions).
-/// Identity stays `(target, rule, finding_key)`; text, file, anchor, and polarity remain metadata.
+/// Migrated capabilities supply `(target, rule key, structured fact)` identity; presentation,
+/// file, anchor, and polarity remain metadata. `None` is the temporary per-capability migration
+/// bridge and is removed once every semantic family has moved.
 pub(crate) fn push_single_module_violations(
     violations: &mut Vec<Violation>,
     context: SingleModuleViolationContext<'_>,
@@ -25,10 +28,17 @@ pub(crate) fn push_single_module_violations(
 ) {
     let anchor = context.anchor.map(str::to_string);
     for (finding, file) in findings {
+        let finding = finding.into_finding();
+        let id = match &context.rule_key {
+            Some(rule_key) => {
+                ViolationId::structured(context.module, context.rule, rule_key.clone(), finding)
+            }
+            None => ViolationId::new(context.module, context.rule, finding),
+        };
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
-                ViolationId::new(context.module, context.rule, finding.into_finding()),
+                id,
                 context.reason.to_string(),
                 context.severity,
             )
@@ -44,6 +54,7 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     /// `(target, rule, finding_key)` does not shift as the governed subtree grows.
     pub(crate) target: &'a str,
     pub(crate) rule: &'a str,
+    pub(crate) rule_key: Option<RuleKey>,
     pub(crate) reason: &'a str,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
@@ -70,10 +81,17 @@ pub(crate) fn push_multi_module_violations(
 ) {
     let anchor = context.anchor.map(str::to_string);
     for (finding, _module, file) in findings {
+        let finding = finding.into_finding();
+        let id = match &context.rule_key {
+            Some(rule_key) => {
+                ViolationId::structured(context.target, context.rule, rule_key.clone(), finding)
+            }
+            None => ViolationId::new(context.target, context.rule, finding),
+        };
         violations.push(
             Violation::new(
                 BoundaryKind::Semantic,
-                ViolationId::new(context.target, context.rule, finding.into_finding()),
+                id,
                 context.reason.to_string(),
                 context.severity,
             )

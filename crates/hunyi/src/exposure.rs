@@ -62,6 +62,7 @@ pub(crate) fn check_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: SIGNATURE_RULE,
+            rule_key: None,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),

@@ -66,6 +66,7 @@ pub(crate) fn check_trait_impl_boundary(
         MultiModuleViolationContext {
             target: &target,
             rule: TRAIT_IMPL_RULE,
+            rule_key: None,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),

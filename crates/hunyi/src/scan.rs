@@ -15,11 +15,13 @@ use syn::visit::{self, Visit};
 use crate::collect::type_param_names;
 use crate::crate_scope::{child_module_names, local_type_namespace_names};
 use crate::errors::missing_module_file_error;
+use crate::finding::UnsafeSiteFact;
 use crate::module_resolve::{locate_module_file, read_parse, resolve_module_branches};
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_target,
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
-    resolve_path, strip_raw, type_to_string,
+    is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path, strip_raw,
+    type_to_string,
 };
 use crate::syn_util::{direct_path_value, has_cfg_attr, has_path_attr};
 
@@ -781,7 +783,7 @@ fn extract_derives_from_cfg_metas(
 pub(crate) struct UnsafeSite {
     pub(crate) module: String,
     pub(crate) file: PathBuf,
-    pub(crate) label: String,
+    pub(crate) site: UnsafeSiteFact,
 }
 
 /// A `syn::visit::Visit` collector recording every executable-`unsafe` **code site** within the
@@ -790,12 +792,12 @@ pub(crate) struct UnsafeSite {
 /// fed a module's items **minus top-level `mod`s** (the walk owns their descent); `visit_item_mod`
 /// is left at its **default (recursing)** so a `mod` declared *inside a fn/block body* — which the
 /// top-level walk never reaches — is still observed, attributed to the enclosing file module.
-#[derive(Default)]
-struct UnsafeSiteCollector {
-    labels: Vec<String>,
-    // Positional discriminator for a self type `type_to_string` cannot render (`_#n`), so two such
-    // `unsafe impl`s in one module stay distinct findings rather than masking each other.
-    unsafe_impl_ordinal: usize,
+struct UnsafeSiteCollector<'a> {
+    sites: Vec<UnsafeSiteFact>,
+    error: Option<String>,
+    module: &'a str,
+    uses: &'a UseMap,
+    local_types: &'a HashSet<String>,
     // The enclosing `impl`'s self-type / `trait`'s name during the recursion, so an `unsafe fn`
     // method is owner-qualified (`unsafe fn Foo::m`) — else two same-named `unsafe fn`s on
     // different owners in one module collapse to one finding and a baseline of the first masks the
@@ -808,36 +810,73 @@ struct UnsafeSiteCollector {
     // (same self type, different trait), collapse to one `unsafe fn Foo::m` and a baseline of one
     // masks the other (a false negative). Self-type alone only separates *different* self types.
     current_impl_trait: Option<String>,
+    current_impl_is_trait: bool,
 }
 
-/// Render a trait path for an `unsafe impl` label — segment idents joined by `::` (raw-stripped),
-/// enough to keep two `unsafe impl`s of different traits distinct. No `quote`.
-fn render_trait_path(path: &syn::Path) -> String {
-    let lead = if path.leading_colon.is_some() {
-        "::"
-    } else {
-        ""
-    };
-    let segs: Vec<String> = path
-        .segments
-        .iter()
-        .map(|s| strip_raw(&s.ident.to_string()))
-        .collect();
-    format!("{lead}{}", segs.join("::"))
+impl<'a> UnsafeSiteCollector<'a> {
+    fn new(module: &'a str, uses: &'a UseMap, local_types: &'a HashSet<String>) -> Self {
+        Self {
+            sites: Vec::new(),
+            error: None,
+            module,
+            uses,
+            local_types,
+            current_owner: None,
+            current_trait: None,
+            current_impl_trait: None,
+            current_impl_is_trait: false,
+        }
+    }
+
+    fn unsupported(&mut self, role: &str) {
+        if self.error.is_none() {
+            self.error = Some(format!(
+                "cannot identify unsafe {role} in {} without a positional fallback",
+                self.module
+            ));
+        }
+    }
 }
 
-impl<'ast> Visit<'ast> for UnsafeSiteCollector {
+fn canonical_unsafe_owner(
+    self_ty: &syn::Type,
+    uses: &UseMap,
+    local_types: &HashSet<String>,
+    module: &str,
+    impl_type_params: &HashSet<String>,
+) -> Option<String> {
+    if let syn::Type::Path(tp) = self_ty {
+        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
+            let head = tp
+                .path
+                .segments
+                .first()
+                .map(|segment| strip_raw(&segment.ident.to_string()));
+            let should_resolve = tp.path.leading_colon.is_some()
+                || matches!(head.as_deref(), Some("crate" | "self" | "super"))
+                || head
+                    .as_ref()
+                    .is_some_and(|head| uses.contains_key(head) || local_types.contains(head));
+            if should_resolve {
+                let base = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?;
+                return Some(format!("{base}{}", render_last_segment_args(&tp.path)?));
+            }
+        }
+    }
+    type_to_string(self_ty)
+}
+
+impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
     fn visit_expr_unsafe(&mut self, node: &'ast syn::ExprUnsafe) {
-        self.labels.push("unsafe block".to_string());
+        self.sites.push(UnsafeSiteFact::Block);
         visit::visit_expr_unsafe(self, node);
     }
 
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
         if node.sig.unsafety.is_some() {
-            self.labels.push(format!(
-                "unsafe fn {}",
-                strip_raw(&node.sig.ident.to_string())
-            ));
+            self.sites.push(UnsafeSiteFact::FreeFn {
+                name: strip_raw(&node.sig.ident.to_string()),
+            });
         }
         visit::visit_item_fn(self, node);
     }
@@ -850,12 +889,24 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
             // separates *different* self types, so a trait-impl method and an inherent (or
             // other-trait) method with the same name on the *same* self type would otherwise
             // collapse to one finding and a baseline of one mask the other (a false negative).
-            let label = match (&self.current_impl_trait, &self.current_owner) {
-                (Some(tr), Some(owner)) => format!("unsafe fn <{tr} for {owner}>::{name}"),
-                (_, Some(owner)) => format!("unsafe fn {owner}::{name}"),
-                (_, None) => format!("unsafe fn {name}"),
-            };
-            self.labels.push(label);
+            match (
+                self.current_impl_is_trait,
+                &self.current_impl_trait,
+                &self.current_owner,
+            ) {
+                (true, Some(trait_ref), Some(owner)) => {
+                    self.sites.push(UnsafeSiteFact::TraitImplMethod {
+                        trait_ref: trait_ref.clone(),
+                        owner: owner.clone(),
+                        name,
+                    });
+                }
+                (false, _, Some(owner)) => self.sites.push(UnsafeSiteFact::InherentMethod {
+                    owner: owner.clone(),
+                    name,
+                }),
+                _ => self.unsupported("method owner"),
+            }
         }
         visit::visit_impl_item_fn(self, node);
     }
@@ -865,11 +916,13 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
             let name = strip_raw(&node.sig.ident.to_string());
             // Qualify by the declaring trait (set in `visit_item_trait`), so two traits each
             // declaring `unsafe fn m` in one module do not collapse to one finding.
-            let label = match &self.current_trait {
-                Some(owner) => format!("unsafe fn {owner}::{name}"),
-                None => format!("unsafe fn {name}"),
-            };
-            self.labels.push(label);
+            match &self.current_trait {
+                Some(owner) => self.sites.push(UnsafeSiteFact::TraitMethod {
+                    owner: owner.clone(),
+                    name,
+                }),
+                None => self.unsupported("trait-method owner"),
+            }
         }
         visit::visit_trait_item_fn(self, node);
     }
@@ -878,48 +931,66 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector {
         // Owner-qualify by the implemented-for type so `unsafe impl Send for Foo` and
         // `unsafe impl Send for Bar` in one module stay distinct findings — else a baseline of
         // the first silently masks the second (a false negative). Lexical (`type_to_string`, no
-        // resolution — this is the light walk), mirroring the trait-path rendering above. The `_#n`
-        // fallback (an unrenderable self type) is consumed only when needed, so two such impls stay
-        // distinct. The same owner also qualifies the impl's inner `unsafe fn` methods.
-        let owner = type_to_string(&node.self_ty).unwrap_or_else(|| {
-            let label = format!("_#{}", self.unsafe_impl_ordinal);
-            self.unsafe_impl_ordinal += 1;
-            label
-        });
+        // resolution — this is the light walk), mirroring the trait-path rendering above. If the
+        // self type cannot be rendered, an observed unsafe site fails loud rather than publishing
+        // traversal position as identity. The same owner also qualifies inner unsafe methods.
+        let params = type_param_names(&node.generics);
+        let owner = canonical_unsafe_owner(
+            &node.self_ty,
+            self.uses,
+            self.local_types,
+            self.module,
+            &params,
+        );
         // The implemented trait (if any), rendered once — reused for the `unsafe impl` label and to
         // qualify the impl's inner `unsafe fn` methods as `<trait for self>` (injectivity above).
         let impl_trait = node
             .trait_
             .as_ref()
-            .map(|(_, path, _)| render_trait_path(path));
+            .and_then(|(_, path, _)| path_to_string(path));
         if node.unsafety.is_some() {
-            let label = match &impl_trait {
-                Some(tr) => format!("unsafe impl {tr} for {owner}"),
-                None => format!("unsafe impl {owner}"),
-            };
-            self.labels.push(label);
+            match (&impl_trait, &owner, node.trait_.is_some()) {
+                (Some(trait_ref), Some(owner), true) => {
+                    self.sites.push(UnsafeSiteFact::TraitImpl {
+                        trait_ref: trait_ref.clone(),
+                        owner: owner.clone(),
+                    });
+                }
+                (None, Some(owner), false) => self.sites.push(UnsafeSiteFact::InherentImpl {
+                    owner: owner.clone(),
+                }),
+                (None, _, true) => self.unsupported("impl trait"),
+                (_, None, _) => self.unsupported("impl self type"),
+                _ => unreachable!("trait presence and rendered trait stay aligned"),
+            }
         }
-        let prev_owner = self.current_owner.replace(owner);
+        let prev_owner = std::mem::replace(&mut self.current_owner, owner);
         let prev_trait = self.current_impl_trait.take();
+        let prev_is_trait = self.current_impl_is_trait;
+        self.current_impl_is_trait = node.trait_.is_some();
         self.current_impl_trait = impl_trait;
         visit::visit_item_impl(self, node);
         self.current_owner = prev_owner;
         self.current_impl_trait = prev_trait;
+        self.current_impl_is_trait = prev_is_trait;
     }
 
     fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
         let name = strip_raw(&node.ident.to_string());
         if node.unsafety.is_some() {
-            self.labels.push(format!("unsafe trait {name}"));
+            self.sites
+                .push(UnsafeSiteFact::Trait { name: name.clone() });
         }
-        let prev = self.current_trait.replace(name);
+        let prev = self
+            .current_trait
+            .replace(format!("{}::{name}", self.module));
         visit::visit_item_trait(self, node);
         self.current_trait = prev;
     }
 
     fn visit_item_foreign_mod(&mut self, node: &'ast syn::ItemForeignMod) {
         if node.unsafety.is_some() {
-            self.labels.push("unsafe extern block".to_string());
+            self.sites.push(UnsafeSiteFact::ExternBlock);
         }
         visit::visit_item_foreign_mod(self, node);
     }
@@ -966,18 +1037,23 @@ fn walk_unsafe(
 ) -> Result<(), String> {
     // Feed the collector this module's items minus top-level `mod`s (walk-owned); body-nested
     // `mod`s stay in and are caught by the collector's default `visit_item_mod` recursion.
-    let mut collector = UnsafeSiteCollector::default();
+    let uses = collect_uses(&items);
+    let local_types = local_type_namespace_names(&items);
+    let mut collector = UnsafeSiteCollector::new(&module, &uses, &local_types);
     for item in &items {
         if matches!(item, syn::Item::Mod(_)) {
             continue;
         }
         collector.visit_item(item);
     }
-    for label in collector.labels {
+    if let Some(error) = collector.error {
+        return Err(error);
+    }
+    for site in collector.sites {
         sites.push(UnsafeSite {
             module: module.clone(),
             file: current_file.clone(),
-            label,
+            site,
         });
     }
 

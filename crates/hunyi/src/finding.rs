@@ -5,7 +5,7 @@
 
 use crate::resolve::{ShapeExposure, strip_raw, type_to_string};
 use crate::syn_util::VisibleItemKind;
-use xuanji::{Finding, FindingKey};
+use xuanji::{Finding, FindingKey, StructuredFactIdentity};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ExposureKind {
@@ -341,10 +341,7 @@ pub(crate) enum SemanticFact {
         owner: String,
     },
     /// `derive {marker} on {canonical}` — forbidden-marker: a forbidden `#[derive]` on a type.
-    ForbiddenDerive {
-        marker: String,
-        canonical: String,
-    },
+    ForbiddenDerive { marker: String, canonical: String },
     /// `impl {marker} for {owner} in {module}` — forbidden-marker: a forbidden trait acquired via a
     /// hand-written `impl`. `marker` is the written trait path (with generic args), `owner` the self
     /// type (with generic args), and `module` the impl site — together injective, so two distinct
@@ -380,9 +377,98 @@ pub(crate) enum SemanticFact {
         item_name: String,
     },
     UnsafeSite {
-        label: String,
         module: String,
+        site: UnsafeSiteFact,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum UnsafeSiteFact {
+    Block,
+    FreeFn {
+        name: String,
+    },
+    InherentMethod {
+        owner: String,
+        name: String,
+    },
+    TraitMethod {
+        owner: String,
+        name: String,
+    },
+    TraitImplMethod {
+        trait_ref: String,
+        owner: String,
+        name: String,
+    },
+    InherentImpl {
+        owner: String,
+    },
+    TraitImpl {
+        trait_ref: String,
+        owner: String,
+    },
+    Trait {
+        name: String,
+    },
+    ExternBlock,
+}
+
+impl UnsafeSiteFact {
+    fn shape(&self) -> &'static str {
+        match self {
+            Self::Block => "unsafe-block",
+            Self::FreeFn { .. } => "unsafe-free-function",
+            Self::InherentMethod { .. } => "unsafe-inherent-method",
+            Self::TraitMethod { .. } => "unsafe-trait-method",
+            Self::TraitImplMethod { .. } => "unsafe-trait-impl-method",
+            Self::InherentImpl { .. } => "unsafe-inherent-impl",
+            Self::TraitImpl { .. } => "unsafe-trait-impl",
+            Self::Trait { .. } => "unsafe-trait",
+            Self::ExternBlock => "unsafe-extern-block",
+        }
+    }
+
+    fn key_fields<'a>(&'a self, module: &'a str) -> Vec<(&'static str, &'a str)> {
+        let mut fields = vec![("module", module)];
+        match self {
+            Self::Block | Self::ExternBlock => {}
+            Self::FreeFn { name } | Self::Trait { name } => fields.push(("name", name)),
+            Self::InherentMethod { owner, name } => {
+                fields.push(("name", name.as_str()));
+                fields.push(("owner", owner.as_str()));
+                fields.push(("owner_kind", "inherent"));
+            }
+            Self::TraitMethod { owner, name } => {
+                fields.push(("name", name.as_str()));
+                fields.push(("owner", owner.as_str()));
+                fields.push(("owner_kind", "trait"));
+            }
+            Self::TraitImplMethod {
+                trait_ref,
+                owner,
+                name,
+            } => {
+                fields.push(("name", name.as_str()));
+                fields.push(("owner", owner.as_str()));
+                fields.push(("owner_kind", "trait_impl"));
+                fields.push(("trait", trait_ref.as_str()));
+            }
+            Self::InherentImpl { owner } => fields.push(("owner", owner)),
+            Self::TraitImpl { trait_ref, owner } => {
+                fields.push(("owner", owner.as_str()));
+                fields.push(("trait", trait_ref.as_str()));
+            }
+        }
+        fields
+    }
+}
+
+fn display_unsafe_owner<'a>(module: &str, owner: &'a str) -> &'a str {
+    owner
+        .strip_prefix(module)
+        .and_then(|suffix| suffix.strip_prefix("::"))
+        .unwrap_or(owner)
 }
 
 impl std::fmt::Display for SemanticFact {
@@ -427,7 +513,49 @@ impl std::fmt::Display for SemanticFact {
                 }
                 kind => write!(f, "{visibility} {} {item_name}", kind.as_str()),
             },
-            Self::UnsafeSite { label, module } => write!(f, "{label} in {module}"),
+            Self::UnsafeSite { module, site } => match site {
+                UnsafeSiteFact::Block => write!(f, "unsafe block in {module}"),
+                UnsafeSiteFact::FreeFn { name } => write!(f, "unsafe fn {name} in {module}"),
+                UnsafeSiteFact::InherentMethod { owner, name } => {
+                    write!(
+                        f,
+                        "unsafe fn {}::{name} in {module}",
+                        display_unsafe_owner(module, owner)
+                    )
+                }
+                UnsafeSiteFact::TraitMethod { owner, name } => {
+                    write!(
+                        f,
+                        "unsafe fn {}::{name} in {module}",
+                        display_unsafe_owner(module, owner)
+                    )
+                }
+                UnsafeSiteFact::TraitImplMethod {
+                    trait_ref,
+                    owner,
+                    name,
+                } => write!(
+                    f,
+                    "unsafe fn <{trait_ref} for {}>::{name} in {module}",
+                    display_unsafe_owner(module, owner)
+                ),
+                UnsafeSiteFact::InherentImpl { owner } => {
+                    write!(
+                        f,
+                        "unsafe impl {} in {module}",
+                        display_unsafe_owner(module, owner)
+                    )
+                }
+                UnsafeSiteFact::TraitImpl { trait_ref, owner } => {
+                    write!(
+                        f,
+                        "unsafe impl {trait_ref} for {} in {module}",
+                        display_unsafe_owner(module, owner)
+                    )
+                }
+                UnsafeSiteFact::Trait { name } => write!(f, "unsafe trait {name} in {module}"),
+                UnsafeSiteFact::ExternBlock => write!(f, "unsafe extern block in {module}"),
+            },
         }
     }
 }
@@ -439,6 +567,16 @@ impl SemanticFact {
     }
 
     fn into_finding_with_text(self, text: String) -> Finding {
+        if let SemanticFact::UnsafeSite { module, site } = &self {
+            return Finding::new(
+                text,
+                StructuredFactIdentity::of(
+                    "tianheng.fact/hunyi/unsafe-site",
+                    site.shape(),
+                    site.key_fields(module),
+                ),
+            );
+        }
         let (code, fields): (&str, Vec<(&str, &str)>) = match &self {
             SemanticFact::Exposed {
                 kind,
@@ -519,9 +657,7 @@ impl SemanticFact {
                     ("visibility", visibility),
                 ],
             ),
-            SemanticFact::UnsafeSite { label, module } => {
-                ("unsafe_site", vec![("label", label), ("module", module)])
-            }
+            SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
         };
         let key = FindingKey::of("hunyi", code, fields);
         Finding::new(text, key)
@@ -908,10 +1044,28 @@ mod fact_tests {
             } => {
                 published_visibility_item_kind(*item_kind);
             }
-            SemanticFact::UnsafeSite {
-                label: _,
-                module: _,
-            } => {}
+            SemanticFact::UnsafeSite { module: _, site } => assert_unsafe_site_is_cataloged(site),
+        }
+    }
+
+    fn assert_unsafe_site_is_cataloged(site: &UnsafeSiteFact) {
+        match site {
+            UnsafeSiteFact::Block
+            | UnsafeSiteFact::FreeFn { name: _ }
+            | UnsafeSiteFact::InherentMethod { owner: _, name: _ }
+            | UnsafeSiteFact::TraitMethod { owner: _, name: _ }
+            | UnsafeSiteFact::TraitImplMethod {
+                trait_ref: _,
+                owner: _,
+                name: _,
+            }
+            | UnsafeSiteFact::InherentImpl { owner: _ }
+            | UnsafeSiteFact::TraitImpl {
+                trait_ref: _,
+                owner: _,
+            }
+            | UnsafeSiteFact::Trait { name: _ }
+            | UnsafeSiteFact::ExternBlock => {}
         }
     }
 
@@ -1207,14 +1361,6 @@ mod fact_tests {
                     ("visibility", "pub"),
                 ],
             ),
-            (
-                SemanticFact::UnsafeSite {
-                    label: "unsafe fn run".into(),
-                    module: "crate::m".into(),
-                },
-                "unsafe_site",
-                vec![("label", "unsafe fn run"), ("module", "crate::m")],
-            ),
         ];
         for (fact, code, expected_fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
@@ -1224,6 +1370,19 @@ mod fact_tests {
             assert_eq!(finding.key().code(), code, "{}", finding.text());
             assert_eq!(fields, expected_fields, "{}", finding.text());
         }
+
+        let unsafe_fact = SemanticFact::UnsafeSite {
+            module: "crate::m".into(),
+            site: UnsafeSiteFact::FreeFn { name: "run".into() },
+        };
+        assert_semantic_fact_is_cataloged(&unsafe_fact);
+        let finding = unsafe_fact.into_finding();
+        assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
+        assert_eq!(finding.key().shape(), "unsafe-free-function");
+        assert_eq!(
+            finding.key().fields().collect::<Vec<_>>(),
+            vec![("module", "crate::m"), ("name", "run")]
+        );
     }
 
     #[test]
@@ -1248,6 +1407,106 @@ mod fact_tests {
                     ("subject", "Port"),
                 ]
             );
+        }
+    }
+
+    #[test]
+    fn every_unsafe_site_form_has_exact_structured_identity() {
+        let cases = vec![
+            (
+                UnsafeSiteFact::Block,
+                "unsafe-block",
+                vec![("module", "crate::m")],
+            ),
+            (
+                UnsafeSiteFact::FreeFn { name: "run".into() },
+                "unsafe-free-function",
+                vec![("module", "crate::m"), ("name", "run")],
+            ),
+            (
+                UnsafeSiteFact::InherentMethod {
+                    owner: "crate::m::Api".into(),
+                    name: "run".into(),
+                },
+                "unsafe-inherent-method",
+                vec![
+                    ("module", "crate::m"),
+                    ("name", "run"),
+                    ("owner", "crate::m::Api"),
+                    ("owner_kind", "inherent"),
+                ],
+            ),
+            (
+                UnsafeSiteFact::TraitMethod {
+                    owner: "crate::m::Port".into(),
+                    name: "run".into(),
+                },
+                "unsafe-trait-method",
+                vec![
+                    ("module", "crate::m"),
+                    ("name", "run"),
+                    ("owner", "crate::m::Port"),
+                    ("owner_kind", "trait"),
+                ],
+            ),
+            (
+                UnsafeSiteFact::TraitImplMethod {
+                    trait_ref: "Port".into(),
+                    owner: "crate::m::Api".into(),
+                    name: "run".into(),
+                },
+                "unsafe-trait-impl-method",
+                vec![
+                    ("module", "crate::m"),
+                    ("name", "run"),
+                    ("owner", "crate::m::Api"),
+                    ("owner_kind", "trait_impl"),
+                    ("trait", "Port"),
+                ],
+            ),
+            (
+                UnsafeSiteFact::InherentImpl {
+                    owner: "crate::m::Api".into(),
+                },
+                "unsafe-inherent-impl",
+                vec![("module", "crate::m"), ("owner", "crate::m::Api")],
+            ),
+            (
+                UnsafeSiteFact::TraitImpl {
+                    trait_ref: "Send".into(),
+                    owner: "crate::m::Api".into(),
+                },
+                "unsafe-trait-impl",
+                vec![
+                    ("module", "crate::m"),
+                    ("owner", "crate::m::Api"),
+                    ("trait", "Send"),
+                ],
+            ),
+            (
+                UnsafeSiteFact::Trait {
+                    name: "Port".into(),
+                },
+                "unsafe-trait",
+                vec![("module", "crate::m"), ("name", "Port")],
+            ),
+            (
+                UnsafeSiteFact::ExternBlock,
+                "unsafe-extern-block",
+                vec![("module", "crate::m")],
+            ),
+        ];
+
+        for (site, shape, fields) in cases {
+            let fact = SemanticFact::UnsafeSite {
+                module: "crate::m".into(),
+                site,
+            };
+            assert_semantic_fact_is_cataloged(&fact);
+            let finding = fact.into_finding();
+            assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
+            assert_eq!(finding.key().shape(), shape);
+            assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
         }
     }
 

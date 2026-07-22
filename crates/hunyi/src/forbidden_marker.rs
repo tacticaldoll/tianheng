@@ -52,6 +52,7 @@ pub(crate) fn check_forbidden_marker_boundary(
         MultiModuleViolationContext {
             target: &boundary.module,
             rule: FORBIDDEN_MARKER_RULE,
+            rule_key: None,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),

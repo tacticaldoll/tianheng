@@ -3403,6 +3403,79 @@ fn unsafe_labels(
     })
 }
 
+fn unsafe_keys(name: &str, source: &str) -> Result<Vec<FindingKey>, String> {
+    let tree = TempSrcTree::new(&format!("unsafe-keys-{name}"));
+    tree.write_all(&[("lib.rs", "pub mod net;\n"), ("net.rs", source)]);
+    unsafe_findings(tree.src(), &tree.root(), &["crate::ffi".to_string()], "x").map(|findings| {
+        findings
+            .into_iter()
+            .map(|(fact, _, _)| fact.into_finding().key().clone())
+            .collect()
+    })
+}
+
+#[test]
+fn unsafe_identity_survives_reorder_and_unrelated_insertion() {
+    let before = unsafe_keys(
+        "reorder-before",
+        "pub struct Api;\nunsafe impl Send for Api {}\n",
+    )
+    .unwrap();
+    let after = unsafe_keys(
+        "reorder-after",
+        "pub const UNRELATED: usize = 1;\npub struct Api;\nunsafe impl Send for Api {}\n",
+    )
+    .unwrap();
+    assert_eq!(before, after);
+}
+
+#[test]
+fn unrenderable_unsafe_owner_fails_loud_without_an_ordinal_identity() {
+    let error = unsafe_keys(
+        "unrenderable-owner",
+        "pub struct Arr<const N: usize>;\npub const N: usize = 1;\nunsafe impl Send for Arr<{ N + 1 }> {}\n",
+    )
+    .unwrap_err();
+    assert!(error.contains("without a positional fallback"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn unsafe_production_violation_separates_target_rule_and_fact_roles() {
+    let (metadata, _fixture) = fixture_metadata(
+        "unsafe-identity",
+        &[
+            ("lib.rs", "pub mod net;\npub mod ffi;\n"),
+            ("net.rs", "pub unsafe fn decode() {}\n"),
+            ("ffi.rs", ""),
+        ],
+    );
+    let boundary = UnsafeBoundary::in_crate("x")
+        .only_under(["crate::raw", "crate::ffi"])
+        .because("unsafe stays behind the audited adapter");
+    let mut violations = Vec::new();
+    check_unsafe_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+
+    let id = violations[0].id();
+    assert_eq!(id.target, "x");
+    let rule = id.rule_key().expect("unsafe production rule is semantic");
+    assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/unsafe-confinement");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![("allowed", "[\"crate::ffi\",\"crate::raw\"]")]
+    );
+    let fact = id
+        .finding_key()
+        .expect("unsafe production fact is semantic");
+    assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/unsafe-site");
+    assert_eq!(fact.shape(), "unsafe-free-function");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![("module", "crate::net"), ("name", "decode")]
+    );
+}
+
 #[test]
 fn unsafe_block_outside_subtree_reacts() {
     let out = unsafe_labels(

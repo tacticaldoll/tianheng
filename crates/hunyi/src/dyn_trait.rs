@@ -61,6 +61,7 @@ pub(crate) fn check_dyn_trait_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: DYN_TRAIT_RULE,
+            rule_key: None,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),

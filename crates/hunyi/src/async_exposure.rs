@@ -53,6 +53,7 @@ pub(crate) fn check_async_exposure_boundary(
             MultiModuleViolationContext {
                 target: &boundary.module,
                 rule: ASYNC_EXPOSURE_RULE,
+                rule_key: None,
                 reason: &boundary.reason,
                 severity: boundary.severity,
                 anchor: boundary.anchor(),
@@ -75,6 +76,7 @@ pub(crate) fn check_async_exposure_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: ASYNC_EXPOSURE_RULE,
+            rule_key: None,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),

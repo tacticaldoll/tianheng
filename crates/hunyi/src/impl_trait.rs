@@ -60,6 +60,7 @@ pub(crate) fn check_impl_trait_boundary(
         SingleModuleViolationContext {
             module: &boundary.module,
             rule: IMPL_TRAIT_RULE,
+            rule_key: None,
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
