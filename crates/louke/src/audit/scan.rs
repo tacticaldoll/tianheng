@@ -475,7 +475,16 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
                             attrs.path = read_path_string(bytes, eq + 1, mod_index);
                         }
                     }
-                    b"cfg" | b"cfg_attr" => attrs.cfg = true,
+                    // A BARE `#[cfg(pred)]` genuinely removes the whole item when `pred` is false
+                    // — the file may legitimately be absent. `cfg_attr` does NOT: it only
+                    // conditionally applies its wrapped attribute(s); the `mod` item itself always
+                    // exists regardless of the predicate (verified against a real `rustc` build:
+                    // `#[cfg_attr(unix, allow(dead_code))] mod x;` with no `x.rs` is E0583 on every
+                    // platform). A `cfg_attr`-wrapped `path` is a different, already-handled case
+                    // (the `path` arm above, `has_path_attr`'s broader test in the syn-based
+                    // dimensions) — this bare-`cfg` scope is only for the plain-missing-file
+                    // tolerance, so a `cfg_attr` sighting here must never grant it.
+                    b"cfg" => attrs.cfg = true,
                     _ => {}
                 }
                 i = attr_group_end(bytes, open, mod_index);

@@ -54,6 +54,58 @@ This index makes the current work discoverable without duplicating the detailed 
   async decision, and baseline v3 compatibility. **Authority:** the post-0.2 identity-pressure
   section below and the structured-identity decisions in `PROJECT.md`.
 
+### READY-PATCH
+
+- **A bare `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the same item is not
+  exempted before the "target must exist" check — 圭表 and 渾儀 both hard-error on a legitimate,
+  common per-platform `#[path]` shim.** **Pressure/source:** a v0.2.0..v0.2.1 diff sweep (the
+  release that introduced unconditional-`#[path]`-following in both dimensions) found neither
+  checks for a co-occurring bare `#[cfg]` before requiring the `#[path]` target to exist. Verified
+  against a real `rustc` build: `#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;` with NO
+  `windows_impl.rs` on disk compiles cleanly on a non-windows machine (rustc strips the whole item,
+  `#[path]` included, before ever resolving it) — the standard "write only the platforms you target"
+  per-platform shim shape. `crates/hunyi/src/module_resolve.rs` (`descend`, ~line 296-299) and its
+  crate-wide sibling in `scan.rs` unconditionally `Err(missing_module_file_error(...))` the moment
+  an unconditional `#[path]` target is missing, with no `has_cfg_attr`-style check for an
+  accompanying bare `#[cfg]` first; `crates/guibiao/src/module_scan/reachability.rs`'s analogous
+  direct-`#[path]`-target check has the identical unconditional shape. **Current reaction:** a
+  boundary scanning such a layout on the "wrong" platform hard-fails (exit 2) instead of tolerating
+  the absence, exactly the false-positive class `has_cfg_attr`'s plain-missing-file tolerance
+  already exists to prevent — just not extended to the `#[path]`-target-missing case. **Risk:**
+  moderate — this per-platform-shim-with-only-one-platform's-file-committed shape is plausible in a
+  real, actively-developed crate (not only a broken/mid-edit tree, unlike the sibling missing-file
+  debt entries below). **Fix:** before erroring on a missing unconditional `#[path]` target, check
+  `has_cfg_attr` on the same item's attributes (excluding the `#[path]` attribute itself) and
+  tolerate (skip) if present — mirroring the existing plain-missing-file tolerance shape, applied at
+  the same call sites in `hunyi::module_resolve::descend`, `hunyi::scan::resolve_child_modules`, and
+  `guibiao::module_scan::reachability`'s unconditional-`#[path]` check. **Version:** fits a focused
+  0.2.x maintenance PR — no public API, wire format, or baseline identity change. **Authority:** this
+  session's static review of v0.2.0..v0.2.1 plus direct `rustc` verification.
+- **Guibiao's and louke's independently hand-rolled string-literal decoders don't handle backslash-
+  newline line continuation, unlike `syn` (used by 渾儀) — a three-way divergence on an exotic but
+  valid `#[path]` value.** **Pressure/source:** the same v0.2.0..v0.2.1 sweep, checking whether the
+  three dimensions' independent `#[path]`-string decoders agree on rustc's full escape grammar.
+  Verified against a real `rustc` build: `#[path = "moved\` + a literal newline + `b.rs"]` (valid
+  Rust — backslash-newline strips to nothing, joining the two literal fragments into `movedb.rs`)
+  compiles and is followed by rustc. `crates/guibiao/src/module_scan/lexer.rs::decode_str_escapes`
+  and `crates/louke/src/audit/scan.rs::decode_str_escapes` (deliberately independent hand copies,
+  三儀 ⊥ 三儀) both fall through to their `_ => None` catch-all for a literal newline immediately
+  after a backslash — neither implements the continuation rule `syn::LitStr::value()` (hunyi's
+  decoder) gets for free. **Current reaction:** three different outcomes from the one input — 渾儀
+  follows the real target and governs it correctly; 圭表's `reachable_modules` silently drops the
+  module from `reachable` (no error, a silent coverage gap, since `direct_path_eq` was structurally
+  recognized as `Some` but the decode failed, so neither the plain-file nor the `#[path]`-target
+  branch runs); 漏刻 falls back to the conventional location (or hard-errors if that's also absent,
+  per the entry above) — none of the three agree with either of the others. **Risk:** low; a
+  backslash-newline continuation inside a `#[path]` string literal is exotic even by the standards
+  of this codebase's other accepted-debt entries, essentially never written in real code. **Fix:**
+  add the line-continuation rule to both `decode_str_escapes` copies (skip a backslash immediately
+  followed by `\n`/`\r\n`, then skip leading whitespace on the continued line, matching `syn`'s
+  `parse_lit_str_cooked`), or accept the gap explicitly if the value is judged not worth the
+  duplicated-decoder maintenance cost. **Version:** not scheduled; low real-world likelihood.
+  **Authority:** this session's static review of v0.2.0..v0.2.1 plus direct `rustc` verification of
+  both the compiling input and each decoder's current `None` fallthrough.
+
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:** judgment-neutral lexer/token extraction is now plausible, but the conformance work must

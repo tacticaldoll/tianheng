@@ -51,14 +51,23 @@ pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
     })
 }
 
-/// Whether any attribute is (or contains, via `cfg_attr`) a `#[cfg(...)]` — the conservative,
-/// predicate-blind "might legitimately be absent on this build" signal a missing conventional file
-/// is checked against: a `#[cfg]`-gated `mod x;` whose file genuinely doesn't exist on this
-/// platform/feature set is expected, not broken, so a walker tolerates it; an **unconditional**
-/// `mod x;` with no backing file is a real, unrecoverable compile error. Shared by both of this
-/// crate's module walkers ([`crate::scan::resolve_child_modules`] and
-/// [`crate::module_resolve::descend`]) so they agree on this policy rather than silently drifting
-/// — the 0.2.2 lesson (found once as an unnoticed divergence between the two).
+/// Whether any attribute is a BARE `#[cfg(...)]` — the conservative, predicate-blind "might
+/// legitimately be absent on this build" signal a missing conventional file is checked against: a
+/// `#[cfg]`-gated `mod x;` whose file genuinely doesn't exist on this platform/feature set is
+/// expected, not broken, so a walker tolerates it; an **unconditional** `mod x;` with no backing
+/// file is a real, unrecoverable compile error. Shared by both of this crate's module walkers
+/// ([`crate::scan::resolve_child_modules`] and [`crate::module_resolve::descend`]) so they agree
+/// on this policy rather than silently drifting — the 0.2.2 lesson (found once as an unnoticed
+/// divergence between the two).
+///
+/// Deliberately does **not** match `cfg_attr` (verified against a real `rustc` build): unlike a
+/// bare `#[cfg(pred)]`, which removes the whole item when `pred` is false, `#[cfg_attr(pred, …)]`
+/// only conditionally applies its wrapped attribute(s) — the `mod` item itself is never removed,
+/// so a `#[cfg_attr(pred, allow(dead_code))] mod x;` with no `x.rs` is a genuine compile error
+/// (E0583) on every platform, not a legitimate absence. A `cfg_attr` wrapping `path` specifically
+/// is a different, already-handled case ([`has_path_attr`]'s broader test, matched before this one
+/// is ever consulted). 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only
+/// distinction for the same reason (`louke::audit::scan::mod_preamble_attrs`).
 pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("cfg"))
 }
