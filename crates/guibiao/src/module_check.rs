@@ -101,9 +101,15 @@ pub(crate) fn check_module_boundary(
         // Two distinct misconfigurations, kept apart so the error is self-describing
         // (PROJECT.md): an inline `mod name { … }` is reachable but owns no source file,
         // so it cannot be a governed target — module boundaries govern file-based modules.
-        // A path that is not reachable at all is a genuinely unknown module (e.g. a typo).
+        // A path that is not reachable at all is a genuinely unknown module (e.g. a typo) —
+        // which now also covers a plain/`#[path]`-declared module whose sole declaration was
+        // `#[cfg]`-tolerated away (reachable, but neither inline nor governed): anchoring
+        // directly at a module absent on this build is "cannot judge," matching 渾儀's own
+        // `descend` precedent for the identical shape (its empty-branches case also falls to
+        // `unknown_module_error`, never a vacuous clean pass). Checked via `inline_only`
+        // specifically, not `reachable` (`inline_only` ⊆ `reachable`), so this distinction holds.
         // Both exit 2, never a silent pass; only the message differs.
-        if reachable.contains(&governed_module) {
+        if inline_only.contains(&governed_module) {
             let leaf = governed_module
                 .rsplit("::")
                 .next()

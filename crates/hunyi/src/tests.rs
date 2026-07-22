@@ -6507,6 +6507,48 @@ fn descend_does_not_tolerate_a_cfg_attr_decorated_missing_file_only_bare_cfg() {
     assert_eq!(err, missing_module_file_error("crate::gated", "x"));
 }
 
+/// A BARE `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the SAME item
+/// removes the whole item, `#[path]` included, when `pred` is false — a standard per-platform
+/// shim (`#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) that must not hard-error `descend`
+/// merely because this platform's target file was never written. Verified against a real `rustc`
+/// build: this compiles cleanly with the target entirely absent. The mutually-exclusive inline
+/// sibling arm (always present, no file needed) still resolves.
+#[test]
+fn descend_tolerates_a_cfg_gated_unconditional_path_target_when_missing() {
+    let file = resolve_file(
+        "cfg-path-shim",
+        &[(
+            "lib.rs",
+            "#[cfg(unix)]\npub mod shared { pub struct A; }\n\
+             #[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod shared;\n",
+        )],
+        "crate::shared",
+    )
+    .expect("the inline arm resolves even though the windows-only #[path] target has no file");
+    assert!(file.ends_with("lib.rs"), "got {}", file.display());
+}
+
+/// The crate-wide walker (`scan::resolve_child_modules`, backing `semantic-unsafe-confinement`,
+/// which has no single-module anchor mode) must tolerate the identical shape: a cfg-gated
+/// unconditional `#[path]` target with no file must not fail the whole scan, so an unrelated
+/// module's real `unsafe` site is still observed.
+#[test]
+fn resolve_child_modules_tolerates_a_cfg_gated_unconditional_path_target_when_missing() {
+    let out = unsafe_labels(
+        "cfg-path-shim-crate-wide",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod live;\n",
+            ),
+            ("live.rs", "unsafe fn f() {}\n"),
+        ],
+        &["crate::allowed_elsewhere"],
+    )
+    .expect("a cfg-gated #[path] target with no file must not fail the crate-wide scan");
+    assert_eq!(out, ["unsafe fn f in crate::live"]);
+}
+
 #[test]
 fn module_file_is_mod_rs_for_a_nested_module() {
     let file = resolve_file(

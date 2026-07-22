@@ -756,6 +756,108 @@ fn a_dual_backed_module_is_a_scan_error_not_silently_accepted() {
     );
 }
 
+/// A plain `mod child;` with NEITHER `child.rs` NOR `child/mod.rs` present, and no `#[cfg]`
+/// anywhere on the declaration, is a genuine rustc compile error — closes the longstanding
+/// "missing plain mod file is a silent gap" debt (BACKLOG: "圭表 gaining `#[cfg]` awareness for an
+/// unrelated reason... closes this for free"). Previously `child` silently vanished from
+/// `reachable` with no error, an undetected coverage gap; now matches 渾儀's own hard error for
+/// the identical shape.
+#[test]
+fn an_unconditional_missing_plain_module_file_is_a_scan_error_not_a_silent_gap() {
+    let (result, _violations) = run_module_check(
+        "missing-plain-unconditional",
+        &[("lib.rs", "pub mod child;\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("child must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "an unconditional plain mod with no backing file must fail loud, never silently vanish",
+    );
+    assert!(
+        err.contains("crate::child") && err.contains("could not be located"),
+        "the error must name the module and the missing-file cause: {err}"
+    );
+}
+
+/// A BARE `#[cfg(...)]`-gated plain `mod child;` with no backing file is tolerated BY THE
+/// SCANNER — an unrelated sibling boundary still resolves cleanly rather than the whole scan
+/// erroring merely because one cfg-gated module has no file on this build/feature set (matching
+/// 渾儀's `has_cfg_attr` tolerance and 漏刻's own `a_cfg_gated_module_with_no_file_is_skipped_not_errored`).
+#[test]
+fn a_cfg_gated_missing_plain_module_file_does_not_fail_an_unrelated_boundary() {
+    let (result, violations) = run_module_check(
+        "missing-plain-cfg-gated",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(feature = \"absent\")]\npub mod child;\npub mod present;\n",
+            ),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("a #[cfg]-gated missing sibling must not fail an unrelated boundary");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
+/// A boundary anchored DIRECTLY at a module whose sole declaration was `#[cfg]`-tolerated away
+/// (no surviving file) is "cannot judge," not a vacuous clean pass — matching 渾儀's own `descend`
+/// precedent for the identical shape (its empty-branches case also falls to
+/// `unknown_module_error`, never silently reporting zero violations for something never checked).
+#[test]
+fn a_boundary_anchored_directly_at_a_cfg_gated_missing_module_is_unknown_not_clean() {
+    let (result, _violations) = run_module_check(
+        "missing-plain-cfg-gated-anchor",
+        &[("lib.rs", "#[cfg(feature = \"absent\")]\npub mod child;\n")],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("child must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "anchoring directly at a module absent on this build must fail loud, never vacuously pass",
+    );
+    assert_eq!(err, unknown_module_error("crate::child", "x"));
+}
+
+/// A BARE `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the same item
+/// removes the whole item, `#[path]` included, when `pred` is false — a standard per-platform
+/// shim (`#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) that must not hard-error an
+/// unrelated boundary merely because this platform's target file was never written. Verified
+/// against a real `rustc` build: this compiles cleanly with the target entirely absent.
+#[test]
+fn a_cfg_gated_unconditional_path_target_does_not_fail_an_unrelated_boundary_when_missing() {
+    let (result, violations) = run_module_check(
+        "cfg-gated-path-target-missing",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod present;\n",
+            ),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("a #[cfg]-gated #[path] target with no file must not fail an unrelated boundary");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
 /// A `#[cfg_attr(cond, path = …)]` IS recognized as a (conditional) remap, the same
 /// stated `#[path]` bound as the separate `#[cfg(cond)] #[path = …]` spelling. Not recognizing it
 /// would govern the conventionally-named file — a cfg-blind mishandling that is a

@@ -147,7 +147,7 @@ pub(crate) fn scan_crate(
     // pre-existing gap (see `BACKLOG.md`'s accepted-debt entry), not a parallel copy of this guard.
     // Seeded with the crate root so a submodule looping back to it is caught too.
     let mut ancestors: HashSet<PathBuf> = HashSet::new();
-    ancestors.insert(canonicalize_source(root_file)?);
+    ancestors.insert(xingbiao::canonicalize_or_fail(root_file)?);
     walk_module(
         root.items,
         "crate".to_string(),
@@ -162,17 +162,6 @@ pub(crate) fn scan_crate(
         &mut scan,
     )?;
     Ok(scan)
-}
-
-/// Canonicalize a source file path (resolving symlinks) for the ancestor-set cycle guard; an
-/// unresolvable path is a scan error ("cannot judge"), never a silent skip.
-fn canonicalize_source(file: &Path) -> Result<PathBuf, String> {
-    std::fs::canonicalize(file).map_err(|err| {
-        format!(
-            "cannot canonicalize source file '{}': {err}",
-            file.display()
-        )
-    })
 }
 
 /// A module whose source file loops the current descent path back on itself — a symlinked module
@@ -293,9 +282,17 @@ fn resolve_child_modules(
                         // An unconditional `#[path]` target must exist (rustc errors otherwise), so
                         // an absent one is a genuine broken reference: fail loud (exit 2), never a
                         // silent skip. A cfg-conditional `#[path]` is the `has_path_attr` skip below.
+                        // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
+                        // removes the whole item when `pred` is false (verified against a real
+                        // rustc build: `#[cfg(windows)] #[path = "…"] mod x;` compiles cleanly on
+                        // a non-windows host with the target entirely absent) — tolerate exactly
+                        // like the plain-missing-file case elsewhere in this walker.
+                        if has_cfg_attr(&module_item.attrs) {
+                            continue;
+                        }
                         return Err(missing_module_file_error(&child_module, crate_package));
                     }
-                    let canon = canonicalize_source(&file)?;
+                    let canon = xingbiao::canonicalize_or_fail(&file)?;
                     if ancestors.contains(&canon) {
                         return Err(module_cycle_error(&child_module, crate_package, &file));
                     }
@@ -357,7 +354,7 @@ fn resolve_child_modules(
                     // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
                     // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
                     // misreport them (that would be a false positive on compilable input).
-                    let canon = canonicalize_source(&file)?;
+                    let canon = xingbiao::canonicalize_or_fail(&file)?;
                     if ancestors.contains(&canon) {
                         return Err(module_cycle_error(&child_module, crate_package, &file));
                     }
@@ -613,7 +610,7 @@ pub(crate) fn walk_subtree_modules(
         // shared across branches: two mutually-exclusive `#[cfg]` arms' own files are never
         // simultaneously open in any real build, so one arm's file must never gate the other's.
         let mut ancestors: HashSet<PathBuf> = HashSet::new();
-        ancestors.insert(canonicalize_source(&file)?);
+        ancestors.insert(xingbiao::canonicalize_or_fail(&file)?);
         // This branch's own `path_base` IS the base a `#[path]` written in it resolves from —
         // used AS-IS, never re-derived as `file.parent()`: for an inline-module branch,
         // `path_base` is its accumulated directory, which differs from the *enclosing* file's own
@@ -941,7 +938,7 @@ pub(crate) fn scan_unsafe_sites(
     let root = read_parse(root_file)?;
     let mut sites = Vec::new();
     let mut ancestors: HashSet<PathBuf> = HashSet::new();
-    ancestors.insert(canonicalize_source(root_file)?);
+    ancestors.insert(xingbiao::canonicalize_or_fail(root_file)?);
     walk_unsafe(
         root.items,
         "crate".to_string(),

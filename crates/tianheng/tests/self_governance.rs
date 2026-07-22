@@ -206,6 +206,33 @@ fn tianheng_constitution() -> Constitution {
                      carried three disagreeing canonicalize-failure policies at once)",
                 ),
         )
+        .boundary(
+            ModuleBoundary::in_crate("hunyi")
+                .module("crate::scan")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "path canonicalization for this crate-wide walker's own cycle/dedup guard \
+                     must go through the shared, fail-loud `xingbiao::canonicalize_or_fail`, \
+                     never be re-hand-rolled inline here — a sibling instance of the 0.2.2 lesson \
+                     found in this same crate's `module_resolve` (a second, independently \
+                     hand-rolled wrapper here once carried its own disagreeing error-message \
+                     policy)",
+                ),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("louke")
+                .module("crate::audit::scan")
+                .must_not_call_inline("std::fs")
+                .ending_with(["canonicalize"])
+                .because(
+                    "this CI-only probe scanner's module-cycle guard must go through the shared, \
+                     fail-loud `xingbiao::try_visit`, never be re-hand-rolled inline here — closes \
+                     the same class of drift 圭表/渾儀's own guards were confined against, now that \
+                     漏刻's self-law permits the additive, `audit`-feature-gated `xingbiao` \
+                     dependency this routes through",
+                ),
+        )
 }
 
 #[test]

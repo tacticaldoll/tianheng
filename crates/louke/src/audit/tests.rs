@@ -678,11 +678,9 @@ fn capture_probe_decodes_string_escapes_to_the_compiler_value() {
 }
 
 #[test]
-fn an_undecodable_escape_or_line_continuation_is_unauditable() {
+fn an_undecodable_escape_is_unauditable() {
     // The decoder's `None` contract: anything it cannot reproduce EXACTLY reacts loud, never a
-    // silently mismatched literal. A backslash-newline line continuation is the reachable
-    // real-source case (it compiles); the malformed forms are the defensive backstop.
-    let line_continuation = "fn f() { assert_boundary!(\"a\\\nb\", o); }";
+    // silently mismatched literal.
     let malformed = [
         "fn f() { assert_boundary!(\"bad\\q\", o); }", // unknown escape
         "fn f() { assert_boundary!(\"trunc\\x\", o); }", // truncated \x
@@ -690,7 +688,7 @@ fn an_undecodable_escape_or_line_continuation_is_unauditable() {
         "fn f() { assert_boundary!(\"emptyu\\u{}\", o); }", // \u with no digits
         "fn f() { assert_boundary!(\"leadus\\u{_41}\", o); }", // leading `_` — rustc rejects
     ];
-    for src in std::iter::once(line_continuation).chain(malformed) {
+    for src in malformed {
         let mut probes = Vec::new();
         scan_source(src, "test.rs", &mut probes);
         assert!(
@@ -704,6 +702,22 @@ fn an_undecodable_escape_or_line_continuation_is_unauditable() {
             "an un-decodable escape must not yield a (mismatched) literal: {src:?} -> {probes:?}"
         );
     }
+}
+
+#[test]
+fn a_backslash_newline_line_continuation_now_decodes_like_rustc() {
+    // Verified against a real `rustc` build: `"a\` + newline + `b"` decodes to `"ab"` (the
+    // backslash, the newline, and the continued line's leading whitespace are stripped). This
+    // decoder now matches `syn`'s `LitStr::value()` fidelity instead of treating the shape as
+    // un-auditable — the fix a v0.2.0..v0.2.1 cross-dimension sweep found missing here (and in
+    // 圭表's independent copy).
+    let src = "fn f() { assert_boundary!(\"a\\\nb\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert!(
+        matches!(&probes[..], [Probe::Literal(seam)] if seam == "ab"),
+        "a line continuation must decode to the joined value, matching rustc: {probes:?}"
+    );
 }
 
 #[test]

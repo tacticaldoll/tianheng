@@ -296,6 +296,16 @@ fn descend(
                 if let Some(rel) = direct_path_value(&module_item.attrs) {
                     let file = branch.path_base.join(&rel);
                     if !file.is_file() {
+                        // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
+                        // (e.g. `#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) removes
+                        // the whole item, `#[path]` included, when `pred` is false — rustc never
+                        // attempts to resolve the target on such a build (verified against a real
+                        // build: this compiles cleanly with the target entirely absent). Tolerate
+                        // exactly like the plain-missing-file case below; an unconditional item
+                        // with no accompanying `#[cfg]` still fails loud.
+                        if has_cfg_attr(&module_item.attrs) {
+                            continue;
+                        }
                         return Err(missing_module_file_error(module, crate_package));
                     }
                     if !xingbiao::try_visit(&mut seen_files, &file)? {
