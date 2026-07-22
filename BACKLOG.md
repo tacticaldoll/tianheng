@@ -54,37 +54,6 @@ This index makes the current work discoverable without duplicating the detailed 
   async decision, and baseline v3 compatibility. **Authority:** the post-0.2 identity-pressure
   section below and the structured-identity decisions in `PROJECT.md`.
 
-### READY-PATCH
-
-- **`resolve_self_type`'s alias/reexport fixpoint has no hop cap — a real unbounded-loop gap, not
-  a style duplication.** `crates/hunyi/src/containment.rs::resolve_self_type` reimplements the same
-  alias+re-export fixpoint shape as `resolve/mod.rs::canonicalize_through_aliases`, but carries only
-  the exact-repeat `seen`-set guard, not the numeric `cap = aliases.len() + reexports.len() + 1` the
-  sibling function added specifically because, per its own doc comment, "the cap hard-guarantees
-  termination against a divergent rewrite the exact-repeat `seen` set cannot catch." No test
-  cross-checks the two resolvers agree. See the full entry in 渾儀's Reaction-phase section below.
-  **Authority:** this session's static review + direct code verification (`containment.rs:108-119`
-  vs `resolve/mod.rs:449-476`); `PROJECT.md` Decisions (0.2.2 lesson: divergent-rewrite protection
-  applied at one call site and missed at a structurally-identical sibling).
-- **Shared path-identity calibration + confinement — closing the 0.2.2 lesson's broader footprint.**
-  A follow-up sweep (prompted by re-examining the 0.2.2 saga) found the same "a fix closes the
-  reported instance, not the shared model" pattern still live in several more places, none
-  previously recorded — inside `guibiao::reachability.rs` itself (three disagreeing `canonicalize`
-  policies in one file), between `guibiao` and `hunyi`'s independently hand-written `path_within`,
-  between the six `guibiao`/`hunyi` `errors.rs` twin pairs, and — lower severity, style-only —
-  a duplicated path-segment pipeline and package-name fold inside `guibiao::use_scan.rs` /
-  `cargo_metadata.rs` / `module_check.rs`, an unused-import-shadowing duplicate of
-  `canonical_segment` in `guibiao::symbol_scan.rs:372`, and a hand-copied repair-hint string across
-  `louke::registry.rs` / `audit.rs` / `finding.rs`. See the full entry in 圭表's ACCEPTED DEBT list
-  below (it supersedes the narrower canonicalize-TOCTOU entry there) for the fix shape: a shared
-  `try_visit`-style guarded-visit combinator in 星表, routing 渾儀's `descend` and 圭表's
-  `reachability.rs` through it, backed by two `must_not_call_inline` self-governance boundaries,
-  two new conformance tests pinning `path_within` and the `errors.rs` twins the way
-  `lexical_conformance.rs` already pins lexical hygiene, and the smaller `guibiao`/`louke`
-  consolidations bundled into the same patch. **Authority:** this session's static review + direct
-  code verification (three independent sweep passes over `guibiao`/`hunyi`/`louke`/`xingbiao`/
-  `xuanji`/`tianheng`); `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds).
-
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:** judgment-neutral lexer/token extraction is now plausible, but the conformance work must
@@ -658,10 +627,14 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   shipped in the first place, so this is reachable only via test fixtures or a mid-edit tree, not
   real published code. **Promotion trigger:** a real report of a missing-file plain `mod` masking a
   boundary check in a *shipped* crate, or 圭表 gaining `#[cfg]` awareness for an unrelated reason
-  (at which point this closes for free). **Version:** not scheduled; reopen only on the trigger
-  above. **Authority:** the dependency-light scanner decision in `PROJECT.md`'s Decisions section.
-- **`descend`'s file-form dedup silently disengages if `canonicalize` fails mid-scan — ACCEPTED
-  DEBT (narrow TOCTOU, pre-existing shape, newly surfaced by 0.2.2's round-5 review).**
+  (at which point this closes for free). **Version:** targeted for reconsideration in the `0.3.0`
+  breaking window, bundled with any decision to give 圭表 `#[cfg]` awareness — a follow-up sweep
+  (this session) confirmed no lesser fix closes it: the sibling "dual-backed module" debt turned out
+  to be `#[cfg]`-independent and closeable now (BUILT below), but this one genuinely needs the
+  bigger call, not a local pattern. Not scheduled before then. **Authority:** the dependency-light
+  scanner decision in `PROJECT.md`'s Decisions section.
+- **`descend`'s file-form dedup silently disengages if `canonicalize` fails mid-scan — BUILT (0.2.3),
+  superseded by the broader shared path-identity calibration entry below.**
   **Pressure/source:** a round-5 adversarial review of `crates/hunyi/src/module_resolve.rs::descend`'s
   `seen_files` dedup (added in 0.2.2 to stop two mutually-exclusive `#[cfg]` siblings backed by the
   identical file from double-counting that file's items) found both dedup sites
@@ -681,9 +654,9 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   for sequencing, not because it's hard. **Risk:** low; requires concurrent external mutation of the
   scanned tree, not reachable from a static, checked-in crate. **Promotion trigger:** a real report of
   a duplicated violation count from a scan racing external file churn (e.g. a codegen step running
-  concurrently with CI). **Version:** not scheduled. **Authority:** round-5 adversarial review,
-  `PROJECT.md` Decisions (0.2.2 lesson).
-- **Shared path-identity calibration + confinement — READY-PATCH, supersedes the TOCTOU entry
+  concurrently with CI). **Version:** closed by the entry below, not on its own narrower terms.
+  **Authority:** round-5 adversarial review, `PROJECT.md` Decisions (0.2.2 lesson).
+- **Shared path-identity calibration + confinement — BUILT (0.2.3), supersedes the TOCTOU entry
   above with a broader fix.** **Pressure/source:** a follow-up sweep found the TOCTOU entry above is
   one instance of a wider pattern, not an isolated one. `crates/guibiao/src/module_scan/
   reachability.rs` alone carries **three** disagreeing `canonicalize`-failure policies in one file:
@@ -731,12 +704,15 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   `finding.rs` (a third, already-differently-worded site) hand-copy the same repair-hint string with
   a comment claiming alignment but no test. **Risk:** low — every triggering condition (a race, a malformed tree) matches the sibling
   ACCEPTED DEBT entries' own low-risk reasoning; the value is closing the broader footprint before
-  it resurfaces the same way across a future round. **Version:** fits a focused 0.2.x maintenance PR
-  or OpenSpec change — no public API, wire format, or baseline identity changes. **Authority:** this
-  session's static review and direct code verification (`grep` across `guibiao`/`hunyi`/`louke`
-  source); `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds); the TOCTOU entry above.
+  it resurfaces the same way across a future round. **Version:** shipped in 0.2.3 — `xingbiao::
+  canonicalize_or_fail`/`try_visit`, both `must_not_call_inline` self-governance boundaries,
+  `path_within_conformance.rs`, and `errors_conformance.rs` (pinning three of the four twins;
+  `missing_src_error`'s twin stays a stated, recorded gap). No public API, wire format, or baseline
+  identity change. **Authority:** this session's static review and direct code verification (`grep`
+  across `guibiao`/`hunyi`/`louke` source); `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds);
+  the TOCTOU entry above.
 - **A conventional module backed by both `name.rs` and `name/mod.rs` is silently dual-governed
-  instead of erroring — ACCEPTED DEBT (pre-existing, cross-dimension inconsistency).**
+  instead of erroring — BUILT (0.2.3).**
   **Pressure/source:** a round-5 review found that when a plain `mod x;`'s probed base directory
   contains **both** `x.rs` and `x/mod.rs` — a genuine `rustc` compile error, E0761, "file for module
   `x` found at both …" — 圭表's per-source live probe (`reachable_modules`) happily accepts both
@@ -751,14 +727,19 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   Note for symmetry: `crates/louke/src/audit/scan.rs::resolve_external_module` already hard-errors on
   this exact `(true, true)` case ("module `{name}` resolves to both … and …") — so this is a genuine,
   demonstrated three-dimension inconsistency (漏刻 fail-loud, 圭表 silent-accept), not just a
-  hypothetical. **Risk:** low, same reasoning as the sibling missing-file entry: unreachable from a
-  tree that actually compiles. **Promotion trigger:** a real report of a dual-backed module masking a
-  boundary check, or 圭表 adopting 漏刻's `(true, true) => Err(...)` shape when the probe loop is next
-  touched for an unrelated reason. **Version:** not scheduled. **Authority:** round-5 adversarial
-  review; the existing missing-plain-file ACCEPTED DEBT entry above sets the precedent for this
-  classification.
+  hypothetical. **Risk (as accepted debt) was low** — reachable only from a tree that would never
+  `cargo build`, same reasoning as the sibling missing-file entry — **but unlike that entry, this one
+  needs no `#[cfg]` awareness to close**: E0761 is a pure file-existence ambiguity, never conditional
+  on any `#[cfg]`, so 圭表 can safely detect it with the same information it already has. **Fix (0.2.3):**
+  `reachability.rs`'s live-probe loop now errors — mirroring 漏刻's own wording — when a single
+  source's plain-child probe finds BOTH `<name>.rs` and `<name>/mod.rs` as real files, closing the
+  three-dimension inconsistency (漏刻 fail-loud, 圭表 now also fail-loud). Pinned by
+  `dual_backed_module_conformance.rs` (mirroring `path_within_conformance.rs`'s style: independent
+  implementations, agreement verified by a shared black-box test, never a shared function — 三儀 ⊥
+  三儀 intact). **Authority:** round-5 adversarial review; this session's follow-up verification that
+  the ambiguity is `#[cfg]`-independent.
 - **hunyi's own two module walkers disagree on `#[cfg]`-tolerance for a missing plain-form file —
-  ACCEPTED DEBT (pre-existing, out of 0.2.2's diff scope).** **Pressure/source:** a round-5 review
+  BUILT (0.2.3).** **Pressure/source:** a round-5 review
   comparing `module_resolve.rs::descend` (backs the five single-module-anchored capabilities via
   `resolve_module_items`/`resolve_module_file`/`resolve_module_branches`) against
   `scan.rs::resolve_child_modules` (backs the crate-wide/subtree walkers) found `descend` hard-errors
@@ -767,21 +748,27 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   `#[cfg]` (`if !has_cfg_attr(&module_item.attrs) { return Err(...) }`) — a real, `cargo check`-clean
   layout (`#[cfg(feature = "never")] pub mod gated;` with no `gated.rs`) that the crate-wide walk
   accepts but a boundary anchored *directly* at `crate::gated` hard-aborts on (exit 2) instead of
-  tolerating. **Current reaction:** `descend` always errors; `resolve_child_modules` never errors on
-  a `#[cfg]`-gated miss. **Why not closed:** confirmed via `git diff v0.2.1..release/0.2.2` that
-  `descend`'s unconditional-error line predates the 0.2.2 `Branch`-vector rewrite byte-for-byte in
-  behavior — it was restructured, not introduced, by this release. BACKLOG's existing missing-file
-  entry above only compares 圭表 against 渾儀's *crate-wide* walker; it does not mention this narrower,
-  purely-渾儀-internal asymmetry between 渾儀's own two walkers. Whether a single-module anchor
-  *should* tolerate `#[cfg]`-gated absence (there is no principled non-error answer to give for a
-  module with no items) is a real open design question, not a same-shape fix. **Risk:** low; the
-  same "a `cfg`-gated absence is expected, not broken" reasoning as the sibling entry applies, and
-  this predates 0.2.2. **Promotion trigger:** a real report of a legitimate `#[cfg]`-gated boundary
-  anchor hard-failing a CI check, or a deliberate design pass reconciling `descend` and
-  `resolve_child_modules`'s missing-file policies. **Version:** not scheduled; pre-existing, out of
-  0.2.2's fix scope. **Authority:** round-5 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson).
+  tolerating. **Prior reaction:** `descend` always errored; `resolve_child_modules` never errored on
+  a `#[cfg]`-gated miss. **Why this was originally framed as an open design question, and why that
+  framing turned out to be too cautious:** the crate had *already* answered "should a `#[cfg]`-gated
+  absence be tolerated" for its crate-wide walker (yes) — the only real question left was whether the
+  single-module-anchored walker should agree with its own sibling, and the obvious answer (given this
+  whole project's theme) is yes. **Fix:** `descend`'s plain-file lookup now applies the identical
+  `has_cfg_attr` tolerance (moved to the shared `syn_util` module both walkers already import from,
+  rather than staying private to `scan.rs`) before hard-erroring. A mutually-exclusive `#[cfg]`
+  per-platform shim (an inline arm plus a file-form sibling whose file is legitimately absent) now
+  resolves via the inline arm instead of spuriously hard-erroring. **Safety note:** this makes
+  `descend` able to return zero surviving branches for the first time (previously impossible, since
+  the old unconditional error fired before that state could arise) — verified this does NOT panic:
+  `descend`'s own pre-existing `next_branches.is_empty()` guard (one level up, already used for the
+  ordinary "segment not found" case) already converts an empty result to `unknown_module_error`
+  before it can reach `resolve_module_root`'s `branches[0]` index, so no new panic surface was
+  introduced. Pinned by two new regression tests: the per-platform-shim tolerance, and that a module
+  with EVERY candidate `#[cfg]`-eliminated still fails loud (never a silent vacuous pass). **Authority:**
+  round-5 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson); this session's direct code
+  verification of the empty-branches safety property.
 - **漏刻's probe scanner dedups module-cycle detection on a LITERAL path, not a canonicalized one —
-  ACCEPTED DEBT (cross-dimension inconsistency, pre-existing).** **Pressure/source:** a round-8
+  BUILT (0.2.3).** **Pressure/source:** a round-8
   adversarial review of `crates/louke/src/audit/scan.rs::collect_reachable_probes` found its
   `visited: BTreeSet<PathBuf>` cycle/dedup guard inserts the file path exactly as resolved (never
   `canonicalize`d — confirmed via `grep -rn canonicalize crates/louke/` returning zero matches),
@@ -790,20 +777,25 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   `crates/hunyi/src/scan.rs` comment at `resolve_child_modules` explicitly claiming "the louke probe
   scanner guards the same hazard; the two dimensions keep parallel copies (三儀 ⊥ 三儀)" — a claim
   this review found to be FALSE for 漏刻 specifically, though the parallel-copies *architecture* the
-  comment describes is otherwise accurate). **Current reaction:** a symlinked directory (or a
-  circular `#[path]`) reached via two distinct literal paths to the identical real file is not
+  comment describes is otherwise accurate). **Prior reaction:** a symlinked directory (or a
+  circular `#[path]`) reached via two distinct literal paths to the identical real file was not
   recognized as the same node, so `collect_reachable_probes`'s explicit work-queue (`pending`, a
-  `Vec`, not the call stack) can grow without bound on a genuine cycle rather than terminating —a
-  hang, not a stack overflow, since the walk is iterative. **Why not closed:** confirmed via `git
-  log --oneline -- crates/louke/src/audit/scan.rs` unchanged since the `v0.2.1` tag — this predates
-  0.2.2 entirely, is out of this release's diff scope, and 漏刻's own probe-audit surface (unlike
-  圭表/渾儀's module-boundary walks) has never had a reported symlink-cycle incident. **Risk:** low;
-  requires a symlinked source directory or a circular `#[path]` chain specifically inside the CI
-  probe-audit target, a layout no shipped crate in this repo uses. **Promotion trigger:** a real
-  report of the probe audit hanging on a cyclic layout, or a maintenance pass on
-  `collect_reachable_probes` for an unrelated reason (at which point canonicalizing `visited`'s
-  entries closes this for free, mirroring 圭表/渾儀's own guards). **Version:** not scheduled.
-  **Authority:** round-8 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds).
+  `Vec`, not the call stack) kept descending — empirically, until an OS path-length limit tripped
+  and the scan spuriously failed on a structure that was not actually broken (verified against a
+  real symlink-cycle fixture: not a true unbounded hang, since the OS bounds it first, but still a
+  wrong reaction on legitimate input). **Why this was previously left open:** closing it required a
+  dependency `louke`'s self-law did not permit (`xuanji` only) — this is the one entry in this batch
+  that needed a deliberate constitution decision, not just code. **Fix:** `louke`'s self-law
+  (`crates/tianheng/tests/self_governance.rs`) now permits an ADDITIVE `xingbiao` dependency,
+  gated behind the non-default `audit` feature (`Cargo.toml`: `xingbiao = { optional = true }`,
+  `audit = ["dep:xingbiao"]`) — never reaches the production hot path the crate's own
+  "ships into the user's production binary" self-law reasoning is about. `collect_reachable_probes`'s
+  `visited` set now routes through `xingbiao::try_visit`, the same shared primitive 圭表/渾儀 already
+  use, closing the cross-dimension inconsistency for real rather than leaving a third independently
+  hand-rolled (and non-canonicalizing) copy. Pinned by a new regression test (a self-referential
+  symlinked directory) mirroring 圭表/渾儀's own analogous symlink-cycle tests. **Authority:** round-8
+  adversarial review; `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds); this session's
+  confirmation that the dependency is additive and `audit`-feature-scoped only.
 - **Multibyte char-literal lexing — documented robustness bound (not a known FN).** *From the
   v0.1.5 hidden-bug sweep.* The `use`/`mod` lexer's simple-char branch assumes a one-byte char
   body, so a multibyte char literal (`'é'`) in an adjacent-literal pattern can misparse a few bytes.
@@ -1066,7 +1058,7 @@ AST. This closes the live gap where 渾儀's nominally structured key was still 
 `descriptor`, so presentation polish would re-identify a baseline entry. See `PROJECT.md`,
 "Structure semantic observation facts".
 
-- **`resolve_self_type`'s fixpoint lacks the hop cap its sibling resolver carries — READY-PATCH.**
+- **`resolve_self_type`'s fixpoint lacks the hop cap its sibling resolver carries — BUILT (0.2.3).**
   **Pressure/source:** a follow-up sweep of the 0.2.2 lesson (divergent-rewrite protection applied at
   one call site, missed at a structurally-identical sibling) found a third instance, this time a real
   safety gap rather than a style duplication. `containment.rs::resolve_self_type` (108-119) hand-rolls
@@ -1080,18 +1072,18 @@ AST. This closes the live gap where 渾儀's nominally structured key was still 
   cannot drift," a guarantee that does not extend to this third, independent reimplementation. Per
   that same doc comment, the cap exists because "the exact-repeat `seen` set cannot catch" **a
   divergent rewrite** (a chain of landings that never exactly repeats). **Current reaction:** none —
-  `resolve_self_type` has no test exercising a divergent (non-cycling) alias chain, so a construction
+  `resolve_self_type` had no test exercising a divergent (non-cycling) alias chain, so a construction
   that recreates the shape `canonicalize_through_aliases`'s cap was hardened against would loop until
   the alias map is exhausted of *new* strings to produce, which is not itself bounded the way a
-  cycle is. **Fix:** route `resolve_self_type` through `canonicalize_through_aliases` (or an
-  equivalent shared helper taking the same alias/reexport maps), retiring the hand-rolled loop, so
-  the two resolvers share the one hop-capped implementation `resolve/mod.rs` already claims they do;
-  add a regression test constructing a divergent (non-cycling) alias chain to prove the cap actually
-  bounds `resolve_self_type`'s termination, not just `canonicalize_through_aliases`'s own. **Risk:**
-  low likelihood in practice (needs a specific alias-map shape to construct a genuinely divergent,
-  non-cycling rewrite chain) but high severity if hit (an unbounded loop in a CI scan, not a wrong
-  answer) — matches the 0.2.2-lesson risk class exactly. **Version:** fits a focused 0.2.x
-  maintenance PR — no public API, wire format, or baseline identity change. **Authority:** this
+  cycle is. **Fix:** `resolve_self_type` now routes through `canonicalize_through_aliases`, retiring
+  the hand-rolled loop, so the two resolvers share the one hop-capped implementation `resolve/mod.rs`
+  already claimed they do; a regression test (`resolve_self_type_does_not_diverge_on_a_reexport_
+  whose_key_prefixes_its_value`) constructs a divergent (non-cycling) alias chain to prove the cap
+  actually bounds `resolve_self_type`'s termination, not just `canonicalize_through_aliases`'s own.
+  **Risk (before the fix):** low likelihood in practice (needs a specific alias-map shape to
+  construct a genuinely divergent, non-cycling rewrite chain) but high severity if hit (an unbounded
+  loop in a CI scan, not a wrong answer) — matched the 0.2.2-lesson risk class exactly. **Version:**
+  shipped in 0.2.3 — no public API, wire format, or baseline identity change. **Authority:** this
   session's static review + direct code verification; `PROJECT.md` Decisions (0.2.2 lesson, in eight
   rounds).
 

@@ -21,7 +21,7 @@ use crate::resolve::{
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
     resolve_path, strip_raw, type_to_string,
 };
-use crate::syn_util::{direct_path_value, has_path_attr};
+use crate::syn_util::{direct_path_value, has_cfg_attr, has_path_attr};
 
 /// One impl site observed in the crate: its enclosing module path, the **real file it was read
 /// from** (its own branch's file — never re-resolved afterward from the module string, which
@@ -773,10 +773,6 @@ fn extract_derives_from_cfg_metas(
         }
     }
     Ok(())
-}
-
-fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|attr| attr.path().is_ident("cfg"))
 }
 
 // --- Unsafe-site scan (`semantic-unsafe-confinement`) -------------------------

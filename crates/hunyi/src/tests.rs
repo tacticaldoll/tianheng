@@ -6450,6 +6450,43 @@ fn module_file_is_the_file_module_source() {
     assert!(file.ends_with("domain.rs"), "got {}", file.display());
 }
 
+/// A mutually-exclusive `#[cfg]` per-platform shim — an inline arm plus a file-form sibling
+/// arm whose file is absent on this build — now resolves via the inline arm instead of hard
+/// erroring on the sibling's missing file, aligning `descend` with `scan::resolve_child_modules`'s
+/// identical `#[cfg]`-tolerance for a missing plain module file (previously the two walkers
+/// silently disagreed on this exact shape — the 0.2.2 lesson).
+#[test]
+fn descend_tolerates_a_cfg_gated_missing_sibling_when_an_inline_arm_resolves() {
+    let file = resolve_file(
+        "cfg-shim",
+        &[(
+            "lib.rs",
+            "#[cfg(unix)]\npub mod shared { pub struct A; }\n\
+             #[cfg(windows)]\npub mod shared;\n",
+        )],
+        "crate::shared",
+    )
+    .expect("the inline arm resolves even though the windows-only file-form sibling has no file");
+    assert!(file.ends_with("lib.rs"), "got {}", file.display());
+}
+
+/// When EVERY declaration for the anchored module is `#[cfg]`-gated and none resolves (no inline
+/// sibling to fall back on), resolution still fails loud — never a silent, vacuous "zero items"
+/// pass. `descend`'s own `next_branches.is_empty()` guard (which already existed for the ordinary
+/// "no branch survived this segment" case) catches this for free: cfg-tolerance only ever removes
+/// candidates, so an entirely-eliminated segment reads the same as an always-had genuinely unknown
+/// one.
+#[test]
+fn descend_still_errors_when_every_candidate_for_a_module_is_cfg_gated_missing() {
+    let err = resolve_file(
+        "cfg-only-missing",
+        &[("lib.rs", "#[cfg(feature = \"absent\")]\npub mod gated;\n")],
+        "crate::gated",
+    )
+    .expect_err("a module with no surviving branch must be a scan error, never a vacuous pass");
+    assert_eq!(err, unknown_module_error("crate::gated", "x"));
+}
+
 #[test]
 fn module_file_is_mod_rs_for_a_nested_module() {
     let file = resolve_file(

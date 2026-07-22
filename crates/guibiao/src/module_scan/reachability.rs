@@ -461,10 +461,24 @@ pub(crate) fn reachable_modules(
                 for (base, source_ancestors) in
                     child_plain_bases.remove(&child).into_iter().flatten()
                 {
-                    for candidate in [
-                        base.join(format!("{child}.rs")),
-                        base.join(&child).join("mod.rs"),
-                    ] {
+                    let flat = base.join(format!("{child}.rs"));
+                    let nested = base.join(&child).join("mod.rs");
+                    // A plain `mod {child};` backed by BOTH conventional file forms at once is a
+                    // genuine rustc compile error (E0761, "found at both … and …") independent of
+                    // any `#[cfg]` — unlike a missing file, this ambiguity needs no `#[cfg]`
+                    // awareness to detect: two real files at one source's own base is never
+                    // legitimate, cfg-gated or not. 漏刻's own `resolve_external_module` already
+                    // hard-errors on this exact shape; mirrored here rather than silently
+                    // accepting both as separate sources.
+                    if flat.is_file() && nested.is_file() {
+                        return Err(format!(
+                            "module '{child_path}' resolves to both '{}' and '{}' — a plain \
+                             `mod {child}` must be backed by exactly one file",
+                            flat.display(),
+                            nested.display()
+                        ));
+                    }
+                    for candidate in [flat, nested] {
                         if !candidate.is_file() {
                             continue;
                         }

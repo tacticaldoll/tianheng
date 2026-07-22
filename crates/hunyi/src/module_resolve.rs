@@ -21,7 +21,7 @@ use crate::errors::{
     unreadable_source_error,
 };
 use crate::resolve::strip_raw;
-use crate::syn_util::{direct_path_value, has_path_attr};
+use crate::syn_util::{direct_path_value, has_cfg_attr, has_path_attr};
 
 /// The path segments of a module relative to the crate root: `crate::domain::sub` →
 /// `["domain", "sub"]`; `crate` → `[]`. A leading `crate` is stripped; canonicalized so a
@@ -312,8 +312,19 @@ fn descend(
                 if has_path_attr(&module_item.attrs) {
                     continue;
                 }
-                let file = locate_module_file(&branch.child_dir, seg)
-                    .ok_or_else(|| missing_module_file_error(module, crate_package))?;
+                // A `#[cfg]`-gated plain module may legitimately have no source file when the
+                // predicate is off (a standard optional-feature pattern) — matching
+                // `scan::resolve_child_modules`'s identical tolerance for the crate-wide walk, so
+                // this single-module-anchored descent no longer disagrees with its own sibling
+                // walker on the identical shape (the 0.2.2 lesson: the two walkers' missing-file
+                // policies had silently drifted apart). An unconditional missing file stays a real
+                // scan error (exit 2).
+                let Some(file) = locate_module_file(&branch.child_dir, seg) else {
+                    if has_cfg_attr(&module_item.attrs) {
+                        continue;
+                    }
+                    return Err(missing_module_file_error(module, crate_package));
+                };
                 if !xingbiao::try_visit(&mut seen_files, &file)? {
                     continue;
                 }

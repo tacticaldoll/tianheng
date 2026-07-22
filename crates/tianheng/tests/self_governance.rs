@@ -128,14 +128,18 @@ fn tianheng_constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("louke")
-                .restrict_dependencies_to(["xuanji"])
+                .restrict_dependencies_to(["xuanji", "xingbiao"])
                 .because(
                     "漏刻 is the runtime dimension and ships into the user's production binary, \
-                     so it stays production-light: it depends on 璇璣 (the reaction model) only \
-                     — no syn, no static engine, no sibling dimension. 三儀 ⊥ 三儀: naming no \
-                     sibling, it cannot depend on the 圭表/渾儀 dimensions, and it reacts in prod \
-                     independently of the 天衡 shell (serde_json reaches it only transitively via \
-                     璇璣, cold-path only)",
+                     so its hot path stays production-light: it depends on 璇璣 (the reaction \
+                     model) only — no syn, no static engine, no sibling dimension. 星表 is an \
+                     additive, `audit`-feature-gated exception (never reaches the production hot \
+                     path): the CI-only probe scanner's own cycle guard routes through 星表's \
+                     shared canonicalize/cycle-guard primitives, the same ones 圭表/渾儀 already \
+                     use, rather than carrying a third independently hand-rolled copy. 三儀 ⊥ 三儀: \
+                     naming no sibling, it cannot depend on the 圭表/渾儀 dimensions, and it reacts \
+                     in prod independently of the 天衡 shell (serde_json reaches it only \
+                     transitively via 璇璣, cold-path only)",
                 ),
         )
         .boundary(

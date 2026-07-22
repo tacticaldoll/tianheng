@@ -57,6 +57,12 @@ impl TempBase {
         std::fs::write(&path, body).unwrap();
         path
     }
+
+    /// Symlink `target` at `link_rel` (relative to this base).
+    #[cfg(unix)]
+    fn symlink(&self, target: impl AsRef<Path>, link_rel: &str) {
+        std::os::unix::fs::symlink(target, self.0.join(link_rel)).expect("create symlink");
+    }
 }
 
 impl Drop for TempBase {
@@ -1084,4 +1090,30 @@ fn finder_repro_fn_orphan() {
     // No declared boundaries: an assert on "undeclared-seam" in the REAL target must be caught.
     let outcome = audit_probe_coverage(&[], &[root]);
     assert_eq!(outcome.exit_code(), 1, "Should catch undeclared seam");
+}
+
+#[cfg(unix)]
+#[test]
+fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
+    // `loop_mod` is a directory symlink back to the base itself, and the root declares `mod
+    // loop_mod;` — so each descent generates a NEW, ever-longer LITERAL path
+    // (`loop_mod/mod.rs`, `loop_mod/loop_mod/mod.rs`, …) that always canonicalizes to the same
+    // real file. Deduping on the literal path alone (as this scanner's `visited` set did before
+    // routing through `xingbiao::try_visit`) never recognizes the repeat, so the walk keeps
+    // descending — empirically, until the accumulated path trips an OS path-length limit and the
+    // scan spuriously fails on a structure that is not actually broken (never a true unbounded
+    // hang here, since the OS bounds it first, but still a real, wrong reaction). Canonicalizing
+    // closes it in two visits instead, matching 圭表/渾儀's own analogous symlink-cycle tests.
+    let tb = TempBase::new("symlink-cycle");
+    let root = tb.source(
+        "mod.rs",
+        "mod loop_mod;\nfn f() { assert_boundary!(\"a\", o); }\n",
+    );
+    tb.symlink(tb.path(), "loop_mod");
+    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a real, declared, and probed seam must be covered, not hang or error: {outcome:?}"
+    );
 }

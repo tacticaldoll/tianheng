@@ -23,7 +23,12 @@ all-features = true
 # The CI face (`audit_probe_coverage` + the hand-rolled source scanner). OFF by default so a
 # production binary depending on louke for the runtime hot path compiles zero scanner code.
 # The `tianheng` shell enables it to run the audit inside `check`. (See PROJECT.md.)
-audit = []
+audit = ["dep:xingbiao"]
 
 [dependencies]
 xuanji = { workspace = true }
+# CI-only (pulled in only by the `audit` feature): the shared path-identity canonicalize/cycle-
+# guard primitives 圭表 and 渾儀 already route their own module-graph cycle guards through, so
+# 漏刻's probe scanner stops carrying a third, independently hand-rolled (and previously
+# non-canonicalizing) copy of the identical guard. Never reaches the production hot path.
+xingbiao = { workspace = true, optional = true }
