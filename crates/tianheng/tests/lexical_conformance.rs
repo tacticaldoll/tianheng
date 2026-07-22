@@ -15,30 +15,14 @@
 //! a third forcing event); a genuine future divergence is a separate false-negative closure, not a
 //! reason to weaken this ledger.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use guibiao::{Constitution as GnomonConstitution, ModuleBoundary, Outcome as GnomonOutcome};
 use louke::{RuntimeBoundary, audit_probe_coverage};
 
-/// Write a minimal, dependency-free crate (so `cargo metadata --no-deps` never touches the
-/// network) with `lib.rs` set to `body`, and return its manifest path and `lib.rs` path.
-fn write_fixture(name: &str, body: &str) -> (PathBuf, PathBuf) {
-    let dir = std::env::temp_dir().join(format!(
-        "tianheng-lexical-conformance-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(
-        dir.join("Cargo.toml"),
-        format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n"),
-    )
-    .expect("write Cargo.toml");
-    let lib = src.join("lib.rs");
-    std::fs::write(&lib, body).expect("write lib.rs");
-    (dir.join("Cargo.toml"), lib)
-}
+#[path = "support/mod.rs"]
+mod support;
+use support::TempFixture;
 
 fn guibiao_forbids_forbidden(package: &str, manifest: &Path) -> GnomonOutcome {
     let constitution = GnomonConstitution::new(package).boundary(
@@ -63,10 +47,9 @@ fn louke_sees_a_real_probe(root: &Path) -> bool {
 }
 
 fn assert_both_agree(name: &str, body: &str, expect_real: bool) {
-    let (manifest, root) = write_fixture(name, body);
-    let guibiao_outcome = guibiao_forbids_forbidden(name, &manifest);
-    let louke_sees_real = louke_sees_a_real_probe(&root);
-    let _ = std::fs::remove_dir_all(manifest.parent().expect("fixture has a parent"));
+    let fixture = TempFixture::new(name, body);
+    let guibiao_outcome = guibiao_forbids_forbidden(name, fixture.manifest());
+    let louke_sees_real = louke_sees_a_real_probe(fixture.lib());
 
     assert_eq!(
         guibiao_outcome.exit_code() == 1,
