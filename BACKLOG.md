@@ -633,8 +633,18 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   meant "inline") was fixed alongside: a boundary anchored directly at a module whose sole
   declaration was `#[cfg]`-tolerated away now reacts `unknown_module_error`, matching 渾儀's own
   `descend` precedent (its empty-branches case falls to the identical error, never a vacuous clean
-  pass). **Authority:** round-5 adversarial review (0.2.2); this session's direct code
-  verification that presence-only detection suffices without semantic `#[cfg]` evaluation.
+  pass). **Round-2 follow-up (same session):** a fresh adversarial pass over this very fix found a
+  narrower message-quality regression it introduced: `inline_only`'s gate (`seen_inline &&
+  !seen_plain_file`) keyed on mere plain-declaration *presence*, not actual *resolution* — so a
+  mutually-exclusive shim pairing an inline arm with a now-legitimately-tolerated-away plain arm
+  was wrongly excluded from `inline_only`, misreporting the self-describing
+  `inline_module_target_error` as a generic `unknown_module_error` ("check the path", wrongly
+  implying a typo). Fixed by deferring the `inline_only` decision until after the plain-declaration
+  resolution loop runs, keyed on `already_sourced` actually finding a real file — reproduced and
+  verified against a real `guibiao::check` run before and after. **Authority:** round-5 adversarial
+  review (0.2.2); this session's direct code verification that presence-only detection suffices
+  without semantic `#[cfg]` evaluation; this session's round-2 adversarial re-review of its own
+  fix.
 - **`descend`'s file-form dedup silently disengages if `canonicalize` fails mid-scan — BUILT (0.2.3),
   superseded by the broader shared path-identity calibration entry below.**
   **Pressure/source:** a round-5 adversarial review of `crates/hunyi/src/module_resolve.rs::descend`'s

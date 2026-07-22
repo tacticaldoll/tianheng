@@ -829,6 +829,37 @@ fn a_boundary_anchored_directly_at_a_cfg_gated_missing_module_is_unknown_not_cle
     assert_eq!(err, unknown_module_error("crate::child", "x"));
 }
 
+/// A mutually-exclusive `#[cfg]` shim pairing an inline arm with a plain-file arm whose file is
+/// tolerated-away-missing must still report the SELF-DESCRIBING `inline_module_target_error`
+/// ("declared inline... move it into its own file"), not the generic `unknown_module_error`
+/// ("check the path", which wrongly implies a typo). Found on this session's own round-2
+/// adversarial review: the bare-`#[cfg]` tolerance above made it newly possible for a plain
+/// declaration to be *declared* yet resolve to nothing, and `inline_only`'s gating on mere
+/// declaration presence (rather than actual resolution) then wrongly excluded this module from
+/// `inline_only`, misreporting which error applies.
+#[test]
+fn an_inline_arm_paired_with_a_tolerated_away_plain_arm_still_reports_the_inline_error() {
+    let (result, _violations) = run_module_check(
+        "inline-plus-tolerated-plain",
+        &[(
+            "lib.rs",
+            "#[cfg(unix)]\npub mod engine { pub struct A; }\n\
+             #[cfg(windows)]\npub mod engine;\n",
+        )],
+        ModuleBoundary::in_crate("x")
+            .module("crate::engine")
+            .must_not_import("crate::forbidden")
+            .because("engine must not import forbidden"),
+    );
+    let err = result.expect_err(
+        "an inline arm alongside a tolerated-away plain arm is still an inline target, not unknown",
+    );
+    assert_eq!(
+        err,
+        inline_module_target_error("crate::engine", "x", "engine")
+    );
+}
+
 /// A BARE `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the same item
 /// removes the whole item, `#[path]` included, when `pred` is false — a standard per-platform
 /// shim (`#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) that must not hard-error an
@@ -851,6 +882,35 @@ fn a_cfg_gated_unconditional_path_target_does_not_fail_an_unrelated_boundary_whe
             .because("present must not import forbidden"),
     );
     result.expect("a #[cfg]-gated #[path] target with no file must not fail an unrelated boundary");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
+/// The bare-`#[cfg]` tolerance for a missing unconditional `#[path]` target must not depend on
+/// attribute order: `#[path]` written BEFORE `#[cfg]` (the reverse of the sibling test above)
+/// must be tolerated identically — mirroring the existing
+/// `an_unconditional_path_attr_wins_regardless_of_cfg_attr_order` guarantee for the `#[path]`
+/// detector itself.
+#[test]
+fn a_cfg_gated_unconditional_path_target_is_tolerated_regardless_of_attribute_order() {
+    let (result, violations) = run_module_check(
+        "cfg-gated-path-target-order",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"windows_impl.rs\"]\n#[cfg(windows)]\npub mod imp;\npub mod present;\n",
+            ),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("attribute order must not affect the bare-#[cfg] tolerance");
     assert_eq!(
         violations.len(),
         1,

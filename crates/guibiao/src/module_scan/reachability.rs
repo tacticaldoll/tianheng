@@ -431,15 +431,16 @@ pub(crate) fn reachable_modules(
                         ));
                 }
             }
-            // `inline_only` is narrower than "inline was declared": it drives ONLY the
-            // orphan-shadow exclusion for a STRAY same-named conventional file that no
-            // declaration brings into scope. That question is live only when no plain file is
-            // ALSO declared (a declared plain file is real, not stray) — independent of whether a
-            // `#[path]` sibling also exists, since a `#[path]` target relocates to an entirely
-            // different file and never competes with `x`'s own conventional path.
-            if seen_inline && !seen_plain_file {
-                inline_only.insert(child_path.clone());
-            }
+            // Whether at least one plain declaration for this child actually resolved to a real
+            // file — NOT merely whether one was declared: a bare-`#[cfg]`-tolerated declaration
+            // (see below) can now be declared yet resolve to nothing, and that must not count as
+            // "a real plain file exists" for the `inline_only` decision just below (a false
+            // negative found on this session's own round-2 adversarial review — an inline arm
+            // paired with an entirely-tolerated-away plain arm was wrongly excluded from
+            // `inline_only`, misreporting the self-describing `inline_module_target_error` as a
+            // generic `unknown_module_error`). Defaults to `false` (matching the original
+            // `!seen_plain_file` semantics) when no plain declaration exists at all.
+            let mut plain_file_resolved = false;
             if seen_plain_file {
                 // Resolved by a live probe from EACH declaring source's own directory —
                 // uniformly for every plain child, whether its module sits at its own
@@ -556,6 +557,7 @@ pub(crate) fn reachable_modules(
                             .push(ScanSource::File(candidate, own_dir, new_child_base, anc));
                     }
                 }
+                plain_file_resolved = !already_sourced.is_empty();
                 if !already_sourced.is_empty() && !any_structural_match {
                     // Every real source for this child was reached only through a divergent
                     // (remap-derived) path, so any OTHER file that merely happens to sit at the
@@ -564,6 +566,16 @@ pub(crate) fn reachable_modules(
                     // `remap_shadowed` already excludes for a direct `#[path]` target.
                     remap_shadowed.insert(child_path.clone());
                 }
+            }
+            // `inline_only` is narrower than "inline was declared": it drives ONLY the
+            // orphan-shadow exclusion for a STRAY same-named conventional file that no
+            // declaration brings into scope. That question is live only when no plain file
+            // ACTUALLY RESOLVED (a merely-declared-but-tolerated-away plain arm is not real) —
+            // independent of whether a `#[path]` sibling also exists, since a `#[path]` target
+            // relocates to an entirely different file and never competes with `x`'s own
+            // conventional path.
+            if seen_inline && !plain_file_resolved {
+                inline_only.insert(child_path.clone());
             }
             if let Some(targets) = child_direct_paths.remove(&child) {
                 // Every unconditional `#[path]` target is followed cfg-blind (see the
