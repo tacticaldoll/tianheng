@@ -4,7 +4,7 @@
 //! module location lies outside the allowed set.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
@@ -64,10 +64,7 @@ pub(crate) fn check_trait_impl_boundary(
     push_multi_module_violations(
         violations,
         MultiModuleViolationContext {
-            src_dir,
-            root_file: &root_file,
             target: &target,
-            crate_package: &boundary.crate_package,
             rule: TRAIT_IMPL_RULE,
             reason: &boundary.reason,
             severity: boundary.severity,
@@ -89,7 +86,7 @@ pub(crate) fn trait_impl_findings(
     trait_path: &str,
     allowed: &[String],
     crate_package: &str,
-) -> Result<Vec<(SemanticFact, String)>, String> {
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let given = canonical_path_str(trait_path);
     let true_anchor = canonicalize_through_reexports(&given, &scan.reexports);
@@ -127,7 +124,13 @@ pub(crate) fn trait_impl_findings(
         // (`impl LocalTrait for Box<Foo>`), which the module-relative canonicalization over-qualifies
         // (`crate::m::Box<…>`) — a stable identity label, not a resolved-path claim; the actionable
         // part (the module location) is exact.
-        let owner = canonical_self_owner(&site.self_ty, &site.uses, &site.module, ordinal);
+        let owner = canonical_self_owner(
+            &site.self_ty,
+            &site.uses,
+            &site.module,
+            ordinal,
+            &site.type_params,
+        );
         // The canonical anchor (spelling-stable across `use`/rename/relative forms) plus the
         // written generic arguments; an unrenderable arg (a complex const-generic expression) falls
         // back to the impl's position, so two such impls still stay distinct rather than collapsing.
@@ -145,6 +148,7 @@ pub(crate) fn trait_impl_findings(
                 owner,
             },
             site.module.clone(),
+            site.file.clone(),
         ));
     }
     sort_attributed_facts(&mut findings);

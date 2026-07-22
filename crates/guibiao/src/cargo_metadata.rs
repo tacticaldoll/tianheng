@@ -79,16 +79,34 @@ pub(crate) fn external_dependencies(package: &Value, kind: DependencyKind) -> Ve
     found
 }
 
+/// Whether `dependency` is the package's OWN self-referential edge — Cargo genuinely permits
+/// (and a doctest/dogfooding pattern genuinely uses) a crate declaring itself as a
+/// `[dev-dependencies]` path dependency on itself (`main = { path = "." }`), which
+/// `cargo metadata --no-deps` emits verbatim as an ordinary-shaped edge whose `name` equals the
+/// package's own. This is never a CROSS-crate concern — there is no OTHER crate for a governance
+/// rule to react to — so every rule that scans "the target's dependency names/sources" must
+/// exclude it identically; a per-rule copy of this check (the round-11 fix's original shape,
+/// which excluded it only inside `Rule::RestrictWorkspaceDependenciesTo`'s own arm) left the
+/// identical false positive live in every sibling rule reading the same [`dependencies`] /
+/// [`dependencies_with_disallowed_source`] observation (found on a round-12 adversarial review —
+/// see `PROJECT.md`'s Decisions). Filtering here, at the shared observation source, closes every
+/// consuming rule at once.
+fn is_self_dependency(package: &Value, dependency: &Value) -> bool {
+    let own_name = package["name"].as_str();
+    own_name.is_some() && dependency["name"].as_str() == own_name
+}
+
 /// Names of the target's dependencies in the selected table, regardless of source —
 /// internal workspace path dependencies included. Used by the forbid and restrict-to
 /// rules, which (unlike the external rule) must see internal crate-to-crate
 /// dependencies. Same conventions as [`external_dependencies`]: package names (not
 /// local renames), and platform-specific / `optional` deps are included (PROJECT.md).
+/// Never includes the target's own self-referential edge (see [`is_self_dependency`]).
 pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String> {
     let mut found = Vec::new();
     if let Some(deps) = package["dependencies"].as_array() {
         for dependency in deps {
-            if !kind_matches(dependency, kind) {
+            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
                 continue;
             }
             if let Some(name) = dependency["name"].as_str() {
@@ -169,7 +187,9 @@ fn classify_source(dependency: &Value) -> SourceKind {
 /// a governed source), reports the package name (a renamed dep by its real name), and
 /// includes `optional` deps — a declared source is governed as declared (PROJECT.md), and
 /// an optional git dependency blocks publishing just as a required one does. An empty
-/// `allowed` set flags every dependency of the kind.
+/// `allowed` set flags every dependency of the kind. Never includes the target's own
+/// self-referential edge (see [`is_self_dependency`]) — its declared source (always `Path`,
+/// a null `source`) is otherwise indistinguishable from a genuine internal dependency.
 pub(crate) fn dependencies_with_disallowed_source(
     package: &Value,
     kind: DependencyKind,
@@ -178,7 +198,7 @@ pub(crate) fn dependencies_with_disallowed_source(
     let mut found = Vec::new();
     if let Some(deps) = package["dependencies"].as_array() {
         for dependency in deps {
-            if !kind_matches(dependency, kind) {
+            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
                 continue;
             }
             if !allowed.contains(&classify_source(dependency)) {
@@ -210,7 +230,11 @@ pub(crate) fn dependencies_with_disallowed_source(
 /// target's authored request alone — declared, not resolved (PROJECT.md) — and does not
 /// expand through `crate_name`'s own `[features]` table, so a transitively-enabled feature
 /// is not chased. When the target does not declare `crate_name` in the selected kind, the
-/// set is empty.
+/// set is empty. If `crate_name` names the target's OWN package (a `RestrictFeaturesOf`/
+/// `ForbidFeaturesOf` boundary naming its own crate — a possible, if unusual, constitution
+/// shape), the target's self-referential edge (see [`is_self_dependency`]) is never matched
+/// either: a self-dependency's "declared feature request" is not a cross-crate feature-flag
+/// concern this rule exists to govern.
 pub(crate) fn declared_features(
     package: &Value,
     crate_name: &str,
@@ -219,7 +243,7 @@ pub(crate) fn declared_features(
     let mut found = Vec::new();
     if let Some(deps) = package["dependencies"].as_array() {
         for dependency in deps {
-            if !kind_matches(dependency, kind) {
+            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
                 continue;
             }
             // Match by resolved package name, never the local `rename`/alias.

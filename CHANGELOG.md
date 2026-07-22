@@ -12,6 +12,74 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-22
+
+### Fixed
+- 圭表 module reachability now walks into an inline `mod parent { … }` body to find its own
+  file-backed declarations, so a child reached only through an inline parent (`mod parent { mod
+  child; }`, compiling `parent/child.rs`) is observed and its imports are checked.
+- 圭表 now follows an unconditional, direct `#[path = "…"]` module declaration to its real target
+  (matching 渾儀 and 漏刻), so a relocated module's imports are observed by all three observation
+  dimensions. A `cfg_attr`-wrapped `#[path]` remains excluded (cfg-conditional, never followed
+  cfg-blind).
+- Every declared source for a module name is now observed, cfg-blind: an inline module body's own
+  nested declarations, a plain conventional file, and an unconditional `#[path]` remap of the same
+  name under mutually-exclusive `#[cfg]` arms (the standard per-platform shim) are all governed,
+  regardless of attribute order or which source is scanned first. A plain (`#[path]`-free) `mod
+  child;` declared inside a file reached through an unconditional `#[path]` remap is now governed
+  under its logical path.
+- A `#[path]` inside one mutually-exclusive `#[cfg]` arm's target — or inside a plain child of that
+  arm — that legitimately references a sibling arm's own target (the two are never simultaneously
+  open in any real build) is no longer misreported as a module cycle. Plain-child resolution now
+  tracks each source's own directory context (where a `#[path]` written in it resolves, and
+  separately, where its own plain/inline children live) instead of resolving through a shared
+  structural index.
+- A plain child reached only through a **symlinked directory** component, and an inline module
+  preceded by an unconditional `#[path]` header (which relocates the base its own file-form
+  children resolve from), are both now followed and governed correctly.
+- 渾儀's single-module resolver (backing signature-coupling, visibility, dyn/impl-trait, and
+  async-exposure anchors) now unions every mutually-exclusive `#[cfg]` variant of a module — inline
+  and file-form alike — instead of stopping at the first match, and resolves a segment nested
+  beneath a split point, or a `#[path]`-loaded module's own conventional children, from that
+  variant's own directory rather than a name-derived or shared one. Two `#[cfg]` arms plainly
+  declaring the identical name (resolving to one real file) are deduped by canonical path so they
+  never inflate one violation into two.
+- A `use`-map, and the child-module/re-export/rename tables it depends on, are now computed **per
+  branch** of a `#[cfg]`-split module rather than once over the flattened cross-branch union —
+  closing false negatives where one branch's own `use` alias or genuine re-export was silently
+  shadowed or overwritten by an unrelated, mutually-exclusive sibling branch. Two purely-inline
+  `#[cfg]` siblings sharing one enclosing file are split into their own branches for this purpose,
+  not just file-form ones.
+- A finding's reported `file` is now attributed **at collection time**, carried from the exact
+  `#[cfg]` branch that produced it, rather than re-resolved afterward from a module-path string —
+  so a violation written in a non-first branch is reported at its own file, never an innocent
+  sibling's.
+- The subtree walker backing `.including_submodules()` now descends every surviving `#[cfg]` branch
+  independently, each from its own resolved `#[path]` base, instead of collapsing several branches
+  to one shared directory pair for further descent.
+- A self type that resolves to the enclosing `impl`'s own declared generic type parameter —
+  written as a bare identifier, a projection (`T::Assoc`), or a qualified path (`<T>::Item`) — is
+  no longer resolved through a same-named `use` alias, in both the forbidden-marker acquisition
+  gate and the trait-impl-locality owner label. This closes a false-positive marker finding and a
+  dedup-collapse false negative where two distinct `MisplacedImpl` violations were silently
+  reported as one.
+- `async_exposure`'s subtree scan now assigns a continuously-incrementing ordinal across the whole
+  walk, never reset per module — closing a dedup-collapse false negative where two
+  mutually-exclusive `#[cfg]` branches of one async fn, each carrying an unrenderable const-generic
+  self type, collided on the same fallback identity and were reported as a single finding.
+- 漏刻's probe-coverage scanner now locates a `mod` declaration's own attribute preamble with a
+  forward, literal- and attribute-group-aware scan, replacing a backward raw-byte scan that could
+  desync on a bare `;`/`{`/`}` inside an earlier attribute's string value or a brace-delimited
+  attribute argument — closing false hard-fails and wrong-file substitutions on valid, compiling
+  code.
+- 圭表's crate-boundary rules (`forbid_dependency_on`, `restrict_dependencies_to`,
+  `restrict_workspace_dependencies_to`, `restrict_dependency_sources_to`, and the
+  feature-granularity rules) no longer observe a crate's own self-referential dependency on
+  itself — a real, Cargo-legal pattern (e.g. a `[dev-dependencies]` path dependency on `.`, used
+  for doctest/dogfooding) that names no other crate at all, so it can never be the cross-crate
+  concern any of these rules exist to govern. The exclusion lives in the shared dependency
+  observation itself, so every crate rule is covered at once.
+
 ## [0.2.1] - 2026-07-21
 
 ### Changed
@@ -281,7 +349,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/tianheng/compare/v0.1.10...v0.2.0
 [0.1.10]: https://github.com/tacticaldoll/tianheng/compare/v0.1.9...v0.1.10

@@ -12,13 +12,28 @@
 /// not matched. A real `use` is never inside a macro body, so nothing real is dropped.
 /// The body delimiter may be `{}`, `()`, or `[]`. Never panics on malformed input.
 pub(super) fn strip_macro_bodies(source: &str) -> String {
+    let identity: Vec<usize> = (0..source.len()).collect();
+    strip_macro_bodies_tracked(source, &identity).0
+}
+
+/// [`strip_macro_bodies`], additionally returning a position map like
+/// [`strip_comments_and_strings_tracked`]: `positions[k]` is `input_positions[j]`, where `j` is
+/// the index in `source` that produced `out[k]` — so a caller chaining this after
+/// [`strip_comments_and_strings_tracked`] gets positions all the way back to the true original
+/// source, not just this stage's input. `input_positions` must be at least as long as `source`.
+pub(super) fn strip_macro_bodies_tracked(
+    source: &str,
+    input_positions: &[usize],
+) -> (String, Vec<usize>) {
     let bytes = source.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut positions: Vec<usize> = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
         if let Some(end) = macro_rules_body_end(bytes, i) {
             // `macro_rules! name <delim>…<delim>` — drop the name and the body.
             out.push(b' ');
+            positions.push(input_positions[i]);
             i = end;
         } else if bytes[i] == b'!' && preceding_macro_name(bytes, i) {
             // A macro invocation `path ! <delim>…<delim>`: keep the `!`, drop the body. Rust allows
@@ -33,20 +48,24 @@ pub(super) fn strip_macro_bodies(source: &str) -> String {
             match macro_invocation_body_end(bytes, i) {
                 Some(end) => {
                     out.push(b'!');
+                    positions.push(input_positions[i]);
                     out.push(b' ');
+                    positions.push(input_positions[i]);
                     i = end;
                 }
                 None => {
                     out.push(bytes[i]);
+                    positions.push(input_positions[i]);
                     i += 1;
                 }
             }
         } else {
             out.push(bytes[i]);
+            positions.push(input_positions[i]);
             i += 1;
         }
     }
-    String::from_utf8_lossy(&out).into_owned()
+    (String::from_utf8_lossy(&out).into_owned(), positions)
 }
 
 /// If a `macro_rules! name <delim>…<delim>` definition begins at `i`, return the index
@@ -189,7 +208,7 @@ fn is_rust_keyword(word: &[u8]) -> bool {
 /// or `[`), or `None` if `j` is not an opening delimiter. Strings and comments are
 /// already stripped, so every delimiter is structural and same-delimiter groups nest
 /// correctly. An unterminated group (malformed input) ends at end of input, not a panic.
-fn balanced_group_end(bytes: &[u8], j: usize) -> Option<usize> {
+pub(super) fn balanced_group_end(bytes: &[u8], j: usize) -> Option<usize> {
     let (open, close) = match bytes.get(j) {
         Some(b'{') => (b'{', b'}'),
         Some(b'(') => (b'(', b')'),
@@ -222,8 +241,19 @@ fn balanced_group_end(bytes: &[u8], j: usize) -> Option<usize> {
 /// UTF-8 is preserved: kept bytes are decoded once and never split, because every
 /// region boundary cut on is ASCII.
 pub(super) fn strip_comments_and_strings(source: &str) -> String {
+    strip_comments_and_strings_tracked(source).0
+}
+
+/// [`strip_comments_and_strings`], additionally returning a same-length position map:
+/// `positions[k]` is the byte index in `source` that produced `out[k]`. A synthetic separator
+/// (the block-comment case below) has no single source byte, so it is stamped with the position
+/// immediately after the comment it replaces — a value real content is never found at, since a
+/// caller only looks up a *kept* byte's original position (e.g. an `=` sign) to resolve a `#[path
+/// = "…"]` value from the untouched original source, never a separator's.
+pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<usize>) {
     let bytes = source.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut positions: Vec<usize> = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
@@ -254,6 +284,7 @@ pub(super) fn strip_comments_and_strings(source: &str) -> String {
             // (A line comment leaves its `\n`, which already separates; `strip_macro_bodies` emits
             // the same separator space for the same reason.)
             out.push(b' ');
+            positions.push(i);
         } else if let Some((hashes, quote)) = raw_string_prefix(bytes, i) {
             // Raw string `r#*"…"#*`: no escapes; closed by `"` plus the same number
             // of `#`. Drop the whole literal so its text is never scanned.
@@ -296,14 +327,16 @@ pub(super) fn strip_comments_and_strings(source: &str) -> String {
             } else {
                 // A lifetime or stray quote.
                 out.push(bytes[i]);
+                positions.push(i);
                 i += 1;
             }
         } else {
             out.push(bytes[i]);
+            positions.push(i);
             i += 1;
         }
     }
-    String::from_utf8_lossy(&out).into_owned()
+    (String::from_utf8_lossy(&out).into_owned(), positions)
 }
 
 /// If a raw string literal begins at `i` — `r`, `br`, or `cr` at a token boundary, then any
@@ -385,4 +418,167 @@ pub(super) fn is_ident_byte(byte: u8) -> bool {
     // a Unicode identifier: `keyword_at("use貓;", …, "use")` must be `None`, since `use貓`
     // is one identifier, not the `use` keyword.
     byte == b'_' || byte.is_ascii_alphanumeric() || byte >= 0x80
+}
+
+/// [`strip_macro_bodies`] composed after [`strip_comments_and_strings`] — the pipeline every
+/// scanner in this module already runs — with the position map chained all the way back to
+/// `source`, so a caller holding a byte index into the returned string can recover exactly which
+/// original byte produced it (used to re-read a `#[path = "…"]` value's real quoted text, which
+/// cleaning has already dropped by the time a `mod` declaration is found).
+pub(super) fn clean_with_positions(source: &str) -> (String, Vec<usize>) {
+    let (stripped, positions) = strip_comments_and_strings_tracked(source);
+    strip_macro_bodies_tracked(&stripped, &positions)
+}
+
+/// Read a `#[path = <value>]` attribute's string value from the **original, untouched** source
+/// bytes, starting at `start` (immediately after the `=`) and bounded by `end`. Callers may pass
+/// the enclosing item's own position for a tight bound, or (as guibiao's sole caller does) the
+/// end of the file — safe either way, because a well-formed string literal's closing quote always
+/// arrives long before that, and a malformed/unterminated one correctly yields `None` regardless
+/// of how generous `end` is. Skips leading whitespace and comments (an attribute may be written
+/// `path /* … */ = /* … */ "…"`),
+/// then parses a plain or raw string literal, decoding escapes through [`decode_str_escapes`] —
+/// the same set rustc and syn accept — so this matches 渾儀's `syn`-derived value and 漏刻's own
+/// `read_path_string` on the same input (three-instrument agreement). Returns `None` for anything
+/// that is not a string literal here, or a literal whose escapes do not decode — fail-safe: the
+/// caller then treats the module as not directly relocated rather than mis-reading a value.
+pub(super) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
+    let mut i = start;
+    while i < end {
+        if bytes[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'/' && matches!(bytes.get(i + 1), Some(&b'/') | Some(&b'*')) {
+            if bytes[i + 1] == b'/' {
+                while i < end && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            } else {
+                i += 2;
+                let mut depth = 1usize;
+                while i + 1 < end && depth > 0 {
+                    if bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                        depth += 1;
+                        i += 2;
+                    } else if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                        depth -= 1;
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            continue;
+        }
+        break;
+    }
+    if bytes.get(i) == Some(&b'r') {
+        // Raw string `r#*"…"#*`: no escapes; the closing is `"` then the same `#` count.
+        let mut hashes = 0usize;
+        let mut j = i + 1;
+        while bytes.get(j) == Some(&b'#') {
+            hashes += 1;
+            j += 1;
+        }
+        if bytes.get(j) != Some(&b'"') {
+            return None;
+        }
+        j += 1;
+        let content_start = j;
+        while j < end {
+            if bytes[j] == b'"' {
+                let mut k = j + 1;
+                let mut seen = 0usize;
+                while seen < hashes && bytes.get(k) == Some(&b'#') {
+                    k += 1;
+                    seen += 1;
+                }
+                if seen == hashes {
+                    return String::from_utf8(bytes[content_start..j].to_vec()).ok();
+                }
+            }
+            j += 1;
+        }
+        return None;
+    }
+    if bytes.get(i) != Some(&b'"') {
+        return None;
+    }
+    i += 1;
+    let content_start = i;
+    while i < end {
+        match bytes[i] {
+            b'"' => return decode_str_escapes(&bytes[content_start..i]),
+            // Skip the escaped byte so an escaped quote `\"` (or `\\`) does not end the literal
+            // early.
+            b'\\' => i += 2,
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+/// Decode a plain string literal's escapes — the set rustc and syn accept (`\n`/`\r`/`\t`/`\\`/
+/// `\0`/`\'`/`\"`/`\xHH`/`\u{…}`) — so a `#[path]` value read from raw source matches what syn
+/// would give. An unrecognized escape or a backslash-newline line continuation yields `None`
+/// (fail-safe: the caller treats the value as unreadable rather than guessing). Deliberately a
+/// standalone copy, not shared with 漏刻's identical decoder — 三儀 ⊥ 三儀, each dimension's lexer
+/// stands on its own.
+fn decode_str_escapes(inner: &[u8]) -> Option<String> {
+    let s = std::str::from_utf8(inner).ok()?;
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next()? {
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            't' => out.push('\t'),
+            '\\' => out.push('\\'),
+            '0' => out.push('\0'),
+            '\'' => out.push('\''),
+            '"' => out.push('"'),
+            'x' => {
+                let hi = chars.next()?.to_digit(16)?;
+                let lo = chars.next()?.to_digit(16)?;
+                let v = hi * 16 + lo;
+                if v > 0x7F {
+                    return None;
+                }
+                out.push(char::from_u32(v)?);
+            }
+            'u' => {
+                if chars.next()? != '{' {
+                    return None;
+                }
+                let mut value: u32 = 0;
+                let mut digits = 0;
+                loop {
+                    match chars.next()? {
+                        '}' => break,
+                        '_' if digits == 0 => return None,
+                        '_' => continue,
+                        d => {
+                            let hd = d.to_digit(16)?;
+                            digits += 1;
+                            if digits > 6 {
+                                return None;
+                            }
+                            value = value * 16 + hd;
+                        }
+                    }
+                }
+                if digits == 0 {
+                    return None;
+                }
+                out.push(char::from_u32(value)?);
+            }
+            _ => return None,
+        }
+    }
+    Some(out)
 }

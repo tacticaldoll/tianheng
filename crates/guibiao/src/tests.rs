@@ -75,6 +75,124 @@ fn rust_files_governs_a_symlinked_source_file() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_plain_child_reached_only_through_a_symlinked_directory_is_governed() {
+    // `rust_files` deliberately never recurses into a symlinked directory (its own cycle guard,
+    // see the sibling tests above), so a file that lives only behind one is absent from the
+    // structural file list `governed_files` scans from. But `reachable_modules`'s live probe for
+    // a plain child resolves the candidate path via `is_file`/`canonicalize`, which DO follow a
+    // symlinked directory component — so before this fix, such a child was marked reachable and
+    // even read/descended into, yet was absent from every `governed_files` output (neither the
+    // structural iterator, which never walked it, nor `remapped`, since its naive path
+    // structurally agreed with its own module path). Verified against a real `cargo check`: this
+    // exact layout compiles `real_target/child.rs` as `crate::mymod::child` through the symlink.
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("guibiao-symlinked-child-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(&src).expect("mkdir src");
+    std::fs::create_dir_all(dir.join("real_target")).expect("mkdir real_target");
+    std::fs::write(
+        src.join("lib.rs"),
+        "pub mod mymod;\npub mod secret { pub struct Thing; }\n",
+    )
+    .expect("write lib.rs");
+    std::fs::write(src.join("mymod.rs"), "pub mod child;\n").expect("write mymod.rs");
+    std::fs::write(
+        dir.join("real_target").join("child.rs"),
+        "use crate::secret::Thing;\n",
+    )
+    .expect("write real_target/child.rs");
+    symlink(dir.join("real_target"), src.join("mymod")).expect("symlink src/mymod -> real_target");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::mymod")
+        .must_not_import("crate::secret")
+        .because("a symlinked-directory child must still be governed, not silently invisible");
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    result.expect("a symlinked-directory-reached child is a valid, governable target");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::mymod");
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a module-import violation carries its source file");
+    assert!(
+        file.ends_with("child.rs"),
+        "the violation must name the real file reached through the symlinked directory: {file}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlinked_module_aliasing_an_unrelated_walked_file_is_still_governed_under_its_own_path() {
+    // Round-6 regression in the fix above: `files_canon` compared CANONICAL (symlink-resolved)
+    // identity, so a module reached through a symlinked directory that happens to alias the same
+    // physical file as some OTHER, unrelated, genuinely-walked module was wrongly treated as
+    // "already found by the structural iterator" merely because canon(candidate) == canon(some
+    // files entry) — even though the candidate itself was never walked. Here `mod real;` is
+    // backed directly by `src/real/mod.rs` (normally walked), and a SEPARATE `mod kernel;` is
+    // backed by `src/kernel/mod.rs`, where `src/kernel` is a symlink to `src/real` (never walked,
+    // since rust_files skips symlinked directories) — so canon(src/kernel/mod.rs) ==
+    // canon(src/real/mod.rs) even though they are two distinct, separately-declared modules.
+    // Verified against a real `cargo check`: both crate::real and crate::kernel compile as
+    // distinct modules, each observing `use crate::secret::Thing;`. Comparing LITERAL (not
+    // canonical) path identity closes this: two on-disk paths are never literally equal merely
+    // because they resolve to the same target.
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("guibiao-symlink-alias-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let src = dir.join("src");
+    std::fs::create_dir_all(src.join("real")).expect("mkdir src/real");
+    std::fs::write(
+        src.join("lib.rs"),
+        "pub mod real;\npub mod kernel;\npub mod secret { pub struct Thing; }\n",
+    )
+    .expect("write lib.rs");
+    std::fs::write(
+        src.join("real").join("mod.rs"),
+        "use crate::secret::Thing;\n",
+    )
+    .expect("write src/real/mod.rs");
+    symlink("real", src.join("kernel")).expect("symlink src/kernel -> real");
+
+    let manifest = dir.join("Cargo.toml");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        }]
+    });
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::secret")
+        .because(
+            "a symlink-aliased module must be governed under its own path, not silently dropped",
+        );
+    let mut violations = Vec::new();
+    let result = check_module_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    result.expect(
+        "crate::kernel is a valid, governable target even though it aliases crate::real's file",
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::kernel");
+}
+
 #[test]
 fn expand_use_tree_does_not_overflow_on_pathological_nesting() {
     // A pathologically brace-nested `use` must not overflow the stack. The depth cap bounds the
@@ -360,49 +478,78 @@ fn module_boundary_uses_the_package_target_src_path() {
 }
 
 #[test]
-fn path_remapped_module_is_not_governed_via_a_conventional_orphan() {
-    let dir = std::env::temp_dir().join(format!(
-        "guibiao-path-remap-boundary-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    let src = dir.join("src");
-    std::fs::create_dir_all(&src).expect("create temp src");
-    std::fs::write(
-        src.join("lib.rs"),
-        "#[path = \"weird.rs\"]\npub mod kernel;\n",
-    )
-    .expect("write lib.rs");
-    std::fs::write(src.join("weird.rs"), "use crate::projection::Thing;\n")
-        .expect("write remapped module");
-    std::fs::write(src.join("kernel.rs"), "use crate::projection::Wrong;\n")
-        .expect("write conventional orphan");
-
-    let manifest = dir.join("Cargo.toml");
-    let metadata = serde_json::json!({
-        "packages": [{
-            "name": "x",
-            "manifest_path": manifest.to_string_lossy().into_owned(),
-            "dependencies": [],
-        }]
-    });
-    let boundary = ModuleBoundary::in_crate("x")
-        .module("crate::kernel")
-        .must_not_import("crate::projection")
-        .because("path-remapped modules are outside the token scanner's coverage");
-
-    let mut violations = Vec::new();
-    let result = check_module_boundary(&metadata, &boundary, &mut violations);
-    let _ = std::fs::remove_dir_all(&dir);
-
-    assert_eq!(
-        result,
-        Err(unknown_module_error("crate::kernel", "x")),
-        "a #[path]-remapped module must not be governed through a same-named conventional orphan"
+fn path_remapped_module_is_followed_not_governed_via_a_conventional_orphan() {
+    // rustc ground truth: `#[path = "weird.rs"] pub mod kernel;` compiles `weird.rs` as
+    // `crate::kernel` (verified with a real `cargo build`), never the same-named conventional
+    // orphan `kernel.rs`. The boundary must react on the REAL target's import, naming it as the
+    // offending file, and must never react on the orphan's (different) import — a same-named
+    // orphan is not compiled, so its content must never surface as this module's finding.
+    let (result, violations) = run_module_check(
+        "path-remap-boundary",
+        &[
+            ("lib.rs", "#[path = \"weird.rs\"]\npub mod kernel;\n"),
+            ("weird.rs", "use crate::projection::Thing;\n"),
+            ("kernel.rs", "use crate::projection::Wrong;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::projection")
+            .because("closing the #[path]-following divergence from 渾儀/漏刻"),
     );
+
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(
+        violations[0].finding, "crate::projection::Thing",
+        "the real target's import is observed, never the orphan's: {violations:?}"
+    );
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a module-import violation carries its source file");
     assert!(
-        violations.is_empty(),
-        "the conventional orphan is not compiled and must not produce a violation"
+        file.ends_with("weird.rs"),
+        "the violation names the real #[path] target, not the conventional orphan: {file}"
+    );
+}
+
+/// An unconditional `#[path = "…"]` preceding an INLINE module header is not a no-op: it
+/// relocates the base directory the inline body's OWN file-form children resolve from, exactly
+/// like a file-form `#[path]`. Verified against a real `cargo check`: `#[path = "thread_files"]
+/// pub mod thread { pub mod local_data; }` compiles `thread_files/local_data.rs` as
+/// `crate::thread::local_data`, with no `src/thread/` directory at all — the naive
+/// (non-relocated) location `thread/local_data.rs` does not even exist. Before this fix the
+/// scanner treated the preceding `#[path]` as a pure no-op and always looked in the naive
+/// location, silently finding nothing and leaving the real file's imports unobserved.
+#[test]
+fn an_unconditional_path_on_an_inline_module_relocates_its_own_file_form_children() {
+    let (result, violations) = run_module_check(
+        "inline-path-relocate",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"thread_files\"]\npub mod thread {\n    pub mod local_data;\n}\n\
+                     pub mod secret { pub struct Thing; }\n",
+            ),
+            ("thread_files/local_data.rs", "use crate::secret::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::thread")
+            .must_not_import("crate::secret")
+            .because("an inline module's #[path] must relocate its own children, not no-op"),
+    );
+    result.expect("the relocated child must be a valid, governable target");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target, "crate::thread");
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a module-import violation carries its source file");
+    assert!(
+        file.ends_with("thread_files/local_data.rs")
+            || file.ends_with("thread_files\\local_data.rs"),
+        "the violation must name the #[path]-relocated file, not a naive thread/local_data.rs: {file}"
     );
 }
 
@@ -1801,6 +1948,97 @@ fn workspace_rule_flags_only_unlisted_workspace_members() {
     assert_eq!(
         forbid_all.findings(&package, &workspace, DependencyKind::Normal),
         vec!["adapters".to_string(), "core".to_string()],
+    );
+}
+
+#[test]
+fn workspace_rule_never_flags_a_crates_own_self_referential_dev_dependency() {
+    // Round-11 finding: Cargo genuinely permits (and real projects use, e.g. a doctest/
+    // dogfooding pattern) a crate declaring itself as a `[dev-dependencies]` path dependency
+    // on itself (`main = { path = "." }`), and `cargo metadata --no-deps` emits this edge
+    // verbatim (verified against real cargo). `workspace_member_names` trivially includes the
+    // crate's own name, and `dependencies()` matches by bare package name with no
+    // self-exclusion — so before this fix, a `forbid_all_workspace_dependencies` /
+    // `restrict_workspace_dependencies_to` boundary declared on that crate flagged its own
+    // legitimate self-dev-dependency as an "unlisted workspace dependency", even though a
+    // self-dependency can never be an inter-crate layering violation (there is no OTHER crate
+    // to leak across a boundary to).
+    let package = serde_json::json!({
+        "name": "main",
+        "dependencies": [
+            { "name": "main", "source": null, "kind": "dev" },
+        ]
+    });
+    let workspace = vec!["main".to_string()];
+    let forbid_all = Rule::RestrictWorkspaceDependenciesTo { allowed: vec![] };
+    assert_eq!(
+        forbid_all.findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "a crate's own self-referential dev-dependency must never be flagged as an unlisted \
+         workspace dependency"
+    );
+}
+
+#[test]
+fn no_dependency_rule_ever_flags_a_crates_own_self_referential_dependency() {
+    // Round-12 finding: round 11 excluded a crate's own self-referential dependency (Cargo's
+    // legal `[dev-dependencies] main = { path = "." }` doctest/dogfooding pattern) ONLY inside
+    // Rule::RestrictWorkspaceDependenciesTo's own arm — leaving the IDENTICAL false positive live
+    // in every sibling rule reading the same `dependencies()` / `dependencies_with_disallowed_source()`
+    // observation (ForbidDependencyOn, RestrictDependenciesTo, RestrictDependencySourcesTo, and
+    // the feature-granularity rules when the boundary happens to name the target's own crate).
+    // A self-dependency is never a CROSS-crate concern any of these rules exist to govern, so the
+    // exclusion is now at the shared observation source (`cargo_metadata.rs::is_self_dependency`),
+    // closing every rule at once rather than one at a time.
+    let package = serde_json::json!({
+        "name": "main",
+        "dependencies": [
+            { "name": "main", "source": null, "kind": "dev", "features": ["x"] },
+        ]
+    });
+    let workspace = vec!["main".to_string()];
+
+    assert_eq!(
+        Rule::ForbidDependencyOn {
+            crates: vec!["main".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "ForbidDependencyOn must not flag the crate's own self-dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependenciesTo {
+            allowed: vec!["serde".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "RestrictDependenciesTo must not flag the crate's own self-dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "RestrictDependencySourcesTo must not flag the crate's own self-dependency's Path source"
+    );
+    assert_eq!(
+        Rule::RestrictFeaturesOf {
+            crate_: "main".to_string(),
+            allowed: vec![]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "RestrictFeaturesOf must not observe the crate's own self-dependency's declared features"
+    );
+    assert_eq!(
+        Rule::ForbidFeaturesOf {
+            crate_: "main".to_string(),
+            forbidden: vec!["x".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Dev),
+        Vec::<String>::new(),
+        "ForbidFeaturesOf must not observe the crate's own self-dependency's declared features"
     );
 }
 

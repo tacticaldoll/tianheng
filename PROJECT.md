@@ -188,13 +188,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   a projection of the report, never the constitution.
 - **Module imports are observed by scanning source `use` declarations**, not by parsing
   a full AST. A hand-rolled scanner keeps the 圭表 core dependency-light and macro-free;
-  its partial coverage — bare path expressions, macro-generated imports, and
-  `#[path = "…"]`-remapped modules are out of scope — is acceptable because the drift law
-  only enforces what is observed. (A `#[path]` attribute moves a `mod name;` to a
-  non-conventional file; the token scanner maps modules by their conventional path, so a
-  remapped module's imports are not observed and the module is not governable — the same
-  stated partial-coverage bound as inline and macro-generated items. Closing it would
-  require reading attributes, an AST-class amendment, not a silent trade.) Comments and
+  its partial coverage — bare path expressions and macro-generated imports are out of scope —
+  is acceptable because the drift law only enforces what is observed. An unconditional, direct
+  `#[path = "…"]` remap is **followed** to its target (0.2.2), matching 渾儀/漏刻, so all three
+  observation dimensions agree on what rustc compiles; a `cfg_attr`-wrapped `path = "…"` stays a
+  cfg-conditional exclusion from the conventional module graph (following it cfg-blind could read
+  a file rustc does not compile in the active configuration), so it fails loud rather than
+  governing a same-named orphan. Comments and
   string literals (normal, byte, and raw) are stripped so their text is never mistaken
   for a `use`. A module's identity is derived in three places — its file path, its `mod`
   declaration, and a `use` path that names it — and these MUST stay in lockstep, since a
@@ -212,6 +212,344 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
   from an unknown-module typo, never a silent pass. Governing inline modules as targets is
   a deliberate non-goal here; if ever wanted it is a separate amendment.
+- **A cfg-blind union that makes several physically distinct files share one logical identity
+  must never let per-module bookkeeping (an ancestor set, a structural lookup) act on that shared
+  identity as if it named one file.** **(0.2.2 lesson, in eight rounds — confirmed across
+  two independent crates.)** Landing the
+  unconditional-`#[path]`-follow work (above) first tracked cycle-guard "already-open source
+  files" in one `HashSet` keyed by the *logical* module path string. Two `#[cfg]` arms of the same
+  name with different unconditional targets — the standard, already-supported per-platform shim —
+  share one logical path, so their targets' canonical paths were unioned into that single set. A
+  further `#[path]` inside one arm's target legitimately referencing the *other* arm's target (the
+  two are never simultaneously open in any real single build) was then misreported as a cycle. A
+  first-round fix moved ancestor tracking onto each `ScanSource` individually — but a **second**
+  adversarial-review round on the shipped result found the *same* mistake still live one hop away,
+  in the sibling plain-child code path added alongside it: `plain_child_base_ancestors` still
+  unioned a module's *entire* source list rather than only the source that actually declared the
+  child, reproducing the identical false-positive cycle through a plain (non-`#[path]`) child of an
+  inline `#[cfg]` arm; a stray, wholly uncompiled file coincidentally sitting at a remapped
+  module's naive structural location could also be phantom-governed alongside the real one, since
+  the (then still `by_module`-based) plain-child lookup had no way to know its parent was
+  remapped; and a plain child resolved through the `#[path]`-remap live probe had no working
+  formula for *its own* further plain children at all (a false negative), since a directory-shape
+  concept the probe needed (where do THIS file's own plain children live — different from where
+  a `#[path]` written inside it resolves, whenever the file is an ordinary flat `name.rs` rather
+  than `mod.rs`-shaped) was never modeled as its own field, so it silently fell back to whichever
+  adjacent value happened to be at hand. All three were root-caused together: plain-child
+  resolution was redesigned to carry, on every `ScanSource`, both `path_base` (where a `#[path]`
+  written in it resolves from) and a *separate* `child_base` (where its own plain/inline children
+  live — these coincide only for the crate root, an inline body, and a `#[path]` target, never for
+  an ordinary flat file), and the global `by_module` structural index was dropped from child
+  resolution entirely in favor of this per-source probe — closing all three at once rather than
+  patching each symptom where it surfaced. The durable lesson, confirmed twice at increasing
+  depth: keyed identity for *governance* (what to report a violation under) and keyed identity for
+  *safety* bookkeeping (what counts as "the same thing already open", or "where do this file's own
+  children live") are not automatically the same key, and a fix that narrows to the one reported
+  instance rather than the shared underlying model tends to resurface one hop further away on the
+  very next adversarial pass — which is exactly what a second review round is for.
+  A **third** round, re-auditing 渾儀's own single-module resolver (`descend`) redesigned alongside
+  the fixes above, found the identical shape of mistake in a second, independent crate: a
+  `#[path]`-loaded module's own *conventional* children were resolved from a name-derived directory
+  unrelated to where the file actually lives (the exact inverse of the `path_base`/`child_base`
+  conflation above), and two non-inline (file-form) `#[cfg]` siblings — one plain, one
+  `#[path]`-remapped — were still not unioned, first-match-wins, unlike the crate-wide walk's own
+  already-established "never stop at one match" policy for the identical shape of declaration. The
+  lesson holds a third time, now confirmed independently in two separate crates built by two
+  separate reaction models (a stateful worklist walk in 圭表, a recursive branch-vec descent in
+  渾儀): a redesign that closes a reported instance is not evidence the *shared model* is closed —
+  only a fresh adversarial pass against the *new* code, not the old bug, earns that confidence.
+  A **fourth** round found the mistake yet again, this time at the boundary between 渾儀's
+  single-module resolver and its OWN subtree walker: `resolve_module_root` correctly unions every
+  surviving branch's items for a single-module report, but the subtree walker fed that union back
+  through only the *first* branch's own directories for further descent — a child declared only in
+  a non-first branch's own file resolved against the wrong directory, silently dropping it. Fixed
+  by exposing every branch on its own (not the collapsed, first-branch-only shape) to the one
+  caller that must keep descending beneath a possibly-split anchor. The same round also found a
+  duplicate-items case in the opposite, lesser-severity direction: two `#[cfg]` arms plainly
+  declaring the identical name resolve to one real file, but nothing deduped the resulting
+  branches, inflating one real violation into two apparently-distinct findings. Four rounds, one
+  recurring root cause: a data shape (a single merged tuple) built for one caller's needs (report
+  "the" file) got reused by a different caller (keep descending) whose needs it does not actually
+  meet — the same "governance key vs. safety key" conflation the lesson opened with, now seen at
+  a third layer of the same two crates.
+  A **fifth** round, scoped to the newest surface area above plus a fresh cross-crate consistency
+  pass, found two further instances in 圭表 — this time not a repeat of the governance/safety-key
+  conflation, but the SAME "a fix closes the reported instance, not the shared model" pattern
+  applied to the plain-child live probe's own completeness. The probe's `structurally_matches`
+  check only compared the candidate's naive on-disk path against its logical module path — it
+  never checked whether that candidate was actually a member of the crate-wide walk's own file
+  list (`fs_walk::rust_files`, which deliberately never recurses into a symlinked directory, its
+  own cycle guard). A plain child reached only through a symlinked directory component agreed on
+  path but was never in that list, so the probe wrongly assumed `governed_files`' structural
+  iterator would find it on its own — silently governing nothing. Separately, the inline-module
+  scan path never read a `#[path]` attribute preceding an inline header at all (a comment claimed
+  it was "a no-op for rustc", true only for the header's own content, not for where its file-form
+  children resolve from — verified false against a real build). Both are the same shape as the
+  lesson's opening case: a check or a scan that is locally reasonable for the ordinary case turns
+  out to silently assume away a real, rustc-compiling shape it was never actually tested against.
+  Fixed by intersecting the live probe's structural-match test against the walk's own canonical
+  file set, and by reading and following an inline header's own unconditional `#[path]` exactly
+  like a file-form one. The same round found 渾儀's OWN single-module resolver (`descend`)
+  mishandling the identical inline-`#[path]` shape in the mirror-image direction: its
+  inline-collection loop excluded ANY `#[path]`-bearing item before ever checking whether it had
+  inline content, and its file-form loop then also skipped it (a stale comment assumed it was
+  "already collected above"), so the item vanished from both loops — a hard, spurious "module not
+  found" (exit 2) on a module that demonstrably exists and compiles, for every single-module-
+  anchored capability, while 渾儀's own crate-wide walker (`resolve_child_modules`, maintained as
+  an independent function) resolved the identical layout without trouble. Two crates, opposite
+  failure directions (圭表 too permissive — silently governing nothing; 渾儀 too strict — hard-
+  erroring on a real module), the SAME root shape: a scan/check written for the ordinary case
+  silently assumed away a real one it was never tested against. Fixed by unioning `descend`'s
+  inline items regardless of `#[path]`, while still following an unconditional one to relocate
+  the base its own file-form children resolve from — matching `resolve_child_modules`'s existing,
+  correct handling of the identical syntax. Five rounds now, the same two-crate pattern each time:
+  closing a reported instance earns confidence only from the NEXT fresh adversarial pass, never
+  from the fix itself.
+  The same round's fifth finding was different in KIND, not degree: `resolve_module_root`'s
+  single-file shape (branches[0]'s file, alongside every branch's unioned items — the deliberate,
+  documented choice from round 4) turned out to disagree with the CLI report's own published
+  promise (`openspec/specs/cli-check-runner/spec.md`: `file` names "where the offending seam is
+  written") once a `#[cfg]`-split module's finding genuinely came from a non-first branch — a real
+  violation could be reported at an innocent sibling's file. `push_multi_module_violations`'
+  `per_finding_file` cache had the identical hazard one hop further: two findings sharing one
+  module string (a legitimate cfg-split) resolved through a cache keyed only by that string, so
+  the second finding silently inherited the first's file. Unlike the four one-hop directory/dedup
+  fixes above, closing this one properly meant `Violation.file` could no longer be resolved from a
+  single module string AFTER the fact at all — it needed to be collected AT THE SITE, while the
+  real file is still open, and carried alongside every item/finding from there to the violation.
+  `resolve_module_items_with_files` now pairs every item with its own branch's file; `ImplSite`,
+  `TypeDef`, and `UnsafeSite` (the crate-wide scan's own site records) and the subtree walker's
+  per-module output now each carry their own real file directly. `seam_file` and `per_finding_file`
+  — the module-string-keyed re-resolution layer this whole hazard lived in — are gone; there is no
+  longer a caller that resolves a finding's file from anything other than the exact branch that
+  produced it. A genuine schema change, not a same-shape patch — confirmed as necessary rather than
+  deferred, since the disagreement was with a published, adopter-facing report guarantee, not an
+  internal implementation comment.
+  A **sixth** round, adversarially reviewing round 5's own changes, found the symlinked-directory
+  fix (round 5, above) had reintroduced the identical false-negative SHAPE through the fix's own
+  new check: `structurally_matches` compared the live-probed candidate's CANONICAL (symlink-
+  resolved) identity against a set of the crate-wide walk's own files' canonical identities. Two
+  on-disk paths that resolve to the same physical file are not the same module — `#[path]` remaps
+  sharing one target is the existing, correctly-handled case for exactly this reason (rustc
+  compiles the same bytes twice as two distinct modules) — but a canonical-identity set cannot
+  distinguish "this exact candidate was walked" from "some OTHER file that happens to alias the
+  same physical target was walked": a module reached only through a symlinked directory that
+  happened to alias an unrelated, genuinely-walked module's file was wrongly treated as "already
+  found," silently un-governing it. The fix within the fix: compare LITERAL (never canonicalized)
+  path identity instead of canonical identity — two distinct on-disk paths are never literally
+  equal merely because they resolve to the same target, so the aliasing hazard cannot arise, while
+  the original round-5 false negative (a candidate whose own literal path was never in the walked
+  file list at all) is still caught exactly as before.
+  The same round found a distinct, previously-unnoticed instance of the founding lesson in 渾儀:
+  `module_findings` (exposure.rs) and `shape_module_findings`/`operand_module_findings`
+  (shape_scan.rs) each called `collect_uses` ONCE over the flattened cross-branch union
+  `resolve_module_items_with_files` returns — the identical items/file conflation the round-5
+  redesign closed for FILE attribution, left unfixed for the `use`-map. Two mutually-exclusive
+  `#[cfg]` branches each declaring `use <different path> as Handle;` (a realistic per-platform
+  shim) collided in the one shared map; the branch unioned last silently overwrote the earlier
+  branch's alias, misresolving the FIRST branch's own bare reference through the SECOND branch's
+  `use` and hiding a real forbidden-exposure violation — a genuine false negative, not a
+  hypothetical. Fixed the same way round 5 fixed file attribution: a `use`-map PER FILE, looked up
+  by each item's own branch file rather than one map merged across the whole module.
+  The same round found a THIRD instance, this time in `scan.rs`'s own `resolve_child_modules` (the
+  shared descent skeleton backing the whole-crate scan and the async-exposure subtree's further
+  descent): `module_resolve.rs::descend` gained a `seen_files` dedup in 0.2.2 for two
+  mutually-exclusive `#[cfg]` arms plainly declaring the identical name (resolving to the one real
+  file) — but `resolve_child_modules`, a separately-maintained sibling walker for the identical
+  shape, never received it. Because a self-type's generic argument `canonical_self_owner` cannot
+  render falls back to a positional `_#{ordinal}` marker computed from the scan `Vec`'s own
+  position, the two duplicate scan entries got DIFFERENT ordinals and escaped the eventual
+  fact-identity dedup — inflating one real trait-impl or forbidden-marker acquisition into two
+  apparently-distinct findings. Fixed with the identical `seen_files`-style guard, keyed on
+  (declared name, canonical file) rather than file alone, since two DIFFERENT names `#[path]`-
+  remapped to the same file are two real, separately-compiled modules — an existing, already-
+  tested case that must never collide with this new dedup entry (a live regression caught by the
+  existing test suite the moment the naive file-only key was tried). Six rounds now: even a fix
+  produced BY an adversarial-review round is not exempt from the next round's scrutiny — the
+  lesson applies recursively to its own remedies, not just the original bug, and a redesign that
+  closes one data shape's cross-branch conflation (files) does not by itself close a SIBLING data
+  shape's identical conflation (use-maps, or a sibling walker's own missing dedup) computed from
+  the same underlying union.
+  A **seventh** round confirmed exactly the sibling gap round 6's own writeup had flagged but left
+  unconfirmed: `exposure.rs::module_findings` fixed its `use`-map per file in round 6 but left
+  `child_mods`/`externs_type`/`externs_reexport`/`renames_bare` computed once over the SAME
+  flattened cross-`#[cfg]`-branch union — a branch with no local `mod net;` had its own genuine
+  `pub use net::Something;` (the real extern crate) silently suppressed merely because a
+  MUTUALLY-EXCLUSIVE sibling branch happened to declare its own local `mod net`. The identical
+  shape existed one layer down in `crate_scope.rs::extern_resolution` (feeding
+  `shape_scan.rs::operand_module_findings`, backing the dyn-trait/impl-trait operand-scoped
+  boundaries) — `externs_type`/`renames_bare` there were *also* computed once over the flattened
+  union, never split by file. Both fixed the same way as the `use`-map: a per-file `FileScope`
+  (exposure.rs) / `FileExternScope` (crate_scope.rs) computed from each branch's own items alone,
+  looked up by each exposure's own file — never a value shared across mutually-exclusive branches.
+  This is the clearest demonstration yet of the recurring lesson: round 6 fixed ONE instance
+  (`use`-maps) of a conflation that had FOUR siblings in the same function (and a fifth in a
+  parallel function one file away) — flagging the risk in the fix's own commit message was
+  necessary but not sufficient; only the next round's adversarial pass, armed with a real
+  constructed repro, actually confirmed and closed it.
+  An **eighth** round found that rounds 6 and 7's own "per file" fix rests on an assumption that
+  is true for a file-form `#[cfg]` sibling (each gets a genuinely distinct file, guaranteed by
+  round 4's per-branch design plus round 6's same-file dedup) but FALSE for an **inline** one:
+  `descend()` still merged every same-named inline `#[cfg]` occurrence into ONE shared `Branch`
+  before round 6's per-file grouping ever ran, so two inline siblings — the standard shape,
+  `#[cfg(a)] mod x { .. } #[cfg(b)] mod x { .. }` — were never separated in the first place; the
+  round-6/7 fix was structurally a no-op for this shape, and the original cross-branch conflation
+  reappeared one hop further in, unnoticed because every prior round's repro used at least one
+  file-form sibling. Fixed in two parts: `descend()` now gives every inline occurrence its OWN
+  branch (mirroring the file-form loop's existing "every declaration produces its own branch"
+  policy), and — since two inline siblings still share one identical ENCLOSING file even once
+  split into separate branches — `resolve_module_items_with_files` now pairs each item with a
+  **branch index**, not just a file, and every consumer (`exposure.rs`'s `FileScope`,
+  `shape_scan.rs`'s `uses_by_branch`/`operand_module_findings`'s `file_scopes`) groups by that
+  index instead of by file alone. `async_exposure.rs`'s subtree path
+  (`scan.rs::walk_subtree_modules`/`collect_subtree`) needed no matching consumer-side change:
+  its own child walker (`resolve_child_modules`) already gave each inline occurrence its own
+  entry (verified — it never merged same-named inline siblings the way `descend()` did), and
+  each subtree entry already builds its `use`-map from its own items directly, never grouped
+  across sibling entries by file. Eight rounds now, the sharpest form of the lesson yet: "grouped
+  by file" was itself an unexamined stand-in for "grouped by branch" that happened to coincide for
+  every shape tested through round 7 — the fix that finally closes it replaces the file key with
+  the actual identity the whole model has been about since round 4.
+- **A round-9 adversarial pass, scoped to fresh surfaces the eight rounds above never touched
+  (forbidden-marker's own self-type gate, and 漏刻's probe scanner), found two unrelated bugs —
+  a different bug class each, not the cfg-branch conflation above.** First: `forbidden_marker.rs`'s
+  marker-acquisition gate (`resolve_self_type` in `containment.rs`) resolved a bare `impl` self type
+  exactly like any other path reference, with no notion that the identifier might be the impl
+  block's OWN declared generic type parameter rather than a nominal type — so a blanket
+  `impl<T> Marker for T {}` in a module that also happened to declare an unrelated `use … as T`
+  alias resolved `T` through that alias, fabricating a marker-acquisition finding on a type the
+  source never actually impls the marker for. The sibling exposure collectors already shadow an
+  impl's own generic-param names for every OTHER position (`collect.rs::type_param_names`,
+  guarding the existing `a_trait_impl_generic_param_shadowing_an_alias_is_not_exposed` regression),
+  but that shadowing was never carried into the crate-wide scan's `ImplSite` (backing
+  forbidden-marker, trait-impl-locality, and unsafe-confinement) or into the self-type gate
+  specifically. Fixed by giving `ImplSite` its own `type_params: HashSet<String>` (the impl's
+  declared generic names, via the now-`pub(crate)` `type_param_names`) and threading it into
+  `resolve_self_type`, which now drops a bare self type matching one of them before any resolution
+  is attempted — the same "stated bound, never a silent claim" treatment already given to any other
+  non-placeable self-type shape. Second: 漏刻's `mod_preamble_attrs` (the probe scanner's own
+  attribute-preamble reader) found where a `mod name;`/`mod name {`'s preamble begins by scanning
+  **backward** from the `mod` keyword for the nearest raw byte equal to `;`/`{`/`}` — the only
+  traversal in the whole file that was NOT literal/comment-aware, unlike every other walk there,
+  which routes through `skip_literal_or_comment` for exactly this reason. An EARLIER attribute's own
+  string value containing a bare `;` in ordinary prose (`#[doc = "Handles A; falls back to B."]`)
+  stopped the backward scan mid-literal, desyncing the forward attribute walk that followed: it read
+  the string's own closing quote as the opener of a bogus new string, swallowing a later
+  `#[path = "…"]` attribute's own `#` inside it — so the scanner never saw the real relocation and
+  either hard-failed on a module that genuinely compiles, or silently substituted the wrong
+  (conventional) file. Fixed by replacing the backward raw-byte scan with a **forward**,
+  literal-aware scan from the enclosing scope's own start (a real, always-outside-any-literal
+  boundary) up to the `mod` keyword, tracking the last `;`/`{`/`}` seen outside any literal/comment —
+  matching every other traversal in the file. Both confirmed with a real, executed, then-reverted
+  repro; both closed root-cause, not deferred, since both are genuine false positives / false
+  hard-failures on valid, `cargo build`-clean code, not a narrow or hypothetical edge.
+  A **round-10** pass, adversarially re-reviewing round 9's own two fixes one hop further (the same
+  discipline the cfg-branch lesson above established, now shown to apply beyond that one bug class
+  too), found both were incomplete. `resolve_self_type`'s new shadow check recognized ONLY a bare
+  single-segment self type (`Path::get_ident()`, which returns `None` for anything but exactly one
+  segment) — so `impl<T> Marker for T::Assoc {}` (a projection off the impl's own parameter, never a
+  nominal type) was still never shadowed and still resolved through a same-named alias, the
+  identical false positive one segment deeper. The sibling exposure collector
+  (`resolve/shape.rs::PathCollector::is_shadowed_param`) already had the RIGHT shape — shadow the
+  leading segment regardless of how many further segments follow — so the fix extracted that check
+  into a shared `is_shadowed_param_path` function and pointed both call sites at it, closing the
+  drift at its root (two independent copies of "what counts as a param use" is exactly the shape
+  this whole lesson warns against) rather than patching `resolve_self_type`'s own copy again. The
+  same round found `canonical_self_owner` (the self-type **label** renderer used to build
+  `trait_impl.rs`'s `MisplacedImpl` owner field, among others) had received NO shadow treatment at
+  all — not a narrower copy, none — despite `ImplSite` carrying `type_params` since round 9
+  specifically for this purpose. This was not merely a cosmetic mislabel: `owner` is part of
+  `MisplacedImpl`'s finding IDENTITY, deduplicated by exact equality, so a blanket impl's own
+  parameter resolving through an alias to the SAME canonical string a genuine direct impl on that
+  aliased type also produces silently collapsed two textually and semantically distinct
+  trait-impl-locality violations into one reported finding — a real false negative (one violation
+  vanishing), not just a wrong display string. Fixed by giving `canonical_self_owner` the identical
+  `impl_type_params` shadow via the same shared `is_shadowed_param_path`, threaded through its seven
+  call sites (`collect.rs` ×5, `forbidden_marker.rs`, `trait_impl.rs`). And 漏刻's `mod_preamble_attrs`
+  forward scan (round 9) was literal-aware but not attribute-group-aware: it tracked no nesting, so
+  a brace-delimited attribute ARGUMENT (`#[foo({ 1 })]`, a valid token tree, not a string literal)
+  between an earlier real `#[path = "…"]` and the `mod` keyword had its own internal `{`/`}` bytes
+  mistaken for item-boundary terminators, resetting the scan past the real attribute — the identical
+  failure mode round 9 closed, reached through a different vector. Fixed by skipping a whole
+  `#[…]`/`#![…]` group as one atomic unit (via `attr_group_end`, the same primitive the existing
+  attribute-matching pass already used) when scanning for the preamble's own start, and likewise
+  skipping a non-attribute `{…}` (a preceding sibling item's own body) via `balanced_brace_end` to
+  its own matching `}` rather than examining its interior bytes. Ten rounds now: a fix that closes
+  the CONFIRMED instance is not evidence the shared model — or even that SAME fix's own new check —
+  is complete; only the next round's fresh adversarial pass, aimed specifically at the prior round's
+  own remedy, earns that confidence, and this now holds across at least two structurally distinct
+  bug classes in this codebase, not only the cfg-branch one.
+  A **round-11** re-review of round 10's fix found the self-type shadow gap a THIRD time: neither
+  `resolve_self_type` nor `is_shadowed_param_path` ever checked `tp.qself` — a QUALIFIED-path self
+  type (`<T>::Item`, `<T as Trait>::Item`) stores its own dependent type in `qself.ty`, entirely
+  outside `path.segments`, so a self type dependent on the impl's own generic parameter written this
+  third syntactic way (real, compiling Rust — a `Marker<T>` trait argument satisfies rustc's E0207
+  unconstrained-type-parameter check that a bare, non-generic-trait blanket impl on `T::Item` would
+  fail) still bypassed the shadow entirely and still resolved through a same-named alias. The
+  sibling `canonical_self_owner` had already guarded on `qself.is_none()` from the start (it falls
+  through to lexical rendering otherwise) — `resolve_self_type` never had the matching guard, at
+  any point in this three-round arc. Fixed by adding the identical `qself.is_some() => None` guard,
+  mirroring the sibling function precisely rather than inventing a fourth bespoke shape. Eleven
+  rounds now on this one theme alone: three consecutive rounds each found the immediately preceding
+  round's fix incomplete, through three different syntactic vectors of the same underlying shape
+  (bare param, projection, qualified path) — the lesson holds not just across bug classes but
+  repeatedly within a single one, and a function that already had the right guard (`canonical_self_
+  owner`) was never itself consulted as the reference implementation until the third pass looked
+  for exactly that comparison.
+  The same round found two further, UNRELATED bugs via fresh-eyes lenses on previously
+  under-reviewed surfaces. First, in 圭表: `Rule::RestrictWorkspaceDependenciesTo`'s own doc comment
+  had asserted, since the rule was written, that a workspace member depending on itself is
+  "harmless: no crate depends on itself" — a false premise. Cargo genuinely permits (and real
+  projects use, e.g. a doctest/dogfooding pattern) a crate declaring itself as a
+  `[dev-dependencies]` path dependency on itself, which `cargo metadata --no-deps` emits verbatim;
+  `workspace_member_names` trivially includes the crate's own name and `dependencies()` matches by
+  bare package name with no self-exclusion, so a `forbid_all_workspace_dependencies` /
+  `restrict_workspace_dependencies_to` boundary flagged a crate's own legitimate self-dependency as
+  an "unlisted workspace dependency" — a false positive on a pattern that names no OTHER crate at
+  all, so cannot be a cross-crate layering violation. Fixed by excluding the target's own name from
+  the workspace-scoped rule's match, at the one call site that owns this filter (not by filtering
+  the shared `workspace_member_names` observation itself, which other, non-self-exempt call sites
+  may still need unfiltered). Second, in 渾儀: `async_exposure_subtree_findings`'s `ordinal`
+  (feeding `canonical_self_owner`'s `_#{ordinal}` fallback for an impl whose self-type carries a
+  genuinely unrenderable const-generic argument — `AsyncInherentMethod`'s ONLY disambiguator, unlike
+  its `AsyncFreeFn`/`AsyncTraitMethod` siblings, which embed `module` directly) reset to 0 for EACH
+  `(module, items, file)` tuple the subtree walker returns, while the seam path enumerates
+  continuously over the flattened branch union and never resets — desyncing the two paths' fallback
+  strings for the anchor module's own items (contradicting this function's own "byte-identical to
+  the single-module path" doc promise) and, far more seriously, letting two mutually-exclusive
+  `#[cfg]` branches of the identical anchor — two genuinely distinct async fns, compiled under two
+  different configs — collide on the SAME fallback string and silently dedup-collapse into one
+  reported finding: a real false negative. This is the identical shape the eight-round cfg-branch
+  lesson above already named (a per-branch value computed without the branch as part of its own
+  identity, so two branches alias), now manifesting through a *shared cross-cutting fact-identity
+  dedup* rather than a *use-map/shadow-set merge* — the SAME root shape reaches a THIRD kind of
+  shared state, not just resolution maps and directory bookkeeping. Fixed by making `ordinal` one
+  counter incrementing continuously across the WHOLE subtree walk, never reset per tuple — matching
+  the seam path's own continuous enumerate and, by construction, guaranteeing two different tuples'
+  items can never share a fallback string. All three findings confirmed with a real, executed,
+  then-reverted repro during the adversarial verify phase.
+  A **round-12** re-review of round 11's fixes found the qself and ordinal fixes solid (a fresh
+  pass specifically hunting for a fourth self-type-shadow vector, and for an ordinal/sort
+  interaction, both came back clean) — but found the round-11 guibiao fix itself too narrowly
+  scoped: it excluded a crate's own self-referential dependency (Cargo's legal `[dev-dependencies]
+  main = { path = "." }` doctest/dogfooding pattern) ONLY inside `Rule::RestrictWorkspaceDependenciesTo`'s
+  own arm, leaving the IDENTICAL false positive live in every sibling rule reading the same shared
+  `dependencies()` / `dependencies_with_disallowed_source()` observation — confirmed to still
+  false-positive under `RestrictDependenciesTo` and `RestrictDependencySourcesTo`, and (a lower-
+  confidence but real variant) under `ForbidDependencyOn`/`RestrictFeaturesOf`/`ForbidFeaturesOf`
+  whenever a boundary happens to name the target's own crate. This is the identical "fix the
+  reported instance, not the shared model" shape the whole 0.2.2 lesson opened with, now surfacing
+  in a THIRD codebase area (圭表's crate rules, after 渾儀's module resolution and 漏刻's probe
+  scanner): a false positive was real and root-caused, but the fix was written against one
+  consuming rule instead of the shared observation those rules all read. Closed properly this time
+  by moving the exclusion below every consumer, into `cargo_metadata.rs` itself (`is_self_dependency`,
+  used by `dependencies`, `dependencies_with_disallowed_source`, and `declared_features`), so a
+  self-referential edge is invisible to EVERY crate rule at once — never a cross-crate concern any
+  of them exist to govern — and the now-redundant local exclusion inside
+  `RestrictWorkspaceDependenciesTo`'s own arm was removed rather than left as a harmless-but-
+  misleading duplicate. Twelve rounds now: the lesson that a fix must target the shared model, not
+  the one instance that triggered the report, applies as much to a fresh, single-round finding as
+  to the eight-round cfg-branch saga it was first named from.
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's, not ours.**
   **(v0.1.2)** crate-source-boundary (`restrict_dependency_sources_to`) is the static
   dimension's first **depth** addition — like 渾儀's dyn-trait, it deepens a proven reaction

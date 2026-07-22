@@ -43,7 +43,13 @@ pub(crate) fn collect_item_return_impl_traits(
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
+            let owner = canonical_self_owner(
+                &item.self_ty,
+                uses,
+                module,
+                ordinal,
+                &type_param_names(&item.generics),
+            );
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
@@ -106,7 +112,13 @@ pub(crate) fn collect_item_async_exposures(
             // never collide under the (target, rule, finding) baseline (a false negative). Generics
             // stay distinct (`Foo<u8>` vs `Foo<u16>`); a self type with an unrenderable const-generic
             // expression is disambiguated by the impl's position, never collapsed.
-            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
+            let owner = canonical_self_owner(
+                &item.self_ty,
+                uses,
+                module,
+                ordinal,
+                &type_param_names(&item.generics),
+            );
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) && method.sig.asyncness.is_some() {
@@ -125,7 +137,7 @@ pub(crate) fn collect_item_async_exposures(
 
 /// The generic **type-parameter** names declared by `generics` — the names that, used bare, are
 /// parameters rather than nominal types (so a same-named `type` alias must not resolve them).
-fn type_param_names(generics: &syn::Generics) -> std::collections::HashSet<String> {
+pub(crate) fn type_param_names(generics: &syn::Generics) -> std::collections::HashSet<String> {
     generics
         .params
         .iter()
@@ -386,8 +398,8 @@ pub(crate) fn collect_item_exposures(
         // Inherent `impl Type { … }` (no trait): its `pub` methods are public API the module
         // authored. Trait impls (`impl Trait for Type`) carry `trait_` and are out of scope.
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
             let impl_params = type_param_names(&item.generics);
+            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal, &impl_params);
             // The impl block's own generic-param bounds and where-clause are impl-site-authored
             // public contract for the inherent API (`impl<T: crate::infra::Secret> Foo<T> { … }`),
             // observed like a struct/enum/type def's generics (paths_in_generics_scoped) and the
@@ -639,16 +651,17 @@ pub(crate) fn collect_trait_impl_exposures(
     // inherent-impl / locality seam owner); the trait label is the written path (a rendering-
     // granularity choice — its generic args distinguish `From<Vec<X>>` from `From<Box<X>>`).
     let trait_label = path_to_string(trait_path).unwrap_or_else(|| format!("trait_#{ordinal}"));
-    let self_label = canonical_self_owner(&item.self_ty, uses, module, ordinal);
+    // The impl block's own generic type parameters are in scope in every position below; shadow
+    // them so a bare parameter use is not misresolved through a same-named `use … as <param>` alias
+    // to a forbidden type (parity with the inherent-impl / signature-coupling collector) — including
+    // in the Self label itself, computed next.
+    let params = type_param_names(&item.generics);
+    let self_label = canonical_self_owner(&item.self_ty, uses, module, ordinal, &params);
     let seam = |position: TraitImplPosition| PublicSeam::TraitImpl {
         trait_ref: trait_label.clone(),
         owner: self_label.clone(),
         position,
     };
-    // The impl block's own generic type parameters are in scope in every position below; shadow
-    // them so a bare parameter use is not misresolved through a same-named `use … as <param>` alias
-    // to a forbidden type (parity with the inherent-impl / signature-coupling collector).
-    let params = type_param_names(&item.generics);
 
     // 1. trait-arg — the trait ref's generic arguments (not the trait base path).
     if let Some(syn::PathArguments::AngleBracketed(args)) =
@@ -886,7 +899,13 @@ pub(crate) fn collect_item_dyn_exposures(
             }
         }
         syn::Item::Impl(item) if item.trait_.is_none() => {
-            let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal);
+            let owner = canonical_self_owner(
+                &item.self_ty,
+                uses,
+                module,
+                ordinal,
+                &type_param_names(&item.generics),
+            );
             // A `dyn` written in the impl block's own generic-param bound or where-clause
             // (`impl<T: AsRef<Box<dyn crate::Port>>> Foo<T>`) is exposed on the inherent API — the
             // sibling path collector observes this position (via paths_in_generics_scoped), so the dyn rule

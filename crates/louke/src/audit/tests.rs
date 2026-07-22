@@ -221,6 +221,77 @@ fn an_unconditional_path_attribute_is_followed_to_its_target() {
 }
 
 #[test]
+fn a_semicolon_inside_an_earlier_doc_attributes_string_does_not_hide_a_later_path_attribute() {
+    // Round-9 finding: mod_preamble_attrs found where a mod declaration's own attribute preamble
+    // begins by scanning BACKWARD from the mod keyword for the nearest raw byte equal to `;`/`{`/`}`
+    // -- the only traversal in this file that was not literal/comment-aware (every other walk here
+    // routes through skip_literal_or_comment specifically to avoid this class of bug). An EARLIER
+    // attribute's own string value containing a bare `;` (ordinary prose, e.g. `#[doc = "Handles A;
+    // falls back to B."]`) stopped the old backward scan mid-literal, desyncing the forward
+    // attribute walk that followed: it read the string's own closing quote as the OPENER of a bogus
+    // new string, swallowing the real `#[path = "..."]` attribute's own `#` inside it. The scanner
+    // then never saw the #[path] attribute at all, so it fell back to the conventional (nonexistent)
+    // location and failed loud on a module that is genuinely `#[path]`-relocated and compiles fine.
+    let base = std::env::temp_dir().join(format!("louke-doc-semicolon-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = write_source(&base, "lib.rs", "mod worker;\nfn live() {}");
+    write_source(
+        &base,
+        "worker.rs",
+        "#[doc = \"Handles A; falls back to B.\"]\n#[path = \"relocated.rs\"]\nmod inner;\n",
+    );
+    write_source(
+        &base,
+        "relocated.rs",
+        "fn f() { assert_boundary!(\"relocated-seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "the #[path] attribute must still be found and followed despite the earlier #[doc] \
+         attribute's own semicolon: {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
+fn a_brace_delimited_attribute_argument_does_not_hide_an_earlier_path_attribute() {
+    // Round-10 finding: round 9's fix made mod_preamble_attrs' backward-then-forward preamble
+    // scan literal/comment-aware, but not attribute-group-aware. Its forward pass found `start`
+    // by remembering the position just past the LAST raw `;`/`{`/`}` byte seen, with no tracking
+    // of nesting -- so a brace-delimited attribute ARGUMENT (`#[foo({ 1 })]`, a valid token tree,
+    // not a string literal) sitting between an earlier, real `#[path = "..."]` and the `mod`
+    // keyword had its own internal `{`/`}` mistaken for item-boundary terminators, resetting
+    // `start` to a point AFTER the real `#[path]` attribute -- reproducing the round-9 bug's exact
+    // failure mode (a #[path]-relocated module falsely reported as unresolvable) through a
+    // different vector. Fixed by skipping a whole `#[...]` group as one atomic unit (via the same
+    // attr_group_end already used by the second, attribute-matching pass) when scanning for the
+    // preamble's own start, so its internal bytes are never examined as boundary candidates.
+    let base = std::env::temp_dir().join(format!("louke-brace-attr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = write_source(&base, "lib.rs", "mod worker;\nfn live() {}");
+    write_source(
+        &base,
+        "worker.rs",
+        "#[path = \"relocated.rs\"]\n#[foo({ 1 })]\nmod inner;\n",
+    );
+    write_source(
+        &base,
+        "relocated.rs",
+        "fn f() { assert_boundary!(\"relocated-seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "the #[path] attribute must still be found and followed despite the later brace-delimited \
+         #[foo({{ 1 }})] attribute argument: {outcome:?}"
+    );
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
 fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
     let base = std::env::temp_dir().join(format!("louke-path-nonmodrs-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
@@ -1038,31 +1109,35 @@ fn a_seam_level_runtime_violation_has_no_file() {
 }
 
 #[test]
-fn zzz_tmp_finder_repro_nonmodrs_path_base() {
-    let base = std::env::temp_dir().join(format!("louke-finder-repro-{}", std::process::id()));
+fn finder_repro_nonmodrs_path_base() {
+    let base = std::env::temp_dir().join(format!("louke-finder-base-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
-    // Finder repro: #[path] inside a NON-mod-rs file (app.rs, reached via `mod app;` in lib.rs).
-    // rustc resolves the target relative to app.rs's OWN directory => src/relocated.rs.
     let root = write_source(&base, "lib.rs", "pub mod app;\n");
     write_source(
         &base,
         "app.rs",
         "#[path = \"relocated.rs\"]\npub mod worker;\n",
     );
-    // The real compiled target (what rustc uses) with the probe:
+    // The REAL compiled target (rustc uses this)
     write_source(
         &base,
         "relocated.rs",
         "fn inner() { assert_boundary!(\"relocated-seam\", o); }\n",
     );
+    // An orphan at louke's wrong join path (src/app/relocated.rs)
+    write_source(&base, "app/relocated.rs", "fn inner() {}\n");
+    // Only the REAL target is compiled and has the probe -> must be caught.
     let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
-    eprintln!("TMP_REPRO outcome = {outcome:?}");
-    eprintln!("TMP_REPRO exit = {}", outcome.exit_code());
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "Coverage should pass as the probe is matched"
+    );
     let _ = std::fs::remove_dir_all(base);
 }
 
 #[test]
-fn zzz_tmp_finder_repro_fn_orphan() {
+fn finder_repro_fn_orphan() {
     let base = std::env::temp_dir().join(format!("louke-finder-fn-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let root = write_source(&base, "lib.rs", "pub mod app;\n");
@@ -1081,7 +1156,6 @@ fn zzz_tmp_finder_repro_fn_orphan() {
     write_source(&base, "app/relocated.rs", "fn inner() {}\n");
     // No declared boundaries: an assert on "undeclared-seam" in the REAL target must be caught.
     let outcome = audit_probe_coverage(&[], &[root]);
-    eprintln!("TMP_FN outcome = {outcome:?}");
-    eprintln!("TMP_FN exit = {}", outcome.exit_code());
+    assert_eq!(outcome.exit_code(), 1, "Should catch undeclared seam");
     let _ = std::fs::remove_dir_all(base);
 }

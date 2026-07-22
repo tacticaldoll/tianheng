@@ -11,6 +11,63 @@ not APIs. A new observation dimension is **a crate, born when it is built** (nev
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
 `guibiao` core stays `serde_json`-only.
 
+## Backlog governance — evidence before promotion
+
+The live backlog is a decision surface, not a promise that every recorded idea will ship. Before a
+live item is promoted, it must name: **class**, **observed pressure**, **observation source**,
+**current reaction or bound**, **risk**, **promotion trigger**, **version class**, and **authority**
+(the spec, project decision, or code/test evidence that owns the claim). Classify it as:
+
+- **READY-PATCH** — supported pressure with a concrete source, and the correction preserves the
+  published API and current baseline/report identity wire. It may enter a `0.2.x` change or focused
+  non-OpenSpec maintenance PR according to the authority it changes.
+- **DESIGN-BREAKING** — a supported problem whose honest solution needs a public or wire migration.
+  It waits for its named forcing trigger and an OpenSpec proposal; being listed does not itself
+  promise `0.3.0`.
+- **WATCH** — plausible pressure without enough adopter, second-consumer, or correctness evidence.
+  Preserve the trigger, not a premature design.
+- **ACCEPTED DEBT** — a known, bounded risk whose current reaction or documented coverage bound is
+  intentionally sufficient. Reopen only when the recorded bound is defeated.
+- **DECLINED** — a considered direction rejected for a recorded reason. Reopen only with evidence
+  that invalidates that reason.
+- **BUILT / HISTORY** — shipped context retained only where it explains a live contract or trigger;
+  requirements live in `openspec/specs/*` and settled rationale in `PROJECT.md`.
+
+Classification and promotion remain human-reviewed judgment. Add an automated reaction only after
+an observable, repeated drift demonstrates what a machine can decide without pretending judgment is
+structural enforcement.
+
+## Live decision index — 0.2.x truth repair and the next breaking window
+
+This index makes the current work discoverable without duplicating the detailed evidence below.
+
+### DESIGN-BREAKING
+
+- **Identity v3 migration bundle.** **Pressure/source:** version-2 identity still couples human
+  `rule` presentation to `ViolationId` and SARIF `ruleId`; SARIF fingerprints remain presentation
+  bearing; unsafe facts compress form/trait/owner/name into one label; async facts have not decided
+  whether identity is the seam or exact signature. **Current reaction:** exhaustive v2 schema
+  catalogs and v1/v2 baseline compatibility freeze the existing wire throughout 0.2.x. **Risk:** a
+  piecemeal fix would churn baselines or create two competing identities. **Trigger:** a verified
+  adopter migration need or correctness failure that cannot be solved additively. **Version:** one
+  coordinated `0.3.0` OpenSpec migration: stable rule key, SARIF fingerprint v2, unsafe decomposition,
+  async decision, and baseline v3 compatibility. **Authority:** the post-0.2 identity-pressure
+  section below and the structured-identity decisions in `PROJECT.md`.
+
+### WATCH / ACCEPTED / DECLINED / BUILT
+
+- **WATCH:** judgment-neutral lexer/token extraction is now plausible, but the conformance work must
+  first prove a cross-scanner false negative or a third scanner before the `PROJECT.md` trigger is
+  treated as fired; `cfg_attr(path)` observe-both semantics, a reusable testing harness, qianyi
+  generator, LSP/editor integration, and a debt ratchet remain gated by their detailed triggers below.
+- **ACCEPTED DEBT:** multi-target conventional-path conflation, macro/configuration coverage bounds,
+  and file-granular un-auditable-probe identity remain bounded as documented below.
+- **DECLINED:** keep the existing explicitly rejected directions under their recorded rationale;
+  this index does not reopen them.
+- **BUILT / HISTORY:** shipped capability ledgers below are historical context, not live work. New
+  work starts from the live classes above, then moves through OpenSpec where capability behavior
+  changes.
+
 ## Version horizons — what 0.2.x carries vs what earns the next breaking window
 
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
@@ -422,6 +479,14 @@ complement — show, then tell.
   rather than a ninth positional. Behavior-preserving, internal-only (no model / adopter surface, so
   distinct from the variant-refactor debt above) — lands whenever the next input does, not a
   standalone task. Until then the 8 args are cohesive single-caller scan inputs (Gate-5-passed).
+- **`governed_files` positional-arg growth — same class, same threshold (internal, born-when-needed).**
+  0.2.2's `#[path]`-following work added `remapped` then `remap_shadowed` (the orphan-shadow fix
+  below), pushing the reachability walk's own selector to 8 positional args (now under
+  `#[allow(clippy::too_many_arguments)]`). Its *next* dimension input should tip it into a named
+  param struct (mirroring the `InlineScanRequest` direction above) rather than a ninth positional —
+  the two `reachable_modules`/`governed_files` outputs-as-inputs pairs (`reachable`+`inline_only`,
+  `remapped`+`remap_shadowed`) are exactly the kind of cohesive group such a struct would carry
+  together. Behavior-preserving, internal-only. Lands whenever the next input does, not standalone.
 - **Considered decline — a mechanical "policy adapter" importing an existing rule source into a
   `Constitution`.** The *goal* (low-friction adoption, do not reinvent governance syntax) is
   legitimate and is served by the **cookbook / examples** (track 1) that translate common governance
@@ -471,6 +536,17 @@ capability change.
   feeding identical inputs to each dimension's parallel logic and asserting agreement would catch
   drift *without* moving code. Deferred until a resolver twin-drift actually bites; 星表 does not
   address it.
+- **Cross-scanner lexical-hygiene conformance matrix — BUILT (0.2.2).** The narrower, already-fired
+  sibling of the reserve above: 圭表 and 漏刻 each hand-roll comment/string/macro-body skipping
+  independently (三儀 ⊥ 三儀; no shared scanner code), and had accumulated related lexical repairs
+  with no executable ledger pinning where they agree — a fix in one could silently remain absent in
+  the other. `crates/tianheng/tests/lexical_conformance.rs` feeds the SAME literal fixture source to
+  both (via their public `check`/`audit_probe_coverage` surfaces, not shared internals) and asserts
+  parity on: a nested block comment (and real content correctly resuming after it), a macro body
+  regardless of `{}`/`()`/`[]` delimiter, and a raw string's contents never mistaken for real code.
+  Pins parity only; does not decide extraction — the reserve above (resolvers/module-reachability)
+  stays separately gated on a resolver twin-drift actually biting. Test-only patch, no capability
+  change.
 
 ## Reaction phases — the 三儀 (observation dimensions)
 
@@ -491,19 +567,31 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   is not seen), and it is source-kind hygiene, not a `cargo publish` oracle (a `{ git, version }`
   dep is flagged though it would publish).
 - **Module-source hardening**: **BUILT (v0.1.4)**. Module boundaries now use Cargo's observed
-  lib/bin `src_path` as the compiled source root, and `#[path]`-remapped modules stay outside the
-  reachable graph instead of being governed through a same-named conventional orphan file. This is
-  a false-negative closure / stated-bound repair, not a new capability.
-  - **Forward candidate — follow unconditional `#[path]` in 圭表 (0.3.x depth, non-breaking).** As of
-    0.2.1, 渾儀 and 漏刻 **follow** an unconditional `#[path = "…"] mod x;` to its target (base = the
-    containing file's own dir with each enclosing inline-`mod` name accumulated onto it, rustc's
-    mod-rs-blind rule; `cfg_attr` stays a bound). 圭表 still holds the v0.1.4 posture of keeping such
-    modules outside its reachable `use`-graph — so it is now the **one dimension that diverges**: a
-    `use` edge inside a `#[path]`-relocated module is not governed by an import/confinement rule. The
-    observation source already exists (圭表's own `use`/`mod` byte scan); following the relocation
-    there — reusing the rustc base-directory rule the other two now share, staying `syn`-free — would
-    close the divergence. A depth (additive, false-negative closure), promoted when a real adopter
-    relocates a governed module; the three-dimension agreement is the correctness pressure, not size.
+  lib/bin `src_path` as the compiled source root, and a `#[path]`-remapped module's same-named
+  conventional file (if any) stays excluded from governance, instead of being governed through it
+  in the remap's place. This is a false-negative closure / stated-bound repair, not a new capability.
+  - **Unconditional `#[path]` parity — BUILT (0.2.2), closing the divergence noted at 0.2.1.** 圭表
+    now **follows** an unconditional `#[path = "…"] mod x;` to its target too, matching 渾儀/漏刻:
+    base = the containing file's own dir with each enclosing inline-`mod` name accumulated onto it
+    (rustc's mod-rs-blind rule); a `cfg_attr`-wrapped `path` stays the cfg-conditional skip bound
+    (never followed cfg-blind). The observation source is 圭表's own `use`/`mod` byte scan, kept
+    `syn`-free; the target's directory becomes mod-rs-like for its own nested children/`#[path]`s.
+    An absent unconditional target is a scan error (exit 2, a genuine broken reference), and a
+    `#[path]` chain cycling back to an already-open file on the current descent path is a scan
+    error too (never a hang), mirroring 渾儀's ancestor-path (not monotonic whole-tree) cycle guard
+    so two declarations legitimately sharing one target is never misreported. `crates/guibiao`
+    only, no new capability — all three dimensions now agree on what rustc compiles.
+  - **cfg-dual file-form sources fully additive — BUILT (0.2.2), a false-negative closure the
+    parity work above surfaced.** An adversarial audit of the parity fix found it had made a
+    `#[path]` sibling additive with a plain-file or inline sibling of the same name, but the
+    *pre-existing* v0.1.4 plain-file-vs-inline bound still made a plain file win over an inline
+    sibling outright — silently dropping the inline body's OWN nested declarations whenever a
+    plain-file sibling also existed under a mutually-exclusive `#[cfg]` arm (verified against real
+    rustc: the inline arm's own file-backed child compiles under its own configuration regardless).
+    Every file-form source for a name is now additive with every other — plain file, inline body,
+    and `#[path]` remap all cfg-blind-union, never mutually exclusive — while `inline_only` (the
+    narrower orphan-shadow-exclusion flag) still correctly gates off once a plain file is genuinely
+    declared. `crates/guibiao` only, no new capability.
 - **Inline-module orphan-shadow**: **BUILT (v0.1.4)**. The inline twin of the `#[path]` orphan
   hazard: an inline-only `mod name { … }`'s same-named conventional file (`name.rs`/`name/mod.rs`)
   is now recognized as an orphan and excluded from the scanned file list, so an inline target stays
@@ -512,6 +600,127 @@ Like 渾儀, 圭表 grows by **depth** (finer reads of the same observation sour
   inline-**only** so the `#[cfg]`-dual-declaration case stays within the existing cfg-blind bound.
   A propose- and apply-stage adversarial-review-driven false-negative closure; `crates/guibiao`
   only, no new capability. (渾儀 was immune — its AST descent is declaration-driven.)
+- **Inline-to-file child reachability — BUILT (0.2.2).** The walk now re-scans an inline-only
+  module's own declaring body span (found via a balanced-brace lookup, not re-derived directory
+  bases) for its nested `mod` declarations, so a file-backed child reached only through an inline
+  parent (`mod parent { mod child; }`, rustc-compiling `parent/child.rs`) is discovered and
+  governed — closing a forbidden false negative where such a child's imports passed unobserved.
+  `by_module`'s file-to-path indexing is already purely structural (derived from each file's own
+  on-disk path), so no rustc directory-base bookkeeping was needed beyond locating the inline body
+  to re-scan; the fix generalizes `declared_modules_with_kind` to scan an arbitrary byte range.
+  `crates/guibiao` only, no new capability.
+- **A missing plain `mod x;` file is a silent gap, not a scan error — ACCEPTED DEBT (cross-dimension
+  inconsistency, pre-existing).** **Pressure/source:** an 0.2.2 adversarial review comparing
+  `reachable_modules` against 渾儀's crate-wide walker (`scan::resolve_child_modules`) on the
+  identical layout found that a plain (non-`#[path]`) `mod x;` whose backing file is genuinely
+  absent leaves `x` reachable but ungoverned and returns `Ok`, while 渾儀's walker hard-errors (exit
+  2) on the same layout. **Current reaction:** silently ungoverned in 圭表 (predates 0.2.2 — the
+  prior `by_module`-based lookup had the identical gap; this review only newly *compared* it
+  against 渾儀, it did not introduce it). **Why not closed:** 渾儀 distinguishes an unconditional
+  declaration (hard error, a genuine broken reference) from a `#[cfg]`-gated one (tolerated, since
+  the file may legitimately not exist on this platform) because its AST descent reads `#[cfg]`.
+  圭表's hand-rolled scanner deliberately does **not** parse attributes beyond `#[path]` (the
+  dependency-light, `syn`-free core decision recorded in `PROJECT.md`), so it cannot make that same
+  distinction — adding the error unconditionally would misfire on a legitimately `#[cfg]`-excluded
+  missing file, trading a documented gap for a new false positive. **Risk:** low; an unconditional
+  plain `mod x;` with a genuinely absent file is a rustc compile error the crate could never have
+  shipped in the first place, so this is reachable only via test fixtures or a mid-edit tree, not
+  real published code. **Promotion trigger:** a real report of a missing-file plain `mod` masking a
+  boundary check in a *shipped* crate, or 圭表 gaining `#[cfg]` awareness for an unrelated reason
+  (at which point this closes for free). **Version:** not scheduled; reopen only on the trigger
+  above. **Authority:** the dependency-light scanner decision in `PROJECT.md`'s Decisions section.
+- **`descend`'s file-form dedup silently disengages if `canonicalize` fails mid-scan — ACCEPTED
+  DEBT (narrow TOCTOU, pre-existing shape, newly surfaced by 0.2.2's round-5 review).**
+  **Pressure/source:** a round-5 adversarial review of `crates/hunyi/src/module_resolve.rs::descend`'s
+  `seen_files` dedup (added in 0.2.2 to stop two mutually-exclusive `#[cfg]` siblings backed by the
+  identical file from double-counting that file's items) found both dedup sites
+  (`if let Ok(canon) = std::fs::canonicalize(&file) { if !seen_files.insert(canon) { continue; } }`)
+  fall through **unconditionally** on `Err` — no `else`, no propagated error — so a transient
+  `canonicalize` failure during the scan silently disables the guard for that one file, reproducing
+  the exact double-counted-violation defect the guard exists to prevent. **Current reaction:** the
+  branch is still pushed on `Err`, same as before `seen_files` existed. **Why not closed:** the
+  precondition is a real OS-level race (empirically confirmed reproducible — a background thread
+  deleting+recreating the file mid-scan flips `canonicalize` to `Err` in well under a second on this
+  filesystem) but requires an external actor mutating the source tree *during* a single scan pass, or
+  an unusual filesystem where `canonicalize` is flaky; ordinary, static source trees never hit it.
+  Closing it properly means picking one of this codebase's own two existing precedents for a fallible
+  `canonicalize` — fail loud (`scan.rs::canonicalize_source`) or skip-and-never-register
+  (`reachability.rs`'s own sibling dedup) — rather than the third, undocumented "proceed
+  unconditionally" the two `descend` sites currently do; a same-shape one-hop fix, deferred only
+  for sequencing, not because it's hard. **Risk:** low; requires concurrent external mutation of the
+  scanned tree, not reachable from a static, checked-in crate. **Promotion trigger:** a real report of
+  a duplicated violation count from a scan racing external file churn (e.g. a codegen step running
+  concurrently with CI). **Version:** not scheduled. **Authority:** round-5 adversarial review,
+  `PROJECT.md` Decisions (0.2.2 lesson).
+- **A conventional module backed by both `name.rs` and `name/mod.rs` is silently dual-governed
+  instead of erroring — ACCEPTED DEBT (pre-existing, cross-dimension inconsistency).**
+  **Pressure/source:** a round-5 review found that when a plain `mod x;`'s probed base directory
+  contains **both** `x.rs` and `x/mod.rs` — a genuine `rustc` compile error, E0761, "file for module
+  `x` found at both …" — 圭表's per-source live probe (`reachable_modules`) happily accepts both
+  candidates as separate sources (both pass `.is_file()`, both canonicalize to distinct real files,
+  both structurally match `crate::…::x`) and governs both, as if the crate compiled. **Current
+  reaction:** silently accepted; two `governed_files` entries are produced for one module path.
+  **Why not closed:** this predates 0.2.2 (the old `by_module: BTreeMap<String, Vec<&PathBuf>>`
+  indexed both files under the identical key, same collision) — the 0.2.2 probe rewrite carried the
+  tolerance through, it did not introduce it. It is also the mirror image of the already-accepted
+  "missing plain `mod x;` file" debt entry above: both concern a layout that would never `cargo build`
+  in the first place, so both are reachable only via a broken or mid-edit tree, never shipped code.
+  Note for symmetry: `crates/louke/src/audit/scan.rs::resolve_external_module` already hard-errors on
+  this exact `(true, true)` case ("module `{name}` resolves to both … and …") — so this is a genuine,
+  demonstrated three-dimension inconsistency (漏刻 fail-loud, 圭表 silent-accept), not just a
+  hypothetical. **Risk:** low, same reasoning as the sibling missing-file entry: unreachable from a
+  tree that actually compiles. **Promotion trigger:** a real report of a dual-backed module masking a
+  boundary check, or 圭表 adopting 漏刻's `(true, true) => Err(...)` shape when the probe loop is next
+  touched for an unrelated reason. **Version:** not scheduled. **Authority:** round-5 adversarial
+  review; the existing missing-plain-file ACCEPTED DEBT entry above sets the precedent for this
+  classification.
+- **hunyi's own two module walkers disagree on `#[cfg]`-tolerance for a missing plain-form file —
+  ACCEPTED DEBT (pre-existing, out of 0.2.2's diff scope).** **Pressure/source:** a round-5 review
+  comparing `module_resolve.rs::descend` (backs the five single-module-anchored capabilities via
+  `resolve_module_items`/`resolve_module_file`/`resolve_module_branches`) against
+  `scan.rs::resolve_child_modules` (backs the crate-wide/subtree walkers) found `descend` hard-errors
+  unconditionally (`missing_module_file_error`) on a plain `mod x;` whose file cannot be located,
+  while `resolve_child_modules` explicitly tolerates the identical shape when the item carries
+  `#[cfg]` (`if !has_cfg_attr(&module_item.attrs) { return Err(...) }`) — a real, `cargo check`-clean
+  layout (`#[cfg(feature = "never")] pub mod gated;` with no `gated.rs`) that the crate-wide walk
+  accepts but a boundary anchored *directly* at `crate::gated` hard-aborts on (exit 2) instead of
+  tolerating. **Current reaction:** `descend` always errors; `resolve_child_modules` never errors on
+  a `#[cfg]`-gated miss. **Why not closed:** confirmed via `git diff v0.2.1..release/0.2.2` that
+  `descend`'s unconditional-error line predates the 0.2.2 `Branch`-vector rewrite byte-for-byte in
+  behavior — it was restructured, not introduced, by this release. BACKLOG's existing missing-file
+  entry above only compares 圭表 against 渾儀's *crate-wide* walker; it does not mention this narrower,
+  purely-渾儀-internal asymmetry between 渾儀's own two walkers. Whether a single-module anchor
+  *should* tolerate `#[cfg]`-gated absence (there is no principled non-error answer to give for a
+  module with no items) is a real open design question, not a same-shape fix. **Risk:** low; the
+  same "a `cfg`-gated absence is expected, not broken" reasoning as the sibling entry applies, and
+  this predates 0.2.2. **Promotion trigger:** a real report of a legitimate `#[cfg]`-gated boundary
+  anchor hard-failing a CI check, or a deliberate design pass reconciling `descend` and
+  `resolve_child_modules`'s missing-file policies. **Version:** not scheduled; pre-existing, out of
+  0.2.2's fix scope. **Authority:** round-5 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson).
+- **漏刻's probe scanner dedups module-cycle detection on a LITERAL path, not a canonicalized one —
+  ACCEPTED DEBT (cross-dimension inconsistency, pre-existing).** **Pressure/source:** a round-8
+  adversarial review of `crates/louke/src/audit/scan.rs::collect_reachable_probes` found its
+  `visited: BTreeSet<PathBuf>` cycle/dedup guard inserts the file path exactly as resolved (never
+  `canonicalize`d — confirmed via `grep -rn canonicalize crates/louke/` returning zero matches),
+  while both 圭表's and 渾儀's own module-cycle guards canonicalize before comparing (closing the
+  identical symlinked-directory hazard on their own dimensions in earlier 0.2.2 rounds; see the
+  `crates/hunyi/src/scan.rs` comment at `resolve_child_modules` explicitly claiming "the louke probe
+  scanner guards the same hazard; the two dimensions keep parallel copies (三儀 ⊥ 三儀)" — a claim
+  this review found to be FALSE for 漏刻 specifically, though the parallel-copies *architecture* the
+  comment describes is otherwise accurate). **Current reaction:** a symlinked directory (or a
+  circular `#[path]`) reached via two distinct literal paths to the identical real file is not
+  recognized as the same node, so `collect_reachable_probes`'s explicit work-queue (`pending`, a
+  `Vec`, not the call stack) can grow without bound on a genuine cycle rather than terminating —a
+  hang, not a stack overflow, since the walk is iterative. **Why not closed:** confirmed via `git
+  log --oneline -- crates/louke/src/audit/scan.rs` unchanged since the `v0.2.1` tag — this predates
+  0.2.2 entirely, is out of this release's diff scope, and 漏刻's own probe-audit surface (unlike
+  圭表/渾儀's module-boundary walks) has never had a reported symlink-cycle incident. **Risk:** low;
+  requires a symlinked source directory or a circular `#[path]` chain specifically inside the CI
+  probe-audit target, a layout no shipped crate in this repo uses. **Promotion trigger:** a real
+  report of the probe audit hanging on a cyclic layout, or a maintenance pass on
+  `collect_reachable_probes` for an unrelated reason (at which point canonicalizing `visited`'s
+  entries closes this for free, mirroring 圭表/渾儀's own guards). **Version:** not scheduled.
+  **Authority:** round-8 adversarial review; `PROJECT.md` Decisions (0.2.2 lesson, in eight rounds).
 - **Multibyte char-literal lexing — documented robustness bound (not a known FN).** *From the
   v0.1.5 hidden-bug sweep.* The `use`/`mod` lexer's simple-char branch assumes a one-byte char
   body, so a multibyte char literal (`'é'`) in an adjacent-literal pattern can misparse a few bytes.
@@ -589,7 +798,7 @@ inline-`mod` name accumulated onto it, matching rustc for mod-rs and non-mod-rs 
 coverage false negative where a relocated module's items were dropped. A `cfg_attr`-wrapped `#[path]`
 stays a cfg-blind bound; an absent unconditional target fails loud (exit 2). (The v0.1.4 posture of
 keeping `#[path]` modules outside scope — governing neither the target nor a same-named orphan — is
-**superseded**; 圭表 still holds that older bound, see its section.)
+**superseded**; 圭表's own v0.1.4 posture is likewise superseded now, 0.2.2, see its section.)
 
 - **Public-API type leakage — signature-coupling** (flagship): **BUILT.** "A module's public
   API must not *expose* a forbidden type" — depending on a type internally is fine; leaking

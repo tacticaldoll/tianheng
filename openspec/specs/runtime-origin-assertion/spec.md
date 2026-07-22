@@ -317,6 +317,16 @@ module, while an absent target for an unconditional `#[path]` is a fail-loud con
 - **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_seam.rs")] mod plat;` with no conventional `plat.rs`, where the relocated file would hold the only probe for a declared seam
 - **THEN** the cfg-conditional relocation is not followed (a stated bound, tolerated as a cfg-gated absence, not a constitution error) and the seam is reported unprobed — never a silent claim that a file rustc may not compile here is covered
 
+#### Scenario: A semicolon inside an earlier attribute's own string does not hide a later #[path]
+
+- **WHEN** a module declares `#[doc = "Handles A; falls back to B."]` immediately followed by an unconditional `#[path = "relocated.rs"] mod inner;`, and `relocated.rs` (not the conventional, absent `inner.rs`) holds a declared seam's probe
+- **THEN** the `#[path]` attribute is still recognized and followed to `relocated.rs` — the bare `;` inside the preceding `#[doc]` attribute's own string value must never be mistaken for the preamble's own start, which would desync the attribute scan and silently lose the `#[path]` relocation (a false hard-failure on a module that genuinely compiles, or a misattribution to the wrong file)
+
+#### Scenario: A brace-delimited attribute argument does not hide an earlier #[path]
+
+- **WHEN** a module declares an unconditional `#[path = "relocated.rs"]` immediately followed by an unrelated `#[foo({ 1 })]` (a brace-delimited token-tree argument, not a string literal) before `mod inner;`, and `relocated.rs` holds a declared seam's probe
+- **THEN** the `#[path]` attribute is still recognized and followed to `relocated.rs` — the brace-delimited attribute argument's own internal `{`/`}` bytes must never be mistaken for a top-level item boundary, which would desync the attribute scan and silently lose the `#[path]` relocation the same way an earlier attribute's own string content could
+
 #### Scenario: Legacy directory callers remain compatible
 
 - **WHEN** a direct caller passes a source directory instead of a target root file

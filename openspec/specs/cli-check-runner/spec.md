@@ -112,10 +112,20 @@ Each violation SHALL additionally carry a **repair-direction `polarity`** — a 
 - **WHEN** the runner checks a workspace with a single-module semantic violation (for example a signature-coupling exposure, or a dyn-trait, impl-trait, async-exposure, or visibility violation) under `--format json`
 - **THEN** the offending violation's `file` is a string naming the source file of the boundary's governed module — the file the semantic scan descends to observe that module's items, where the offending seam is written — even when the `finding` names a forbidden type defined in another file
 
+#### Scenario: A cfg-split single-module violation names the offending branch's file, not the first
+
+- **WHEN** the boundary's governed module is declared under two mutually-exclusive `#[cfg]` arms of the same name (a per-platform shim) — a plain, clean arm declared FIRST and an unconditionally `#[path]`-remapped arm declared SECOND that alone exposes the forbidden type — under `--format json`
+- **THEN** the violation's `file` names the SECOND arm's real file, where the exposure is actually written — never the first arm's file merely because it was declared first; the reported file is always the exact branch that produced the finding, never a single first-branch file for the whole module
+
 #### Scenario: A whole-crate-scan semantic violation carries the offending element's module file
 
 - **WHEN** the runner checks a workspace with a trait-impl-locality or forbidden-marker semantic violation under `--format json`
 - **THEN** the offending violation's `file` is a string naming the source file of the module the offending element sits in — the `impl` site's module for a trait-impl or a forbidden `impl`, or the offending type's defining module for a forbidden `#[derive]`
+
+#### Scenario: Two subtree findings sharing one cfg-split module string each name their own file
+
+- **WHEN** an async-exposure subtree boundary's anchor is reached through a mutually-exclusive `#[cfg]` split into two branches backed by different real files but sharing one logical module path, and each branch's own `async fn` reacts, under `--format json`
+- **THEN** each of the two violations names its OWN real branch's file — never both collapsing to whichever branch's file was resolved first for that shared module string
 
 #### Scenario: A forbidden-marker derive names its defining type's file, not an impl site
 

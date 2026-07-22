@@ -40,6 +40,46 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 - **WHEN** the anchored module is declared as two `#[cfg(…)] mod x { … }` inline variants (which `syn` parses as two separate modules, evaluating no `cfg`), and only the source-*later* variant exposes a forbidden type
 - **THEN** the system observes the union of all same-named inline variants and reacts on the exposure, never resolving only the source-first variant (a `mod`-resolution divergence from the crate-wide scan is the false-negative class this resolver forbids). This anchor-resolution property is shared by every single-module-anchored semantic capability (visibility, dyn/impl-trait, async-exposure), not only signature-coupling; an **unconditional** `#[path = "…"]` file module is followed to its target, while an inline or `cfg_attr`-wrapped `#[path]` remains a stated (fail-loud) out-of-scope bound.
 
+#### Scenario: A cfg-mixed inline and file-form anchor governs both variants
+
+- **WHEN** the anchored module is declared as one `#[cfg(feature = "a")] mod x { … }` inline variant and one `#[cfg(feature = "b")] mod x;` file-form variant (the standard per-platform shim pairing an inline body with a file-form sibling), and only the file-form variant exposes a forbidden type
+- **THEN** the system observes both variants' items and reacts on the file-form exposure, never stopping at the inline variant merely because it was found first — the same additive, cfg-blind union as two inline variants of one name, shared by every single-module-anchored semantic capability
+
+#### Scenario: A segment nested beneath a flat cfg-mixed sibling resolves from its own directory
+
+- **WHEN** `x` is cfg-mixed (an inline variant on one arm, a flat, non-`mod.rs` file-form sibling on another), and the anchor is a further segment `x::y` reached through an unconditional `#[path]` written inside the flat file-form sibling itself
+- **THEN** the system resolves `y` from the file-form sibling's own containing directory — the same directory a `#[path]` written in an ordinary flat file always resolves from — rather than from the inline variant's accumulated directory, which coincides with it only when the file-form sibling is `mod.rs`-shaped
+
+#### Scenario: A plain child of a #[path]-remapped anchor resolves from the remap's own directory
+
+- **WHEN** the anchored module is `crate::net::inner`, `crate::net` is declared `#[path = "moved/thing.rs"] pub mod net;`, and `moved/thing.rs` declares a plain `pub mod inner;`
+- **THEN** the system resolves `inner` to `moved/inner.rs` — the `#[path]`-loaded file's own directory, since it is mod-rs-like regardless of its own filename — never a name-derived `net/inner.rs` that has no relationship to where the file actually lives
+
+#### Scenario: Two non-inline cfg-sibling variants, one plain and one path-remapped, both govern
+
+- **WHEN** the anchored module is declared as one `#[cfg(feature = "a")] mod x;` plain variant (backed by `x.rs`) and one `#[cfg(feature = "b")] #[path = "moved.rs"] mod x;` remapped variant, and only the remapped variant exposes a forbidden type
+- **THEN** the system observes both variants' items and reacts on the remapped exposure, matching the crate-wide walk's own policy of never stopping at the first non-inline declaration for a name — two non-inline siblings need not name the same file once an unconditional `#[path]` can relocate one of them
+
+#### Scenario: An inline module carrying an unconditional path is resolved, not reported unknown
+
+- **WHEN** the anchored module is `crate::thread` (or a further segment beneath it, e.g. `crate::thread::local_data`), declared `#[path = "thread_files"] pub mod thread { pub mod local_data; }` — an inline header with an unconditional `#[path]` — and `thread_files/local_data.rs` exposes a forbidden type
+- **THEN** the system resolves `crate::thread` (finding its inline items) and follows the `#[path]` to relocate the base `local_data` resolves from to `thread_files/`, reacting on the exposure — rather than reporting `crate::thread` as an unknown module merely because an unconditional `#[path]` precedes its inline header
+
+#### Scenario: A cfg-split module's own use-map does not merge across mutually-exclusive branches
+
+- **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, each declaring `use <different real path> as Handle;` under the same local alias name, and only the FIRST branch's own bare `Handle` reference genuinely resolves to a forbidden type
+- **THEN** the system reacts on the first branch's own exposure, resolving its bare `Handle` reference through THAT branch's own `use` declaration — never through the second, mutually-exclusive branch's `use Handle` alias merely because both branches' items were observed in one pass
+
+#### Scenario: A cfg-split branch's own child module does not shadow a sibling branch's extern re-export
+
+- **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, one declaring a local child module with the same name as a real extern crate dependency, and the OTHER branch (with no such local child module) contains a genuine `pub use <dep>::Something;` naming the real extern crate
+- **THEN** the system reacts on the second branch's own re-export, resolving `<dep>` as the real extern crate — never treating it as shadowed by a local child module that only the FIRST, mutually-exclusive branch declares
+
+#### Scenario: Two INLINE cfg siblings sharing one enclosing file do not merge their use-maps or child-module shadows
+
+- **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, BOTH inline (`#[cfg(a)] mod x { .. }` / `#[cfg(b)] mod x { .. }`, sharing the identical enclosing file), each declaring its own `use <different real path> as Handle;` under the same local alias name, and only the FIRST arm's own bare `Handle` reference genuinely resolves to a forbidden type
+- **THEN** the system reacts on the first arm's own exposure, resolving its bare `Handle` reference through THAT arm's own `use` declaration — never through the second, mutually-exclusive arm's `use Handle` alias merely because both arms are inline and share one file; the same isolation holds for a local child module in one inline arm shadowing the other inline arm's own genuine extern re-export
+
 ### Requirement: Public-signature observation governs exposure
 
 The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule, finding_key)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.

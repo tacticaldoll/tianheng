@@ -134,7 +134,7 @@ fn collect_scope_modules(
             cursor = skip_ascii_space(bytes, cursor);
             match bytes.get(cursor) {
                 Some(b';') => {
-                    let attrs = mod_preamble_attrs(bytes, i);
+                    let attrs = mod_preamble_attrs(bytes, start, i);
                     // Resolve either the unconditional `#[path = "…"]` target (followed to observe
                     // its probes) or, absent one, the conventional `<base>/name.rs|name/mod.rs`.
                     let resolved = match &attrs.path {
@@ -163,7 +163,7 @@ fn collect_scope_modules(
                 }
                 Some(b'{') => {
                     let close = balanced_brace_end(bytes, cursor, end);
-                    let attrs = mod_preamble_attrs(bytes, i);
+                    let attrs = mod_preamble_attrs(bytes, start, i);
                     // Descending an inline `mod x { … }`: x's children resolve from `inline_base` —
                     // `<child_base>/name`, or `<file_dir>/dir` for an inline `#[path = "dir"]` remap.
                     // rustc accumulates the inline-module name as a directory component, so this base
@@ -384,13 +384,61 @@ struct ModPreambleAttrs {
 /// coverage false negative, the worst outcome under FN-first). A `#[cfg_attr(.., path = ..)]`
 /// conditional relocation reads as `cfg` (its meta name is `cfg_attr`, not `path`), so an absent
 /// target is tolerated rather than errored.
-fn mod_preamble_attrs(bytes: &[u8], mod_index: usize) -> ModPreambleAttrs {
-    let mut start = 0;
-    for i in (0..mod_index).rev() {
-        if matches!(bytes[i], b';' | b'{' | b'}') {
-            start = i + 1;
-            break;
+///
+/// `scope_start` bounds the search for the preamble's own start: it is the enclosing scope's own
+/// start (a real item/scope boundary, never inside a literal or comment), so scanning **forward**
+/// from it — skipping literals/comments exactly like the rest of this file's walkers — to find the
+/// last `;`/`}` outside of any literal/comment/attribute-group is well-defined. A backward raw-byte
+/// scan (the original implementation) is NOT well-defined this way: it cannot tell whether a
+/// `;`/`{`/`}` byte it meets while walking backward sits inside a string/char literal or comment
+/// without first knowing where that literal started — so an EARLIER attribute's own string value
+/// containing one of those bytes (e.g. `#[doc = "Handles A; falls back to B."]`) stopped the old
+/// backward scan mid-literal, desyncing the subsequent forward attribute walk and silently losing a
+/// later `#[path = "…"]` on the same preamble (found on a round-9 adversarial review — see
+/// `PROJECT.md`'s Decisions).
+///
+/// The forward scan is not merely literal-aware but **attribute-group-aware**: an entire `#[…]` /
+/// `#![…]` is skipped as one atomic unit via [`attr_group_end`], the identical primitive the
+/// second (attribute-matching) pass below already uses. Attribute syntax permits an arbitrary
+/// token-tree argument, including a brace-delimited one (`#[foo({ 1 })]`) that is not a string
+/// literal — treating only the FIRST pass's own literal-awareness as sufficient (round 9's fix)
+/// still let such a brace be mistaken for a top-level item terminator, resetting `start` to a
+/// point AFTER an earlier, real `#[path = "…"]` attribute and silently losing it — the identical
+/// failure mode round 9 closed, reached through a different vector (found on a round-10
+/// adversarial review of round 9's own fix — see `PROJECT.md`'s Decisions). A non-attribute `{…}`
+/// (a preceding sibling item's own block body, or a macro invocation's body) is likewise skipped
+/// as one atomic unit via [`balanced_brace_end`], landing on its own matching `}` — the real
+/// boundary — rather than treating the interior's own bytes as candidates.
+fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> ModPreambleAttrs {
+    let mut start = scope_start;
+    let mut i = scope_start;
+    while i < mod_index {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(mod_index);
+            continue;
         }
+        if bytes[i] == b'#' {
+            let mut open = i + 1;
+            if bytes.get(open) == Some(&b'!') {
+                open += 1;
+            }
+            if bytes.get(open) == Some(&b'[') {
+                // The whole attribute group is opaque here — its own `;`/`{`/`}` bytes (inside a
+                // token-tree argument) are content, never a boundary. Left in the scanned range
+                // for the second pass below, which is what actually matches it.
+                i = attr_group_end(bytes, open, mod_index);
+                continue;
+            }
+        }
+        if bytes[i] == b'{' {
+            i = balanced_brace_end(bytes, i, mod_index);
+            start = i;
+            continue;
+        }
+        if bytes[i] == b';' {
+            start = i + 1;
+        }
+        i += 1;
     }
     let mut attrs = ModPreambleAttrs {
         path: None,

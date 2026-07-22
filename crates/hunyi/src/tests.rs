@@ -28,7 +28,12 @@ fn findings(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 /// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
@@ -53,7 +58,12 @@ fn findings_with_deps(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", false, &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
@@ -76,7 +86,12 @@ fn findings_including_trait_impls(
     let root = src.join("lib.rs");
     let result = module_findings(&src, &root, module, &forbidden, "x", true, &[]);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 // --- extern-path exposure (the external-crate name set) -------------------
@@ -2590,10 +2605,10 @@ fn locality_findings(
     let root = src.join("lib.rs");
     let result = trait_impl_findings(&src, &root, trait_path, &allowed, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    // The pure-heart tests assert on findings only; drop the per-finding module here.
+    // The pure-heart tests assert on findings only; drop the per-finding module/file here.
     result.map(|v| {
         v.into_iter()
-            .map(|(finding, _module)| finding.to_string())
+            .map(|(finding, _module, _file)| finding.to_string())
             .collect()
     })
 }
@@ -2617,6 +2632,76 @@ fn an_impl_outside_the_allowed_location_is_a_finding() {
     assert_eq!(
         out,
         ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
+}
+
+#[test]
+fn two_misplaced_impls_do_not_dedup_collapse_when_a_blanket_impls_param_shadows_an_alias() {
+    // Round-10 finding: `canonical_self_owner` never received round 9's impl_type_params shadow at
+    // all -- unlike resolve_self_type (containment.rs), it unconditionally resolved any bare self
+    // type via resolve_path. This is not merely a cosmetic label: the `owner` it renders is part of
+    // `SemanticFact::MisplacedImpl`'s finding IDENTITY, deduplicated by exact equality. A module
+    // declaring `use Foo as T;` alongside BOTH a blanket `impl<T> Command for T {}` (T is the
+    // impl's own generic parameter) AND a genuine direct `impl Command for Foo {}` had the blanket
+    // impl's bare `T` incorrectly resolve through the alias to the SAME canonical owner string as
+    // the direct impl's own (correctly resolved) owner -- two textually and semantically distinct
+    // misplaced-impl violations collapsed into one reported finding, a real false negative (one
+    // genuine violation silently vanishing), not just a wrong display string. Fixed by giving
+    // `canonical_self_owner` the same `impl_type_params` shadow `resolve_self_type` already has.
+    let out = locality_findings(
+        "owner-collapse-blanket-and-direct",
+        &[
+            ("lib.rs", "pub mod command;\npub mod domain;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Command;\nuse crate::domain::sub::Foo as T;\npub mod sub { pub struct Foo; }\nimpl<T> Command for T {}\nimpl Command for crate::domain::sub::Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        2,
+        "both the blanket impl (its own param T) and the direct impl on Foo are genuinely distinct \
+         misplaced-impl violations and must not dedup-collapse into one: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_impl_finding() {
+    // Round-6 finding: resolve_child_modules (scan.rs, backing the whole-crate scan) had no
+    // canonical-file dedup for two mutually-exclusive #[cfg] arms plainly declaring the IDENTICAL
+    // name resolving to the ONE real file -- unlike module_resolve.rs's descend(), which gained
+    // exactly this dedup in 0.2.2. Because the self-type's generic argument here is an
+    // unrenderable const-generic block expression, canonical_self_owner falls back to a positional
+    // `_#{ordinal}` marker computed from the scan Vec's own position -- so the two duplicate scan
+    // entries got DIFFERENT ordinals and escaped the eventual fact-identity dedup, inflating one
+    // real impl into two findings. Verified against real rustc: both `cargo check --features u`
+    // and `--features w` compile cleanly with exactly one `impl Command for Arr<2>`.
+    let out = locality_findings(
+        "cfg-dual-same-file",
+        &[
+            (
+                "lib.rs",
+                "pub trait Command {}\npub struct Arr<const N: usize>;\n\
+                 #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
+            ),
+            (
+                "foo.rs",
+                "impl crate::Command for crate::Arr<{ 1 + 1 }> {}\n",
+            ),
+        ],
+        "crate::Command",
+        &["crate::allowed_elsewhere"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "one real impl, backed by one real file under either #[cfg] arm, must be one finding: {out:?}"
     );
 }
 
@@ -3238,7 +3323,7 @@ fn unsafe_labels(
     let allowed: Vec<String> = allowed.iter().map(|a| a.to_string()).collect();
     let result = unsafe_findings(&src, &root, &allowed, "x").map(|fs| {
         fs.into_iter()
-            .map(|(finding, _)| finding.to_string())
+            .map(|(finding, _, _)| finding.to_string())
             .collect()
     });
     let _ = std::fs::remove_dir_all(&dir);
@@ -3723,7 +3808,12 @@ fn vis_findings_at(
     let root = src.join("lib.rs");
     let result = visibility_findings(&src, &root, module, "x", ceiling_rank);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 #[test]
@@ -4213,10 +4303,10 @@ fn marker_findings(
     let root = src.join("lib.rs");
     let result = forbidden_marker_findings(&src, &root, subtree, &forbidden, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    // The pure-heart tests assert on findings only; drop the per-finding module here.
+    // The pure-heart tests assert on findings only; drop the per-finding module/file here.
     result.map(|v| {
         v.into_iter()
-            .map(|(finding, _module)| finding.to_string())
+            .map(|(finding, _module, _file)| finding.to_string())
             .collect()
     })
 }
@@ -4422,6 +4512,103 @@ fn a_forbidden_marker_on_a_local_type_alias_reacts() {
     )
     .unwrap();
     assert_eq!(out, ["impl Marker for crate::domain::Bar in crate::domain"]);
+}
+
+#[test]
+fn a_blanket_impls_own_generic_param_is_not_resolved_through_a_same_named_alias() {
+    // Round-9 finding: resolve_self_type (containment.rs) resolved a bare self type exactly like
+    // any other path reference, with no awareness that the identifier might be the impl's OWN
+    // declared generic type parameter rather than a nominal type. `impl<T> Marker for T {}` (a
+    // blanket impl — T is a parameter use, not a type) in a module that also happens to declare an
+    // unrelated `use ... as T` alias resolved the self type through that alias, fabricating a
+    // marker-acquisition finding on the aliased type even though the source never writes `impl
+    // Marker for` it at all. The sibling exposure collectors already shadow an impl's own generic
+    // params for every OTHER position (collect.rs::type_param_names); the marker gate's self-type
+    // check lacked the identical shadowing. Fixed by threading each ImplSite's own
+    // `type_params` (impl<T, ..>'s declared names) into resolve_self_type, which now drops a bare
+    // self type matching one of them before any resolution is attempted.
+    let out = marker_findings(
+        "blanket-impl-generic-param-shadow",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use crate::domain::sub::Innocent as T;\npub mod sub { pub struct Innocent; }\npub trait Marker {}\nimpl<T> Marker for T {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a blanket impl's own generic param T must not resolve through the unrelated `use ... as T` \
+         alias in scope in that module — the source never impls Marker for Innocent: {out:?}"
+    );
+}
+
+#[test]
+fn a_blanket_impls_generic_param_is_shadowed_even_through_a_multi_segment_projection() {
+    // Round-10 finding: round 9's fix (resolve_self_type) only recognized a BARE single-segment
+    // self type as the impl's own generic parameter (via `Path::get_ident()`, which returns `None`
+    // for anything with more than one segment). `impl<T> Marker for T::Assoc {}` -- T::Assoc is a
+    // projection off the impl's own parameter, never a nominal type, exactly like the sibling
+    // exposure collector's own `is_shadowed_param_path` already treats `T::Item` -- was therefore
+    // never shadowed and still resolved the leading `T` through an unrelated same-named alias,
+    // fabricating a marker-acquisition finding one segment deeper than round 9 closed. Fixed by
+    // sharing `is_shadowed_param_path` (the leading-segment check, regardless of further segments)
+    // between the exposure collector and resolve_self_type instead of a narrower private copy.
+    let out = marker_findings(
+        "blanket-impl-multi-segment-generic-param-shadow",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use crate::domain::sub as T;\npub mod sub { pub struct Assoc; }\npub trait Marker {}\nimpl<T> Marker for T::Assoc {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a blanket impl's own generic param T must stay shadowed even in a projection T::Assoc, \
+         never resolving through the unrelated `use ... as T` module alias: {out:?}"
+    );
+}
+
+#[test]
+fn a_qualified_path_self_type_off_the_impls_own_generic_param_is_not_resolved_through_an_alias() {
+    // Round-11 finding: `resolve_self_type` had no `qself.is_none()` guard at all, unlike its
+    // sibling `canonical_self_owner` (which excludes a qself'd self type from resolution
+    // entirely). A QUALIFIED-path self type (`<T>::Item`) stores its own dependent type (`T`, the
+    // impl's own generic parameter) in `qself.ty`, entirely OUTSIDE `path.segments` -- so
+    // `is_shadowed_param_path`, which only ever inspects `path`, can never see it. The trailing
+    // segments (`Item`) were resolved as an ordinary bare path instead, silently bypassing the
+    // round-9/10 shadow through a third syntactic vector. `impl<T: HasItem> Marker<T> for <T>::Item
+    // {}` is real, compiling Rust (the `Marker<T>` trait argument satisfies rustc's E0207
+    // unconstrained-type-parameter check). Fixed by dropping any qself'd self type before the
+    // shadow check even runs -- the same "not a placeable nominal path" treatment already given to
+    // every other non-resolvable self-type shape.
+    let out = marker_findings(
+        "qself-bracket-projection-shadow-gap",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "use crate::domain::sub::Innocent as Item;\npub mod sub { pub struct Innocent; }\npub trait HasItem { type Item; }\npub trait Marker<X> {}\nimpl<T: HasItem> Marker<T> for <T>::Item {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["Marker"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "a qself'd self type dependent on the impl's own generic param T must not resolve its \
+         trailing segment through the unrelated `use ... as Item` module alias: {out:?}"
+    );
 }
 
 #[test]
@@ -4667,6 +4854,37 @@ fn two_same_named_types_in_different_submodules_stay_distinct() {
 }
 
 #[test]
+fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_marker_finding() {
+    // The forbidden-marker impl form shares resolve_child_modules/scan.impls with trait-impl-
+    // locality, so it has the identical round-6 duplication hazard: two mutually-exclusive
+    // #[cfg] arms declaring the same name resolving to one real file, whose self-type generic
+    // argument is unrenderable (falling back to a positional ordinal), used to inflate one real
+    // marker acquisition into two findings.
+    let out = marker_findings(
+        "cfg-dual-same-file",
+        &[
+            (
+                "lib.rs",
+                "pub struct Arr<const N: usize>;\n\
+                 #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
+            ),
+            (
+                "foo.rs",
+                "impl crate::Marker for crate::Arr<{ 1 + 1 }> {}\n",
+            ),
+        ],
+        "crate",
+        &["crate::Marker"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "one real impl, backed by one real file under either #[cfg] arm, must be one finding: {out:?}"
+    );
+}
+
+#[test]
 fn the_forbidden_marker_builder_carries_severity() {
     let b = ForbiddenMarkerBoundary::in_crate("app")
         .module("crate::domain")
@@ -4694,7 +4912,12 @@ fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<
     let root = src.join("lib.rs");
     let result = dyn_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -4727,7 +4950,12 @@ fn dyn_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = dyn_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
@@ -4851,6 +5079,79 @@ fn dyn_operand_matches_a_reexported_trait_by_its_defining_path() {
 }
 
 #[test]
+fn a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_principal() {
+    // Round-7 finding: extern_resolution computed externs_type/renames_bare ONCE over the
+    // flattened union of every #[cfg] branch's items (feeding operand_module_findings, backing
+    // dyn-trait/impl-trait operand-scoped boundaries) -- the identical conflation round 6 fixed
+    // for signature-coupling's use-map, left unfixed here too. The "u" branch (platform.rs)
+    // declares a LOCAL `mod traits { .. }`; the mutually-exclusive "w" branch (win_platform.rs)
+    // has no local `mod traits` at all and its own `dyn traits::Marker` genuinely names the real
+    // extern crate `traits`. Before the fix, the "u" branch's local `mod traits` silently
+    // suppressed the "w" branch's own genuine extern dyn-principal match.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")] pub mod platform;\n\
+             #[cfg(feature = \"w\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+        ),
+        (
+            "platform.rs",
+            "pub mod traits { pub trait Marker {} }\npub fn open() -> u8 { 0 }\n",
+        ),
+        (
+            "win_platform.rs",
+            "pub fn f() -> Box<dyn traits::Marker> { todo!() }\n",
+        ),
+    ];
+    assert_eq!(
+        dyn_operand_findings(
+            "cfg-sibling-childmod-shadow",
+            files,
+            "crate::platform",
+            &["traits::Marker"],
+            &["traits"],
+        )
+        .unwrap(),
+        ["dyn traits::Marker exposed by fn crate::platform::f"],
+        "the w branch's own genuine extern dyn-principal must react, regardless of the u \
+         branch's own local mod traits",
+    );
+}
+
+#[test]
+fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_others_own_extern_principal()
+ {
+    // Round-8 finding, the operand-scoped (`shape_scan.rs`/`crate_scope.rs`) analogue of
+    // `a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_others_extern_reexport`
+    // above: `operand_module_findings` groups its per-branch `FileExternScope` (and `uses_by_branch`)
+    // by branch index too, not just by file — two INLINE `#[cfg]` siblings share the identical
+    // enclosing lib.rs, so a file-keyed group would let the "u" arm's local `mod traits` suppress
+    // the "w" arm's genuine extern `dyn traits::Marker`, the identical conflation the file-form
+    // version above exercises, but with both arms declared inline in one shared file.
+    let files = &[(
+        "lib.rs",
+        "#[cfg(feature = \"u\")] pub mod platform {\n\
+         pub mod traits { pub trait Marker {} }\n\
+         pub fn open() -> u8 { 0 }\n}\n\
+         #[cfg(feature = \"w\")] pub mod platform {\n\
+         pub fn f() -> Box<dyn traits::Marker> { todo!() }\n}\n",
+    )];
+    assert_eq!(
+        dyn_operand_findings(
+            "cfg-split-inline-inline-childmod-shadow",
+            files,
+            "crate::platform",
+            &["traits::Marker"],
+            &["traits"],
+        )
+        .unwrap(),
+        ["dyn traits::Marker exposed by fn crate::platform::f"],
+        "the w arm's own genuine extern dyn-principal must react, regardless of the u arm's own \
+         local mod traits, even though both arms are inline and share lib.rs",
+    );
+}
+
+#[test]
 fn dyn_operand_ignores_auto_trait_markers() {
     // `dyn Port + Send`: the sole non-auto trait is Port. Forbidding Port flags it; forbidding
     // only the Send marker flags nothing (Send is an auto trait, never an operand, and a bare Send
@@ -4969,7 +5270,12 @@ fn impl_trait_findings(
     let root = src.join("lib.rs");
     let result = impl_trait_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5108,7 +5414,12 @@ fn impl_trait_operand_findings(
     let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
     let result = impl_trait_operand_module_findings(&src, &root, module, &forbidden, "x", &deps);
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn impl_trait_operand_mod(
@@ -5310,7 +5621,12 @@ fn async_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Ve
     let root = src.join("lib.rs");
     let result = async_exposure_module_findings(&src, &root, module, "x");
     let _ = std::fs::remove_dir_all(&dir);
-    result.map(|facts| facts.into_iter().map(|fact| fact.to_string()).collect())
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
 }
 
 fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5449,7 +5765,7 @@ fn async_subtree(
     result.map(|facts| {
         facts
             .into_iter()
-            .map(|(fact, module)| (fact.to_string(), module))
+            .map(|(fact, module, _file)| (fact.to_string(), module))
             .collect()
     })
 }
@@ -5513,6 +5829,69 @@ fn async_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
 }
 
 #[test]
+fn async_subtree_and_seam_agree_on_the_owner_fallback_for_an_unrenderable_const_generic_self_type()
+{
+    // Round-11 finding: the subtree path's `ordinal` (fed to `collect_item_async_exposures`, and
+    // from there into `canonical_self_owner`'s `_#{ordinal}` fallback for an impl block whose
+    // self-type carries an unrenderable const-generic argument) used to reset to 0 for EACH
+    // `(module, items, file)` tuple `walk_subtree_modules` returns, while the seam path
+    // (`shape_module_findings`) enumerates continuously over the flattened branch union and never
+    // resets. For the anchor module's own items this desynced the two paths' owner-fallback
+    // strings for the identical impl block -- contradicting this function's own doc promise that a
+    // seam finding is "byte-identical to the single-module path". `ordinal` is now one counter
+    // incrementing continuously across every tuple the subtree walk visits, matching the seam
+    // path's own continuous enumerate.
+    let files = &[(
+        "lib.rs",
+        "pub struct Arr<const N: usize>;\npub struct Marker;\nimpl Marker { pub async fn before() {} }\nimpl<const N: usize> Arr<{ N + 1 }> { pub async fn unrenderable() {} }\n",
+    )];
+    let seam = async_findings("const-generic-owner-parity-seam", files, "crate").unwrap();
+    let subtree = async_subtree_labels("const-generic-owner-parity-subtree", files, "crate");
+    assert_eq!(
+        seam, subtree,
+        "the seam and subtree paths must assign the identical owner-fallback string to the same \
+         impl block's unrenderable const-generic self type: seam={seam:?} subtree={subtree:?}"
+    );
+}
+
+#[test]
+fn async_subtree_does_not_collapse_two_cfg_split_branches_sharing_an_unrenderable_owner_fallback() {
+    // Round-11 finding (the severe half): because `AsyncInherentMethod`'s identity is `(owner,
+    // name, tail)` with no module field (unlike its `AsyncFreeFn`/`AsyncTraitMethod` siblings), and
+    // the shared fact-only dedup (`sort_attributed_facts`) never consults the carried module/file
+    // either, two mutually-exclusive `#[cfg]` branches of the SAME anchor module, each declaring a
+    // same-named type with an unrenderable const-generic self-type argument at the same
+    // per-branch position, used to collide on the identical `_#{ordinal}` owner-fallback string
+    // (ordinal reset to 0 for each branch's own tuple) -- collapsing two genuinely distinct async
+    // fns, compiled under two different, mutually-exclusive configs, into ONE reported finding. A
+    // continuously-incrementing ordinal across the whole subtree walk (never reset per branch)
+    // means two different branches' items can never share an ordinal, so their fallback labels can
+    // never collide by construction.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod m;\n#[cfg(feature = \"w\")]\n#[path = \"m_w.rs\"]\npub mod m;\n",
+        ),
+        (
+            "m.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 1 }> { pub async fn run() {} }\n",
+        ),
+        (
+            "m_w.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 2 }> { pub async fn run() {} }\n",
+        ),
+    ];
+    let subtree = async_subtree_labels("cfg-split-owner-fallback-collision", files, "crate::m");
+    assert_eq!(
+        subtree.len(),
+        2,
+        "both cfg branches' own async fn are genuinely distinct violations and must not \
+         dedup-collapse into one merely because their unrenderable-self-type owner fallbacks \
+         previously collided: {subtree:?}"
+    );
+}
+
+#[test]
 fn async_subtree_reacts_through_inline_and_nested_modules() {
     // Inline `mod`, file `mod`, and a grandchild all react, each attributed to its own module.
     let files = &[
@@ -5530,6 +5909,131 @@ fn async_subtree_reacts_through_inline_and_nested_modules() {
             "async fn crate::outer::middle::b()",
             "async fn crate::outer::middle::leaf::c()",
         ],
+    );
+}
+
+#[test]
+fn async_subtree_anchored_at_an_inline_module_follows_its_own_further_path_child() {
+    // rustc ground truth (verified with a real rustc build): `#[path = "moved/leaf.rs"]` written
+    // inside an INLINE `mod outer { … }` accumulates outer's own directory as the base — the file
+    // actually compiles at `outer/moved/leaf.rs`, never `moved/leaf.rs` (which would sit beside
+    // lib.rs itself). `walk_subtree_modules` used to re-derive the anchor's own `#[path]`-base as
+    // `file.parent()` — correct for a file-form anchor, but wrong for an INLINE anchor (the inline
+    // body stays in the *enclosing* file, whose own directory is not the inline module's
+    // accumulated one) — silently substituting the wrong base for anything the subtree walk
+    // itself needs to resolve a further `#[path]` from. `resolve_module_root`'s own returned
+    // `path_base` (this fix) is used directly instead of being re-derived.
+    let files = &[
+        (
+            "lib.rs",
+            "pub mod outer {\n    #[path = \"moved/leaf.rs\"]\n    pub mod leaf;\n}\n",
+        ),
+        ("outer/moved/leaf.rs", "pub async fn seam() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("inline-anchor-path-child", files, "crate::outer"),
+        ["async fn crate::outer::leaf::seam()"],
+    );
+}
+
+#[test]
+fn async_subtree_walks_every_branch_of_a_cfg_split_anchor_not_just_the_first() {
+    // rustc ground truth (verified with a real rustc build under either single-feature config):
+    // `#[cfg(feature = "u")] pub mod foo;` (flat, own directory src/) paired with
+    // `#[cfg(feature = "w")] #[path = "win/foo.rs"] pub mod foo;` (own directory src/win/) is the
+    // standard per-platform shim — each arm plainly declares its OWN `pub mod bar;`, resolving to
+    // a DIFFERENT real file (src/foo/bar.rs vs src/win/bar.rs). `resolve_module_root` correctly
+    // unions both arms' items, but `walk_subtree_modules` used to thread only the FIRST arm's own
+    // directory pair through to resolve those unioned items' own children — so the second arm's
+    // `bar` silently resolved against the wrong directory and its own async fn was never observed.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\n#[path = \"win/foo.rs\"]\npub mod foo;\n",
+        ),
+        ("foo.rs", "pub mod bar;\n"),
+        ("foo/bar.rs", "pub async fn unix_leaf() {}\n"),
+        ("win/foo.rs", "pub mod bar;\n"),
+        ("win/bar.rs", "pub async fn win_leaf() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("cfg-split-anchor-both-branches", files, "crate::foo"),
+        [
+            "async fn crate::foo::bar::unix_leaf()",
+            "async fn crate::foo::bar::win_leaf()",
+        ],
+    );
+}
+
+#[test]
+fn async_subtree_violations_name_each_branchs_own_file_not_a_shared_module_string_cache() {
+    // Round-5 finding: async_exposure_subtree_findings correctly emits one finding per branch
+    // (fixed above), both tagged with the identical module string "crate::foo::bar" (a legitimate
+    // cfg-split: unix_leaf lives in foo/bar.rs, win_leaf in win/bar.rs). Before this redesign,
+    // push_multi_module_violations resolved each finding's file via per_finding_file, a cache
+    // keyed ONLY by that module string — so the first finding processed populated the cache with
+    // one branch's file, and the second finding (from the OTHER branch) silently reused it. Every
+    // multi-module finding now pairs with the real file its own branch was resolved from (from
+    // the subtree walker itself), so each violation's file must name its own real branch.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-split-anchor-file-attribution",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\n#[path = \"win/foo.rs\"]\npub mod foo;\n",
+            ),
+            ("foo.rs", "pub mod bar;\n"),
+            ("foo/bar.rs", "pub async fn unix_leaf() {}\n"),
+            ("win/foo.rs", "pub mod bar;\n"),
+            ("win/bar.rs", "pub async fn win_leaf() {}\n"),
+        ],
+    );
+    let boundary = AsyncExposureBoundary::in_crate("x")
+        .module("crate::foo")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("each branch's finding must name its own real file");
+    let mut violations = Vec::new();
+    check_async_exposure_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    let mut by_finding: std::collections::BTreeMap<String, &str> = Default::default();
+    for v in &violations {
+        by_finding.insert(
+            v.finding.clone(),
+            v.file
+                .as_deref()
+                .expect("a subtree finding carries its file"),
+        );
+    }
+    assert!(
+        by_finding["async fn crate::foo::bar::unix_leaf()"].ends_with("foo/bar.rs"),
+        "unix_leaf must name foo/bar.rs: {by_finding:?}"
+    );
+    assert!(
+        by_finding["async fn crate::foo::bar::win_leaf()"].ends_with("win/bar.rs"),
+        "win_leaf must name win/bar.rs, never foo/bar.rs (a shared-cache misattribution): {by_finding:?}"
+    );
+}
+
+#[test]
+fn async_subtree_does_not_duplicate_a_file_shared_by_two_plain_cfg_siblings() {
+    // rustc ground truth: `#[cfg(feature = "u")] pub mod foo;` and `#[cfg(feature = "w")] pub mod
+    // foo;` (both PLAIN, no #[path]) are two mutually-exclusive declarations of the SAME name that
+    // resolve to the IDENTICAL real file (foo.rs) — neither build ever compiles it twice.
+    // descend()'s file-form search used to push one branch per matching declaration regardless of
+    // whether they resolved to the same file, so foo.rs's own async fn was observed (and reported)
+    // twice.
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
+        ),
+        ("foo.rs", "pub async fn seam() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree_labels("plain-cfg-siblings-one-file", files, "crate::foo"),
+        ["async fn crate::foo::seam()"],
     );
 }
 
@@ -5987,6 +6491,36 @@ fn module_file_descends_a_deep_file_module() {
     assert!(file.ends_with("a/b.rs"), "got {}", file.display());
 }
 
+#[test]
+fn module_file_follows_an_unconditional_path_on_an_inline_module_to_its_relocated_child() {
+    // rustc ground truth (verified with a real `cargo check`): `#[path = "thread_files"] pub mod
+    // thread { pub mod local_data; }` compiles `thread_files/local_data.rs` as
+    // `crate::thread::local_data`, with no `src/thread/` directory at all — the naive
+    // (non-relocated) location does not even exist. Before the fix, `descend`'s inline-collection
+    // loop skipped ANY `#[path]`-bearing mod (inline or not) before ever checking its content,
+    // and the file-form loop then also skipped it (assuming it was "already collected above"),
+    // so the item vanished from both loops — `crate::thread` itself failed with a spurious
+    // "module not found" error, even though it demonstrably exists and compiles.
+    let file = resolve_file(
+        "inline-path-relocate",
+        &[
+            (
+                "lib.rs",
+                "#[path = \"thread_files\"]\npub mod thread {\n    pub mod local_data;\n}\n",
+            ),
+            ("thread_files/local_data.rs", "pub struct A;\n"),
+        ],
+        "crate::thread::local_data",
+    )
+    .unwrap();
+    assert!(
+        file.ends_with("thread_files/local_data.rs")
+            || file.ends_with("thread_files\\local_data.rs"),
+        "got {}",
+        file.display()
+    );
+}
+
 /// Build fixtures under a temp `src` plus synthetic `cargo metadata --no-deps` for a single
 /// crate `x` whose lib root is that `src/lib.rs`, so a private `check_*_boundary` can run
 /// without spawning `cargo`. Returns `(metadata, tempdir)`; the caller removes `tempdir`
@@ -6118,6 +6652,447 @@ fn cfg_duplicated_inline_modules_are_all_governed() {
         violations.len(),
         1,
         "the non-source-first cfg variant's exposure must react: {violations:?}"
+    );
+}
+
+#[test]
+fn cfg_mixed_inline_and_file_form_siblings_are_both_governed() {
+    // rustc ground truth (verified with a real rustc build under EITHER single-feature config):
+    // `#[cfg(feature = "a")] pub mod platform { .. }` (inline) and `#[cfg(feature = "b")] pub mod
+    // platform;` (file-form, backed by platform.rs) is the standard per-platform shim pairing an
+    // inline variant with a file-form one — valid, common Rust, not a name collision. `descend`
+    // used to return as soon as it found ANY inline variant, never reading the file-form sibling
+    // at all: a boundary anchored on `crate::platform` observed only the inline arm's exposures,
+    // silently missing the file-form arm's — a real false negative (the resolver never even
+    // opened platform.rs). Both must react now, matching the crate-wide scan's own cfg-blind,
+    // observe-all policy for same-named children.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-inline-file",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod platform { pub fn open() -> u8 { 0 } }\n\
+                 #[cfg(feature = \"b\")] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            (
+                "platform.rs",
+                "pub fn open() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("platform must not expose infra in any cfg variant, inline or file-form");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the file-form sibling's exposure must react even though an inline variant exists: {violations:?}"
+    );
+}
+
+#[test]
+fn a_semantic_boundary_anchored_at_an_inline_module_with_an_unconditional_path_reacts_instead_of_erroring()
+ {
+    // Before the fix, ANY single-module-anchored capability (signature-coupling-exposure,
+    // dyn-trait-boundary, impl-trait-boundary, visibility-boundary, and async-exposure's
+    // non-subtree seam) hard-failed with a spurious "module not found" (exit 2) when anchored at
+    // an inline module carrying an unconditional `#[path]` — or any of its descendants — even
+    // though hunyi's own crate-wide walker (`walk_subtree_modules`/`resolve_child_modules`)
+    // resolved the identical layout without trouble. This asserts the single-module path now
+    // agrees with the crate-wide one: the boundary must react on the real exposure, not error.
+    let (metadata, dir) = fixture_metadata(
+        "inline-path-boundary",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[path = \"thread_files\"]\npub mod thread {\n    pub mod local_data;\n}\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            (
+                "thread_files/local_data.rs",
+                "pub fn leak() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::thread::local_data")
+        .must_not_expose("crate::infra")
+        .because("an inline module's own #[path] must not make its children unresolvable");
+    let mut violations = Vec::new();
+    let result = check_boundary(&metadata, &boundary, &mut violations);
+    let _ = std::fs::remove_dir_all(&dir);
+    result.expect("crate::thread::local_data must resolve, not hard-error as an unknown module");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the relocated child's exposure must still be observed: {violations:?}"
+    );
+}
+
+#[test]
+fn a_further_segment_beneath_a_flat_file_form_cfg_sibling_resolves_from_its_own_directory() {
+    // rustc ground truth (verified with a real rustc build under the "b" feature): a flat
+    // (non-`mod.rs`) file-form cfg sibling's OWN `#[path]` resolves relative to ITS OWN
+    // containing directory, not `<child_dir>/<its own name>/` — the same rule an ordinary flat
+    // file always follows, regardless of whether it also happens to pair with a mutually-
+    // exclusive `#[cfg]` inline sibling. Before the fix, descend()'s merged-branch case
+    // unconditionally continued a further segment from the INLINE sibling's accumulated
+    // directory, which only coincides with a `mod.rs`-style file-form sibling's own directory —
+    // silently misresolving (or hard-erroring on) the real target for a flat one instead.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-flat-further-segment",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod plat { pub struct Marker; }\n\
+                 #[cfg(feature = \"b\")] #[path = \"moved/plat_moved.rs\"] pub mod plat;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            (
+                "moved/plat_moved.rs",
+                "#[path = \"elsewhere.rs\"]\npub mod target;\n",
+            ),
+            (
+                "moved/elsewhere.rs",
+                "pub fn get() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::plat::target")
+        .must_not_expose("crate::infra")
+        .because(
+            "plat::target must not expose infra even through a flat cfg-sibling's own #[path]",
+        );
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the flat file-form sibling's own #[path] target (moved/elsewhere.rs, a SIBLING of \
+         plat_moved.rs, not a child of a plat/ subdirectory) must be read and react: {violations:?}"
+    );
+}
+
+#[test]
+fn a_plain_child_of_a_path_remapped_module_resolves_from_the_remaps_own_directory() {
+    // rustc ground truth (verified with a real rustc build): `#[path = "moved/thing.rs"] pub mod
+    // net;` makes `moved/thing.rs` mod-rs-like, so its own plain `pub mod inner;` resolves to
+    // `moved/inner.rs`, NOT `net/inner.rs` (a name-derived location that has nothing to do with
+    // where the file actually lives). descend()'s Branch redesign correctly threads `path_base`
+    // for a FURTHER `#[path]` beneath a `#[path]`-loaded file, but a `child_dir` bug left the
+    // CONVENTIONAL-child continuation still computed as the naive `<child_dir>/<seg>` regardless
+    // of origin — silently resolving a plain child of a #[path]-remapped module at the wrong,
+    // uncompiled location.
+    let (metadata, dir) = fixture_metadata(
+        "path-remap-plain-child",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n#[path = \"moved/thing.rs\"]\npub mod net;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("moved/thing.rs", "pub mod inner;\n"),
+            (
+                "moved/inner.rs",
+                "pub fn get() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::net::inner")
+        .must_not_expose("crate::infra")
+        .because("net::inner must not expose infra even though net is #[path]-remapped");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "moved/inner.rs (the real, rustc-compiled file) must be read and react: {violations:?}"
+    );
+}
+
+#[test]
+fn cfg_mixed_plain_and_path_remapped_file_form_siblings_are_both_governed() {
+    // rustc ground truth (verified with a real rustc build under either single-feature config):
+    // `#[cfg(feature = "a")] pub mod platform;` (plain, backed by platform.rs) paired with
+    // `#[cfg(feature = "b")] #[path = "win_platform.rs"] pub mod platform;` (remapped) is the
+    // standard per-platform shim between two NON-inline variants — valid, common Rust, and once
+    // #[path]-following exists the two variants need not name the same file at all. descend()'s
+    // file-form search used to `break` at the first non-inline match regardless of source order,
+    // silently dropping whichever variant did not win the race. Matching
+    // `resolve_child_modules`'s own crate-wide policy (which never breaks after one match),
+    // EVERY non-inline declaration for a segment now produces its own branch.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-plain-and-remapped-file-form",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod platform;\n\
+                 #[cfg(feature = \"b\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("platform.rs", "pub fn open() -> u8 { 0 }\n"),
+            (
+                "win_platform.rs",
+                "pub fn open() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("platform must not expose infra in either the plain or #[path]-remapped arm");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the #[path]-remapped sibling's exposure must react even though a plain sibling was \
+         declared first in source order: {violations:?}"
+    );
+}
+
+#[test]
+fn a_cfg_mixed_single_module_violation_names_the_offending_sibling_not_the_first_branch() {
+    // Round-5 finding: resolve_module_root unions every surviving branch's ITEMS (fixed above —
+    // the violation still fires) but used to always report `branches[0]`'s FILE regardless of
+    // which branch actually produced the finding. Here the plain, clean `platform;` arm is
+    // declared FIRST (branches[0]) and the offending #[path]-remapped `win_platform.rs` arm is
+    // declared second — before the fix, `.file` named platform.rs, which contains no reference to
+    // `crate::infra` at all. Every single-module finding now pairs with the real file its own
+    // item's branch was resolved from, so `.file` must name win_platform.rs, where the offending
+    // seam is actually written.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-mixed-file-names-offending-branch",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 #[cfg(feature = \"a\")] pub mod platform;\n\
+                 #[cfg(feature = \"b\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("platform.rs", "pub fn open() -> u8 { 0 }\n"),
+            (
+                "win_platform.rs",
+                "pub fn open() -> crate::infra::Db { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("the reported file must name the sibling that actually exposes infra");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    let file = violations[0]
+        .file
+        .as_deref()
+        .expect("a semantic exposure violation carries its source file");
+    assert!(
+        file.ends_with("win_platform.rs"),
+        "expected the offending sibling win_platform.rs, got {file} — a clean file must never \
+         be reported as the source of a real violation: {violations:?}"
+    );
+}
+
+#[test]
+fn a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others() {
+    // Round-6 finding: module_findings called collect_uses ONCE over the flattened union of every
+    // #[cfg] branch's items, so two mutually-exclusive branches each declaring `use <different
+    // path> as Handle;` collided in one shared use-map -- the branch unioned LAST silently
+    // overwrote the earlier branch's mapping, misresolving the FIRST branch's own bare `Handle`
+    // reference through the SECOND branch's `use` and hiding a real forbidden-exposure finding.
+    // Verified against real rustc: both platform.rs and win_platform.rs compile cleanly under
+    // their own respective feature. A control fixture with the identical platform.rs but no cfg
+    // split correctly reports 1 violation, confirming this is a cfg-split-specific regression,
+    // not a general resolution gap.
+    let (metadata, dir) = fixture_metadata(
+        "cfg-split-use-alias-collision",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\npub mod other;\n\
+                 #[cfg(feature = \"u\")] pub mod platform;\n\
+                 #[cfg(feature = \"w\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("other.rs", "pub struct Widget;\n"),
+            (
+                "platform.rs",
+                "use crate::infra::Db as Handle;\npub fn leak() -> Handle { unimplemented!() }\n",
+            ),
+            (
+                "win_platform.rs",
+                "use crate::other::Widget as Handle;\npub fn leak2() -> Handle { unimplemented!() }\n",
+            ),
+        ],
+    );
+    let boundary = SemanticBoundary::in_crate("x")
+        .module("crate::platform")
+        .must_not_expose("crate::infra")
+        .because("the unix arm's own Handle alias must resolve to infra, not the windows arm's");
+    let mut violations = Vec::new();
+    check_boundary(&metadata, &boundary, &mut violations).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unix arm's leak() -> Handle genuinely exposes crate::infra::Db and must react: {violations:?}"
+    );
+}
+
+#[test]
+fn a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_reexport() {
+    // Round-7 finding: module_findings still computed child_mods/externs_type/externs_reexport/
+    // renames_bare ONCE over the flattened union of every #[cfg] branch's items -- the identical
+    // conflation round 6 fixed for the use-map, left unfixed here. The "u" branch (platform.rs)
+    // declares a LOCAL `mod net { .. }`; the mutually-exclusive "w" branch (win_platform.rs) has
+    // no local `mod net` at all and its own `pub use net::Something;` genuinely names the real
+    // extern crate `net` -- verified against real rustc/cargo (win_platform.rs alone, with the
+    // `net` dependency declared, compiles cleanly). Before the fix, the "u" branch's local `mod
+    // net` silently suppressed the "w" branch's own genuine extern re-export, since child_mods
+    // (computed over the union) always contained "net".
+    let out = findings_with_deps(
+        "cfg-sibling-childmod-shadow",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(feature = \"u\")] pub mod platform;\n\
+                 #[cfg(feature = \"w\")] #[path = \"win_platform.rs\"] pub mod platform;\n",
+            ),
+            (
+                "platform.rs",
+                "pub mod net { pub struct Something; }\npub fn open() -> u8 { 0 }\n",
+            ),
+            ("win_platform.rs", "pub use net::Something;\n"),
+        ],
+        "crate::platform",
+        &["net::Something"],
+        &["net"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["net::Something exposed by pub use crate::platform::Something"],
+        "the w branch's own genuine extern re-export must react, regardless of the u branch's \
+         own local mod net: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_split_module_with_two_inline_siblings_does_not_let_one_arms_use_alias_shadow_the_others() {
+    // Round-8 finding: `descend()` used to MERGE every same-named inline `#[cfg]` occurrence into
+    // one shared `Branch` before this whole per-file fix (round 6) even had a chance to run, so
+    // the round-6/7 "per-file" use-map/shadow-set grouping was structurally a no-op for two INLINE
+    // siblings — they always shared one `Branch`, one merged items list, one merged use-map,
+    // regardless of which file's identity that fix grouped by. `descend()` now gives each inline
+    // occurrence its OWN branch (mirroring the file-form loop), but two inline siblings still
+    // share the identical ENCLOSING file (lib.rs here) — so `resolve_module_items_with_files`
+    // pairs each item with a BRANCH INDEX, not just a file, and `module_findings` groups by that
+    // index. This is the identical `a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others`
+    // scenario (round 6), but with BOTH arms declared INLINE in the SAME file rather than as two
+    // separate file-form siblings — exercising the file-keyed grouping's own blind spot.
+    let out = findings(
+        "cfg-split-inline-inline-use-alias-collision",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\npub mod other;\n\
+             #[cfg(feature = \"u\")] pub mod platform {\n\
+             use crate::infra::Db as Handle;\n\
+             pub fn leak() -> Handle { unimplemented!() }\n}\n\
+             #[cfg(feature = \"w\")] pub mod platform {\n\
+             use crate::other::Widget as Handle;\n\
+             pub fn leak2() -> Handle { unimplemented!() }\n}\n",
+            ),
+            ("infra.rs", "pub struct Db;\n"),
+            ("other.rs", "pub struct Widget;\n"),
+        ],
+        "crate::platform",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::infra::Db exposed by fn crate::platform::leak"],
+        "the u arm's own Handle alias must resolve to infra, not the w arm's, even though both \
+         arms are inline and share lib.rs: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_others_extern_reexport()
+ {
+    // Round-8 finding, the childmod/extern-reexport analogue of the test above (round 7's own
+    // file-form version is `a_cfg_sibling_child_module_does_not_shadow_a_different_branchs_own_extern_reexport`).
+    // The "u" arm declares a LOCAL `mod net { .. }` inline; the mutually-exclusive "w" arm — also
+    // inline, sharing the identical lib.rs — has no local `mod net` at all, so its own `pub use
+    // net::Something;` genuinely names the real extern crate `net`. Grouping by file alone would
+    // let the "u" arm's local `mod net` suppress the "w" arm's genuine extern re-export merely
+    // because both share one file; grouping by branch index keeps them apart.
+    let out = findings_with_deps(
+        "cfg-split-inline-inline-childmod-shadow",
+        &[(
+            "lib.rs",
+            "#[cfg(feature = \"u\")] pub mod platform {\n\
+             pub mod net { pub struct Something; }\n\
+             pub fn open() -> u8 { 0 }\n}\n\
+             #[cfg(feature = \"w\")] pub mod platform {\n\
+             pub use net::Something;\n}\n",
+        )],
+        "crate::platform",
+        &["net::Something"],
+        &["net"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["net::Something exposed by pub use crate::platform::Something"],
+        "the w arm's own genuine extern re-export must react, regardless of the u arm's own \
+         local mod net, even though both arms are inline and share lib.rs: {out:?}"
+    );
+}
+
+#[test]
+fn async_subtree_observes_both_arms_of_a_two_inline_sibling_cfg_split_anchor() {
+    // Round-8 finding (b): when the async-exposure subtree boundary is anchored DIRECTLY at a
+    // module reached through two mutually-exclusive INLINE `#[cfg]` siblings sharing one file,
+    // `walk_subtree_modules` must observe EACH arm's own async fn — never merging the two arms'
+    // items into one shared list (which happened to still union both fns correctly under the old
+    // pre-round-8 `descend()`, since shape-only observation over a union list drops nothing) nor
+    // dropping either arm now that `descend()` gives each its own `Branch` and its own
+    // `collect_subtree` call (two entries sharing one file, each with only its own arm's items).
+    let files = &[(
+        "lib.rs",
+        "#[cfg(feature = \"u\")] pub mod platform { pub async fn unix_seam() {} }\n\
+         #[cfg(feature = \"w\")] pub mod platform { pub async fn win_seam() {} }\n",
+    )];
+    let mut labels =
+        async_subtree_labels("inline-inline-cfg-split-anchor", files, "crate::platform");
+    labels.sort();
+    assert_eq!(
+        labels,
+        [
+            "async fn crate::platform::unix_seam()",
+            "async fn crate::platform::win_seam()",
+        ],
+        "both inline cfg arms' own async fns must be observed, even though they share lib.rs: {labels:?}"
     );
 }
 

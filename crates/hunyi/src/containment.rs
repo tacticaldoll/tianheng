@@ -7,7 +7,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::resolve::{
-    BareFallback, ReexportMap, UseMap, canonicalize_through_reexports, resolve_path, strip_raw,
+    BareFallback, ReexportMap, UseMap, canonicalize_through_reexports, is_shadowed_param_path,
+    resolve_path, strip_raw,
 };
 
 /// Sibling-safe `::`-path containment: `path` equals `prefix` or sits strictly beneath it
@@ -48,6 +49,17 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 /// `impl M for Bar` where `type Bar = Real`, both land on the real definition (to coherence a
 /// re-export/alias denotes the same type, so the marker genuinely lands there).
 ///
+/// `impl_type_params` shadows the impl block's OWN declared generic type-parameter names
+/// (`impl<T> Marker for T {}`'s `T`): a bare self type naming one of them is a parameter use, not a
+/// nominal type, so it must never resolve through a same-named `use … as <param>` alias that
+/// happens to be in scope in that module — the identical shadowing the exposure collectors already
+/// apply (`collect.rs::type_param_names`) for every OTHER impl-site position, but which the
+/// marker-acquisition self-type check lacked (found on a round-9 adversarial review: a blanket
+/// `impl<T> Marker for T {}` in a module with an unrelated `use crate::domain::Innocent as T;`
+/// fabricated a marker-acquisition finding on `Innocent`, which the source never actually impls
+/// the marker for). A stated bound, same treatment as any other non-placeable shape: dropped, never
+/// a silent claim of a resolved landing.
+///
 /// The canonicalization is folded in **here** so a self-type is canonical *by construction*: a
 /// caller cannot resolve a self-type and forget to close the re-export/alias hop (the sibling
 /// capabilities' shared-canonicalizer discipline, made structural at the one self-type resolver).
@@ -64,9 +76,34 @@ pub(crate) fn resolve_self_type(
     module: &str,
     alias_targets: &HashMap<String, String>,
     reexports: &ReexportMap,
+    impl_type_params: &HashSet<String>,
 ) -> Option<String> {
     let base = match self_ty {
-        syn::Type::Path(tp) => resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?,
+        syn::Type::Path(tp) => {
+            // A QUALIFIED-path self type (`<T>::Item`, `<T as Trait>::Item`) stores its own
+            // dependent type in `qself.ty`, entirely OUTSIDE `path.segments` — even when that
+            // dependent type is the impl's own generic parameter, `is_shadowed_param_path` (which
+            // only ever inspects `path`) can never see it, so the trailing segments alone would be
+            // resolved as an ordinary bare path, silently bypassing the shadow through a THIRD
+            // syntactic vector neither the bare-param nor the `T::Assoc` projection form covers
+            // (found on a round-11 adversarial review; see `PROJECT.md`'s Decisions). Mirrors
+            // `canonical_self_owner`'s own `qself.is_none()` guard: a qself'd self type is never a
+            // placeable nominal path either way, so it is dropped here — the same "stated bound,
+            // never a silent claim" treatment as any other non-resolvable self-type shape.
+            if tp.qself.is_some() {
+                return None;
+            }
+            // A self type naming the impl's own type parameter — bare (`T`) or a projection off it
+            // (`T::Assoc`) — is a parameter use, never a nominal type: dropped before any resolution
+            // is attempted, via the SAME leading-segment shadow check the sibling exposure
+            // collectors use (`is_shadowed_param_path`), not a narrower single-segment-only copy —
+            // matching `impl<T> ... for T {}` OR `impl<T> ... for T::Assoc {}` here would otherwise
+            // resolve `T` through an unrelated same-named alias in scope.
+            if is_shadowed_param_path(&tp.path, impl_type_params) {
+                return None;
+            }
+            resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?
+        }
         _ => return None,
     };
     let mut landing = base;

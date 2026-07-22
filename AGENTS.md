@@ -60,6 +60,13 @@ protocol for humans and agents. **Provenance — why a change was made — lives
 PR, not a separate ADR file class.** When two documents conflict, fix the conflict (an OpenSpec
 change, or a doc PR) before building on it.
 
+Backlog entries are decision inputs, not an undifferentiated wish list. Classify live work by its
+evidence and next trigger (`READY-PATCH`, `DESIGN-BREAKING`, `WATCH`, or `ACCEPTED DEBT`), keep
+rejected directions under `DECLINED`, and move shipped work to `BUILT / HISTORY`. Promotion into
+implementation requires the entry to name its observation source, risk, compatibility class, and
+authority in `BACKLOG.md`; a breaking candidate does not promise a minor release until its recorded
+trigger fires.
+
 ## OpenSpec lifecycle
 
 A capability change moves through OpenSpec: **explore → propose → apply → sync**. Each committed
