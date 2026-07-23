@@ -8,8 +8,15 @@ pub(super) enum Probe {
     Literal(String),
     /// A probe whose seam argument is NOT a string literal (a const or expression): the CI
     /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
-    /// source file so the reaction is actionable (and the baseline identity stable).
-    Unauditable { file: String },
+    /// source file, an owner-qualified enclosing item (never a bare name — two owners may share
+    /// a method name), and the offending expression's own trimmed source text, so distinct
+    /// non-literal probes in one file are distinct findings (never a byte offset or occurrence
+    /// count — see `fn_scopes`/`first_macro_arg_end`).
+    Unauditable {
+        file: String,
+        owner: String,
+        expr: String,
+    },
 }
 
 pub(super) fn collect_probes(input: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
@@ -562,6 +569,9 @@ fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
 /// `file` labels an un-auditable probe so the reaction is actionable.
 pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
     let b = source.as_bytes();
+    // Resolved once per file: every `fn` body's byte range, owner-qualified (never a bare name —
+    // see `fn_scopes`), so an un-auditable probe's enclosing item is looked up by position below.
+    let scopes = fn_scopes(b);
     let mut i = 0;
     while i < b.len() {
         // Comments and string/char literals are skipped whole (one shared definition below), so
@@ -576,7 +586,8 @@ pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
             if let Some(rest) = match_probe_marker(b, i) {
-                let (probe, next) = capture_probe(b, rest, file);
+                let owner = owner_for(&scopes, i);
+                let (probe, next) = capture_probe(b, rest, file, &owner);
                 if let Some(probe) = probe {
                     probes.push(probe);
                 }
@@ -926,8 +937,10 @@ fn skip_trivia(b: &[u8], mut i: usize) -> usize {
 /// skip trivia; a plain or raw string first argument is an auditable [`Probe::Literal`] (its
 /// value); any other first token (a `const`, an expression, a byte string) is
 /// [`Probe::Unauditable`] — never a silent skip. `None` (with `next` past the marker) only when
-/// the marker is not actually a probe call (no opening delimiter follows).
-fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
+/// the marker is not actually a probe call (no opening delimiter follows). `owner` is the
+/// caller-supplied, already-resolved owner-qualified enclosing item (see `fn_scopes`), threaded
+/// straight into an `Unauditable` probe's identity.
+fn capture_probe(b: &[u8], i: usize, file: &str, owner: &str) -> (Option<Probe>, usize) {
     let i = skip_trivia(b, i);
     // Rust macros accept `( )`, `{ }`, or `[ ]` interchangeably; a probe written
     // `assert_boundary!{"s", o}` or `["s", o]` is a real probe. Accept any of the three
@@ -940,18 +953,25 @@ fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
     if i >= b.len() {
         return (None, i);
     }
+    // The offending expression's own trimmed source text, captured once regardless of which
+    // un-auditable branch below is taken — this is the identity discriminator (never a byte
+    // offset), so two textually distinct non-literal probes never collapse to one finding.
+    let unauditable = |b: &[u8]| -> Probe {
+        let end = first_macro_arg_end(b, i);
+        let expr = String::from_utf8_lossy(trim_bytes(&b[i..end])).into_owned();
+        Probe::Unauditable {
+            file: file.to_string(),
+            owner: owner.to_string(),
+            expr,
+        }
+    };
     // A raw string `r"…"` / `r#"…"#` is a traceable literal — parse its value rather than
     // rejecting it as un-auditable (which would mis-flag a legitimate probe and double-report).
     if b[i] == b'r' && matches!(b.get(i + 1), Some(b'"') | Some(b'#')) {
         if let Some((seam, next)) = raw_string_value(b, i) {
             return (Some(Probe::Literal(seam)), next);
         }
-        return (
-            Some(Probe::Unauditable {
-                file: file.to_string(),
-            }),
-            i,
-        );
+        return (Some(unauditable(b)), i);
     }
     // A plain string literal. Find its end (the `\\`-skip only keeps a `\"` from ending the
     // string early), then DECODE its escapes to the value the compiler produces — the declared
@@ -973,21 +993,328 @@ fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
         }
         return match decode_str_escapes(&b[start..j]) {
             Some(seam) => (Some(Probe::Literal(seam)), j + 1),
-            None => (
-                Some(Probe::Unauditable {
-                    file: file.to_string(),
-                }),
-                j + 1,
-            ),
+            None => (Some(unauditable(b)), j + 1),
         };
     }
     // Anything else (a const, an expression, a byte string) cannot be traced to a declared seam.
-    (
-        Some(Probe::Unauditable {
-            file: file.to_string(),
-        }),
-        i,
-    )
+    (Some(unauditable(b)), i)
+}
+
+/// Find the end of a macro's first argument starting at `open` (just past the opening delimiter
+/// and any leading trivia): the index of a top-level comma, or the matching close delimiter if no
+/// comma precedes it. Tracks nesting over all three delimiter kinds — the same one-depth-counter
+/// model `foreign_macro_body_end` uses for a whole macro body — so a nested call or index in the
+/// seam expression (`assert_boundary!(some_fn(a, b), obj)`, `assert_boundary!(TABLE[i], obj)`) is
+/// not mistaken for the argument's own end.
+fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        match b[i] {
+            b'(' | b'{' | b'[' => depth += 1,
+            b')' | b'}' | b']' => {
+                if depth == 0 {
+                    return i;
+                }
+                depth -= 1;
+            }
+            b',' if depth == 0 => return i,
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
+}
+
+/// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
+/// since the captured text is not yet known to be valid UTF-8 at the trim point).
+fn trim_bytes(b: &[u8]) -> &[u8] {
+    let start = b
+        .iter()
+        .position(|c| !c.is_ascii_whitespace())
+        .unwrap_or(b.len());
+    let end = b
+        .iter()
+        .rposition(|c| !c.is_ascii_whitespace())
+        .map_or(start, |p| p + 1);
+    &b[start..end]
+}
+
+/// An `impl`'s owner context: an inherent impl carries only its `Self` type; a trait impl also
+/// carries the trait path. Qualifies a nested `fn`'s owner (never a bare method name — two owners
+/// may share one), mirroring `hunyi`'s `owner`/`trait_ref` qualification for the identical
+/// same-named-item collision (`semantic-unsafe-confinement`).
+enum ImplOrTraitContext {
+    Impl {
+        trait_ref: Option<String>,
+        self_ty: String,
+    },
+    Trait(String),
+}
+
+/// Render a `fn`'s owner-qualified identity string from the accumulated inline-`mod` path, the
+/// innermost enclosing `impl`/`trait` context (if any), and the fn's own name. Never a bare method
+/// or fn name alone: the module path additionally disambiguates two same-named free `fn`s (or two
+/// same-named local types) declared in different inline `mod { … }` blocks of the *same* file —
+/// two same-named items in *different files* are already distinguished by the outer `file` field,
+/// so this only needs to cover same-file `mod` nesting, not cross-file module identity.
+fn render_owner(
+    module_path: &str,
+    context_stack: &[(usize, ImplOrTraitContext)],
+    fn_name: &str,
+) -> String {
+    let prefix = if module_path.is_empty() {
+        String::new()
+    } else {
+        format!("{module_path}::")
+    };
+    let body = match context_stack.last() {
+        Some((
+            _,
+            ImplOrTraitContext::Impl {
+                trait_ref: Some(trait_ref),
+                self_ty,
+            },
+        )) => format!("impl {trait_ref} for {self_ty}::{fn_name}"),
+        Some((
+            _,
+            ImplOrTraitContext::Impl {
+                trait_ref: None,
+                self_ty,
+            },
+        )) => {
+            format!("impl {self_ty}::{fn_name}")
+        }
+        Some((_, ImplOrTraitContext::Trait(name))) => format!("trait {name}::{fn_name}"),
+        None => format!("fn {fn_name}"),
+    };
+    format!("{prefix}{body}")
+}
+
+/// Match a bare keyword identifier at `i` (e.g. `fn`, `impl`, `trait`), requiring a right word
+/// boundary so `implx`/`fnx` is not mistaken for the keyword — mirrors [`match_probe_marker`]'s
+/// own boundary discipline. The caller checks the left boundary.
+fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
+    if i + name.len() > b.len() || &b[i..i + name.len()] != name {
+        return None;
+    }
+    let after = i + name.len();
+    if b.get(after).is_some_and(|&c| is_ident_byte(c)) {
+        return None;
+    }
+    Some(after)
+}
+
+/// Find `keyword` (`for` or `where`) at top-level depth (outside any `<…>`/`(…)`/`[…]`) in
+/// `header`, respecting word boundaries and skipping string/char/comment content, returning its
+/// start index. Used to split an `impl` header without being fooled by a `for`/`where` nested in a
+/// generic bound (e.g. an HRTB `for<'a>` inside `<…>`). `>` only closes a generic level when not
+/// preceded by `-` (excluding a `->` return-arrow), matching `skip_to_item_body`'s own rule.
+fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < header.len() {
+        if let Some(next) = skip_literal_or_comment(header, i) {
+            i = next;
+            continue;
+        }
+        match header[i] {
+            b'(' | b'[' | b'<' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b'>' if i == 0 || header[i - 1] != b'-' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if depth == 0 {
+            let left_boundary = i == 0 || !is_ident_byte(header[i - 1]);
+            if left_boundary && match_keyword(header, i, keyword).is_some() {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Skip from `i` (just past a `fn`/`trait` name, or the start of an `impl` header) past any
+/// generics/parameter-list/return-type/where-clause to the item's own opening `{`, returning the
+/// index just past that brace — or `None` if a top-level `;` is reached first (a body-less trait
+/// method declaration, which contributes no scope). Tracks `(`/`)`/`[`/`]`/`<`/`>` nesting (not
+/// `{`/`}`, which is exactly what the caller is deciding whether it has reached) so a generic
+/// bound or parameter type containing any of these does not false-trigger the terminator search.
+/// Stated bound: a const-generic default expression using a shift operator (`<<`/`>>`) before the
+/// item's own body is not specially handled — vanishingly rare in a bare `fn`/`impl`/`trait`
+/// header and not attempted here.
+fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        match b[i] {
+            b'(' | b'[' | b'<' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b'>' if i == 0 || b[i - 1] != b'-' => depth = depth.saturating_sub(1),
+            b'{' if depth == 0 => return Some(i + 1),
+            b';' if depth == 0 => return None,
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// After the `fn`/`trait` keyword (`after_keyword` just past it), parse the item's name and skip
+/// to its opening `{`. Returns `None` for a malformed/nameless item or a body-less declaration.
+fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
+    let name_start = skip_trivia(b, after_keyword);
+    let mut name_end = name_start;
+    while name_end < b.len() && is_ident_byte(b[name_end]) {
+        name_end += 1;
+    }
+    if name_end == name_start {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&b[name_start..name_end]).into_owned();
+    let body_start = skip_to_item_body(b, name_end)?;
+    Some((name, body_start))
+}
+
+/// After the `impl` keyword (`after_impl` just past it), parse the header up to its opening `{`,
+/// splitting an optional `Trait for Self` header into `(Some(trait), self)` and an inherent
+/// `impl Self` header into `(None, self)`. The split searches for a top-level `for` only before
+/// any top-level `where` (a `where`-clause `for<'a>` HRTB must never be mistaken for the impl's
+/// own `for`). Returns `None` only on malformed/truncated input (an `impl` always has a body).
+fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext, usize)> {
+    let header_start = skip_trivia(b, after_impl);
+    let body_start = skip_to_item_body(b, header_start)?;
+    let header = &b[header_start..body_start - 1];
+    let search_region = match find_top_level_keyword(header, b"where") {
+        Some(w) => &header[..w],
+        None => header,
+    };
+    let ctx = match find_top_level_keyword(search_region, b"for") {
+        Some(for_at) => ImplOrTraitContext::Impl {
+            trait_ref: Some(String::from_utf8_lossy(trim_bytes(&header[..for_at])).into_owned()),
+            self_ty: String::from_utf8_lossy(trim_bytes(&header[for_at + 3..])).into_owned(),
+        },
+        None => ImplOrTraitContext::Impl {
+            trait_ref: None,
+            self_ty: String::from_utf8_lossy(trim_bytes(header)).into_owned(),
+        },
+    };
+    Some((ctx, body_start))
+}
+
+/// Every owner-qualified `fn` body in this source file, as `(body_start, body_end, owner)` byte
+/// ranges — `body_start`/`body_end` bound just inside the fn's own `{ … }` (excluding the braces
+/// themselves). Looked up by [`owner_for`] so an un-auditable probe's identity is qualified by a
+/// real structural discriminator, never a bare name or a position.
+///
+/// Deliberately does not skip macro-invocation/`macro_rules!` bodies the way `scan_source` does:
+/// a probe is never found inside one (that exclusion already happens in `scan_source` before a
+/// probe is ever captured), so a phantom `fn`/`impl`/`trait` this function might mis-parse out of
+/// macro-template text can never overlap the position of a real probe — it is inert, not a
+/// correctness risk.
+fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
+    let mut depth = 0usize;
+    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
+    // file) contributes nothing here, since its content is scanned separately, as its own file,
+    // where the outer `file` identity field already disambiguates it.
+    let mut mod_stack: Vec<(usize, String)> = Vec::new();
+    let mut context_stack: Vec<(usize, ImplOrTraitContext)> = Vec::new();
+    let mut fn_stack: Vec<(usize, usize, String)> = Vec::new();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
+        if left_boundary {
+            if let Some(rest) = match_keyword(b, i, b"mod") {
+                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                    mod_stack.push((depth, name));
+                    depth += 1;
+                    i = body_start;
+                    continue;
+                }
+            } else if let Some(rest) = match_keyword(b, i, b"impl") {
+                if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
+                    context_stack.push((depth, ctx));
+                    depth += 1;
+                    i = body_start;
+                    continue;
+                }
+            } else if let Some(rest) = match_keyword(b, i, b"trait") {
+                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                    context_stack.push((depth, ImplOrTraitContext::Trait(name)));
+                    depth += 1;
+                    i = body_start;
+                    continue;
+                }
+            } else if let Some(rest) = match_keyword(b, i, b"fn") {
+                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                    let module_path = mod_stack
+                        .iter()
+                        .map(|(_, name)| name.as_str())
+                        .collect::<Vec<_>>()
+                        .join("::");
+                    let owner = render_owner(&module_path, &context_stack, &name);
+                    fn_stack.push((depth, body_start, owner));
+                    depth += 1;
+                    i = body_start;
+                    continue;
+                }
+            }
+        }
+        match b[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if fn_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _, _)| open_depth == depth)
+                {
+                    let (_, body_start, owner) = fn_stack.pop().expect("checked Some above");
+                    out.push((body_start, i, owner));
+                }
+                if context_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _)| open_depth == depth)
+                {
+                    context_stack.pop();
+                }
+                if mod_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _)| open_depth == depth)
+                {
+                    mod_stack.pop();
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Look up the innermost owner-qualified `fn` scope containing byte position `pos` (the smallest
+/// enclosing range, in case of nested `fn`s), or a stated fallback if `pos` falls inside no known
+/// `fn` body (a probe outside any function — not a realistic `assert_boundary!` call site, but
+/// handled rather than panicking).
+fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
+    scopes
+        .iter()
+        .filter(|(start, end, _)| *start <= pos && pos < *end)
+        .min_by_key(|(start, end, _)| end - start)
+        .map(|(_, _, owner)| owner.clone())
+        .unwrap_or_else(|| "<module scope>".to_string())
 }
 
 /// Parse a raw string literal `r"…"` / `r#…"…"#…` starting at `i`, returning `(value, next)`.

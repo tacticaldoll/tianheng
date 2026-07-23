@@ -1129,6 +1129,183 @@ fn an_unauditable_probe_reacts() {
     );
 }
 
+/// Un-auditable-probe violations from `outcome` (identified by carrying a `file` — the one
+/// runtime violation kind that does; a seam-level runtime violation names a seam, never a file).
+fn unauditable_violations(outcome: &Outcome) -> Vec<&crate::Violation> {
+    match outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .filter(|v| v.file.is_some())
+            .collect(),
+        other => panic!("expected violations, got {other:?}"),
+    }
+}
+
+#[test]
+fn two_distinct_expressions_in_the_same_function_react_separately() {
+    let tb = TempBase::new("audit-unaud-two-exprs");
+    let dir = tb.dir(
+        "two",
+        "fn compute_seam() -> &'static str { \"s\" } \
+         fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(compute_seam(), o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "two textually distinct non-literal expressions must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "their identities must be distinct: {violations:?}"
+    );
+}
+
+#[test]
+fn same_expression_in_two_different_free_functions_reacts_separately() {
+    let tb = TempBase::new("audit-unaud-two-fns");
+    let dir = tb.dir(
+        "two",
+        "fn a() { assert_boundary!(SEAM_A, o); } fn b() { assert_boundary!(SEAM_A, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "the same expression in two different functions must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by enclosing function, not collapsed: {violations:?}"
+    );
+}
+
+#[test]
+fn same_named_method_in_two_different_impls_reacts_separately() {
+    // The regression case an unqualified bare enclosing-fn/impl name would have missed: two
+    // owners sharing a method name and an identical expression must not collapse to one finding.
+    let tb = TempBase::new("audit-unaud-two-impls");
+    let dir = tb.dir(
+        "two",
+        "struct A; struct B; \
+         impl A { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
+         impl B { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named method on two different owners must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by owner, not collapsed under a bare method name: {violations:?}"
+    );
+}
+
+#[test]
+fn same_named_free_fn_in_two_different_inline_mods_reacts_separately() {
+    // The regression an adversarial review of this exact change caught empirically: without
+    // module-path qualification, two same-named free fns in different inline `mod` blocks of one
+    // file collapsed to one finding — the identical false-negative class this change exists to
+    // close, just via a dimension (module path) the first cut of `render_owner` didn't track.
+    let tb = TempBase::new("audit-unaud-two-inline-mods");
+    let dir = tb.dir(
+        "two",
+        "mod a { pub fn probe() { assert_boundary!(SEAM_A, o); } } \
+         mod b { pub fn probe() { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named free fn in two different inline mods must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by module path, not collapsed under a bare fn name: {violations:?}"
+    );
+}
+
+#[test]
+fn same_named_method_in_two_different_trait_impls_reacts_separately() {
+    let tb = TempBase::new("audit-unaud-two-trait-impls");
+    let dir = tb.dir(
+        "two",
+        "struct T; trait Foo { fn probe(&self); } trait Bar { fn probe(&self); } \
+         impl Foo for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
+         impl Bar for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named method on the same Self type via two different traits must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by trait, not collapsed: {violations:?}"
+    );
+}
+
+#[test]
+fn identical_expression_repeated_in_the_same_function_collapses_to_one_violation() {
+    let tb = TempBase::new("audit-unaud-dup");
+    let dir = tb.dir(
+        "dup",
+        "fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(SEAM_A, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        1,
+        "a verbatim-repeated expression in the same scope is a stated bound, not two findings: {violations:?}"
+    );
+}
+
+#[test]
+fn same_expression_in_two_files_reacts_separately() {
+    let tb = TempBase::new("audit-unaud-two-files");
+    let dir_a = tb.dir("file-a", "fn f() { assert_boundary!(SEAM_A, o); }");
+    let dir_b = tb.dir("file-b", "fn f() { assert_boundary!(SEAM_A, o); }");
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir_a, dir_b]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "the same expression in two different files must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by file, not collapsed: {violations:?}"
+    );
+}
+
 #[test]
 fn a_seam_level_runtime_violation_has_no_file() {
     // A declared-but-never-probed seam names a seam, not a source location, so its `file`

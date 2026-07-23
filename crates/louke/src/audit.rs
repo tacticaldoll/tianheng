@@ -184,21 +184,29 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
     }
     // Un-auditable probes: a non-literal seam argument cannot be traced to a declared seam.
     // React rather than silently skip (a silent skip is a false negative). One reaction per
-    // file (deduped, sorted) so the finding names where to look and the baseline id is stable.
-    let mut unauditable_files: Vec<&str> = probes
+    // (file, owner-qualified enclosing item, expression text) — deduped, sorted — so two
+    // textually distinct non-literal probes in the same file are distinct findings and
+    // baselining one cannot mask another; two byte-identical occurrences in the same file and
+    // the same enclosing item still collapse to one (a stated bound: at that granularity no
+    // further source content distinguishes them, mirroring `module-boundary`'s "same import on
+    // multiple lines is one violation").
+    let mut unauditable: Vec<(&str, &str, &str)> = probes
         .iter()
         .filter_map(|p| match p {
-            Probe::Unauditable { file } => Some(file.as_str()),
+            Probe::Unauditable { file, owner, expr } => {
+                Some((file.as_str(), owner.as_str(), expr.as_str()))
+            }
             Probe::Literal(_) => None,
         })
         .collect();
-    unauditable_files.sort_unstable();
-    unauditable_files.dedup();
-    for file in unauditable_files {
-        // The offending source file is in hand here (the probe scan captured it). Project it
-        // into the `file` field as well as the finding text: it is a genuine observation, so
-        // reporting `null` would be a dishonest null. This is the one runtime violation with a
-        // source location — the seam-level ones above name a seam, not a file.
+    unauditable.sort_unstable();
+    unauditable.dedup();
+    for (file, owner, expr) in unauditable {
+        // The offending source file, owner, and expression are in hand here (the probe scan
+        // captured them). Project the file into the `file` field as well as the finding text: it
+        // is a genuine observation, so reporting `null` would be a dishonest null. This is the
+        // one runtime violation with a source location — the seam-level ones above name a seam,
+        // not a file.
         violations.push(
             audit_violation(
                 "<un-auditable probe>",
@@ -206,6 +214,8 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
                 AuditRule::LiteralProbeSeam.key(),
                 RuntimeFact::UnauditableProbe {
                     file: file.to_string(),
+                    owner: owner.to_string(),
+                    expr: expr.to_string(),
                 },
                 "spell the seam as a string literal so probe coverage can be verified".to_string(),
                 Severity::Enforce,
