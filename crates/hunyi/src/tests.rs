@@ -109,6 +109,8 @@ fn semantic_findings(
 
 type ShapeModuleEvaluator =
     fn(&Path, &Path, &str, &str) -> Result<Vec<(SemanticFact, PathBuf)>, String>;
+type ShapeSubtreeEvaluator =
+    fn(&Path, &Path, &str, &str) -> Result<Vec<(SemanticFact, String, PathBuf)>, String>;
 
 /// Exercise one of hunyi's shape-only module observers and project its facts to the strings
 /// capability tests assert. The observer remains capability-specific; only fixture plumbing and
@@ -126,6 +128,24 @@ fn shape_findings(
         facts
             .into_iter()
             .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
+}
+
+/// Exercise a shape observer across a governed subtree while retaining module attribution.
+fn subtree_findings(
+    family: &str,
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    evaluate: ShapeSubtreeEvaluator,
+) -> Result<Vec<(String, String)>, String> {
+    let tree = TempSrcTree::new(&format!("{family}-sub-{name}"));
+    tree.write_all(files);
+    evaluate(tree.src(), &tree.root(), module, "x").map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, module, _file)| (fact.to_string(), module))
             .collect()
     })
 }
@@ -5846,15 +5866,7 @@ fn impl_trait_subtree(
     files: &[(&str, &str)],
     module: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    let tree = TempSrcTree::new(&format!("impl-sub-{name}"));
-    tree.write_all(files);
-    let result = impl_trait_subtree_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, module, _file)| (fact.to_string(), module))
-            .collect()
-    })
+    subtree_findings("impl", name, files, module, impl_trait_subtree_findings)
 }
 
 /// Just the finding strings, sorted — for cases where the module attribution rides inside the
@@ -6242,15 +6254,13 @@ fn async_subtree(
     files: &[(&str, &str)],
     module: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    let tree = TempSrcTree::new(&format!("async-sub-{name}"));
-    tree.write_all(files);
-    let result = async_exposure_subtree_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, module, _file)| (fact.to_string(), module))
-            .collect()
-    })
+    subtree_findings(
+        "async",
+        name,
+        files,
+        module,
+        async_exposure_subtree_findings,
+    )
 }
 
 /// Just the finding strings, sorted — for cases where the module attribution rides inside the
