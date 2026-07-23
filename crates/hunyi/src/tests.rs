@@ -111,6 +111,14 @@ type ShapeModuleEvaluator =
     fn(&Path, &Path, &str, &str) -> Result<Vec<(SemanticFact, PathBuf)>, String>;
 type ShapeSubtreeEvaluator =
     fn(&Path, &Path, &str, &str) -> Result<Vec<(SemanticFact, String, PathBuf)>, String>;
+type OperandModuleEvaluator = fn(
+    &Path,
+    &Path,
+    &str,
+    &[String],
+    &str,
+    &[String],
+) -> Result<Vec<(SemanticFact, PathBuf)>, String>;
 
 /// Exercise one of hunyi's shape-only module observers and project its facts to the strings
 /// capability tests assert. The observer remains capability-specific; only fixture plumbing and
@@ -146,6 +154,29 @@ fn subtree_findings(
         facts
             .into_iter()
             .map(|(fact, module, _file)| (fact.to_string(), module))
+            .collect()
+    })
+}
+
+/// Exercise an operand-scoped shape observer with the same canonical forbidden/dependency inputs
+/// production receives, then project its facts to the reaction strings capability tests assert.
+fn operand_findings(
+    family: &str,
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    forbidden: &[&str],
+    deps: &[&str],
+    evaluate: OperandModuleEvaluator,
+) -> Result<Vec<String>, String> {
+    let tree = TempSrcTree::new(&format!("{family}op-{name}"));
+    tree.write_all(files);
+    let forbidden: Vec<String> = forbidden.iter().map(|value| value.to_string()).collect();
+    let deps: Vec<String> = deps.iter().map(|value| value.to_string()).collect();
+    evaluate(tree.src(), &tree.root(), module, &forbidden, "x", &deps).map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
             .collect()
     })
 }
@@ -5195,18 +5226,15 @@ fn dyn_operand_findings(
     forbidden: &[&str],
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("dynop-{name}"));
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
-    let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
-    let result =
-        dyn_operand_module_findings(tree.src(), &tree.root(), module, &forbidden, "x", &deps);
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    operand_findings(
+        "dyn",
+        name,
+        files,
+        module,
+        forbidden,
+        deps,
+        dyn_operand_module_findings,
+    )
 }
 
 fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
@@ -5636,24 +5664,15 @@ fn impl_trait_operand_findings(
     forbidden: &[&str],
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("implop-{name}"));
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
-    let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
-    let result = impl_trait_operand_module_findings(
-        tree.src(),
-        &tree.root(),
+    operand_findings(
+        "impl",
+        name,
+        files,
         module,
-        &forbidden,
-        "x",
-        &deps,
-    );
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+        forbidden,
+        deps,
+        impl_trait_operand_module_findings,
+    )
 }
 
 fn impl_trait_operand_mod(
