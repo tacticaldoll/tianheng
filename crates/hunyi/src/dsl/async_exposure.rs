@@ -23,9 +23,6 @@ pub struct AsyncExposureBoundary {
     pub(crate) reason: String,
     pub(crate) anchor: Option<String>,
     pub(crate) severity: Severity,
-    /// When set, the reaction descends the anchored module's whole subtree, not just its own
-    /// items. Off by default, so an existing boundary projects and reacts byte-identically.
-    pub(crate) including_submodules: bool,
     pub(crate) depth: ScanDepth,
 }
 
@@ -36,7 +33,7 @@ impl AsyncExposureBoundary {
             "tianheng.rule/hunyi/async-exposure",
             [(
                 "including_submodules",
-                self.including_submodules.to_string(),
+                self.including_submodules().to_string(),
             )],
         )
     }
@@ -89,7 +86,7 @@ impl AsyncExposureBoundary {
     /// Whether the reaction descends the anchored module's whole subtree (`true`) or governs only
     /// its own items (`false`, the default).
     pub fn including_submodules(&self) -> bool {
-        self.including_submodules
+        self.depth == ScanDepth::Subtree
     }
 }
 
@@ -128,7 +125,6 @@ impl AsyncExposureModuleDraft {
             crate_package: self.crate_package,
             module: self.module,
             severity: Severity::Enforce,
-            including_submodules: false,
             depth: ScanDepth::Shallow,
         }
     }
@@ -140,7 +136,6 @@ pub struct AsyncExposureBoundaryDraft {
     crate_package: String,
     module: String,
     severity: Severity,
-    including_submodules: bool,
     depth: ScanDepth,
 }
 
@@ -148,7 +143,6 @@ impl AsyncExposureBoundaryDraft {
     /// Configure the observation scan depth / granularity level.
     pub fn depth(mut self, depth: ScanDepth) -> Self {
         self.depth = depth;
-        self.including_submodules = !depth.is_shallow();
         self
     }
 
@@ -178,7 +172,6 @@ impl AsyncExposureBoundaryDraft {
             reason: reason.to_string(),
             anchor: None,
             severity: self.severity,
-            including_submodules: self.including_submodules,
             depth: self.depth,
         }
     }
