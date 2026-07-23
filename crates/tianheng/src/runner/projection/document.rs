@@ -154,7 +154,7 @@ pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) ->
     )
 }
 pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    shape_operand_boundary_json(
+    let mut object = shape_operand_boundary_json(
         boundary.module(),
         boundary.crate_package(),
         IMPL_TRAIT_RULE,
@@ -162,7 +162,14 @@ pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) 
         boundary.reason(),
         boundary.anchor(),
         boundary.forbidden_operands(),
-    )
+    );
+    // The subtree opt-in changes the reaction (whole subtree vs the anchored seam), so the
+    // projected law must show it. Emitted only when set, so a bare boundary's JSON (and the
+    // Markdown derived from it) stays byte-identical — mirrors async-exposure's own projection.
+    if boundary.including_submodules() {
+        object["including_submodules"] = serde_json::json!(true);
+    }
+    object
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
     let mut object = semantic_module_json(

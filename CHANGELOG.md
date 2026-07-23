@@ -18,6 +18,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   structured reaction model.
 - Explicit machine-contract formats: `tianheng.baseline/structured-facts`,
   `tianheng.reaction/structured-facts`, and `tianheng.constitution/declared-boundaries`.
+- `ImplTraitBoundary::including_submodules()`: an opt-in subtree scope for the impl-trait
+  (existential RPIT) boundary, mirroring `AsyncExposureBoundary`'s existing depth. Defaults off;
+  an existing boundary projects and reacts byte-identically.
+- `NoExistentialLeak` / `Constitution::no_existential_leak(...)`: a composed profile folding
+  impl-trait's written `-> impl Trait` and async-exposure's implicit `impl Future` — the two
+  existential-leak signals — into one declaration, mirroring `SansIoPure`. Each composed boundary
+  keeps its own separate identity; adds no new reaction.
 
 ### Fixed
 - 漏刻's un-auditable-probe finding identity is no longer file-granular: it is now qualified by the

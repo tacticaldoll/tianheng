@@ -29,6 +29,9 @@ pub struct ImplTraitBoundary {
     pub(crate) reason: String,
     pub(crate) anchor: Option<String>,
     pub(crate) severity: Severity,
+    /// When set, the reaction descends the anchored module's whole subtree, not just its own
+    /// items. Off by default, so an existing boundary projects and reacts byte-identically.
+    pub(crate) including_submodules: bool,
 }
 
 impl ImplTraitBoundary {
@@ -36,10 +39,16 @@ impl ImplTraitBoundary {
     pub fn rule_key(&self) -> RuleKey {
         RuleKey::of(
             "tianheng.rule/hunyi/impl-trait-exposure",
-            [(
-                "forbidden_operands",
-                super::canonical_path_set(&self.forbidden_operands),
-            )],
+            [
+                (
+                    "forbidden_operands",
+                    super::canonical_path_set(&self.forbidden_operands),
+                ),
+                (
+                    "including_submodules",
+                    self.including_submodules.to_string(),
+                ),
+            ],
         )
     }
 
@@ -88,6 +97,12 @@ impl ImplTraitBoundary {
     pub fn severity(&self) -> Severity {
         self.severity
     }
+
+    /// Whether the reaction descends the anchored module's whole subtree (`true`) or governs only
+    /// its own items (`false`, the default).
+    pub fn including_submodules(&self) -> bool {
+        self.including_submodules
+    }
 }
 
 /// An impl-trait boundary awaiting its module anchor.
@@ -125,6 +140,7 @@ impl ImplTraitModuleDraft {
             module: self.module,
             forbidden_operands: Vec::new(),
             severity: Severity::Enforce,
+            including_submodules: false,
         }
     }
 
@@ -153,6 +169,7 @@ impl ImplTraitModuleDraft {
             module: self.module,
             forbidden_operands: operands.into_iter().map(Into::into).collect(),
             severity: Severity::Enforce,
+            including_submodules: false,
         }
     }
 }
@@ -164,6 +181,7 @@ pub struct ImplTraitBoundaryDraft {
     module: String,
     forbidden_operands: Vec<String>,
     severity: Severity,
+    including_submodules: bool,
 }
 
 impl ImplTraitBoundaryDraft {
@@ -171,6 +189,18 @@ impl ImplTraitBoundaryDraft {
     /// reaction — the first rung of adoption.
     pub fn warn(mut self) -> Self {
         self.severity = Severity::Warn;
+        self
+    }
+
+    /// Descend the anchored module's **whole subtree**: a returned `impl Trait` in any descendant
+    /// module reacts, not only one at the anchored module's own seam. Off by default (the boundary
+    /// governs the declared seam alone); with it, anchoring at `crate` governs the whole crate.
+    /// Mirrors [`AsyncExposureBoundary`]'s `including_submodules` opt-in: projected only when set,
+    /// so a bare boundary stays byte-identical.
+    ///
+    /// [`AsyncExposureBoundary`]: crate::AsyncExposureBoundary
+    pub fn including_submodules(mut self) -> Self {
+        self.including_submodules = true;
         self
     }
 
@@ -183,6 +213,7 @@ impl ImplTraitBoundaryDraft {
             reason: reason.to_string(),
             anchor: None,
             severity: self.severity,
+            including_submodules: self.including_submodules,
         }
     }
 }

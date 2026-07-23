@@ -29,6 +29,7 @@
 #[doc = include_str!("../README.md")]
 pub struct ReadmeDoctests;
 
+mod existential;
 mod runner;
 mod sans_io;
 
@@ -90,9 +91,12 @@ pub use hunyi::{
 #[doc(hidden)]
 pub use louke::{RuntimeBoundaryDraft, RuntimeSeamDraft};
 
-// The shell's own composed profile: a convenience that folds two dimensions' boundaries into one
-// declaration (see [`Constitution::sans_io_pure`]). The terminal `SansIoPure` is the documented
-// surface; its builder intermediates are hidden like every other `*Draft`.
+// The shell's own composed profiles: a convenience that folds boundaries into one declaration
+// (see [`Constitution::sans_io_pure`] / [`Constitution::no_existential_leak`]). The terminal types
+// are the documented surface; their builder intermediates are hidden like every other `*Draft`.
+pub use existential::NoExistentialLeak;
+#[doc(hidden)]
+pub use existential::{NoExistentialLeakCrateDraft, NoExistentialLeakModuleDraft};
 pub use sans_io::SansIoPure;
 #[doc(hidden)]
 pub use sans_io::{SansIoPureCrateDraft, SansIoPureDraft, SansIoPureModuleDraft};
@@ -241,8 +245,8 @@ pub mod prelude {
     pub use super::{
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
         CrateBoundary, DependencyKind, DynTraitBoundary, Finding, ForbiddenMarkerBoundary,
-        ImplTraitBoundary, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, RuleKey,
-        RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
+        ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome, Polarity,
+        Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
         StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation, ViolationId,
         VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
     };

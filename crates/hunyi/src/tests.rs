@@ -3415,11 +3415,15 @@ fn every_hunyi_rule_family_has_exact_semantic_identity() {
     let impl_trait = ImplTraitBoundary::in_crate("x")
         .module("crate::api")
         .must_not_expose_impl_trait_of(["crate::Port"])
+        .including_submodules()
         .because("r");
     assert_rule(
         impl_trait.rule_key(),
         "tianheng.rule/hunyi/impl-trait-exposure",
-        &[("forbidden_operands", "[\"crate::Port\"]")],
+        &[
+            ("forbidden_operands", "[\"crate::Port\"]"),
+            ("including_submodules", "true"),
+        ],
     );
 
     let locality = TraitImplBoundary::in_crate("x")
@@ -5821,6 +5825,225 @@ fn impl_trait_operand_boundary_carries_operands_and_severity() {
         .must_not_expose_impl_trait()
         .because("no existential at all");
     assert!(shape.forbidden_operands().is_empty());
+}
+
+#[test]
+fn impl_trait_boundary_carries_anchor_and_including_submodules() {
+    let b = ImplTraitBoundary::in_crate("core")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .warn()
+        .because("the core seam must return named types, not an existential");
+    assert_eq!(b.severity(), Severity::Warn);
+    // The subtree opt-in defaults off and threads through `.because`.
+    assert!(!b.including_submodules());
+    let sub = ImplTraitBoundary::in_crate("core")
+        .module("crate")
+        .must_not_expose_impl_trait()
+        .including_submodules()
+        .because("no existential anywhere under the kernel");
+    assert!(sub.including_submodules());
+}
+
+// --- impl-trait: subtree scope (`including_submodules`) -------------------
+
+fn impl_trait_subtree(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let tree = TempSrcTree::new(&format!("impl-sub-{name}"));
+    tree.write_all(files);
+    let result = impl_trait_subtree_findings(tree.src(), &tree.root(), module, "x");
+    result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, module, _file)| (fact.to_string(), module))
+            .collect()
+    })
+}
+
+/// Just the finding strings, sorted — for cases where the module attribution rides inside the
+/// finding string anyway.
+fn impl_trait_subtree_labels(name: &str, files: &[(&str, &str)], module: &str) -> Vec<String> {
+    impl_trait_subtree(name, files, module)
+        .unwrap()
+        .into_iter()
+        .map(|(finding, _module)| finding)
+        .collect()
+}
+
+#[test]
+fn impl_trait_subtree_reacts_to_a_submodule_return_the_seam_scope_misses() {
+    // The crux this opt-in exists for, mirroring async-exposure's own: a returned `impl Trait` in a
+    // *submodule* is invisible to the default seam scope (anchored at `crate`, it sees only
+    // crate-root items) — the gap the `no_existential_leak` composed profile's own honesty
+    // requires closed for its impl-trait half. The subtree scope catches it.
+    let files = &[
+        ("lib.rs", "pub mod net;\n"),
+        ("net.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+    ];
+    // Default seam scope at `crate` misses it entirely…
+    assert_eq!(
+        impl_trait_findings("seam-misses-sub", files, "crate").unwrap(),
+        Vec::<String>::new(),
+    );
+    // …the subtree scope reacts, attributing it to the submodule.
+    let subtree = impl_trait_subtree("sub-reacts", files, "crate").unwrap();
+    assert_eq!(subtree.len(), 1);
+    assert_eq!(subtree[0].1, "crate::net");
+    assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
+}
+
+#[test]
+fn impl_trait_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
+    // The anchor module's own returned `impl Trait` is still caught, and its finding string is
+    // byte-identical to the single-module path — so enabling the opt-in on a seam-only boundary
+    // adds deeper findings without re-identifying the seam ones (baseline stability).
+    let files = &[
+        ("lib.rs", "pub mod m;\n"),
+        (
+            "m.rs",
+            "pub fn own() -> impl crate::Port { todo!() }\npub mod deep;\n",
+        ),
+        (
+            "m/deep.rs",
+            "pub fn nested() -> impl crate::Port { todo!() }\n",
+        ),
+    ];
+    let seam = impl_trait_findings("seam-parity", files, "crate::m").unwrap();
+    assert_eq!(seam.len(), 1);
+    let subtree = impl_trait_subtree_labels("subtree-parity", files, "crate::m");
+    assert_eq!(subtree.len(), 2);
+    // The seam finding appears verbatim in the subtree result.
+    assert!(subtree.contains(&seam[0]));
+}
+
+#[test]
+fn impl_trait_subtree_scopes_to_the_anchored_subtree_not_the_whole_crate() {
+    let files = &[
+        ("lib.rs", "pub mod a;\npub mod c;\n"),
+        (
+            "a.rs",
+            "pub mod b;\npub fn make() -> impl crate::Port { todo!() }\n",
+        ),
+        ("a/b.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+        ("c.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+    ];
+    let subtree = impl_trait_subtree("bounded", files, "crate::a").unwrap();
+    let modules: Vec<&str> = subtree.iter().map(|(_, m)| m.as_str()).collect();
+    assert!(modules.contains(&"crate::a"));
+    assert!(modules.contains(&"crate::a::b"));
+    assert!(!modules.contains(&"crate::c"), "{:?}", modules);
+}
+
+#[test]
+fn impl_trait_subtree_tolerates_a_cfg_gated_fileless_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"never\")]\npub mod optional;\npub mod present;\n",
+        ),
+        (
+            "present.rs",
+            "pub fn make() -> impl crate::Port { todo!() }\n",
+        ),
+    ];
+    let subtree = impl_trait_subtree("cfg-fileless", files, "crate").unwrap();
+    assert_eq!(subtree.len(), 1);
+    assert_eq!(subtree[0].1, "crate::present");
+}
+
+#[test]
+fn impl_trait_subtree_errors_on_a_non_cfg_missing_submodule() {
+    let files = &[("lib.rs", "pub mod missing;\n")];
+    let err = impl_trait_subtree("non-cfg-missing", files, "crate").unwrap_err();
+    assert!(err.contains("missing"), "{err}");
+}
+
+#[test]
+fn impl_trait_subtree_does_not_observe_a_body_nested_module() {
+    let files = &[(
+        "lib.rs",
+        "pub fn outer() { mod inner { pub fn hidden() -> impl crate::Port { todo!() } } }\n",
+    )];
+    let subtree = impl_trait_subtree("body-nested", files, "crate").unwrap();
+    assert!(subtree.is_empty(), "{:?}", subtree);
+}
+
+#[test]
+fn impl_trait_subtree_and_seam_both_fail_loud_on_an_unrenderable_owner() {
+    // Mirrors `async_subtree_and_seam_both_fail_loud_on_an_unrenderable_owner` exactly: impl-trait's
+    // owner resolution (`canonical_self_owner`) produces an internal positional sentinel for a
+    // genuinely unrenderable self type, caught by the shared `reject_positional_identity` gate
+    // (invoked via `sort_attributed_facts`/`sort_faceted_facts`) — never published as identity,
+    // under either scope.
+    let files = &[(
+        "lib.rs",
+        "pub struct Arr<const N: usize>;\npub struct Marker;\nimpl Marker { pub fn before() -> impl crate::Port { todo!() } }\nimpl<const N: usize> Arr<{ N + 1 }> { pub fn unrenderable() -> impl crate::Port { todo!() } }\n",
+    )];
+    let seam = impl_trait_findings("const-generic-owner-parity-seam", files, "crate").unwrap_err();
+    let subtree =
+        impl_trait_subtree("const-generic-owner-parity-subtree", files, "crate").unwrap_err();
+    assert!(seam.contains("without a stable structural label"), "{seam}");
+    assert!(
+        subtree.contains("without a stable structural label"),
+        "{subtree}"
+    );
+    assert!(!seam.contains("_#") && !subtree.contains("_#"));
+}
+
+#[test]
+fn impl_trait_subtree_cfg_branches_never_share_an_unrenderable_owner_fallback() {
+    // Mirrors `async_cfg_branches_never_share_an_unrenderable_owner_fallback` exactly: two
+    // mutually-exclusive `#[cfg]` branches of the same module each declare a same-named type with
+    // an unrenderable const-generic self-type argument (`Arr<{ N + 1 }>` vs `Arr<{ N + 2 }>`). This
+    // is the actual case task 1.3a's continuous-ordinal threading protects: a hardcoded or
+    // reset-per-module ordinal would let the two branches' sentinels collide into one internal
+    // value before `reject_positional_identity` ever runs. The gate still fails loud either way, so
+    // this proves the ordinal is threaded correctly, not merely that the gate exists (the single-site
+    // test above already proves the gate; this one proves the counter feeding it).
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod m;\n#[cfg(feature = \"w\")]\n#[path = \"m_w.rs\"]\npub mod m;\n",
+        ),
+        (
+            "m.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 1 }> { pub fn run() -> impl crate::Port { todo!() } }\n",
+        ),
+        (
+            "m_w.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 2 }> { pub fn run() -> impl crate::Port { todo!() } }\n",
+        ),
+    ];
+    let error =
+        impl_trait_subtree("cfg-split-owner-fallback-collision", files, "crate::m").unwrap_err();
+    assert!(
+        error.contains("without a stable structural label"),
+        "{error}"
+    );
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn impl_trait_operand_scoped_boundary_rejects_subtree_scope() {
+    // A stated bound (not a silent gap): operand-scoping's per-branch principal-resolution
+    // machinery is proven only over a single module, so combining it with subtree scope fails
+    // loud with an actionable message rather than silently under- or mis-reacting.
+    let (metadata, _fixture) = fixture_metadata(
+        "impltrait-operand-subtree",
+        &[("lib.rs", "pub fn make() -> impl crate::Port { todo!() }\n")],
+    );
+    let boundary = ImplTraitBoundary::in_crate("x")
+        .module("crate")
+        .must_not_expose_impl_trait_of(["crate::Port"])
+        .including_submodules()
+        .because("r");
+    let mut violations = Vec::new();
+    let err = check_impl_trait_boundary(&metadata, &boundary, &mut violations).unwrap_err();
+    assert!(err.contains("not yet supported"), "{err}");
+    assert!(violations.is_empty());
 }
 
 // --- async-exposure -------------------------------------------------------
