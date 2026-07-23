@@ -157,7 +157,7 @@ The system SHALL fold trait-impl-locality findings into the same exit-code contr
 
 ### Requirement: Severity and baseline parity
 
-A trait-impl-locality boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries: a `warn` violation is reported but does not by itself fail the reaction. Its violations SHALL be gated against the same `Baseline` mechanism, sharing the violation identity `(target, rule, finding_key)` — where the finding identifies the offending impl by its module location and implemented-for type. The rule is a fixed string; the allowed-location set is policy configuration, not part of the violation identity, so editing the allowed set does not turn a still-misplaced impl into a new violation. A project may thus adopt the boundary on a dirty codebase and gate only on new misplaced impls.
+A trait-impl-locality boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries: a `warn` violation is reported but does not by itself fail the reaction. Its violations SHALL be gated against the same `Baseline` mechanism, sharing the violation identity `(target, rule_key, fact)` — where the finding identifies the offending impl by its module location and implemented-for type. The rule is a fixed string; the allowed-location set is policy configuration, not part of the violation identity, so editing the allowed set does not turn a still-misplaced impl into a new violation. A project may thus adopt the boundary on a dirty codebase and gate only on new misplaced impls.
 
 #### Scenario: A warn boundary reports without failing
 

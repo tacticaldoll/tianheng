@@ -111,7 +111,7 @@ fn a_violation_absent_from_the_baseline_still_reacts() {
     );
 }
 
-/// Identity ⊥ presentation/metadata. Version-2 `ViolationId = (target, rule, finding_key)` excludes
+/// Identity ⊥ presentation/metadata. `ViolationId = (target, rule_key, fact)` excludes
 /// human finding text and `file`, so relocating the code keeps the baseline matching.
 #[test]
 fn moving_the_file_does_not_churn_the_baseline() {

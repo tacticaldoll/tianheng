@@ -104,6 +104,11 @@ independent reviewer, and verify each finding against the code before acting on 
 redesign a change rather than let it pass diluted (the no-weakening-to-pass rule itself is
 *Self-governance*, below). (`propose` / `apply` here are the OpenSpec phases above.)
 
+A vocabulary- or identity-level breaking change additionally requires grepping every touched spec
+and doc for the retired term across its *whole* file, not only the new diff: sync bolting on a
+correctly-worded requirement while the same file's older prose still names the retired shape is
+itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_key` lesson).
+
 ## Commits & PRs
 
 - **Conventional Commits.** Every non-release subject is

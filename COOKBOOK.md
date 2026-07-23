@@ -469,10 +469,14 @@ existing entry's hand-added `owner` / `tracker` metadata when its identity still
 identities without metadata, and drops resolved identities. A missing baseline is an error in gate
 mode (exit `2`), never an empty baseline that silently passes.
 
-Refactoring the offending code or improving finding wording does **not** churn a version-2
-baseline: identity is `(target, rule, finding_key)`; the human `finding`, `file`, `anchor`, reason,
-and severity are presentation/metadata. A version-1 baseline still matches its old exact text triple
-until `--write-baseline` upgrades it. The runnable
+Refactoring the offending code or improving finding wording does **not** churn a baseline: identity
+is `(target, rule_key, fact)`; the human `finding`, `file`, `anchor`, reason, and severity are
+presentation/metadata. The baseline document itself is unversioned — it carries a semantic `format`
+string, never a numeric `version`. A baseline written before this shape (any file still carrying a
+numeric `version`) is unsupported: `--write-baseline` refuses to overwrite it and `--baseline` refuses
+to gate against it, both exiting `2` rather than silently upgrading or reinterpreting it. Preserve any
+desired `owner`/`tracker` annotations by hand, move or delete the unsupported file, then regenerate
+with `--write-baseline`. The runnable
 `examples/guibiao-standalone/tests/reaction.rs` proves identity stability and the new-violation
 gate; `scripts/test_examples.sh` drives the real CLI write/gate path.
 

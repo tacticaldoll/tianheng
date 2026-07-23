@@ -136,7 +136,7 @@ The system SHALL fold visibility findings into the same exit-code contract as th
 
 ### Requirement: Severity and baseline parity
 
-A visibility boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries: a `warn` violation is reported but does not by itself fail the reaction. Its violations SHALL be gated against the same `Baseline` mechanism, sharing the violation identity `(target, rule, finding_key)` — where the rule is a fixed string and the finding identifies the offending item — so a project may adopt the boundary on a dirty codebase and gate only on new `pub` items.
+A visibility boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries: a `warn` violation is reported but does not by itself fail the reaction. Its violations SHALL be gated against the same `Baseline` mechanism, sharing the violation identity `(target, rule_key, fact)` — where the rule is a fixed string and the finding identifies the offending item — so a project may adopt the boundary on a dirty codebase and gate only on new `pub` items.
 
 #### Scenario: A warn boundary reports without failing
 
