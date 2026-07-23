@@ -141,25 +141,31 @@ complement — show, then tell.
 - **Already enforced; make legible (doc, do not build).**
   - *Three-layer split — declaration (`Constitution`) ⊥ reaction (`check`, pure) ⊥ shell (`run`).*
     Already a **self-law** (functional-core ⊥ imperative-shell: `guibiao` must not depend on
-    `tianheng`). Actionable: state the layering in adopter docs and name the **presentation ⊥
-    verdict** invariant — `--format json`/`sarif` and the ANSI render change presentation only,
-    never the outcome (already CI-reacted: the `reaction` job asserts a SARIF projection still exits
-    1). This is also track 2's render guardrail.
+    `tianheng`). **Presentation ⊥ verdict — DONE:** `README.md` now states "Presentation changes
+    never change the verdict or exit code" adopter-facing (already CI-reacted: the `reaction` job
+    asserts a SARIF projection still exits 1). **Remaining actionable:** the three-layer *naming*
+    itself (declaration/reaction/shell) is still not stated in adopter docs — only its consequence
+    (presentation ⊥ verdict) is.
   - *`xuanji` = the sole cross-crate wire contract.* Already so (the shared reaction model,
-    `serde_json`-only, below every dimension, self-law-enforced). Actionable: elevate its JSON /
-    `Baseline` schema to an **explicitly versioned, migration-disciplined** contract in docs — ties
-    to the 0.2.0 structured-baseline item (findings as data).
-  - *Violation identity ⊥ metadata.* **BUILT (0.2.0 line):** the baseline match key is
-    `ViolationId = { target, rule, finding, finding_key }` (v2 structured identity; a v1 baseline
-    matches on `{ target, rule, finding }` for migration); `file` is explicitly *not* identity (set
-    via `with_file`, non-breaking, never affects matching); `BaselineEntry.owner/tracker` are
-    metadata-only; the baseline carries no `anchor` (it rides the live `Violation`). This is the
-    injective-identity principle realized. Actionable: surface it in the **adopter-facing README** as
-    a stability contract, not only in rustdoc.
-- **Adoption ladder → README (track-1 pitch), enriched.** The reviewer's warn → enforce ramp is
-  real but one-dimensional; the actual ladder is **two axes**: severity (`warn` first → `enforce`
-  gate) *and* baseline (grandfather existing violations → enforce new). An existing codebase adopts
-  via baseline, a greenfield one via warn-first — document both as the on-ramp.
+    `serde_json`-only, below every dimension, self-law-enforced). **Resolved differently in 0.3.0:**
+    rather than an explicitly *versioned* migration-disciplined contract, the machine contracts
+    (`tianheng.baseline/structured-facts`, `tianheng.reaction/structured-facts`,
+    `tianheng.constitution/declared-boundaries`) are explicitly *unversioned* semantic format
+    identifiers — see `PROJECT.md`'s Decisions and the `0.3.0` window above.
+  - *Violation identity ⊥ metadata.* **BUILT (0.2.0 line; superseded by 0.3.0):** the baseline match
+    key was `ViolationId = { target, rule, finding, finding_key }` (v2 structured identity; a v1
+    baseline matched on `{ target, rule, finding }` for migration); `file` was explicitly *not*
+    identity (set via `with_file`, non-breaking, never affected matching); `BaselineEntry.owner/tracker`
+    were metadata-only. **0.3.0 replaced this shape entirely:** identity is now `(target, rule_key,
+    fact)` — see `PROJECT.md`'s Decisions — and no numeric baseline is read (an unsupported file is
+    rejected, never migrated). This remains the injective-identity principle realized, now in its
+    current form. **DONE:** `README.md`'s "What stays stable across the pre-1.0 line" section states
+    this as an adopter-facing stability contract, not only in rustdoc.
+- **Adoption ladder → README (track-1 pitch), enriched — DONE.** The reviewer's warn → enforce ramp
+  was real but one-dimensional; the actual ladder is **two axes**: severity (`warn` first →
+  `enforce` gate) *and* baseline (grandfather existing violations → enforce new). `README.md` now
+  documents both as the on-ramp (the exit-code table, the warn-first greenfield path, and the
+  baseline grandfather path).
 - **Prelude / stable-surface audit — BUILT (0.2.0 line).** The real composed adopter uses the
   wildcard prelude for both declaration and `Outcome` inspection, so trimming it into a builder-only
   menu would break the very reaction that opened the 0.2 window. The surface is now classified by
@@ -595,10 +601,12 @@ survives across sessions.
   debt-scheduling system does not. Resolve the tension before building. *Metadata — BUILT (v0.1.5):*
   baseline entries carry **structured metadata** `owner` / `tracker` (external issue) via a
   `BaselineEntry`, so a grandfather list points debt at a tracker instead of accreting a silent,
-  never-shrinking per-instance exemption table. Additive/patch — the match identity `(target, rule,
-  finding)` and the required parse format are untouched (Some-only fields, `version` 1); `--write-baseline`
-  is a metadata-preserving merge by identity (warns, never silently wipes). The once-listed `anchor`
-  field was **dropped as redundant** with the boundary→violation anchor. *Rejected — time-based auto-decay /
+  never-shrinking per-instance exemption table. Additive/patch at the time — the match identity was
+  `(target, rule, finding)` and the parse format required a numeric `version` field, both since
+  replaced by 0.3.0's `(target, rule_key, fact)` identity and unversioned semantic `format` string (see
+  `PROJECT.md`'s Decisions); `owner`/`tracker` metadata preservation across that change still holds.
+  `--write-baseline` is a metadata-preserving merge by identity (warns, never silently wipes). The
+  once-listed `anchor` field was **dropped as redundant** with the boundary→violation anchor. *Rejected — time-based auto-decay /
   auto-escalation* (`expires("<date>")` producing a reaction; a `warn_until("<date>")` Warn→Enforce
   ramp): it makes the reaction depend on **wall-clock**, breaking the invariant that a reaction is a
   pure function of (declaration, observed code) — the determinism red line that keeps reactions
