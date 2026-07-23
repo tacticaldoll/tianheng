@@ -59,19 +59,16 @@ pub enum ScanDepth {
     /// Default shallow scan: current module/signature level (<10ms).
     #[default]
     Shallow,
-    /// Deep subtree scan: recursive submodule and private implementation traversal.
+    /// Deep subtree scan: recursive submodule traversal.
     Subtree,
-    /// Audit scan: static AST observation coupled with runtime probe coverage cross-check.
-    Audit,
 }
 
 impl ScanDepth {
-    /// The projection label (`"shallow"` / `"subtree"` / `"audit"`), single source for report and constitution renderings.
+    /// The projection label (`"shallow"` / `"subtree"`), single source for report and constitution renderings.
     pub fn as_str(&self) -> &'static str {
         match self {
             ScanDepth::Shallow => "shallow",
             ScanDepth::Subtree => "subtree",
-            ScanDepth::Audit => "audit",
         }
     }
 

@@ -107,6 +107,6 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 > 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself. The clock axis reacts via 圭表 (must-not-call-inline `std::time::…::now`), the async axis via 渾儀 (must-not-expose an async public fn)
 
-- **rule**: must not expose async fn (including_submodules: true)
+- **rule**: must not expose async fn (including_submodules: true; scan_depth: subtree)
 - **kind**: semantic · **severity**: enforce · **crate**: xuanji
 

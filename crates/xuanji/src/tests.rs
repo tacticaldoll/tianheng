@@ -34,10 +34,8 @@ fn scan_depth_labels_and_defaults_are_correct() {
     assert_eq!(ScanDepth::default(), ScanDepth::Shallow);
     assert!(ScanDepth::Shallow.is_shallow());
     assert!(!ScanDepth::Subtree.is_shallow());
-    assert!(!ScanDepth::Audit.is_shallow());
     assert_eq!(ScanDepth::Shallow.as_str(), "shallow");
     assert_eq!(ScanDepth::Subtree.as_str(), "subtree");
-    assert_eq!(ScanDepth::Audit.as_str(), "audit");
 }
 
 #[test]

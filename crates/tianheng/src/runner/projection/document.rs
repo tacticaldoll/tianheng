@@ -169,6 +169,9 @@ pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) 
     if boundary.including_submodules() {
         object["including_submodules"] = serde_json::json!(true);
     }
+    if !boundary.scan_depth().is_shallow() {
+        object["scan_depth"] = serde_json::json!(boundary.scan_depth().as_str());
+    }
     object
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
@@ -185,6 +188,9 @@ pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBo
     // Markdown derived from it) stays byte-identical.
     if boundary.including_submodules() {
         object["including_submodules"] = serde_json::json!(true);
+    }
+    if !boundary.scan_depth().is_shallow() {
+        object["scan_depth"] = serde_json::json!(boundary.scan_depth().as_str());
     }
     object
 }

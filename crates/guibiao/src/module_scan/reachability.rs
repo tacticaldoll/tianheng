@@ -6,6 +6,7 @@ use super::lexer::{balanced_group_end, clean_with_positions, is_ident_byte, read
 use super::path_vocab::{canonical_segment, is_mod_declaration_keyword, path_within};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use xuanji::ScanDepth;
 
 /// Selects file paths belonging to the governed module that are reachable in the module graph.
 /// Excludes undeclared orphan files, inline-only shadows, and remap-shadowed paths.
@@ -19,7 +20,14 @@ pub(crate) fn governed_files(
     remapped: &[(PathBuf, String)],
     remap_shadowed: &std::collections::BTreeSet<String>,
     root_relative: Option<&Path>,
+    depth: ScanDepth,
 ) -> Vec<(PathBuf, String)> {
+    let matches_depth = |mod_path: &str| -> bool {
+        match depth {
+            ScanDepth::Shallow => mod_path == module,
+            _ => path_within(mod_path, module),
+        }
+    };
     let structural = files.iter().filter_map(|file| {
         let relative = file.strip_prefix(src_dir).ok()?;
         let module_path = module_path_of(relative, root_relative);
@@ -29,14 +37,14 @@ pub(crate) fn governed_files(
         if !reachable.contains(&module_path) {
             return None;
         }
-        if path_within(&module_path, module) {
+        if matches_depth(&module_path) {
             Some((file.clone(), module_path))
         } else {
             None
         }
     });
     let remap_entries = remapped.iter().filter_map(|(file, module_path)| {
-        if path_within(module_path, module) {
+        if matches_depth(module_path) {
             Some((file.clone(), module_path.clone()))
         } else {
             None
@@ -1172,6 +1180,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
 
         assert!(reachable.contains("crate::normal"), "{reachable:?}");
@@ -1229,6 +1238,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
 
         assert!(
@@ -1492,6 +1502,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         assert!(
             governed
@@ -1632,6 +1643,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         assert!(
             inline_only.contains("crate::parent"),
@@ -1684,6 +1696,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         // A weak `reachable.contains(..)` check alone would pass even if decoding silently
         // failed: `child_kinds`/`reachable` gain an entry for a declared name regardless of
@@ -1959,6 +1972,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         assert!(
             reachable.contains("crate::kernel::child::grandchild"),
@@ -2018,6 +2032,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         assert!(
             governed
@@ -2069,6 +2084,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         assert!(reachable.contains("crate::x"), "{reachable:?}");
         assert!(
@@ -2119,6 +2135,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         assert!(
             reachable.contains("crate::x::y"),
@@ -2211,6 +2228,7 @@ mod tests {
             &remapped,
             &remap_shadowed,
             None,
+            ScanDepth::Subtree,
         );
         let a_entries: Vec<_> = governed
             .iter()

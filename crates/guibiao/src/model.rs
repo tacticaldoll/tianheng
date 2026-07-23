@@ -891,6 +891,20 @@ impl ModuleBoundary {
         self.depth
     }
 
+    /// Stable semantic identity for this declared module boundary.
+    pub fn rule_key(&self) -> RuleKey {
+        let key = self.rule.key();
+        if self.depth == ScanDepth::Shallow {
+            RuleKey::of(
+                key.rule_type(),
+                key.fields()
+                    .chain(std::iter::once(("scan_depth", self.depth.as_str()))),
+            )
+        } else {
+            key
+        }
+    }
+
     /// The rule this boundary declares, exposed read-only for projection and model inspection.
     pub fn rule(&self) -> &ModuleRule {
         &self.rule
@@ -1333,7 +1347,7 @@ impl ModuleTargetDraft {
             module: self.module,
             rule,
             severity: Severity::Enforce,
-            depth: ScanDepth::Shallow,
+            depth: ScanDepth::Subtree,
         }
     }
 }

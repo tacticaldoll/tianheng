@@ -26,6 +26,7 @@ pub struct AsyncExposureBoundary {
     /// When set, the reaction descends the anchored module's whole subtree, not just its own
     /// items. Off by default, so an existing boundary projects and reacts byte-identically.
     pub(crate) including_submodules: bool,
+    pub(crate) depth: ScanDepth,
 }
 
 impl AsyncExposureBoundary {
@@ -42,11 +43,7 @@ impl AsyncExposureBoundary {
 
     /// The observation scan depth for this boundary.
     pub fn scan_depth(&self) -> ScanDepth {
-        if self.including_submodules {
-            ScanDepth::Subtree
-        } else {
-            ScanDepth::Shallow
-        }
+        self.depth
     }
 
     /// Begin an async-exposure boundary in the crate named `package`.
@@ -132,6 +129,7 @@ impl AsyncExposureModuleDraft {
             module: self.module,
             severity: Severity::Enforce,
             including_submodules: false,
+            depth: ScanDepth::Shallow,
         }
     }
 }
@@ -143,11 +141,13 @@ pub struct AsyncExposureBoundaryDraft {
     module: String,
     severity: Severity,
     including_submodules: bool,
+    depth: ScanDepth,
 }
 
 impl AsyncExposureBoundaryDraft {
     /// Configure the observation scan depth / granularity level.
     pub fn depth(mut self, depth: ScanDepth) -> Self {
+        self.depth = depth;
         self.including_submodules = !depth.is_shallow();
         self
     }
@@ -179,6 +179,7 @@ impl AsyncExposureBoundaryDraft {
             anchor: None,
             severity: self.severity,
             including_submodules: self.including_submodules,
+            depth: self.depth,
         }
     }
 }

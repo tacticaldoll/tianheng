@@ -5887,3 +5887,49 @@ fn inline_strict_external_default_path_module_attribution_unshifted() {
         "default attribution must stay on the FILE module, not the inline submodule: {violations:?}"
     );
 }
+
+#[test]
+fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "pub mod sub;\nuse crate::forbidden_on_core;\n"),
+        ("core/sub.rs", "use crate::forbidden_on_sub;\n"),
+    ];
+
+    // 1. Shallow depth: boundary on crate::core only governs core.rs, so import in core/sub.rs does NOT react
+    let shallow_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::forbidden_on_sub")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("core seam does not import forbidden_on_sub");
+    let (res1, shallow_violations) =
+        run_module_check("scan-depth-shallow", files, shallow_boundary);
+    assert!(res1.is_ok(), "{res1:?}");
+    assert_eq!(
+        shallow_violations.len(),
+        0,
+        "Shallow depth ignores submodule files"
+    );
+
+    // 2. Subtree depth: boundary on crate::core governs core.rs AND core/sub.rs, so import in core/sub.rs DOES react
+    let subtree_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::forbidden_on_sub")
+        .depth(xuanji::ScanDepth::Subtree)
+        .because("core subtree does not import forbidden_on_sub");
+    let (res2, subtree_violations) =
+        run_module_check("scan-depth-subtree", files, subtree_boundary);
+    assert!(res2.is_ok(), "{res2:?}");
+    assert_eq!(
+        subtree_violations.len(),
+        1,
+        "Subtree depth evaluates submodule files"
+    );
+    assert_eq!(
+        subtree_violations[0]
+            .rule_key()
+            .fields()
+            .collect::<Vec<_>>(),
+        vec![("module", "crate::forbidden_on_sub")]
+    );
+}
