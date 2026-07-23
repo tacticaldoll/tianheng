@@ -664,26 +664,32 @@ stay in-shape by default; the reaction stays the non-bypassable backstop (see `P
 (`AGENTS.self-law.md`, generated from `self_governance.rs`, staleness-gated) so an agent working on
 this repo reads the *enforced* law, not the demo; **reason-foregrounding** in the law projection
 (`list --format markdown` leads each boundary with its reason) and in the reaction's text report;
-the **reason-writing convention** (AGENTS.md). *Forward (phase-2):* an **adopter-facing
-潛移 face** — any project generates its own agent-context from its constitution. The library
+the **reason-writing convention** (AGENTS.md). **Adopter-facing 潛移 face — SHIPPED (v0.1.1 /
+v0.1.4), CLOSED.** Any project generates its own agent-context from its constitution: the library
 primitive (`constitution_markdown`) and a README recipe shipped in v0.1.1; a **byte-checked
 staleness-gate recipe** shipped in v0.1.4 (a `cargo test` that regenerates the projection and
 byte-compares it to the committed file — the adopter-facing form of Tianheng's own
 `self_law_projection_is_fresh`, so an adopter's hand-maintained agent-context prose becomes a
-non-bypassable projection; adopter-surfaced by worklane). A full generator / a `list-self`-style
-CLI stays deferred (adopter-workflow product weight, and a `list-self` CLI would tangle the
-demo-vs-self-law story) — the primitive plus the gate already close the drift. **Pilot now offered
-(v0.1.5 dogfooding input):** worklane volunteers as the **first generator pilot** — it already has
-the generation need, the freshness-gate discipline, and can feed back the CLI shape and staleness
-semantics a real adopter wants; this is the live *second consumer* "born when built" was waiting
-for, so the generator becomes a **0.1.5 Tier-2 candidate** (see Version horizons). Its north star —
-the **adopter-facing adoption guide** the generator would produce — is carved out as its own future
-item below (*潛移 applied to adoption*), not buried here. Held to the same
-bound: only what reacts or projects enters context; no
-unobservable wish becomes law (prose prescription is the rejected open loop). *Version by SemVer
-honesty, not by phase:* an additive generator/CLI is a **patch**; a 0.2.0 is earned only by a
-breaking change — e.g. the deliberate pre-1.0 refinement of `guibiao`'s widened public surface
-(see PROJECT.md, Decisions) — never by bundling a milestone.
+non-bypassable projection). worklane adopts this directly, unmodified — the primitive plus the gate
+already close the drift; no further work is needed on this axis.
+
+**A full generator / a `list-self`-style CLI — DECLINED / RESOLVED BY DESIGN.** Previously recorded
+as deferred over a "demo-vs-self-law" tangle; re-examined during 0.3.0 exploration and found to be a
+phantom blocker, not a real one, for two independent reasons. First, the tangle was a namespace
+category error: `list-self` would have to live in `tianheng::run`'s shared dispatch, but that
+dispatch is common to every adopter binary, and an ordinary adopter has only one `Constitution` —
+there is no demo/self distinction to disambiguate, so the concept is meaningless there; only
+Tianheng's own repo (uniquely both library and a governed project) has two constitutions to
+confuse, and that is a repo-local concern a shared public API should never carry. Second, and more
+fundamentally, an on-the-fly CLI is the wrong shape for 潛移 itself: an autoregressive agent absorbs
+law by finding it already sitting in its context (`PROJECT.md`, 潛移 — "the agent is pulled, not
+pushed or told"), never by first executing a command to query it, since prompting an agent to run a
+command before writing code is itself an instruction, the exact thing 潛移 rejects. A checked-in,
+staleness-gated file (`AGENTS.self-law.md`, already built) is not a stand-in for the "real" CLI
+generator — it is the only form the gravity thesis can physically take. No code or spec follow-up
+is warranted: the declined capability needs no reaction, matching every other entry under
+"Explicitly not on the roadmap" below, and the one structural fact worth protecting (self-law
+projection must not go stale) already has one (`self_law_projection_is_fresh`).
 
 **潛移 applied to adoption — the adoption-gravity deliverable (future item, born when built).**
 Tianheng exists, almost by definition, to **minimize drift-prone prose code-docs** — to turn a
