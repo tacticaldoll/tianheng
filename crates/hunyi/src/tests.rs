@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::containment::leaf_of;
 use crate::crate_scope::dependency_names;
 use crate::errors::{missing_module_file_error, unknown_module_error, unknown_trait_error};
+use crate::finding::SemanticFact;
 use crate::module_resolve::resolve_module_file;
 
 /// A unique, self-cleaning temp `src/` tree: write source files (and, where needed, a symlink),
@@ -99,6 +100,29 @@ fn semantic_findings(
         &deps,
     );
     result.map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
+}
+
+type ShapeModuleEvaluator =
+    fn(&Path, &Path, &str, &str) -> Result<Vec<(SemanticFact, PathBuf)>, String>;
+
+/// Exercise one of hunyi's shape-only module observers and project its facts to the strings
+/// capability tests assert. The observer remains capability-specific; only fixture plumbing and
+/// the common reaction projection live here.
+fn shape_findings(
+    family: &str,
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    evaluate: ShapeModuleEvaluator,
+) -> Result<Vec<String>, String> {
+    let tree = TempSrcTree::new(&format!("{family}-{name}"));
+    tree.write_all(files);
+    evaluate(tree.src(), &tree.root(), module, "x").map(|facts| {
         facts
             .into_iter()
             .map(|(fact, _file)| fact.to_string())
@@ -5131,15 +5155,7 @@ fn the_forbidden_marker_builder_carries_severity() {
 /// Like [`findings`] but for the dyn-trait capability: write `files`, return the rendered
 /// `dyn` shapes exposed by `module`. Shape-only, so it takes no forbidden set.
 fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("dyn-{name}"));
-    tree.write_all(files);
-    let result = dyn_module_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    shape_findings("dyn", name, files, module, dyn_module_findings)
 }
 
 fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5474,15 +5490,7 @@ fn impl_trait_findings(
     files: &[(&str, &str)],
     module: &str,
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("impl-{name}"));
-    tree.write_all(files);
-    let result = impl_trait_module_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    shape_findings("impl", name, files, module, impl_trait_module_findings)
 }
 
 fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -6035,15 +6043,7 @@ fn impl_trait_operand_scoped_boundary_rejects_subtree_scope() {
 // --- async-exposure -------------------------------------------------------
 
 fn async_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("async-{name}"));
-    tree.write_all(files);
-    let result = async_exposure_module_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    shape_findings("async", name, files, module, async_exposure_module_findings)
 }
 
 fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
