@@ -1337,7 +1337,7 @@ impl ModuleTargetDraft {
             strict: false,
             external: false,
             severity: Severity::Enforce,
-            depth: ScanDepth::Shallow,
+            depth: ScanDepth::Subtree,
         }
     }
 

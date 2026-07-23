@@ -38,7 +38,7 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:**
-  - Self-governance observation depth upgrade (`self_governance.rs` scan depth explicit declarations after PR #115 merge).
+  - Self-governance observation depth upgrade (explicit ScanDepth declarations across self_governance.rs boundaries after the depth feature lands).
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `cfg_attr(path)` observe-both semantics (requires real adopter pressure).
   - Reusable testing harness (`tianheng::testing`).

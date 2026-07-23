@@ -8840,3 +8840,50 @@ fn derive_renamed_to_a_nonforbidden_local_trait_stays_clean() {
     .unwrap();
     assert_eq!(out, Vec::<String>::new());
 }
+
+#[test]
+fn hunyi_boundary_depth_getters_and_delegation_parity() {
+    use xuanji::ScanDepth;
+
+    // AsyncExposureBoundary
+    let async_b = AsyncExposureBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .because("sync core");
+    assert_eq!(async_b.scan_depth(), ScanDepth::Shallow);
+
+    let async_subtree = AsyncExposureBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .depth(ScanDepth::Subtree)
+        .because("sync core subtree");
+    assert_eq!(async_subtree.scan_depth(), ScanDepth::Subtree);
+
+    let async_submodules = AsyncExposureBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("sync core submodules");
+    assert_eq!(async_submodules.scan_depth(), ScanDepth::Subtree);
+
+    // ImplTraitBoundary
+    let impl_b = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .because("no RPIT leak");
+    assert_eq!(impl_b.scan_depth(), ScanDepth::Shallow);
+
+    let impl_subtree = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .depth(ScanDepth::Subtree)
+        .because("no RPIT leak in subtree");
+    assert_eq!(impl_subtree.scan_depth(), ScanDepth::Subtree);
+
+    let impl_submodules = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .including_submodules()
+        .because("no RPIT leak in submodules");
+    assert_eq!(impl_submodules.scan_depth(), ScanDepth::Subtree);
+}
