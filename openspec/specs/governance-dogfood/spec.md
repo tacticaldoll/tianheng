@@ -11,12 +11,12 @@ The repository SHALL maintain an executable, reviewable inventory mapping the pu
 `Constitution` boundary-family set to at least one repository-owned self-governance or isolated
 example reaction. That set is: static crate and module boundaries; signature, trait-impl,
 visibility, forbidden-marker, dyn-trait, impl-trait, async-exposure, and unsafe semantic
-boundaries; the `sans_io_pure` composed profile; and runtime boundaries. A family SHALL count as
-fulfilled only after its owner executes the real evaluator against source or Cargo metadata and
-observes its declared structured reaction; construction, projection, an exit code that another
-family could cause, or a free-standing coverage claim SHALL NOT count. The dogfood gate SHALL fail
-when any inventoried family has no fulfilled owner or an owner claims a family absent from the
-inventory.
+boundaries; the `sans_io_pure` and `no_existential_leak` composed profiles; and runtime boundaries.
+A family SHALL count as fulfilled only after its owner executes the real evaluator against source
+or Cargo metadata and observes its declared structured reaction; construction, projection, an exit
+code that another family could cause, or a free-standing coverage claim SHALL NOT count. The
+dogfood gate SHALL fail when any inventoried family has no fulfilled owner or an owner claims a
+family absent from the inventory.
 
 #### Scenario: Every public family has a fulfilled reaction owner
 
@@ -28,17 +28,6 @@ inventory.
 
 - **WHEN** an inventoried published family has no successfully fulfilled reaction owner
 - **THEN** the dogfood gate fails and names the missing family identity
-
-#### Scenario: Unknown ownership claims fail the gate
-
-- **WHEN** an example or self-governance owner claims a family identity absent from the inventory
-- **THEN** the dogfood gate fails and names the unknown family identity
-
-#### Scenario: The inventory does not classify future methods automatically
-
-- **WHEN** a future change proposes another public boundary-family insertion path
-- **THEN** its OpenSpec and API review deliberately classifies it as a family, depth, modifier, or
-  shorthand, and only a new family extends the executable inventory
 
 ### Requirement: Breadth stays separate from teaching examples
 
@@ -164,3 +153,4 @@ fields without pinning human presentation or whole report documents.
 #### Scenario: Presentation changes freely
 - **WHEN** only rule/finding wording or diagnostics change
 - **THEN** the identity dogfood remains green
+

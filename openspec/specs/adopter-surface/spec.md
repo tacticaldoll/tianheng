@@ -4,15 +4,13 @@
 
 Define the composed wildcard entrypoint and its external compilation reaction so Tianheng's
 documented adoption path remains usable and semantically honest across the 0.2 line.
-
 ## Requirements
-
 ### Requirement: The prelude is the composed adopter entrypoint
 
 `tianheng::prelude::*` SHALL expose the existing declaration and execution surface: `Constitution`,
 `CrateBoundary`, `ModuleBoundary`, `SemanticBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`, `AsyncExposureBoundary`,
-`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `DependencyKind`, `SourceKind`,
+`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `DependencyKind`, `SourceKind`,
 `VisibilityCeiling`, `Severity`, and `run`. An external consumer SHALL be able to compose boundaries
 from all three instruments through one `Constitution` without importing dimension crates.
 
@@ -95,3 +93,4 @@ into this adopter-surface contract.
 
 - **WHEN** an external test needs the pure signature-coupling check
 - **THEN** it imports `check_semantic` explicitly from the crate root without expanding the wildcard prelude menu or implying that one check evaluates every semantic capability
+
