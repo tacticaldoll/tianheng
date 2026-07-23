@@ -56,10 +56,13 @@ claim outside that perimeter.
 *Intent: the domain depends on ports, never on infrastructure.*
 
 ```rust
+use guibiao::{Constitution, ModuleBoundary, ScanDepth};
+
 .boundary(
     ModuleBoundary::in_crate("my-app")
         .module("crate::domain")
         .must_not_import("crate::infra")
+        .depth(ScanDepth::Subtree)
         .because("the domain stays pure — it never depends on infrastructure"),
 )
 ```
