@@ -121,13 +121,13 @@ A trait-impl exposure finding SHALL be **seam-qualified with the impl-site posit
 `trait-arg`, `self`, `assoc {name}`, `where {bounded-type}`, or `method {name} return`. Two positions
 that expose the **same** forbidden type SHALL therefore produce **distinct** findings, so baselining
 one exposure MUST NOT mask a new exposure of the same type at another position under the
-`(target, rule, finding_key)` baseline identity (the one forbidden false negative). Findings SHALL share
+`(target, rule_key, fact)` baseline identity (the one forbidden false negative). Findings SHALL share
 the `(target, rule)` of the signature-coupling boundary that carries them.
 
 #### Scenario: Two positions in one impl exposing the same type stay distinct findings
 
 - **WHEN** one impl exposes `crate::infra::DbPool` at both the `trait-arg` and `self` positions, and the `trait-arg` finding is recorded in the baseline as accepted
-- **THEN** the `self` finding still reacts: its seam names its own position, so the baseline identity `(target, rule, finding_key)` does not mask it
+- **THEN** the `self` finding still reacts: its seam names its own position, so the baseline identity `(target, rule_key, fact)` does not mask it
 
 #### Scenario: Two where-bounds on distinct type parameters exposing the same type stay distinct
 

@@ -186,7 +186,7 @@ pub(crate) struct VisibleItem<'a> {
     pub(crate) name: String,
 }
 
-/// The finite visibility-fact vocabulary. Its labels are published version-2 `item_kind` wire;
+/// The finite visibility-fact vocabulary. Its labels are published `item_kind` wire;
 /// keeping the variants typed makes a new governed item kind an explicit compatibility decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum VisibleItemKind {

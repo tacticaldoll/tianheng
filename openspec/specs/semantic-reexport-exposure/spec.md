@@ -73,7 +73,7 @@ A re-export finding SHALL be seam-qualified as `{canonical forbidden type} expos
 {exported-path}`, where `{exported-path}` is the module-qualified name the re-export publishes (the
 alias when `as` is used, otherwise the re-exported leaf name). Two re-exports of the **same** forbidden
 type under **different** exported names SHALL therefore produce **distinct** findings, so baselining
-one MUST NOT mask the other under the `(target, rule, finding_key)` baseline identity (the one forbidden
+one MUST NOT mask the other under the `(target, rule_key, fact)` baseline identity (the one forbidden
 false negative). Re-export findings SHALL share the `(target, rule)` of the signature-coupling
 boundary (`rule` = "must not expose").
 

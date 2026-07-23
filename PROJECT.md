@@ -221,7 +221,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **The semantic capability-admission test (the gate against lints).** A semantic capability is admissible in 渾儀 iff: (1) declarative-not-lint; (2) no essential gap on local-crate AST; (3) anchorable to a `syn`-resolvable element.
 - **Name resolution is a 渾儀-internal shared layer (`hunyi::resolve`).** `guibiao` (syn-free scanner) and `hunyi` (`syn` AST) retain separate resolution engines to maintain the syn quarantine.
 - **漏刻 (runtime) is identity-coherent.** Prod face (`assert_boundary!`) is std-light and fail-closed; CI face (`audit_probe_coverage`) is feature-gated behind `audit` (`xingbiao` dependency).
-- **Violation identity is a structured observed fact, not presentation.** 璇璣 carries the vocabulary-neutral `FindingKey` envelope and compares identities by `(target, rule, finding_key)`. Diagnostic text and file paths stay out of baseline identity.
+- **Violation identity is a structured observed fact, not presentation.** 璇璣 carries the vocabulary-neutral `ViolationId`, constructed from a governed target, a validated `RuleKey`, and a `StructuredFactIdentity` — `(target, rule_key, fact)` — with each dimension owning its own fact schemas. Diagnostic text and file paths stay out of baseline identity.
 - **Rule construction is builder-owned; inspection stays open-ended.** Data-carrying `Rule`/`ModuleRule` variants are `#[non_exhaustive]`.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.
 

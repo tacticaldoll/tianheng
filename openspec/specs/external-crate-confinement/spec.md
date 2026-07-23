@@ -100,7 +100,7 @@ The rule is **use-only**, matching the scanner: an `extern crate c;` declaration
 
 ### Requirement: Identity distinguishes the confined crate
 
-The system SHALL make a violation's identity `(target, rule, finding_key)` distinguish the confined crate, by carrying the confined crate name as the `target`. A confinement of crate `c` and a confinement of a different crate `d`, both anchored on the same permitted subtree `s` and both breached by the same offending importer, SHALL therefore produce **distinct** identities. Were the confined crate absent from the identity, baselining one confined crate's violation would mask a new, un-baselined violation of the other confined crate from the same module — a false negative the identity model forbids.
+The system SHALL make a violation's identity `(target, rule_key, fact)` distinguish the confined crate, by carrying the confined crate name as the `target`. A confinement of crate `c` and a confinement of a different crate `d`, both anchored on the same permitted subtree `s` and both breached by the same offending importer, SHALL therefore produce **distinct** identities. Were the confined crate absent from the identity, baselining one confined crate's violation would mask a new, un-baselined violation of the other confined crate from the same module — a false negative the identity model forbids.
 
 #### Scenario: Baselining one confined crate does not mask another on the same subtree
 
@@ -109,7 +109,7 @@ The system SHALL make a violation's identity `(target, rule, finding_key)` disti
 
 ### Requirement: A confinement reports each violation once
 
-The system SHALL report each distinct confinement violation at most once, deduplicated by identity `(target, rule, finding_key)`. When one offending module imports the confined crate on multiple lines, or across multiple files of the same enclosing module, the system SHALL emit a single violation for that (subtree, confined-crate, importer) triple, not one per import site.
+The system SHALL report each distinct confinement violation at most once, deduplicated by identity `(target, rule_key, fact)`. When one offending module imports the confined crate on multiple lines, or across multiple files of the same enclosing module, the system SHALL emit a single violation for that (subtree, confined-crate, importer) triple, not one per import site.
 
 #### Scenario: One importer importing the confined crate on many lines yields one violation
 

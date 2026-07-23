@@ -54,8 +54,8 @@ funnel, sans-I/O, and unsafe-confinement examples SHALL retain their focused nar
 
 ### Requirement: Dogfood assertions preserve presentation freedom
 
-Dogfood SHALL identify expected reactions through structured boundary kind, stable rule identity,
-dimension-owned `FindingKey`, and declared reason or anchor where needed. It SHALL NOT pin an entire
+Dogfood SHALL identify expected reactions through structured boundary kind, validated `RuleKey`,
+dimension-owned `StructuredFactIdentity`, and declared reason or anchor where needed. It SHALL NOT pin an entire
 JSON report, ANSI output, or human finding sentence. The examples script SHALL execute the catalog
 through the public shell in addition to its library-level structured assertions.
 
