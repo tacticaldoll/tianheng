@@ -187,6 +187,7 @@ fn tianheng_constitution() -> Constitution {
                 .module("crate::module_resolve")
                 .must_not_call_inline("std::fs")
                 .ending_with(["canonicalize"])
+                .depth(ScanDepth::Subtree)
                 .because(
                     "path canonicalization for this resolver's own cycle/dedup guard must go \
                      through the shared, fail-loud `xingbiao::try_visit`, never be re-hand-rolled \
@@ -199,6 +200,7 @@ fn tianheng_constitution() -> Constitution {
                 .module("crate::module_scan::reachability")
                 .must_not_call_inline("std::fs")
                 .ending_with(["canonicalize"])
+                .depth(ScanDepth::Subtree)
                 .because(
                     "path canonicalization for this walker's own cycle/dedup guard must go \
                      through the shared, fail-loud `xingbiao::canonicalize_or_fail`/`try_visit`, \
@@ -211,6 +213,7 @@ fn tianheng_constitution() -> Constitution {
                 .module("crate::scan")
                 .must_not_call_inline("std::fs")
                 .ending_with(["canonicalize"])
+                .depth(ScanDepth::Subtree)
                 .because(
                     "path canonicalization for this crate-wide walker's own cycle/dedup guard \
                      must go through the shared, fail-loud `xingbiao::canonicalize_or_fail`, \
@@ -225,6 +228,7 @@ fn tianheng_constitution() -> Constitution {
                 .module("crate::audit::scan")
                 .must_not_call_inline("std::fs")
                 .ending_with(["canonicalize"])
+                .depth(ScanDepth::Subtree)
                 .because(
                     "this CI-only probe scanner's module-cycle guard must go through the shared, \
                      fail-loud `xingbiao::try_visit`, never be re-hand-rolled inline here — closes \

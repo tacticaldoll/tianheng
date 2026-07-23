@@ -38,7 +38,6 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:**
-  - Self-governance observation depth upgrade (explicit ScanDepth declarations across self_governance.rs boundaries after the depth feature lands).
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `cfg_attr(path)` observe-both semantics (requires real adopter pressure).
   - Reusable testing harness (`tianheng::testing`).
@@ -52,6 +51,7 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
   - Trait method set freezing (API contract, not architectural shape).
   - Pre-creating empty crates/modules.
 - **BUILT / HISTORY:**
+  - Self-governance observation depth upgrade (explicit ScanDepth declarations across self_governance.rs boundaries).
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ## Version horizons

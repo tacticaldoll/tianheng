@@ -60,6 +60,7 @@ claim outside that perimeter.
     ModuleBoundary::in_crate("my-app")
         .module("crate::domain")
         .must_not_import("crate::infra")
+        .depth(ScanDepth::Subtree)
         .because("the domain stays pure — it never depends on infrastructure"),
 )
 ```
