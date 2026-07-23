@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use xuanji::ScanDepth;
 
 use crate::cargo_metadata::{crate_root_file, find_package};
 use crate::errors::{
@@ -45,7 +46,7 @@ fn push_module_violation(
     violations.push(
         Violation::new(
             BoundaryKind::Module,
-            ViolationId::new(target, boundary.rule.key(), finding.key().clone()),
+            ViolationId::new(target, boundary.rule_key(), finding.key().clone()),
             rule,
             finding.text(),
             boundary.reason.clone(),
@@ -99,6 +100,7 @@ pub(crate) fn check_module_boundary(
         &remapped,
         &remap_shadowed,
         root_relative.as_deref(),
+        boundary.depth,
     );
     if governed.is_empty() {
         // Two distinct misconfigurations, kept apart so the error is self-describing
@@ -176,6 +178,7 @@ pub(crate) fn check_module_boundary(
             &remapped,
             &remap_shadowed,
             root_relative.as_deref(),
+            ScanDepth::Subtree,
         );
         // Collect `(importer module, offending file)` pairs *before* de-duplication: the file
         // is in hand here (the scan reads it to observe the import) but is gone once the list
@@ -284,6 +287,7 @@ pub(crate) fn check_module_boundary(
             &remapped,
             &remap_shadowed,
             root_relative.as_deref(),
+            ScanDepth::Subtree,
         );
         // `(offending importer module, file)` collected before de-dup, for the same reason as
         // the inbound rule: the file is in hand during the scan but lost once the list
@@ -360,6 +364,7 @@ pub(crate) fn check_module_boundary(
             &remapped,
             &remap_shadowed,
             root_relative.as_deref(),
+            ScanDepth::Subtree,
         );
         // The rename-aware declared-dependency import identifiers back the strict-external head
         // ladder — read ONLY when the external variant is in play, so the default path reads

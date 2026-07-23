@@ -70,35 +70,35 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 > 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself. The clock axis reacts via 圭表 (must-not-call-inline `std::time::…::now`), the async axis via 渾儀 (must-not-expose an async public fn)
 
-- **rule**: inline symbol path confined to module (confined_prefix: std::time; ending_with: now)
+- **rule**: inline symbol path confined to module (confined_prefix: std::time; ending_with: now; scan_depth: subtree)
 - **kind**: module · **severity**: enforce · **crate**: xuanji
 
 ### `crate::module_resolve`
 
 > path canonicalization for this resolver's own cycle/dedup guard must go through the shared, fail-loud `xingbiao::try_visit`, never be re-hand-rolled inline here — the 0.2.2 lesson (a canonicalize-failure policy hand-rolled per call site drifted to disagreeing behavior across this crate)
 
-- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize; scan_depth: subtree)
 - **kind**: module · **severity**: enforce · **crate**: hunyi
 
 ### `crate::module_scan::reachability`
 
 > path canonicalization for this walker's own cycle/dedup guard must go through the shared, fail-loud `xingbiao::canonicalize_or_fail`/`try_visit`, never be re-hand-rolled inline here — the 0.2.2 lesson (this exact file once carried three disagreeing canonicalize-failure policies at once)
 
-- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize; scan_depth: subtree)
 - **kind**: module · **severity**: enforce · **crate**: guibiao
 
 ### `crate::scan`
 
 > path canonicalization for this crate-wide walker's own cycle/dedup guard must go through the shared, fail-loud `xingbiao::canonicalize_or_fail`, never be re-hand-rolled inline here — a sibling instance of the 0.2.2 lesson found in this same crate's `module_resolve` (a second, independently hand-rolled wrapper here once carried its own disagreeing error-message policy)
 
-- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize; scan_depth: subtree)
 - **kind**: module · **severity**: enforce · **crate**: hunyi
 
 ### `crate::audit::scan`
 
 > this CI-only probe scanner's module-cycle guard must go through the shared, fail-loud `xingbiao::try_visit`, never be re-hand-rolled inline here — closes the same class of drift 圭表/渾儀's own guards were confined against, now that 漏刻's self-law permits the additive, `audit`-feature-gated `xingbiao` dependency this routes through
 
-- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize; scan_depth: subtree)
 - **kind**: module · **severity**: enforce · **crate**: louke
 
 ## Async-exposure boundaries
@@ -107,6 +107,6 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 > 璇璣 is the measure-only reaction model: it reads no ambient clock inline and exposes no async surface — time and effects enter only through the dimensions above it, never the model itself. The clock axis reacts via 圭表 (must-not-call-inline `std::time::…::now`), the async axis via 渾儀 (must-not-expose an async public fn)
 
-- **rule**: must not expose async fn (including_submodules: true)
+- **rule**: must not expose async fn (including_submodules: true; scan_depth: subtree)
 - **kind**: semantic · **severity**: enforce · **crate**: xuanji
 

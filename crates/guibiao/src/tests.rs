@@ -5887,3 +5887,98 @@ fn inline_strict_external_default_path_module_attribution_unshifted() {
         "default attribution must stay on the FILE module, not the inline submodule: {violations:?}"
     );
 }
+
+#[test]
+fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "pub mod sub;\nuse crate::forbidden_on_core;\n"),
+        ("core/sub.rs", "use crate::forbidden_on_sub;\n"),
+    ];
+
+    // 1. Shallow depth: boundary on crate::core only governs core.rs, so import in core/sub.rs does NOT react
+    let shallow_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::forbidden_on_sub")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("core seam does not import forbidden_on_sub");
+    let (res1, shallow_violations) =
+        run_module_check("scan-depth-shallow", files, shallow_boundary);
+    assert!(res1.is_ok(), "{res1:?}");
+    assert_eq!(
+        shallow_violations.len(),
+        0,
+        "Shallow depth ignores submodule files"
+    );
+
+    // 2. Subtree depth: boundary on crate::core governs core.rs AND core/sub.rs, so import in core/sub.rs DOES react
+    let subtree_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::forbidden_on_sub")
+        .depth(xuanji::ScanDepth::Subtree)
+        .because("core subtree does not import forbidden_on_sub");
+    let (res2, subtree_violations) =
+        run_module_check("scan-depth-subtree", files, subtree_boundary);
+    assert!(res2.is_ok(), "{res2:?}");
+    assert_eq!(
+        subtree_violations.len(),
+        1,
+        "Subtree depth evaluates submodule files"
+    );
+    assert_eq!(
+        subtree_violations[0]
+            .rule_key()
+            .fields()
+            .collect::<Vec<_>>(),
+        vec![("module", "crate::forbidden_on_sub")]
+    );
+}
+
+#[test]
+fn legacy_inline_confinement_defaults_to_subtree_and_preserves_identity() {
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "pub mod sub;\n"),
+        (
+            "core/sub.rs",
+            "fn t() { let _ = std::time::SystemTime::now(); }\n",
+        ),
+    ];
+
+    // 1. Legacy inline boundary without explicit depth -> defaults to Subtree -> catches call in core/sub.rs
+    let legacy_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_call_inline("std::time")
+        .because("core reads no wall clock");
+    let (res, violations) = run_module_check("legacy-inline-subtree", files, legacy_boundary);
+    assert!(res.is_ok(), "{res:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "Legacy inline boundary governs submodules"
+    );
+    // Verify legacy RuleKey identity has NO "scan_depth" field (zero baseline breakage)
+    assert_eq!(
+        violations[0].rule_key().fields().collect::<Vec<_>>(),
+        vec![
+            ("ending_with", "[]"),
+            ("prefix", "std::time"),
+            ("strict", "false")
+        ]
+    );
+
+    // 2. Explicit Shallow depth -> restricts observation seam to core.rs -> ignores call in core/sub.rs
+    let shallow_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_call_inline("std::time")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("core seam reads no wall clock");
+    let (res2, shallow_violations) =
+        run_module_check("shallow-inline-seam", files, shallow_boundary);
+    assert!(res2.is_ok(), "{res2:?}");
+    assert_eq!(
+        shallow_violations.len(),
+        0,
+        "Explicit Shallow depth ignores submodule calls"
+    );
+}

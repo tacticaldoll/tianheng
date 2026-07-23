@@ -17,8 +17,8 @@
 #![deny(missing_docs)]
 
 pub use xuanji::{
-    BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, Severity, StructuredFactIdentity,
-    Violation, ViolationId,
+    BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, ScanDepth, Severity,
+    StructuredFactIdentity, Violation, ViolationId,
 };
 
 mod dsl;

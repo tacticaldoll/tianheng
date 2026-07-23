@@ -89,3 +89,22 @@ changes.
 
 - **WHEN** both reference consumers are checked with their Tianheng-family dependencies patched to the local change
 - **THEN** their existing builder, runner, check, coverage, projection, baseline, and type-name usage compiles unchanged
+
+### Requirement: Specific boundary builders SHALL expose explicit ScanDepth toggles
+
+The public reaction model SHALL provide a strongly-typed `ScanDepth` enum (`Shallow`, `Subtree`) with `#[default]` set to `Shallow`. Supporting boundary builders (`guibiao`: `ModuleBoundary`, `InlineConfinementDraft`; `hunyi`: `AsyncExposureBoundary`, `ImplTraitBoundary`) SHALL expose `.depth(ScanDepth)` to allow explicit configuration of observation depth. Legacy module boundaries SHALL preserve their default `Subtree` evaluation and baseline identity, while `.depth(ScanDepth::Shallow)` restricts observation to the anchored seam. Existing ergonomic builders (such as `.including_submodules()`) SHALL map to `.depth(ScanDepth::Subtree)` and SHALL remain fully compatible.
+
+#### Scenario: Legacy module boundary construction preserves existing Subtree evaluation and identity
+
+- **WHEN** a module boundary is declared without an explicit depth modifier
+- **THEN** its scan depth defaults to `ScanDepth::Subtree` (governing its whole module subtree) and its rule key and evaluation behavior are 100% preserved
+
+#### Scenario: Explicit depth configuration via ScanDepth enum
+
+- **WHEN** a supporting boundary builder is configured with `.depth(ScanDepth::Subtree)` or `.depth(ScanDepth::Shallow)`
+- **THEN** the boundary retains the specified depth and evaluates matching targets accordingly
+
+#### Scenario: Existing builder ergonomics delegate to ScanDepth
+
+- **WHEN** an adopter calls an existing modifier like `.including_submodules()`
+- **THEN** the boundary configures its depth to `ScanDepth::Subtree` without breaking caller code
