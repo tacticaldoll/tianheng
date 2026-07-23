@@ -27,7 +27,7 @@ live item is promoted, it must name: **class**, **observed pressure**, **observa
 - **DECLINED** — a considered direction rejected for a recorded reason.
 - **BUILT / HISTORY** — shipped context retained only where it explains a live contract or trigger;
   requirements live in [`openspec/specs/*`](openspec/specs) and settled rationale in [`PROJECT.md`](PROJECT.md).
-  Detailed historical ledgers for 0.1.x – 0.3.0 are archived in [`docs/history/0.3.0-built-ledger.md`](docs/history/0.3.0-built-ledger.md).
+  Detailed historical ledgers for 0.1.x – 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ## Live decision index
 
@@ -51,7 +51,7 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
   - Trait method set freezing (API contract, not architectural shape).
   - Pre-creating empty crates/modules.
 - **BUILT / HISTORY:**
-  - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.3.0-built-ledger.md`](docs/history/0.3.0-built-ledger.md).
+  - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ## Version horizons
 
