@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 struct TempPath(PathBuf);
 
 impl TempPath {
+    fn named(label: &str) -> Self {
+        Self::new(std::env::temp_dir().join(format!("tianheng-{label}-{}", std::process::id())))
+    }
+
     fn new(path: PathBuf) -> Self {
         let guard = Self(path);
         guard.clean();
@@ -897,9 +901,7 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 
 #[test]
 fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
-    let base = TempPath::new(
-        std::env::temp_dir().join(format!("tianheng-runtime-root-{}", std::process::id())),
-    );
+    let base = TempPath::named("runtime-root");
     let base = base.path();
     std::fs::create_dir_all(base).unwrap();
     std::fs::write(
@@ -1940,9 +1942,7 @@ fn warn_uncovered_never_changes_the_exit_code() {
 fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // `check` defaults its target to the nearest `Cargo.toml`, cargo-style. Drive the pure
     // ascent over a real temp tree so the walk is proven without touching the process cwd.
-    let root = TempPath::new(
-        std::env::temp_dir().join(format!("tianheng-nearest-{}", std::process::id())),
-    );
+    let root = TempPath::named("nearest");
     let root = root.path();
     let outer = root.join("outer");
     let inner = outer.join("inner");
@@ -1978,10 +1978,7 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
 fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     // The metadata-preserving merge, driven through the real write path + a temp file: write a
     // baseline, hand-annotate an entry, re-write from the same report — the annotation survives.
-    let path = TempPath::new(std::env::temp_dir().join(format!(
-        "tianheng-baseline-merge-{}.json",
-        std::process::id()
-    )));
+    let path = TempPath::named("baseline-merge");
     let path = path.path();
     let path_str = path.to_str().expect("utf-8 temp path");
 
@@ -2016,10 +2013,7 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
 
 #[test]
 fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_it() {
-    let path = TempPath::new(std::env::temp_dir().join(format!(
-        "tianheng-baseline-v1-upgrade-{}.json",
-        std::process::id()
-    )));
+    let path = TempPath::named("baseline-v1-upgrade");
     let path = path.path();
     let path_str = path.to_str().expect("utf-8 temp path");
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
@@ -2042,10 +2036,7 @@ fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_
 
 #[test]
 fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
-    let path = TempPath::new(std::env::temp_dir().join(format!(
-        "tianheng-baseline-create-race-{}.json",
-        std::process::id()
-    )));
+    let path = TempPath::named("baseline-create-race");
     let path = path.path();
     std::fs::write(path, "appeared concurrently").unwrap();
 
@@ -2063,8 +2054,7 @@ fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
 fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
     // Pass `bless` as a bool (the helper reads no environment), so this test mutates no
     // process-global state and cannot race the parallel self-law gate.
-    let dir =
-        TempPath::new(std::env::temp_dir().join(format!("tianheng-gate-{}", std::process::id())));
+    let dir = TempPath::named("gate");
     // A not-yet-existing subdir, so bless must `create_dir_all` the parent.
     let path = dir.path().join("sub").join("law.md");
     let hint = "BLESS=1 cargo test";
