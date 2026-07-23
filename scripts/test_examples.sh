@@ -98,7 +98,8 @@ for identity in \
     '"type": "tianheng.fact/hunyi/trait-impl-site"' \
     '"type": "tianheng.fact/hunyi/forbidden-marker-acquisition"' \
     '"type": "tianheng.fact/hunyi/dyn-trait-exposure"' \
-    '"type": "tianheng.fact/hunyi/impl-trait-exposure"'
+    '"type": "tianheng.fact/hunyi/impl-trait-exposure"' \
+    '"type": "tianheng.fact/hunyi/async-exposure"'
 do
     grep -q "$identity" "$EXAMPLE_ARTIFACT_ROOT/capability_catalog.json" \
         || { echo "::error::capability catalog missing structured identity $identity"; exit 1; }
@@ -110,6 +111,8 @@ fulfill_family hunyi/trait-impl
 fulfill_family hunyi/forbidden-marker
 fulfill_family hunyi/dyn-trait
 fulfill_family hunyi/impl-trait
+fulfill_family hunyi/async-exposure
+fulfill_family tianheng/no-existential-leak
 fulfill_example capability-catalog
 
 # ---------------------------------------------------------------- composed

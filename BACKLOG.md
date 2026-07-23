@@ -366,10 +366,21 @@ never silent — the FN-first contract requires a known gap be recorded, not hid
   there. No residual FN remains in this pair.
 
 Forward depths (born when built, same `syn` source):
-- **`must_not_expose_existential` (unifier)** — a possible future capability folding impl-trait
-  (written `impl Future`/RPIT) and async-exposure (implicit `impl Future`) under one "no
-  existential at this seam" rule. Deferred: the two syntactic signals stay distinct rules until a
-  unification earns its own admission (it must not blur the two findings' identities). Not built.
+- **`must_not_expose_existential` (unifier) — BUILT as `NoExistentialLeak` (`Constitution::no_existential_leak`).**
+  Shipped differently than originally framed: not a fused `Rule` merging impl-trait and
+  async-exposure identity (the deferred "must not blur the two findings' identities" concern
+  assumed that was the target), but a `tianheng`-shell **composed profile** mirroring
+  `sans_io_pure` — one declaration expands into the existing `ImplTraitBoundary` and
+  `AsyncExposureBoundary` boundaries, each keeping its own separate identity untouched. Two
+  distinct existential-leak causes remain two distinct, separately-baseline-able findings; nothing
+  about identity was ever at risk. Required `ImplTraitBoundary` to gain subtree scope
+  (`including_submodules`, mirroring `AsyncExposureBoundary`'s existing depth) so the profile's
+  whole-subtree claim is honest on both halves. `DynTraitBoundary` subtree scope and
+  `AsyncExposureBoundary` operand-scoping remain deliberate, stated non-goals, not silently
+  dropped: dyn-trait has no demonstrated consumer for subtree scope yet, and async's
+  compiler-inserted `impl Future` has no written principal-trait text for operand-resolution to
+  target. See `openspec/specs/semantic-impl-trait-boundary` and the `existential-leak-profile`
+  change.
 - **`UnsafeBoundary` — subtree-confined `unsafe`**: **BUILT (v0.1.8).** `UnsafeBoundary::in_crate(p)
   .only_under(["crate::ffi"])` — `unsafe` (blocks, `unsafe fn`/`impl`/`trait`, `unsafe extern`) may
   appear only under the declared subtree(s); a site elsewhere reacts. Observed via an

@@ -41,4 +41,12 @@ pub fn constitution() -> Constitution {
                 .must_not_expose_impl_trait()
                 .because("the catalog impl-trait family must produce its structured reaction"),
         )
+        .no_existential_leak(
+            NoExistentialLeak::in_crate("capability_catalog")
+                .module("crate::shapes")
+                .because(
+                    "the catalog's composed no-existential-leak profile must produce its \
+                     structured reaction for both the written and the implicit existential signal",
+                ),
+        )
 }
