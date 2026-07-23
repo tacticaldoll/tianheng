@@ -12,6 +12,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+### Documentation
+- Archived historical 0.1.x–0.3.0 shipped backlog ledgers into `docs/history/0.3.0-built-ledger.md` and pruned `BACKLOG.md` to optimize context gravity.
+
 ### Added
 - Semantic `RuleKey` and `StructuredFactIdentity` inspection across 圭表, 渾儀, 漏刻, 璇璣, and
   `tianheng::prelude::*`; all three instruments remain directly adoptable and return the same
