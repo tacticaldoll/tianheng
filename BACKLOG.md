@@ -37,22 +37,13 @@ Classification and promotion remain human-reviewed judgment. Add an automated re
 an observable, repeated drift demonstrates what a machine can decide without pretending judgment is
 structural enforcement.
 
-## Live decision index — 0.2.x truth repair and the next breaking window
+## Live decision index — 0.2.x truth repair and the 0.3.0 identity window
 
 This index makes the current work discoverable without duplicating the detailed evidence below.
 
 ### DESIGN-BREAKING
 
-- **Identity v3 migration bundle.** **Pressure/source:** version-2 identity still couples human
-  `rule` presentation to `ViolationId` and SARIF `ruleId`; SARIF fingerprints remain presentation
-  bearing; unsafe facts compress form/trait/owner/name into one label; async facts have not decided
-  whether identity is the seam or exact signature. **Current reaction:** exhaustive v2 schema
-  catalogs and v1/v2 baseline compatibility freeze the existing wire throughout 0.2.x. **Risk:** a
-  piecemeal fix would churn baselines or create two competing identities. **Trigger:** a verified
-  adopter migration need or correctness failure that cannot be solved additively. **Version:** one
-  coordinated `0.3.0` OpenSpec migration: stable rule key, SARIF fingerprint v2, unsafe decomposition,
-  async decision, and baseline v3 compatibility. **Authority:** the post-0.2 identity-pressure
-  section below and the structured-identity decisions in `PROJECT.md`.
+None currently live — the identity migration below (`0.3.0`) closed the prior candidate.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
@@ -64,32 +55,40 @@ This index makes the current work discoverable without duplicating the detailed 
   and file-granular un-auditable-probe identity remain bounded as documented below.
 - **DECLINED:** keep the existing explicitly rejected directions under their recorded rationale;
   this index does not reopen them.
-- **BUILT / HISTORY:** shipped capability ledgers below are historical context, not live work. New
-  work starts from the live classes above, then moves through OpenSpec where capability behavior
-  changes.
+- **BUILT / HISTORY:** the `0.3.0` identity migration bundle — stable rule key, SARIF fingerprint v2,
+  unsafe-site decomposition, the async seam-vs-signature decision, and baseline compatibility (no
+  numeric baseline is read; an unsupported file is rejected, never migrated) — shipped in one
+  coordinated OpenSpec change (see *Version horizons* below and `PROJECT.md`'s Decisions). Shipped
+  capability ledgers elsewhere in this file are historical context, not live work. New work starts
+  from the live classes above, then moves through OpenSpec where capability behavior changes.
 
-## Version horizons — what 0.2.x carries vs what earns the next breaking window
+## Version horizons — what 0.2.x carried, what 0.3.0 shipped, and what earns the next breaking window
 
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
 patch, breaking → minor**, and never a vanity minor bump. Version `0.2.0` shipped the first
-deliberate breaking window; the current line is **0.2.x**:
+deliberate breaking window; `0.3.0` shipped the second:
 
 - **0.2.x (patch)** — additive depth on an existing observation source, false-negative closures
   that preserve the published API and version-2 identity wire, packaging / CI / license hygiene,
   compatibility reactions, and governance-doc corrections. Size alone never earns a minor.
-- **Next breaking window (`0.3.0` only if earned)** — candidates that must reshape the published
-  reaction-inspection or baseline wire wait here: unsafe-site fact decomposition, a decision on
-  whether an async seam's rendered signature belongs to identity, and separation of stable rule
-  identity from human rule presentation. These candidates do not promise a `0.3.0`; one is promoted
-  only when a real adopter or correctness pressure justifies the break, and then the break earns the
-  minor. The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded
-  drop-in surface unless a separately demonstrated forcing function says otherwise.
+- **The next breaking window past `0.3.0` (only if earned)** — the same discipline applies: no
+  candidate promises a minor bump until a real adopter or correctness pressure justifies the break.
+  The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded drop-in
+  surface unless a separately demonstrated forcing function says otherwise.
 
 **The `0.2.0` window — SHIPPED.** Structured violation identity moved live findings to
 dimension-owned `FindingKey`s and version-2 baselines; the widened `guibiao` projection / baseline
 surface was kept and shaped because modou consumes it standalone. The composed adopter surface was
-compile-reacted against pacta's usage. Those decisions and their rationale now live in `PROJECT.md`;
-the post-0.2 pressure points below are follow-ups, not unfinished 0.2.0 scope.
+compile-reacted against pacta's usage. Those decisions and their rationale now live in `PROJECT.md`.
+
+**The `0.3.0` window — SHIPPED.** Its three candidates landed in one coordinated
+migration (`feat(xuanji)!: make reaction identity semantic`): unsafe-site fact decomposition
+(owner/owner-kind/trait/name as separate structured fields — `semantic-unsafe-confinement`), the
+async seam-vs-signature decision (identity is the seam — module/owner-kind/owner/name; the rendered
+signature stays presentation-only — `semantic-async-exposure-boundary`), and stable rule identity
+separated from human rule presentation (`RuleKey` vs. `rule` — `structured-violation-identity`).
+SARIF fingerprints and the baseline wire moved with it; no numeric baseline is read, and there is no
+automatic migration off one. Those decisions now live in `PROJECT.md`.
 
 ### The crate family as products — identity now, product weight on reaction
 
