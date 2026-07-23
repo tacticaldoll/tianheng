@@ -74,42 +74,15 @@ impl Drop for TempSrcTree {
     }
 }
 
-/// Write `files` (each `(relative path, contents)`) under a unique temp `src` dir, then
-/// return the findings for `module` against `forbidden`. Exercises the whole evaluator
-/// (module resolution → exposure → use-resolution → match) without spawning `cargo`.
-fn findings(
+/// Write `files` under a unique temp `src` tree and exercise the semantic evaluator without
+/// spawning `cargo`. Capability-facing helpers below name the posture they need while this
+/// function owns the shared module-resolution → exposure → use-resolution → match pipeline.
+fn semantic_findings(
     name: &str,
     files: &[(&str, &str)],
     module: &str,
     forbidden: &[&str],
-) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(name);
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-    let result = module_findings(
-        tree.src(),
-        &tree.root(),
-        module,
-        &forbidden,
-        "x",
-        false,
-        &[],
-    );
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
-}
-
-/// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
-/// normalized, as `dependency_names` produces), so an external-crate exposure resolves.
-fn findings_with_deps(
-    name: &str,
-    files: &[(&str, &str)],
-    module: &str,
-    forbidden: &[&str],
+    include_trait_impls: bool,
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
     let tree = TempSrcTree::new(name);
@@ -122,7 +95,7 @@ fn findings_with_deps(
         module,
         &forbidden,
         "x",
-        false,
+        include_trait_impls,
         &deps,
     );
     result.map(|facts| {
@@ -133,6 +106,28 @@ fn findings_with_deps(
     })
 }
 
+/// Return the default semantic findings for `module` against `forbidden`.
+fn findings(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    forbidden: &[&str],
+) -> Result<Vec<String>, String> {
+    semantic_findings(name, files, module, forbidden, false, &[])
+}
+
+/// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
+/// normalized, as `dependency_names` produces), so an external-crate exposure resolves.
+fn findings_with_deps(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    forbidden: &[&str],
+    deps: &[&str],
+) -> Result<Vec<String>, String> {
+    semantic_findings(name, files, module, forbidden, false, deps)
+}
+
 /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
 /// `impl` block's impl-site-authored positions are also observed.
 fn findings_including_trait_impls(
@@ -141,16 +136,7 @@ fn findings_including_trait_impls(
     module: &str,
     forbidden: &[&str],
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(name);
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-    let result = module_findings(tree.src(), &tree.root(), module, &forbidden, "x", true, &[]);
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    semantic_findings(name, files, module, forbidden, true, &[])
 }
 
 // --- extern-path exposure (the external-crate name set) -------------------
