@@ -56,8 +56,6 @@ claim outside that perimeter.
 *Intent: the domain depends on ports, never on infrastructure.*
 
 ```rust
-use guibiao::{Constitution, ModuleBoundary, ScanDepth};
-
 .boundary(
     ModuleBoundary::in_crate("my-app")
         .module("crate::domain")
