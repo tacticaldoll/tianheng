@@ -32,6 +32,6 @@ mod tests;
 pub use baseline::{Baseline, BaselineEntry, ViolationId, apply_baseline};
 pub use finding::Finding;
 pub use identity::{RuleKey, StructuredFactIdentity};
-pub use model::{BoundaryKind, Outcome, Polarity, Severity};
+pub use model::{BoundaryKind, Outcome, Polarity, ScanDepth, Severity};
 pub use util::pretty_json;
 pub use violation::{Report, Violation};

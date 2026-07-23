@@ -52,6 +52,35 @@ impl BoundaryKind {
     }
 }
 
+/// The depth or granularity level of a boundary observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum ScanDepth {
+    /// Default shallow scan: current module/signature level (<10ms).
+    #[default]
+    Shallow,
+    /// Deep subtree scan: recursive submodule and private implementation traversal.
+    Subtree,
+    /// Audit scan: static AST observation coupled with runtime probe coverage cross-check.
+    Audit,
+}
+
+impl ScanDepth {
+    /// The projection label (`"shallow"` / `"subtree"` / `"audit"`), single source for report and constitution renderings.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ScanDepth::Shallow => "shallow",
+            ScanDepth::Subtree => "subtree",
+            ScanDepth::Audit => "audit",
+        }
+    }
+
+    /// Returns true if this depth is `Shallow` (useful for default/filtering comparisons).
+    pub fn is_shallow(&self) -> bool {
+        matches!(self, Self::Shallow)
+    }
+}
+
 /// The repair direction a boundary-drift violation points to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]

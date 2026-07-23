@@ -1,6 +1,4 @@
-//! Async-exposure declaration DSL — [`AsyncExposureBoundary`] and its draft chain.
-
-use xuanji::{RuleKey, Severity};
+use xuanji::{RuleKey, ScanDepth, Severity};
 
 /// An async-exposure boundary: a module's public API must not declare an `async fn`. The
 /// **implicit-existential** complement of [`ImplTraitBoundary`]: an `async fn` leaks a
@@ -40,6 +38,15 @@ impl AsyncExposureBoundary {
                 self.including_submodules.to_string(),
             )],
         )
+    }
+
+    /// The observation scan depth for this boundary.
+    pub fn scan_depth(&self) -> ScanDepth {
+        if self.including_submodules {
+            ScanDepth::Subtree
+        } else {
+            ScanDepth::Shallow
+        }
     }
 
     /// Begin an async-exposure boundary in the crate named `package`.
@@ -139,6 +146,12 @@ pub struct AsyncExposureBoundaryDraft {
 }
 
 impl AsyncExposureBoundaryDraft {
+    /// Configure the observation scan depth / granularity level.
+    pub fn depth(mut self, depth: ScanDepth) -> Self {
+        self.including_submodules = !depth.is_shallow();
+        self
+    }
+
     /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
     /// reaction — the first rung of adoption.
     pub fn warn(mut self) -> Self {
@@ -153,9 +166,8 @@ impl AsyncExposureBoundaryDraft {
     /// projected only when set, so a bare boundary stays byte-identical.
     ///
     /// [`SemanticBoundary`]: crate::SemanticBoundary
-    pub fn including_submodules(mut self) -> Self {
-        self.including_submodules = true;
-        self
+    pub fn including_submodules(self) -> Self {
+        self.depth(ScanDepth::Subtree)
     }
 
     /// Finish the boundary with its human-readable reason (the repair hint).

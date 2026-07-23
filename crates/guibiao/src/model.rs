@@ -862,6 +862,7 @@ pub struct ModuleBoundary {
     pub(crate) reason: String,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<String>,
+    pub(crate) depth: ScanDepth,
 }
 
 impl ModuleBoundary {
@@ -883,6 +884,11 @@ impl ModuleBoundary {
     /// The durable governance anchor recorded with the boundary, if any.
     pub fn anchor(&self) -> Option<&str> {
         self.anchor.as_deref()
+    }
+
+    /// The scan depth / granularity recorded with the boundary.
+    pub fn scan_depth(&self) -> ScanDepth {
+        self.depth
     }
 
     /// The rule this boundary declares, exposed read-only for projection and model inspection.
@@ -1317,6 +1323,7 @@ impl ModuleTargetDraft {
             strict: false,
             external: false,
             severity: Severity::Enforce,
+            depth: ScanDepth::Shallow,
         }
     }
 
@@ -1326,6 +1333,7 @@ impl ModuleTargetDraft {
             module: self.module,
             rule,
             severity: Severity::Enforce,
+            depth: ScanDepth::Shallow,
         }
     }
 }
@@ -1336,9 +1344,21 @@ pub struct ModuleBoundaryDraft {
     module: String,
     rule: ModuleRule,
     severity: Severity,
+    depth: ScanDepth,
 }
 
 impl ModuleBoundaryDraft {
+    /// Configure the observation scan depth / granularity level.
+    pub fn depth(mut self, depth: ScanDepth) -> Self {
+        self.depth = depth;
+        self
+    }
+
+    /// Convenience modifier setting the scan depth to [`ScanDepth::Subtree`].
+    pub fn including_submodules(self) -> Self {
+        self.depth(ScanDepth::Subtree)
+    }
+
     /// Make this boundary advisory: its violations are reported but do not fail CI.
     pub fn warn(mut self) -> Self {
         self.severity = Severity::Warn;
@@ -1354,6 +1374,7 @@ impl ModuleBoundaryDraft {
             reason: reason.to_string(),
             severity: self.severity,
             anchor: None,
+            depth: self.depth,
         }
     }
 }
@@ -1372,9 +1393,16 @@ pub struct InlineConfinementDraft {
     strict: bool,
     external: bool,
     severity: Severity,
+    depth: ScanDepth,
 }
 
 impl InlineConfinementDraft {
+    /// Configure the observation scan depth / granularity level.
+    pub fn depth(mut self, depth: ScanDepth) -> Self {
+        self.depth = depth;
+        self
+    }
+
     /// Narrow the confinement to react only on calls whose **terminal segment** (leaf-exact) is
     /// one of `verbs` (e.g. `["now"]`) — the adopter's declared read verbs. The adopter owns any
     /// false negative from omitting a verb (a future `::current()` passes); the engine bakes in no
@@ -1468,6 +1496,7 @@ impl InlineConfinementDraft {
             reason: reason.to_string(),
             severity: self.severity,
             anchor: None,
+            depth: self.depth,
         }
     }
 }

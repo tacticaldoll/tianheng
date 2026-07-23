@@ -1,6 +1,4 @@
-//! Impl-trait-boundary declaration DSL — [`ImplTraitBoundary`] and its draft chain.
-
-use xuanji::{RuleKey, Severity};
+use xuanji::{RuleKey, ScanDepth, Severity};
 
 /// An impl-trait boundary: a module's public API must not **return** a written `impl Trait`
 /// (return-position `impl Trait` / RPIT). The **existential** complement of [`DynTraitBoundary`]:
@@ -50,6 +48,15 @@ impl ImplTraitBoundary {
                 ),
             ],
         )
+    }
+
+    /// The observation scan depth for this boundary.
+    pub fn scan_depth(&self) -> ScanDepth {
+        if self.including_submodules {
+            ScanDepth::Subtree
+        } else {
+            ScanDepth::Shallow
+        }
     }
 
     /// Begin an impl-trait boundary in the crate named `package`.
@@ -185,6 +192,12 @@ pub struct ImplTraitBoundaryDraft {
 }
 
 impl ImplTraitBoundaryDraft {
+    /// Configure the observation scan depth / granularity level.
+    pub fn depth(mut self, depth: ScanDepth) -> Self {
+        self.including_submodules = !depth.is_shallow();
+        self
+    }
+
     /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
     /// reaction — the first rung of adoption.
     pub fn warn(mut self) -> Self {
@@ -199,9 +212,8 @@ impl ImplTraitBoundaryDraft {
     /// so a bare boundary stays byte-identical.
     ///
     /// [`AsyncExposureBoundary`]: crate::AsyncExposureBoundary
-    pub fn including_submodules(mut self) -> Self {
-        self.including_submodules = true;
-        self
+    pub fn including_submodules(self) -> Self {
+        self.depth(ScanDepth::Subtree)
     }
 
     /// Finish the boundary with its human-readable reason (the repair hint).
