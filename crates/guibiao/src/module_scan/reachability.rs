@@ -1001,6 +1001,39 @@ mod tests {
     use super::*;
     use crate::module_scan::rust_files;
 
+    /// A unique, self-cleaning source tree for module-reachability fixtures.
+    ///
+    /// Reachability tests differ in the module graph they write, but not in the filesystem
+    /// plumbing needed to host it. Keep that plumbing here so every case cleans up on panic and a
+    /// new case only describes the source shape it is exercising.
+    struct TempSrcTree {
+        dir: PathBuf,
+        src: PathBuf,
+    }
+
+    impl TempSrcTree {
+        fn new(label: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "guibiao-reachability-{label}-{}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            let src = dir.join("src");
+            std::fs::create_dir_all(&src).expect("create temp src");
+            Self { dir, src }
+        }
+
+        fn src(&self) -> &Path {
+            &self.src
+        }
+    }
+
+    impl Drop for TempSrcTree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
     #[test]
     fn declared_modules_finds_only_top_level_declarations() {
         let source = r#"
@@ -1031,9 +1064,8 @@ mod tests {
         // brings into scope: a root orphan (`serde.rs`) and a subtree orphan
         // (`kernel/orphan.rs`, which `kernel.rs` never declares). Only `crate` and
         // `crate::kernel` are reachable; the orphans are not — at the root OR in a subtree.
-        let dir = std::env::temp_dir().join(format!("guibiao-reach-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("declared-not-filenames");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("kernel")).expect("create temp src/kernel");
         std::fs::write(
             src.join("lib.rs"),
@@ -1053,8 +1085,6 @@ mod tests {
         let files = rust_files(&src).expect("list files");
         let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(reachable.contains("crate"), "{reachable:?}");
         assert!(
             reachable.contains("crate::kernel"),
@@ -1077,10 +1107,8 @@ mod tests {
         // not also claim the segment-less `crate` module. If both `core.rs` and `lib.rs` mapped to
         // `crate`, the stray file's `mod ghost;` would union into the real root and make
         // `crate::ghost` phantom-reachable (a spurious module-boundary violation on an uncompiled file).
-        let dir = std::env::temp_dir().join(format!("guibiao-custom-root-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("custom-root");
+        let src = tree.src().to_path_buf();
         std::fs::write(src.join("core.rs"), "pub mod real;\n").expect("write core.rs");
         std::fs::write(
             src.join("real.rs"),
@@ -1098,8 +1126,6 @@ mod tests {
         let root_relative = std::path::PathBuf::from("core.rs");
         let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, Some(&root_relative)).expect("walk modules");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             reachable.contains("crate"),
             "the custom root seeds crate: {reachable:?}"
@@ -1120,10 +1146,8 @@ mod tests {
         // `crate::kernel` — verified with a real `cargo build`. The conventional orphan
         // `kernel.rs` (which the remap's presence puts out of scope, module-source hardening
         // v0.1.4) must stay excluded even though `crate::kernel` is now reachable.
-        let dir = std::env::temp_dir().join(format!("guibiao-path-remap-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("path-remap");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[path = \"weird.rs\"]\npub mod kernel;\npub mod normal;\n",
@@ -1149,7 +1173,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
 
         assert!(reachable.contains("crate::normal"), "{reachable:?}");
         assert!(
@@ -1182,10 +1205,8 @@ mod tests {
         // when the backing file physically lives at `other/child.rs`). Before this fix, the child
         // was reachable (inserted unconditionally) but never a member of `sources`, so it was
         // never scanned and never governed — a real `use` passed every boundary unobserved.
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-remap-plain-child-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("remap-plain-child");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("other")).expect("create temp src/other");
         std::fs::write(
             src.join("lib.rs"),
@@ -1209,7 +1230,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
 
         assert!(
             reachable.contains("crate::kernel::child"),
@@ -1376,17 +1396,14 @@ mod tests {
         // A crate whose target root is a custom filename
         // (`[lib] path = "src/core.rs"`) must still have its submodules reachable. The root file's
         // relative path is passed as root_relative so it maps to `crate` (not `crate::core`).
-        let dir = std::env::temp_dir().join(format!("guibiao-customroot-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("mkdir src");
+        let tree = TempSrcTree::new("custom-root-maps-to-crate");
+        let src = tree.src().to_path_buf();
         std::fs::write(src.join("core.rs"), "pub mod sub;\n").expect("write core.rs");
         std::fs::write(src.join("sub.rs"), "// sub\n").expect("write sub.rs");
         let files = rust_files(&src).expect("list files");
         let (with_root, _, _, _) =
             reachable_modules(&src, &files, Some(std::path::Path::new("core.rs"))).expect("walk");
         let (without_root, _, _, _) = reachable_modules(&src, &files, None).expect("walk");
-        let _ = std::fs::remove_dir_all(&dir);
         assert!(
             with_root.contains("crate::sub"),
             "with the custom root mapped to crate, its submodule is reachable: {with_root:?}"
@@ -1416,9 +1433,8 @@ mod tests {
         // `cargo build`. `parent` owns no file of its own (inline-only), so before this fix the
         // walk stopped at `crate::parent` without ever discovering `child`: the forbidden false
         // negative this test pins (an import in the real compiled file going unobserved).
-        let dir = std::env::temp_dir().join(format!("guibiao-inline-child-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("inline-file-child-reachable");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("parent")).expect("create temp src/parent");
         std::fs::write(
             src.join("lib.rs"),
@@ -1434,7 +1450,6 @@ mod tests {
         let files = rust_files(&src).expect("list files");
         let (reachable, inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
-        let _ = std::fs::remove_dir_all(&dir);
 
         assert!(
             inline_only.contains("crate::parent"),
@@ -1454,10 +1469,8 @@ mod tests {
     fn an_inline_modules_file_backed_child_is_governed() {
         // The end-to-end shape of the false negative: `governed_files` must actually select the
         // real compiled file for scanning, not just mark its module path reachable.
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-inline-child-gov-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("inline-file-child-governed");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("parent")).expect("create temp src/parent");
         std::fs::write(
             src.join("lib.rs"),
@@ -1480,8 +1493,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             governed
                 .iter()
@@ -1496,9 +1507,8 @@ mod tests {
         // levels of INLINE nesting (`parent`, `a`, `b`) still resolve a file-backed leaf `c` at
         // `src/kernel/parent/a/b/c.rs` — verified with a real `cargo build`. Each inline level's
         // own body must be re-scanned in turn, not just the first one.
-        let dir = std::env::temp_dir().join(format!("guibiao-inline-chain-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("inline-chain");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("kernel/parent/a/b")).expect("mkdirs");
         std::fs::write(src.join("lib.rs"), "pub mod kernel;\n").expect("write lib.rs");
         std::fs::write(
@@ -1515,8 +1525,6 @@ mod tests {
         let files = rust_files(&src).expect("list files");
         let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             reachable.contains("crate::kernel::parent::a::b::c"),
             "a file-backed leaf beneath a chain of inline modules must be reachable: {reachable:?}"
@@ -1528,9 +1536,8 @@ mod tests {
         // rustc ground truth: `mod name;` beneath an inline parent may also resolve via the
         // `<name>/mod.rs` directory form, not just `<name>.rs` — the same two conventional forms
         // available to any file module, verified here under an inline ancestor.
-        let dir = std::env::temp_dir().join(format!("guibiao-inline-modrs-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("inline-mod-rs-child");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("parent/child")).expect("mkdirs");
         std::fs::write(
             src.join("lib.rs"),
@@ -1546,8 +1553,6 @@ mod tests {
         let files = rust_files(&src).expect("list files");
         let (reachable, _inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             reachable.contains("crate::parent::child"),
             "a mod.rs-style child beneath an inline parent must be reachable: {reachable:?}"
@@ -1560,10 +1565,8 @@ mod tests {
         // inline module discovered through this fix's new path: a stray conventional file
         // matching the INLINE parent's own name (not the file-backed child) is still an orphan
         // Rust never compiles, so it must stay unreachable and ungoverned.
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-inline-orphan-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("inline-orphan");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("parent")).expect("mkdirs");
         std::fs::write(
             src.join("lib.rs"),
@@ -1584,8 +1587,6 @@ mod tests {
         let files = rust_files(&src).expect("list files");
         let (reachable, inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             inline_only.contains("crate::parent"),
             "parent is declared inline-only: {inline_only:?}"
@@ -1604,10 +1605,8 @@ mod tests {
         // already follow for an inline-nested `#[path]`. The conventional orphan
         // `parent/child.rs` must stay excluded from governance even though `crate::parent::child`
         // is now reachable (through `weird.rs`).
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-inline-path-remap-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("inline-path-remap");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("parent")).expect("mkdirs");
         std::fs::write(
             src.join("lib.rs"),
@@ -1634,8 +1633,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             inline_only.contains("crate::parent"),
             "parent is declared inline-only: {inline_only:?}"
@@ -1665,13 +1662,8 @@ mod tests {
         // decode this the same way `syn` (used by 渾儀) does, or this crate silently drops the
         // remapped module from `reachable` instead of following it — a coverage gap found on a
         // v0.2.0..v0.2.1 cross-dimension sweep.
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-path-remap-line-continuation-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("path-remap-line-continuation");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[path = \"moved\\\n    b.rs\"]\npub mod kernel;\n",
@@ -1693,8 +1685,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         // A weak `reachable.contains(..)` check alone would pass even if decoding silently
         // failed: `child_kinds`/`reachable` gain an entry for a declared name regardless of
         // whether its `#[path]` value ever decodes, so the real proof is that the DECODED
@@ -1716,11 +1706,8 @@ mod tests {
         // An unconditional `#[path]` target is a rustc compile error when absent — a genuine
         // broken reference, never a silent skip (the same "cannot judge, not nothing to judge"
         // discipline as an unreadable governed file).
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-path-remap-missing-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("path-remap-missing");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[path = \"absent.rs\"]\npub mod kernel;\n",
@@ -1729,8 +1716,6 @@ mod tests {
 
         let files = rust_files(&src).expect("list files");
         let result = reachable_modules(&src, &files, None);
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             result.is_err(),
             "a #[path] target that does not exist is a scan error, not a silent skip: {result:?}"
@@ -1744,10 +1729,8 @@ mod tests {
         // the scanner must fail loud (exit 2) instead of looping/overflowing the stack. Ordinary
         // conventional/inline nesting cannot cycle (bounded by the finite file list), so this
         // guard is exercised only through a `#[path]` chain, mirroring 渾儀's ancestor-path guard.
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-path-remap-cycle-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("path-remap-cycle");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("a")).expect("mkdirs");
         // lib.rs declares `mod a { #[path = "../lib.rs"] mod b; }` — `b`'s target resolves from
         // `a`'s own accumulated directory (`src/a/`), so `../lib.rs` is `src/lib.rs` itself: the
@@ -1760,8 +1743,6 @@ mod tests {
 
         let files = rust_files(&src).expect("list files");
         let result = reachable_modules(&src, &files, None);
-        let _ = std::fs::remove_dir_all(&dir);
-
         // Asserting on the specific message (not just `is_err()`) pins that this is genuinely the
         // ancestor-cycle guard firing, not an unrelated error (e.g. an OS path-length limit from
         // an unnormalized `..` accumulating across repeated hops) that would happen to also return
@@ -1782,11 +1763,8 @@ mod tests {
         // "two modules sharing one #[path] target is not a cycle" precedent. An ancestor-path (not
         // monotonic whole-tree) guard is required or this legitimate, compilable input would be
         // misreported as a cycle (a false positive).
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-path-remap-shared-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("path-remap-shared");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[path = \"s.rs\"]\npub mod a;\n#[path = \"s.rs\"]\npub mod b;\n",
@@ -1799,8 +1777,6 @@ mod tests {
             &src, &files, None,
         )
         .expect("two modules sharing one #[path] target is not a cycle (rustc compiles it)");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(reachable.contains("crate::a"), "{reachable:?}");
         assert!(reachable.contains("crate::b"), "{reachable:?}");
         assert_eq!(remapped.len(), 2, "{remapped:?}");
@@ -1815,11 +1791,8 @@ mod tests {
         // not evaluate `#[cfg]`, so it must follow BOTH targets (cfg-blind union, matching 渾儀's
         // own same-named-file-form-child policy), not pick one arbitrarily: a single-target
         // design would silently drop the inactive platform's imports depending on scan/file order.
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-cfg-dual-path-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("cfg-dual-path");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[cfg(unix)]\n#[path = \"unix_impl.rs\"]\npub mod imp;\n#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\n",
@@ -1834,8 +1807,6 @@ mod tests {
         let files = rust_files(&src).expect("list files");
         let (reachable, _inline_only, remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("both cfg-gated targets are followed");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(reachable.contains("crate::imp"), "{reachable:?}");
         let mut targets: Vec<&PathBuf> = remapped
             .iter()
@@ -1863,13 +1834,8 @@ mod tests {
         // both targets' canons were unioned into ONE shared ancestor set for `crate::imp`, so
         // scanning variant_a.rs's own nested `#[path]` against that merged set wrongly matched
         // variant_b.rs's canon and returned a scan error for valid, compilable input.
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-cfg-cross-arm-nested-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("cfg-cross-arm-nested");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[cfg(feature = \"a\")]\n#[path = \"variant_a.rs\"]\npub mod imp;\n#[cfg(feature = \"b\")]\n#[path = \"variant_b.rs\"]\npub mod imp;\n",
@@ -1890,8 +1856,6 @@ mod tests {
                 "a nested #[path] crossing into a mutually-exclusive cfg sibling's own target must \
              not be misreported as a cycle",
             );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(reachable.contains("crate::imp"), "{reachable:?}");
         assert!(
             reachable.contains("crate::imp::also_b"),
@@ -1921,12 +1885,8 @@ mod tests {
         // own ancestor set wrongly included `windows_x.rs`'s canon — and when `y.rs` legitimately
         // `#[path]`-references `windows_x.rs` (the OTHER, never-simultaneously-open cfg arm's own
         // target), the cycle guard misfired on valid, compilable input.
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-cfg-inline-plain-child-cross-arm-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("cfg-inline-plain-child-cross-arm");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("x")).expect("create temp src/x");
         std::fs::write(
             src.join("lib.rs"),
@@ -1948,8 +1908,6 @@ mod tests {
         .expect(
             "a plain child's own nested #[path] crossing into a cfg sibling's target must not be a cycle",
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(reachable.contains("crate::x::y"), "{reachable:?}");
         assert!(
             reachable.contains("crate::x::y::cross"),
@@ -1974,12 +1932,8 @@ mod tests {
         // itself mod-rs-like. Before the fix, nothing resolved this: the probed child's own
         // `child_base` was never computed/carried forward, so its own plain children were
         // reachable (inserted unconditionally) but never governed — a real false negative.
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-probed-child-grandchild-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("probed-child-grandchild");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("other/child")).expect("create temp dirs");
         std::fs::write(
             src.join("lib.rs"),
@@ -2006,8 +1960,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             reachable.contains("crate::kernel::child::grandchild"),
             "{reachable:?}"
@@ -2032,12 +1984,8 @@ mod tests {
         // structural `by_module` lookup for the probed child's logical path did not know its
         // parent was remapped, so it phantom-matched this stray file alongside the real,
         // probe-resolved one — a false positive (an uncompiled file wrongly governed).
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-remap-stray-structural-sibling-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("remap-stray-structural-sibling");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("other")).expect("create temp src/other");
         std::fs::create_dir_all(src.join("kernel")).expect("create temp src/kernel");
         std::fs::write(
@@ -2071,8 +2019,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             governed
                 .iter()
@@ -2098,13 +2044,8 @@ mod tests {
         // file's own registration (the false negative this test pins): both are cfg-blind and
         // additive, never mutually exclusive, matching how multiple `#[path]` targets are already
         // unioned above.
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-cfg-plain-path-sibling-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("cfg-plain-path-sibling");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[cfg(unix)]\npub mod x;\n#[cfg(windows)]\n#[path = \"windows_x.rs\"]\npub mod x;\n",
@@ -2129,8 +2070,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(reachable.contains("crate::x"), "{reachable:?}");
         assert!(
             governed.iter().any(|(f, _)| f == &plain),
@@ -2155,13 +2094,8 @@ mod tests {
         // plain-file-vs-inline cfg-blind bound (that bound is specifically about a same-named
         // CONVENTIONAL file, which a `#[path]` remap is not) — it must be observed alongside the
         // `#[path]` target, additively, the same as the plain-file case above.
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-cfg-inline-path-sibling-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("cfg-inline-path-sibling");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("x")).expect("mkdir x");
         std::fs::write(
             src.join("lib.rs"),
@@ -2186,8 +2120,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             reachable.contains("crate::x::y"),
             "the inline sibling's own file-backed child must still be reachable: {reachable:?}"
@@ -2221,12 +2153,8 @@ mod tests {
         // also mean the inline body's OWN declarations go unscanned: `crate::x::y` is real,
         // compiled source under its own `#[cfg]` arm, and dropping it was a genuine false
         // negative (the scanner does not evaluate `#[cfg]`, so it must observe every variant).
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-cfg-plain-inline-sibling-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
+        let tree = TempSrcTree::new("cfg-plain-inline-sibling");
+        let src = tree.src().to_path_buf();
         std::fs::create_dir_all(src.join("x")).expect("mkdirs");
         std::fs::write(
             src.join("lib.rs"),
@@ -2242,8 +2170,6 @@ mod tests {
         let files = rust_files(&src).expect("list files");
         let (reachable, inline_only, _remapped, _remap_shadowed) =
             reachable_modules(&src, &files, None).expect("walk modules");
-        let _ = std::fs::remove_dir_all(&dir);
-
         assert!(
             !inline_only.contains("crate::x"),
             "a plain file is declared, so crate::x is not inline-only: {inline_only:?}"
@@ -2264,11 +2190,8 @@ mod tests {
         // names. `governed_files`'s structural iterator (a real plain-file sibling, not shadowed)
         // and its `remap_entries` iterator (unconditional) then both name `(a.rs, crate::a)` —
         // pinning that the combined result carries it once, not twice.
-        let dir =
-            std::env::temp_dir().join(format!("guibiao-dup-remap-target-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let src = dir.join("src");
-        std::fs::create_dir_all(&src).expect("create temp src");
+        let tree = TempSrcTree::new("duplicate-remap-target");
+        let src = tree.src().to_path_buf();
         std::fs::write(
             src.join("lib.rs"),
             "#[cfg(not(feature = \"b\"))]\npub mod a;\n#[cfg(feature = \"b\")]\n#[path = \"a.rs\"]\npub mod a;\n",
@@ -2289,8 +2212,6 @@ mod tests {
             &remap_shadowed,
             None,
         );
-        let _ = std::fs::remove_dir_all(&dir);
-
         let a_entries: Vec<_> = governed
             .iter()
             .filter(|(_, module)| module == "crate::a")
