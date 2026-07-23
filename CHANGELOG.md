@@ -19,6 +19,16 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - Explicit machine-contract formats: `tianheng.baseline/structured-facts`,
   `tianheng.reaction/structured-facts`, and `tianheng.constitution/declared-boundaries`.
 
+### Fixed
+- 漏刻's un-auditable-probe finding identity is no longer file-granular: it is now qualified by the
+  offending non-literal seam expression's own source text and its owner-qualified enclosing item
+  (module path plus `fn`/`impl`/`trait` context), so two distinct non-literal probes in the same
+  file react as distinct findings and baselining one can no longer mask another. A false-negative
+  closure (a patch, per the standing v0.1.3 re-export-exposure precedent): an existing baseline
+  with an un-auditable-probe entry goes stale and needs `--write-baseline`, never silently
+  reinterpreted. Two byte-identical expressions in the same file and the same enclosing item still
+  collapse to one finding — a stated bound.
+
 ### Changed
 - **Breaking:** violation and baseline identity is now exactly governed target + semantic rule key
   + structured fact identity. Rule/finding wording and all diagnostics remain available but cannot

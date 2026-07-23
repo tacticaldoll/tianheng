@@ -544,14 +544,19 @@ Deferred / forward:
     practice. A stated bound; if ever closed, distinguish no-target (skip) from target-without-src_path
     (constitution error) and narrow the `runtime-origin-assertion` spec's blanket "unresolvable =
     constitution error" wording to match.
-- **Un-auditable-probe finding identity is file-granular (baseline re-mask hardening, not a coverage
-  FN).** *From the v0.1.5 hidden-bug sweep.* The un-auditable-probe `Violation` is keyed by file
-  (one reaction per file), so if an un-auditable probe is baselined and later removed, the stale
-  baseline entry can re-mask a *new*, distinct un-auditable probe added to the same file until the
-  baseline is pruned. Accepted debt today (while any un-auditable probe remains in the file the
-  accepted fact stays true), and the general baseline-staleness surfacing (`Baseline::stale`) covers
-  it; if ever tightened, qualify the finding by a per-probe locator (byte offset / occurrence
-  index). Low; not the forbidden FN. Relates to the finding-identity-must-be-injective principle.
+- **Un-auditable-probe finding identity is file-granular — CLOSED (0.3.0).** *From the v0.1.5
+  hidden-bug sweep.* The un-auditable-probe `Violation` was keyed by file alone (one reaction per
+  file), so baselining one un-auditable probe could re-mask a different, later-added one in the
+  same file. Closed by qualifying the identity with the offending expression's own trimmed source
+  text and its owner-qualified enclosing item (module path + `fn`/`impl`/`trait` context; see
+  `crates/louke/src/audit/scan.rs::fn_scopes`) — a genuine content-derived discriminator, never a
+  byte offset. **Supersedes this entry's own prior remediation sketch** ("qualify by a per-probe
+  locator: byte offset / occurrence index"): the 0.3.0 identity migration hardened
+  `structured-violation-identity` to forbid exactly that (no identity field derived from
+  traversal position, ordinal, or collection index), so the fix took the content-discriminator
+  path instead. Two byte-identical expressions in the same file and the same owner-qualified
+  enclosing item still collapse to one finding — a stated bound, not a silent gap (see
+  `runtime-origin-assertion`'s ADDED requirement).
 
 ## Deferred — not a reaction phase (the 三司: governance & observability layer)
 

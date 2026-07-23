@@ -25,9 +25,14 @@ pub(crate) enum RuntimeFact {
     UndeclaredProbe {
         seam: String,
     },
+    // `owner` is the owner-qualified enclosing item (never a bare name — see `fn_scopes` in
+    // `audit::scan`), and `expr` the offending expression's own trimmed source text; together
+    // with `file` these are the identity discriminator, never a byte offset or occurrence count.
     #[cfg(feature = "audit")]
     UnauditableProbe {
         file: String,
+        owner: String,
+        expr: String,
     },
 }
 
@@ -81,15 +86,20 @@ impl RuntimeFact {
                 ),
             ),
             #[cfg(feature = "audit")]
-            Self::UnauditableProbe { file } => Finding::new(
+            Self::UnauditableProbe { file, owner, expr } => Finding::new(
                 format!(
-                    "{file} has an assert_boundary! probe with a non-literal seam (const or \
-                     expression), which the CI face cannot trace to a declared seam"
+                    "{file}: {owner} has an assert_boundary! probe with a non-literal seam \
+                     `{expr}` (const or expression), which the CI face cannot trace to a \
+                     declared seam"
                 ),
                 key(
                     "tianheng.fact/louke/runtime-seam-audit",
                     "unauditable-probe",
-                    [("file", file.as_str())],
+                    [
+                        ("file", file.as_str()),
+                        ("owner", owner.as_str()),
+                        ("expr", expr.as_str()),
+                    ],
                 ),
             ),
         }
@@ -128,7 +138,11 @@ mod tests {
             RuntimeFact::DuplicateSeam { seam: _ }
             | RuntimeFact::UnprobedSeam { seam: _ }
             | RuntimeFact::UndeclaredProbe { seam: _ }
-            | RuntimeFact::UnauditableProbe { file: _ } => {}
+            | RuntimeFact::UnauditableProbe {
+                file: _,
+                owner: _,
+                expr: _,
+            } => {}
         }
     }
 
@@ -194,10 +208,16 @@ mod tests {
             (
                 RuntimeFact::UnauditableProbe {
                     file: "src/lib.rs".to_string(),
+                    owner: "fn install".to_string(),
+                    expr: "SEAM_CONST".to_string(),
                 },
                 "tianheng.fact/louke/runtime-seam-audit",
                 "unauditable-probe",
-                vec![("file", "src/lib.rs")],
+                vec![
+                    ("expr", "SEAM_CONST"),
+                    ("file", "src/lib.rs"),
+                    ("owner", "fn install"),
+                ],
             ),
         ] {
             assert_case(case);
@@ -227,5 +247,45 @@ mod tests {
         .clone();
         assert_ne!(missing, undeclared);
         assert_ne!(missing, other);
+    }
+
+    #[cfg(feature = "audit")]
+    #[test]
+    fn unauditable_probe_identity_distinguishes_owner_and_expression() {
+        let base = RuntimeFact::UnauditableProbe {
+            file: "src/lib.rs".to_string(),
+            owner: "fn a".to_string(),
+            expr: "SEAM_A".to_string(),
+        }
+        .into_finding()
+        .key()
+        .clone();
+        let different_owner = RuntimeFact::UnauditableProbe {
+            file: "src/lib.rs".to_string(),
+            owner: "fn b".to_string(),
+            expr: "SEAM_A".to_string(),
+        }
+        .into_finding()
+        .key()
+        .clone();
+        let different_expr = RuntimeFact::UnauditableProbe {
+            file: "src/lib.rs".to_string(),
+            owner: "fn a".to_string(),
+            expr: "compute_seam()".to_string(),
+        }
+        .into_finding()
+        .key()
+        .clone();
+        let different_file = RuntimeFact::UnauditableProbe {
+            file: "src/other.rs".to_string(),
+            owner: "fn a".to_string(),
+            expr: "SEAM_A".to_string(),
+        }
+        .into_finding()
+        .key()
+        .clone();
+        assert_ne!(base, different_owner);
+        assert_ne!(base, different_expr);
+        assert_ne!(base, different_file);
     }
 }
