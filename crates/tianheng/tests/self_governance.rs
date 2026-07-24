@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 
 use tianheng::prelude::*;
-use tianheng::{Boundary, Rule, constitution_markdown};
+use tianheng::{Boundary, Rule};
 
 /// The Tianheng workspace manifest. `None` when it is absent — e.g. inside a published
 /// `.crate` tarball, which has no workspace root — so the self-governance gate SKIPS rather
@@ -282,16 +282,6 @@ fn workspace_root() -> Option<PathBuf> {
     })
 }
 
-/// The whole self-law artifact: the fixed preamble, then the live projection of the *same*
-/// self-constitution the dogfood gate reacts against, rendered by the *same* renderer as
-/// `list --format markdown`. The seam newline between the two is owned here (the doc-builder),
-/// never smuggled into [`constitution_markdown`], which adds nothing of its own; the trailing
-/// newline makes the file end conventionally.
-fn render_self_law_doc() -> String {
-    let projection = constitution_markdown(&tianheng_constitution());
-    format!("{SELF_LAW_PREAMBLE}\n{projection}\n")
-}
-
 /// Contract A — the agent-loaded `AGENTS.self-law.md` must byte-match the live projection of
 /// `tianheng_constitution()`. Stale → fail (with the regenerate command); `BLESS=1` → rewrite
 /// the file instead of asserting (so the artifact changes by regeneration, never by hand).
@@ -300,21 +290,12 @@ fn self_law_projection_is_fresh() {
     let Some(root) = workspace_root() else {
         return; // outside a checkout — same repo-only discipline as the governance gate
     };
-    let path = root.join("AGENTS.self-law.md");
-    let live = render_self_law_doc();
-
-    // Delegate the read/bless/compare to the reusable `projection_gate` helper — the same gate
-    // adopters call for their own projection. The test owns the workspace-only early return above
-    // and reads its own `BLESS` (the helper reads no environment); the helper's `Err` names the
-    // artifact path, preserving the "names the artifact" staleness contract.
-    let bless = std::env::var_os("BLESS").is_some();
-    tianheng::projection_gate(
-        &live,
-        &path,
-        "BLESS=1 cargo test -p tianheng self_law_projection_is_fresh",
-        bless,
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
+    GovernanceTest::for_constitution(tianheng_constitution())
+        .with_manifest_dir(&root)
+        .assert_projection_fresh_with_preamble(
+            root.join("AGENTS.self-law.md"),
+            &format!("{SELF_LAW_PREAMBLE}\n"),
+        );
 }
 
 /// Contract C — the **declaration-integrity** reaction (the 潛移/校讎-adjacent shape: its

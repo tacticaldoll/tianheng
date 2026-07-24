@@ -67,9 +67,7 @@ pub(crate) fn violations_text_styled(report: &Report, style: Style) -> String {
     }
     let baselined = report.violations.iter().filter(|v| v.baselined).count();
     let mut shown: Vec<_> = report.violations.iter().filter(|v| !v.baselined).collect();
-    shown.sort_by(|a, b| {
-        (a.target.as_str(), a.rule.as_str()).cmp(&(b.target.as_str(), b.rule.as_str()))
-    });
+    shown.sort_by(|a, b| (a.target(), a.rule.as_str()).cmp(&(b.target(), b.rule.as_str())));
 
     let mut out = String::new();
     for violation in shown {
@@ -88,7 +86,7 @@ pub(crate) fn violations_text_styled(report: &Report, style: Style) -> String {
         writeln!(out, "{header}").unwrap();
         writeln!(out).unwrap();
         writeln!(out, "Reason:\n  {}", style.reason(&violation.reason)).unwrap();
-        writeln!(out, "Boundary:\n  {}", violation.target).unwrap();
+        writeln!(out, "Boundary:\n  {}", violation.target()).unwrap();
         writeln!(out, "Rule:\n  {}", violation.rule).unwrap();
         writeln!(out, "Found:\n  {}", violation.finding).unwrap();
         if let Some(file) = &violation.file {

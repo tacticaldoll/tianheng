@@ -11,7 +11,7 @@ pub struct Violation {
     /// Which kind of boundary produced this violation.
     pub kind: BoundaryKind,
     /// The governed target.
-    pub target: String,
+    pub(crate) target: String,
     /// The violated rule label.
     pub rule: String,
     /// The offending finding text.
@@ -35,6 +35,11 @@ pub struct Violation {
 }
 
 impl Violation {
+    /// The governed target.
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+
     /// Build a violation observed during evaluation.
     pub fn new(
         kind: BoundaryKind,

@@ -70,7 +70,7 @@ fn a_disallowed_origin_reacts() {
         .unwrap()
         .unwrap();
     assert_eq!(v.kind, BoundaryKind::Runtime);
-    assert_eq!(v.target, "seam");
+    assert_eq!(v.target(), "seam");
     assert_eq!(v.rule, runtime_seam_rule_line(&["app::domain"]));
     let id = v.id();
     let key = id.fact();

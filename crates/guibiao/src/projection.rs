@@ -173,7 +173,7 @@ fn boundary_json(boundary: &Boundary) -> Value {
             if let Some(anchor) = b.anchor() {
                 object["anchor"] = serde_json::json!(anchor);
             }
-            if !b.scan_depth().is_shallow() {
+            if b.scan_depth().is_shallow() {
                 object["scan_depth"] = serde_json::json!(b.scan_depth().as_str());
             }
             object

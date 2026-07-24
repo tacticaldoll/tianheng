@@ -269,12 +269,15 @@ pub(crate) fn reachable_modules(
                         if let Some(rel) =
                             read_path_string(text.as_bytes(), orig_eq + 1, text.len())
                         {
-                            child_direct_paths.entry(declared.name).or_default().push((
-                                PathBuf::from(rel),
-                                path_base.clone(),
-                                source_ancestors.clone(),
-                                declared.has_bare_cfg,
-                            ));
+                            child_direct_paths
+                                .entry(declared.name.clone())
+                                .or_default()
+                                .push((
+                                    PathBuf::from(rel),
+                                    path_base.clone(),
+                                    source_ancestors.clone(),
+                                    declared.has_bare_cfg,
+                                ));
                         }
                     }
                 } else {
@@ -287,22 +290,22 @@ pub(crate) fn reachable_modules(
                             source_ancestors.clone(),
                             declared.has_bare_cfg,
                         ));
-                    for &eq_cleaned in &declared.conditional_path_eqs {
-                        if let Some(&orig_eq) = positions.get(eq_cleaned) {
-                            if let Some(rel) =
-                                read_path_string(text.as_bytes(), orig_eq + 1, text.len())
-                            {
-                                let candidate_target = path_base.join(&rel);
-                                if candidate_target.is_file() {
-                                    child_conditional_paths
-                                        .entry(declared.name.clone())
-                                        .or_default()
-                                        .push((
-                                            PathBuf::from(rel),
-                                            path_base.clone(),
-                                            source_ancestors.clone(),
-                                        ));
-                                }
+                }
+                for &eq_cleaned in &declared.conditional_path_eqs {
+                    if let Some(&orig_eq) = positions.get(eq_cleaned) {
+                        if let Some(rel) =
+                            read_path_string(text.as_bytes(), orig_eq + 1, text.len())
+                        {
+                            let candidate_target = path_base.join(&rel);
+                            if candidate_target.is_file() {
+                                child_conditional_paths
+                                    .entry(declared.name.clone())
+                                    .or_default()
+                                    .push((
+                                        PathBuf::from(rel),
+                                        path_base.clone(),
+                                        source_ancestors.clone(),
+                                    ));
                             }
                         }
                     }
@@ -689,8 +692,10 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
                             // bound as the file-form case (never followed cfg-blind).
                             let (direct_path_eq, conditional_path_eqs) =
                                 match path_attr_before_item(bytes, i) {
-                                    PathAttrKind::Direct(eq) => (Some(eq), Vec::new()),
-                                    PathAttrKind::ConditionalRemaps(eqs) => (None, eqs),
+                                    PathAttrKind::Remaps {
+                                        direct,
+                                        conditional,
+                                    } => (direct, conditional),
                                     PathAttrKind::None | PathAttrKind::Excluded => {
                                         (None, Vec::new())
                                     }
@@ -711,8 +716,10 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
                             let has_bare_cfg = has_bare_cfg_attr_before_item(bytes, i);
                             let (direct_path_eq, conditional_path_eqs) =
                                 match path_attr_before_item(bytes, i) {
-                                    PathAttrKind::Direct(eq) => (Some(eq), Vec::new()),
-                                    PathAttrKind::ConditionalRemaps(eqs) => (None, eqs),
+                                    PathAttrKind::Remaps {
+                                        direct,
+                                        conditional,
+                                    } => (direct, conditional),
                                     PathAttrKind::None | PathAttrKind::Excluded => {
                                         (None, Vec::new())
                                     }
@@ -783,8 +790,10 @@ pub(super) fn declared_modules(source: &str) -> Vec<String> {
 /// token as an ordinary file declaration would govern the wrong file (or a same-named orphan).
 enum PathAttrKind {
     None,
-    Direct(usize),
-    ConditionalRemaps(Vec<usize>),
+    Remaps {
+        direct: Option<usize>,
+        conditional: Vec<usize>,
+    },
     Excluded,
 }
 
@@ -797,10 +806,13 @@ fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> PathAttrKind {
         }
     }
     match attr_prefix_path_kind(&bytes[start..mod_index]) {
-        PathAttrKind::Direct(relative) => PathAttrKind::Direct(start + relative),
-        PathAttrKind::ConditionalRemaps(relatives) => {
-            PathAttrKind::ConditionalRemaps(relatives.into_iter().map(|rel| start + rel).collect())
-        }
+        PathAttrKind::Remaps {
+            direct,
+            conditional,
+        } => PathAttrKind::Remaps {
+            direct: direct.map(|rel| start + rel),
+            conditional: conditional.into_iter().map(|rel| start + rel).collect(),
+        },
         other => other,
     }
 }
@@ -808,6 +820,7 @@ fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> PathAttrKind {
 fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
     let mut i = 0;
     let mut excluded = false;
+    let mut direct = None;
     let mut conditional_eqs = Vec::new();
     while i < bytes.len() {
         if bytes[i] != b'#' {
@@ -828,18 +841,20 @@ fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
         if bytes[i..].starts_with(b"path")
             && bytes.get(i + 4).is_none_or(|byte| !is_ident_byte(*byte))
         {
-            // An unconditional direct `path = "…"` wins over a cfg-conditional remap seen
-            // elsewhere on the same item, regardless of which is scanned first: it is what
-            // rustc compiles whenever a sibling `cfg_attr(pred, path = "…")`'s predicate is
-            // false, so the scan must not stop at whichever `#[path]`-ish attribute comes first
-            // textually — an early return here made the result attribute-order-dependent, a real
-            // false negative when the cfg_attr happened to precede the direct attribute.
+            // Retain an unconditional direct path alongside every cfg-conditional candidate.
+            // rustc currently gives multiple path-bearing attributes textual precedence (and
+            // warns that accepting the shape will become an error), while this scanner is
+            // deliberately cfg-blind. Unioning every physically existing written candidate is
+            // therefore the only false-negative-safe observation: neither attribute order nor
+            // the active predicate may silently remove governed source.
             let mut j = i + 4;
             while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                 j += 1;
             }
             if bytes.get(j) == Some(&b'=') {
-                return PathAttrKind::Direct(j);
+                direct = Some(j);
+                i = j + 1;
+                continue;
             }
             // A bare `#[path]`/`#[path(...)]` (not valid remap syntax) excludes on its own, but
             // a later unconditional `#[path = "…"]` on the same item still wins — keep scanning
@@ -861,8 +876,11 @@ fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
             continue;
         }
     }
-    if !conditional_eqs.is_empty() {
-        PathAttrKind::ConditionalRemaps(conditional_eqs)
+    if direct.is_some() || !conditional_eqs.is_empty() {
+        PathAttrKind::Remaps {
+            direct,
+            conditional: conditional_eqs,
+        }
     } else if excluded {
         PathAttrKind::Excluded
     } else {
@@ -1413,15 +1431,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unconditional_path_attr_wins_regardless_of_cfg_attr_order() {
-        // A `cfg_attr(pred, path = "…")` and an unconditional `#[path = "…"]` can legitimately
-        // sit on the same item (the cfg_attr's target is used only when `pred` holds; the direct
-        // one is what rustc compiles whenever it does not — verified against real rustc, which
-        // accepts this and resolves to the direct target when `pred` is false). scanning used to
-        // return on the FIRST recognized `#[path]`-ish attribute, so whichever was written first
-        // "won" — a cfg_attr(path) textually BEFORE the direct #[path] made the whole declaration
-        // `Excluded`, dropping a module rustc genuinely compiles on every build where `pred` is
-        // false. Order must not matter: the unconditional attribute always wins.
+    fn mixed_direct_and_conditional_path_attrs_keep_the_module_regardless_of_order() {
         assert_eq!(
             declared_modules(
                 "#[cfg_attr(some_platform, path = \"b.rs\")]\n#[path = \"a.rs\"]\npub mod x;\n"
@@ -1436,6 +1446,57 @@ mod tests {
             vec!["x".to_string()],
             "the direct #[path] first must keep working as before",
         );
+    }
+
+    #[test]
+    fn mixed_direct_and_conditional_path_attrs_union_both_sources_regardless_of_order() {
+        for (case, attrs) in [
+            (
+                "conditional-first",
+                "#[cfg_attr(unix, path = \"conditional.rs\")]\n#[path = \"direct.rs\"]",
+            ),
+            (
+                "direct-first",
+                "#[path = \"direct.rs\"]\n#[cfg_attr(unix, path = \"conditional.rs\")]",
+            ),
+        ] {
+            let tree = TempSrcTree::new(case);
+            let src = tree.src().to_path_buf();
+            std::fs::write(src.join("lib.rs"), format!("{attrs}\npub mod imp;\n"))
+                .expect("write lib.rs");
+            let direct = src.join("direct.rs");
+            let conditional = src.join("conditional.rs");
+            std::fs::write(&direct, "use crate::from_direct::Thing;\n").expect("write direct.rs");
+            std::fs::write(&conditional, "use crate::from_conditional::Thing;\n")
+                .expect("write conditional.rs");
+
+            let files = rust_files(&src).expect("list files");
+            let (reachable, inline_only, remapped, remap_shadowed) =
+                reachable_modules(&src, &files, None).expect("walk modules");
+            let governed = governed_files(
+                &src,
+                &files,
+                "crate",
+                &reachable,
+                &inline_only,
+                &remapped,
+                &remap_shadowed,
+                None,
+                ScanDepth::Subtree,
+            );
+            assert!(
+                governed
+                    .iter()
+                    .any(|(file, module)| file == &direct && module == "crate::imp"),
+                "{case}: direct candidate must be governed: {governed:?}"
+            );
+            assert!(
+                governed
+                    .iter()
+                    .any(|(file, module)| file == &conditional && module == "crate::imp"),
+                "{case}: conditional candidate must be governed: {governed:?}"
+            );
+        }
     }
 
     #[test]

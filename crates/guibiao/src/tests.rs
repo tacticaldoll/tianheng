@@ -385,7 +385,7 @@ fn a_plain_child_reached_only_through_a_symlinked_directory_is_governed() {
 
     result.expect("a symlinked-directory-reached child is a valid, governable target");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::mymod");
+    assert_eq!(violations[0].target(), "crate::mymod");
     let file = violations[0]
         .file
         .as_deref()
@@ -436,7 +436,7 @@ fn a_symlinked_module_aliasing_an_unrelated_walked_file_is_still_governed_under_
         "crate::kernel is a valid, governable target even though it aliases crate::real's file",
     );
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(violations[0].target(), "crate::kernel");
 }
 
 #[test]
@@ -519,7 +519,7 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
         "the submodule file must resolve, not raise a false exit-2: {result:?}"
     );
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::foo::lib");
+    assert_eq!(violations[0].target(), "crate::foo::lib");
     assert_eq!(violations[0].rule, "module must not import");
     assert_eq!(violations[0].finding, "crate::sink");
     let id = violations[0].id();
@@ -645,7 +645,7 @@ fn a_raw_identifier_module_is_governed_and_its_import_observed() {
         1,
         "the forbidden import from inside the raw-identifier module must be observed: {violations:?}"
     );
-    assert_eq!(violations[0].target, "crate::type");
+    assert_eq!(violations[0].target(), "crate::type");
     assert_eq!(violations[0].finding, "crate::mod::Thing");
 }
 
@@ -709,7 +709,7 @@ fn path_remapped_module_is_followed_not_governed_via_a_conventional_orphan() {
 
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(violations[0].target(), "crate::kernel");
     assert_eq!(
         violations[0].finding, "crate::projection::Thing",
         "the real target's import is observed, never the orphan's: {violations:?}"
@@ -751,7 +751,7 @@ fn an_unconditional_path_on_an_inline_module_relocates_its_own_file_form_childre
     );
     result.expect("the relocated child must be a valid, governable target");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::thread");
+    assert_eq!(violations[0].target(), "crate::thread");
     let file = violations[0]
         .file
         .as_deref()
@@ -1217,7 +1217,7 @@ fn restrict_imports_to_flags_an_import_outside_the_allowlist() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(violations[0].target(), "crate::kernel");
     assert_eq!(violations[0].finding, "crate::io::Sink");
 }
 
@@ -1456,7 +1456,7 @@ fn must_not_be_imported_by_flags_the_forbidden_importer_only() {
     // Only crate::http is beneath the forbidden importer; crate::api imports internal
     // too but is outside crate::http, so it is clean.
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].target(), "crate::internal");
     assert_eq!(violations[0].finding, "crate::http");
     assert_eq!(violations[0].rule, "module must not be imported by");
 }
@@ -1480,7 +1480,7 @@ fn must_not_be_imported_by_flags_an_inline_module_importer() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].target(), "crate::internal");
     assert_eq!(violations[0].finding, "crate::http");
 }
 
@@ -1769,7 +1769,7 @@ fn must_not_be_imported_by_protects_a_raw_identifier_module() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::type");
+    assert_eq!(violations[0].target(), "crate::type");
     assert_eq!(violations[0].finding, "crate::http");
 }
 
@@ -1920,7 +1920,7 @@ fn outbound_dedup_collapses_identical_findings_but_keeps_distinct_ones() {
     // And no two violations share an identity (target, rule, finding).
     let mut ids: Vec<_> = violations
         .iter()
-        .map(|v| (&v.target, &v.rule, &v.finding))
+        .map(|v| (v.target(), &v.rule, &v.finding))
         .collect();
     let before = ids.len();
     ids.sort();
@@ -3487,7 +3487,7 @@ fn feature_report_names_target_rule_finding_and_reason() {
     let mut v = Vec::new();
     check_crate_boundary(&metadata, &[], &boundary, &mut v).unwrap();
     assert_eq!(v.len(), 1);
-    assert_eq!(v[0].target, "app");
+    assert_eq!(v[0].target(), "app");
     assert_eq!(v[0].rule, "forbid features of");
     assert_eq!(v[0].finding, "C/unstable");
     assert_eq!(v[0].reason, "C's unstable API face is off-limits");
@@ -3865,7 +3865,7 @@ fn must_only_be_imported_by_flags_an_importer_outside_the_allowlist() {
     assert!(result.is_ok(), "{result:?}");
     // facade is allowlisted (clean); consumer is not (violates).
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].target(), "crate::internal");
     assert_eq!(violations[0].finding, "crate::consumer");
     assert_eq!(violations[0].rule, "module may only be imported by");
 }
@@ -4083,7 +4083,7 @@ fn confine_flags_an_external_import_outside_the_subtree() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "libc");
+    assert_eq!(violations[0].target(), "libc");
     assert_eq!(violations[0].finding, "crate::service");
     let file = violations[0].file.as_deref().expect("carries its file");
     assert!(file.ends_with("service.rs"), "names the offender: {file}");
@@ -4301,8 +4301,8 @@ fn confine_identity_is_injective_across_confined_crates() {
     assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
     assert_eq!(libc_v.len(), 1, "{libc_v:?}");
     assert_eq!(winapi_v.len(), 1, "{winapi_v:?}");
-    assert_eq!(libc_v[0].target, "libc");
-    assert_eq!(winapi_v[0].target, "winapi");
+    assert_eq!(libc_v[0].target(), "libc");
+    assert_eq!(winapi_v[0].target(), "winapi");
     assert_eq!(
         libc_v[0].finding, winapi_v[0].finding,
         "same offending importer — only the target (confined crate) differs"
@@ -4342,7 +4342,7 @@ fn confine_canonicalizes_a_raw_identifier_crate_name() {
         1,
         "raw and plain crate-name forms are one identity: {violations:?}"
     );
-    assert_eq!(violations[0].target, "async");
+    assert_eq!(violations[0].target(), "async");
 }
 
 #[test]
@@ -4468,7 +4468,7 @@ fn confine_matches_a_hyphenated_package_name_against_its_underscore_identifier()
         1,
         "a hyphenated package name matches its underscore import identifier: {violations:?}"
     );
-    assert_eq!(violations[0].target, "windows_sys");
+    assert_eq!(violations[0].target(), "windows_sys");
     assert_eq!(violations[0].finding, "crate::service");
 }
 
@@ -4491,7 +4491,7 @@ fn confine_observes_an_aliased_import_of_the_confined_crate() {
         1,
         "an aliased import is still observed: {violations:?}"
     );
-    assert_eq!(violations[0].target, "libc");
+    assert_eq!(violations[0].target(), "libc");
     assert_eq!(violations[0].finding, "crate::service");
 }
 
@@ -4519,7 +4519,7 @@ fn inline_default_reacts_on_an_associated_fn_call() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "std::time");
+    assert_eq!(violations[0].target(), "std::time");
     assert!(
         violations[0].finding.contains("std::time::SystemTime::now"),
         "{violations:?}"
@@ -5015,7 +5015,7 @@ fn inline_strict_external_reacts_on_a_fully_qualified_external_call() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "chrono::Utc");
+    assert_eq!(violations[0].target(), "chrono::Utc");
     assert!(
         violations[0].finding.contains("chrono::Utc::now"),
         "{violations:?}"
@@ -5293,7 +5293,7 @@ fn inline_strict_external_preserves_identity_no_baseline_churn() {
     assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
     assert_eq!(plain.len(), 1, "{plain:?}");
     assert_eq!(flagged.len(), 1, "{flagged:?}");
-    assert_eq!(plain[0].target, flagged[0].target, "target parity");
+    assert_eq!(plain[0].target(), flagged[0].target(), "target parity");
     assert_eq!(plain[0].rule, flagged[0].rule, "rule (label) parity");
     assert_eq!(plain[0].finding, flagged[0].finding, "finding parity");
     assert_eq!(
@@ -5362,7 +5362,7 @@ fn inline_strict_external_cross_module_local_item_does_not_mask() {
         1,
         "a same-named item of ANOTHER module must not mask a real external call: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5400,7 +5400,7 @@ fn inline_strict_external_block_local_item_does_not_mask() {
         1,
         "a block-local item (depth ≥ 1) must not mask a same-module external call: {violations:?}"
     );
-    assert_eq!(violations[0].target, "log");
+    assert_eq!(violations[0].target(), "log");
     assert!(
         violations[0].finding.contains("log::logger"),
         "{violations:?}"
@@ -5637,10 +5637,11 @@ fn inline_prefix_is_carried_in_the_violation_target() {
             .because("no std calls"),
     );
     assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
-    assert_eq!(v1[0].target, "std::time");
-    assert_eq!(v2[0].target, "std");
+    assert_eq!(v1[0].target(), "std::time");
+    assert_eq!(v2[0].target(), "std");
     assert_ne!(
-        v1[0].target, v2[0].target,
+        v1[0].target(),
+        v2[0].target(),
         "distinct prefixes → distinct identity"
     );
 }
@@ -5756,7 +5757,7 @@ fn inline_strict_external_inline_submodule_call_is_not_masked() {
         1,
         "a file-top item must not mask an external call inside an inline submodule: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5818,7 +5819,7 @@ fn inline_strict_external_deeply_nested_submodule_reacts() {
         1,
         "a file-top item must not mask a call in a deeply nested submodule: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5853,7 +5854,7 @@ fn inline_strict_external_cfg_gated_submodule_reacts() {
         1,
         "a cfg-gated inline submodule must not perturb brace tracking: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5932,6 +5933,32 @@ fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
             .collect::<Vec<_>>(),
         vec![("module", "crate::forbidden_on_sub")]
     );
+}
+
+#[test]
+fn scan_depth_projection_omits_legacy_subtree_and_emits_shallow() {
+    let legacy = Constitution::new("legacy").boundary(
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_import("crate::adapter")
+            .because("core depends inward only"),
+    );
+    let legacy_json: serde_json::Value = serde_json::from_str(&constitution_json(&legacy)).unwrap();
+    assert!(
+        legacy_json["boundaries"][0].get("scan_depth").is_none(),
+        "legacy subtree projection must stay byte-compatible: {legacy_json}"
+    );
+
+    let shallow = Constitution::new("shallow").boundary(
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_import("crate::adapter")
+            .depth(xuanji::ScanDepth::Shallow)
+            .because("only the core seam depends inward"),
+    );
+    let shallow_json: serde_json::Value =
+        serde_json::from_str(&constitution_json(&shallow)).unwrap();
+    assert_eq!(shallow_json["boundaries"][0]["scan_depth"], "shallow");
 }
 
 #[test]
