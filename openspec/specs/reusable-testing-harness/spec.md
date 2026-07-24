@@ -52,8 +52,12 @@ The `tianheng::testing` module SHALL export a `GovernanceTest` struct that wraps
 
 ### Requirement: GovernanceTest provides fixture negative testing
 
-`GovernanceTest` SHALL provide a `test_fixture(fixture_manifest_path)` method to assert that custom boundaries produce expected violations on violating fixture workspaces.
+`GovernanceTest` SHALL provide `test_fixture(fixture_manifest_path)` and `assert_violates_fixture(fixture_manifest_path)` methods to assert that custom boundaries produce expected violations on violating fixture workspaces.
 
 #### Scenario: Fixture violation assertion succeeds
-- **WHEN** a custom boundary produces expected violations on a violating fixture
+- **WHEN** a custom boundary produces expected violations on a violating fixture via `test_fixture`
+- **THEN** fixture assertion completes successfully
+
+#### Scenario: Assert violates fixture alias succeeds
+- **WHEN** a custom boundary produces expected violations on a violating fixture via `assert_violates_fixture`
 - **THEN** fixture assertion completes successfully
