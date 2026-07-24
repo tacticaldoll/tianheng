@@ -93,4 +93,3 @@ into this adopter-surface contract.
 
 - **WHEN** an external test needs the pure signature-coupling check
 - **THEN** it imports `check_semantic` explicitly from the crate root without expanding the wildcard prelude menu or implying that one check evaluates every semantic capability
-

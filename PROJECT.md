@@ -226,4 +226,3 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **Async identity is the seam, not the rendered signature.** An async-exposure fact's identity is its module, owner kind, canonical owner, and item name; the full parameter/return signature is human diagnostic presentation only and never enters identity — a signature-only change preserves the baseline, while a different owner or name is a new fact.
 - **Rule construction is builder-owned; inspection stays open-ended.** Data-carrying `Rule`/`ModuleRule` variants are `#[non_exhaustive]`.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.
-

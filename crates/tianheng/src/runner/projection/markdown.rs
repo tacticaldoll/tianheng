@@ -60,6 +60,10 @@ pub(super) fn boundary_markdown(boundary: &Value) -> String {
     }
     out.push('\n');
 
+    if let Some(anchor) = boundary.get("anchor").and_then(Value::as_str) {
+        out.push_str(&format!("- **anchor**: {anchor}\n"));
+    }
+
     let mut context = format!("- **kind**: {}", field("kind"));
     let severity = field("severity");
     if !severity.is_empty() {
@@ -74,11 +78,13 @@ pub(super) fn boundary_markdown(boundary: &Value) -> String {
 }
 
 /// The rule parameters of a boundary — every JSON field that is not one of the structural keys
-/// (kind/target/crate/rule/severity/reason) — rendered inline. `pub(in crate::runner)` so a
+/// (kind/target/crate/rule/severity/reason/anchor) — rendered inline. `pub(in crate::runner)` so a
 /// projection test can pin `STRUCTURAL` against `boundary_json_base`'s emitted keys (guarding the
 /// hand-maintained list from drift).
 pub(in crate::runner) fn boundary_params(boundary: &Value) -> String {
-    const STRUCTURAL: [&str; 6] = ["kind", "target", "crate", "rule", "severity", "reason"];
+    const STRUCTURAL: [&str; 7] = [
+        "kind", "target", "crate", "rule", "severity", "reason", "anchor",
+    ];
     let Some(object) = boundary.as_object() else {
         return String::new();
     };

@@ -213,8 +213,11 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
     let c = Constitution::new("app").signature_boundary(anchored);
     let json = serde_json::to_string(&list_document(&c)).expect("json");
     assert!(json.contains("\"anchor\":\"ADR-014\""), "{json}");
-    // Markdown derives from the JSON params generically, so the anchor surfaces there too.
-    assert!(constitution_markdown(&c).contains("ADR-014"));
+    let markdown = constitution_markdown(&c);
+    assert!(
+        markdown.contains("\n- **anchor**: ADR-014\n"),
+        "markdown must render the anchor as its own element: {markdown}"
+    );
     // Parity: the text projection surfaces the anchor too (it appeared in json/markdown but not
     // text before — the `list` three-format parity gap).
     assert!(
@@ -232,6 +235,11 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
     let bare_c = Constitution::new("app").signature_boundary(bare);
     let bare_json = serde_json::to_string(&list_document(&bare_c)).expect("json");
     assert!(!bare_json.contains("anchor"), "{bare_json}");
+    let bare_markdown = constitution_markdown(&bare_c);
+    assert!(
+        !bare_markdown.contains("**anchor**"),
+        "a boundary without an anchor must render no anchor element: {bare_markdown}"
+    );
     // And a bare boundary's text stays byte-identical (no stray `anchor:` line).
     assert!(
         !semantic_text(std::slice::from_ref(
@@ -246,7 +254,7 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
 fn markdown_params_exclude_exactly_the_structural_base_keys() {
     // Guard the hand-maintained `STRUCTURAL` list (markdown.rs) against drift from the keys
     // `boundary_json_base` emits: a boundary JSON with every base field set (crate + anchor) plus a
-    // rule param must render the non-structural keys as params and NONE of the structural six. A
+    // rule param must render the non-structural keys as params and NONE of the structural seven. A
     // future always-present base key added without updating `STRUCTURAL` would leak into params here.
     let boundary = serde_json::json!({
         "kind": "semantic", "target": "app", "crate": "app",
@@ -254,7 +262,9 @@ fn markdown_params_exclude_exactly_the_structural_base_keys() {
         "forbidden": ["Foo"], "anchor": "ADR-014",
     });
     let params = boundary_params(&boundary);
-    for structural in ["kind", "target", "crate", "rule", "severity", "reason"] {
+    for structural in [
+        "kind", "target", "crate", "rule", "severity", "reason", "anchor",
+    ] {
         assert!(
             !params.contains(&format!("{structural}:")),
             "structural base key `{structural}` leaked into markdown params: {params}"
@@ -263,10 +273,6 @@ fn markdown_params_exclude_exactly_the_structural_base_keys() {
     assert!(
         params.contains("forbidden:"),
         "a rule param must surface: {params}"
-    );
-    assert!(
-        params.contains("anchor:"),
-        "anchor is a non-structural param: {params}"
     );
 }
 

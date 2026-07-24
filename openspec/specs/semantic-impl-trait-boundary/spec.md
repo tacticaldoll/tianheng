@@ -174,4 +174,3 @@ as it already does for the default (seam-only) scope.
 
 - **WHEN** a subtree-scoped boundary descends two mutually-exclusive `#[cfg]` branches that each independently declare a same-named type with an unrenderable const-generic self-type argument (e.g. `Arr<{ N + 1 }>` vs `Arr<{ N + 2 }>`), and that type's `impl` block returns an `impl Trait`
 - **THEN** the system reports a constitution error (exit 2) rather than publishing an internal positional label as identity — never silently collapsing the two genuinely distinct sites into one reported finding, and never partially succeeding
-
