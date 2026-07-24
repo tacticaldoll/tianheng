@@ -13,5 +13,5 @@
 ## 3. Verification and lifecycle
 
 - [x] 3.1 Run the complete repository Definition of Done without changing package versions.
-- [ ] 3.2 Sync the constitution-projection delta into the main spec and retire the completed
-  OpenSpec scaffold without retaining a dated archive copy.
+- [x] 3.2 Sync the constitution-projection delta into the main spec; retire the completed scaffold
+  as the lifecycle cleanup that follows task completion.
