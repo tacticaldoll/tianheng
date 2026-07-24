@@ -550,3 +550,21 @@ std::fs::write("AGENTS.my-project-law.md", md)?;
 Gate it with `tianheng::projection_gate(...)` in a `cargo test` (see the root `README.md`) so CI
 fails the moment the written law drifts from the declared one — the same staleness reaction
 Tianheng runs on its own `AGENTS.self-law.md`.
+
+### Fluent testing harness — `tianheng::testing::GovernanceTest`
+
+*Intent: streamline architecture reactions, workspace member coverage, and Markdown projection freshness assertions into one clean fluent harness in `cargo test`.*
+
+```rust
+use tianheng::prelude::*;
+
+#[test]
+fn test_architecture_governance() {
+    GovernanceTest::for_constitution(constitution())
+        .assert_clean()                            // Asserts 0 violations returned
+        .assert_all_workspace_members_covered()    // Asserts 100% of workspace members are governed
+        .assert_projection_fresh("AGENTS.md");     // Asserts Markdown projection matches, supporting BLESS=1
+}
+```
+
+This single test pattern combines clean reaction evaluation, non-vacuous coverage checks, and stale projection detection (with `BLESS=1` auto-regeneration), exactly as Tianheng governs itself in `crates/tianheng/tests/self_governance.rs`.
