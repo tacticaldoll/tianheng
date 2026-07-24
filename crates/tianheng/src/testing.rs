@@ -13,7 +13,7 @@ use crate::{Constitution, Outcome, check_constitution, constitution_markdown};
 /// A test harness for asserting architectural governance properties in `cargo test`.
 ///
 /// Wraps a [`Constitution`] and provides fluent assertion methods for workspace governance,
-/// coverage completeness, and projection freshness.
+/// coverage completeness, projection freshness, and fixture negative testing.
 #[derive(Debug, Clone)]
 pub struct GovernanceTest {
     constitution: Constitution,
@@ -55,12 +55,8 @@ impl GovernanceTest {
         }
     }
 
-    /// Assert that the constitution returns no violations (`Outcome::Clean`).
-    ///
-    /// # Panics
-    ///
-    /// Panics with a formatted report if any boundary violation or constitution error occurs.
-    pub fn assert_clean(&self) -> &Self {
+    /// Helper to resolve the manifest path and handle missing manifest under packaged tests.
+    fn resolve_manifest(&self) -> Option<PathBuf> {
         let manifest = self.manifest_path();
         if !manifest.exists() {
             assert!(
@@ -68,8 +64,20 @@ impl GovernanceTest {
                 "workspace manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
                 manifest
             );
-            return self;
+            return None;
         }
+        Some(manifest)
+    }
+
+    /// Assert that the constitution returns no violations (`Outcome::Clean`).
+    ///
+    /// # Panics
+    ///
+    /// Panics with a formatted report if any boundary violation or constitution error occurs.
+    pub fn assert_clean(&self) -> &Self {
+        let Some(manifest) = self.resolve_manifest() else {
+            return self;
+        };
 
         let outcome = check_constitution(&self.constitution, &manifest);
         assert!(
@@ -87,15 +95,9 @@ impl GovernanceTest {
     ///
     /// Panics if any workspace member has no targeting boundary, or if zero members are observed.
     pub fn assert_all_workspace_members_covered(&self) -> &Self {
-        let manifest = self.manifest_path();
-        if !manifest.exists() {
-            assert!(
-                std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-                "workspace manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
-                manifest
-            );
+        let Some(manifest) = self.resolve_manifest() else {
             return self;
-        }
+        };
 
         let (_, coverage) = check_and_cover(self.constitution.static_boundaries(), &manifest);
         let coverage = coverage.expect("workspace metadata is readable");
@@ -133,15 +135,9 @@ impl GovernanceTest {
         projection_path: impl AsRef<Path>,
         preamble: &str,
     ) -> &Self {
-        let manifest = self.manifest_path();
-        if !manifest.exists() {
-            assert!(
-                std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-                "workspace manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
-                manifest
-            );
+        let Some(manifest) = self.resolve_manifest() else {
             return self;
-        }
+        };
 
         let target_path = if projection_path.as_ref().is_absolute() {
             projection_path.as_ref().to_path_buf()
@@ -182,6 +178,52 @@ impl GovernanceTest {
             "projection Markdown at {target_path:?} is out of sync with code constitution! Run with BLESS=1 to regenerate."
         );
 
+        self
+    }
+
+    /// Assert that evaluating the constitution against a violating fixture manifest yields violations.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the fixture evaluation unexpectedly returns `Outcome::Clean`.
+    pub fn test_fixture(&self, fixture_manifest_path: impl AsRef<Path>) -> &Self {
+        self.assert_violates_fixture(fixture_manifest_path)
+    }
+
+    /// Assert that evaluating the constitution against a violating fixture manifest yields violations.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the fixture evaluation unexpectedly returns `Outcome::Clean`.
+    pub fn assert_violates_fixture(&self, fixture_manifest_path: impl AsRef<Path>) -> &Self {
+        let target_path = if fixture_manifest_path.as_ref().is_absolute() {
+            fixture_manifest_path.as_ref().to_path_buf()
+        } else {
+            self.manifest_dir.join(fixture_manifest_path.as_ref())
+        };
+
+        let manifest = if target_path.ends_with("Cargo.toml") {
+            target_path
+        } else {
+            target_path.join("Cargo.toml")
+        };
+
+        if !manifest.exists() {
+            assert!(
+                std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+                "fixture manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
+                manifest
+            );
+            return self;
+        }
+
+        let outcome = check_constitution(&self.constitution, &manifest);
+        assert!(
+            !matches!(outcome, Outcome::Clean),
+            "expected violating outcome for fixture at {:?}, but evaluation returned clean: {:?}",
+            manifest,
+            outcome
+        );
         self
     }
 }

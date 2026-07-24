@@ -408,3 +408,15 @@ fn every_workspace_member_is_self_governed() {
         .with_manifest_dir(manifest.parent().unwrap())
         .assert_all_workspace_members_covered();
 }
+
+#[test]
+fn fixture_negative_testing_observes_violating_fixture() {
+    let Some(manifest) = workspace_manifest() else {
+        return;
+    };
+    let root = manifest.parent().unwrap();
+    let fixture = root.join("crates/tianheng/tests/fixtures/violating/Cargo.toml");
+    GovernanceTest::for_constitution(tianheng_constitution())
+        .with_manifest_dir(root)
+        .test_fixture(fixture);
+}
