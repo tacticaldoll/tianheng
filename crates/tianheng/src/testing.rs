@@ -48,32 +48,11 @@ impl GovernanceTest {
 
     /// Resolve the target manifest path (`Cargo.toml`).
     pub fn manifest_path(&self) -> PathBuf {
-        if self.manifest_dir.ends_with("Cargo.toml") {
-            self.manifest_dir.clone()
-        } else {
-            self.manifest_dir.join("Cargo.toml")
-        }
+        ensure_cargo_toml_path(&self.manifest_dir)
     }
 
-    /// Helper to resolve target manifest path and handle missing manifest under packaged tests.
-    fn resolve_manifest(&self) -> Option<PathBuf> {
-        self.resolve_manifest_from(&self.manifest_dir)
-    }
-
-    /// Helper to resolve a specific manifest path and handle missing manifest under packaged tests.
-    fn resolve_manifest_from(&self, path: impl AsRef<Path>) -> Option<PathBuf> {
-        let target_path = if path.as_ref().is_absolute() {
-            path.as_ref().to_path_buf()
-        } else {
-            self.manifest_dir.join(path.as_ref())
-        };
-
-        let manifest = if target_path.ends_with("Cargo.toml") {
-            target_path
-        } else {
-            target_path.join("Cargo.toml")
-        };
-
+    /// Check if a manifest path exists, enforcing `TIANHENG_WORKSPACE_TESTS` discipline.
+    fn check_manifest_exists(&self, manifest: PathBuf) -> Option<PathBuf> {
         if !manifest.exists() {
             assert!(
                 std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
@@ -83,6 +62,21 @@ impl GovernanceTest {
             return None;
         }
         Some(manifest)
+    }
+
+    /// Helper to resolve the main constitution manifest path.
+    fn resolve_manifest(&self) -> Option<PathBuf> {
+        self.check_manifest_exists(self.manifest_path())
+    }
+
+    /// Helper to resolve a fixture manifest path (absolute or relative to `manifest_dir`).
+    fn resolve_fixture_manifest(&self, path: impl AsRef<Path>) -> Option<PathBuf> {
+        let target_path = if path.as_ref().is_absolute() {
+            path.as_ref().to_path_buf()
+        } else {
+            self.manifest_dir.join(path.as_ref())
+        };
+        self.check_manifest_exists(ensure_cargo_toml_path(&target_path))
     }
 
     /// Assert that the constitution returns no violations (`Outcome::Clean`).
@@ -206,20 +200,7 @@ impl GovernanceTest {
     ///
     /// Panics if fixture evaluation returns [`Outcome::Clean`] or [`Outcome::ConstitutionError`].
     pub fn test_fixture(&self, fixture_manifest_path: impl AsRef<Path>) -> &Self {
-        self.assert_violates_fixture(fixture_manifest_path)
-    }
-
-    /// Assert that evaluating the constitution against a violating fixture manifest yields boundary violations.
-    ///
-    /// Evaluates `check_constitution` against `fixture_manifest_path` and asserts that the outcome
-    /// is [`Outcome::Violations`]. A [`Outcome::ConstitutionError`] or [`Outcome::Clean`] will panic.
-    ///
-    /// # Panics
-    ///
-    /// Panics if fixture evaluation returns [`Outcome::Clean`] or [`Outcome::ConstitutionError`].
-    #[doc(alias = "test_fixture")]
-    pub fn assert_violates_fixture(&self, fixture_manifest_path: impl AsRef<Path>) -> &Self {
-        let Some(manifest) = self.resolve_manifest_from(fixture_manifest_path) else {
+        let Some(manifest) = self.resolve_fixture_manifest(fixture_manifest_path) else {
             return self;
         };
 
@@ -231,5 +212,20 @@ impl GovernanceTest {
             outcome
         );
         self
+    }
+
+    /// Alias for [`test_fixture`](Self::test_fixture).
+    #[doc(alias = "test_fixture")]
+    pub fn assert_violates_fixture(&self, fixture_manifest_path: impl AsRef<Path>) -> &Self {
+        self.test_fixture(fixture_manifest_path)
+    }
+}
+
+/// Helper function to ensure a path targets `Cargo.toml`.
+fn ensure_cargo_toml_path(path: &Path) -> PathBuf {
+    if path.ends_with("Cargo.toml") {
+        path.to_path_buf()
+    } else {
+        path.join("Cargo.toml")
     }
 }
