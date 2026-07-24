@@ -10,9 +10,10 @@ documented adoption path remains usable and semantically honest across the 0.2 l
 `tianheng::prelude::*` SHALL expose the existing declaration and execution surface: `Constitution`,
 `CrateBoundary`, `ModuleBoundary`, `SemanticBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`, `AsyncExposureBoundary`,
-`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `DependencyKind`, `SourceKind`,
-`VisibilityCeiling`, `Severity`, and `run`. An external consumer SHALL be able to compose boundaries
-from all three instruments through one `Constitution` without importing dimension crates.
+`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
+`ScanDepth`, `DependencyKind`, `SourceKind`, `VisibilityCeiling`, `Severity`, and `run`. An
+external consumer SHALL be able to compose boundaries from all three instruments through one
+`Constitution` without importing dimension crates.
 
 #### Scenario: A consumer declares the composed law from one import
 
@@ -33,9 +34,9 @@ intentional 0.3.0 break. These names SHALL form an inspection tier, not a second
 identity or builder-owned rules. Standalone instrument APIs SHALL expose the same reaction model
 without requiring the composed facade.
 
-The public surface SHALL NOT promise a `Dimension`/`ObservedFact` plugin trait, runtime plugin
-loading, or a `tianheng::testing` assertion DSL in this change. Rust architecture tests SHALL use
-the existing pure standalone/composed checks and inspect structured `Outcome` values.
+The public surface SHALL NOT promise a `Dimension`/`ObservedFact` plugin trait or runtime plugin
+loading. Rust architecture tests MAY use the promised `GovernanceTest` harness or invoke the
+existing pure standalone/composed checks and inspect structured `Outcome` values.
 
 #### Scenario: A consumer inspects a composed reaction
 
@@ -55,15 +56,16 @@ the existing pure standalone/composed checks and inspect structured `Outcome` va
 #### Scenario: Architecture tests use the reaction model
 
 - **WHEN** an adopter wants a Rust test for an architectural boundary
-- **THEN** it invokes an existing pure check and asserts against structured Outcome data without a new testing DSL
+- **THEN** it uses `GovernanceTest` or invokes an existing pure check and asserts against structured Outcome data
 
 ### Requirement: The adopter surface has an external compilation reaction
 
 The repository SHALL compile integration-test consumers for the wildcard composed prelude and for
 each standalone instrument's promised check/reaction surface. The tests SHALL name the structured
-identity inspection types and type-check representative builder/check chains. They SHALL NOT invoke
-CLI, filesystem, or process side effects merely to prove API availability, and SHALL NOT imply an
-unimplemented plugin protocol.
+identity inspection types, the promised harness and depth selector, and type-check representative
+builder/check chains including `NoExistentialLeak`. They SHALL NOT invoke CLI, filesystem, or
+process side effects merely to prove API availability, and SHALL NOT imply an unimplemented plugin
+protocol.
 
 #### Scenario: A composed export is accidentally removed
 
@@ -79,6 +81,25 @@ unimplemented plugin protocol.
 
 - **WHEN** the compile consumer references a run or check function
 - **THEN** it type-checks the signature without executing observation or presentation side effects
+
+### Requirement: Shipped prelude additions are explicit compile-reacted promises
+
+The composed wildcard prelude SHALL expose `NoExistentialLeak`, `ScanDepth`, and `GovernanceTest`
+alongside the existing adopter surface. The external compilation reaction SHALL name each type and
+type-check `Constitution::no_existential_leak(...)` without executing workspace observation.
+`GovernanceTest` SHALL be the promised architecture-test harness; older prose denying any testing
+harness promise MUST NOT remain in this capability.
+
+#### Scenario: Composed existential profile is compile-reacted
+
+- **WHEN** an external-view integration test imports only `tianheng::prelude::*`
+- **THEN** it can name `NoExistentialLeak` and build a constitution through
+  `.no_existential_leak(...)`
+
+#### Scenario: Harness and depth selector are compile-reacted
+
+- **WHEN** the wildcard prelude contract is compiled
+- **THEN** `GovernanceTest` and `ScanDepth` resolve as public types
 
 ### Requirement: Focused semantic checks remain explicit
 

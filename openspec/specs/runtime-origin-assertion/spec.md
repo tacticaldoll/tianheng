@@ -394,8 +394,9 @@ byte offset, line number, or occurrence count.
 
 An un-auditable runtime probe fact SHALL identify its complete enclosing lexical item context within
 the source file. Equal nested function names, methods on equal local type names, or local impl
-contexts in distinct enclosing functions SHALL remain distinct without using byte offsets,
-traversal ordinals, or collection positions.
+contexts in distinct enclosing functions SHALL remain distinct without using absolute byte
+offsets, global traversal ordinals, or collection positions. Anonymous equal-header siblings MAY
+use a parent-local discriminator that is stable under differently-shaped unrelated insertion.
 
 #### Scenario: Equal nested functions in distinct outer functions remain distinct
 
@@ -406,3 +407,23 @@ traversal ordinals, or collection positions.
 
 - **WHEN** an unrelated item is inserted before a nested un-auditable probe
 - **THEN** the probe retains the same structured fact identity
+
+### Requirement: Anonymous lexical scopes distinguish un-auditable probes
+
+An un-auditable probe's complete lexical owner SHALL include anonymous block scopes that enclose a
+named item, including closure bodies. Equal nested function names and expression text under
+distinct closures in the same named owner SHALL remain distinct facts. The discriminator MUST NOT
+use an absolute byte offset; equal structural siblings MAY use a parent-local discriminator that
+is stable when a differently-shaped unrelated item is inserted.
+
+#### Scenario: Equal nested functions under distinct closures stay distinct
+
+- **WHEN** one function contains two closure bodies that each declare `fn inner()` with the same
+  non-literal `assert_boundary!` expression
+- **THEN** the audit emits two distinct un-auditable-probe identities
+
+#### Scenario: Unrelated insertion preserves anonymous ownership
+
+- **WHEN** a differently-shaped unrelated statement or item is inserted before one of those
+  closures
+- **THEN** the pre-existing closure probe retains its structured fact identity

@@ -15,7 +15,7 @@
   coverage plus runtime non-coverage.
 - [x] 3.2 Compile-react `NoExistentialLeak`, its composed builder, `ScanDepth`, and
   `GovernanceTest`.
-- [ ] 3.3 Remove stale adopter-surface denial of the shipped harness during spec sync.
+- [x] 3.3 Remove stale adopter-surface denial of the shipped harness during spec sync.
 
 ## 4. Governance history
 
@@ -24,4 +24,4 @@
 ## 5. Verification and lifecycle
 
 - [x] 5.1 Run the complete Definition of Done and adversarial regression checks at version 0.2.3.
-- [ ] 5.2 Sync all four delta specs into main specs.
+- [x] 5.2 Sync all four delta specs into main specs.
