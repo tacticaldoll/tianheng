@@ -312,7 +312,7 @@ The system SHALL follow a file-form module declared with an **unconditional, dir
 
 An unconditional target that does not exist on disk is a genuine broken reference (rustc itself errors on it) and SHALL be a scan error (exit 2), never a silent skip. A `#[path]` chain that resolves back to a source file already open on the path from the crate root (only possible through `#[path]`, since ordinary conventional/inline nesting is bounded by the crate's finite file list) SHALL likewise be a scan error, never an unbounded walk — tracked by the set of files open on the *current descent path*, not a monotonic whole-crate visited set, so two sibling or cousin declarations legitimately sharing one `#[path]` target (rustc compiles the same file twice, as two distinct modules) is never misreported as a cycle.
 
-The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes, but only the **direct, unconditional** form is followed. A `cfg_attr`-wrapped `path` remains a stated, cfg-conditional coverage bound (the same family as inline and macro-generated items — see the scanner decision in `PROJECT.md`): it is cfg-conditional, so following it cfg-blind could read a file rustc does not compile in the active configuration; a `cfg_attr` whose applied metas contain no genuine `path` name-value SHALL remain an ordinary module. This cfg-blind exclusion prevents a conditional remap from silently governing a same-named conventional orphan. An **unconditional, direct** `path` attribute on an inline module (`mod foo { … }`) does not relocate the module's own content (rustc treats the attribute as a no-op for that purpose — the body already IS the module) and SHALL NOT make that inline module disappear from reachability, but it DOES relocate the base directory the inline body's OWN file-form children resolve from, exactly as it would for a file-form declaration — the system SHALL follow it there too, resolved from the declaring source's own `path_base`. A `cfg_attr`-wrapped `path` preceding an inline module remains the same stated, cfg-conditional coverage bound as the file-form case (never followed cfg-blind; the inline body's own default child directory is used instead).
+The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes. When a direct `#[path = "…"]` attribute is present, it SHALL take precedence over any sibling `cfg_attr` paths on the same declaration. When no direct `#[path = "…"]` attribute is present and one or more `cfg_attr(..., path = "...")` attributes are recognized, the scanner SHALL collect all candidate remapped targets and perform a union-scan across all candidate target files that physically exist on disk (`path.exists()`). Candidate files that do not exist on disk SHALL be safely skipped without triggering a scan error (treating them as absent under the active compilation target). An unconditional `#[path]` attribute on an inline module (`mod foo { … }`) does not relocate the module's own content (rustc treats the attribute as a no-op for that purpose — the body already IS the module) and SHALL NOT make that inline module disappear from reachability, but it DOES relocate the base directory the inline body's OWN file-form children resolve from, exactly as it would for a file-form declaration — the system SHALL follow it there too, resolved from the declaring source's own `path_base`.
 
 #### Scenario: A path-remapped module's imports are observed at its real target
 
@@ -369,15 +369,20 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 - **WHEN** a crate declares `#[path = "other/weird.rs"] mod kernel;`, `other/weird.rs` declares a plain `mod child;` (resolved to the real `other/child.rs`), and an unrelated, wholly undeclared file also happens to physically sit at `kernel/child.rs` (the location a plain `mod child;` inside a NON-remapped `kernel` would occupy)
 - **THEN** the system governs only `other/child.rs` under `crate::kernel::child` — the stray file at `kernel/child.rs` is never compiled by rustc (`kernel` is wholly remapped) and must never be phantom-governed alongside the real one merely for coincidentally sharing its naive structural path
 
-#### Scenario: A cfg_attr-wrapped path attribute is recognized as a remap
+#### Scenario: A cfg_attr-wrapped path attribute undergoes union-scan when target file exists
 
-- **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, a conventional `foo.rs` exists containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
-- **THEN** the system treats `crate::foo` as remapped and reports it as out of scope (exit 2), rather than governing the conventional orphan or silently passing; the scanner does not evaluate whether `unix` is active
+- **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, `weird.rs` exists on disk containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
+- **THEN** the system observes the import in `weird.rs` for `crate::foo` and reports the violation, performing union-scan over all physically existing candidate files rather than marking the module out of scope
 
-#### Scenario: A nested cfg_attr-wrapped path attribute is recognized as a remap
+#### Scenario: A missing cfg_attr-wrapped path target is safely skipped
 
-- **WHEN** a crate declares `#[cfg_attr(a, cfg_attr(b, path = "weird.rs"))] mod foo;`
-- **THEN** the system recursively recognizes the applied `path` name-value and treats `crate::foo` as remapped and out of scope
+- **WHEN** a crate declares `#[cfg_attr(windows, path = "win_only.rs")] mod foo;` and `win_only.rs` does not exist on disk
+- **THEN** the system skips `win_only.rs` without raising a scan error, treating absent conditional targets as inactive under the current source checkout
+
+#### Scenario: A nested cfg_attr-wrapped path attribute is recognized as a candidate remap
+
+- **WHEN** a crate declares `#[cfg_attr(a, cfg_attr(b, path = "weird.rs"))] mod foo;` and `weird.rs` exists on disk
+- **THEN** the system recursively recognizes the applied `path` target and includes `weird.rs` in the union-scan for `crate::foo`
 
 #### Scenario: A cfg_attr without an applied path remains governable
 
