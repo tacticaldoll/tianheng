@@ -1210,6 +1210,52 @@ fn same_named_nested_functions_in_different_outer_functions_react_separately() {
 }
 
 #[test]
+fn same_named_nested_functions_in_equal_closures_react_separately_and_stably() {
+    let tb = TempBase::new("audit-unaud-two-closures");
+    let dir = tb.dir(
+        "two",
+        "fn outer() { \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         }",
+    );
+    let before = audit_probe_coverage(
+        &[boundary("s", Severity::Enforce)],
+        std::slice::from_ref(&dir),
+    );
+    let before_violations = unauditable_violations(&before);
+    assert_eq!(
+        before_violations.len(),
+        2,
+        "equal nested functions under distinct closures must not collapse: {before_violations:?}"
+    );
+    let before_facts: std::collections::BTreeSet<_> = before_violations
+        .iter()
+        .map(|violation| violation.fact().clone())
+        .collect();
+    assert_eq!(before_facts.len(), 2, "closure owners must differ");
+
+    std::fs::write(
+        dir.join("a.rs"),
+        "fn outer() { \
+         let unrelated = 1; \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         }",
+    )
+    .unwrap();
+    let after = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let after_facts: std::collections::BTreeSet<_> = unauditable_violations(&after)
+        .iter()
+        .map(|violation| violation.fact().clone())
+        .collect();
+    assert_eq!(
+        before_facts, after_facts,
+        "a differently-shaped unrelated insertion must not re-key closure ownership"
+    );
+}
+
+#[test]
 fn same_named_local_impl_methods_in_different_outer_functions_react_separately() {
     let tb = TempBase::new("audit-unaud-two-local-impls");
     let dir = tb.dir(

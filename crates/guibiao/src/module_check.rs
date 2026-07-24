@@ -58,6 +58,14 @@ fn push_module_violation(
     );
 }
 
+fn within_scan_depth(candidate: &str, anchor: &str, depth: ScanDepth) -> bool {
+    if depth == ScanDepth::Shallow {
+        candidate == anchor
+    } else {
+        path_within(candidate, anchor)
+    }
+}
+
 pub(crate) fn check_module_boundary(
     metadata: &Value,
     boundary: &ModuleBoundary,
@@ -192,7 +200,7 @@ pub(crate) fn check_module_boundary(
             // Fast path: a file whose module is within the protected subtree hosts only
             // self-imports (its inline descendants are within it, hence within the protected
             // module too), never an inbound edge — skip the read.
-            if path_within(&file_module, &governed_module) {
+            if boundary.depth == ScanDepth::Subtree && path_within(&file_module, &governed_module) {
                 continue;
             }
             // Forbid-one perf pre-filter: the importers a file can carry are its own module and its
@@ -211,7 +219,7 @@ pub(crate) fn check_module_boundary(
             for (importer, import) in imports_with_importers(&text, &file_module, &root_modules) {
                 // A module importing from within the protected subtree is not an inbound edge
                 // (an inline submodule of the protected module resolves to within it here).
-                if path_within(&importer, &governed_module) {
+                if within_scan_depth(&importer, &governed_module, boundary.depth) {
                     continue;
                 }
                 // Forbid-one: only the forbidden importer (or beneath, `::`-delimited) can violate.
@@ -221,7 +229,7 @@ pub(crate) fn check_module_boundary(
                     }
                 }
                 // This importer must actually import the protected module.
-                if !path_within(&import, &governed_module) {
+                if !within_scan_depth(&import, &governed_module, boundary.depth) {
                     continue;
                 }
                 // Closed allowlist: an importer within any allowed entry (or beneath it) is
@@ -296,7 +304,7 @@ pub(crate) fn check_module_boundary(
         for (file, file_module) in all_files {
             // A file whose module is within the permitted subtree hosts only permitted imports
             // (its inline descendants are within it too) — skip the read.
-            if path_within(&file_module, &governed_module) {
+            if boundary.depth == ScanDepth::Subtree && path_within(&file_module, &governed_module) {
                 continue;
             }
             let text = std::fs::read_to_string(&file)
@@ -308,7 +316,7 @@ pub(crate) fn check_module_boundary(
                 if external != confined {
                     continue;
                 }
-                if path_within(&importer, &governed_module) {
+                if within_scan_depth(&importer, &governed_module, boundary.depth) {
                     continue;
                 }
                 offenders.push((importer, file.display().to_string()));

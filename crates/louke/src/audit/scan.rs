@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// What the source scan found for a probe occurrence (`assert_boundary!`).
@@ -10,8 +10,9 @@ pub(super) enum Probe {
     /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
     /// source file, an owner-qualified enclosing item (never a bare name — two owners may share
     /// a method name), and the offending expression's own trimmed source text, so distinct
-    /// non-literal probes in one file are distinct findings (never a byte offset or occurrence
-    /// count — see `fn_scopes`/`first_macro_arg_end`).
+    /// non-literal probes in one file are distinct findings (never an absolute byte offset; an
+    /// anonymous lexical scope may carry a parent-local equal-header discriminator — see
+    /// `fn_scopes`/`first_macro_arg_end`).
     Unauditable {
         file: String,
         owner: String,
@@ -1099,6 +1100,32 @@ fn render_owner(
     }
 }
 
+fn anonymous_scope_header(b: &[u8], brace: usize) -> String {
+    let start = b[..brace]
+        .iter()
+        .rposition(|byte| matches!(byte, b';' | b'{' | b'}'))
+        .map_or(0, |index| index + 1);
+    let header = String::from_utf8_lossy(trim_bytes(&b[start..brace]));
+    let normalized = header.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        "<block>".to_string()
+    } else {
+        normalized
+    }
+}
+
+fn enclosing_owner(
+    named_owner: Option<&str>,
+    anonymous_stack: &[(usize, String)],
+) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(named_owner) = named_owner {
+        parts.push(named_owner.to_string());
+    }
+    parts.extend(anonymous_stack.iter().map(|(_, scope)| scope.clone()));
+    (!parts.is_empty()).then(|| parts.join("::"))
+}
+
 /// Match a bare keyword identifier at `i` (e.g. `fn`, `impl`, `trait`), requiring a right word
 /// boundary so `implx`/`fnx` is not mistaken for the keyword — mirrors [`match_probe_marker`]'s
 /// own boundary discipline. The caller checks the left boundary.
@@ -1232,6 +1259,8 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
     let mut mod_stack: Vec<(usize, String)> = Vec::new();
     let mut context_stack: Vec<(usize, ImplOrTraitContext)> = Vec::new();
     let mut fn_stack: Vec<(usize, usize, String)> = Vec::new();
+    let mut anonymous_stack: Vec<(usize, String)> = Vec::new();
+    let mut anonymous_siblings: HashMap<(String, String), usize> = HashMap::new();
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
@@ -1269,12 +1298,12 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                         .map(|(_, name)| name.as_str())
                         .collect::<Vec<_>>()
                         .join("::");
-                    let owner = render_owner(
-                        &module_path,
+                    let enclosing = enclosing_owner(
                         fn_stack.last().map(|(_, _, owner)| owner.as_str()),
-                        &context_stack,
-                        &name,
+                        &anonymous_stack,
                     );
+                    let owner =
+                        render_owner(&module_path, enclosing.as_deref(), &context_stack, &name);
                     fn_stack.push((depth, body_start, owner));
                     depth += 1;
                     i = body_start;
@@ -1283,7 +1312,20 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
             }
         }
         match b[i] {
-            b'{' => depth += 1,
+            b'{' => {
+                let header = anonymous_scope_header(b, i);
+                let parent = enclosing_owner(
+                    fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+                    &anonymous_stack,
+                )
+                .unwrap_or_else(|| "<module scope>".to_string());
+                let sibling = anonymous_siblings
+                    .entry((parent, header.clone()))
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+                anonymous_stack.push((depth, format!("block {header}#{sibling}")));
+                depth += 1;
+            }
             b'}' => {
                 depth = depth.saturating_sub(1);
                 if fn_stack
@@ -1304,6 +1346,12 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                     .is_some_and(|&(open_depth, _)| open_depth == depth)
                 {
                     mod_stack.pop();
+                }
+                if anonymous_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _)| open_depth == depth)
+                {
+                    anonymous_stack.pop();
                 }
             }
             _ => {}

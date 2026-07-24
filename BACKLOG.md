@@ -44,6 +44,18 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
     tension with “baseline is a generated snapshot, not policy” and “not a governance platform”:
     a bounded opt-in gate may fit, while debt scheduling does not. Promote only after that tension
     is resolved with adopter pressure and an explicit observation/reaction design.
+  - **`xuanji` sink for shared run/projection vocabulary.** Class: WATCH. Observed pressure:
+    `pacta` consumes the composed facade while `modou` consumes and re-exports Guibiao's widened
+    standalone check/baseline/projection surface. Observation source: those reference-consumer
+    builds and the current crate dependency graph. Current bound: keep dimension-owned
+    projection/check surfaces above vocabulary-neutral `xuanji`; sinking them now would break the
+    proven standalone Guibiao consumer without demonstrated cross-dimension deduplication. Risk:
+    duplicated shell vocabulary may grow if multiple instruments acquire standalone products.
+    Promotion trigger: a second standalone instrument consumer (Hunyi or Louke) demonstrates the
+    same projection/run need and makes a shared sink earn its migration cost. Version class:
+    DESIGN-BREAKING. Authority: `PROJECT.md`'s crate-family and dimension-independence decisions,
+    `openspec/specs/rule-model-surface/spec.md` reference-consumer contract, and the Pacta/Modou
+    compatibility evidence recorded in `CHANGELOG.md`.
 - **ACCEPTED DEBT:**
   - Multi-target conventional-path conflation.
   - Macro/configuration coverage bounds.
