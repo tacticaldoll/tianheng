@@ -187,6 +187,10 @@ pub(crate) fn reachable_modules(
             String,
             Vec<(PathBuf, PathBuf, HashSet<PathBuf>, bool)>,
         > = Default::default();
+        let mut child_conditional_paths: std::collections::BTreeMap<
+            String,
+            Vec<(PathBuf, PathBuf, HashSet<PathBuf>, bool)>,
+        > = Default::default();
         // Every `child_base` (NOT `path_base` — see the `ScanSource` doc above) a PLAIN
         // (`#[path]`-free) declaration for a name was seen under, each paired with the DECLARING
         // SOURCE's own ancestor set — critically per-source, exactly like `child_direct_paths`
@@ -260,34 +264,49 @@ pub(crate) fn reachable_modules(
                     }
                     continue;
                 }
-                let Some(eq_cleaned) = declared.direct_path_eq else {
-                    // A PLAIN file declaration (no `#[path]`) — resolved by a live probe from
-                    // THIS source's own `child_base` (see `child_plain_bases` above). Kept a
-                    // separate flag from a direct `#[path]` sibling below: the two are additive (a
-                    // `#[cfg]`-gated per-platform shim commonly pairs a plain file on one platform
-                    // with a `#[path]`-relocated one on another), never mutually exclusive.
+                if let Some(eq_cleaned) = declared.direct_path_eq {
+                    if let Some(&orig_eq) = positions.get(eq_cleaned) {
+                        if let Some(rel) =
+                            read_path_string(text.as_bytes(), orig_eq + 1, text.len())
+                        {
+                            child_direct_paths.entry(declared.name).or_default().push((
+                                PathBuf::from(rel),
+                                path_base.clone(),
+                                source_ancestors.clone(),
+                                declared.has_bare_cfg,
+                            ));
+                        }
+                    }
+                } else {
                     seen.1 = true;
-                    child_plain_bases.entry(declared.name).or_default().push((
-                        child_base.clone(),
-                        source_ancestors.clone(),
-                        declared.has_bare_cfg,
-                    ));
-                    continue;
-                };
-                let Some(&orig_eq) = positions.get(eq_cleaned) else {
-                    continue;
-                };
-                // A value this reader cannot decode falls back to the conventional (excluded,
-                // non-relocated) handling — fail-safe, never a mis-decoded path — matching 漏刻's
-                // own `read_path_string` precedent for the identical scenario. On valid rustc input
-                // this reader decodes every accepted escape, so the fallback is not expected to fire.
-                if let Some(rel) = read_path_string(text.as_bytes(), orig_eq + 1, text.len()) {
-                    child_direct_paths.entry(declared.name).or_default().push((
-                        PathBuf::from(rel),
-                        path_base.clone(),
-                        source_ancestors.clone(),
-                        declared.has_bare_cfg,
-                    ));
+                    child_plain_bases
+                        .entry(declared.name.clone())
+                        .or_default()
+                        .push((
+                            child_base.clone(),
+                            source_ancestors.clone(),
+                            declared.has_bare_cfg,
+                        ));
+                    for &eq_cleaned in &declared.conditional_path_eqs {
+                        if let Some(&orig_eq) = positions.get(eq_cleaned) {
+                            if let Some(rel) =
+                                read_path_string(text.as_bytes(), orig_eq + 1, text.len())
+                            {
+                                let candidate_target = path_base.join(&rel);
+                                if candidate_target.is_file() {
+                                    child_conditional_paths
+                                        .entry(declared.name.clone())
+                                        .or_default()
+                                        .push((
+                                            PathBuf::from(rel),
+                                            path_base.clone(),
+                                            source_ancestors.clone(),
+                                            declared.has_bare_cfg,
+                                        ));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -546,6 +565,37 @@ pub(crate) fn reachable_modules(
                         .push(ScanSource::File(target, own_dir.clone(), own_dir, anc));
                 }
             }
+            if let Some(targets) = child_conditional_paths.remove(&child) {
+                if !seen_plain_file && !child_direct_paths.contains_key(&child) {
+                    remap_shadowed.insert(child_path.clone());
+                }
+                for (rel, base, target_ancestors, _has_bare_cfg) in targets {
+                    let target = base.join(&rel);
+                    if !target.is_file() {
+                        continue;
+                    }
+                    let Ok(canon) = xingbiao::canonicalize_or_fail(&target) else {
+                        continue;
+                    };
+                    if target_ancestors.contains(&canon) {
+                        return Err(format!(
+                            "module '{child_path}' is remapped by #[cfg_attr(..., path = ...)] to '{}', which cycles back to an already-open source file",
+                            target.display()
+                        ));
+                    }
+                    remapped.push((target.clone(), child_path.clone()));
+                    let own_dir = canon
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| base.clone());
+                    let mut anc = target_ancestors.clone();
+                    anc.insert(canon);
+                    sources
+                        .entry(child_path.clone())
+                        .or_default()
+                        .push(ScanSource::File(target, own_dir.clone(), own_dir, anc));
+                }
+            }
             if reachable.insert(child_path.clone()) {
                 queue.push(child_path);
             }
@@ -567,6 +617,7 @@ struct DeclaredModule {
     is_inline: bool,
     body: Option<(usize, usize)>,
     direct_path_eq: Option<usize>,
+    conditional_path_eqs: Vec<usize>,
     /// Whether a BARE `#[cfg(...)]` (never `cfg_attr`) precedes this declaration — see
     /// [`has_bare_cfg_attr_before_item`]. Only meaningful for a non-inline (file-form) declaration
     /// with no resolvable file: it is the "might legitimately be absent on this build" signal, the
@@ -629,16 +680,21 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
                             // value is captured here (`direct_path_eq`) for exactly that reason;
                             // a `cfg_attr`-wrapped one stays the same stated, cfg-conditional skip
                             // bound as the file-form case (never followed cfg-blind).
-                            let direct_path_eq = match path_attr_before_item(bytes, i) {
-                                PathAttrKind::Direct(eq) => Some(eq),
-                                PathAttrKind::None | PathAttrKind::Excluded => None,
-                            };
+                            let (direct_path_eq, conditional_path_eqs) =
+                                match path_attr_before_item(bytes, i) {
+                                    PathAttrKind::Direct(eq) => (Some(eq), Vec::new()),
+                                    PathAttrKind::ConditionalRemaps(eqs) => (None, eqs),
+                                    PathAttrKind::None | PathAttrKind::Excluded => {
+                                        (None, Vec::new())
+                                    }
+                                };
                             let close = balanced_group_end(bytes, k).unwrap_or(bytes.len());
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
                                 is_inline: true,
                                 body: Some((k + 1, close.saturating_sub(1))),
                                 direct_path_eq,
+                                conditional_path_eqs,
                                 has_bare_cfg: false,
                             });
                             i = close;
@@ -646,27 +702,22 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
                         }
                         Some(b';') => {
                             let has_bare_cfg = has_bare_cfg_attr_before_item(bytes, i);
-                            match path_attr_before_item(bytes, i) {
-                                PathAttrKind::Excluded => {}
-                                PathAttrKind::None => {
-                                    declared.push(DeclaredModule {
-                                        name: canonical_segment(ident).to_string(),
-                                        is_inline: false,
-                                        body: None,
-                                        direct_path_eq: None,
-                                        has_bare_cfg,
-                                    });
-                                }
-                                PathAttrKind::Direct(eq) => {
-                                    declared.push(DeclaredModule {
-                                        name: canonical_segment(ident).to_string(),
-                                        is_inline: false,
-                                        body: None,
-                                        direct_path_eq: Some(eq),
-                                        has_bare_cfg,
-                                    });
-                                }
-                            }
+                            let (direct_path_eq, conditional_path_eqs) =
+                                match path_attr_before_item(bytes, i) {
+                                    PathAttrKind::Direct(eq) => (Some(eq), Vec::new()),
+                                    PathAttrKind::ConditionalRemaps(eqs) => (None, eqs),
+                                    PathAttrKind::None | PathAttrKind::Excluded => {
+                                        (None, Vec::new())
+                                    }
+                                };
+                            declared.push(DeclaredModule {
+                                name: canonical_segment(ident).to_string(),
+                                is_inline: false,
+                                body: None,
+                                direct_path_eq,
+                                conditional_path_eqs,
+                                has_bare_cfg,
+                            });
                         }
                         _ => {}
                     }
@@ -726,6 +777,7 @@ pub(super) fn declared_modules(source: &str) -> Vec<String> {
 enum PathAttrKind {
     None,
     Direct(usize),
+    ConditionalRemaps(Vec<usize>),
     Excluded,
 }
 
@@ -739,6 +791,9 @@ fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> PathAttrKind {
     }
     match attr_prefix_path_kind(&bytes[start..mod_index]) {
         PathAttrKind::Direct(relative) => PathAttrKind::Direct(start + relative),
+        PathAttrKind::ConditionalRemaps(relatives) => {
+            PathAttrKind::ConditionalRemaps(relatives.into_iter().map(|rel| start + rel).collect())
+        }
         other => other,
     }
 }
@@ -746,6 +801,7 @@ fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> PathAttrKind {
 fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
     let mut i = 0;
     let mut excluded = false;
+    let mut conditional_eqs = Vec::new();
     while i < bytes.len() {
         if bytes[i] != b'#' {
             i += 1;
@@ -785,22 +841,83 @@ fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
             continue;
         }
         // The combined `#[cfg_attr(<pred>, …, path = "…")]` spelling (equivalent to
-        // `#[cfg(<pred>)] #[path = "…"]`) is a conditional remap too — recognized cfg-blindly, the
-        // same stated `#[path]` bound: cfg-conditional, so never followed on its own. An
-        // unconditional `#[path = "…"]` elsewhere on the same item still wins (above), so this
-        // keeps scanning instead of returning immediately.
+        // `#[cfg(<pred>)] #[path = "…"]`) is a conditional remap. Collect candidate path = "..."
+        // positions across all cfg_attr occurrences. An unconditional `#[path = "…"]` elsewhere
+        // on the same item still wins (above), so this keeps scanning instead of returning immediately.
         if bytes[i..].starts_with(b"cfg_attr")
             && bytes.get(i + 8).is_none_or(|byte| !is_ident_byte(*byte))
-            && cfg_attr_prefix_has_path(&bytes[i + 8..])
         {
-            excluded = true;
+            cfg_attr_prefix_collect_path_eqs(&bytes[i + 8..], i + 8, &mut conditional_eqs);
+            if conditional_eqs.is_empty() && cfg_attr_prefix_has_path(&bytes[i + 8..]) {
+                excluded = true;
+            }
             continue;
         }
     }
-    if excluded {
+    if !conditional_eqs.is_empty() {
+        PathAttrKind::ConditionalRemaps(conditional_eqs)
+    } else if excluded {
         PathAttrKind::Excluded
     } else {
         PathAttrKind::None
+    }
+}
+
+fn cfg_attr_prefix_collect_path_eqs(bytes: &[u8], base_offset: usize, eqs: &mut Vec<usize>) {
+    let mut i = 0;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    if bytes.get(i) != Some(&b'(') {
+        return;
+    }
+    i += 1;
+    let mut depth = 1usize;
+    let mut past_predicate = false;
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'"' => {
+                i += 1;
+                while i < bytes.len() && bytes[i] != b'"' {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                i += 1;
+            }
+            b'(' => {
+                depth += 1;
+                i += 1;
+            }
+            b')' => {
+                depth -= 1;
+                i += 1;
+            }
+            b',' if depth == 1 => {
+                past_predicate = true;
+                i += 1;
+            }
+            byte if depth == 1 && past_predicate && is_ident_byte(byte) => {
+                let start = i;
+                while i < bytes.len() && is_ident_byte(bytes[i]) {
+                    i += 1;
+                }
+                let ident = &bytes[start..i];
+                if ident == b"path" {
+                    let mut j = i;
+                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if bytes.get(j) == Some(&b'=') {
+                        eqs.push(base_offset + j);
+                    }
+                } else if ident == b"cfg_attr" {
+                    cfg_attr_prefix_collect_path_eqs(&bytes[i..], base_offset + i, eqs);
+                }
+            }
+            _ => i += 1,
+        }
     }
 }
 
@@ -1271,29 +1388,21 @@ mod tests {
     }
 
     #[test]
-    fn a_cfg_attr_nested_path_is_a_remap() {
+    fn a_cfg_attr_nested_path_collects_conditional_remaps() {
         // `#[cfg_attr(<pred>, path = "…")]` (== `#[cfg(<pred>)] #[path = "…"]`) is a
-        // conditional remap — the FILE module is out of scope, the same stated `#[path]` bound. Not
-        // recognizing it would scan the module against a wrong/absent conventional file (a silent
-        // false negative in the static dimension).
-        assert!(
-            declared_modules("#[cfg_attr(windows, path = \"os/windows.rs\")]\npub mod os;\n")
-                .is_empty(),
-            "a cfg_attr-nested path remap puts the FILE module out of scope",
-        );
+        // conditional remap — under union-scan semantics, the declared module is captured with its
+        // candidate conditional targets so all physically existing files undergo governance.
+        let mods =
+            declared_modules("#[cfg_attr(windows, path = \"os/windows.rs\")]\npub mod os;\n");
+        assert_eq!(mods, vec!["os".to_string()]);
         // The remap may sit after the predicate among several applied attrs, and whitespace varies.
-        assert!(
-            declared_modules("#[cfg_attr(all(unix), deprecated, path = \"p.rs\")]\nmod a;\n")
-                .is_empty(),
-        );
-        // A NESTED `cfg_attr` remap (== `#[cfg(all(a,b))] #[path]`) is
-        // detected too — the recursion must descend the applied `cfg_attr`, or guibiao would
-        // silently govern nothing while hunyi failed loud (a cross-dimension divergence).
-        assert!(
-            declared_modules("#[cfg_attr(a, cfg_attr(b, path = \"secret.rs\"))]\npub mod m;\n")
-                .is_empty(),
-            "a nested cfg_attr path remap is detected",
-        );
+        let mods_a =
+            declared_modules("#[cfg_attr(all(unix), deprecated, path = \"p.rs\")]\nmod a;\n");
+        assert_eq!(mods_a, vec!["a".to_string()]);
+        // A NESTED `cfg_attr` remap (== `#[cfg(all(a,b))] #[path]`) is detected too.
+        let mods_m =
+            declared_modules("#[cfg_attr(a, cfg_attr(b, path = \"secret.rs\"))]\npub mod m;\n");
+        assert_eq!(mods_m, vec!["m".to_string()]);
     }
 
     #[test]

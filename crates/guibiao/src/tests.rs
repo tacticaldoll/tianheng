@@ -1134,7 +1134,7 @@ fn a_cfg_gated_unconditional_path_target_is_tolerated_regardless_of_attribute_or
 /// not silently governed as the wrong module.
 #[test]
 fn a_cfg_attr_wrapped_path_is_recognized_as_a_remap() {
-    let (result, _violations) = run_module_check(
+    let (result, violations) = run_module_check(
         "cfg-attr-path",
         &[
             (
@@ -1149,14 +1149,14 @@ fn a_cfg_attr_wrapped_path_is_recognized_as_a_remap() {
             .must_not_import("crate::forbidden")
             .because("foo must not import forbidden"),
     );
-    // crate::foo is a remapped module, out of scope — so a boundary anchored on it is a constitution
-    // error (exit 2), matching a direct `#[path]` remap. The conventional foo.rs is NOT governed as
-    // crate::foo (no false positive on the active-cfg configuration, no silent guess).
+    // Under union-scan semantics, crate::foo performs a reachability walk across all candidate files
+    // that physically exist on disk (both foo.rs and weird.rs), observing the forbidden import in foo.rs.
     assert!(
-        result.is_err(),
-        "a cfg_attr-remapped module is out of scope; a boundary on it must fail loud, not guess \
-         the conventional file"
+        result.is_ok(),
+        "a cfg_attr-remapped module performs union-scan over physically existing target files"
     );
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].finding, "crate::forbidden::Y");
 }
 
 /// Run a module boundary against a synthetic one-package workspace whose `src`
