@@ -13,7 +13,7 @@ static REACTIONS: AtomicUsize = AtomicUsize::new(0);
 fn a_rogue_origin_reacts_at_runtime_and_a_blessed_one_does_not() {
     set_sink(|violation| {
         assert_eq!(violation.kind, louke::BoundaryKind::Runtime);
-        assert_eq!(violation.target, "adapter-seam");
+        assert_eq!(violation.target(), "adapter-seam");
         assert_eq!(
             violation.fact().fact_type(),
             "tianheng.fact/louke/runtime-crossing"

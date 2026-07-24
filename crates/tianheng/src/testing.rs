@@ -10,6 +10,10 @@ use guibiao::check_and_cover;
 
 use crate::{Constitution, Outcome, check_constitution, constitution_markdown};
 
+fn bless_enabled() -> bool {
+    std::env::var("BLESS").is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+}
+
 /// A test harness for asserting architectural governance properties in `cargo test`.
 ///
 /// Wraps a [`Constitution`] and provides fluent assertion methods for workspace governance,
@@ -165,12 +169,7 @@ impl GovernanceTest {
             format!("{preamble}\n{projection}")
         };
 
-        let is_bless = match std::env::var("BLESS") {
-            Ok(val) => val == "1" || val.eq_ignore_ascii_case("true"),
-            Err(_) => false,
-        };
-
-        if is_bless {
+        if bless_enabled() {
             std::fs::write(&target_path, &expected).unwrap_or_else(|err| {
                 panic!("failed to write blessed projection to {target_path:?}: {err}")
             });
@@ -227,5 +226,108 @@ fn ensure_cargo_toml_path(path: &Path) -> PathBuf {
         path.to_path_buf()
     } else {
         path.join("Cargo.toml")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TempHarness {
+        root: PathBuf,
+    }
+
+    impl TempHarness {
+        fn new(name: &str) -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "tianheng-governance-test-{name}-{}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).unwrap();
+            std::fs::write(
+                root.join("Cargo.toml"),
+                "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n",
+            )
+            .unwrap();
+            Self { root }
+        }
+    }
+
+    impl Drop for TempHarness {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    #[ignore = "executed in subprocesses by projection_freshness_covers_every_bless_mode"]
+    fn projection_bless_mode_child() {
+        let mode = std::env::var("TIANHENG_PROJECTION_TEST_MODE").unwrap();
+        let temp = TempHarness::new("projection");
+        let harness = GovernanceTest::for_constitution(Constitution::new("fixture"))
+            .with_manifest_dir(&temp.root);
+        let path = temp.root.join("law.md");
+        let live = constitution_markdown(harness.constitution());
+
+        match mode.as_str() {
+            "fresh" => {
+                std::fs::write(&path, &live).unwrap();
+                harness.assert_projection_fresh(&path);
+            }
+            "stale" => {
+                std::fs::write(&path, "stale").unwrap();
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        harness.assert_projection_fresh(&path);
+                    }))
+                    .is_err()
+                );
+                assert_eq!(std::fs::read_to_string(&path).unwrap(), "stale");
+            }
+            "blessed" => {
+                std::fs::write(&path, "stale").unwrap();
+                harness.assert_projection_fresh(&path);
+                assert_eq!(std::fs::read_to_string(&path).unwrap(), live);
+            }
+            _ => panic!("unknown projection test mode"),
+        }
+    }
+
+    #[test]
+    fn projection_freshness_covers_every_bless_mode() {
+        let exe = std::env::current_exe().unwrap();
+        for (bless, mode) in [
+            (None, "fresh"),
+            (None, "stale"),
+            (Some(""), "stale"),
+            (Some("0"), "stale"),
+            (Some("false"), "stale"),
+            (Some("1"), "blessed"),
+            (Some("true"), "blessed"),
+            (Some("TRUE"), "blessed"),
+        ] {
+            let mut command = std::process::Command::new(&exe);
+            command
+                .args([
+                    "--exact",
+                    "testing::tests::projection_bless_mode_child",
+                    "--ignored",
+                ])
+                .env("TIANHENG_PROJECTION_TEST_MODE", mode);
+            match bless {
+                Some(value) => {
+                    command.env("BLESS", value);
+                }
+                None => {
+                    command.env_remove("BLESS");
+                }
+            }
+            let status = command.status().unwrap();
+            assert!(
+                status.success(),
+                "projection child failed for BLESS={bless:?}, mode={mode}"
+            );
+        }
     }
 }

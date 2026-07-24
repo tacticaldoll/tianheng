@@ -7129,7 +7129,7 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
     assert_eq!(violations.len(), 1, "one exposure violation");
-    assert_eq!(violations[0].target, "crate::domain");
+    assert_eq!(violations[0].target(), "crate::domain");
     assert_eq!(violations[0].rule, SIGNATURE_RULE);
     let id = violations[0].id();
     let key = id.fact();

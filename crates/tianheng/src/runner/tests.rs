@@ -890,7 +890,7 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
             report
                 .violations
                 .iter()
-                .any(|v| v.target == "a-seam-no-probe-covers"
+                .any(|v| v.target() == "a-seam-no-probe-covers"
                     && v.finding.contains("no assert_boundary! probe")),
             "the declared-unprobed seam must be the reported finding: {:?}",
             report.violations
@@ -943,7 +943,7 @@ fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
         1,
         "reachable custom-root module stays covered"
     );
-    assert_eq!(violations[0].target, "orphan");
+    assert_eq!(violations[0].target(), "orphan");
 
     let _ = std::fs::remove_dir_all(base);
 }

@@ -47,6 +47,25 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<Violation>();
     assert_public_type::<ViolationId>();
 
+    let violation = Violation::new(
+        BoundaryKind::Crate,
+        ViolationId::new(
+            "consumer-core",
+            RuleKey::of("tianheng.rule/test/adopter", [] as [(&str, &str); 0]),
+            StructuredFactIdentity::new(
+                "tianheng.fact/test/adopter",
+                "fact",
+                [] as [(&str, &str); 0],
+            )
+            .unwrap(),
+        ),
+        "adopter rule",
+        "adopter fact",
+        "the consumer core stays governed".to_string(),
+        Severity::Enforce,
+    );
+    assert_eq!(violation.target(), "consumer-core");
+
     let crate_boundary = CrateBoundary::crate_("consumer-core")
         .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
         .dependency_kind(DependencyKind::Normal)

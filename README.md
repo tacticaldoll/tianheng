@@ -219,7 +219,8 @@ fn agent_law_projection_is_fresh() {
         &fresh,
         std::path::Path::new("AGENTS.my-project-law.md"),
         "BLESS=1 cargo test",
-        std::env::var_os("BLESS").is_some(),
+        std::env::var("BLESS")
+            .is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true")),
     )
     .unwrap();
 }

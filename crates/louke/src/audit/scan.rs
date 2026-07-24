@@ -1064,6 +1064,7 @@ enum ImplOrTraitContext {
 /// so this only needs to cover same-file `mod` nesting, not cross-file module identity.
 fn render_owner(
     module_path: &str,
+    enclosing_fn: Option<&str>,
     context_stack: &[(usize, ImplOrTraitContext)],
     fn_name: &str,
 ) -> String {
@@ -1092,7 +1093,10 @@ fn render_owner(
         Some((_, ImplOrTraitContext::Trait(name))) => format!("trait {name}::{fn_name}"),
         None => format!("fn {fn_name}"),
     };
-    format!("{prefix}{body}")
+    match enclosing_fn {
+        Some(enclosing) => format!("{enclosing}::{body}"),
+        None => format!("{prefix}{body}"),
+    }
 }
 
 /// Match a bare keyword identifier at `i` (e.g. `fn`, `impl`, `trait`), requiring a right word
@@ -1265,7 +1269,12 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                         .map(|(_, name)| name.as_str())
                         .collect::<Vec<_>>()
                         .join("::");
-                    let owner = render_owner(&module_path, &context_stack, &name);
+                    let owner = render_owner(
+                        &module_path,
+                        fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+                        &context_stack,
+                        &name,
+                    );
                     fn_stack.push((depth, body_start, owner));
                     depth += 1;
                     i = body_start;

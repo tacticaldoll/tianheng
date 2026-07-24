@@ -38,7 +38,7 @@ fn prod_face_end_to_end() {
         events()
             .lock()
             .unwrap()
-            .push(format!("{}|{}", v.target, v.finding));
+            .push(format!("{}|{}", v.target(), v.finding));
     });
     louke::install(
         [

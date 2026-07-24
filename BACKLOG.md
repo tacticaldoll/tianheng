@@ -40,6 +40,10 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
 - **WATCH:**
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `qianyi` generator & LSP/editor integration.
+  - Baseline debt ratchet (`--require-baseline-reduction`, only-fix-never-add). This remains in
+    tension with “baseline is a generated snapshot, not policy” and “not a governance platform”:
+    a bounded opt-in gate may fit, while debt scheduling does not. Promote only after that tension
+    is resolved with adopter pressure and an explicit observation/reaction design.
 - **ACCEPTED DEBT:**
   - Multi-target conventional-path conflation.
   - Macro/configuration coverage bounds.

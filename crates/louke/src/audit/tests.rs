@@ -141,7 +141,7 @@ fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
         Outcome::Violations(report) => report.violations,
         other => panic!("orphan and inline shadow must stay unprobed: {other:?}"),
     };
-    let mut targets: Vec<_> = violations.iter().map(|v| v.target.as_str()).collect();
+    let mut targets: Vec<_> = violations.iter().map(|v| v.target()).collect();
     targets.sort_unstable();
     assert_eq!(targets, ["inline-shadow", "orphan"]);
 }
@@ -997,7 +997,7 @@ fn audit_reacts_to_a_duplicate_declared_seam() {
             report
                 .violations
                 .iter()
-                .any(|v| v.target == "twice" && v.finding.contains("declared more than once")),
+                .any(|v| v.target() == "twice" && v.finding.contains("declared more than once")),
             "a duplicate declared seam must react: {:?}",
             report.violations
         ),
@@ -1056,7 +1056,7 @@ fn audit_production_violation_separates_target_rule_and_fact_roles() {
     };
     let violation = report.violations.first().expect("one unprobed seam");
     let id = violation.id();
-    assert_eq!(violation.target, "checkout");
+    assert_eq!(violation.target(), "checkout");
     let rule = id.rule_key();
     assert_eq!(rule.rule_type(), "tianheng.rule/louke/declared-seam-probed");
     assert_eq!(rule.fields().count(), 0);
@@ -1187,6 +1187,77 @@ fn same_expression_in_two_different_free_functions_reacts_separately() {
         2,
         "distinguished by enclosing function, not collapsed: {violations:?}"
     );
+}
+
+#[test]
+fn same_named_nested_functions_in_different_outer_functions_react_separately() {
+    let tb = TempBase::new("audit-unaud-two-nested-fns");
+    let dir = tb.dir(
+        "two",
+        "fn outer_a() { fn inner() { assert_boundary!(SEAM_A, o); } } \
+         fn outer_b() { fn inner() { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named nested functions in distinct outer functions must not collapse: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(facts.len(), 2, "lexical owner chains must differ");
+}
+
+#[test]
+fn same_named_local_impl_methods_in_different_outer_functions_react_separately() {
+    let tb = TempBase::new("audit-unaud-two-local-impls");
+    let dir = tb.dir(
+        "two",
+        "fn outer_a() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } } \
+         fn outer_b() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named local impl methods in distinct outer functions must not collapse: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "outer lexical owners must qualify local impls"
+    );
+}
+
+#[test]
+fn nested_function_identity_survives_unrelated_item_insertion() {
+    let tb = TempBase::new("audit-unaud-nested-stable");
+    let dir = tb.dir(
+        "same",
+        "fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
+    );
+    let before_fact = unauditable_violations(&audit_probe_coverage(
+        &[boundary("s", Severity::Enforce)],
+        std::slice::from_ref(&dir),
+    ))[0]
+        .fact()
+        .clone();
+    std::fs::write(
+        dir.join("a.rs"),
+        "fn unrelated() {} fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
+    )
+    .expect("rewrite fixture with unrelated item");
+    let after_fact = unauditable_violations(&audit_probe_coverage(
+        &[boundary("s", Severity::Enforce)],
+        &[dir],
+    ))[0]
+        .fact()
+        .clone();
+    assert_eq!(before_fact, after_fact);
 }
 
 #[test]
