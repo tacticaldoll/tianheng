@@ -469,3 +469,4 @@ observed fact. Source file, rendered import text, and traversal order SHALL NOT 
 #### Scenario: Repeated imports remain one fact
 - **WHEN** the same governed module observes the same violating import in multiple files or lines
 - **THEN** it emits one identity while a structurally different import remains distinct
+
