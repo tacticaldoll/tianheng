@@ -12,7 +12,8 @@ use crate::Constitution;
 
 /// Attach a boundary's durable governance `anchor` to its projected JSON, only when set — so a
 /// boundary without one keeps byte-identical projection (and the Markdown derived from it via
-/// `boundary_params`), the same discipline the operand / `including_trait_impls` params already use.
+/// its standalone anchor element), the same discipline the operand / `including_trait_impls`
+/// params already use.
 fn anchored(mut object: Value, anchor: Option<&str>) -> Value {
     if let Some(anchor) = anchor {
         object["anchor"] = serde_json::json!(anchor);
