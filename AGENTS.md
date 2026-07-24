@@ -43,11 +43,13 @@ drift law keeps it here, not in `Constitution`.
 
 A boundary's `because(...)` is read twice: once by a human, and — projected into an agent's
 context by `list` — once by an autoregressive model that *imitates* it (see PROJECT.md, 潛移).
-Write it as the **forward shape the boundary protects** ("the kernel depends inward only"),
-not a backward justification ("we once hit a cycle"): the forward voice conditions original
-generation, not just repair. But keep it **within the boundary's observable perimeter** — a
-reason must never assert structure the law does not react to (that is prose prescription, an
-open loop with no backstop). Forward voice, bounded to what reacts.
+
+Governance follows a **Three-Layer Architecture**:
+1. **Layer 1: Reaction Backstop (Code)** — Functional boundaries (`restrict_dependencies_to`, `must_not_call_inline`) enforce hard invariants in code. Minimalism forbids redundant reactions (do not add a denylist for a prohibition an allowlist already enforces).
+2. **Layer 2: Qiányí Gravity Pull (Prose Reason & Projection)** — `because(...)` reasons project into `AGENTS.self-law.md` to condition LLM continuations. Write reasons strictly in a **forward voice** ("the kernel depends inward only"), never as a backward justification or historical debrief ("we once hit a cycle in 0.2.2"): **provenance belongs in `PROJECT.md` decisions and git history, not in the live context reason.**
+3. **Layer 3: Provenance & History (Doc)** — Historical rationale, lessons learned, and decision context stay in `PROJECT.md` decisions and commit history, keeping live context dense and noise-free.
+
+Keep every reason **within the boundary's observable perimeter** — a reason must never assert structure the law does not react to (that is prose prescription, an open loop with no backstop). Forward voice, bounded to what reacts, minimal in reactions.
 
 ## Document authority & provenance
 
