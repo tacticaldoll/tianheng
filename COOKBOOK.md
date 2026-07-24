@@ -42,6 +42,7 @@ Exit codes are the contract: `0` clean / warn-only / fully baselined · `1` enfo
 | restrict live objects crossing a port seam | [Govern which adapter crosses a seam](#govern-which-adapter-crosses-a-dyn-seam-at-runtime) |
 | introduce governance without making an existing project red | [Adopt on a dirty codebase](#adopt-on-a-dirty-codebase-without-a-red-wall) |
 | prove a declared boundary still has teeth | [Test that a boundary reacts](#test-that-a-boundary-actually-reacts) |
+| publish an imitable Agent Law for your codebase | [Publish an imitable Agent Law](#publish-an-imitable-agent-law-for-your-codebase-three-layer-agent-law) |
 
 The table routes by *observable architectural fact*, not by architecture-fashion label. A recipe's
 text immediately below its declaration states what the selected instrument observes; it makes no
@@ -538,33 +539,37 @@ Coverage changes no exit code on its own, so nothing gates unless *you* assert o
 against a new, ungoverned crate slipping in is one you build deliberately. This is exactly how
 Tianheng gates its own coverage in `crates/tianheng/tests/self_governance.rs`.
 
-### Put your declared law into an AI agent's context (kept fresh)
+### Publish an imitable Agent Law for your codebase (Three-Layer Agent Law)
 
-*Intent: the agent reads the law in imitable form, and the copy cannot silently rot.*
+*Intent: publish your declared governance as a 3-layer imitable Agent Law (`AGENTS.md` / `AGENTS.self-law.md`) so AI agents imitate your architecture by gravity (潛移) — and gate it in `cargo test` so the projection never rots.*
 
-```rust
-let md = tianheng::constitution_markdown(&constitution());
-std::fs::write("AGENTS.my-project-law.md", md)?;
-```
-
-Gate it with `tianheng::projection_gate(...)` in a `cargo test` (see the root `README.md`) so CI
-fails the moment the written law drifts from the declared one — the same staleness reaction
-Tianheng runs on its own `AGENTS.self-law.md`.
-
-### Fluent testing harness — `tianheng::testing::GovernanceTest`
-
-*Intent: streamline architecture reactions, workspace member coverage, and Markdown projection freshness assertions into one clean fluent harness in `cargo test`.*
+The **Three-Layer Agent Law** consists of:
+1. **Layer 1: Universal Preamble** — meta-instructions and vocabulary only (`SELF_LAW_PREAMBLE` discipline; never crate-specific or un-reacted architectural claims).
+2. **Layer 2: Projection Body** — rendered directly from your declared `Constitution` via `tianheng::constitution_markdown(&constitution())`.
+3. **Layer 3: Law Source** — the Rust `constitution()` code, protected by `.github/CODEOWNERS` and verified by `cargo test`.
 
 ```rust
 use tianheng::prelude::*;
 
+const PREAMBLE: &str = r#"# AGENTS.self-law.md — My Project Law
+
+Working agreement for AI agents and humans. Read this before changing code.
+
+1. **Before changing code — read the declared law.** Read the boundaries below to understand the shape you must not drift.
+2. **After changing code — react.** Run `cargo test` or `your-binary check`.
+3. **On a violation — repair toward the declared reason.** Read `reason` first (it is the repair direction), then fix the code so the reason holds again. Never weaken a boundary to pass CI.
+"#;
+
 #[test]
-fn test_architecture_governance() {
+fn test_agent_law_freshness() {
     GovernanceTest::for_constitution(constitution())
         .assert_clean()                            // Asserts 0 violations returned
         .assert_all_workspace_members_covered()    // Asserts 100% of workspace members are governed
-        .assert_projection_fresh("AGENTS.md");     // Asserts Markdown projection matches, supporting BLESS=1
+        .assert_projection_fresh_with_preamble("AGENTS.self-law.md", PREAMBLE); // Staleness test + BLESS=1 support
 }
 ```
 
-This single test pattern combines clean reaction evaluation, non-vacuous coverage checks, and stale projection detection (with `BLESS=1` auto-regeneration), exactly as Tianheng governs itself in `crates/tianheng/tests/self_governance.rs`.
+> **Preamble Discipline (Important):** Keep Layer 1 strictly universal. A preamble MUST NOT contain crate-specific or un-reacted architectural rules (e.g., "all handlers must be in `src/handlers`"). Crate-specific architectural claims belong ONLY in Layer 2 (generated from `constitution()`), where every boundary carries a real, non-bypassable reaction. Un-reacted claims in preambles lead to rotted agent instructions over time.
+
+**Workflow (`BLESS=1` Regeneration):**
+Run `BLESS=1 cargo test` to automatically overwrite or update `AGENTS.self-law.md` when you update your `Constitution`. In CI, `cargo test` runs without `BLESS` and fails loudly if the checked-in Markdown file drifts from `constitution()`.
