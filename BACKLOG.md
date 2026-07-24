@@ -39,7 +39,6 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
 
 - **WATCH:**
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
-  - `cfg_attr(path)` observe-both semantics (requires real adopter pressure).
   - `qianyi` generator & LSP/editor integration.
 - **ACCEPTED DEBT:**
   - Multi-target conventional-path conflation.
@@ -50,6 +49,7 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
   - Trait method set freezing (API contract, not architectural shape).
   - Pre-creating empty crates/modules.
 - **BUILT / HISTORY:**
+  - `cfg_attr(path)` observe-both semantics (union-scan over default and physically existing `cfg_attr(path)` target paths).
   - Reusable testing harness (`tianheng::testing::GovernanceTest` fluent builder in facade for reaction, coverage, projection freshness with `BLESS=1`, and fixture testing).
   - Self-governance observation depth upgrade (explicit ScanDepth declarations across self_governance.rs boundaries).
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
