@@ -55,13 +55,29 @@ impl GovernanceTest {
         }
     }
 
-    /// Helper to resolve the manifest path and handle missing manifest under packaged tests.
+    /// Helper to resolve target manifest path and handle missing manifest under packaged tests.
     fn resolve_manifest(&self) -> Option<PathBuf> {
-        let manifest = self.manifest_path();
+        self.resolve_manifest_from(&self.manifest_dir)
+    }
+
+    /// Helper to resolve a specific manifest path and handle missing manifest under packaged tests.
+    fn resolve_manifest_from(&self, path: impl AsRef<Path>) -> Option<PathBuf> {
+        let target_path = if path.as_ref().is_absolute() {
+            path.as_ref().to_path_buf()
+        } else {
+            self.manifest_dir.join(path.as_ref())
+        };
+
+        let manifest = if target_path.ends_with("Cargo.toml") {
+            target_path
+        } else {
+            target_path.join("Cargo.toml")
+        };
+
         if !manifest.exists() {
             assert!(
                 std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-                "workspace manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
+                "manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
                 manifest
             );
             return None;
@@ -181,46 +197,36 @@ impl GovernanceTest {
         self
     }
 
-    /// Assert that evaluating the constitution against a violating fixture manifest yields violations.
+    /// Assert that evaluating the constitution against a violating fixture manifest yields boundary violations.
+    ///
+    /// Evaluates `check_constitution` against `fixture_manifest_path` and asserts that the outcome
+    /// is [`Outcome::Violations`]. A [`Outcome::ConstitutionError`] or [`Outcome::Clean`] will panic.
     ///
     /// # Panics
     ///
-    /// Panics if the fixture evaluation unexpectedly returns `Outcome::Clean`.
+    /// Panics if fixture evaluation returns [`Outcome::Clean`] or [`Outcome::ConstitutionError`].
     pub fn test_fixture(&self, fixture_manifest_path: impl AsRef<Path>) -> &Self {
         self.assert_violates_fixture(fixture_manifest_path)
     }
 
-    /// Assert that evaluating the constitution against a violating fixture manifest yields violations.
+    /// Assert that evaluating the constitution against a violating fixture manifest yields boundary violations.
+    ///
+    /// Evaluates `check_constitution` against `fixture_manifest_path` and asserts that the outcome
+    /// is [`Outcome::Violations`]. A [`Outcome::ConstitutionError`] or [`Outcome::Clean`] will panic.
     ///
     /// # Panics
     ///
-    /// Panics if the fixture evaluation unexpectedly returns `Outcome::Clean`.
+    /// Panics if fixture evaluation returns [`Outcome::Clean`] or [`Outcome::ConstitutionError`].
+    #[doc(alias = "test_fixture")]
     pub fn assert_violates_fixture(&self, fixture_manifest_path: impl AsRef<Path>) -> &Self {
-        let target_path = if fixture_manifest_path.as_ref().is_absolute() {
-            fixture_manifest_path.as_ref().to_path_buf()
-        } else {
-            self.manifest_dir.join(fixture_manifest_path.as_ref())
-        };
-
-        let manifest = if target_path.ends_with("Cargo.toml") {
-            target_path
-        } else {
-            target_path.join("Cargo.toml")
-        };
-
-        if !manifest.exists() {
-            assert!(
-                std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-                "fixture manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
-                manifest
-            );
+        let Some(manifest) = self.resolve_manifest_from(fixture_manifest_path) else {
             return self;
-        }
+        };
 
         let outcome = check_constitution(&self.constitution, &manifest);
         assert!(
-            !matches!(outcome, Outcome::Clean),
-            "expected violating outcome for fixture at {:?}, but evaluation returned clean: {:?}",
+            matches!(outcome, Outcome::Violations(_)),
+            "expected a boundary violation for fixture at {:?}, got: {:?}",
             manifest,
             outcome
         );

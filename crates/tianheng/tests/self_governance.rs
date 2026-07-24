@@ -416,7 +416,13 @@ fn fixture_negative_testing_observes_violating_fixture() {
     };
     let root = manifest.parent().unwrap();
     let fixture = root.join("crates/tianheng/tests/fixtures/violating/Cargo.toml");
-    GovernanceTest::for_constitution(tianheng_constitution())
+    let fixture_constitution = Constitution::new("example").boundary(
+        CrateBoundary::crate_("example-core")
+            .deny_external_dependencies()
+            .because("example-core is a domain-free core and must stay dependency-light"),
+    );
+
+    GovernanceTest::for_constitution(fixture_constitution)
         .with_manifest_dir(root)
         .test_fixture(fixture);
 }
