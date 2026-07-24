@@ -189,7 +189,7 @@ pub(crate) fn reachable_modules(
         > = Default::default();
         let mut child_conditional_paths: std::collections::BTreeMap<
             String,
-            Vec<(PathBuf, PathBuf, HashSet<PathBuf>, bool)>,
+            Vec<(PathBuf, PathBuf, HashSet<PathBuf>)>,
         > = Default::default();
         // Every `child_base` (NOT `path_base` — see the `ScanSource` doc above) a PLAIN
         // (`#[path]`-free) declaration for a name was seen under, each paired with the DECLARING
@@ -301,7 +301,6 @@ pub(crate) fn reachable_modules(
                                             PathBuf::from(rel),
                                             path_base.clone(),
                                             source_ancestors.clone(),
-                                            declared.has_bare_cfg,
                                         ));
                                 }
                             }
@@ -566,17 +565,25 @@ pub(crate) fn reachable_modules(
                 }
             }
             if let Some(targets) = child_conditional_paths.remove(&child) {
-                if !seen_plain_file && !child_direct_paths.contains_key(&child) {
+                // `child_direct_paths.remove` has already consumed the entry at the
+                // direct-path block above, so contains_key here is always false —
+                // the shadow condition reduces to the plain-file check alone.
+                if !seen_plain_file {
                     remap_shadowed.insert(child_path.clone());
                 }
-                for (rel, base, target_ancestors, _has_bare_cfg) in targets {
+                for (rel, base, target_ancestors) in targets {
                     let target = base.join(&rel);
+                    // The producer already filtered to is_file(); re-check defends
+                    // against a TOCTOU window (the file disappears between scan and
+                    // canonicalize), skipping it silently as "became absent".
                     if !target.is_file() {
                         continue;
                     }
-                    let Ok(canon) = xingbiao::canonicalize_or_fail(&target) else {
-                        continue;
-                    };
+                    // Unlike absent conditional candidates (skipped above), a
+                    // canonicalize failure on an existing file is a real IO, symlink,
+                    // or permission fault — propagate it loud so governance never
+                    // silently covers only part of a union-scan set.
+                    let canon = xingbiao::canonicalize_or_fail(&target)?;
                     if target_ancestors.contains(&canon) {
                         return Err(format!(
                             "module '{child_path}' is remapped by #[cfg_attr(..., path = ...)] to '{}', which cycles back to an already-open source file",
