@@ -32,6 +32,9 @@ pub struct ReadmeDoctests;
 mod existential;
 mod runner;
 mod sans_io;
+pub mod testing;
+
+pub use testing::GovernanceTest;
 
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
@@ -246,9 +249,9 @@ pub mod prelude {
     pub use super::{
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
         CrateBoundary, DependencyKind, DynTraitBoundary, Finding, ForbiddenMarkerBoundary,
-        ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome, Polarity,
-        Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, SemanticBoundary, Severity,
-        SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
+        GovernanceTest, ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome,
+        Polarity, Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, SemanticBoundary,
+        Severity, SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
         ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
     };
 }

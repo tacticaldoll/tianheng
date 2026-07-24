@@ -16,11 +16,12 @@ A family SHALL count as fulfilled only after its owner executes the real evaluat
 or Cargo metadata and observes its declared structured reaction; construction, projection, an exit
 code that another family could cause, or a free-standing coverage claim SHALL NOT count. The
 dogfood gate SHALL fail when any inventoried family has no fulfilled owner or an owner claims a
-family absent from the inventory.
+family absent from the inventory. The self-governance suite SHALL dogfood `tianheng::testing::GovernanceTest`
+to execute reaction, workspace member coverage, and projection freshness assertions.
 
 #### Scenario: Every public family has a fulfilled reaction owner
 
-- **WHEN** the dogfood suite runs against the current public `Constitution` surface
+- **WHEN** the dogfood suite runs against the current public `Constitution` surface via `tianheng::testing::GovernanceTest`
 - **THEN** every inventoried boundary family has at least one owner whose real evaluator and
   structured reaction assertions completed successfully
 

@@ -9,7 +9,6 @@
 
 use std::path::PathBuf;
 
-use guibiao::check_and_cover;
 use tianheng::prelude::*;
 use tianheng::{Boundary, Rule, constitution_markdown};
 
@@ -241,20 +240,12 @@ fn tianheng_constitution() -> Constitution {
 
 #[test]
 fn tianheng_governs_itself() {
-    // The whole self-constitution reacts through the same composed evaluator an adopter calls.
-    // Static → semantic → runtime-audit ordering and constitution-error precedence therefore
-    // dogfood the public shell heart, including the always-run runtime audit when this law declares
-    // no runtime boundaries. Any drift surfaces with the producing boundary's reason.
     let Some(manifest) = workspace_manifest() else {
         return; // no workspace root (e.g. a packaged crate) — self-governance runs in-repo only
     };
-    let constitution = tianheng_constitution();
-    let outcome = check_constitution(&constitution, &manifest);
-    assert!(
-        matches!(outcome, Outcome::Clean),
-        "Tianheng's composed self-law drifted: {outcome:?}"
-    );
-    assert_eq!(outcome.exit_code(), 0);
+    GovernanceTest::for_constitution(tianheng_constitution())
+        .with_manifest_dir(manifest.parent().unwrap())
+        .assert_clean();
 }
 
 /// The fixed preamble of the agent-loaded self-law projection (`AGENTS.self-law.md`). It is a
@@ -413,19 +404,25 @@ fn every_workspace_member_is_self_governed() {
     let Some(manifest) = workspace_manifest() else {
         return; // outside a checkout — same repo-only discipline as the governance gate
     };
-    let constitution = tianheng_constitution();
-    let (_, coverage) = check_and_cover(constitution.static_boundaries(), &manifest);
-    let coverage = coverage.expect("workspace metadata is readable in-repo");
-    assert!(
-        coverage.total > 0,
-        "coverage observed zero workspace members — the metadata read is degenerate, so an \
-         empty `uncovered` would pass this gate vacuously"
+    GovernanceTest::for_constitution(tianheng_constitution())
+        .with_manifest_dir(manifest.parent().unwrap())
+        .assert_all_workspace_members_covered();
+}
+
+#[test]
+fn fixture_negative_testing_observes_violating_fixture() {
+    let Some(manifest) = workspace_manifest() else {
+        return;
+    };
+    let root = manifest.parent().unwrap();
+    let fixture = root.join("crates/tianheng/tests/fixtures/violating/Cargo.toml");
+    let fixture_constitution = Constitution::new("example").boundary(
+        CrateBoundary::crate_("example-core")
+            .deny_external_dependencies()
+            .because("example-core is a domain-free core and must stay dependency-light"),
     );
-    assert!(
-        coverage.uncovered.is_empty(),
-        "workspace members escape self-governance (no boundary in `tianheng_constitution()` \
-         targets them): {:?} — add a boundary for each, or the dogfood gate silently skips \
-         them (a false negative of the self-law)",
-        coverage.uncovered
-    );
+
+    GovernanceTest::for_constitution(fixture_constitution)
+        .with_manifest_dir(root)
+        .test_fixture(fixture);
 }
