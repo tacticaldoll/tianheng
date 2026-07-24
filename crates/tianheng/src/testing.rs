@@ -114,7 +114,15 @@ impl GovernanceTest {
         };
 
         let (_, coverage) = check_and_cover(self.constitution.static_boundaries(), &manifest);
-        let coverage = coverage.expect("workspace metadata is readable");
+        let mut coverage = coverage.expect("workspace metadata is readable");
+        let semantic_targets: std::collections::HashSet<&str> = self
+            .constitution
+            .semantic_boundaries()
+            .crate_packages()
+            .collect();
+        coverage
+            .uncovered
+            .retain(|member| !semantic_targets.contains(member.as_str()));
         assert!(
             coverage.total > 0,
             "coverage observed zero workspace members — empty uncovered set would pass vacuously"
@@ -245,11 +253,13 @@ mod tests {
             ));
             let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(&root).unwrap();
+            std::fs::create_dir_all(root.join("src")).unwrap();
             std::fs::write(
                 root.join("Cargo.toml"),
                 "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n",
             )
             .unwrap();
+            std::fs::write(root.join("src/lib.rs"), "").unwrap();
             Self { root }
         }
     }
@@ -329,5 +339,31 @@ mod tests {
                 "projection child failed for BLESS={bless:?}, mode={mode}"
             );
         }
+    }
+
+    #[test]
+    fn workspace_coverage_counts_semantic_targets_but_not_runtime_seams() {
+        let temp = TempHarness::new("coverage");
+        let semantic = crate::SemanticBoundary::in_crate("fixture")
+            .module("crate")
+            .must_not_expose("crate::infra")
+            .because("the fixture API owns its vocabulary");
+        GovernanceTest::for_constitution(Constitution::new("fixture").signature_boundary(semantic))
+            .with_manifest_dir(&temp.root)
+            .assert_all_workspace_members_covered();
+
+        let runtime = crate::RuntimeBoundary::at("fixture-seam")
+            .only_origins(["fixture"])
+            .because("only the fixture crosses this seam");
+        let runtime_only =
+            GovernanceTest::for_constitution(Constitution::new("fixture").runtime(runtime))
+                .with_manifest_dir(&temp.root);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                runtime_only.assert_all_workspace_members_covered();
+            }))
+            .is_err(),
+            "a seam carries no crate target and must not cover the fixture package"
+        );
     }
 }

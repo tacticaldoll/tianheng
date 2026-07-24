@@ -26,6 +26,9 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<UnsafeBoundary>();
     assert_public_type::<RuntimeBoundary>();
     assert_public_type::<SansIoPure>();
+    assert_public_type::<NoExistentialLeak>();
+    assert_public_type::<GovernanceTest>();
+    assert_public_type::<ScanDepth>();
     assert_public_type::<DependencyKind>();
     assert_public_type::<SourceKind>();
     assert_public_type::<VisibilityCeiling>();
@@ -104,6 +107,9 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .module("crate::domain")
         .reading_clock_via("std::time", ["now"])
         .because("the domain receives time through its seam");
+    let existential_profile = NoExistentialLeak::in_crate("consumer-core")
+        .module("crate::api")
+        .because("the public API names concrete return types");
 
     let constitution = Constitution::new("consumer")
         .boundary(crate_boundary)
@@ -111,7 +117,8 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .signature_boundary(signature_boundary)
         .visibility_boundary(visibility_boundary)
         .runtime(runtime_boundary)
-        .sans_io_pure(profile);
+        .sans_io_pure(profile)
+        .no_existential_leak(existential_profile);
 
     // Function items and closures are type-checked but never invoked: this contract proves the
     // public call shapes without parsing a CLI, scanning a workspace, or writing process output.

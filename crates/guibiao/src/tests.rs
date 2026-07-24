@@ -5936,6 +5936,118 @@ fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
 }
 
 #[test]
+fn shallow_restrict_imports_to_ignores_descendant_imports() {
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "pub mod detail;\n"),
+        ("core/detail.rs", "use crate::adapter;\n"),
+    ];
+    let shallow = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .restrict_imports_to(["crate::core"])
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("the core seam depends inward");
+    let (shallow_result, shallow_violations) =
+        run_module_check("shallow-restrict-imports", files, shallow);
+    assert!(shallow_result.is_ok(), "{shallow_result:?}");
+    assert!(shallow_violations.is_empty(), "{shallow_violations:?}");
+
+    let subtree = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .restrict_imports_to(["crate::core"])
+        .because("the core subtree depends inward");
+    let (subtree_result, subtree_violations) =
+        run_module_check("subtree-restrict-imports", files, subtree);
+    assert!(subtree_result.is_ok(), "{subtree_result:?}");
+    assert_eq!(subtree_violations.len(), 1, "{subtree_violations:?}");
+}
+
+#[test]
+fn shallow_inbound_rules_protect_only_the_exact_module() {
+    let files = &[
+        ("lib.rs", "pub mod protected;\npub mod client;\n"),
+        ("protected.rs", "pub mod detail;\n"),
+        ("protected/detail.rs", "pub struct Item;\n"),
+        ("client.rs", "use crate::protected::detail::Item;\n"),
+    ];
+
+    let shallow_forbid = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_not_be_imported_by("crate::client")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("only the protected seam rejects this importer");
+    let (_, shallow_forbid_violations) =
+        run_module_check("shallow-inbound-forbid", files, shallow_forbid);
+    assert!(
+        shallow_forbid_violations.is_empty(),
+        "{shallow_forbid_violations:?}"
+    );
+
+    let subtree_forbid = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_not_be_imported_by("crate::client")
+        .because("the protected subtree rejects this importer");
+    let (_, subtree_forbid_violations) =
+        run_module_check("subtree-inbound-forbid", files, subtree_forbid);
+    assert_eq!(
+        subtree_forbid_violations.len(),
+        1,
+        "{subtree_forbid_violations:?}"
+    );
+
+    let shallow_allow = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("only the protected seam has a closed importer set");
+    let (_, shallow_allow_violations) =
+        run_module_check("shallow-inbound-allow", files, shallow_allow);
+    assert!(
+        shallow_allow_violations.is_empty(),
+        "{shallow_allow_violations:?}"
+    );
+
+    let subtree_allow = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .because("the protected subtree has a closed importer set");
+    let (_, subtree_allow_violations) =
+        run_module_check("subtree-inbound-allow", files, subtree_allow);
+    assert_eq!(
+        subtree_allow_violations.len(),
+        1,
+        "{subtree_allow_violations:?}"
+    );
+}
+
+#[test]
+fn shallow_external_confinement_permits_only_the_exact_module() {
+    let files = &[
+        ("lib.rs", "pub mod secret;\n"),
+        ("secret.rs", "pub mod detail;\n"),
+        ("secret/detail.rs", "use libc::c_int;\n"),
+    ];
+    let shallow = ModuleBoundary::in_crate("x")
+        .module("crate::secret")
+        .confine_external_crate("libc")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("only the secret seam may import libc");
+    let (shallow_result, shallow_violations) =
+        run_module_check("shallow-external-confinement", files, shallow);
+    assert!(shallow_result.is_ok(), "{shallow_result:?}");
+    assert_eq!(shallow_violations.len(), 1, "{shallow_violations:?}");
+
+    let subtree = ModuleBoundary::in_crate("x")
+        .module("crate::secret")
+        .confine_external_crate("libc")
+        .because("the secret subtree may import libc");
+    let (subtree_result, subtree_violations) =
+        run_module_check("subtree-external-confinement", files, subtree);
+    assert!(subtree_result.is_ok(), "{subtree_result:?}");
+    assert!(subtree_violations.is_empty(), "{subtree_violations:?}");
+}
+
+#[test]
 fn scan_depth_projection_omits_legacy_subtree_and_emits_shallow() {
     let legacy = Constitution::new("legacy").boundary(
         ModuleBoundary::in_crate("x")
