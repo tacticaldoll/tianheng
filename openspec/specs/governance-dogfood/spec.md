@@ -165,3 +165,17 @@ calling only the lower-level projection helper.
 
 - **WHEN** the repository self-governance test suite verifies `AGENTS.self-law.md`
 - **THEN** it invokes the public harness projection-freshness surface with the same BLESS semantics taught to adopters
+
+### Requirement: False-negative closure reaction fixtures
+
+The repository SHALL maintain isolated test fixtures under `crates/tianheng/tests/fixtures/` and integrated example checks for transparent macro unstripping (`cfg_if!`) and ancestor glob hazard reactions. The test harness SHALL assert that a `cfg_if!`-wrapped violation and an ancestor glob hazard violation both react with an enforced exit code 1 when checked through the shell facade.
+
+#### Scenario: Transparent macro violation fixture reacts with exit 1
+
+- **WHEN** `tianheng check` runs against the `cfg_if_violation` fixture manifest
+- **THEN** the runner exits with status 1 and reports the structured module violation enclosed in `cfg_if!`
+
+#### Scenario: Glob hazard violation fixture reacts with exit 1
+
+- **WHEN** `tianheng check` runs against the `glob_hazard_violation` fixture manifest
+- **THEN** the runner exits with status 1 and reports the structured Glob Hazard violation
