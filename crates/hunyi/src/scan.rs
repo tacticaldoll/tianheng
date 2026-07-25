@@ -526,7 +526,10 @@ fn walk_module(
                     };
                     if let Some(resolved) = resolved {
                         if resolved != alias {
-                            scan.aliases.insert(alias, resolved);
+                            let entry = scan.aliases.entry(alias).or_default();
+                            if !entry.contains(&resolved) {
+                                entry.push(resolved);
+                            }
                         }
                     }
                 }

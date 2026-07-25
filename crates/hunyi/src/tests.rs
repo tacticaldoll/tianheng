@@ -921,12 +921,12 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
     // each iteration, never exactly repeating — the outer exact-repeat `seen` guard alone could
     // not catch that. The assertion is simply that this terminates.
     use crate::containment::resolve_self_type;
-    use crate::resolve::{AliasMap, ReexportMap, UseMap};
+    use crate::resolve::{ReexportMap, UseMap};
     use std::collections::HashSet;
 
     let self_ty: syn::Type = syn::parse_str("Foo").unwrap();
     let uses = UseMap::new();
-    let aliases = AliasMap::new();
+    let aliases = std::collections::HashMap::new();
     let mut reexports = ReexportMap::new();
     reexports.insert("crate::a::Foo".to_string(), "crate::a::Foo::b".to_string());
     let landing = resolve_self_type(
@@ -8913,5 +8913,55 @@ fn non_generic_compound_type_alias_target_walk_detects_nested_exposure() {
         out.len(),
         6,
         "6 exposures (3 type aliases + 3 functions using them) must be detected: {out:?}"
+    );
+}
+
+#[test]
+fn tuple_alias_with_forbidden_type_in_first_position_and_private_helper_reacts() {
+    let out = findings(
+        "tuple-alias-first-pos",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\npub mod api;\n"),
+            (
+                "domain.rs",
+                "type PrivateHelper = (crate::infra::DbPool, crate::api::Public);\n\
+                 pub fn leak_first_pos() -> PrivateHelper { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct DbPool;\n"),
+            ("api.rs", "pub struct Public;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "private helper tuple alias with forbidden type in first position must react: {out:?}"
+    );
+    assert!(out[0].contains("crate::infra::DbPool exposed by fn crate::domain::leak_first_pos"));
+}
+
+#[test]
+fn raw_pointer_type_alias_target_walk_detects_nested_exposure() {
+    let out = findings(
+        "ptr-alias-walk",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
+            (
+                "domain.rs",
+                "pub type PtrAlias = *const crate::infra::DbPool;\n\
+                 pub fn leak_ptr() -> PtrAlias { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct DbPool;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        2,
+        "raw pointer type alias declaration and function return type must react: {out:?}"
     );
 }
