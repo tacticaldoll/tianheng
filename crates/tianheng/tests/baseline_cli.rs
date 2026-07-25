@@ -201,3 +201,29 @@ fn disallow_stale_json_and_sarif_projections_are_consistent_with_exit_code() {
 
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn disallow_stale_equals_form_is_unrecognized_argument_usage_error() {
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let path = temp_baseline("stale-equals");
+    std::fs::write(&path, wrong_typed_baseline()).expect("write baseline");
+
+    let output = command_for(&manifest)
+        .args([
+            "--baseline",
+            path.to_str().unwrap(),
+            "--disallow-stale=false",
+        ])
+        .output()
+        .expect("run CLI");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    assert!(
+        stderr.contains("unrecognized argument '--disallow-stale=false'"),
+        "{stderr}"
+    );
+
+    let _ = std::fs::remove_file(path);
+}

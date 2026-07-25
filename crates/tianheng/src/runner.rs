@@ -215,16 +215,6 @@ where
                     write_baseline_path = Some(path.to_string());
                 } else if let Some(value) = other.strip_prefix("--format=") {
                     format = Some(value.to_string());
-                } else if let Some(value) = other.strip_prefix("--disallow-stale=") {
-                    match value {
-                        "true" | "" => disallow_stale = true,
-                        "false" => disallow_stale = false,
-                        other => {
-                            return usage(&format!(
-                                "invalid --disallow-stale value '{other}' (expected true or false)"
-                            ));
-                        }
-                    }
                 } else {
                     // An unknown flag, a misspelling, or a stray positional is a
                     // misconfiguration — fail loud (exit 2), never silently ignore
