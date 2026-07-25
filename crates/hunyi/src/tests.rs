@@ -8975,47 +8975,50 @@ fn wide_tuple_alias_with_forbidden_first_member_expands_without_truncation() {
             (
                 "domain.rs",
                 "type Inner = crate::infra::Secret;\n\
-                 type Wide = (Inner, crate::api::Public, u32, u64, u128);\n\
+                 type Wide = (Inner, crate::api::A, crate::api::B, crate::api::C, crate::api::D, crate::api::E);\n\
                  pub fn leak_wide() -> Wide { loop {} }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
-            ("api.rs", "pub struct Public;\n"),
+            (
+                "api.rs",
+                "pub struct A;\npub struct B;\npub struct C;\npub struct D;\npub struct E;\n",
+            ),
         ],
         "crate::domain",
         &["crate::infra"],
     )
     .unwrap();
     assert_eq!(
-        out.len(),
-        1,
-        "wide tuple alias must expand all branches without truncation: {out:?}"
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::domain::leak_wide"],
+        "wide tuple alias with 6 resolvable targets and forbidden target first must expand without truncation: {out:?}"
     );
-    assert!(out[0].contains("crate::infra::Secret exposed by fn crate::domain::leak_wide"));
 }
 
 #[test]
 fn diamond_alias_expansion_does_not_leak_intermediate_aliases() {
-    let out = findings(
-        "diamond-alias",
-        &[
-            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
-            (
-                "domain.rs",
-                "type Mid = crate::infra::Secret;\n\
-                 type Other = Mid;\n\
-                 type Diamond = (Mid, Other);\n\
-                 pub fn leak_diamond() -> Diamond { loop {} }\n",
-            ),
-            ("infra.rs", "pub struct Secret;\n"),
-        ],
-        "crate::domain",
-        &["crate::infra"],
-    )
-    .unwrap();
-    assert_eq!(
-        out.len(),
-        1,
-        "diamond alias must expand to terminal target without intermediate alias leakage: {out:?}"
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+    let mut aliases = AliasMap::new();
+    aliases.insert(
+        "crate::domain::Mid".to_string(),
+        vec!["crate::infra::Secret".to_string()],
     );
-    assert!(out[0].contains("crate::infra::Secret exposed by fn crate::domain::leak_diamond"));
+    aliases.insert(
+        "crate::domain::Other".to_string(),
+        vec!["crate::domain::Mid".to_string()],
+    );
+    aliases.insert(
+        "crate::domain::Diamond".to_string(),
+        vec![
+            "crate::domain::Mid".to_string(),
+            "crate::domain::Other".to_string(),
+        ],
+    );
+    let reexports = ReexportMap::new();
+    let expanded = expand_canonical_paths("crate::domain::Diamond", &aliases, &reexports);
+    assert_eq!(
+        expanded,
+        vec!["crate::infra::Secret"],
+        "diamond alias expansion must yield strictly terminal target without intermediate alias leakage: {expanded:?}"
+    );
 }
