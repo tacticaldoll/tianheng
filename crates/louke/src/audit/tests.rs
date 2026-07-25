@@ -562,6 +562,23 @@ fn a_non_ascii_prefixed_lookalike_is_not_a_probe() {
 }
 
 #[test]
+fn probe_first_arg_with_generic_comma_preserves_full_span() {
+    let src = "fn f() { assert_boundary!(SEAM::<A, B>, o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(probes.len(), 1);
+    match &probes[0] {
+        crate::audit::scan::Probe::Unauditable { expr, .. } => {
+            assert_eq!(
+                expr, "SEAM::<A, B>",
+                "generic comma must not truncate argument span: {expr:?}"
+            );
+        }
+        other => panic!("expected Unauditable probe, got {other:?}"),
+    }
+}
+
+#[test]
 fn a_probe_with_a_gap_before_the_bang_is_captured() {
     // `ident ! (…)` with whitespace or a comment between the name and `!` is valid Rust
     // (`println !("x")` compiles), so a probe written that way must still count — a contiguous-only
@@ -1580,4 +1597,21 @@ fn blank_marker_string_is_constitution_error() {
         matches!(outcome, Outcome::ConstitutionError(_)),
         "blank marker string must be a constitution error: {outcome:?}"
     );
+}
+
+#[test]
+fn invalid_marker_string_is_constitution_error() {
+    let tb = TempBase::new("invalid-marker");
+    let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
+    for invalid in ["if", "match", "123foo", "foo::bar", "foo-bar"] {
+        let outcome = audit_probe_coverage_with_markers(
+            &[boundary("seam", Severity::Enforce)],
+            std::slice::from_ref(&root),
+            &[invalid],
+        );
+        assert!(
+            matches!(outcome, Outcome::ConstitutionError(_)),
+            "invalid marker '{invalid}' must be a constitution error: {outcome:?}"
+        );
+    }
 }

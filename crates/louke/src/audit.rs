@@ -119,9 +119,9 @@ pub fn audit_probe_coverage_with_markers(
         return Outcome::ConstitutionError("custom probe markers list cannot be empty".to_string());
     }
     for &marker in markers {
-        if marker.trim().is_empty() {
+        if !scan::is_valid_macro_marker(marker) {
             return Outcome::ConstitutionError(format!(
-                "custom probe marker '{marker}' cannot be empty or blank"
+                "custom probe marker '{marker}' is not a valid Rust macro identifier"
             ));
         }
     }

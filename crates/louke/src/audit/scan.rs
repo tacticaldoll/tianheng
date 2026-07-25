@@ -881,6 +881,28 @@ fn is_ident_byte(byte: u8) -> bool {
 /// (`return !(x)`, `if !(cond) {…}`), not a macro invocation — its operand must not be skipped as a
 /// macro body. `macro_rules` is deliberately absent (it is not a keyword and must reach the
 /// name-skip). A non-ASCII / non-UTF-8 run is never a keyword.
+pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
+    let bytes = marker.as_bytes();
+    if bytes.is_empty() {
+        return false;
+    }
+    let (ident_bytes, is_raw) = if marker.starts_with("r#") {
+        (&bytes[2..], true)
+    } else {
+        (bytes, false)
+    };
+    if ident_bytes.is_empty() || ident_bytes[0].is_ascii_digit() {
+        return false;
+    }
+    if !ident_bytes.iter().all(|&b| is_ident_byte(b)) {
+        return false;
+    }
+    if !is_raw && is_rust_keyword(ident_bytes) {
+        return false;
+    }
+    true
+}
+
 fn is_rust_keyword(word: &[u8]) -> bool {
     let Ok(word) = std::str::from_utf8(word) else {
         return false;
@@ -1040,6 +1062,7 @@ fn capture_probe(b: &[u8], i: usize, file: &str, owner: &str) -> (Option<Probe>,
 /// not mistaken for the argument's own end.
 fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
     let mut depth = 0usize;
+    let mut angle_depth = 0usize;
     let mut i = open;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
@@ -1049,12 +1072,24 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
         match b[i] {
             b'(' | b'{' | b'[' => depth += 1,
             b')' | b'}' | b']' => {
-                if depth == 0 {
+                if depth == 0 && angle_depth == 0 {
                     return i;
                 }
-                depth -= 1;
+                depth = depth.saturating_sub(1);
             }
-            b',' if depth == 0 => return i,
+            b'<' => {
+                if i > open {
+                    let prev = b[i - 1];
+                    if prev == b':' || prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>'
+                    {
+                        angle_depth += 1;
+                    }
+                }
+            }
+            b'>' => {
+                angle_depth = angle_depth.saturating_sub(1);
+            }
+            b',' if depth == 0 && angle_depth == 0 => return i,
             _ => {}
         }
         i += 1;
