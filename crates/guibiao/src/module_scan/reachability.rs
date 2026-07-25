@@ -650,6 +650,9 @@ fn is_item_header_keyword(bytes: &[u8], i: usize) -> bool {
         || keyword_starts_at(bytes, i, b"impl")
         || keyword_starts_at(bytes, i, b"trait")
         || keyword_starts_at(bytes, i, b"extern")
+        || keyword_starts_at(bytes, i, b"const")
+        || keyword_starts_at(bytes, i, b"static")
+        || keyword_starts_at(bytes, i, b"type")
 }
 
 fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<DeclaredModule> {
@@ -1637,6 +1640,21 @@ cfg_if::cfg_if! {
 }
 "#;
         assert_eq!(declared_modules(src), vec!["child".to_string()]);
+    }
+
+    #[test]
+    fn declared_modules_ignores_mod_inside_const_or_static_block() {
+        let src = r#"
+const _: () = {
+    mod child {
+        use crate::secret;
+    }
+};
+static FOO: () = {
+    mod inner;
+};
+"#;
+        assert!(declared_modules(src).is_empty());
     }
 
     #[test]
