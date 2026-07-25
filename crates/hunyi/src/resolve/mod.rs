@@ -459,6 +459,10 @@ fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<Stri
 /// Follow the **alias** and **re-export** closures together from `path` to all canonical fixpoint paths,
 /// so a name reached through a multi-target `type X = (A, B);` alias and/or a `pub use` facade resolves
 /// to all defining paths.
+/// Maximum expansion depth for alias/re-export chains. Exceeding this limit returns the node
+/// as its own target (fail-safe), preventing stack overflow on large or adversarial workspaces.
+const MAX_EXPANSION_DEPTH: usize = 64;
+
 pub(crate) fn expand_canonical_paths(
     path: &str,
     aliases: &AliasMap,
@@ -467,18 +471,9 @@ pub(crate) fn expand_canonical_paths(
     if aliases.is_empty() && reexports.is_empty() {
         return vec![path.to_string()];
     }
-    let max_depth = aliases.len() + reexports.len() + 1;
     let mut memo = std::collections::HashMap::new();
     let mut chain_seen = std::collections::HashSet::new();
-    expand_memoized(
-        path,
-        aliases,
-        reexports,
-        0,
-        max_depth,
-        &mut chain_seen,
-        &mut memo,
-    )
+    expand_memoized(path, aliases, reexports, 0, &mut chain_seen, &mut memo)
 }
 
 fn expand_memoized(
@@ -486,7 +481,6 @@ fn expand_memoized(
     aliases: &AliasMap,
     reexports: &ReexportMap,
     depth: usize,
-    max_depth: usize,
     chain_seen: &mut std::collections::HashSet<String>,
     memo: &mut std::collections::HashMap<String, Vec<String>>,
 ) -> Vec<String> {
@@ -494,37 +488,21 @@ fn expand_memoized(
         return cached.clone();
     }
 
-    if depth > max_depth || !chain_seen.insert(current.to_string()) {
+    if depth > MAX_EXPANSION_DEPTH || !chain_seen.insert(current.to_string()) {
         return vec![current.to_string()];
     }
 
     let mut results = Vec::new();
     if let Some(next_targets) = rewrite_longest_alias_prefixes(current, aliases) {
         for target in next_targets {
-            for res in expand_memoized(
-                &target,
-                aliases,
-                reexports,
-                depth + 1,
-                max_depth,
-                chain_seen,
-                memo,
-            ) {
+            for res in expand_memoized(&target, aliases, reexports, depth + 1, chain_seen, memo) {
                 if !results.contains(&res) {
                     results.push(res);
                 }
             }
         }
     } else if let Some(next) = rewrite_longest_prefix(current, reexports) {
-        for res in expand_memoized(
-            &next,
-            aliases,
-            reexports,
-            depth + 1,
-            max_depth,
-            chain_seen,
-            memo,
-        ) {
+        for res in expand_memoized(&next, aliases, reexports, depth + 1, chain_seen, memo) {
             if !results.contains(&res) {
                 results.push(res);
             }

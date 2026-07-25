@@ -968,6 +968,30 @@ fn diamond_alias_graph_expansion_terminates_and_memoizes_intermediate_nodes() {
 }
 
 #[test]
+fn deep_chain_expansion_terminates_at_fixed_depth() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    // Build a linear chain longer than MAX_EXPANSION_DEPTH (64):
+    // N0 -> N1 -> N2 -> ... -> N99
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+    for i in 0..99usize {
+        aliases.insert(format!("crate::N{i}"), vec![format!("crate::N{}", i + 1)]);
+    }
+
+    // Must return without panicking (stack overflow) and produce some non-empty result.
+    let res = expand_canonical_paths("crate::N0", &aliases, &reexports);
+    assert!(
+        !res.is_empty(),
+        "must return a non-empty result even for over-long chains"
+    );
+    // All returned paths must be strings starting with "crate::N".
+    for r in &res {
+        assert!(r.starts_with("crate::N"), "unexpected result path: {r}");
+    }
+}
+
+#[test]
 fn a_self_similar_reexport_is_dropped_and_the_real_type_still_reacts() {
     // Build-time guard: `pub use self::sub::sub;` re-exports the value `sub` from
     // a same-named child module, yielding a `crate::sub -> crate::sub::sub` map entry (key ⊂ value).
