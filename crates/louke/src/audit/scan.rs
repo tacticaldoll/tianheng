@@ -24,10 +24,18 @@ pub(super) fn collect_probes(input: &Path, probes: &mut Vec<Probe>) -> Result<()
     if input.is_file() {
         return collect_reachable_probes(input, probes);
     }
-    collect_directory_probes(input, probes)
+    let mut visited = HashSet::new();
+    collect_directory_probes(input, probes, &mut visited)
 }
 
-fn collect_directory_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+fn collect_directory_probes(
+    dir: &Path,
+    probes: &mut Vec<Probe>,
+    visited: &mut HashSet<PathBuf>,
+) -> Result<(), String> {
+    if !xingbiao::try_visit(visited, dir)? {
+        return Ok(());
+    }
     let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
     // Sort entries so the scan order — and thus the violation order in the report — is
     // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
@@ -45,8 +53,10 @@ fn collect_directory_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), S
     paths.sort();
     for (is_dir, path) in paths {
         if is_dir {
-            collect_directory_probes(&path, probes)?;
-        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+            collect_directory_probes(&path, probes, visited)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
+            && xingbiao::try_visit(visited, &path)?
+        {
             let source = std::fs::read_to_string(&path)
                 .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
             scan_source(&source, &path.display().to_string(), probes);
