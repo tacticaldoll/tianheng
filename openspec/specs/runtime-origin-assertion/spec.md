@@ -430,12 +430,17 @@ is stable when a differently-shaped unrelated item is inserted.
 
 ### Requirement: CI face accepts configurable custom probe macro markers
 
-The `audit_probe_coverage` scanner SHALL support custom probe macro marker names (`&[&str]`), defaulting to `["assert_boundary"]`. Each custom marker identifier SHALL be matched at a valid word boundary followed by optional whitespace and `!`, applying the same lexical scanning, seam argument decoding, and macro-body exclusion rules as `assert_boundary!`. A custom marker probe referencing a declared seam SHALL count toward probe coverage for that seam.
+The `audit_probe_coverage` scanner SHALL support custom probe macro marker names (`&[&str]`), defaulting to `["assert_boundary"]`. Each custom marker identifier SHALL be a valid ASCII Rust identifier (`[A-Za-z_][A-Za-z0-9_]*`, strictly excluding keywords, raw identifiers, and non-ASCII characters). Custom markers SHALL be matched at a valid word boundary followed by optional whitespace and `!`, applying the same lexical scanning, seam argument decoding, and macro-body exclusion rules as `assert_boundary!`. A custom marker probe referencing a declared seam SHALL count toward probe coverage for that seam.
 
 #### Scenario: A custom probe macro wrapper is recognized in CI coverage
 
 - **WHEN** a project wraps `assert_boundary!` in a custom macro `company_seam!` and runs `audit_probe_coverage_with_markers` configured with `["assert_boundary", "company_seam"]`
 - **THEN** calls to `company_seam!("seam-name", obj)` are scanned as valid auditable probes for seam `"seam-name"`
+
+#### Scenario: Non-ASCII or invalid identifier markers cause a constitution error
+
+- **WHEN** `audit_probe_coverage_with_markers` is called with a marker containing non-ASCII characters, keywords, or invalid identifier characters
+- **THEN** the action fails loud with `Outcome::ConstitutionError`
 
 #### Scenario: Unregistered custom macro markers are ignored
 
