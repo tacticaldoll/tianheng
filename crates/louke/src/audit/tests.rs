@@ -1503,3 +1503,20 @@ fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
         "a real, declared, and probed seam must be covered, not hang or error: {outcome:?}"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn directory_audit_does_not_hang_on_a_symlinked_directory_cycle() {
+    let tb = TempBase::new("dir-symlink-cycle");
+    let _src = tb.source("main.rs", "fn f() { assert_boundary!(\"a\", o); }\n");
+    tb.symlink(tb.path(), "loop_dir");
+    let outcome = audit_probe_coverage(
+        &[boundary("a", Severity::Enforce)],
+        &[tb.path().to_path_buf()],
+    );
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "directory scan on a cyclic symlinked dir must be covered without hanging or looping: {outcome:?}"
+    );
+}
