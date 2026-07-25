@@ -111,6 +111,34 @@ pub(super) fn is_crate_root_shadow(
     current_module == "crate" && root_modules.iter().any(|m| m == head)
 }
 
+/// Canonicalize and fold module path segments, resolving embedded `self` and `super`
+/// segments anywhere in the path (e.g. `["crate", "a", "b", "super", "c"]` -> `["crate", "a", "c"]`).
+/// Returns `None` if `super` over-pops past the `crate` root or if the path is not crate-rooted.
+pub(super) fn fold_canonical_segments(segments: &[&str]) -> Option<String> {
+    let mut stack: Vec<&str> = Vec::new();
+    for &raw_seg in segments {
+        let seg = canonical_segment(raw_seg.trim());
+        if seg.is_empty() {
+            continue;
+        }
+        match seg {
+            "self" => continue,
+            "super" => {
+                if stack.last() == Some(&"crate") || stack.is_empty() {
+                    return None;
+                }
+                stack.pop();
+            }
+            other => stack.push(other),
+        }
+    }
+    if stack.first() == Some(&"crate") {
+        Some(stack.join("::"))
+    } else {
+        None
+    }
+}
+
 /// Resolve a `self::…` / `super::…` relative path against `current_module` into a crate-rooted
 /// absolute path. `parts` is the already-canonicalized, `::`-split path whose first segment is
 /// `self` or `super`. Returns `None` when a `super` chain **over-pops** past the crate root (more
@@ -123,32 +151,16 @@ pub(super) fn is_crate_root_shadow(
 /// subtle edge cannot silently diverge across them (the twin-drift bug class). guibiao-internal;
 /// crosses no dimension boundary.
 pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option<String> {
-    let mut out: Vec<&str> = current_module
+    let first = parts.first().copied()?;
+    if first != "self" && first != "super" {
+        return None;
+    }
+    let mut full: Vec<&str> = current_module
         .split("::")
         .filter(|s| !s.is_empty())
         .collect();
-    match parts.first().copied() {
-        Some("self") => {
-            out.extend(&parts[1..]);
-            Some(out.join("::"))
-        }
-        Some("super") => {
-            let mut tail = parts;
-            while let Some(&seg) = tail.first() {
-                if seg != "super" {
-                    break;
-                }
-                out.pop();
-                tail = &tail[1..];
-            }
-            if out.first() != Some(&"crate") {
-                return None;
-            }
-            out.extend(tail);
-            Some(out.join("::"))
-        }
-        _ => None,
-    }
+    full.extend(parts);
+    fold_canonical_segments(&full)
 }
 
 /// Content inside the first `{ … }` of `s` (which must start with `{`), honoring nesting. The single
@@ -203,4 +215,34 @@ pub(super) fn split_top_commas(s: &str) -> Vec<String> {
         parts.push(current);
     }
     parts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fold_canonical_segments_resolves_embedded_super_and_self() {
+        assert_eq!(
+            fold_canonical_segments(&["crate", "a", "b", "super", "c", "D"]),
+            Some("crate::a::c::D".to_string())
+        );
+        assert_eq!(
+            fold_canonical_segments(&["crate", "a", "self", "b", "C"]),
+            Some("crate::a::b::C".to_string())
+        );
+        assert_eq!(
+            fold_canonical_segments(&["crate", "a", "b", "super", "super", "secret"]),
+            Some("crate::secret".to_string())
+        );
+    }
+
+    #[test]
+    fn fold_canonical_segments_over_pop_returns_none() {
+        assert_eq!(
+            fold_canonical_segments(&["crate", "a", "super", "super"]),
+            None
+        );
+        assert_eq!(fold_canonical_segments(&["super", "a"]), None);
+    }
 }

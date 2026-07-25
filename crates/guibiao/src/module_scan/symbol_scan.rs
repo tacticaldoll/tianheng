@@ -14,8 +14,9 @@ use crate::finding::ModuleFact;
 
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    brace_content, canonical_module_path, canonical_segment, effective_module, inline_mod_at,
-    is_crate_root_shadow, path_within, resolve_self_super, split_top_commas,
+    brace_content, canonical_module_path, canonical_segment, effective_module,
+    fold_canonical_segments, inline_mod_at, is_crate_root_shadow, path_within, resolve_self_super,
+    split_top_commas,
 };
 
 /// The crate-wide resolution context, built once from every reachable file: the local definition
@@ -885,7 +886,7 @@ fn resolve_head(
     let parts_str: Vec<&str> = parts.iter().map(String::as_str).collect();
     let base: String = match head.as_str() {
         "std" | "core" | "alloc" => parts.join("::"),
-        "crate" => parts.join("::"),
+        "crate" => fold_canonical_segments(&parts_str)?,
         // `self`/`super` relative resolution (incl. the `super` over-pop guard, whose `None` is
         // `?`-propagated) lives once in `path_vocab::resolve_self_super`.
         "self" | "super" => resolve_self_super(current_module, &parts_str)?,
@@ -1019,7 +1020,8 @@ fn resolve_written_path(
     let (head, _rest) = parts.split_first()?;
     let parts_str: Vec<&str> = parts.iter().map(String::as_str).collect();
     match head.as_str() {
-        "crate" | "std" | "core" | "alloc" => Some(parts.join("::")),
+        "std" | "core" | "alloc" => Some(parts.join("::")),
+        "crate" => fold_canonical_segments(&parts_str),
         _ if global => Some(parts.join("::")), // `::name::…` — global/external, kept as written
         // `self`/`super` relative resolution — incl. the `super` over-pop guard — lives once in
         // `path_vocab::resolve_self_super`.
