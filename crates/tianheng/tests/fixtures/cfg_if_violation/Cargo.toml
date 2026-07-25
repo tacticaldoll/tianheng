@@ -1,0 +1,7 @@
+# In-repo fixture: a violating target where a forbidden use is enclosed in a cfg_if! macro.
+[package]
+name = "example-core"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

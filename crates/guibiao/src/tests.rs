@@ -480,10 +480,16 @@ fn a_use_in_a_whitespace_spaced_macro_body_is_not_a_real_import() {
     // Rust allows whitespace between a macro path and its `!` (`cfg_if ! { … }`). The body is a
     // macro-generated context, out of scope per the module-boundary spec, so its `use` must be
     // stripped — not observed as a real import (a false positive).
-    let spaced = "cfg_if ! { use crate::secret::X; }\n";
+    let spaced = "my_macro ! { use crate::secret::X; }\n";
     assert!(
         imported_module_paths(spaced, "crate::m", &[]).is_empty(),
         "a use inside a whitespace-spaced macro invocation body is macro-generated, not a real import"
+    );
+    let transparent = "cfg_if ! { use crate::secret::X; }\n";
+    assert_eq!(
+        imported_module_paths(transparent, "crate::m", &[]),
+        vec![crate::module_scan::ImportedPath::plain("crate::secret::X")],
+        "a use inside a transparent control-flow macro (cfg_if!) is observed"
     );
     // But a unary `!` on a real block after a keyword (`return !{ … }`) is NOT a macro — its block
     // is real code, and a `use` inside it must still be observed (guarding against a false negative
@@ -1869,6 +1875,56 @@ fn must_not_import_dedups_a_finding_across_subtree_files() {
         "one violation per distinct finding: {violations:?}"
     );
     assert_eq!(violations[0].finding, "crate::forbidden::X");
+}
+
+#[test]
+fn must_not_import_flags_ancestor_glob_hazard() {
+    // When a boundary forbids `crate::a::b`, importing an ancestor wildcard (`use crate::a::*;`)
+    // brings `crate::a::b` into scope and MUST trigger a Glob Hazard violation (fail-closed).
+    let (result, violations) = run_module_check(
+        "glob-hazard-ancestor",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            ("app.rs", "use crate::a::*;"),
+            ("a.rs", "pub mod b;"),
+            ("a/b.rs", "pub struct Secret;"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_import("crate::a::b")
+            .because("app must not import b"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "importing an ancestor module wildcard violates a descendant forbidden boundary: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::a");
+}
+
+#[test]
+fn must_not_import_allows_plain_ancestor_module_import() {
+    // When a boundary forbids `crate::a::b`, importing the parent module without a wildcard
+    // (`use crate::a;`) does NOT bring `crate::a::b` into scope and MUST stay clean.
+    let (result, violations) = run_module_check(
+        "plain-ancestor-import",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            ("app.rs", "use crate::a;"),
+            ("a.rs", "pub mod b;"),
+            ("a/b.rs", "pub struct Secret;"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_import("crate::a::b")
+            .because("app must not import b"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "plain non-glob ancestor import must remain clean: {violations:?}"
+    );
 }
 
 #[test]
