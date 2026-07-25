@@ -22,11 +22,6 @@ pub(super) enum Probe {
 
 pub(super) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
 
-#[allow(dead_code)]
-pub(super) fn collect_probes(input: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
-    collect_probes_with_markers(input, DEFAULT_MARKERS, probes)
-}
-
 pub(super) fn collect_probes_with_markers(
     input: &Path,
     markers: &[&str],
@@ -594,7 +589,7 @@ fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
 /// probe marker appears in code, record whether its seam argument is a string literal
 /// (auditable) or not (un-auditable). Declarations come from the passed `RuntimeBoundary` objects.
 /// `file` labels an un-auditable probe so the reaction is actionable.
-#[allow(dead_code)]
+#[cfg(test)]
 pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
     scan_source_with_markers(source, file, DEFAULT_MARKERS, probes);
 }

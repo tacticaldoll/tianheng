@@ -1557,3 +1557,27 @@ fn unregistered_custom_marker_is_ignored_by_audit() {
         "unregistered custom macro wrapper must be ignored and report declared seam unprobed: {outcome:?}"
     );
 }
+
+#[test]
+fn empty_marker_list_is_constitution_error() {
+    let tb = TempBase::new("empty-marker-list");
+    let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
+    let outcome =
+        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &[]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(_)),
+        "empty markers list must be a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn blank_marker_string_is_constitution_error() {
+    let tb = TempBase::new("blank-marker");
+    let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
+    let outcome =
+        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &["  "]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(_)),
+        "blank marker string must be a constitution error: {outcome:?}"
+    );
+}
