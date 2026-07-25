@@ -944,6 +944,30 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
 }
 
 #[test]
+fn diamond_alias_graph_expansion_terminates_and_memoizes_intermediate_nodes() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+
+    // Multi-tier diamond graph:
+    // A -> (B, C)
+    // B -> D
+    // C -> D
+    // D -> Secret
+    aliases.insert(
+        "crate::A".to_string(),
+        vec!["crate::B".to_string(), "crate::C".to_string()],
+    );
+    aliases.insert("crate::B".to_string(), vec!["crate::D".to_string()]);
+    aliases.insert("crate::C".to_string(), vec!["crate::D".to_string()]);
+    aliases.insert("crate::D".to_string(), vec!["crate::Secret".to_string()]);
+
+    let res = expand_canonical_paths("crate::A", &aliases, &reexports);
+    assert_eq!(res, vec!["crate::Secret".to_string()]);
+}
+
+#[test]
 fn a_self_similar_reexport_is_dropped_and_the_real_type_still_reacts() {
     // Build-time guard: `pub use self::sub::sub;` re-exports the value `sub` from
     // a same-named child module, yielding a `crate::sub -> crate::sub::sub` map entry (key ⊂ value).

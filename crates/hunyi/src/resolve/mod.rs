@@ -468,47 +468,74 @@ pub(crate) fn expand_canonical_paths(
         return vec![path.to_string()];
     }
     let max_depth = aliases.len() + reexports.len() + 1;
-    let mut current_queue = vec![(path.to_string(), 0, std::collections::HashSet::new())];
-    let mut final_paths = Vec::new();
-    let mut memo: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut memo = std::collections::HashMap::new();
+    let mut chain_seen = std::collections::HashSet::new();
+    expand_memoized(
+        path,
+        aliases,
+        reexports,
+        0,
+        max_depth,
+        &mut chain_seen,
+        &mut memo,
+    )
+}
 
-    while let Some((current, depth, mut chain_seen)) = current_queue.pop() {
-        if !chain_seen.insert(current.clone()) || depth > max_depth {
-            if !final_paths.contains(&current) {
-                final_paths.push(current);
-            }
-            continue;
-        }
-
-        if let Some(cached) = memo.get(&current) {
-            for target in cached {
-                if !final_paths.contains(target) {
-                    final_paths.push(target.clone());
-                }
-            }
-            continue;
-        }
-
-        let mut expanded = false;
-        if let Some(next_targets) = rewrite_longest_alias_prefixes(&current, aliases) {
-            for target in next_targets {
-                current_queue.push((target, depth + 1, chain_seen.clone()));
-            }
-            expanded = true;
-        } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
-            current_queue.push((next, depth + 1, chain_seen.clone()));
-            expanded = true;
-        }
-
-        if !expanded {
-            memo.insert(current.clone(), vec![current.clone()]);
-            if !final_paths.contains(&current) {
-                final_paths.push(current);
-            }
-        }
+fn expand_memoized(
+    current: &str,
+    aliases: &AliasMap,
+    reexports: &ReexportMap,
+    depth: usize,
+    max_depth: usize,
+    chain_seen: &mut std::collections::HashSet<String>,
+    memo: &mut std::collections::HashMap<String, Vec<String>>,
+) -> Vec<String> {
+    if let Some(cached) = memo.get(current) {
+        return cached.clone();
     }
 
-    final_paths
+    if depth > max_depth || !chain_seen.insert(current.to_string()) {
+        return vec![current.to_string()];
+    }
+
+    let mut results = Vec::new();
+    if let Some(next_targets) = rewrite_longest_alias_prefixes(current, aliases) {
+        for target in next_targets {
+            for res in expand_memoized(
+                &target,
+                aliases,
+                reexports,
+                depth + 1,
+                max_depth,
+                chain_seen,
+                memo,
+            ) {
+                if !results.contains(&res) {
+                    results.push(res);
+                }
+            }
+        }
+    } else if let Some(next) = rewrite_longest_prefix(current, reexports) {
+        for res in expand_memoized(
+            &next,
+            aliases,
+            reexports,
+            depth + 1,
+            max_depth,
+            chain_seen,
+            memo,
+        ) {
+            if !results.contains(&res) {
+                results.push(res);
+            }
+        }
+    } else {
+        results.push(current.to_string());
+    }
+
+    chain_seen.remove(current);
+    memo.insert(current.to_string(), results.clone());
+    results
 }
 
 /// Follow the **alias** and **re-export** closures together from `path` to a single fixpoint path.
