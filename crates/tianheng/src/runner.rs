@@ -169,6 +169,7 @@ where
     let mut write_baseline_path: Option<String> = None;
     let mut format: Option<String> = None;
     let mut warn_uncovered = false;
+    let mut disallow_stale = false;
     let mut args = args.into_iter().map(Into::into).skip(1).peekable();
 
     // The command is the first positional token; an absent or unrecognized leading
@@ -204,6 +205,7 @@ where
             "--write-baseline" => write_baseline_path = Some(value!("--write-baseline")),
             "--format" => format = Some(value!("--format")),
             "--warn-uncovered" => warn_uncovered = true,
+            "--disallow-stale" => disallow_stale = true,
             other => {
                 if let Some(path) = other.strip_prefix("--manifest-path=") {
                     manifest_path = Some(path.to_string());
@@ -213,6 +215,16 @@ where
                     write_baseline_path = Some(path.to_string());
                 } else if let Some(value) = other.strip_prefix("--format=") {
                     format = Some(value.to_string());
+                } else if let Some(value) = other.strip_prefix("--disallow-stale=") {
+                    match value {
+                        "true" | "" => disallow_stale = true,
+                        "false" => disallow_stale = false,
+                        other => {
+                            return usage(&format!(
+                                "invalid --disallow-stale value '{other}' (expected true or false)"
+                            ));
+                        }
+                    }
                 } else {
                     // An unknown flag, a misspelling, or a stray positional is a
                     // misconfiguration — fail loud (exit 2), never silently ignore
@@ -246,6 +258,7 @@ where
             || baseline_path.is_some()
             || write_baseline_path.is_some()
             || warn_uncovered
+            || disallow_stale
         {
             return usage("list takes only --format; other flags are check-only");
         }
@@ -310,6 +323,9 @@ where
     if baseline_path.is_some() && write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
+    if disallow_stale && baseline_path.is_none() {
+        return usage("--disallow-stale requires --baseline");
+    }
 
     // From here on the command is `check`: it requires a workspace to observe.
     // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
@@ -353,6 +369,7 @@ where
             report_format,
             coverage.as_ref(),
             warn_uncovered,
+            disallow_stale,
         );
     }
 
@@ -491,6 +508,7 @@ fn gate(
     format: ReportFormat,
     coverage: Option<&Coverage>,
     warn_uncovered: bool,
+    disallow_stale: bool,
 ) -> u8 {
     // A constitution error is the whole story: report it before reading the baseline, so
     // it is never masked by a missing or unreadable baseline file (both exit 2, but the
@@ -531,8 +549,27 @@ fn gate(
         _ => &empty,
     };
     let stale: Vec<BaselineEntry> = baseline.stale(report).into_iter().cloned().collect();
+    let has_stale = disallow_stale && !stale.is_empty();
+    let exit_code = if has_stale && outcome.exit_code() == 0 {
+        1
+    } else {
+        outcome.exit_code()
+    };
+
     match format {
-        ReportFormat::Json => println!("{}", report_json(outcome, &stale, coverage)),
+        ReportFormat::Json => {
+            let json_str = report_json(outcome, &stale, coverage);
+            if exit_code != outcome.exit_code() {
+                if let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                    doc["exit_code"] = serde_json::json!(exit_code);
+                    println!("{}", serde_json::to_string_pretty(&doc).unwrap());
+                } else {
+                    println!("{json_str}");
+                }
+            } else {
+                println!("{json_str}");
+            }
+        }
         ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
         ReportFormat::Text => {
             report_violations(report);
@@ -544,12 +581,18 @@ fn gate(
                     entry.finding
                 );
             }
+            if has_stale {
+                eprintln!(
+                    "Tianheng: --disallow-stale failed: {} stale baseline entry/entries found",
+                    stale.len()
+                );
+            }
             if let Some(coverage) = coverage {
                 report_coverage(coverage, warn_uncovered);
             }
         }
     }
-    outcome.exit_code()
+    exit_code
 }
 
 /// Fold two outcomes into one reaction. Reused across the composition chain — static + semantic,
