@@ -490,7 +490,11 @@ fn walk_module(
             //      rename (the rename map is pre-collected, so this is order-independent).
             // A generic alias (`type X<T> = …`) or a complex target (`Vec<T>`, `&T`, a
             // tuple/`dyn`/`impl`) is skipped — a stated coverage bound, never a silent claim.
-            syn::Item::Type(type_item) if type_item.generics.params.is_empty() => {
+            syn::Item::Type(type_item) => {
+                if !type_item.generics.params.is_empty() {
+                    // Stated bound: generic type aliases (`type X<T> = …`) are intentionally skipped.
+                    continue;
+                }
                 // Record the alias's LANDING type — where its target resolves under the same bare-head
                 // `CurrentModule` fallback the impl-self check uses — so the forbidden-marker check can
                 // react on an alias to a crate-defined subtree type (`type Bar = Real`) yet stay silent
