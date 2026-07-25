@@ -441,3 +441,8 @@ The `audit_probe_coverage` scanner SHALL support custom probe macro marker names
 
 - **WHEN** a file contains `other_macro!("seam-name", obj)` where `"other_macro"` is not in the configured marker list
 - **THEN** the scanner ignores it and does not record a probe
+
+#### Scenario: Empty or blank marker list is a constitution error
+
+- **WHEN** `audit_probe_coverage_with_markers` is called with an empty marker list or a marker string that is empty or blank
+- **THEN** the action fails loud with `Outcome::ConstitutionError`, never silently flooding violations or matching empty strings
