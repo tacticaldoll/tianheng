@@ -1520,3 +1520,40 @@ fn directory_audit_does_not_hang_on_a_symlinked_directory_cycle() {
         "directory scan on a cyclic symlinked dir must be covered without hanging or looping: {outcome:?}"
     );
 }
+
+#[test]
+fn custom_marker_list_recognizes_user_probe_wrapper() {
+    let tb = TempBase::new("custom-marker");
+    let root = tb.source(
+        "main.rs",
+        "fn f() { my_custom_seam!(\"custom-seam\", obj); }\n",
+    );
+    let outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[root],
+        &["assert_boundary", "my_custom_seam"],
+    );
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "custom registered probe macro wrapper must cover the seam: {outcome:?}"
+    );
+}
+
+#[test]
+fn unregistered_custom_marker_is_ignored_by_audit() {
+    let tb = TempBase::new("unregistered-marker");
+    let root = tb.source(
+        "main.rs",
+        "fn f() { unknown_seam!(\"custom-seam\", obj); }\n",
+    );
+    let outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[root],
+        &["assert_boundary", "my_custom_seam"],
+    );
+    assert!(
+        matches!(outcome, Outcome::Violations(_)),
+        "unregistered custom macro wrapper must be ignored and report declared seam unprobed: {outcome:?}"
+    );
+}

@@ -20,16 +20,28 @@ pub(super) enum Probe {
     },
 }
 
+pub(super) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
+
+#[allow(dead_code)]
 pub(super) fn collect_probes(input: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+    collect_probes_with_markers(input, DEFAULT_MARKERS, probes)
+}
+
+pub(super) fn collect_probes_with_markers(
+    input: &Path,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+) -> Result<(), String> {
     if input.is_file() {
-        return collect_reachable_probes(input, probes);
+        return collect_reachable_probes(input, markers, probes);
     }
     let mut visited = HashSet::new();
-    collect_directory_probes(input, probes, &mut visited)
+    collect_directory_probes(input, markers, probes, &mut visited)
 }
 
 fn collect_directory_probes(
     dir: &Path,
+    markers: &[&str],
     probes: &mut Vec<Probe>,
     visited: &mut HashSet<PathBuf>,
 ) -> Result<(), String> {
@@ -53,19 +65,23 @@ fn collect_directory_probes(
     paths.sort();
     for (is_dir, path) in paths {
         if is_dir {
-            collect_directory_probes(&path, probes, visited)?;
+            collect_directory_probes(&path, markers, probes, visited)?;
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
             && xingbiao::try_visit(visited, &path)?
         {
             let source = std::fs::read_to_string(&path)
                 .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
-            scan_source(&source, &path.display().to_string(), probes);
+            scan_source_with_markers(&source, &path.display().to_string(), markers, probes);
         }
     }
     Ok(())
 }
 
-fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+fn collect_reachable_probes(
+    root: &Path,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+) -> Result<(), String> {
     let root_parent = root
         .parent()
         .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
@@ -78,7 +94,7 @@ fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), 
         }
         let source = std::fs::read_to_string(&file)
             .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
-        scan_source(&source, &file.display().to_string(), probes);
+        scan_source_with_markers(&source, &file.display().to_string(), markers, probes);
         // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
         // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
         // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
@@ -578,7 +594,17 @@ fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
 /// probe marker appears in code, record whether its seam argument is a string literal
 /// (auditable) or not (un-auditable). Declarations come from the passed `RuntimeBoundary` objects.
 /// `file` labels an un-auditable probe so the reaction is actionable.
+#[allow(dead_code)]
 pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
+    scan_source_with_markers(source, file, DEFAULT_MARKERS, probes);
+}
+
+pub(super) fn scan_source_with_markers(
+    source: &str,
+    file: &str,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+) {
     let b = source.as_bytes();
     // Resolved once per file: every `fn` body's byte range, owner-qualified (never a bare name —
     // see `fn_scopes`), so an un-auditable probe's enclosing item is looked up by position below.
@@ -596,7 +622,7 @@ pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
         // marker embedded in a longer identifier is not mis-counted as a probe.
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
-            if let Some(rest) = match_probe_marker(b, i) {
+            if let Some(rest) = match_probe_marker(b, i, markers) {
                 let owner = owner_for(&scopes, i);
                 let (probe, next) = capture_probe(b, rest, file, &owner);
                 if let Some(probe) = probe {
@@ -829,21 +855,21 @@ fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
 /// to the opening delimiter; `None` otherwise. The right word boundary rejects a longer identifier
 /// like `assert_boundaryx`; the caller checks the left boundary. Tolerating the gap closes a false
 /// negative: a probe written `assert_boundary !("seam")` was silently dropped by a contiguous match.
-fn match_probe_marker(b: &[u8], i: usize) -> Option<usize> {
-    const NAME: &[u8] = b"assert_boundary";
-    if i + NAME.len() > b.len() || &b[i..i + NAME.len()] != NAME {
-        return None;
+fn match_probe_marker(b: &[u8], i: usize, markers: &[&str]) -> Option<usize> {
+    for &marker in markers {
+        let name = marker.as_bytes();
+        if i + name.len() <= b.len() && &b[i..i + name.len()] == name {
+            let after_name = i + name.len();
+            // Right word boundary: `assert_boundaryx` / `assert_boundary_probe` is a different identifier.
+            if !b.get(after_name).is_some_and(|&c| is_ident_byte(c)) {
+                let bang = skip_trivia(b, after_name);
+                if b.get(bang) == Some(&b'!') {
+                    return Some(bang + 1);
+                }
+            }
+        }
     }
-    let after_name = i + NAME.len();
-    // Right word boundary: `assert_boundaryx` / `assert_boundary_probe` is a different identifier.
-    if b.get(after_name).is_some_and(|&c| is_ident_byte(c)) {
-        return None;
-    }
-    let bang = skip_trivia(b, after_name);
-    if b.get(bang) != Some(&b'!') {
-        return None;
-    }
-    Some(bang + 1)
+    None
 }
 
 /// An identifier byte — ASCII `[A-Za-z0-9_]` or any UTF-8 non-ASCII byte (`>= 0x80`). Used for the

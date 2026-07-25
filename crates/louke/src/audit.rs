@@ -15,7 +15,7 @@ use crate::registry::UNDECLARED_SEAM_REPAIR_HINT;
 use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation, ViolationId};
 
 mod scan;
-use scan::{Probe, collect_probes};
+use scan::{DEFAULT_MARKERS, Probe, collect_probes_with_markers};
 
 #[derive(Clone, Copy)]
 enum AuditRule {
@@ -62,50 +62,22 @@ fn audit_violation(
 #[cfg(test)]
 use scan::scan_source;
 
-/// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** (the
-/// authoritative seam set — the constitution, not a source scan for declarations) by scanning
-/// the workspace's source inputs for `assert_boundary!` probes. A file input is treated as an
-/// exact Cargo target root and walked through reachable modules; a directory input retains the
-/// legacy recursive corpus for source compatibility. Reacts, with the static
-/// dimensions' exit-code contract, in both directions plus an un-auditable case:
-///
-/// - **declared-but-unprobed** — a declared seam with no literal probe → a `Violation` at the
-///   declaring boundary's severity (a `warn` boundary yields an advisory). Closes the
-///   otherwise-essential "declared but never enforced" gap.
-/// - **probed-but-undeclared** — a literal probe whose seam is not in the declared set → an
-///   enforce `Violation` (a typo against the declared seams).
-/// - **un-auditable probe** — an `assert_boundary!` whose seam argument is not a string literal
-///   (e.g. a `const`) cannot be traced to a declared seam → an enforce `Violation` naming the
-///   site, never a silent skip (a silent skip would be a false negative).
-///
-/// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
-/// can no longer hide a seam. The probe scan is build/CI-time only (std-only, comment- and
-/// string-literal-aware including raw/byte strings); source outside a member's lib/bin target
-/// subtree is out of scope (the same bound as the semantic dimension). It does NOT observe the
-/// live install registry — install-vs-constitution consistency is the prod face's runtime
-/// fail-closed concern; this verifies coverage against the declared seams and the source.
-///
-/// **Stated bound (lexical, not semantic):** the scan is textual and does not evaluate `cfg`.
-/// A probe behind a non-production `#[cfg(...)]` (e.g. `#[cfg(test)]`) is still counted as
-/// covering its seam, so a seam whose *only* probe is compiled out of the production binary
-/// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
-///
-/// **`#[path]` relocation (followed, with a narrowed bound):** an **unconditional**
-/// `#[path = "…"] mod name;` is followed to its author-chosen file and its probes are counted — the
-/// base is the directory a conventional `mod name;` would use, and the loaded file is mod-rs-like,
-/// so its own children resolve from its directory. A **`cfg_attr`-wrapped** `#[path]` is
-/// cfg-conditional and its relocation is **not** followed (following it cfg-blind could read a file
-/// rustc does not compile in this configuration): the *relocated* file's probes are not counted, and
-/// — being cfg-blind — the scan instead resolves the module conventionally, counting the
-/// conventional `name.rs` if one is present (even where an active predicate makes rustc compile the
-/// relocated file and ignore the conventional one). This is the same cfg-blindness as the
-/// `#[cfg(test)]` bound above, in both directions; it is a stated bound, not exact rustc fidelity.
-///
-/// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
+/// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** using
+/// the default `["assert_boundary"]` probe macro marker.
 pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
+    audit_probe_coverage_with_markers(declared, source_inputs, DEFAULT_MARKERS)
+}
+
+/// **CI face with custom markers.** Audit probe coverage against the **declared `RuntimeBoundary`
+/// objects** using a custom list of probe macro marker names (e.g. `["assert_boundary", "my_seam"]`).
+pub fn audit_probe_coverage_with_markers(
+    declared: &[RuntimeBoundary],
+    source_inputs: &[PathBuf],
+    markers: &[&str],
+) -> Outcome {
     let mut probes = Vec::new();
     for input in source_inputs {
-        if let Err(message) = collect_probes(input, &mut probes) {
+        if let Err(message) = collect_probes_with_markers(input, markers, &mut probes) {
             return Outcome::ConstitutionError(message);
         }
     }
