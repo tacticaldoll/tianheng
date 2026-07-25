@@ -543,10 +543,10 @@ Tianheng gates its own coverage in `crates/tianheng/tests/self_governance.rs`.
 
 *Intent: publish your declared governance as a 3-layer imitable Agent Law (`AGENTS.md` / `AGENTS.self-law.md`) so AI agents imitate your architecture by gravity (潛移) — and gate it in `cargo test` so the projection never rots.*
 
-The **Three-Layer Agent Law** consists of:
-1. **Layer 1: Universal Preamble** — meta-instructions and vocabulary only (`SELF_LAW_PREAMBLE` discipline; never crate-specific or un-reacted architectural claims).
-2. **Layer 2: Projection Body** — rendered directly from your declared `Constitution` via `tianheng::constitution_markdown(&constitution())`.
-3. **Layer 3: Law Source** — the Rust `constitution()` code, protected by `.github/CODEOWNERS` and verified by `cargo test`.
+Governance follows a **Three-Layer Architecture**:
+1. **Layer 1: Universal Preamble** — meta-instructions and working agreements only (`PREAMBLE` discipline; never crate-specific or un-reacted architectural claims).
+2. **Layer 2: Qiányí Gravity Pull (Prose Reason & Projection Body)** — `because(...)` reasons projected directly from your declared `Constitution` into `AGENTS.self-law.md` to condition LLM continuations.
+3. **Layer 3: Reaction Backstop (Rust Law Source)** — functional boundaries (`restrict_dependencies_to`, `must_not_call_inline`) in code, protected by `.github/CODEOWNERS` and verified by `cargo test`.
 
 ```rust
 use tianheng::prelude::*;
@@ -568,6 +568,18 @@ fn test_agent_law_freshness() {
         .assert_projection_fresh_with_preamble("AGENTS.self-law.md", PREAMBLE); // Staleness test + BLESS=1 support
 }
 ```
+
+> **Reason Distillation Discipline (Important):** Write `because(...)` reasons strictly in a **forward voice** ("the domain logic depends inward only"), declaring the architectural shape to imitate. Never write historical debriefs ("we once hit a dependency cycle in 0.2.1"): **provenance belongs in `PROJECT.md` decisions and git history, not in live context reasons.**
+
+```rust
+// ❌ BAD: Historical backstory inflates context tokens and confuses agent continuation
+.because("the domain stays pure — we once hit a dependency cycle in v0.2.1 when infra was imported directly")
+
+// 🟢 GOOD: Forward voice declares the shape to imitate cleanly
+.because("the domain stays pure: domain logic inward-only dependent, infrastructure reached only via ports")
+```
+
+> **Minimalism Discipline (Important):** Do not add a redundant denylist for a prohibition an allowlist already enforces (e.g. adding `.forbid_dependency_on(["app"])` alongside `.restrict_dependencies_to(["core"])`). Minimalism keeps your law clean, while the allowlist's `because(...)` prose explicitly captures the architectural rule (e.g., `functional core ⊥ imperative shell`).
 
 > **Preamble Discipline (Important):** Keep Layer 1 strictly universal. A preamble MUST NOT contain crate-specific or un-reacted architectural rules (e.g., "all handlers must be in `src/handlers`"). Crate-specific architectural claims belong ONLY in Layer 2 (generated from `constitution()`), where every boundary carries a real, non-bypassable reaction. Un-reacted claims in preambles lead to rotted agent instructions over time.
 
