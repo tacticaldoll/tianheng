@@ -1094,15 +1094,17 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
                 depth = depth.saturating_sub(1);
             }
             b'<' => {
-                let is_qualified_start =
-                    i == open || (i > open && b[open..i].iter().all(|c| c.is_ascii_whitespace()));
-                let prev = if i > open { b[i - 1] } else { b'\0' };
-                let is_turbofish = prev == b':';
-                let is_inner_generic = angle_depth > 0
-                    && (prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>');
-                let is_as_trait = i >= 3 && (&b[i - 3..i] == b"as " || &b[i - 2..i] == b"as");
-                if is_qualified_start || is_turbofish || is_inner_generic || is_as_trait {
-                    angle_depth += 1;
+                if depth == 0 {
+                    let is_qualified_start = i == open
+                        || (i > open && b[open..i].iter().all(|c| c.is_ascii_whitespace()));
+                    let prev = if i > open { b[i - 1] } else { b'\0' };
+                    let is_turbofish = prev == b':';
+                    let is_inner_generic = angle_depth > 0
+                        && (prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>');
+                    let is_as_trait = i >= 3 && (&b[i - 3..i] == b"as " || &b[i - 2..i] == b"as");
+                    if is_qualified_start || is_turbofish || is_inner_generic || is_as_trait {
+                        angle_depth += 1;
+                    }
                 }
             }
             b'>' => {
