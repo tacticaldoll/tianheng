@@ -563,18 +563,34 @@ fn a_non_ascii_prefixed_lookalike_is_not_a_probe() {
 
 #[test]
 fn probe_first_arg_with_generic_comma_preserves_full_span() {
-    let src = "fn f() { assert_boundary!(SEAM::<A, B>, o); }";
-    let mut probes = Vec::new();
-    scan_source(src, "test.rs", &mut probes);
-    assert_eq!(probes.len(), 1);
-    match &probes[0] {
-        crate::audit::scan::Probe::Unauditable { expr, .. } => {
-            assert_eq!(
-                expr, "SEAM::<A, B>",
-                "generic comma must not truncate argument span: {expr:?}"
-            );
+    for (src, expected_expr) in [
+        (
+            "fn f() { assert_boundary!(SEAM::<A, B>, o); }",
+            "SEAM::<A, B>",
+        ),
+        ("fn f() { assert_boundary!(a < b, o); }", "a < b"),
+        ("fn f() { assert_boundary!(a < b, c > d); }", "a < b"),
+        (
+            "fn f() { assert_boundary!(SEAM::<fn() -> A, B>, o); }",
+            "SEAM::<fn() -> A, B>",
+        ),
+        (
+            "fn f() { assert_boundary!(SEAM::<{ A > B }, C>, o); }",
+            "SEAM::<{ A > B }, C>",
+        ),
+    ] {
+        let mut probes = Vec::new();
+        scan_source(src, "test.rs", &mut probes);
+        assert_eq!(probes.len(), 1, "failed for {src}");
+        match &probes[0] {
+            crate::audit::scan::Probe::Unauditable { expr, .. } => {
+                assert_eq!(
+                    expr, expected_expr,
+                    "first macro arg must match for {src}: got {expr:?}"
+                );
+            }
+            other => panic!("expected Unauditable probe, got {other:?}"),
         }
-        other => panic!("expected Unauditable probe, got {other:?}"),
     }
 }
 
@@ -1603,7 +1619,10 @@ fn blank_marker_string_is_constitution_error() {
 fn invalid_marker_string_is_constitution_error() {
     let tb = TempBase::new("invalid-marker");
     let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
-    for invalid in ["if", "match", "123foo", "foo::bar", "foo-bar"] {
+    for invalid in [
+        "if", "match", "123foo", "foo::bar", "foo-bar", "_", "r#self", "r#super", "r#crate", "r#_",
+        "💥", "a💥",
+    ] {
         let outcome = audit_probe_coverage_with_markers(
             &[boundary("seam", Severity::Enforce)],
             std::slice::from_ref(&root),

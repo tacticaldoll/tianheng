@@ -882,25 +882,38 @@ fn is_ident_byte(byte: u8) -> bool {
 /// macro body. `macro_rules` is deliberately absent (it is not a keyword and must reach the
 /// name-skip). A non-ASCII / non-UTF-8 run is never a keyword.
 pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
-    let bytes = marker.as_bytes();
-    if bytes.is_empty() {
+    if marker.is_empty() {
         return false;
     }
-    let (ident_bytes, is_raw) = if marker.starts_with("r#") {
-        (&bytes[2..], true)
+    let (ident_str, is_raw) = if let Some(stripped) = marker.strip_prefix("r#") {
+        (stripped, true)
     } else {
-        (bytes, false)
+        (marker, false)
     };
-    if ident_bytes.is_empty() || ident_bytes[0].is_ascii_digit() {
+
+    if ident_str.is_empty() {
         return false;
     }
-    if !ident_bytes.iter().all(|&b| is_ident_byte(b)) {
+
+    if is_raw {
+        if matches!(ident_str, "self" | "Self" | "super" | "crate" | "_") {
+            return false;
+        }
+    } else {
+        if ident_str == "_" {
+            return false;
+        }
+        if is_rust_keyword(ident_str.as_bytes()) {
+            return false;
+        }
+    }
+
+    let first = ident_str.chars().next().unwrap();
+    if !first.is_alphabetic() && first != '_' {
         return false;
     }
-    if !is_raw && is_rust_keyword(ident_bytes) {
-        return false;
-    }
-    true
+
+    ident_str.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
 fn is_rust_keyword(word: &[u8]) -> bool {
@@ -1080,14 +1093,21 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
             b'<' => {
                 if i > open {
                     let prev = b[i - 1];
-                    if prev == b':' || prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>'
-                    {
+                    let is_turbofish = prev == b':';
+                    let is_inner_generic = angle_depth > 0
+                        && (prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>');
+                    if is_turbofish || is_inner_generic {
                         angle_depth += 1;
                     }
                 }
             }
             b'>' => {
-                angle_depth = angle_depth.saturating_sub(1);
+                if depth == 0 && angle_depth > 0 {
+                    let prev = if i > open { b[i - 1] } else { b'\0' };
+                    if prev != b'-' {
+                        angle_depth -= 1;
+                    }
+                }
             }
             b',' if depth == 0 && angle_depth == 0 => return i,
             _ => {}
