@@ -71,6 +71,11 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
     adopters independently write incorrect preambles containing architectural claims that then
     rot, revisit.
 - **BUILT / HISTORY:**
+  - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.
+  - Non-generic compound type alias target traversal in `hunyi` (tuples, arrays, slices, references, raw pointers).
+  - Mid-path `super` and `self` module path normalization in `guibiao`.
+  - `cfg_if!` macro expansion unstripping and ancestor-glob fail-closed observation in `guibiao`.
+  - Configurable custom probe macro marker attributes in `louke`.
   - Three-layer agent-law artifact naming (Preamble + Projection + Law Source) and `COOKBOOK.md` recipe with `GovernanceTest` preamble discipline.
   - `cfg_attr(path)` observe-both semantics (union-scan over default and physically existing `cfg_attr(path)` target paths).
   - Reusable testing harness (`tianheng::testing::GovernanceTest` fluent builder in facade for reaction, coverage, projection freshness with `BLESS=1`, and fixture testing).
