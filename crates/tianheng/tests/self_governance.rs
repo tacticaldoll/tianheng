@@ -342,3 +342,41 @@ fn fixture_negative_testing_observes_violating_fixture() {
         .with_manifest_dir(root)
         .test_fixture(fixture);
 }
+
+#[test]
+fn fixture_negative_testing_observes_cfg_if_violation() {
+    let Some(manifest) = workspace_manifest() else {
+        return;
+    };
+    let root = manifest.parent().unwrap();
+    let fixture = root.join("crates/tianheng/tests/fixtures/cfg_if_violation/Cargo.toml");
+    let fixture_constitution = Constitution::new("example").boundary(
+        ModuleBoundary::in_crate("example-core")
+            .module("crate::kernel_mod")
+            .must_not_import("crate::secret")
+            .because("kernel_mod must not import secret even inside cfg_if!"),
+    );
+
+    GovernanceTest::for_constitution(fixture_constitution)
+        .with_manifest_dir(root)
+        .test_fixture(fixture);
+}
+
+#[test]
+fn fixture_negative_testing_observes_glob_hazard_violation() {
+    let Some(manifest) = workspace_manifest() else {
+        return;
+    };
+    let root = manifest.parent().unwrap();
+    let fixture = root.join("crates/tianheng/tests/fixtures/glob_hazard_violation/Cargo.toml");
+    let fixture_constitution = Constitution::new("example").boundary(
+        ModuleBoundary::in_crate("example-core")
+            .module("crate::app")
+            .must_not_import("crate::domain::secret")
+            .because("app must not import domain::secret via ancestor glob"),
+    );
+
+    GovernanceTest::for_constitution(fixture_constitution)
+        .with_manifest_dir(root)
+        .test_fixture(fixture);
+}

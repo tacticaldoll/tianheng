@@ -13,8 +13,8 @@ use crate::errors::{
 };
 use crate::finding::ModuleFact;
 use crate::module_scan::{
-    InlineFinding, canonical_module_path, external_imports_with_importers, governed_files,
-    imported_module_paths, imports_with_importers, inline_symbol_findings,
+    ImportedPath, InlineFinding, canonical_module_path, external_imports_with_importers,
+    governed_files, imported_module_paths, imports_with_importers, inline_symbol_findings,
     package_name_to_import_ident, path_within, reachable_modules, rust_files,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
@@ -405,10 +405,13 @@ pub(crate) fn check_module_boundary(
     // for `RestrictImportsTo`, a crate-root pre-check) differ. Containment is
     // `::`-delimited throughout (exact match OR an `x::` prefix), so a sibling like
     // `crate::types_extra` is never mistaken for being beneath `crate::types`.
-    let is_violation: Box<dyn Fn(&str) -> bool> = match &boundary.rule {
+    let is_violation: Box<dyn Fn(&ImportedPath) -> bool> = match &boundary.rule {
         ModuleRule::MustNotImport { module } => {
             let forbidden = canonical_module_path(module);
-            Box::new(move |import: &str| path_within(import, &forbidden))
+            Box::new(move |import: &ImportedPath| {
+                path_within(&import.path, &forbidden)
+                    || (import.is_glob && path_within(&forbidden, &import.path))
+            })
         }
         ModuleRule::RestrictImportsTo { allowed } => {
             // The crate root has no outward internal edge — every import is within its
@@ -424,9 +427,9 @@ pub(crate) fn check_module_boundary(
                 .map(|entry| canonical_module_path(entry))
                 .collect();
             let governed_self = governed_module.clone();
-            Box::new(move |import: &str| {
-                let within_own = path_within(import, &governed_self);
-                let within_allowed = allowed.iter().any(|entry| path_within(import, entry));
+            Box::new(move |import: &ImportedPath| {
+                let within_own = path_within(&import.path, &governed_self);
+                let within_allowed = allowed.iter().any(|entry| path_within(&import.path, entry));
                 // A violation is any outward edge: neither within the module's own subtree
                 // nor within an allowlist entry.
                 !(within_own || within_allowed)
@@ -451,7 +454,7 @@ pub(crate) fn check_module_boundary(
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
         for import in imported_module_paths(&text, &current_module, &root_modules) {
             if is_violation(&import) {
-                findings.push((import, file.display().to_string()));
+                findings.push((import.path, file.display().to_string()));
             }
         }
     }

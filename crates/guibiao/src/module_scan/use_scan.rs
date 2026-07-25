@@ -17,6 +17,78 @@ use super::path_vocab::{
 
 /// Internal module paths imported by `source`, normalized to absolute `crate::…`
 /// form. `current_module` is the importing file's module; a `use` inside an inline
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct ImportedPath {
+    pub path: String,
+    pub is_glob: bool,
+}
+
+impl ImportedPath {
+    pub(crate) fn plain(path: impl Into<String>) -> Self {
+        ImportedPath {
+            path: path.into(),
+            is_glob: false,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn glob(path: impl Into<String>) -> Self {
+        ImportedPath {
+            path: path.into(),
+            is_glob: true,
+        }
+    }
+}
+
+impl std::ops::Deref for ImportedPath {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.path
+    }
+}
+
+impl std::borrow::Borrow<str> for ImportedPath {
+    fn borrow(&self) -> &str {
+        &self.path
+    }
+}
+
+impl From<&str> for ImportedPath {
+    fn from(s: &str) -> Self {
+        ImportedPath::plain(s)
+    }
+}
+
+impl From<String> for ImportedPath {
+    fn from(s: String) -> Self {
+        ImportedPath::plain(s)
+    }
+}
+
+impl PartialEq<String> for ImportedPath {
+    fn eq(&self, other: &String) -> bool {
+        &self.path == other
+    }
+}
+
+impl PartialEq<ImportedPath> for String {
+    fn eq(&self, other: &ImportedPath) -> bool {
+        self == &other.path
+    }
+}
+
+impl PartialEq<str> for ImportedPath {
+    fn eq(&self, other: &str) -> bool {
+        self.path == other
+    }
+}
+
+impl PartialEq<&str> for ImportedPath {
+    fn eq(&self, other: &&str) -> bool {
+        self.path == *other
+    }
+}
+
 /// `mod name { … }` is attributed to that submodule, so `self`/`super` resolve against
 /// the real enclosing module, not the file's. Only `use` declarations are observed;
 /// grouped and glob forms are expanded; raw identifiers (`r#name`) are canonicalized;
@@ -28,8 +100,8 @@ pub(crate) fn imported_module_paths(
     source: &str,
     current_module: &str,
     root_modules: &[String],
-) -> Vec<String> {
-    let mut paths: Vec<String> = imports_with_importers(source, current_module, root_modules)
+) -> Vec<ImportedPath> {
+    let mut paths: Vec<ImportedPath> = imports_with_importers(source, current_module, root_modules)
         .into_iter()
         .map(|(_importer, import)| import)
         .collect();
@@ -49,13 +121,19 @@ pub(crate) fn imports_with_importers(
     source: &str,
     current_module: &str,
     root_modules: &[String],
-) -> Vec<(String, String)> {
+) -> Vec<(String, ImportedPath)> {
     let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
     let mut pairs = Vec::new();
     for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
-        for leaf in expand_use_tree(&tree) {
+        for (leaf, is_glob) in expand_use_tree(&tree) {
             if let Some(absolute) = normalize_module_path(&leaf, &module, root_modules) {
-                pairs.push((module.clone(), absolute));
+                pairs.push((
+                    module.clone(),
+                    ImportedPath {
+                        path: absolute,
+                        is_glob,
+                    },
+                ));
             }
         }
     }
@@ -78,7 +156,7 @@ pub(crate) fn external_imports_with_importers(
     let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
     let mut pairs = Vec::new();
     for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
-        for leaf in expand_use_tree(&tree) {
+        for (leaf, _is_glob) in expand_use_tree(&tree) {
             if let Some(head) = external_crate_head(&leaf, &module, root_modules) {
                 pairs.push((module.clone(), head));
             }
@@ -160,7 +238,7 @@ fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, Strin
 
 /// Expand a use tree into leaf paths: `a::{b, c::d}` -> `a::b`, `a::c::d`; drop
 /// `::*` and ` as alias`; `{self}` resolves to the prefix module.
-fn expand_use_tree(tree: &str) -> Vec<String> {
+fn expand_use_tree(tree: &str) -> Vec<(String, bool)> {
     expand_use_tree_depth(tree, 0)
 }
 
@@ -170,7 +248,7 @@ fn expand_use_tree(tree: &str) -> Vec<String> {
 /// scanner bounds coverage, so it is logged as a stated limit, not a silent hole for real code.
 const MAX_USE_NEST_DEPTH: usize = 128;
 
-fn expand_use_tree_depth(tree: &str, depth: usize) -> Vec<String> {
+fn expand_use_tree_depth(tree: &str, depth: usize) -> Vec<(String, bool)> {
     if depth >= MAX_USE_NEST_DEPTH {
         return Vec::new();
     }
@@ -196,7 +274,7 @@ fn expand_use_tree_depth(tree: &str, depth: usize) -> Vec<String> {
                 if head == "self" {
                     let module = prefix.trim_end_matches(':').trim();
                     if !module.is_empty() {
-                        out.push(module.to_string());
+                        out.push((module.to_string(), false));
                     }
                 } else {
                     out.extend(expand_use_tree_depth(&format!("{prefix}{part}"), depth + 1));
@@ -209,12 +287,15 @@ fn expand_use_tree_depth(tree: &str, depth: usize) -> Vec<String> {
                 Some(idx) => &tree[..idx],
                 None => tree,
             };
-            let leaf = leaf.trim().strip_suffix("::*").unwrap_or(leaf.trim());
-            let leaf = leaf.trim_end_matches(':');
-            if leaf.is_empty() {
+            let (leaf_path, is_glob) = match leaf.trim().strip_suffix("::*") {
+                Some(stripped) => (stripped, true),
+                None => (leaf.trim(), false),
+            };
+            let leaf_path = leaf_path.trim_end_matches(':');
+            if leaf_path.is_empty() {
                 Vec::new()
             } else {
-                vec![leaf.to_string()]
+                vec![(leaf_path.to_string(), is_glob)]
             }
         }
     }
@@ -333,23 +414,29 @@ mod tests {
             use crate::z::*;
         "#;
         let imports = imported_module_paths(source, "crate::kernel", &[]);
-        assert!(imports.contains(&"crate::a::b".to_string()), "{imports:?}");
         assert!(
-            imports.contains(&"crate::a::c::d".to_string()),
+            imports.contains(&ImportedPath::plain("crate::a::b")),
+            "{imports:?}"
+        );
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::a::c::d")),
             "{imports:?}"
         );
         // `super` from crate::kernel resolves to crate.
         assert!(
-            imports.contains(&"crate::sibling::X".to_string()),
+            imports.contains(&ImportedPath::plain("crate::sibling::X")),
             "{imports:?}"
         );
         // `self` resolves against the current module.
         assert!(
-            imports.contains(&"crate::kernel::inner::Y".to_string()),
+            imports.contains(&ImportedPath::plain("crate::kernel::inner::Y")),
             "{imports:?}"
         );
         // glob keeps the module prefix.
-        assert!(imports.contains(&"crate::z".to_string()), "{imports:?}");
+        assert!(
+            imports.contains(&ImportedPath::glob("crate::z")),
+            "{imports:?}"
+        );
         // external first segment is ignored, and commented-out imports are not seen.
         assert!(!imports.iter().any(|p| p.contains("serde")), "{imports:?}");
         assert!(
@@ -407,7 +494,7 @@ mod tests {
         let ok = "use super::other::X;\n";
         assert_eq!(
             imported_module_paths(ok, "crate::a", &[]),
-            vec!["crate::other::X".to_string()],
+            vec![ImportedPath::plain("crate::other::X")],
         );
     }
 
@@ -417,7 +504,7 @@ mod tests {
         let url = r#"let u = "http://example.com"; use crate::real::A;"#;
         let imports = imported_module_paths(url, "crate::kernel", &[]);
         assert!(
-            imports.contains(&"crate::real::A".to_string()),
+            imports.contains(&ImportedPath::plain("crate::real::A")),
             "{imports:?}"
         );
 
@@ -432,14 +519,18 @@ mod tests {
         let quote_char = r#"let q = '"'; use crate::real::B;"#;
         let imports = imported_module_paths(quote_char, "crate::kernel", &[]);
         assert!(
-            imports.contains(&"crate::real::B".to_string()),
+            imports.contains(&ImportedPath::plain("crate::real::B")),
             "{imports:?}"
         );
 
         // A lifetime must not break use detection or produce a spurious path.
         let lifetime = "fn f<'a>(x: &'a str) {} use crate::a::b;";
         let imports = imported_module_paths(lifetime, "crate::kernel", &[]);
-        assert_eq!(imports, vec!["crate::a::b".to_string()], "{imports:?}");
+        assert_eq!(
+            imports,
+            vec![ImportedPath::plain("crate::a::b")],
+            "{imports:?}"
+        );
     }
 
     #[test]
@@ -459,7 +550,7 @@ mod tests {
         "#;
         let imports = imported_module_paths(source, "crate::kernel", &[]);
         assert!(
-            imports.contains(&"crate::current::A".to_string()),
+            imports.contains(&ImportedPath::plain("crate::current::A")),
             "the real use after the nested comment must be observed: {imports:?}"
         );
         assert!(
@@ -478,7 +569,7 @@ mod tests {
         let roots = vec!["kernel".to_string()];
         let imports = imported_module_paths(source, "crate", &roots);
         assert!(
-            imports.contains(&"crate::kernel::Thing".to_string()),
+            imports.contains(&ImportedPath::plain("crate::kernel::Thing")),
             "a bare use of a crate-root module must resolve to crate::…: {imports:?}"
         );
         assert!(
@@ -508,7 +599,7 @@ mod tests {
         // crate-root module shadows the extern prelude in a bare `use` path.
         assert!(
             imported_module_paths("use serde::Deserialize;", "crate", &roots)
-                .contains(&"crate::serde::Deserialize".to_string()),
+                .contains(&ImportedPath::plain("crate::serde::Deserialize")),
             "a bare head matching a root module resolves locally (shadowing rule)"
         );
     }
@@ -522,7 +613,7 @@ mod tests {
         let roots = vec!["serde".to_string()];
         assert!(
             imported_module_paths("use serde::Value;", "crate", &roots)
-                .contains(&"crate::serde::Value".to_string()),
+                .contains(&ImportedPath::plain("crate::serde::Value")),
             "at the crate root, a bare crate-root-module path resolves locally"
         );
         assert!(
@@ -537,7 +628,7 @@ mod tests {
         let source = "use crate::café::Item;";
         let imports = imported_module_paths(source, "crate::kernel", &[]);
         assert!(
-            imports.contains(&"crate::café::Item".to_string()),
+            imports.contains(&ImportedPath::plain("crate::café::Item")),
             "{imports:?}"
         );
     }
@@ -562,7 +653,7 @@ mod tests {
         let tricky = r####"let s = r##"http://x "# inside"##; use crate::real::C;"####;
         let imports = imported_module_paths(tricky, "crate::kernel", &[]);
         assert!(
-            imports.contains(&"crate::real::C".to_string()),
+            imports.contains(&ImportedPath::plain("crate::real::C")),
             "{imports:?}"
         );
 
@@ -570,7 +661,7 @@ mod tests {
         let idents = "let r = 1; let b = 2; use crate::real::D;";
         assert_eq!(
             imported_module_paths(idents, "crate::kernel", &[]),
-            vec!["crate::real::D".to_string()]
+            vec![ImportedPath::plain("crate::real::D")]
         );
     }
 
@@ -599,7 +690,7 @@ mod tests {
         let tricky = r##"let s = cr#"a"b"#; use crate::real::C;"##;
         let imports = imported_module_paths(tricky, "crate::kernel", &[]);
         assert!(
-            imports.contains(&"crate::real::C".to_string()),
+            imports.contains(&ImportedPath::plain("crate::real::C")),
             "a use after a raw C-string with an odd inner-quote count must be observed: {imports:?}"
         );
 
@@ -608,14 +699,14 @@ mod tests {
         let cstr = r#"let s = c"use crate::ghost::Z;"; use crate::real::E;"#;
         assert_eq!(
             imported_module_paths(cstr, "crate::kernel", &[]),
-            vec!["crate::real::E".to_string()]
+            vec![ImportedPath::plain("crate::real::E")]
         );
 
         // `c` as an ordinary identifier (not a C-string prefix) is unaffected.
         let idents = "let c = 1; use crate::real::D;";
         assert_eq!(
             imported_module_paths(idents, "crate::kernel", &[]),
-            vec!["crate::real::D".to_string()]
+            vec![ImportedPath::plain("crate::real::D")]
         );
     }
 
@@ -635,7 +726,7 @@ mod tests {
         let imports = imported_module_paths(source, "crate", &[]);
         assert_eq!(
             imports,
-            vec!["crate::real::A".to_string()],
+            vec![ImportedPath::plain("crate::real::A")],
             "macro definition and invocation bodies are skipped; the real use is kept: {imports:?}"
         );
         // Every body delimiter form ({}, (), []) is skipped, for both definitions and
@@ -656,7 +747,8 @@ mod tests {
         // `!=` and unary `!` are not macro invocations — a following real use is kept.
         let not_macros = "let _ = a != b; let _ = !flag; use crate::real::B;";
         assert!(
-            imported_module_paths(not_macros, "crate", &[]).contains(&"crate::real::B".to_string()),
+            imported_module_paths(not_macros, "crate", &[])
+                .contains(&ImportedPath::plain("crate::real::B")),
             "`!=` / unary `!` must not be treated as a macro invocation"
         );
     }
@@ -676,7 +768,7 @@ mod tests {
             let src = format!("{header}\nuse crate::forbidden::Thing;");
             assert_eq!(
                 imported_module_paths(&src, "crate", &[]),
-                vec!["crate::forbidden::Thing".to_string()],
+                vec![ImportedPath::plain("crate::forbidden::Thing")],
                 "the `use<…>` bound must be skipped so the following real use is observed: {header:?}"
             );
         }
@@ -689,7 +781,7 @@ mod tests {
         // that precedes it.
         assert_eq!(
             imported_module_paths("use crate::x::Y;", "crate", &[]),
-            vec!["crate::x::Y".to_string()],
+            vec![ImportedPath::plain("crate::x::Y")],
             "a plain use is unaffected by the bound-skip"
         );
         assert_eq!(
@@ -698,7 +790,7 @@ mod tests {
                 "crate",
                 &[],
             ),
-            vec!["crate::x::Y".to_string()],
+            vec![ImportedPath::plain("crate::x::Y")],
             "a trailing use<> bound must not drop the preceding real use or panic"
         );
     }
@@ -711,11 +803,11 @@ mod tests {
         let source = "mod inner { use self::leaf::Thing; use super::sibling::X; }";
         let imports = imported_module_paths(source, "crate::a", &[]);
         assert!(
-            imports.contains(&"crate::a::inner::leaf::Thing".to_string()),
+            imports.contains(&ImportedPath::plain("crate::a::inner::leaf::Thing")),
             "self must resolve against the inline submodule: {imports:?}"
         );
         assert!(
-            imports.contains(&"crate::a::sibling::X".to_string()),
+            imports.contains(&ImportedPath::plain("crate::a::sibling::X")),
             "super from the inline submodule resolves to crate::a: {imports:?}"
         );
         // A bare first segment inside an inline submodule is external even when the file
@@ -732,7 +824,7 @@ mod tests {
         // A top-level use (no inline module) is unchanged.
         assert_eq!(
             imported_module_paths("use self::leaf::Thing;", "crate::a", &[]),
-            vec!["crate::a::leaf::Thing".to_string()]
+            vec![ImportedPath::plain("crate::a::leaf::Thing")]
         );
     }
 
@@ -744,7 +836,7 @@ mod tests {
         let src = r#"let _q = '\''; let _s = "use crate::ghost::Z;"; use crate::real::A;"#;
         assert_eq!(
             imported_module_paths(src, "crate::kernel", &[]),
-            vec!["crate::real::A".to_string()],
+            vec![ImportedPath::plain("crate::real::A")],
             "an escaped-quote char literal must not leak and expose a fake use"
         );
     }
@@ -795,6 +887,31 @@ mod tests {
         assert!(
             masked.is_empty(),
             "a use inside a string or macro body is not an observed external head: {masked:?}"
+        );
+    }
+
+    #[test]
+    fn cfg_if_macro_body_is_unstripped_and_observed() {
+        // Transparent control-flow macros (`cfg_if!`) wrap human-authored items without
+        // transforming identities; their bodies are preserved so enclosed `use` declarations
+        // are observed statically (closing the false-negative gap).
+        let src = r#"
+            cfg_if::cfg_if! {
+                if #[cfg(unix)] {
+                    use crate::unix_module::UnixThing;
+                } else {
+                    use crate::win_module::WinThing;
+                }
+            }
+        "#;
+        let paths = imported_module_paths(src, "crate", &[]);
+        assert_eq!(
+            paths,
+            vec![
+                ImportedPath::plain("crate::unix_module::UnixThing"),
+                ImportedPath::plain("crate::win_module::WinThing"),
+            ],
+            "imports inside cfg_if! macro bodies are observed: {paths:?}"
         );
     }
 }

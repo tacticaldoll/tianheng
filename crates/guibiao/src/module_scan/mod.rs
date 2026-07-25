@@ -21,7 +21,7 @@ pub(crate) use path_vocab::{canonical_module_path, package_name_to_import_ident,
 pub(crate) use reachability::{governed_files, reachable_modules};
 pub(crate) use symbol_scan::{InlineFinding, inline_symbol_findings};
 pub(crate) use use_scan::{
-    external_imports_with_importers, imported_module_paths, imports_with_importers,
+    ImportedPath, external_imports_with_importers, imported_module_paths, imports_with_importers,
 };
 
 // Cross-cutting tests assert invariants that span the dimensions the scanner is split into:
@@ -34,7 +34,7 @@ mod tests {
     use super::lexer::{keyword_starts_at, strip_macro_bodies};
     use super::path_vocab::canonical_segment;
     use super::reachability::declared_modules;
-    use super::{canonical_module_path, imported_module_paths};
+    use super::{ImportedPath, canonical_module_path, imported_module_paths};
 
     #[test]
     fn scanner_does_not_panic_on_odd_input() {
@@ -72,7 +72,7 @@ mod tests {
         "#;
         assert_eq!(
             imported_module_paths(with_use, "crate", &[]),
-            vec!["crate::real::A".to_string()],
+            vec![ImportedPath::plain("crate::real::A")],
             "a `use` inside a raw-identifier macro definition is not observed"
         );
         let with_mod = "macro_rules! r#try { () => { mod ghost; }; }\nmod real;";
@@ -114,7 +114,7 @@ mod tests {
         );
         assert_eq!(
             imported_module_paths("use crate::r#type::Thing;", "crate", &[]),
-            vec!["crate::type::Thing".to_string()],
+            vec![ImportedPath::plain("crate::type::Thing")],
             "a raw-identifier use path is canonicalized to its plain form"
         );
     }

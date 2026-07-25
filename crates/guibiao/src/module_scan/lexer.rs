@@ -38,25 +38,27 @@ pub(super) fn strip_macro_bodies_tracked(
         } else if bytes[i] == b'!' && preceding_macro_name(bytes, i) {
             // A macro invocation `path ! <delim>…<delim>`: keep the `!`, drop the body. Rust allows
             // whitespace between the macro path and its `!` (`cfg_if ! { … }`), so the macro name is
-            // found across whitespace by `preceding_macro_name`. The `!` of `macro_rules!` never
-            // reaches here — the definition arm above consumes it. `!=` / unary `!expr` are not
-            // invocations: the byte after `!` is not an opening delimiter, so
-            // `macro_invocation_body_end` returns `None`; and a unary `!` on a parenthesized or block
-            // expression after a keyword (`return !(x)`, `break !{ … }`) is excluded by
-            // `preceding_macro_name` (a keyword is not a macro name), so a governed `use` inside such
-            // a real block is never wrongly stripped.
-            match macro_invocation_body_end(bytes, i) {
-                Some(end) => {
-                    out.push(b'!');
-                    positions.push(input_positions[i]);
-                    out.push(b' ');
-                    positions.push(input_positions[i]);
-                    i = end;
-                }
-                None => {
-                    out.push(bytes[i]);
-                    positions.push(input_positions[i]);
-                    i += 1;
+            // found across whitespace by `preceding_macro_name`. Transparent control-flow macros
+            // (`cfg_if!`) wrap human-authored items without transforming identities; their bodies
+            // are preserved so enclosed `use`, `mod`, and call expressions are observed statically.
+            if is_transparent_macro_name(bytes, i) {
+                out.push(bytes[i]);
+                positions.push(input_positions[i]);
+                i += 1;
+            } else {
+                match macro_invocation_body_end(bytes, i) {
+                    Some(end) => {
+                        out.push(b'!');
+                        positions.push(input_positions[i]);
+                        out.push(b' ');
+                        positions.push(input_positions[i]);
+                        i = end;
+                    }
+                    None => {
+                        out.push(bytes[i]);
+                        positions.push(input_positions[i]);
+                        i += 1;
+                    }
                 }
             }
         } else {
@@ -136,6 +138,29 @@ fn preceding_macro_name(bytes: &[u8], bang: usize) -> bool {
         return false; // no identifier word precedes the `!`
     }
     is_raw_ident_prefixed(bytes, start) || !is_rust_keyword(&bytes[start..end])
+}
+
+/// Whether the macro invocation at `bang` is a **transparent control-flow macro** (specifically
+/// `cfg_if!`), whose structural contents should be preserved during macro stripping.
+fn is_transparent_macro_name(bytes: &[u8], bang: usize) -> bool {
+    let mut end = bang;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let mut start = end;
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    if start == end {
+        return false;
+    }
+    let word = &bytes[start..end];
+    let name = if is_raw_ident_prefixed(bytes, start) && word.starts_with(b"r#") {
+        &word[2..]
+    } else {
+        word
+    };
+    name == b"cfg_if"
 }
 
 /// Whether `word` is a Rust keyword — a word that, before a `!`, marks a unary negation rather than
