@@ -1928,6 +1928,66 @@ fn must_not_import_allows_plain_ancestor_module_import() {
 }
 
 #[test]
+fn must_not_import_flags_midpath_super_import() {
+    // When a grouped use or nested import contains a mid-path `super` (e.g. `use crate::a::b::{super::secret::X}`),
+    // it resolves to `crate::a::secret::X` and MUST trigger a violation when `crate::a::secret` is forbidden.
+    let (result, violations) = run_module_check(
+        "midpath-super-import",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            ("app.rs", "use crate::a::b::{super::secret::X};"),
+            ("a.rs", "pub mod b;\npub mod secret;\n"),
+            ("a/b.rs", "pub struct Dummy;"),
+            ("a/secret.rs", "pub struct X;"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_import("crate::a::secret")
+            .because("app must not import secret"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "mid-path super import must be normalized and flagged as a violation: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::a::secret::X");
+}
+
+#[test]
+fn inline_symbol_confinement_flags_midpath_super_call() {
+    // Both direct calls (crate::a::b::super::secret::helper()) and group-imported alias calls
+    // with mid-path super must normalize to crate::a::secret::helper and react when crate::a::secret is forbidden.
+    let (result, violations) = run_module_check(
+        "symbol-midpath-super",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            (
+                "app.rs",
+                "use crate::a::b::{super::secret::helper as h};\npub fn run() { h(); crate::a::b::super::secret::helper(); }",
+            ),
+            ("a.rs", "pub mod b;\npub mod secret;\n"),
+            ("a/b.rs", "pub fn dummy() {}"),
+            ("a/secret.rs", "pub fn helper() {}"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_call_inline("crate::a::secret")
+            .because("app must not call inline symbol in secret"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "inline symbol calls with mid-path super must normalize and react: {violations:?}"
+    );
+    assert_eq!(
+        violations[0].finding,
+        "crate::a::secret::helper in crate::app"
+    );
+}
+
+#[test]
 fn restrict_imports_to_dedups_a_finding_across_subtree_files() {
     let (result, violations) = run_module_check(
         "dedup-rit-subtree",

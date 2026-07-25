@@ -11,8 +11,8 @@
 
 use super::lexer::{keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    brace_content, canonical_segment, effective_module, inline_mod_at, is_crate_root_shadow,
-    resolve_self_super, split_top_commas,
+    brace_content, canonical_segment, effective_module, fold_canonical_segments, inline_mod_at,
+    is_crate_root_shadow, resolve_self_super, split_top_commas,
 };
 
 /// Internal module paths imported by `source`, normalized to absolute `crate::…`
@@ -335,7 +335,7 @@ fn normalize_module_path(
     let segments = split_canonical_segments(path);
     let (first, _rest) = segments.split_first()?;
     match *first {
-        "crate" => Some(segments.join("::")),
+        "crate" => fold_canonical_segments(&segments),
         // `self`/`super` relative resolution — incl. the `super` over-pop guard — lives once in
         // `path_vocab::resolve_self_super`, shared with the symbol-scan resolvers.
         "self" | "super" => resolve_self_super(current_module, &segments),
