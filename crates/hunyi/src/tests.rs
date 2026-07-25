@@ -968,27 +968,23 @@ fn diamond_alias_graph_expansion_terminates_and_memoizes_intermediate_nodes() {
 }
 
 #[test]
-fn deep_chain_expansion_terminates_at_fixed_depth() {
+fn deep_chain_expansion_reaches_terminal_without_truncation() {
     use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
 
-    // Build a linear chain longer than MAX_EXPANSION_DEPTH (64):
-    // N0 -> N1 -> N2 -> ... -> N99
+    // Build a 99-hop linear chain: N0 -> N1 -> … -> N99 (no alias on N99, so it is the fixpoint).
+    // The iterative expansion must traverse the full chain without truncation or stack overflow.
     let mut aliases: AliasMap = std::collections::HashMap::new();
     let reexports = ReexportMap::new();
     for i in 0..99usize {
         aliases.insert(format!("crate::N{i}"), vec![format!("crate::N{}", i + 1)]);
     }
 
-    // Must return without panicking (stack overflow) and produce some non-empty result.
     let res = expand_canonical_paths("crate::N0", &aliases, &reexports);
-    assert!(
-        !res.is_empty(),
-        "must return a non-empty result even for over-long chains"
+    assert_eq!(
+        res,
+        vec!["crate::N99".to_string()],
+        "full 99-hop chain must resolve to the terminal node N99, got {res:?}"
     );
-    // All returned paths must be strings starting with "crate::N".
-    for r in &res {
-        assert!(r.starts_with("crate::N"), "unexpected result path: {r}");
-    }
 }
 
 #[test]

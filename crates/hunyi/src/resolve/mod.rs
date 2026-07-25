@@ -456,13 +456,6 @@ fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<Stri
     None
 }
 
-/// Follow the **alias** and **re-export** closures together from `path` to all canonical fixpoint paths,
-/// so a name reached through a multi-target `type X = (A, B);` alias and/or a `pub use` facade resolves
-/// to all defining paths.
-/// Maximum expansion depth for alias/re-export chains. Exceeding this limit returns the node
-/// as its own target (fail-safe), preventing stack overflow on large or adversarial workspaces.
-const MAX_EXPANSION_DEPTH: usize = 64;
-
 pub(crate) fn expand_canonical_paths(
     path: &str,
     aliases: &AliasMap,
@@ -471,49 +464,84 @@ pub(crate) fn expand_canonical_paths(
     if aliases.is_empty() && reexports.is_empty() {
         return vec![path.to_string()];
     }
-    let mut memo = std::collections::HashMap::new();
-    let mut chain_seen = std::collections::HashSet::new();
-    expand_memoized(path, aliases, reexports, 0, &mut chain_seen, &mut memo)
-}
+    // Iterative post-order DFS over the alias/re-export graph.
+    //
+    // Each stack entry is `(node, returning)`. On the first visit (`returning = false`) we push the
+    // node's children (unresolved dependencies) and then push a `returning = true` sentinel that
+    // fires only after all children have been resolved. Cycle detection uses `in_stack`: if a node
+    // is visited while already on the active DFS path it is a cycle, and we break it by memoizing
+    // the node as its own target (same semantics as the old recursive chain_seen guard, but without
+    // occupying a thread stack frame for every hop).
+    let mut memo: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut in_stack: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut work: Vec<(String, bool)> = vec![(path.to_string(), false)];
 
-fn expand_memoized(
-    current: &str,
-    aliases: &AliasMap,
-    reexports: &ReexportMap,
-    depth: usize,
-    chain_seen: &mut std::collections::HashSet<String>,
-    memo: &mut std::collections::HashMap<String, Vec<String>>,
-) -> Vec<String> {
-    if let Some(cached) = memo.get(current) {
-        return cached.clone();
-    }
+    while let Some((current, returning)) = work.pop() {
+        if returning {
+            // All of `current`'s children are now in `memo`. Compute `current`'s own result.
+            in_stack.remove(&current);
+            if memo.contains_key(&current) {
+                // Already set (e.g., as cycle break) — nothing to do.
+                continue;
+            }
+            let mut results = Vec::new();
+            if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
+                for t in &targets {
+                    let child = memo
+                        .get(t.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| vec![t.clone()]);
+                    for r in child {
+                        if !results.contains(&r) {
+                            results.push(r);
+                        }
+                    }
+                }
+            } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+                let child = memo
+                    .get(&next)
+                    .cloned()
+                    .unwrap_or_else(|| vec![next.clone()]);
+                for r in child {
+                    if !results.contains(&r) {
+                        results.push(r);
+                    }
+                }
+            } else {
+                results.push(current.clone());
+            }
+            memo.insert(current, results);
+            continue;
+        }
 
-    if depth > MAX_EXPANSION_DEPTH || !chain_seen.insert(current.to_string()) {
-        return vec![current.to_string()];
-    }
+        // Pre-visit.
+        if memo.contains_key(&current) {
+            continue;
+        }
+        if !in_stack.insert(current.clone()) {
+            // Cycle: break by memoizing the node as its own target.
+            memo.insert(current.clone(), vec![current]);
+            continue;
+        }
 
-    let mut results = Vec::new();
-    if let Some(next_targets) = rewrite_longest_alias_prefixes(current, aliases) {
-        for target in next_targets {
-            for res in expand_memoized(&target, aliases, reexports, depth + 1, chain_seen, memo) {
-                if !results.contains(&res) {
-                    results.push(res);
+        // Push the returning sentinel first (processed after all children).
+        work.push((current.clone(), true));
+
+        // Push unresolved children (reversed so the first target is processed first).
+        if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
+            for target in targets.into_iter().rev() {
+                if !memo.contains_key(&target) {
+                    work.push((target, false));
                 }
             }
-        }
-    } else if let Some(next) = rewrite_longest_prefix(current, reexports) {
-        for res in expand_memoized(&next, aliases, reexports, depth + 1, chain_seen, memo) {
-            if !results.contains(&res) {
-                results.push(res);
+        } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+            if !memo.contains_key(&next) {
+                work.push((next, false));
             }
         }
-    } else {
-        results.push(current.to_string());
     }
 
-    chain_seen.remove(current);
-    memo.insert(current.to_string(), results.clone());
-    results
+    memo.remove(path).unwrap_or_else(|| vec![path.to_string()])
 }
 
 /// Follow the **alias** and **re-export** closures together from `path` to a single fixpoint path.
