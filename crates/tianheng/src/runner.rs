@@ -28,7 +28,7 @@ use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
-    constitution_text, report_json,
+    constitution_text, report_json, report_json_with_stale_policy,
 };
 use louke::audit_probe_coverage;
 use xingbiao::{cargo_metadata, member_root_files};
@@ -49,7 +49,7 @@ use projection::*;
 pub use projection::{constitution_markdown, projection_gate};
 
 mod render;
-use render::{report, report_coverage, report_sarif, report_violations};
+use render::{report, report_coverage, report_sarif, report_sarif_with_stale, report_violations};
 mod term_color;
 use term_color::Style;
 
@@ -169,6 +169,7 @@ where
     let mut write_baseline_path: Option<String> = None;
     let mut format: Option<String> = None;
     let mut warn_uncovered = false;
+    let mut disallow_stale = false;
     let mut args = args.into_iter().map(Into::into).skip(1).peekable();
 
     // The command is the first positional token; an absent or unrecognized leading
@@ -204,6 +205,7 @@ where
             "--write-baseline" => write_baseline_path = Some(value!("--write-baseline")),
             "--format" => format = Some(value!("--format")),
             "--warn-uncovered" => warn_uncovered = true,
+            "--disallow-stale" => disallow_stale = true,
             other => {
                 if let Some(path) = other.strip_prefix("--manifest-path=") {
                     manifest_path = Some(path.to_string());
@@ -246,6 +248,7 @@ where
             || baseline_path.is_some()
             || write_baseline_path.is_some()
             || warn_uncovered
+            || disallow_stale
         {
             return usage("list takes only --format; other flags are check-only");
         }
@@ -310,6 +313,9 @@ where
     if baseline_path.is_some() && write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
+    if disallow_stale && baseline_path.is_none() {
+        return usage("--disallow-stale requires --baseline");
+    }
 
     // From here on the command is `check`: it requires a workspace to observe.
     // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
@@ -353,6 +359,7 @@ where
             report_format,
             coverage.as_ref(),
             warn_uncovered,
+            disallow_stale,
         );
     }
 
@@ -491,6 +498,7 @@ fn gate(
     format: ReportFormat,
     coverage: Option<&Coverage>,
     warn_uncovered: bool,
+    disallow_stale: bool,
 ) -> u8 {
     // A constitution error is the whole story: report it before reading the baseline, so
     // it is never masked by a missing or unreadable baseline file (both exit 2, but the
@@ -531,9 +539,22 @@ fn gate(
         _ => &empty,
     };
     let stale: Vec<BaselineEntry> = baseline.stale(report).into_iter().cloned().collect();
+    let has_stale = disallow_stale && !stale.is_empty();
+    let exit_code = if has_stale && outcome.exit_code() == 0 {
+        1
+    } else {
+        outcome.exit_code()
+    };
+
     match format {
-        ReportFormat::Json => println!("{}", report_json(outcome, &stale, coverage)),
-        ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+        ReportFormat::Json => println!(
+            "{}",
+            report_json_with_stale_policy(outcome, &stale, coverage, disallow_stale)
+        ),
+        ReportFormat::Sarif => println!(
+            "{}",
+            report_sarif_with_stale(outcome, &stale, disallow_stale)
+        ),
         ReportFormat::Text => {
             report_violations(report);
             for entry in &stale {
@@ -544,12 +565,18 @@ fn gate(
                     entry.finding
                 );
             }
+            if has_stale {
+                eprintln!(
+                    "Tianheng: --disallow-stale failed: {} stale baseline entry/entries found",
+                    stale.len()
+                );
+            }
             if let Some(coverage) = coverage {
                 report_coverage(coverage, warn_uncovered);
             }
         }
     }
-    outcome.exit_code()
+    exit_code
 }
 
 /// Fold two outcomes into one reaction. Reused across the composition chain — static + semantic,

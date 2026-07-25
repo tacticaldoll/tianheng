@@ -55,6 +55,11 @@ The runner SHALL exit `0` when no enforce-severity boundary is violated, `1` whe
 
 The runner SHALL accept two mutually exclusive baseline flags: `--baseline <file>` selects gate mode (suppress baselined violations, fail only on new ones) and `--write-baseline <file>` records the current violations as a baseline. Each SHALL also accept the `=<file>` form. Supplying both SHALL be a usage error that exits 2. In gate mode the process exit code SHALL reflect the gated outcome — 0 when the only violations are baselined or warn, 1 on a new enforce-severity violation. A baseline file that cannot be read or parsed SHALL be treated as a scan error and exit 2.
 
+The runner SHALL additionally accept `--disallow-stale` as a presence-only flag in gate mode (`--baseline <file>`). When `--disallow-stale` is enabled and one or more stale baseline entries are present, the runner SHALL treat stale baseline entries as a gate failure and exit `1`. Supplying `--disallow-stale` without `--baseline <file>` SHALL be a usage error that exits `2`. When `--disallow-stale` triggers a gate failure:
+- In `--format text`, standard error SHALL report the stale baseline entries and exit `1`.
+- In `--format json`, standard output SHALL emit a document with `exit_code: 1`, `stale_disallowed: true`, and `stale_baseline` containing the stale entries.
+- In `--format sarif`, standard output SHALL emit a SARIF document containing an `error`-level result for each disallowed stale baseline entry, with `invocations[0].executionSuccessful` set to `false`.
+
 #### Scenario: Write-baseline records and exits 0
 
 - **WHEN** the runner is invoked with `--write-baseline <file>` against a workspace with violations
@@ -80,9 +85,19 @@ The runner SHALL accept two mutually exclusive baseline flags: `--baseline <file
 - **WHEN** the runner is invoked with `--baseline <file>` and the file is missing or malformed
 - **THEN** the runner reports a scan error and exits 2
 
+#### Scenario: Disallow-stale fails on stale baseline entry
+
+- **WHEN** the runner is invoked with `--baseline <file>` and `--disallow-stale`, and the baseline file contains a stale entry no longer present in the workspace
+- **THEN** the runner reports the stale baseline entry as a failure and exits 1
+
+#### Scenario: Disallow-stale without baseline is a usage error
+
+- **WHEN** the runner is invoked with `--disallow-stale` without `--baseline`
+- **THEN** the runner reports a usage error and exits 2
+
 ### Requirement: Machine-readable report format
 
-The runner SHALL accept `--format json` (and `--format=json`) and emit the outcome as a JSON document on standard output; the default format SHALL remain human-readable text, so existing invocations are unchanged. The runner SHALL additionally accept `--format sarif` as a machine/CI-consumable projection of the same outcome (defined below). An unrecognized format value SHALL be a usage error that exits 2, never a silent fallback. The `markdown` format is a `list`-only projection of the declared law and is NOT a `check` format: `check --format markdown` SHALL be a usage error that exits 2, because `check`'s machine-readable output is the JSON report, not a law summary. The JSON SHALL faithfully project the outcome: an `outcome` discriminant (`clean`, `violations`, or `constitution_error`), the `exit_code` mirroring the process exit, a `violations` array, a `stale_baseline` array (empty outside gate mode), and an `error` message (null unless a constitution error). Each violation SHALL carry its `kind`, `target`, `rule`, `finding`, `reason`, `severity`, and `baselined` flag; the `reason` SHALL serve as the repair hint with no separate invented field.
+The runner SHALL accept `--format json` (and `--format=json`) and emit the outcome as a JSON document on standard output; the default format SHALL remain human-readable text, so existing invocations are unchanged. The runner SHALL additionally accept `--format sarif` as a machine/CI-consumable projection of the same outcome (defined below). An unrecognized format value SHALL be a usage error that exits 2, never a silent fallback. The `markdown` format is a `list`-only projection of the declared law and is NOT a `check` format: `check --format markdown` SHALL be a usage error that exits 2, because `check`'s machine-readable output is the JSON report, not a law summary. The JSON SHALL faithfully project the outcome: an `outcome` discriminant (`clean`, `violations`, or `constitution_error`), the `exit_code` mirroring the process exit, a `violations` array, a `stale_baseline` array (empty outside gate mode), a `stale_disallowed` boolean flag, and an `error` message (null unless a constitution error). Each violation SHALL carry its `kind`, `target`, `rule`, `finding`, `reason`, `severity`, and `baselined` flag; the `reason` SHALL serve as the repair hint with no separate invented field.
 
 Each violation SHALL additionally carry a `file` field naming the offending source file, so an agent knows *where* to repair. The `file` SHALL be a string wherever the offending source file is a faithful byproduct of observation: a **module-import violation** names a source file where the forbidden import occurs (the static scan already reads that file to observe the import); a **single-module semantic violation** — one whose governed anchor resolves to a single module's items: signature-coupling exposure (including its re-export and trait-impl-exposure depths), dyn-trait and impl-trait (shape and operand), async-exposure, or visibility — names the source file of that **governed module** (the file the semantic scan already descends to in order to observe the module's items, and where the offending seam is written); and an **un-auditable-probe runtime violation** names the source file holding the non-literal `assert_boundary!` (the probe scan already captured that file). a **whole-crate-scan semantic violation** — **trait-impl-locality** and **forbidden-marker**, which observe a whole-crate/subtree scan and name sites scattered across the crate — likewise names a source file: the source file of the **module the offending element sits in** (the `impl` site's module for a trait-impl or a forbidden `impl`; the offending type's defining module for a forbidden `#[derive]`), resolved by the same mechanism as the single-module capabilities but per finding. For any semantic violation the `finding` still names the canonicalized forbidden type/shape or the offending element — which may be *defined* in another file — while the `file` names the module the offending element sits in, the actionable location; the two are distinct. For the remaining violation kinds the `file` SHALL be `null`, a faithful absence rather than an omitted-but-known location: a crate-dependency violation is an edge in the dependency graph with no single source file; and a seam-level runtime violation (a duplicate, undeclared, or unprobed seam) names a seam, not a source location, so no single file applies. The `file` SHALL NOT enter the violation's baseline identity (`target`, `rule_key`, `fact`), so adding or changing it SHALL NOT make an existing baselined violation count as new, and SHALL NOT change the number of violations reported (it is metadata attached after identity de-duplication, never a de-duplication key).
 
@@ -580,3 +595,4 @@ NOT be emitted.
 
 - **WHEN** unrelated findings are inserted or SARIF results are emitted in another order
 - **THEN** every pre-existing violation retains its fingerprint
+

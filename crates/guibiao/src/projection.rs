@@ -14,13 +14,29 @@ use xuanji::pretty_json;
 /// projection of [`Outcome`] with each violation's `kind`, the boundary `reason` as
 /// the repair hint, and `exit_code` mirroring the process exit. `stale` lists
 /// baseline entries matching no current violation (empty outside gate mode).
-pub fn report_json(
+/// Render the outcome as a JSON document for machine consumption, with optional stale-disallow policy:
+/// a faithful projection of [`Outcome`] with each violation's `kind`, the boundary `reason` as
+/// the repair hint, and `exit_code` mirroring the process exit. `stale` lists baseline entries
+/// matching no current violation. When `disallow_stale` is true and `stale` is not empty,
+/// `stale_disallowed` is set to `true`, `exit_code` is `1`, and `outcome` reflects `"violations"`
+/// if any violation or disallowed stale entry fails the gate.
+pub fn report_json_with_stale_policy(
     outcome: &Outcome,
     stale: &[BaselineEntry],
     coverage: Option<&Coverage>,
+    disallow_stale: bool,
 ) -> String {
+    let has_disallowed_stale = disallow_stale && !stale.is_empty();
     let (label, violations, error) = match outcome {
-        Outcome::Clean => ("clean", Vec::new(), Value::Null),
+        Outcome::Clean => (
+            if has_disallowed_stale {
+                "violations"
+            } else {
+                "clean"
+            },
+            Vec::new(),
+            Value::Null,
+        ),
         Outcome::Violations(report) => (
             "violations",
             report.violations.iter().map(Violation::to_json).collect(),
@@ -31,10 +47,6 @@ pub fn report_json(
             Vec::new(),
             Value::String(message.clone()),
         ),
-        // `Outcome` is `#[non_exhaustive]` (it lives in 璇璣, shared across dimensions).
-        // A future variant this engine does not yet produce renders as a neutral label;
-        // the projection decides nothing — `exit_code()` (authoritative, in 璇璣) governs
-        // the reaction — so this fallback is a faithful "don't know", never a false pass.
         _ => ("unknown", Vec::new(), Value::Null),
     };
     let stale_baseline: Vec<Value> = stale
@@ -51,12 +63,18 @@ pub fn report_json(
             })
         })
         .collect();
+    let exit_code = if has_disallowed_stale && outcome.exit_code() == 0 {
+        1
+    } else {
+        outcome.exit_code()
+    };
     let mut document = serde_json::json!({
         "format": "tianheng.reaction/structured-facts",
         "outcome": label,
-        "exit_code": outcome.exit_code(),
+        "exit_code": exit_code,
         "violations": violations,
         "stale_baseline": stale_baseline,
+        "stale_disallowed": has_disallowed_stale,
         "error": error,
     });
     if let Some(coverage) = coverage {
@@ -66,6 +84,16 @@ pub fn report_json(
         });
     }
     pretty_json(&document)
+}
+
+/// Render the outcome as a JSON document for machine consumption.
+/// Delegates to [`report_json_with_stale_policy`] with default `disallow_stale = false`.
+pub fn report_json(
+    outcome: &Outcome,
+    stale: &[BaselineEntry],
+    coverage: Option<&Coverage>,
+) -> String {
+    report_json_with_stale_policy(outcome, stale, coverage, false)
 }
 
 /// Render the declared constitution as a human-readable projection — the law as

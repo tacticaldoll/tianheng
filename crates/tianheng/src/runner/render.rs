@@ -158,9 +158,19 @@ pub(crate) fn coverage_report(coverage: &Coverage, warn_uncovered: bool) -> Stri
 /// `executionSuccessful` is `false` (required on any SARIF invocation). Clean → empty `results`.
 /// Presentation only: the outcome and exit code are unchanged.
 pub(crate) fn report_sarif(outcome: &Outcome) -> String {
+    report_sarif_with_stale(outcome, &[], false)
+}
+
+pub(crate) fn report_sarif_with_stale(
+    outcome: &Outcome,
+    stale: &[guibiao::BaselineEntry],
+    disallow_stale: bool,
+) -> String {
     use serde_json::{Value, json};
     let mut results: Vec<Value> = Vec::new();
     let mut invocations: Vec<Value> = Vec::new();
+    let has_disallowed_stale = disallow_stale && !stale.is_empty();
+
     match outcome {
         Outcome::Violations(report) => {
             for v in report.violations.iter().filter(|v| !v.baselined) {
@@ -213,6 +223,33 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
         // Clean (and any future outcome) contributes no results.
         _ => {}
     }
+
+    if has_disallowed_stale {
+        for entry in stale {
+            results.push(json!({
+                "ruleId": entry.rule,
+                "level": "error",
+                "message": {
+                    "text": format!(
+                        "Stale baseline entry disallowed: {} / {} / {}",
+                        entry.id.target(),
+                        entry.rule,
+                        entry.finding
+                    )
+                },
+            }));
+        }
+        if invocations.is_empty() {
+            invocations.push(json!({
+                "executionSuccessful": false,
+                "toolExecutionNotifications": [{
+                    "level": "error",
+                    "message": { "text": format!("--disallow-stale failed: {} stale baseline entry/entries found", stale.len()) },
+                }],
+            }));
+        }
+    }
+
     let mut run = json!({
         "tool": { "driver": { "name": "tianheng" } },
         "results": results,
