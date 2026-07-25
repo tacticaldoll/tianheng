@@ -179,3 +179,12 @@ The repository SHALL maintain isolated test fixtures under `crates/tianheng/test
 
 - **WHEN** `tianheng check` runs against the `glob_hazard_violation` fixture manifest
 - **THEN** the runner exits with status 1 and reports the structured Glob Hazard violation
+
+### Requirement: Mid-path relative import dogfood coverage
+
+The repository unit and integration test suites SHALL include lock assertions verifying that mid-path `super` and `self` imports inside grouped `use` trees and inline submodules are normalized to canonical `crate::...` paths and trigger module boundary violations when targeting forbidden subtrees.
+
+#### Scenario: Mid-path super grouped import triggers module boundary violation
+
+- **WHEN** the test harness evaluates a module boundary against source containing `use crate::a::b::{super::forbidden::X};`
+- **THEN** the harness detects `crate::a::forbidden` and reports the expected violation
