@@ -578,6 +578,10 @@ fn probe_first_arg_with_generic_comma_preserves_full_span() {
             "fn f() { assert_boundary!(SEAM::<{ A > B }, C>, o); }",
             "SEAM::<{ A > B }, C>",
         ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as Trait<C, D>>::SEAM",
+        ),
     ] {
         let mut probes = Vec::new();
         scan_source(src, "test.rs", &mut probes);
@@ -1621,7 +1625,7 @@ fn invalid_marker_string_is_constitution_error() {
     let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
     for invalid in [
         "if", "match", "123foo", "foo::bar", "foo-bar", "_", "r#self", "r#super", "r#crate", "r#_",
-        "💥", "a💥",
+        "💥", "a💥", "café",
     ] {
         let outcome = audit_probe_coverage_with_markers(
             &[boundary("seam", Severity::Enforce)],
