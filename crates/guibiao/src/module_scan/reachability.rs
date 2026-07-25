@@ -655,6 +655,35 @@ fn is_item_header_keyword(bytes: &[u8], i: usize) -> bool {
         || keyword_starts_at(bytes, i, b"type")
 }
 
+fn skip_item_declaration(bytes: &[u8], start: usize, end: usize) -> Option<usize> {
+    // const/static/type items terminate with `;` at depth 0; their initializer may contain
+    // multiple sibling braces (e.g. `const X: () = if cond { … } else { … };`).
+    // All other item kinds (fn, struct, enum, impl, trait, extern) terminate at the `}` that
+    // brings brace depth back to 0 — their top-level brace body.
+    let needs_semicolon = keyword_starts_at(bytes, start, b"const")
+        || keyword_starts_at(bytes, start, b"static")
+        || keyword_starts_at(bytes, start, b"type");
+
+    let mut depth = 0usize;
+    let mut j = start;
+    while j < end {
+        match bytes[j] {
+            b'(' | b'{' | b'[' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 && !needs_semicolon {
+                    return Some(j + 1);
+                }
+            }
+            b';' if depth == 0 => return Some(j + 1),
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
 fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<DeclaredModule> {
     let bytes = cleaned.as_bytes();
     let end = range.end.min(bytes.len());
@@ -662,17 +691,12 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
     let mut i = range.start.min(end);
     while i < end {
         if is_item_header_keyword(bytes, i) {
-            let mut j = i;
-            while j < end && bytes[j] != b'{' && bytes[j] != b';' {
-                j += 1;
-            }
-            if j < end && bytes[j] == b'{' {
-                if let Some(close) = balanced_group_end(bytes, j) {
-                    i = close;
-                    continue;
-                }
+            if let Some(next) = skip_item_declaration(bytes, i, end) {
+                i = next;
+                continue;
             }
         }
+
         match bytes[i] {
             b'm' if is_mod_declaration_keyword(bytes, i) => {
                 let mut j = i + 3;
@@ -1646,6 +1670,13 @@ cfg_if::cfg_if! {
     fn declared_modules_ignores_mod_inside_const_or_static_block() {
         let src = r#"
 const _: () = {
+    mod child {
+        use crate::secret;
+    }
+};
+const X: () = if true {
+    ()
+} else {
     mod child {
         use crate::secret;
     }
