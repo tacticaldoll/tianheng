@@ -228,8 +228,12 @@ pub(crate) fn check_module_boundary(
                         continue;
                     }
                 }
-                // This importer must actually import the protected module.
-                if !within_scan_depth(&import, &governed_module, boundary.depth) {
+                // This importer must actually import the protected module (either directly,
+                // via descendant path, or via an ancestor glob wildcard import).
+                let imports_protected =
+                    within_scan_depth(&import, &governed_module, boundary.depth)
+                        || (import.is_glob && path_within(&governed_module, &import.path));
+                if !imports_protected {
                     continue;
                 }
                 // Closed allowlist: an importer within any allowed entry (or beneath it) is

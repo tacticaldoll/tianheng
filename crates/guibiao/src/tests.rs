@@ -1468,6 +1468,23 @@ fn must_not_be_imported_by_flags_the_forbidden_importer_only() {
 }
 
 #[test]
+fn must_not_be_imported_by_flags_ancestor_glob_import() {
+    let (result, violations) = run_module_check(
+        "inbound-ancestor-glob",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use crate::*;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::internal");
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
 fn must_not_be_imported_by_flags_an_inline_module_importer() {
     // `crate::http` is an INLINE module in lib.rs, not a file. Its `use crate::internal`
     // is attributed to the inline importer `crate::http`, not the file's module `crate`, so the

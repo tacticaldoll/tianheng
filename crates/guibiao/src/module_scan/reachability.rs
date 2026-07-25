@@ -2,7 +2,9 @@
 //! selects governed source files, excluding undeclared orphans, inline shadows, and
 //! remap-shadowed paths. Depends on [`super::lexer`] and [`super::path_vocab`].
 
-use super::lexer::{balanced_group_end, clean_with_positions, is_ident_byte, read_path_string};
+use super::lexer::{
+    balanced_group_end, clean_with_positions, is_ident_byte, keyword_starts_at, read_path_string,
+};
 use super::path_vocab::{canonical_segment, is_mod_declaration_keyword, path_within};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -641,23 +643,35 @@ struct DeclaredModule {
 /// from a candidate unbounded by `range.start`, which stays correct here: the nearest preceding
 /// `;`/`{`/`}` it finds is either an earlier sibling's terminator within the range or the range's
 /// own enclosing `{`, never a byte outside the declaration it is checking.
+fn is_item_header_keyword(bytes: &[u8], i: usize) -> bool {
+    keyword_starts_at(bytes, i, b"fn")
+        || keyword_starts_at(bytes, i, b"struct")
+        || keyword_starts_at(bytes, i, b"enum")
+        || keyword_starts_at(bytes, i, b"impl")
+        || keyword_starts_at(bytes, i, b"trait")
+        || keyword_starts_at(bytes, i, b"extern")
+}
+
 fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<DeclaredModule> {
     let bytes = cleaned.as_bytes();
     let end = range.end.min(bytes.len());
     let mut declared = Vec::new();
-    let mut depth: i32 = 0;
     let mut i = range.start.min(end);
     while i < end {
+        if is_item_header_keyword(bytes, i) {
+            let mut j = i;
+            while j < end && bytes[j] != b'{' && bytes[j] != b';' {
+                j += 1;
+            }
+            if j < end && bytes[j] == b'{' {
+                if let Some(close) = balanced_group_end(bytes, j) {
+                    i = close;
+                    continue;
+                }
+            }
+        }
         match bytes[i] {
-            b'{' => {
-                depth += 1;
-                i += 1;
-            }
-            b'}' => {
-                depth -= 1;
-                i += 1;
-            }
-            b'm' if depth == 0 && is_mod_declaration_keyword(bytes, i) => {
+            b'm' if is_mod_declaration_keyword(bytes, i) => {
                 let mut j = i + 3;
                 while j < end && bytes[j].is_ascii_whitespace() {
                     j += 1;
@@ -1611,6 +1625,18 @@ mod tests {
         assert!(declared_modules("macro_rules! m { () => { mod ghost; }; }").is_empty());
         // A real top-level declaration is still found.
         assert_eq!(declared_modules("mod real;"), vec!["real".to_string()]);
+    }
+
+    #[test]
+    fn declared_modules_observes_mod_inside_cfg_if_macro_body() {
+        let src = r#"
+cfg_if::cfg_if! {
+    if #[cfg(feature = "x")] {
+        mod child;
+    }
+}
+"#;
+        assert_eq!(declared_modules(src), vec!["child".to_string()]);
     }
 
     #[test]
