@@ -2,9 +2,7 @@
 //! selects governed source files, excluding undeclared orphans, inline shadows, and
 //! remap-shadowed paths. Depends on [`super::lexer`] and [`super::path_vocab`].
 
-use super::lexer::{
-    balanced_group_end, clean_with_positions, is_ident_byte, keyword_starts_at, read_path_string,
-};
+use super::lexer::{balanced_group_end, clean_with_positions, is_ident_byte, read_path_string};
 use super::path_vocab::{canonical_segment, is_mod_declaration_keyword, path_within};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -643,62 +641,52 @@ struct DeclaredModule {
 /// from a candidate unbounded by `range.start`, which stays correct here: the nearest preceding
 /// `;`/`{`/`}` it finds is either an earlier sibling's terminator within the range or the range's
 /// own enclosing `{`, never a byte outside the declaration it is checking.
-fn is_item_header_keyword(bytes: &[u8], i: usize) -> bool {
-    keyword_starts_at(bytes, i, b"fn")
-        || keyword_starts_at(bytes, i, b"struct")
-        || keyword_starts_at(bytes, i, b"enum")
-        || keyword_starts_at(bytes, i, b"impl")
-        || keyword_starts_at(bytes, i, b"trait")
-        || keyword_starts_at(bytes, i, b"extern")
-        || keyword_starts_at(bytes, i, b"const")
-        || keyword_starts_at(bytes, i, b"static")
-        || keyword_starts_at(bytes, i, b"type")
-}
-
-fn skip_item_declaration(bytes: &[u8], start: usize, end: usize) -> Option<usize> {
-    // const/static/type items terminate with `;` at depth 0; their initializer may contain
-    // multiple sibling braces (e.g. `const X: () = if cond { … } else { … };`).
-    // All other item kinds (fn, struct, enum, impl, trait, extern) terminate at the `}` that
-    // brings brace depth back to 0 — their top-level brace body.
-    let needs_semicolon = keyword_starts_at(bytes, start, b"const")
-        || keyword_starts_at(bytes, start, b"static")
-        || keyword_starts_at(bytes, start, b"type");
-
-    let mut depth = 0usize;
-    let mut j = start;
-    while j < end {
-        match bytes[j] {
-            b'(' | b'{' | b'[' => depth += 1,
-            b')' | b']' => depth = depth.saturating_sub(1),
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 && !needs_semicolon {
-                    return Some(j + 1);
-                }
-            }
-            b';' if depth == 0 => return Some(j + 1),
-            _ => {}
-        }
-        j += 1;
-    }
-    None
-}
-
 fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<DeclaredModule> {
     let bytes = cleaned.as_bytes();
     let end = range.end.min(bytes.len());
     let mut declared = Vec::new();
     let mut i = range.start.min(end);
+    // In `cleaned`, non-transparent macro bodies have already been stripped; a `{` preceded by `!`
+    // therefore always opens a transparent macro body (cfg_if!). Within that body, ALL nested
+    // braces are also transparent — cfg_if! arms (`if #[cfg(...)] { … }`) are top-level item
+    // scopes, and the scanner cannot distinguish arm braces from item-body braces without a full
+    // parse. `effective_depth` counts only non-transparent braces; `mod` is observed only at
+    // effective_depth 0, matching the caller-supplied range's own top-level scope.
+    let mut brace_stack: Vec<bool> = Vec::new(); // true = transparent (inside cfg_if! body)
+    let mut transparent_count: usize = 0; // number of currently open transparent braces
+    let mut effective_depth: usize = 0;
     while i < end {
-        if is_item_header_keyword(bytes, i) {
-            if let Some(next) = skip_item_declaration(bytes, i, end) {
-                i = next;
-                continue;
-            }
-        }
-
         match bytes[i] {
-            b'm' if is_mod_declaration_keyword(bytes, i) => {
+            b'{' => {
+                // A `{` preceded by `!` opens a transparent macro body. Any `{` encountered
+                // while already inside a transparent context is also transparent.
+                let is_after_bang = i > range.start && {
+                    let mut j = i - 1;
+                    while j > range.start && bytes[j].is_ascii_whitespace() {
+                        j -= 1;
+                    }
+                    bytes[j] == b'!'
+                };
+                if is_after_bang || transparent_count > 0 {
+                    brace_stack.push(true);
+                    transparent_count += 1;
+                } else {
+                    brace_stack.push(false);
+                    effective_depth += 1;
+                }
+                i += 1;
+            }
+            b'}' => {
+                if let Some(was_transparent) = brace_stack.pop() {
+                    if was_transparent {
+                        transparent_count = transparent_count.saturating_sub(1);
+                    } else {
+                        effective_depth = effective_depth.saturating_sub(1);
+                    }
+                }
+                i += 1;
+            }
+            b'm' if effective_depth == 0 && is_mod_declaration_keyword(bytes, i) => {
                 let mut j = i + 3;
                 while j < end && bytes[j].is_ascii_whitespace() {
                     j += 1;
