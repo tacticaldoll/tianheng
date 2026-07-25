@@ -464,13 +464,12 @@ pub(crate) fn expand_canonical_paths(
     aliases: &AliasMap,
     reexports: &ReexportMap,
 ) -> Vec<String> {
-    let mut current_queue = vec![path.to_string()];
+    let max_depth = aliases.len() + reexports.len() + 1;
+    let mut current_queue = vec![(path.to_string(), 0, std::collections::HashSet::new())];
     let mut final_paths = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let cap = aliases.len() + reexports.len() + 1;
 
-    while let Some(current) = current_queue.pop() {
-        if !seen.insert(current.clone()) || seen.len() > cap {
+    while let Some((current, depth, mut chain_seen)) = current_queue.pop() {
+        if !chain_seen.insert(current.clone()) || depth > max_depth {
             if !final_paths.contains(&current) {
                 final_paths.push(current);
             }
@@ -480,11 +479,11 @@ pub(crate) fn expand_canonical_paths(
         let mut expanded = false;
         if let Some(next_targets) = rewrite_longest_alias_prefixes(&current, aliases) {
             for target in next_targets {
-                current_queue.push(target);
+                current_queue.push((target, depth + 1, chain_seen.clone()));
             }
             expanded = true;
         } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
-            current_queue.push(next);
+            current_queue.push((next, depth + 1, chain_seen.clone()));
             expanded = true;
         }
 

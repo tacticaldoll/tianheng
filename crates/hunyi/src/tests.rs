@@ -8965,3 +8965,57 @@ fn raw_pointer_type_alias_target_walk_detects_nested_exposure() {
         "raw pointer type alias declaration and function return type must react: {out:?}"
     );
 }
+
+#[test]
+fn wide_tuple_alias_with_forbidden_first_member_expands_without_truncation() {
+    let out = findings(
+        "wide-tuple-alias",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\npub mod api;\n"),
+            (
+                "domain.rs",
+                "type Inner = crate::infra::Secret;\n\
+                 type Wide = (Inner, crate::api::Public, u32, u64, u128);\n\
+                 pub fn leak_wide() -> Wide { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("api.rs", "pub struct Public;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "wide tuple alias must expand all branches without truncation: {out:?}"
+    );
+    assert!(out[0].contains("crate::infra::Secret exposed by fn crate::domain::leak_wide"));
+}
+
+#[test]
+fn diamond_alias_expansion_does_not_leak_intermediate_aliases() {
+    let out = findings(
+        "diamond-alias",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
+            (
+                "domain.rs",
+                "type Mid = crate::infra::Secret;\n\
+                 type Other = Mid;\n\
+                 type Diamond = (Mid, Other);\n\
+                 pub fn leak_diamond() -> Diamond { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "diamond alias must expand to terminal target without intermediate alias leakage: {out:?}"
+    );
+    assert!(out[0].contains("crate::infra::Secret exposed by fn crate::domain::leak_diamond"));
+}
