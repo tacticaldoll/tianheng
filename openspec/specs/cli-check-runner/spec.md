@@ -55,7 +55,10 @@ The runner SHALL exit `0` when no enforce-severity boundary is violated, `1` whe
 
 The runner SHALL accept two mutually exclusive baseline flags: `--baseline <file>` selects gate mode (suppress baselined violations, fail only on new ones) and `--write-baseline <file>` records the current violations as a baseline. Each SHALL also accept the `=<file>` form. Supplying both SHALL be a usage error that exits 2. In gate mode the process exit code SHALL reflect the gated outcome — 0 when the only violations are baselined or warn, 1 on a new enforce-severity violation. A baseline file that cannot be read or parsed SHALL be treated as a scan error and exit 2.
 
-The runner SHALL additionally accept `--disallow-stale` (and `--disallow-stale` with no value) in gate mode (`--baseline <file>`). When `--disallow-stale` is enabled and one or more stale baseline entries are present, the runner SHALL treat stale baseline entries as a gate failure and exit `1`. Supplying `--disallow-stale` without `--baseline <file>` SHALL be a usage error that exits `2`.
+The runner SHALL additionally accept `--disallow-stale` as a presence-only flag in gate mode (`--baseline <file>`). When `--disallow-stale` is enabled and one or more stale baseline entries are present, the runner SHALL treat stale baseline entries as a gate failure and exit `1`. Supplying `--disallow-stale` without `--baseline <file>` SHALL be a usage error that exits `2`. When `--disallow-stale` triggers a gate failure:
+- In `--format text`, standard error SHALL report the stale baseline entries and exit `1`.
+- In `--format json`, standard output SHALL emit a document with `exit_code: 1`, `stale_disallowed: true`, and `stale_baseline` containing the stale entries.
+- In `--format sarif`, standard output SHALL emit a SARIF document containing an `error`-level result for each disallowed stale baseline entry, with `invocations[0].executionSuccessful` set to `false`.
 
 #### Scenario: Write-baseline records and exits 0
 

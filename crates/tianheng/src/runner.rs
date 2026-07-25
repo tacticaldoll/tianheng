@@ -28,7 +28,7 @@ use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
-    constitution_text, report_json,
+    constitution_text, report_json, report_json_with_stale_policy,
 };
 use louke::audit_probe_coverage;
 use xingbiao::{cargo_metadata, member_root_files};
@@ -49,7 +49,7 @@ use projection::*;
 pub use projection::{constitution_markdown, projection_gate};
 
 mod render;
-use render::{report, report_coverage, report_sarif, report_violations};
+use render::{report, report_coverage, report_sarif, report_sarif_with_stale, report_violations};
 mod term_color;
 use term_color::Style;
 
@@ -557,20 +557,14 @@ fn gate(
     };
 
     match format {
-        ReportFormat::Json => {
-            let json_str = report_json(outcome, &stale, coverage);
-            if exit_code != outcome.exit_code() {
-                if let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                    doc["exit_code"] = serde_json::json!(exit_code);
-                    println!("{}", serde_json::to_string_pretty(&doc).unwrap());
-                } else {
-                    println!("{json_str}");
-                }
-            } else {
-                println!("{json_str}");
-            }
-        }
-        ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+        ReportFormat::Json => println!(
+            "{}",
+            report_json_with_stale_policy(outcome, &stale, coverage, disallow_stale)
+        ),
+        ReportFormat::Sarif => println!(
+            "{}",
+            report_sarif_with_stale(outcome, &stale, disallow_stale)
+        ),
         ReportFormat::Text => {
             report_violations(report);
             for entry in &stale {
