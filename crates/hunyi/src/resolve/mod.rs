@@ -33,9 +33,9 @@ pub(crate) type UseMap = HashMap<String, String>;
 pub(crate) type ReexportMap = HashMap<String, String>;
 
 /// A type-alias closure: a `type X = <path>;` alias's canonical path (`{module}::X`) → the
-/// canonical path of its nominal target. Followed together with the re-export closure to a
+/// canonical paths of its nominal targets. Followed together with the re-export closure to a
 /// fixpoint, so a forbidden type reached through an alias resolves to its defining path.
-pub(crate) type AliasMap = HashMap<String, String>;
+pub(crate) type AliasMap = HashMap<String, Vec<String>>;
 
 /// Whether a bare/relative name (not in the `use`-map, not `crate`/`self`/`super`)
 /// resolves against the current module, or is left unresolved.
@@ -440,23 +440,82 @@ pub(crate) fn canonicalize_through_reexports(path: &str, reexports: &ReexportMap
     canonicalize_through_aliases(path, &AliasMap::new(), reexports)
 }
 
-/// Follow the **alias** and **re-export** closures together from `path` to a fixpoint, so a
-/// name reached through a `type X = <path>;` alias and/or a `pub use` facade resolves to the
-/// defining path. An alias hop is tried before a re-export hop at each step; the two maps are
-/// keyed by canonical path and cannot collide (a `type X` and a `pub use … as X` in one module
-/// is a name clash that does not compile). Cycle-guarded. For a `path` in neither map this is
-/// identical to [`canonicalize_through_reexports`], so a non-alias finding is unchanged.
+fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<String>> {
+    let segments: Vec<&str> = path.split("::").collect();
+    for end in (1..=segments.len()).rev() {
+        let prefix = segments[..end].join("::");
+        if let Some(targets) = map.get(&prefix) {
+            let tail = if end == segments.len() {
+                ""
+            } else {
+                &path[prefix.len()..]
+            };
+            return Some(targets.iter().map(|t| format!("{t}{tail}")).collect());
+        }
+    }
+    None
+}
+
+/// Follow the **alias** and **re-export** closures together from `path` to all canonical fixpoint paths,
+/// so a name reached through a multi-target `type X = (A, B);` alias and/or a `pub use` facade resolves
+/// to all defining paths.
+pub(crate) fn expand_canonical_paths(
+    path: &str,
+    aliases: &AliasMap,
+    reexports: &ReexportMap,
+) -> Vec<String> {
+    let max_depth = aliases.len() + reexports.len() + 1;
+    let mut current_queue = vec![(path.to_string(), 0, std::collections::HashSet::new())];
+    let mut final_paths = Vec::new();
+
+    while let Some((current, depth, mut chain_seen)) = current_queue.pop() {
+        if !chain_seen.insert(current.clone()) || depth > max_depth {
+            if !final_paths.contains(&current) {
+                final_paths.push(current);
+            }
+            continue;
+        }
+
+        let mut expanded = false;
+        if let Some(next_targets) = rewrite_longest_alias_prefixes(&current, aliases) {
+            for target in next_targets {
+                current_queue.push((target, depth + 1, chain_seen.clone()));
+            }
+            expanded = true;
+        } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+            current_queue.push((next, depth + 1, chain_seen.clone()));
+            expanded = true;
+        }
+
+        if !expanded && !final_paths.contains(&current) {
+            final_paths.push(current);
+        }
+    }
+
+    final_paths
+}
+
+/// Follow the **alias** and **re-export** closures together from `path` to a single fixpoint path.
+/// Delegates to [`expand_canonical_paths`] and yields the first resolved target path.
 pub(crate) fn canonicalize_through_aliases(
     path: &str,
     aliases: &AliasMap,
     reexports: &ReexportMap,
 ) -> String {
+    expand_canonical_paths(path, aliases, reexports)
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| path.to_string())
+}
+
+/// Follow a single-target alias map (`HashMap<String, String>`) and re-export closure to a fixpoint.
+pub(crate) fn canonicalize_through_single_alias_map(
+    path: &str,
+    aliases: &std::collections::HashMap<String, String>,
+    reexports: &ReexportMap,
+) -> String {
     let mut current = path.to_string();
     let mut seen = std::collections::HashSet::new();
-    // Same hop cap as [`canonicalize_through_reexports`], summed over both maps: a terminating
-    // interleaved chain traverses each map's edges at most once, so `aliases.len() +
-    // reexports.len() + 1` distinct paths bounds it. The cap hard-guarantees termination against
-    // a divergent rewrite the exact-repeat `seen` set cannot catch.
     let cap = aliases.len() + reexports.len() + 1;
     while seen.insert(current.clone()) {
         if seen.len() > cap {
@@ -475,23 +534,36 @@ pub(crate) fn canonicalize_through_aliases(
     current
 }
 
-/// The alias's target as a **bare nominal path** — `Some(path)` iff `ty` is a `Type::Path` with
-/// no `qself` and no generic arguments on any segment (`type X = a::b::C`), the only alias shape
-/// this resolver follows. `None` for a complex target (`Vec<T>`, `&T`, a tuple, `dyn`/`impl`, or
-/// any generic-argument-bearing path) — a stated coverage bound, never a silent claim.
-pub(crate) fn alias_nominal_target(ty: &syn::Type) -> Option<&syn::Path> {
-    if let syn::Type::Path(tp) = ty {
-        if tp.qself.is_none()
-            && tp
-                .path
-                .segments
-                .iter()
-                .all(|s| matches!(s.arguments, syn::PathArguments::None))
-        {
-            return Some(&tp.path);
+/// The alias's targets as **bare nominal paths** — collects all `syn::Path` targets contained in
+/// `ty`, recursively walking non-generic compound type constructors (`Type::Reference`,
+/// `Type::Ptr`, `Type::Tuple`, `Type::Slice`, `Type::Array`, `Type::Group`, `Type::Paren`). Any path with `qself`
+/// or generic arguments (`Vec<T>`) is skipped — a stated coverage bound, never a silent claim.
+pub(crate) fn alias_nominal_targets<'a>(ty: &'a syn::Type, acc: &mut Vec<&'a syn::Path>) {
+    match ty {
+        syn::Type::Path(tp) => {
+            if tp.qself.is_none()
+                && tp
+                    .path
+                    .segments
+                    .iter()
+                    .all(|s| matches!(s.arguments, syn::PathArguments::None))
+            {
+                acc.push(&tp.path);
+            }
         }
+        syn::Type::Reference(tr) => alias_nominal_targets(&tr.elem, acc),
+        syn::Type::Ptr(tp) => alias_nominal_targets(&tp.elem, acc),
+        syn::Type::Tuple(tt) => {
+            for elem in &tt.elems {
+                alias_nominal_targets(elem, acc);
+            }
+        }
+        syn::Type::Slice(ts) => alias_nominal_targets(&ts.elem, acc),
+        syn::Type::Array(ta) => alias_nominal_targets(&ta.elem, acc),
+        syn::Type::Group(tg) => alias_nominal_targets(&tg.elem, acc),
+        syn::Type::Paren(tp) => alias_nominal_targets(&tp.elem, acc),
+        _ => {}
     }
-    None
 }
 
 /// A bare, single-segment exposed path (`H`) that names a local `type` alias in `module`

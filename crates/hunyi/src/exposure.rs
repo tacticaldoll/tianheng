@@ -22,7 +22,7 @@ use crate::finding::{ExposureKind, SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{
     BareFallback, apply_bare_alias_rename, apply_crate_root_rename, bare_local_alias,
-    canonical_path_str, canonicalize_through_aliases, collect_uses, extern_verbatim_renamed,
+    canonical_path_str, collect_uses, expand_canonical_paths, extern_verbatim_renamed,
     renames_shadowed, resolve_path,
 };
 use crate::rules::SIGNATURE_RULE;
@@ -188,7 +188,7 @@ pub(crate) fn module_findings(
 
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()
-        .filter_map(|(exposure, file, branch)| {
+        .flat_map(|(exposure, file, branch)| {
             let scope = &scopes[branch];
             let uses = &scope.uses;
             // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
@@ -225,32 +225,27 @@ pub(crate) fn module_findings(
                         extern_verbatim_renamed(&exposure.path, type_externs, &scope.renames_bare)
                     })
             };
-            resolved
-                .map(|canonical| canonicalize_through_aliases(&canonical, &aliases, &reexports))
-                // Crate-relative spelling of a crate-root rename: `crate::Y::rest` → `X::rest`.
-                // `crate::Y` unambiguously names the crate-root extern rename (a crate-root `mod Y`
-                // cannot coexist with `extern crate … as Y`), so this is unconditional and uses the
-                // full rename map; only the segment immediately after `crate` is treated as the alias.
-                // Applied AFTER the alias/re-export closure so a `crate::Y::…` reached directly OR
-                // through a `type` alias / `pub use` target (whose stored target keeps the verbatim
-                // `crate::Y::…`) is rewritten alike — otherwise the aliased form is a residual FN.
+            let canonicals = match resolved {
+                Some(canonical) => expand_canonical_paths(&canonical, &aliases, &reexports),
+                None => Vec::new(),
+            };
+            let file_ref = file.clone();
+            let seam_ref = exposure.seam.clone();
+            canonicals
+                .into_iter()
                 .map(|canonical| apply_crate_root_rename(canonical, &extern_renames))
-                // Bare spelling of the same rename: a forbidden type imported by a private
-                // `use Y::…;` resolves through the use-map to `Y::…` verbatim (unlike the direct
-                // type-position form, which the extern oracle already rewrote), so rewrite a bare
-                // alias head here too. Uses `renames_bare` — a head shadowed by a local `mod Y` is
-                // left alone (rustc resolves bare `Y` to the local module there).
                 .map(|canonical| apply_bare_alias_rename(canonical, &scope.renames_bare))
                 .filter(|canonical| matches_forbidden(canonical, &forbidden))
-                // Seam-qualify: two distinct seams exposing the same forbidden type stay distinct
-                // findings, so baselining one never masks a new leak at another (the one forbidden
-                // bug) — the shape/existential rules do the same below.
-                .map(|canonical| SemanticFact::Exposed {
-                    kind: ExposureKind::Signature,
-                    subject: canonical,
-                    seam: exposure.seam.clone(),
+                .map(move |canonical| {
+                    (
+                        SemanticFact::Exposed {
+                            kind: ExposureKind::Signature,
+                            subject: canonical,
+                            seam: seam_ref.clone(),
+                        },
+                        file_ref.clone(),
+                    )
                 })
-                .map(|fact| (fact, file.clone()))
         })
         .collect();
     sort_faceted_facts(&mut findings)?;

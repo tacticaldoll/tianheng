@@ -7,8 +7,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::resolve::{
-    BareFallback, ReexportMap, UseMap, canonicalize_through_aliases, is_shadowed_param_path,
-    resolve_path, strip_raw,
+    BareFallback, ReexportMap, UseMap, canonicalize_through_single_alias_map,
+    is_shadowed_param_path, resolve_path, strip_raw,
 };
 
 /// Sibling-safe `::`-path containment: `path` equals `prefix` or sits strictly beneath it
@@ -109,7 +109,7 @@ pub(crate) fn resolve_self_type(
         }
         _ => return None,
     };
-    Some(canonicalize_through_aliases(
+    Some(canonicalize_through_single_alias_map(
         &base,
         alias_targets,
         reexports,
