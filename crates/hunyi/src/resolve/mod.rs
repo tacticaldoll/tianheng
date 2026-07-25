@@ -475,23 +475,35 @@ pub(crate) fn canonicalize_through_aliases(
     current
 }
 
-/// The alias's target as a **bare nominal path** — `Some(path)` iff `ty` is a `Type::Path` with
-/// no `qself` and no generic arguments on any segment (`type X = a::b::C`), the only alias shape
-/// this resolver follows. `None` for a complex target (`Vec<T>`, `&T`, a tuple, `dyn`/`impl`, or
-/// any generic-argument-bearing path) — a stated coverage bound, never a silent claim.
-pub(crate) fn alias_nominal_target(ty: &syn::Type) -> Option<&syn::Path> {
-    if let syn::Type::Path(tp) = ty {
-        if tp.qself.is_none()
-            && tp
-                .path
-                .segments
-                .iter()
-                .all(|s| matches!(s.arguments, syn::PathArguments::None))
-        {
-            return Some(&tp.path);
+/// The alias's targets as **bare nominal paths** — collects all `syn::Path` targets contained in
+/// `ty`, recursively walking non-generic compound type constructors (`Type::Reference`,
+/// `Type::Tuple`, `Type::Slice`, `Type::Array`, `Type::Group`, `Type::Paren`). Any path with `qself`
+/// or generic arguments (`Vec<T>`) is skipped — a stated coverage bound, never a silent claim.
+pub(crate) fn alias_nominal_targets<'a>(ty: &'a syn::Type, acc: &mut Vec<&'a syn::Path>) {
+    match ty {
+        syn::Type::Path(tp) => {
+            if tp.qself.is_none()
+                && tp
+                    .path
+                    .segments
+                    .iter()
+                    .all(|s| matches!(s.arguments, syn::PathArguments::None))
+            {
+                acc.push(&tp.path);
+            }
         }
+        syn::Type::Reference(tr) => alias_nominal_targets(&tr.elem, acc),
+        syn::Type::Tuple(tt) => {
+            for elem in &tt.elems {
+                alias_nominal_targets(elem, acc);
+            }
+        }
+        syn::Type::Slice(ts) => alias_nominal_targets(&ts.elem, acc),
+        syn::Type::Array(ta) => alias_nominal_targets(&ta.elem, acc),
+        syn::Type::Group(tg) => alias_nominal_targets(&tg.elem, acc),
+        syn::Type::Paren(tp) => alias_nominal_targets(&tp.elem, acc),
+        _ => {}
     }
-    None
 }
 
 /// A bare, single-segment exposed path (`H`) that names a local `type` alias in `module`

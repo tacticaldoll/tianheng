@@ -18,7 +18,7 @@ use crate::errors::missing_module_file_error;
 use crate::finding::UnsafeSiteFact;
 use crate::module_resolve::{locate_module_file, read_parse, resolve_module_branches};
 use crate::resolve::{
-    AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_target,
+    AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_targets,
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
     is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path, strip_raw,
     type_to_string,
@@ -509,7 +509,9 @@ fn walk_module(
                         scan.alias_targets.insert(alias, landing);
                     }
                 }
-                if let Some(target) = alias_nominal_target(&type_item.ty) {
+                let mut targets = Vec::new();
+                alias_nominal_targets(&type_item.ty, &mut targets);
+                for target in targets {
                     let alias = format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
                     let resolved = if target.leading_colon.is_some() {
                         extern_verbatim_renamed(target, externs, &scan.extern_renames)

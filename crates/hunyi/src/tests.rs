@@ -8887,3 +8887,31 @@ fn hunyi_boundary_depth_getters_and_delegation_parity() {
         .because("no RPIT leak in submodules");
     assert_eq!(impl_submodules.scan_depth(), ScanDepth::Subtree);
 }
+
+#[test]
+fn non_generic_compound_type_alias_target_walk_detects_nested_exposure() {
+    let out = findings(
+        "compound-alias-walk",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
+            (
+                "domain.rs",
+                "pub type TupleAlias = (crate::infra::DbPool, u32);\n\
+                 pub type RefAlias = &'static crate::infra::DbPool;\n\
+                 pub type SliceAlias = [crate::infra::DbPool];\n\
+                 pub fn leak_tuple() -> TupleAlias { loop {} }\n\
+                 pub fn leak_ref() -> RefAlias { loop {} }\n\
+                 pub fn leak_slice() -> &'static SliceAlias { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct DbPool;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        6,
+        "6 exposures (3 type aliases + 3 functions using them) must be detected: {out:?}"
+    );
+}
