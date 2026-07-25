@@ -22,6 +22,7 @@ fn bless_enabled() -> bool {
 pub struct GovernanceTest {
     constitution: Constitution,
     manifest_dir: PathBuf,
+    explicit_manifest_dir: bool,
 }
 
 impl GovernanceTest {
@@ -36,12 +37,14 @@ impl GovernanceTest {
         Self {
             constitution,
             manifest_dir,
+            explicit_manifest_dir: false,
         }
     }
 
     /// Explicitly override the manifest directory path.
     pub fn with_manifest_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.manifest_dir = path.into();
+        self.explicit_manifest_dir = true;
         self
     }
 
@@ -56,8 +59,11 @@ impl GovernanceTest {
     }
 
     /// Check if a manifest path exists, enforcing `TIANHENG_WORKSPACE_TESTS` discipline.
-    fn check_manifest_exists(&self, manifest: PathBuf) -> Option<PathBuf> {
+    fn check_manifest_exists(&self, manifest: PathBuf, is_explicit: bool) -> Option<PathBuf> {
         if !manifest.exists() {
+            if is_explicit || self.explicit_manifest_dir {
+                panic!("target manifest at {manifest:?} does not exist");
+            }
             assert!(
                 std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
                 "manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
@@ -70,7 +76,7 @@ impl GovernanceTest {
 
     /// Helper to resolve the main constitution manifest path.
     fn resolve_manifest(&self) -> Option<PathBuf> {
-        self.check_manifest_exists(self.manifest_path())
+        self.check_manifest_exists(self.manifest_path(), false)
     }
 
     /// Helper to resolve a fixture manifest path (absolute or relative to `manifest_dir`).
@@ -80,7 +86,7 @@ impl GovernanceTest {
         } else {
             self.manifest_dir.join(path.as_ref())
         };
-        self.check_manifest_exists(ensure_cargo_toml_path(&target_path))
+        self.check_manifest_exists(ensure_cargo_toml_path(&target_path), true)
     }
 
     /// Assert that the constitution returns no violations (`Outcome::Clean`).
@@ -364,6 +370,28 @@ mod tests {
             }))
             .is_err(),
             "a seam carries no crate target and must not cover the fixture package"
+        );
+    }
+
+    #[test]
+    fn missing_explicit_manifest_or_fixture_panics_loudly() {
+        let harness = GovernanceTest::for_constitution(Constitution::new("test"))
+            .with_manifest_dir("non_existent_directory_xyz");
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                harness.assert_clean();
+            }))
+            .is_err(),
+            "missing explicit manifest_dir must panic loudly"
+        );
+
+        let harness_fixture = GovernanceTest::for_constitution(Constitution::new("test"));
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                harness_fixture.assert_violates_fixture("non_existent_fixture.toml");
+            }))
+            .is_err(),
+            "missing explicit fixture path must panic loudly"
         );
     }
 }
