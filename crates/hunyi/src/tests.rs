@@ -3481,10 +3481,7 @@ fn every_hunyi_rule_family_has_exact_semantic_identity() {
     assert_rule(
         impl_trait.rule_key(),
         "tianheng.rule/hunyi/impl-trait-exposure",
-        &[
-            ("forbidden_operands", "[\"crate::Port\"]"),
-            ("including_submodules", "true"),
-        ],
+        &[("forbidden_operands", "[\"crate::Port\"]")],
     );
 
     let locality = TraitImplBoundary::in_crate("x")
@@ -3530,7 +3527,7 @@ fn every_hunyi_rule_family_has_exact_semantic_identity() {
     assert_rule(
         async_exposure.rule_key(),
         "tianheng.rule/hunyi/async-exposure",
-        &[("including_submodules", "true")],
+        &[],
     );
 
     let unsafe_confinement = UnsafeBoundary::in_crate("x")
@@ -6143,7 +6140,7 @@ fn async_production_violation_separates_target_rule_and_seam() {
     assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/async-exposure");
     assert_eq!(
         rule.fields().collect::<Vec<_>>(),
-        vec![("including_submodules", "false")]
+        Vec::<(&str, &str)>::new()
     );
     let fact = id.fact();
     assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/async-exposure");
@@ -6156,6 +6153,24 @@ fn async_production_violation_separates_target_rule_and_seam() {
             ("owner", "crate::registry"),
             ("owner_kind", "module"),
         ]
+    );
+}
+
+#[test]
+fn subtree_opt_in_preserves_anchored_finding_violation_id_identity() {
+    let default_rule = AsyncExposureBoundary::in_crate("pkg")
+        .module("crate::m")
+        .must_not_expose_async_fn()
+        .because("test");
+    let subtree_rule = AsyncExposureBoundary::in_crate("pkg")
+        .module("crate::m")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("test");
+    assert_eq!(
+        default_rule.rule_key(),
+        subtree_rule.rule_key(),
+        "toggling including_submodules must not alter RuleKey identity"
     );
 }
 

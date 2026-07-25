@@ -464,14 +464,27 @@ pub(crate) fn expand_canonical_paths(
     aliases: &AliasMap,
     reexports: &ReexportMap,
 ) -> Vec<String> {
+    if aliases.is_empty() && reexports.is_empty() {
+        return vec![path.to_string()];
+    }
     let max_depth = aliases.len() + reexports.len() + 1;
     let mut current_queue = vec![(path.to_string(), 0, std::collections::HashSet::new())];
     let mut final_paths = Vec::new();
+    let mut memo: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
 
     while let Some((current, depth, mut chain_seen)) = current_queue.pop() {
         if !chain_seen.insert(current.clone()) || depth > max_depth {
             if !final_paths.contains(&current) {
                 final_paths.push(current);
+            }
+            continue;
+        }
+
+        if let Some(cached) = memo.get(&current) {
+            for target in cached {
+                if !final_paths.contains(target) {
+                    final_paths.push(target.clone());
+                }
             }
             continue;
         }
@@ -487,8 +500,11 @@ pub(crate) fn expand_canonical_paths(
             expanded = true;
         }
 
-        if !expanded && !final_paths.contains(&current) {
-            final_paths.push(current);
+        if !expanded {
+            memo.insert(current.clone(), vec![current.clone()]);
+            if !final_paths.contains(&current) {
+                final_paths.push(current);
+            }
         }
     }
 

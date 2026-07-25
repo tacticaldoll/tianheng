@@ -29,13 +29,7 @@ pub struct AsyncExposureBoundary {
 impl AsyncExposureBoundary {
     /// Stable semantic identity for this async-exposure rule.
     pub fn rule_key(&self) -> RuleKey {
-        RuleKey::of(
-            "tianheng.rule/hunyi/async-exposure",
-            [(
-                "including_submodules",
-                self.including_submodules().to_string(),
-            )],
-        )
+        RuleKey::of::<_, &str, &str>("tianheng.rule/hunyi/async-exposure", [])
     }
 
     /// The observation scan depth for this boundary.
