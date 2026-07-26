@@ -654,6 +654,7 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
         open_pos: usize,
         close_pos: usize,
         macro_depth: usize,
+        inherited_top_level: bool,
     }
     let mut macro_scopes: Vec<MacroScope> = Vec::new();
     let mut file_depth = 0usize;
@@ -670,17 +671,23 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
 
         // Check if `i` is the `!` of a transparent macro invocation (`cfg_if!`)
         if let Some((open_pos, close_pos)) = transparent_macro_body_at(bytes, i) {
+            let inherited_top_level = if let Some(parent) = macro_scopes.last() {
+                parent.inherited_top_level && (parent.macro_depth == 1)
+            } else {
+                file_depth == 0
+            };
             macro_scopes.push(MacroScope {
                 open_pos,
                 close_pos,
                 macro_depth: 0,
+                inherited_top_level,
             });
             i += 1;
             continue;
         }
 
         let is_top_level = if let Some(active) = macro_scopes.last() {
-            active.macro_depth == 1
+            active.inherited_top_level && (active.macro_depth == 1)
         } else {
             file_depth == 0
         };
@@ -1699,6 +1706,18 @@ const FLAG: bool = ! {
 };
 "#;
         assert!(declared_modules(src_unary).is_empty());
+
+        // `cfg_if!` invoked inside an item body (fn/const) MUST NOT promote its mod declarations to crate top-level
+        let src_inside_fn = r#"
+fn owner() {
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "x")] {
+            mod item_local_child;
+        }
+    }
+}
+"#;
+        assert!(declared_modules(src_inside_fn).is_empty());
     }
 
     #[test]
