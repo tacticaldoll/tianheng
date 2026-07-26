@@ -1115,8 +1115,7 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
             }
             b'<' => {
                 if depth == 0 {
-                    let is_qualified_start = i == open
-                        || (i > open && b[open..i].iter().all(|c| c.is_ascii_whitespace()));
+                    let is_qualified_start = is_unary_prefix_span(&b[open..i]);
                     let is_turbofish = last_token_was_double_colon;
                     let is_inner_generic = angle_depth > 0 && last_token_was_ident_or_gt;
                     let is_as_trait = i >= 3 && (&b[i - 3..i] == b"as " || &b[i - 2..i] == b"as");
@@ -1144,6 +1143,32 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
         i += 1;
     }
     b.len()
+}
+
+/// Whether `b` consists only of ASCII whitespace and unary / prefix operator tokens
+/// (`&`, `*`, `!`, `-`, `+`, `mut`, `ref`).
+fn is_unary_prefix_span(b: &[u8]) -> bool {
+    let mut i = 0;
+    while i < b.len() {
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if matches!(b[i], b'&' | b'*' | b'!' | b'-' | b'+') {
+            i += 1;
+            continue;
+        }
+        if b[i..].starts_with(b"mut") && (i + 3 == b.len() || !is_ident_byte(b[i + 3])) {
+            i += 3;
+            continue;
+        }
+        if b[i..].starts_with(b"ref") && (i + 3 == b.len() || !is_ident_byte(b[i + 3])) {
+            i += 3;
+            continue;
+        }
+        return false;
+    }
+    true
 }
 
 /// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
