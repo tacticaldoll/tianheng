@@ -622,6 +622,22 @@ fn probe_first_arg_with_generic_comma_preserves_full_span() {
             "fn f() { assert_boundary!(& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM, ()); }",
             "& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM",
         ),
+        (
+            "fn f() { assert_boundary!(&\"a\" < &Foo::<u8, u16>::X, ()); }",
+            "&\"a\" < &Foo::<u8, u16>::X",
+        ),
+        (
+            "fn f() { assert_boundary!(&'a' < &'b', ()); }",
+            "&'a' < &'b'",
+        ),
+        (
+            "fn f() { assert_boundary!(&b\"a\" < &b\"b\", ()); }",
+            "&b\"a\" < &b\"b\"",
+        ),
+        (
+            "fn f() { assert_boundary!(&r#\"a\"# < &r#\"b\"#, ()); }",
+            "&r#\"a\"# < &r#\"b\"#",
+        ),
     ] {
         let mut probes = Vec::new();
         scan_source(src, "test.rs", &mut probes);
