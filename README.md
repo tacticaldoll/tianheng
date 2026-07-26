@@ -13,8 +13,8 @@ and it does not instruct your agent. Developers and agents propose change; Tianh
 and runtime *reactions* to keep architectural shape from drifting.
 
 > **Status: experimental — pre-1.0.** Real adopters ended the deliberate `0.1.x` hold and opened the
-> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The upcoming `0.3.0` deliberately
-> spends the next breaking window on semantic rule/fact identity and rejects numeric baselines.
+> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The `0.3.0` release deliberately
+> uses this breaking window for semantic rule/fact identity and rejects numeric baselines.
 > The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded drop-in
 > surface.
 
