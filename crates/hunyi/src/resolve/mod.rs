@@ -478,10 +478,8 @@ pub(crate) fn expand_canonical_paths(
 
     while let Some((current, returning)) = work.pop() {
         if returning {
-            // All of `current`'s children are now in `memo`. Compute `current`'s own result.
             in_stack.remove(&current);
             if memo.contains_key(&current) {
-                // Already set (e.g., as cycle break) — nothing to do.
                 continue;
             }
             let mut results = Vec::new();
@@ -518,11 +516,13 @@ pub(crate) fn expand_canonical_paths(
         if memo.contains_key(&current) {
             continue;
         }
-        if !in_stack.insert(current.clone()) {
-            // Cycle: break by memoizing the node as its own target.
-            memo.insert(current.clone(), vec![current]);
+        if in_stack.contains(&current) {
+            // Active-path cycle: do not re-enter current node; its fallback value (vec![current])
+            // will be used when child aggregation happens in ancestor's returning phase.
             continue;
         }
+
+        in_stack.insert(current.clone());
 
         // Push the returning sentinel first (processed after all children).
         work.push((current.clone(), true));

@@ -968,6 +968,28 @@ fn diamond_alias_graph_expansion_terminates_and_memoizes_intermediate_nodes() {
 }
 
 #[test]
+fn cycle_branch_with_terminal_sibling_preserves_sibling() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+
+    // A -> [B, Secret]
+    // B -> A
+    aliases.insert(
+        "crate::A".to_string(),
+        vec!["crate::B".to_string(), "crate::Secret".to_string()],
+    );
+    aliases.insert("crate::B".to_string(), vec!["crate::A".to_string()]);
+
+    let res = expand_canonical_paths("crate::A", &aliases, &reexports);
+    assert!(
+        res.contains(&"crate::Secret".to_string()),
+        "sibling Secret target must be preserved even if child branch B cycles back to A: got {res:?}"
+    );
+}
+
+#[test]
 fn deep_chain_expansion_reaches_terminal_without_truncation() {
     use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
 
