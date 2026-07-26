@@ -1354,14 +1354,19 @@ fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
 /// to its opening `{`. Returns `None` for a malformed/nameless item or a body-less declaration.
 fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
     let name_start = skip_trivia(b, after_keyword);
-    let mut name_end = name_start;
+    let ident_start = if b.get(name_start..name_start + 2) == Some(b"r#") {
+        name_start + 2
+    } else {
+        name_start
+    };
+    let mut name_end = ident_start;
     while name_end < b.len() && is_ident_byte(b[name_end]) {
         name_end += 1;
     }
-    if name_end == name_start {
+    if name_end == ident_start {
         return None;
     }
-    let name = String::from_utf8_lossy(&b[name_start..name_end]).into_owned();
+    let name = String::from_utf8_lossy(&b[ident_start..name_end]).into_owned();
     let body_start = skip_to_item_body(b, name_end)?;
     Some((name, body_start))
 }

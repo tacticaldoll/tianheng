@@ -1303,6 +1303,38 @@ fn same_expression_in_two_different_free_functions_reacts_separately() {
 }
 
 #[test]
+fn raw_identifier_function_names_keep_probe_owners_distinct() {
+    let tb = TempBase::new("audit-unaud-two-raw-ident-fns");
+    let dir = tb.dir(
+        "two",
+        "fn r#type() { assert_boundary!(SEAM_A, o); } \
+         fn r#async() { assert_boundary!(SEAM_A, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "raw identifier names must not collapse to their leading `r`: {violations:?}"
+    );
+    let owners: std::collections::BTreeSet<_> = violations
+        .iter()
+        .map(|violation| {
+            violation
+                .fact()
+                .fields()
+                .find_map(|(name, value)| (name == "owner").then_some(value.to_string()))
+                .expect("unauditable probe identity carries its owner")
+        })
+        .collect();
+    assert_eq!(
+        owners,
+        ["fn async".to_string(), "fn type".to_string()].into(),
+        "raw item names use the scanner's canonical de-prefixed vocabulary"
+    );
+}
+
+#[test]
 fn same_named_nested_functions_in_different_outer_functions_react_separately() {
     let tb = TempBase::new("audit-unaud-two-nested-fns");
     let dir = tb.dir(
