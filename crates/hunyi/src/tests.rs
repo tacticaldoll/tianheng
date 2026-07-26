@@ -1010,6 +1010,24 @@ fn deep_chain_expansion_reaches_terminal_without_truncation() {
 }
 
 #[test]
+fn self_growing_reexport_prefix_loop_terminates_without_hanging() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let aliases: AliasMap = std::collections::HashMap::new();
+    let mut reexports = ReexportMap::new();
+
+    // A self-similar re-export entry `crate::a -> crate::a::b` creates a self-growing path chain:
+    // crate::a::foo -> crate::a::b::foo -> crate::a::b::b::foo -> ...
+    reexports.insert("crate::a".to_string(), "crate::a::b".to_string());
+
+    let res = expand_canonical_paths("crate::a::foo", &aliases, &reexports);
+    assert!(
+        !res.is_empty(),
+        "expansion must terminate without hanging on self-growing prefix loops: got {res:?}"
+    );
+}
+
+#[test]
 fn a_self_similar_reexport_is_dropped_and_the_real_type_still_reacts() {
     // Build-time guard: `pub use self::sub::sub;` re-exports the value `sub` from
     // a same-named child module, yielding a `crate::sub -> crate::sub::sub` map entry (key ⊂ value).

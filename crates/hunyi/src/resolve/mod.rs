@@ -466,17 +466,18 @@ pub(crate) fn expand_canonical_paths(
     }
     // Iterative post-order DFS over the alias/re-export graph.
     //
-    // Each stack entry is `(node, returning)`. On the first visit (`returning = false`) we push the
+    // Each stack entry is `(node, returning, depth)`. On the first visit (`returning = false`) we push the
     // node's children (unresolved dependencies) and then push a `returning = true` sentinel that
-    // fires only after all children have been resolved. Cycle detection uses `in_stack`: if a node
-    // is visited while already on the active DFS path it is a cycle, and we break it by memoizing
-    // the node as its own target (same semantics as the old recursive chain_seen guard, but without
-    // occupying a thread stack frame for every hop).
+    // fires only after all children have been resolved. Cycle detection uses `in_stack` (for exact
+    // node cycles) and `depth >= max_steps` (where `max_steps = aliases.len() + reexports.len() + 1`,
+    // the mathematical maximum path length in a non-looping rewrite system) to terminate self-growing
+    // prefix loops (such as `crate::a -> crate::a::b`).
+    let max_steps = aliases.len() + reexports.len() + 1;
     let mut memo: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     let mut in_stack: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut work: Vec<(String, bool)> = vec![(path.to_string(), false)];
+    let mut work: Vec<(String, bool, usize)> = vec![(path.to_string(), false, 0)];
 
-    while let Some((current, returning)) = work.pop() {
+    while let Some((current, returning, depth)) = work.pop() {
         if returning {
             in_stack.remove(&current);
             if memo.contains_key(&current) {
@@ -516,27 +517,26 @@ pub(crate) fn expand_canonical_paths(
         if memo.contains_key(&current) {
             continue;
         }
-        if in_stack.contains(&current) {
-            // Active-path cycle: do not re-enter current node; its fallback value (vec![current])
-            // will be used when child aggregation happens in ancestor's returning phase.
+        if in_stack.contains(&current) || depth >= max_steps {
+            // Active-path cycle or self-growing prefix loop cap reached.
             continue;
         }
 
         in_stack.insert(current.clone());
 
         // Push the returning sentinel first (processed after all children).
-        work.push((current.clone(), true));
+        work.push((current.clone(), true, depth));
 
         // Push unresolved children (reversed so the first target is processed first).
         if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
             for target in targets.into_iter().rev() {
                 if !memo.contains_key(&target) {
-                    work.push((target, false));
+                    work.push((target, false, depth + 1));
                 }
             }
         } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
             if !memo.contains_key(&next) {
-                work.push((next, false));
+                work.push((next, false, depth + 1));
             }
         }
     }
