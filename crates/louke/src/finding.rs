@@ -26,10 +26,12 @@ pub(crate) enum RuntimeFact {
         seam: String,
     },
     // `owner` is the owner-qualified enclosing item (never a bare name — see `fn_scopes` in
-    // `audit::scan`), and `expr` the offending expression's own trimmed source text; together
-    // with `file` these are the identity discriminator, never a byte offset or occurrence count.
+    // `audit::scan`), `marker` the actual configured wrapper matched, and `expr` the offending
+    // expression's own trimmed source text; together with `file` these are the identity
+    // discriminator, never a byte offset or occurrence count.
     #[cfg(feature = "audit")]
     UnauditableProbe {
+        marker: String,
         file: String,
         owner: String,
         expr: String,
@@ -69,7 +71,7 @@ impl RuntimeFact {
             ),
             #[cfg(feature = "audit")]
             Self::UnprobedSeam { seam } => Finding::new(
-                format!("declared seam '{seam}' has no assert_boundary! probe"),
+                format!("declared seam '{seam}' has no configured probe marker"),
                 key(
                     "tianheng.fact/louke/runtime-seam-audit",
                     "unprobed-declaration",
@@ -86,9 +88,14 @@ impl RuntimeFact {
                 ),
             ),
             #[cfg(feature = "audit")]
-            Self::UnauditableProbe { file, owner, expr } => Finding::new(
+            Self::UnauditableProbe {
+                marker,
+                file,
+                owner,
+                expr,
+            } => Finding::new(
                 format!(
-                    "{file}: {owner} has an assert_boundary! probe with a non-literal seam \
+                    "{file}: {owner} has a {marker}! probe with a non-literal seam \
                      `{expr}` (const or expression), which the CI face cannot trace to a \
                      declared seam"
                 ),
@@ -96,6 +103,7 @@ impl RuntimeFact {
                     "tianheng.fact/louke/runtime-seam-audit",
                     "unauditable-probe",
                     [
+                        ("marker", marker.as_str()),
                         ("file", file.as_str()),
                         ("owner", owner.as_str()),
                         ("expr", expr.as_str()),
@@ -139,6 +147,7 @@ mod tests {
             | RuntimeFact::UnprobedSeam { seam: _ }
             | RuntimeFact::UndeclaredProbe { seam: _ }
             | RuntimeFact::UnauditableProbe {
+                marker: _,
                 file: _,
                 owner: _,
                 expr: _,
@@ -207,6 +216,7 @@ mod tests {
             ),
             (
                 RuntimeFact::UnauditableProbe {
+                    marker: "custom_probe".to_string(),
                     file: "src/lib.rs".to_string(),
                     owner: "fn install".to_string(),
                     expr: "SEAM_CONST".to_string(),
@@ -216,6 +226,7 @@ mod tests {
                 vec![
                     ("expr", "SEAM_CONST"),
                     ("file", "src/lib.rs"),
+                    ("marker", "custom_probe"),
                     ("owner", "fn install"),
                 ],
             ),
@@ -253,6 +264,7 @@ mod tests {
     #[test]
     fn unauditable_probe_identity_distinguishes_owner_and_expression() {
         let base = RuntimeFact::UnauditableProbe {
+            marker: "assert_boundary".to_string(),
             file: "src/lib.rs".to_string(),
             owner: "fn a".to_string(),
             expr: "SEAM_A".to_string(),
@@ -261,6 +273,7 @@ mod tests {
         .key()
         .clone();
         let different_owner = RuntimeFact::UnauditableProbe {
+            marker: "assert_boundary".to_string(),
             file: "src/lib.rs".to_string(),
             owner: "fn b".to_string(),
             expr: "SEAM_A".to_string(),
@@ -269,6 +282,7 @@ mod tests {
         .key()
         .clone();
         let different_expr = RuntimeFact::UnauditableProbe {
+            marker: "assert_boundary".to_string(),
             file: "src/lib.rs".to_string(),
             owner: "fn a".to_string(),
             expr: "compute_seam()".to_string(),
@@ -277,7 +291,17 @@ mod tests {
         .key()
         .clone();
         let different_file = RuntimeFact::UnauditableProbe {
+            marker: "assert_boundary".to_string(),
             file: "src/other.rs".to_string(),
+            owner: "fn a".to_string(),
+            expr: "SEAM_A".to_string(),
+        }
+        .into_finding()
+        .key()
+        .clone();
+        let different_marker = RuntimeFact::UnauditableProbe {
+            marker: "custom_probe".to_string(),
+            file: "src/lib.rs".to_string(),
             owner: "fn a".to_string(),
             expr: "SEAM_A".to_string(),
         }
@@ -287,5 +311,6 @@ mod tests {
         assert_ne!(base, different_owner);
         assert_ne!(base, different_expr);
         assert_ne!(base, different_file);
+        assert_ne!(base, different_marker);
     }
 }

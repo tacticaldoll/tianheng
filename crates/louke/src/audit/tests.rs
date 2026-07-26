@@ -583,6 +583,22 @@ fn probe_first_arg_with_generic_comma_preserves_full_span() {
             "<Foo<A, B> as Trait<C, D>>::SEAM",
         ),
         (
+            "fn f() { assert_boundary!(<Foo<A, B> as /* gap */ Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as /* gap */ Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as\n    Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as\n    Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(value as /* gap */ <Foo<A, B> as Trait<C, D>>::Assoc, o); }",
+            "value as /* gap */ <Foo<A, B> as Trait<C, D>>::Assoc",
+        ),
+        (
+            "fn f() { assert_boundary!(value as\n    <Foo<A, B> as Trait<C, D>>::Assoc, o); }",
+            "value as\n    <Foo<A, B> as Trait<C, D>>::Assoc",
+        ),
+        (
             "fn f() { assert_boundary!(SEAM::<[Foo<A, B>; 1], C>, o); }",
             "SEAM::<[Foo<A, B>; 1], C>",
         ),
@@ -874,7 +890,7 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
                 report
                     .violations
                     .iter()
-                    .any(|v| v.finding.contains("has no assert_boundary! probe")),
+                    .any(|v| v.finding.contains("has no configured probe marker")),
                 "the 3-char declared seam must be reported unprobed: {:?}",
                 report.violations
             );
@@ -1634,6 +1650,59 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
         outcome,
         Outcome::Clean,
         "custom registered probe macro wrapper must cover the seam: {outcome:?}"
+    );
+}
+
+#[test]
+fn custom_marker_messages_name_the_configuration_and_actual_matched_marker() {
+    let tb = TempBase::new("custom-marker-wording");
+    let missing = tb.source("missing.rs", "fn f() {}\n");
+    let missing_outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[missing],
+        &["my_custom_seam"],
+    );
+    let Outcome::Violations(missing_report) = missing_outcome else {
+        panic!("expected an unprobed violation");
+    };
+    assert!(
+        missing_report.violations[0]
+            .finding
+            .contains("no configured probe marker")
+    );
+    assert!(
+        !missing_report.violations[0]
+            .finding
+            .contains("assert_boundary")
+    );
+
+    let unauditable = tb.source("unauditable.rs", "fn f() { my_custom_seam!(SEAM, obj); }\n");
+    let unauditable_outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[unauditable],
+        &["my_custom_seam"],
+    );
+    let Outcome::Violations(unauditable_report) = unauditable_outcome else {
+        panic!("expected unprobed and unauditable violations");
+    };
+    let violation = unauditable_report
+        .violations
+        .iter()
+        .find(|violation| {
+            violation.rule
+                == "a configured probe marker's seam must be a string literal to be auditable"
+        })
+        .expect("unauditable violation");
+    assert!(violation.finding.contains("my_custom_seam! probe"));
+}
+
+#[test]
+fn anonymous_scope_header_ignores_delimiters_inside_literals_and_comments() {
+    let source = br#"if value == "};" /* ; { } */ {"#;
+    let brace = source.len() - 1;
+    assert_eq!(
+        scan::anonymous_scope_header(source, 0, brace),
+        r#"if value == "};" /* ; { } */"#
     );
 }
 
