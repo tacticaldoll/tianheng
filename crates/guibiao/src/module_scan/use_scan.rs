@@ -15,8 +15,8 @@ use super::path_vocab::{
     is_crate_root_shadow, resolve_self_super, split_top_commas,
 };
 
-/// Internal module paths imported by `source`, normalized to absolute `crate::…`
-/// form. `current_module` is the importing file's module; a `use` inside an inline
+/// One normalized internal import path, retaining whether the source used a glob so boundary
+/// evaluation can distinguish a direct import from an ancestor-glob hazard.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ImportedPath {
     pub path: String,
@@ -89,13 +89,14 @@ impl PartialEq<&str> for ImportedPath {
     }
 }
 
-/// `mod name { … }` is attributed to that submodule, so `self`/`super` resolve against
-/// the real enclosing module, not the file's. Only `use` declarations are observed;
-/// grouped and glob forms are expanded; raw identifiers (`r#name`) are canonicalized;
-/// paths whose first segment is an external crate are ignored. Bare path expressions
-/// and macro-generated imports are out of scope (PROJECT.md): comments and string
-/// literals are stripped, and macro bodies are removed, so a `use` written inside one
-/// is a macro-generated import and is not observed. Returns sorted, de-duplicated paths.
+/// Internal module paths imported by `source`, normalized to absolute `crate::…` form.
+/// `current_module` is the importing file's module; a `use` inside an inline `mod name { … }` is
+/// attributed to that submodule, so `self`/`super` resolve against the real enclosing module, not
+/// the file's. Only `use` declarations are observed; grouped and glob forms are expanded; raw
+/// identifiers (`r#name`) are canonicalized; paths whose first segment is an external crate are
+/// ignored. Bare path expressions and macro-generated imports are out of scope (PROJECT.md):
+/// comments and string literals are stripped, and macro bodies are removed, so a `use` written
+/// inside one is a macro-generated import and is not observed. Returns sorted, de-duplicated paths.
 pub(crate) fn imported_module_paths(
     source: &str,
     current_module: &str,
