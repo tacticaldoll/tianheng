@@ -136,13 +136,9 @@ impl Baseline {
             .entries
             .iter()
             .map(|entry| {
-                let mut object = serde_json::json!({
-                    "target": entry.id.target(),
-                    "rule": entry.rule,
-                    "finding": entry.finding,
-                    "rule_key": entry.id.rule_key().to_json(),
-                    "fact": entry.id.fact().to_json(),
-                });
+                let mut object = entry.id.to_json();
+                object["rule"] = serde_json::json!(entry.rule);
+                object["finding"] = serde_json::json!(entry.finding);
                 if let Some(owner) = &entry.owner {
                     object["owner"] = serde_json::json!(owner);
                 }

@@ -70,7 +70,7 @@ impl Violation {
         }
     }
 
-    /// The stable key for this observed finding.
+    /// The structured observed-fact identity for this violation.
     pub fn fact(&self) -> &StructuredFactIdentity {
         &self.fact
     }

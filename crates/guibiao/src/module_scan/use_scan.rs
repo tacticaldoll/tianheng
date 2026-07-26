@@ -2,10 +2,10 @@
 //! `crate::…` module paths it imports via `use` — grouped/glob forms expanded, raw
 //! identifiers canonicalized, external crates and out-of-scope forms (bare path
 //! expressions, macro-generated imports) dropped. A `::*` glob is observed at its **base**
-//! module only (`use a::b::*;` → `a::b`): a glob of an *ancestor* of a forbidden module does
-//! not surface the forbidden descendant as an edge — a declared partial-coverage bound of the
-//! denylist rule (`must_not_import`), documented on its builder. Inline `mod name { … }` nesting is
-//! tracked so `self`/`super` resolve against the real enclosing module. Depends downward
+//! module (`use a::b::*;` → `a::b`) and retains its glob shape, so `must_not_import` can react
+//! fail-closed when that base is equal to or an ancestor of a forbidden module. Inline
+//! `mod name { … }` nesting is tracked so `self`/`super` resolve against the real enclosing
+//! module. Depends downward
 //! on [`super::lexer`] (hygiene / token boundaries) and [`super::path_vocab`] (segment
 //! canonicalization, the `mod`-keyword test); pure string processing, no model type.
 
@@ -15,8 +15,8 @@ use super::path_vocab::{
     is_crate_root_shadow, resolve_self_super, split_top_commas,
 };
 
-/// Internal module paths imported by `source`, normalized to absolute `crate::…`
-/// form. `current_module` is the importing file's module; a `use` inside an inline
+/// One normalized internal import path, retaining whether the source used a glob so boundary
+/// evaluation can distinguish a direct import from an ancestor-glob hazard.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ImportedPath {
     pub path: String,
@@ -24,6 +24,7 @@ pub(crate) struct ImportedPath {
 }
 
 impl ImportedPath {
+    #[cfg(test)]
     pub(crate) fn plain(path: impl Into<String>) -> Self {
         ImportedPath {
             path: path.into(),
@@ -47,55 +48,14 @@ impl std::ops::Deref for ImportedPath {
     }
 }
 
-impl std::borrow::Borrow<str> for ImportedPath {
-    fn borrow(&self) -> &str {
-        &self.path
-    }
-}
-
-impl From<&str> for ImportedPath {
-    fn from(s: &str) -> Self {
-        ImportedPath::plain(s)
-    }
-}
-
-impl From<String> for ImportedPath {
-    fn from(s: String) -> Self {
-        ImportedPath::plain(s)
-    }
-}
-
-impl PartialEq<String> for ImportedPath {
-    fn eq(&self, other: &String) -> bool {
-        &self.path == other
-    }
-}
-
-impl PartialEq<ImportedPath> for String {
-    fn eq(&self, other: &ImportedPath) -> bool {
-        self == &other.path
-    }
-}
-
-impl PartialEq<str> for ImportedPath {
-    fn eq(&self, other: &str) -> bool {
-        self.path == other
-    }
-}
-
-impl PartialEq<&str> for ImportedPath {
-    fn eq(&self, other: &&str) -> bool {
-        self.path == *other
-    }
-}
-
-/// `mod name { … }` is attributed to that submodule, so `self`/`super` resolve against
-/// the real enclosing module, not the file's. Only `use` declarations are observed;
-/// grouped and glob forms are expanded; raw identifiers (`r#name`) are canonicalized;
-/// paths whose first segment is an external crate are ignored. Bare path expressions
-/// and macro-generated imports are out of scope (PROJECT.md): comments and string
-/// literals are stripped, and macro bodies are removed, so a `use` written inside one
-/// is a macro-generated import and is not observed. Returns sorted, de-duplicated paths.
+/// Internal module paths imported by `source`, normalized to absolute `crate::…` form.
+/// `current_module` is the importing file's module; a `use` inside an inline `mod name { … }` is
+/// attributed to that submodule, so `self`/`super` resolve against the real enclosing module, not
+/// the file's. Only `use` declarations are observed; grouped and glob forms are expanded; raw
+/// identifiers (`r#name`) are canonicalized; paths whose first segment is an external crate are
+/// ignored. Bare path expressions and macro-generated imports are out of scope (PROJECT.md):
+/// comments and string literals are stripped, and macro bodies are removed, so a `use` written
+/// inside one is a macro-generated import and is not observed. Returns sorted, de-duplicated paths.
 pub(crate) fn imported_module_paths(
     source: &str,
     current_module: &str,
@@ -452,7 +412,7 @@ mod tests {
         // leave `use` unrecognized and the import dropped.
         assert_eq!(
             imported_module_paths("use/*re-export*/crate::secret::Thing;", "crate", &[]),
-            vec!["crate::secret::Thing".to_string()],
+            vec![ImportedPath::plain("crate::secret::Thing")],
             "a block comment after `use` must not swallow the import",
         );
     }
@@ -467,15 +427,15 @@ mod tests {
         assert_eq!(
             imports,
             vec![
-                "crate::config".to_string(),
-                "crate::config::Setting".to_string(),
+                ImportedPath::plain("crate::config"),
+                ImportedPath::plain("crate::config::Setting"),
             ],
             "a `self as alias` in a group resolves to the prefix module: {imports:?}"
         );
         // A lone `{self as x}` likewise resolves to the prefix module, never `…::self`.
         assert_eq!(
             imported_module_paths("use crate::config::{self as cfg};", "crate", &[]),
-            vec!["crate::config".to_string()],
+            vec![ImportedPath::plain("crate::config")],
         );
     }
 

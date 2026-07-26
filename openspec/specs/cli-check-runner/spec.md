@@ -595,4 +595,3 @@ NOT be emitted.
 
 - **WHEN** unrelated findings are inserted or SARIF results are emitted in another order
 - **THEN** every pre-existing violation retains its fingerprint
-

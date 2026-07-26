@@ -8,12 +8,13 @@ pub(super) enum Probe {
     Literal(String),
     /// A probe whose seam argument is NOT a string literal (a const or expression): the CI
     /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
-    /// source file, an owner-qualified enclosing item (never a bare name — two owners may share
-    /// a method name), and the offending expression's own trimmed source text, so distinct
-    /// non-literal probes in one file are distinct findings (never an absolute byte offset; an
-    /// anonymous lexical scope may carry a parent-local equal-header discriminator — see
-    /// `fn_scopes`/`first_macro_arg_end`).
+    /// matched marker, source file, an owner-qualified enclosing item (never a bare name — two
+    /// owners may share a method name), and the offending expression's own trimmed source text,
+    /// so distinct non-literal probes in one file are distinct findings (never an absolute byte
+    /// offset; an anonymous lexical scope may carry a parent-local equal-header discriminator —
+    /// see `fn_scopes`/`first_macro_arg_end`).
     Unauditable {
+        marker: String,
         file: String,
         owner: String,
         expr: String,
@@ -617,9 +618,9 @@ pub(super) fn scan_source_with_markers(
         // marker embedded in a longer identifier is not mis-counted as a probe.
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
-            if let Some(rest) = match_probe_marker(b, i, markers) {
+            if let Some((rest, marker)) = match_probe_marker(b, i, markers) {
                 let owner = owner_for(&scopes, i);
-                let (probe, next) = capture_probe(b, rest, file, &owner);
+                let (probe, next) = capture_probe(b, rest, marker, file, &owner);
                 if let Some(probe) = probe {
                     probes.push(probe);
                 }
@@ -844,23 +845,21 @@ fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
     None
 }
 
-/// Match the probe marker at `i`: the identifier `assert_boundary` at a word boundary, then — as
+/// Match a configured probe marker at `i`: the identifier at a word boundary, then — as
 /// `ident ! (…)` with whitespace/comments between the name and `!` is valid Rust (`println !("x")`
 /// compiles) — its `!`. Returns the index just past the `!`, whence [`capture_probe`] skips trivia
 /// to the opening delimiter; `None` otherwise. The right word boundary rejects a longer identifier
-/// like `assert_boundaryx`; the caller checks the left boundary. Tolerating the gap closes a false
-/// negative: a probe written `assert_boundary !("seam")` was silently dropped by a contiguous match.
-fn match_probe_marker(b: &[u8], i: usize, markers: &[&str]) -> Option<usize> {
+/// like `assert_boundaryx`; the caller checks the left boundary. Identifier matching delegates to
+/// [`match_keyword`] so probe markers and structural keywords share one right-boundary rule.
+/// Tolerating the gap closes a false negative: a probe written `assert_boundary !("seam")` was
+/// silently dropped by a contiguous match.
+fn match_probe_marker<'a>(b: &[u8], i: usize, markers: &[&'a str]) -> Option<(usize, &'a str)> {
     for &marker in markers {
         let name = marker.as_bytes();
-        if i + name.len() <= b.len() && &b[i..i + name.len()] == name {
-            let after_name = i + name.len();
-            // Right word boundary: `assert_boundaryx` / `assert_boundary_probe` is a different identifier.
-            if !b.get(after_name).is_some_and(|&c| is_ident_byte(c)) {
-                let bang = skip_trivia(b, after_name);
-                if b.get(bang) == Some(&b'!') {
-                    return Some(bang + 1);
-                }
+        if let Some(after_name) = match_keyword(b, i, name) {
+            let bang = skip_trivia(b, after_name);
+            if b.get(bang) == Some(&b'!') {
+                return Some((bang + 1, marker));
             }
         }
     }
@@ -874,6 +873,48 @@ fn match_probe_marker(b: &[u8], i: usize, markers: &[&str]) -> Option<usize> {
 /// falsely match (a false coverage / fabricated probed-but-undeclared reaction).
 fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
+}
+
+/// Whether `marker` is one valid Rust macro identifier accepted by the configurable probe scan.
+///
+/// Plain keywords and invalid identifier spellings are rejected; raw identifiers may escape a
+/// keyword except for Rust's non-escapable path/self names.
+pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
+    if marker.is_empty() {
+        return false;
+    }
+    let (ident_str, is_raw) = if let Some(stripped) = marker.strip_prefix("r#") {
+        (stripped, true)
+    } else {
+        (marker, false)
+    };
+
+    if ident_str.is_empty() {
+        return false;
+    }
+
+    if is_raw {
+        if matches!(ident_str, "self" | "Self" | "super" | "crate" | "_") {
+            return false;
+        }
+    } else {
+        if ident_str == "_" {
+            return false;
+        }
+        if is_rust_keyword(ident_str.as_bytes()) {
+            return false;
+        }
+    }
+
+    let bytes = ident_str.as_bytes();
+    let first = bytes[0];
+    if !first.is_ascii_alphabetic() && first != b'_' {
+        return false;
+    }
+
+    bytes
+        .iter()
+        .all(|&b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// Whether the identifier run `word` is a Rust keyword (strict or reserved). A macro name is a real
@@ -964,7 +1005,7 @@ fn skip_trivia(b: &[u8], mut i: usize) -> usize {
     }
 }
 
-/// After the `assert_boundary!` marker, classify the probe by its first argument and return
+/// After a configured probe marker, classify the probe by its first argument and return
 /// `(probe, next_index)`. Skip trivia, expect a macro opening delimiter (`(`, `{`, or `[`),
 /// skip trivia; a plain or raw string first argument is an auditable [`Probe::Literal`] (its
 /// value); any other first token (a `const`, an expression, a byte string) is
@@ -972,7 +1013,13 @@ fn skip_trivia(b: &[u8], mut i: usize) -> usize {
 /// the marker is not actually a probe call (no opening delimiter follows). `owner` is the
 /// caller-supplied, already-resolved owner-qualified enclosing item (see `fn_scopes`), threaded
 /// straight into an `Unauditable` probe's identity.
-fn capture_probe(b: &[u8], i: usize, file: &str, owner: &str) -> (Option<Probe>, usize) {
+fn capture_probe(
+    b: &[u8],
+    i: usize,
+    marker: &str,
+    file: &str,
+    owner: &str,
+) -> (Option<Probe>, usize) {
     let i = skip_trivia(b, i);
     // Rust macros accept `( )`, `{ }`, or `[ ]` interchangeably; a probe written
     // `assert_boundary!{"s", o}` or `["s", o]` is a real probe. Accept any of the three
@@ -992,6 +1039,7 @@ fn capture_probe(b: &[u8], i: usize, file: &str, owner: &str) -> (Option<Probe>,
         let end = first_macro_arg_end(b, i);
         let expr = String::from_utf8_lossy(trim_bytes(&b[i..end])).into_owned();
         Probe::Unauditable {
+            marker: marker.to_string(),
             file: file.to_string(),
             owner: owner.to_string(),
             expr,
@@ -1040,10 +1088,35 @@ fn capture_probe(b: &[u8], i: usize, file: &str, owner: &str) -> (Option<Probe>,
 /// not mistaken for the argument's own end.
 fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
     let mut depth = 0usize;
+    let mut angle_depth = 0usize;
+    let mut last_token_was_double_colon = false;
+    let mut last_token_was_ident_or_gt = false;
+    let mut last_token_was_as = false;
     let mut i = open;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
             i = next;
+            continue;
+        }
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if i + 1 < b.len() && b[i] == b':' && b[i + 1] == b':' {
+            last_token_was_double_colon = true;
+            last_token_was_ident_or_gt = false;
+            last_token_was_as = false;
+            i += 2;
+            continue;
+        }
+        if is_ident_byte(b[i]) {
+            let start = i;
+            last_token_was_ident_or_gt = true;
+            last_token_was_double_colon = false;
+            while i < b.len() && is_ident_byte(b[i]) {
+                i += 1;
+            }
+            last_token_was_as = &b[start..i] == b"as";
             continue;
         }
         match b[i] {
@@ -1052,14 +1125,65 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
                 if depth == 0 {
                     return i;
                 }
-                depth -= 1;
+                depth = depth.saturating_sub(1);
             }
-            b',' if depth == 0 => return i,
+            b'<' => {
+                if depth == 0 {
+                    let is_qualified_start = is_unary_prefix_span(&b[open..i]);
+                    let is_turbofish = last_token_was_double_colon;
+                    let is_inner_generic = angle_depth > 0 && last_token_was_ident_or_gt;
+                    if is_qualified_start || is_turbofish || is_inner_generic || last_token_was_as {
+                        angle_depth += 1;
+                    }
+                }
+            }
+            b'>' => {
+                if depth == 0 && angle_depth > 0 {
+                    let prev = if i > open { b[i - 1] } else { b'\0' };
+                    if prev != b'-' {
+                        angle_depth -= 1;
+                    }
+                }
+                last_token_was_ident_or_gt = true;
+            }
+            b',' if depth == 0 && angle_depth == 0 => return i,
             _ => {}
+        }
+        last_token_was_double_colon = false;
+        last_token_was_as = false;
+        if b[i] != b'>' {
+            last_token_was_ident_or_gt = false;
         }
         i += 1;
     }
     b.len()
+}
+
+/// Whether `b` consists only of ASCII whitespace, comments, and unary / prefix operator tokens
+/// (`&`, `*`, `!`, `-`, `+`, `mut`, `ref`). Value literals (strings, chars, numbers) return false.
+fn is_unary_prefix_span(b: &[u8]) -> bool {
+    let mut i = 0;
+    while i < b.len() {
+        let next = skip_trivia(b, i);
+        if next != i {
+            i = next;
+            continue;
+        }
+        if matches!(b[i], b'&' | b'*' | b'!' | b'-' | b'+') {
+            i += 1;
+            continue;
+        }
+        if b[i..].starts_with(b"mut") && (i + 3 == b.len() || !is_ident_byte(b[i + 3])) {
+            i += 3;
+            continue;
+        }
+        if b[i..].starts_with(b"ref") && (i + 3 == b.len() || !is_ident_byte(b[i + 3])) {
+            i += 3;
+            continue;
+        }
+        return false;
+    }
+    true
 }
 
 /// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
@@ -1131,11 +1255,7 @@ fn render_owner(
     }
 }
 
-fn anonymous_scope_header(b: &[u8], brace: usize) -> String {
-    let start = b[..brace]
-        .iter()
-        .rposition(|byte| matches!(byte, b';' | b'{' | b'}'))
-        .map_or(0, |index| index + 1);
+pub(super) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> String {
     let header = String::from_utf8_lossy(trim_bytes(&b[start..brace]));
     let normalized = header.split_whitespace().collect::<Vec<_>>().join(" ");
     if normalized.is_empty() {
@@ -1234,14 +1354,19 @@ fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
 /// to its opening `{`. Returns `None` for a malformed/nameless item or a body-less declaration.
 fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
     let name_start = skip_trivia(b, after_keyword);
-    let mut name_end = name_start;
+    let ident_start = if b.get(name_start..name_start + 2) == Some(b"r#") {
+        name_start + 2
+    } else {
+        name_start
+    };
+    let mut name_end = ident_start;
     while name_end < b.len() && is_ident_byte(b[name_end]) {
         name_end += 1;
     }
-    if name_end == name_start {
+    if name_end == ident_start {
         return None;
     }
-    let name = String::from_utf8_lossy(&b[name_start..name_end]).into_owned();
+    let name = String::from_utf8_lossy(&b[ident_start..name_end]).into_owned();
     let body_start = skip_to_item_body(b, name_end)?;
     Some((name, body_start))
 }
@@ -1294,6 +1419,10 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
     let mut anonymous_siblings: HashMap<(String, String), usize> = HashMap::new();
     let mut out = Vec::new();
     let mut i = 0;
+    // Start of the current code header, advanced only by code delimiters observed by this
+    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
+    // anonymous-scope boundary.
+    let mut anonymous_header_start = 0usize;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
             i = next;
@@ -1305,6 +1434,7 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                 if let Some((name, body_start)) = parse_named_item_header(b, rest) {
                     mod_stack.push((depth, name));
                     depth += 1;
+                    anonymous_header_start = body_start;
                     i = body_start;
                     continue;
                 }
@@ -1312,6 +1442,7 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                 if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
                     context_stack.push((depth, ctx));
                     depth += 1;
+                    anonymous_header_start = body_start;
                     i = body_start;
                     continue;
                 }
@@ -1319,6 +1450,7 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                 if let Some((name, body_start)) = parse_named_item_header(b, rest) {
                     context_stack.push((depth, ImplOrTraitContext::Trait(name)));
                     depth += 1;
+                    anonymous_header_start = body_start;
                     i = body_start;
                     continue;
                 }
@@ -1337,6 +1469,7 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                         render_owner(&module_path, enclosing.as_deref(), &context_stack, &name);
                     fn_stack.push((depth, body_start, owner));
                     depth += 1;
+                    anonymous_header_start = body_start;
                     i = body_start;
                     continue;
                 }
@@ -1344,7 +1477,7 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
         }
         match b[i] {
             b'{' => {
-                let header = anonymous_scope_header(b, i);
+                let header = anonymous_scope_header(b, anonymous_header_start, i);
                 let parent = enclosing_owner(
                     fn_stack.last().map(|(_, _, owner)| owner.as_str()),
                     &anonymous_stack,
@@ -1356,6 +1489,7 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                     .or_insert(1);
                 anonymous_stack.push((depth, format!("block {header}#{sibling}")));
                 depth += 1;
+                anonymous_header_start = i + 1;
             }
             b'}' => {
                 depth = depth.saturating_sub(1);
@@ -1384,7 +1518,9 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
                 {
                     anonymous_stack.pop();
                 }
+                anonymous_header_start = i + 1;
             }
+            b';' => anonymous_header_start = i + 1,
             _ => {}
         }
         i += 1;

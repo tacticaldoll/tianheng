@@ -157,7 +157,7 @@ pub(crate) fn check_crossing(
     Ok(Some((
         Violation::new(
             BoundaryKind::Runtime,
-            ViolationId::new(seam, runtime_rule_key(&s.allowed), finding.key().clone()),
+            ViolationId::new(seam, runtime_rule_key(&s.allowed), finding.fact().clone()),
             rule,
             finding.text(),
             s.reason.clone(),

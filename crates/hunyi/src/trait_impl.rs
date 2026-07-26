@@ -121,10 +121,10 @@ pub(crate) fn trait_impl_findings(
         // `impl Convert<u16> for Foo`, both legal and coherent — as distinct findings, so a baseline
         // accepting one cannot mask the other (finding-identity injectivity). The self type is
         // likewise retained when renderable; an unrenderable expression carries an internal
-        // positional sentinel that the shared sorting reaction rejects. Stated label bound: a trait impl's self type MAY be foreign
-        // (`impl LocalTrait for Box<Foo>`), which the module-relative canonicalization over-qualifies
-        // (`crate::m::Box<…>`) — a stable identity label, not a resolved-path claim; the actionable
-        // part (the module location) is exact.
+        // positional sentinel that the shared sorting reaction rejects. Stated label bound: a
+        // trait impl's self type MAY be foreign (`impl LocalTrait for Box<Foo>`), which the
+        // module-relative canonicalization over-qualifies (`crate::m::Box<…>`) — a stable identity
+        // label, not a resolved-path claim; the actionable part (the module location) is exact.
         let owner = canonical_self_owner(
             &site.self_ty,
             &site.uses,

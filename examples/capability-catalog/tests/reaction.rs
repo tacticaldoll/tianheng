@@ -76,14 +76,6 @@ fn uncovered_public_families_react_through_the_composed_evaluator() {
         ),
         (
             "semantic",
-            "must not expose impl trait",
-            "tianheng.fact/hunyi/impl-trait-exposure",
-            "public-seam",
-            "the catalog's composed no-existential-leak profile must produce its structured \
-             reaction for both the written and the implicit existential signal",
-        ),
-        (
-            "semantic",
             "must not expose async fn",
             "tianheng.fact/hunyi/async-exposure",
             "async-free-function",

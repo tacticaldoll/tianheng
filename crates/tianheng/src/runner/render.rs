@@ -4,9 +4,13 @@
 //! presented" surface is self-contained, beside the `list`-projection sibling
 //! `runner/projection.rs`.
 
-use guibiao::{Coverage, Outcome, Report, Severity};
+use guibiao::{Coverage, Outcome, Report, Severity, stale_policy};
 
 use super::term_color::Style;
+
+pub(crate) fn disallow_stale_message(count: usize) -> String {
+    format!("--disallow-stale failed: {count} stale baseline entry/entries found")
+}
 
 /// The human-readable `check` report goes to **stderr** as a single stream — clean
 /// line, violation/advisory blocks, the baseline summary, coverage, and stale entries
@@ -169,7 +173,7 @@ pub(crate) fn report_sarif_with_stale(
     use serde_json::{Value, json};
     let mut results: Vec<Value> = Vec::new();
     let mut invocations: Vec<Value> = Vec::new();
-    let has_disallowed_stale = disallow_stale && !stale.is_empty();
+    let has_disallowed_stale = stale_policy(outcome, stale, disallow_stale).stale_disallowed;
 
     match outcome {
         Outcome::Violations(report) => {
@@ -244,7 +248,7 @@ pub(crate) fn report_sarif_with_stale(
                 "executionSuccessful": false,
                 "toolExecutionNotifications": [{
                     "level": "error",
-                    "message": { "text": format!("--disallow-stale failed: {} stale baseline entry/entries found", stale.len()) },
+                    "message": { "text": disallow_stale_message(stale.len()) },
                 }],
             }));
         }

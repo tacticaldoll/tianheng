@@ -24,7 +24,7 @@ pub(crate) fn check_crate_boundary(
                 ViolationId::new(
                     boundary.target.package.clone(),
                     boundary.rule.key(),
-                    finding.key().clone(),
+                    finding.fact().clone(),
                 ),
                 boundary.rule.label(),
                 finding.text(),

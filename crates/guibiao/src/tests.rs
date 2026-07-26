@@ -1468,6 +1468,23 @@ fn must_not_be_imported_by_flags_the_forbidden_importer_only() {
 }
 
 #[test]
+fn must_not_be_imported_by_flags_ancestor_glob_import() {
+    let (result, violations) = run_module_check(
+        "inbound-ancestor-glob",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use crate::*;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::internal");
+    assert_eq!(violations[0].finding, "crate::http");
+}
+
+#[test]
 fn must_not_be_imported_by_flags_an_inline_module_importer() {
     // `crate::http` is an INLINE module in lib.rs, not a file. Its `use crate::internal`
     // is attributed to the inline importer `crate::http`, not the file's module `crate`, so the
@@ -2202,6 +2219,38 @@ fn report_json_reflects_baseline_and_stale_in_gate() {
     assert_eq!(doc["violations"][0]["baselined"], true);
     assert_eq!(doc["stale_baseline"][0]["finding"], "gone");
     assert!(doc["stale_baseline"][0]["fact"].is_object());
+}
+
+#[test]
+fn stale_policy_is_one_pure_exit_code_source_for_runner_and_projection() {
+    let baseline = Baseline::from_json(
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"old rule","finding":"gone",
+            "rule_key":{"type":"tianheng.rule/test/old","fields":{}},
+            "fact":{"type":"tianheng.fact/test/old","shape":"gone","fields":{}}
+        }]}"#,
+    )
+    .unwrap();
+    let stale: Vec<BaselineEntry> = baseline.entries().cloned().collect();
+
+    assert_eq!(
+        stale_policy(&Outcome::Clean, &stale, true),
+        StalePolicy {
+            stale_disallowed: true,
+            exit_code: 1,
+        }
+    );
+    assert_eq!(
+        stale_policy(
+            &Outcome::ConstitutionError("cannot judge".into()),
+            &stale,
+            true
+        )
+        .exit_code,
+        2,
+        "stale policy never masks a constitution error"
+    );
+    assert_eq!(stale_policy(&Outcome::Clean, &stale, false).exit_code, 0);
 }
 
 #[test]
@@ -6049,6 +6098,30 @@ fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
             .collect::<Vec<_>>(),
         vec![("module", "crate::forbidden_on_sub")]
     );
+}
+
+#[test]
+fn module_boundary_including_submodules_is_a_compatible_subtree_modifier() {
+    let default = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .because("r");
+    let explicit = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .depth(xuanji::ScanDepth::Subtree)
+        .because("r");
+    let ergonomic = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .depth(xuanji::ScanDepth::Shallow)
+        .including_submodules()
+        .because("r");
+
+    assert_eq!(default.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(explicit.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(ergonomic.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(default.rule_key(), ergonomic.rule_key());
 }
 
 #[test]

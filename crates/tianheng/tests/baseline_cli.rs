@@ -116,6 +116,10 @@ fn disallow_stale_without_baseline_is_a_usage_error() {
         stderr.contains("--disallow-stale requires --baseline"),
         "{stderr}"
     );
+    assert!(
+        stderr.contains("[--disallow-stale]"),
+        "usage synopsis must advertise the supported flag: {stderr}"
+    );
 }
 
 #[test]

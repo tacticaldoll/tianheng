@@ -14,6 +14,14 @@ fn bless_enabled() -> bool {
     std::env::var("BLESS").is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
+fn resolve_relative(path: &Path, base: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    }
+}
+
 /// A test harness for asserting architectural governance properties in `cargo test`.
 ///
 /// Wraps a [`Constitution`] and provides fluent assertion methods for workspace governance,
@@ -22,6 +30,7 @@ fn bless_enabled() -> bool {
 pub struct GovernanceTest {
     constitution: Constitution,
     manifest_dir: PathBuf,
+    explicit_manifest_dir: bool,
 }
 
 impl GovernanceTest {
@@ -36,12 +45,14 @@ impl GovernanceTest {
         Self {
             constitution,
             manifest_dir,
+            explicit_manifest_dir: false,
         }
     }
 
     /// Explicitly override the manifest directory path.
     pub fn with_manifest_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.manifest_dir = path.into();
+        self.explicit_manifest_dir = true;
         self
     }
 
@@ -56,8 +67,11 @@ impl GovernanceTest {
     }
 
     /// Check if a manifest path exists, enforcing `TIANHENG_WORKSPACE_TESTS` discipline.
-    fn check_manifest_exists(&self, manifest: PathBuf) -> Option<PathBuf> {
+    fn check_manifest_exists(&self, manifest: PathBuf, is_explicit: bool) -> Option<PathBuf> {
         if !manifest.exists() {
+            if is_explicit || self.explicit_manifest_dir {
+                panic!("target manifest at {manifest:?} does not exist");
+            }
             assert!(
                 std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
                 "manifest expected at {:?} but absent while TIANHENG_WORKSPACE_TESTS is set",
@@ -70,17 +84,13 @@ impl GovernanceTest {
 
     /// Helper to resolve the main constitution manifest path.
     fn resolve_manifest(&self) -> Option<PathBuf> {
-        self.check_manifest_exists(self.manifest_path())
+        self.check_manifest_exists(self.manifest_path(), false)
     }
 
     /// Helper to resolve a fixture manifest path (absolute or relative to `manifest_dir`).
     fn resolve_fixture_manifest(&self, path: impl AsRef<Path>) -> Option<PathBuf> {
-        let target_path = if path.as_ref().is_absolute() {
-            path.as_ref().to_path_buf()
-        } else {
-            self.manifest_dir.join(path.as_ref())
-        };
-        self.check_manifest_exists(ensure_cargo_toml_path(&target_path))
+        let target_path = resolve_relative(path.as_ref(), &self.manifest_dir);
+        self.check_manifest_exists(ensure_cargo_toml_path(&target_path), true)
     }
 
     /// Assert that the constitution returns no violations (`Outcome::Clean`).
@@ -161,12 +171,8 @@ impl GovernanceTest {
             return self;
         };
 
-        let target_path = if projection_path.as_ref().is_absolute() {
-            projection_path.as_ref().to_path_buf()
-        } else {
-            let root = manifest.parent().unwrap_or_else(|| Path::new("."));
-            root.join(projection_path.as_ref())
-        };
+        let root = manifest.parent().unwrap_or_else(|| Path::new("."));
+        let target_path = resolve_relative(projection_path.as_ref(), root);
 
         let projection = constitution_markdown(&self.constitution);
         let expected = if preamble.is_empty() {
@@ -271,6 +277,18 @@ mod tests {
     }
 
     #[test]
+    fn relative_paths_resolve_from_their_callers_base() {
+        let base = std::env::temp_dir().join("tianheng-relative-path-base");
+        assert_eq!(
+            resolve_relative(Path::new("fixtures/violating"), &base),
+            base.join("fixtures/violating")
+        );
+
+        let absolute = base.join("law.md");
+        assert_eq!(resolve_relative(&absolute, Path::new("ignored")), absolute);
+    }
+
+    #[test]
     #[ignore = "executed in subprocesses by projection_freshness_covers_every_bless_mode"]
     fn projection_bless_mode_child() {
         let mode = std::env::var("TIANHENG_PROJECTION_TEST_MODE").unwrap();
@@ -364,6 +382,28 @@ mod tests {
             }))
             .is_err(),
             "a seam carries no crate target and must not cover the fixture package"
+        );
+    }
+
+    #[test]
+    fn missing_explicit_manifest_or_fixture_panics_loudly() {
+        let harness = GovernanceTest::for_constitution(Constitution::new("test"))
+            .with_manifest_dir("non_existent_directory_xyz");
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                harness.assert_clean();
+            }))
+            .is_err(),
+            "missing explicit manifest_dir must panic loudly"
+        );
+
+        let harness_fixture = GovernanceTest::for_constitution(Constitution::new("test"));
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                harness_fixture.assert_violates_fixture("non_existent_fixture.toml");
+            }))
+            .is_err(),
+            "missing explicit fixture path must panic loudly"
         );
     }
 }

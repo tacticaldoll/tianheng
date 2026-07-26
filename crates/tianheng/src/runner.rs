@@ -28,7 +28,7 @@ use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
-    constitution_text, report_json, report_json_with_stale_policy,
+    constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
 use louke::audit_probe_coverage;
 use xingbiao::{cargo_metadata, member_root_files};
@@ -49,7 +49,10 @@ use projection::*;
 pub use projection::{constitution_markdown, projection_gate};
 
 mod render;
-use render::{report, report_coverage, report_sarif, report_sarif_with_stale, report_violations};
+use render::{
+    disallow_stale_message, report, report_coverage, report_sarif, report_sarif_with_stale,
+    report_violations,
+};
 mod term_color;
 use term_color::Style;
 
@@ -383,7 +386,7 @@ fn usage(message: &str) -> u8 {
         "usage:\n  \
          tianheng check --manifest-path <path/to/Cargo.toml> \
          [--baseline <file> | --write-baseline <file>] [--format text|json|sarif] \
-         [--warn-uncovered]\n  \
+         [--warn-uncovered] [--disallow-stale]\n  \
          tianheng list [--format text|json|markdown]"
     );
     eprintln!("error: {message}");
@@ -539,12 +542,7 @@ fn gate(
         _ => &empty,
     };
     let stale: Vec<BaselineEntry> = baseline.stale(report).into_iter().cloned().collect();
-    let has_stale = disallow_stale && !stale.is_empty();
-    let exit_code = if has_stale && outcome.exit_code() == 0 {
-        1
-    } else {
-        outcome.exit_code()
-    };
+    let policy = stale_policy(outcome, &stale, disallow_stale);
 
     match format {
         ReportFormat::Json => println!(
@@ -565,18 +563,15 @@ fn gate(
                     entry.finding
                 );
             }
-            if has_stale {
-                eprintln!(
-                    "Tianheng: --disallow-stale failed: {} stale baseline entry/entries found",
-                    stale.len()
-                );
+            if policy.stale_disallowed {
+                eprintln!("Tianheng: {}", disallow_stale_message(stale.len()));
             }
             if let Some(coverage) = coverage {
                 report_coverage(coverage, warn_uncovered);
             }
         }
     }
-    exit_code
+    policy.exit_code
 }
 
 /// Fold two outcomes into one reaction. Reused across the composition chain — static + semantic,

@@ -1,3 +1,5 @@
+//! Impl-trait exposure boundary declaration DSL.
+
 use xuanji::{RuleKey, ScanDepth, Severity};
 
 /// An impl-trait boundary: a module's public API must not **return** a written `impl Trait`
@@ -35,16 +37,10 @@ impl ImplTraitBoundary {
     pub fn rule_key(&self) -> RuleKey {
         RuleKey::of(
             "tianheng.rule/hunyi/impl-trait-exposure",
-            [
-                (
-                    "forbidden_operands",
-                    super::canonical_path_set(&self.forbidden_operands),
-                ),
-                (
-                    "including_submodules",
-                    self.including_submodules().to_string(),
-                ),
-            ],
+            [(
+                "forbidden_operands",
+                super::canonical_path_set(&self.forbidden_operands),
+            )],
         )
     }
 

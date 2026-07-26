@@ -456,43 +456,92 @@ fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<Stri
     None
 }
 
-/// Follow the **alias** and **re-export** closures together from `path` to all canonical fixpoint paths,
-/// so a name reached through a multi-target `type X = (A, B);` alias and/or a `pub use` facade resolves
-/// to all defining paths.
 pub(crate) fn expand_canonical_paths(
     path: &str,
     aliases: &AliasMap,
     reexports: &ReexportMap,
 ) -> Vec<String> {
-    let max_depth = aliases.len() + reexports.len() + 1;
-    let mut current_queue = vec![(path.to_string(), 0, std::collections::HashSet::new())];
-    let mut final_paths = Vec::new();
+    if aliases.is_empty() && reexports.is_empty() {
+        return vec![path.to_string()];
+    }
+    // Iterative post-order DFS over the alias/re-export graph.
+    //
+    // Each stack entry is `(node, returning, depth)`. On the first visit (`returning = false`) we push the
+    // node's children (unresolved dependencies) and then push a `returning = true` sentinel that
+    // fires only after all children have been resolved. Cycle detection uses `in_stack` (for exact
+    // node cycles) and `depth >= max_steps` (where `max_steps = aliases.len() + reexports.len() + 1`,
+    // the mathematical maximum path length in a non-looping rewrite system) to terminate self-growing
+    // prefix loops (such as `crate::a -> crate::a::b`).
+    let max_steps = aliases.len() + reexports.len() + 1;
+    let mut memo: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut in_stack: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut work: Vec<(String, bool, usize)> = vec![(path.to_string(), false, 0)];
 
-    while let Some((current, depth, mut chain_seen)) = current_queue.pop() {
-        if !chain_seen.insert(current.clone()) || depth > max_depth {
-            if !final_paths.contains(&current) {
-                final_paths.push(current);
+    while let Some((current, returning, depth)) = work.pop() {
+        if returning {
+            in_stack.remove(&current);
+            if memo.contains_key(&current) {
+                continue;
             }
+            let mut results = Vec::new();
+            if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
+                for t in &targets {
+                    let child = memo
+                        .get(t.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| vec![t.clone()]);
+                    for r in child {
+                        if !results.contains(&r) {
+                            results.push(r);
+                        }
+                    }
+                }
+            } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+                let child = memo
+                    .get(&next)
+                    .cloned()
+                    .unwrap_or_else(|| vec![next.clone()]);
+                for r in child {
+                    if !results.contains(&r) {
+                        results.push(r);
+                    }
+                }
+            } else {
+                results.push(current.clone());
+            }
+            memo.insert(current, results);
             continue;
         }
 
-        let mut expanded = false;
-        if let Some(next_targets) = rewrite_longest_alias_prefixes(&current, aliases) {
-            for target in next_targets {
-                current_queue.push((target, depth + 1, chain_seen.clone()));
-            }
-            expanded = true;
-        } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
-            current_queue.push((next, depth + 1, chain_seen.clone()));
-            expanded = true;
+        // Pre-visit.
+        if memo.contains_key(&current) {
+            continue;
+        }
+        if in_stack.contains(&current) || depth >= max_steps {
+            // Active-path cycle or self-growing prefix loop cap reached.
+            continue;
         }
 
-        if !expanded && !final_paths.contains(&current) {
-            final_paths.push(current);
+        in_stack.insert(current.clone());
+
+        // Push the returning sentinel first (processed after all children).
+        work.push((current.clone(), true, depth));
+
+        // Push unresolved children (reversed so the first target is processed first).
+        if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
+            for target in targets.into_iter().rev() {
+                if !memo.contains_key(&target) {
+                    work.push((target, false, depth + 1));
+                }
+            }
+        } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+            if !memo.contains_key(&next) {
+                work.push((next, false, depth + 1));
+            }
         }
     }
 
-    final_paths
+    memo.remove(path).unwrap_or_else(|| vec![path.to_string()])
 }
 
 /// Follow the **alias** and **re-export** closures together from `path` to a single fixpoint path.
@@ -535,34 +584,34 @@ pub(crate) fn canonicalize_through_single_alias_map(
 }
 
 /// The alias's targets as **bare nominal paths** — collects all `syn::Path` targets contained in
-/// `ty`, recursively walking non-generic compound type constructors (`Type::Reference`,
-/// `Type::Ptr`, `Type::Tuple`, `Type::Slice`, `Type::Array`, `Type::Group`, `Type::Paren`). Any path with `qself`
-/// or generic arguments (`Vec<T>`) is skipped — a stated coverage bound, never a silent claim.
+/// `ty`, iteratively walking non-generic compound type constructors (`Type::Reference`,
+/// `Type::Ptr`, `Type::Tuple`, `Type::Slice`, `Type::Array`, `Type::Group`, `Type::Paren`). Any
+/// path with `qself` or generic arguments (`Vec<T>`) is skipped — a stated coverage bound, never a
+/// silent claim.
 pub(crate) fn alias_nominal_targets<'a>(ty: &'a syn::Type, acc: &mut Vec<&'a syn::Path>) {
-    match ty {
-        syn::Type::Path(tp) => {
-            if tp.qself.is_none()
-                && tp
-                    .path
-                    .segments
-                    .iter()
-                    .all(|s| matches!(s.arguments, syn::PathArguments::None))
-            {
-                acc.push(&tp.path);
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            syn::Type::Path(tp) => {
+                if tp.qself.is_none()
+                    && tp
+                        .path
+                        .segments
+                        .iter()
+                        .all(|s| matches!(s.arguments, syn::PathArguments::None))
+                {
+                    acc.push(&tp.path);
+                }
             }
+            syn::Type::Reference(tr) => pending.push(&tr.elem),
+            syn::Type::Ptr(tp) => pending.push(&tp.elem),
+            syn::Type::Tuple(tt) => pending.extend(tt.elems.iter().rev()),
+            syn::Type::Slice(ts) => pending.push(&ts.elem),
+            syn::Type::Array(ta) => pending.push(&ta.elem),
+            syn::Type::Group(tg) => pending.push(&tg.elem),
+            syn::Type::Paren(tp) => pending.push(&tp.elem),
+            _ => {}
         }
-        syn::Type::Reference(tr) => alias_nominal_targets(&tr.elem, acc),
-        syn::Type::Ptr(tp) => alias_nominal_targets(&tp.elem, acc),
-        syn::Type::Tuple(tt) => {
-            for elem in &tt.elems {
-                alias_nominal_targets(elem, acc);
-            }
-        }
-        syn::Type::Slice(ts) => alias_nominal_targets(&ts.elem, acc),
-        syn::Type::Array(ta) => alias_nominal_targets(&ta.elem, acc),
-        syn::Type::Group(tg) => alias_nominal_targets(&tg.elem, acc),
-        syn::Type::Paren(tp) => alias_nominal_targets(&tp.elem, acc),
-        _ => {}
     }
 }
 
@@ -596,4 +645,30 @@ pub(crate) fn bare_single_segment_ident(path: &syn::Path) -> Option<String> {
         return None;
     }
     Some(strip_raw(&seg.ident.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::alias_nominal_targets;
+
+    #[test]
+    fn deeply_nested_alias_targets_use_a_bounded_native_stack() {
+        const DEPTH: usize = 32_768;
+        let mut ty: syn::Type = syn::parse_quote!(Leaf);
+        for _ in 0..DEPTH {
+            ty = syn::Type::Paren(syn::TypeParen {
+                paren_token: syn::token::Paren::default(),
+                elem: Box::new(ty),
+            });
+        }
+        // Leak the adversarially deep fixture so its recursive syn-owned drop cannot become the
+        // native-stack behavior under test; production AST lifetime is owned by the parsed file.
+        let ty = Box::leak(Box::new(ty));
+        let mut targets = Vec::new();
+
+        alias_nominal_targets(ty, &mut targets);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].segments[0].ident, "Leaf");
+    }
 }

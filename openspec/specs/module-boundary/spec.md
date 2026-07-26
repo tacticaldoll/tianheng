@@ -518,10 +518,7 @@ observed fact. Source file, rendered import text, and traversal order SHALL NOT 
 
 ### Requirement: Mixed direct and conditional path remaps remain observable
 
-When one file-module declaration carries both direct `#[path = "…"]` and one or more
-`cfg_attr(..., path = "…")` remaps, 圭表 SHALL conservatively resolve every physically existing
-written candidate and SHALL scan their union. Attribute order SHALL NOT silently remove a candidate,
-and canonically identical candidates SHALL be evaluated once.
+When one file-module declaration carries both direct `#[path = "…"]` and one or more `cfg_attr(..., path = "…")` remaps, 圭表 SHALL conservatively resolve every physically existing written candidate and SHALL scan their union. Attribute order SHALL NOT silently remove a candidate, and canonically identical candidates SHALL be evaluated once.
 
 #### Scenario: Conditional remap after a direct remap is observed
 

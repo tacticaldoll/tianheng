@@ -944,6 +944,90 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
 }
 
 #[test]
+fn diamond_alias_graph_expansion_terminates_and_memoizes_intermediate_nodes() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+
+    // Multi-tier diamond graph:
+    // A -> (B, C)
+    // B -> D
+    // C -> D
+    // D -> Secret
+    aliases.insert(
+        "crate::A".to_string(),
+        vec!["crate::B".to_string(), "crate::C".to_string()],
+    );
+    aliases.insert("crate::B".to_string(), vec!["crate::D".to_string()]);
+    aliases.insert("crate::C".to_string(), vec!["crate::D".to_string()]);
+    aliases.insert("crate::D".to_string(), vec!["crate::Secret".to_string()]);
+
+    let res = expand_canonical_paths("crate::A", &aliases, &reexports);
+    assert_eq!(res, vec!["crate::Secret".to_string()]);
+}
+
+#[test]
+fn cycle_branch_with_terminal_sibling_preserves_sibling() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+
+    // A -> [B, Secret]
+    // B -> A
+    aliases.insert(
+        "crate::A".to_string(),
+        vec!["crate::B".to_string(), "crate::Secret".to_string()],
+    );
+    aliases.insert("crate::B".to_string(), vec!["crate::A".to_string()]);
+
+    let res = expand_canonical_paths("crate::A", &aliases, &reexports);
+    assert!(
+        res.contains(&"crate::Secret".to_string()),
+        "sibling Secret target must be preserved even if child branch B cycles back to A: got {res:?}"
+    );
+}
+
+#[test]
+fn deep_chain_expansion_reaches_terminal_without_truncation() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    // Build a 99-hop linear chain: N0 -> N1 -> … -> N99 (no alias on N99, so it is the fixpoint).
+    // The iterative expansion must traverse the full chain without truncation or stack overflow.
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+    for i in 0..99usize {
+        aliases.insert(format!("crate::N{i}"), vec![format!("crate::N{}", i + 1)]);
+    }
+
+    let res = expand_canonical_paths("crate::N0", &aliases, &reexports);
+    assert_eq!(
+        res,
+        vec!["crate::N99".to_string()],
+        "full 99-hop chain must resolve to the terminal node N99, got {res:?}"
+    );
+}
+
+#[test]
+fn self_growing_reexport_prefix_loop_terminates_without_hanging() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let aliases: AliasMap = std::collections::HashMap::new();
+    let mut reexports = ReexportMap::new();
+
+    // A self-similar re-export entry `crate::a -> crate::a::b` creates a self-growing path chain:
+    // crate::a::foo -> crate::a::b::foo -> crate::a::b::b::foo -> ...
+    reexports.insert("crate::a".to_string(), "crate::a::b".to_string());
+
+    let res = expand_canonical_paths("crate::a::foo", &aliases, &reexports);
+    assert!(
+        !res.is_empty(),
+        "expansion must terminate without hanging on self-growing prefix loops: got {res:?}"
+    );
+}
+
+#[test]
 fn a_self_similar_reexport_is_dropped_and_the_real_type_still_reacts() {
     // Build-time guard: `pub use self::sub::sub;` re-exports the value `sub` from
     // a same-named child module, yielding a `crate::sub -> crate::sub::sub` map entry (key ⊂ value).
@@ -3481,10 +3565,7 @@ fn every_hunyi_rule_family_has_exact_semantic_identity() {
     assert_rule(
         impl_trait.rule_key(),
         "tianheng.rule/hunyi/impl-trait-exposure",
-        &[
-            ("forbidden_operands", "[\"crate::Port\"]"),
-            ("including_submodules", "true"),
-        ],
+        &[("forbidden_operands", "[\"crate::Port\"]")],
     );
 
     let locality = TraitImplBoundary::in_crate("x")
@@ -3530,7 +3611,7 @@ fn every_hunyi_rule_family_has_exact_semantic_identity() {
     assert_rule(
         async_exposure.rule_key(),
         "tianheng.rule/hunyi/async-exposure",
-        &[("including_submodules", "true")],
+        &[],
     );
 
     let unsafe_confinement = UnsafeBoundary::in_crate("x")
@@ -6052,13 +6133,20 @@ fn impl_trait_subtree_cfg_branches_never_share_an_unrenderable_owner_fallback() 
 }
 
 #[test]
-fn impl_trait_operand_scoped_boundary_rejects_subtree_scope() {
-    // A stated bound (not a silent gap): operand-scoping's per-branch principal-resolution
-    // machinery is proven only over a single module, so combining it with subtree scope fails
-    // loud with an actionable message rather than silently under- or mis-reacting.
+fn impl_trait_operand_scoped_boundary_reacts_across_file_and_inline_submodules() {
     let (metadata, _fixture) = fixture_metadata(
         "impltrait-operand-subtree",
-        &[("lib.rs", "pub fn make() -> impl crate::Port { todo!() }\n")],
+        &[
+            (
+                "lib.rs",
+                "pub trait Port {}\npub trait Other {}\npub mod file;\n\
+                 pub mod inline { pub fn other() -> impl crate::Other { todo!() } }\n",
+            ),
+            (
+                "file.rs",
+                "use crate::Port as ApiPort;\npub fn port() -> impl ApiPort { todo!() }\n",
+            ),
+        ],
     );
     let boundary = ImplTraitBoundary::in_crate("x")
         .module("crate")
@@ -6066,9 +6154,16 @@ fn impl_trait_operand_scoped_boundary_rejects_subtree_scope() {
         .including_submodules()
         .because("r");
     let mut violations = Vec::new();
-    let err = check_impl_trait_boundary(&metadata, &boundary, &mut violations).unwrap_err();
-    assert!(err.contains("not yet supported"), "{err}");
-    assert!(violations.is_empty());
+    check_impl_trait_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].target(), "crate");
+    assert!(violations[0].finding.contains("port"));
+    assert!(
+        violations[0]
+            .file
+            .as_deref()
+            .is_some_and(|file| file.ends_with("file.rs"))
+    );
 }
 
 // --- async-exposure -------------------------------------------------------
@@ -6143,7 +6238,7 @@ fn async_production_violation_separates_target_rule_and_seam() {
     assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/async-exposure");
     assert_eq!(
         rule.fields().collect::<Vec<_>>(),
-        vec![("including_submodules", "false")]
+        Vec::<(&str, &str)>::new()
     );
     let fact = id.fact();
     assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/async-exposure");
@@ -6156,6 +6251,24 @@ fn async_production_violation_separates_target_rule_and_seam() {
             ("owner", "crate::registry"),
             ("owner_kind", "module"),
         ]
+    );
+}
+
+#[test]
+fn subtree_opt_in_preserves_anchored_finding_violation_id_identity() {
+    let default_rule = AsyncExposureBoundary::in_crate("pkg")
+        .module("crate::m")
+        .must_not_expose_async_fn()
+        .because("test");
+    let subtree_rule = AsyncExposureBoundary::in_crate("pkg")
+        .module("crate::m")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("test");
+    assert_eq!(
+        default_rule.rule_key(),
+        subtree_rule.rule_key(),
+        "toggling including_submodules must not alter RuleKey identity"
     );
 }
 

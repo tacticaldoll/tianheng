@@ -46,7 +46,7 @@ fn push_module_violation(
     violations.push(
         Violation::new(
             BoundaryKind::Module,
-            ViolationId::new(target, boundary.rule_key(), finding.key().clone()),
+            ViolationId::new(target, boundary.rule_key(), finding.fact().clone()),
             rule,
             finding.text(),
             boundary.reason.clone(),
@@ -64,6 +64,10 @@ fn within_scan_depth(candidate: &str, anchor: &str, depth: ScanDepth) -> bool {
     } else {
         path_within(candidate, anchor)
     }
+}
+
+fn is_self_import_only(file_module: &str, governed_module: &str, depth: ScanDepth) -> bool {
+    depth == ScanDepth::Subtree && path_within(file_module, governed_module)
 }
 
 pub(crate) fn check_module_boundary(
@@ -200,7 +204,7 @@ pub(crate) fn check_module_boundary(
             // Fast path: a file whose module is within the protected subtree hosts only
             // self-imports (its inline descendants are within it, hence within the protected
             // module too), never an inbound edge — skip the read.
-            if boundary.depth == ScanDepth::Subtree && path_within(&file_module, &governed_module) {
+            if is_self_import_only(&file_module, &governed_module, boundary.depth) {
                 continue;
             }
             // Forbid-one perf pre-filter: the importers a file can carry are its own module and its
@@ -228,8 +232,12 @@ pub(crate) fn check_module_boundary(
                         continue;
                     }
                 }
-                // This importer must actually import the protected module.
-                if !within_scan_depth(&import, &governed_module, boundary.depth) {
+                // This importer must actually import the protected module (either directly,
+                // via descendant path, or via an ancestor glob wildcard import).
+                let imports_protected =
+                    within_scan_depth(&import, &governed_module, boundary.depth)
+                        || (import.is_glob && path_within(&governed_module, &import.path));
+                if !imports_protected {
                     continue;
                 }
                 // Closed allowlist: an importer within any allowed entry (or beneath it) is
@@ -304,7 +312,7 @@ pub(crate) fn check_module_boundary(
         for (file, file_module) in all_files {
             // A file whose module is within the permitted subtree hosts only permitted imports
             // (its inline descendants are within it too) — skip the read.
-            if boundary.depth == ScanDepth::Subtree && path_within(&file_module, &governed_module) {
+            if is_self_import_only(&file_module, &governed_module, boundary.depth) {
                 continue;
             }
             let text = std::fs::read_to_string(&file)

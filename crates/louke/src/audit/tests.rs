@@ -562,6 +562,119 @@ fn a_non_ascii_prefixed_lookalike_is_not_a_probe() {
 }
 
 #[test]
+fn probe_first_arg_with_generic_comma_preserves_full_span() {
+    for (src, expected_expr) in [
+        (
+            "fn f() { assert_boundary!(SEAM::<A, B>, o); }",
+            "SEAM::<A, B>",
+        ),
+        ("fn f() { assert_boundary!(a < b, o); }", "a < b"),
+        ("fn f() { assert_boundary!(a < b, c > d); }", "a < b"),
+        (
+            "fn f() { assert_boundary!(SEAM::<fn() -> A, B>, o); }",
+            "SEAM::<fn() -> A, B>",
+        ),
+        (
+            "fn f() { assert_boundary!(SEAM::<{ A > B }, C>, o); }",
+            "SEAM::<{ A > B }, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as /* gap */ Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as /* gap */ Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as\n    Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as\n    Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(value as /* gap */ <Foo<A, B> as Trait<C, D>>::Assoc, o); }",
+            "value as /* gap */ <Foo<A, B> as Trait<C, D>>::Assoc",
+        ),
+        (
+            "fn f() { assert_boundary!(value as\n    <Foo<A, B> as Trait<C, D>>::Assoc, o); }",
+            "value as\n    <Foo<A, B> as Trait<C, D>>::Assoc",
+        ),
+        (
+            "fn f() { assert_boundary!(SEAM::<[Foo<A, B>; 1], C>, o); }",
+            "SEAM::<[Foo<A, B>; 1], C>",
+        ),
+        (
+            "fn f() { assert_boundary!(seam:: // comment\n <A, B>, obj); }",
+            "seam:: // comment\n <A, B>",
+        ),
+        (
+            "fn f() { assert_boundary!(seam:: /* /* nested */ */ <A, C>, obj); }",
+            "seam:: /* /* nested */ */ <A, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(SEAM::<Outer /* comment */ <A, B>, C>, obj); }",
+            "SEAM::<Outer /* comment */ <A, B>, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(seam::<Ω <A, B>, C>, obj); }",
+            "seam::<Ω <A, B>, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(&<Foo<u8, u16> as Trait<u32, u64>>::SEAM, ()); }",
+            "&<Foo<u8, u16> as Trait<u32, u64>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(*<Foo<A, B> as Trait<C, D>>::SEAM, ()); }",
+            "*<Foo<A, B> as Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(!<Foo<A, B> as Trait<C, D>>::SEAM, ()); }",
+            "!<Foo<A, B> as Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(& /* comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM, ()); }",
+            "& /* comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(& /* outer /* nested */ comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM, ()); }",
+            "& /* outer /* nested */ comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM, ()); }",
+            "& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(&\"a\" < &Foo::<u8, u16>::X, ()); }",
+            "&\"a\" < &Foo::<u8, u16>::X",
+        ),
+        (
+            "fn f() { assert_boundary!(&'a' < &'b', ()); }",
+            "&'a' < &'b'",
+        ),
+        (
+            "fn f() { assert_boundary!(&b\"a\" < &b\"b\", ()); }",
+            "&b\"a\" < &b\"b\"",
+        ),
+        (
+            "fn f() { assert_boundary!(&r#\"a\"# < &r#\"b\"#, ()); }",
+            "&r#\"a\"# < &r#\"b\"#",
+        ),
+    ] {
+        let mut probes = Vec::new();
+        scan_source(src, "test.rs", &mut probes);
+        assert_eq!(probes.len(), 1, "failed for {src}");
+        match &probes[0] {
+            crate::audit::scan::Probe::Unauditable { expr, .. } => {
+                assert_eq!(
+                    expr, expected_expr,
+                    "first macro arg must match for {src}: got {expr:?}"
+                );
+            }
+            other => panic!("expected Unauditable probe, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn a_probe_with_a_gap_before_the_bang_is_captured() {
     // `ident ! (…)` with whitespace or a comment between the name and `!` is valid Rust
     // (`println !("x")` compiles), so a probe written that way must still count — a contiguous-only
@@ -777,7 +890,7 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
                 report
                     .violations
                     .iter()
-                    .any(|v| v.finding.contains("has no assert_boundary! probe")),
+                    .any(|v| v.finding.contains("has no configured probe marker")),
                 "the 3-char declared seam must be reported unprobed: {:?}",
                 report.violations
             );
@@ -1190,6 +1303,38 @@ fn same_expression_in_two_different_free_functions_reacts_separately() {
 }
 
 #[test]
+fn raw_identifier_function_names_keep_probe_owners_distinct() {
+    let tb = TempBase::new("audit-unaud-two-raw-ident-fns");
+    let dir = tb.dir(
+        "two",
+        "fn r#type() { assert_boundary!(SEAM_A, o); } \
+         fn r#async() { assert_boundary!(SEAM_A, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "raw identifier names must not collapse to their leading `r`: {violations:?}"
+    );
+    let owners: std::collections::BTreeSet<_> = violations
+        .iter()
+        .map(|violation| {
+            violation
+                .fact()
+                .fields()
+                .find_map(|(name, value)| (name == "owner").then_some(value.to_string()))
+                .expect("unauditable probe identity carries its owner")
+        })
+        .collect();
+    assert_eq!(
+        owners,
+        ["fn async".to_string(), "fn type".to_string()].into(),
+        "raw item names use the scanner's canonical de-prefixed vocabulary"
+    );
+}
+
+#[test]
 fn same_named_nested_functions_in_different_outer_functions_react_separately() {
     let tb = TempBase::new("audit-unaud-two-nested-fns");
     let dir = tb.dir(
@@ -1541,6 +1686,101 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
 }
 
 #[test]
+fn custom_marker_messages_name_the_configuration_and_actual_matched_marker() {
+    let tb = TempBase::new("custom-marker-wording");
+    let missing = tb.source("missing.rs", "fn f() {}\n");
+    let missing_outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[missing],
+        &["my_custom_seam"],
+    );
+    let Outcome::Violations(missing_report) = missing_outcome else {
+        panic!("expected an unprobed violation");
+    };
+    assert!(
+        missing_report.violations[0]
+            .finding
+            .contains("no configured probe marker")
+    );
+    assert!(
+        !missing_report.violations[0]
+            .finding
+            .contains("assert_boundary")
+    );
+
+    let unauditable = tb.source("unauditable.rs", "fn f() { my_custom_seam!(SEAM, obj); }\n");
+    let unauditable_outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[unauditable],
+        &["my_custom_seam"],
+    );
+    let Outcome::Violations(unauditable_report) = unauditable_outcome else {
+        panic!("expected unprobed and unauditable violations");
+    };
+    let violation = unauditable_report
+        .violations
+        .iter()
+        .find(|violation| {
+            violation.rule
+                == "a configured probe marker's seam must be a string literal to be auditable"
+        })
+        .expect("unauditable violation");
+    assert!(violation.finding.contains("my_custom_seam! probe"));
+}
+
+#[test]
+fn anonymous_scope_header_ignores_delimiters_inside_literals_and_comments() {
+    let source = br#"if value == "};" /* ; { } */ {"#;
+    let brace = source.len() - 1;
+    assert_eq!(
+        scan::anonymous_scope_header(source, 0, brace),
+        r#"if value == "};" /* ; { } */"#
+    );
+}
+
+#[test]
+fn literal_punctuation_in_anonymous_scopes_keeps_probe_owners_distinct_end_to_end() {
+    let tb = TempBase::new("anonymous-owner-literal-punctuation");
+    let dir = tb.dir(
+        "two",
+        r#"
+fn outer() {
+    if "a;b" == "x" {
+        fn probe() { assert_boundary!(SEAM_A, o); }
+    }
+    if "a{b" == "x" {
+        fn probe() { assert_boundary!(SEAM_A, o); }
+    }
+}
+"#,
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "literal punctuation must not collapse distinct anonymous owners: {violations:?}"
+    );
+    let owners: std::collections::BTreeSet<_> = violations
+        .iter()
+        .map(|violation| {
+            violation
+                .fact()
+                .fields()
+                .find_map(|(name, value)| (name == "owner").then_some(value.to_string()))
+                .expect("unauditable probe identity carries its owner")
+        })
+        .collect();
+    assert_eq!(
+        owners.len(),
+        2,
+        "the full audit path must retain both literal-distinguished owner headers: {violations:?}"
+    );
+    assert!(owners.iter().any(|owner| owner.contains(r#"if "a;b""#)));
+    assert!(owners.iter().any(|owner| owner.contains(r#"if "a{b""#)));
+}
+
+#[test]
 fn unregistered_custom_marker_is_ignored_by_audit() {
     let tb = TempBase::new("unregistered-marker");
     let root = tb.source(
@@ -1580,4 +1820,24 @@ fn blank_marker_string_is_constitution_error() {
         matches!(outcome, Outcome::ConstitutionError(_)),
         "blank marker string must be a constitution error: {outcome:?}"
     );
+}
+
+#[test]
+fn invalid_marker_string_is_constitution_error() {
+    let tb = TempBase::new("invalid-marker");
+    let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
+    for invalid in [
+        "if", "match", "123foo", "foo::bar", "foo-bar", "_", "r#self", "r#super", "r#crate", "r#_",
+        "💥", "a💥", "café",
+    ] {
+        let outcome = audit_probe_coverage_with_markers(
+            &[boundary("seam", Severity::Enforce)],
+            std::slice::from_ref(&root),
+            &[invalid],
+        );
+        assert!(
+            matches!(outcome, Outcome::ConstitutionError(_)),
+            "invalid marker '{invalid}' must be a constitution error: {outcome:?}"
+        );
+    }
 }

@@ -31,7 +31,7 @@ pub(crate) fn push_single_module_violations(
         let id = ViolationId::new(
             context.module,
             context.rule_key.clone(),
-            finding.key().clone(),
+            finding.fact().clone(),
         );
         violations.push(
             Violation::new(
@@ -85,7 +85,7 @@ pub(crate) fn push_multi_module_violations(
         let id = ViolationId::new(
             context.target,
             context.rule_key.clone(),
-            finding.key().clone(),
+            finding.fact().clone(),
         );
         violations.push(
             Violation::new(

@@ -51,7 +51,7 @@ fn audit_violation(
     let finding = fact.into_finding();
     Violation::new(
         BoundaryKind::Runtime,
-        ViolationId::new(target, rule_key, finding.key().clone()),
+        ViolationId::new(target, rule_key, finding.fact().clone()),
         rule,
         finding.text(),
         reason,
@@ -119,9 +119,9 @@ pub fn audit_probe_coverage_with_markers(
         return Outcome::ConstitutionError("custom probe markers list cannot be empty".to_string());
     }
     for &marker in markers {
-        if marker.trim().is_empty() {
+        if !scan::is_valid_macro_marker(marker) {
             return Outcome::ConstitutionError(format!(
-                "custom probe marker '{marker}' cannot be empty or blank"
+                "custom probe marker '{marker}' is not a valid Rust macro identifier"
             ));
         }
     }
@@ -206,24 +206,32 @@ pub fn audit_probe_coverage_with_markers(
     }
     // Un-auditable probes: a non-literal seam argument cannot be traced to a declared seam.
     // React rather than silently skip (a silent skip is a false negative). One reaction per
-    // (file, owner-qualified enclosing item, expression text) — deduped, sorted — so two
+    // (marker, file, owner-qualified enclosing item, expression text) — deduped, sorted — so two
     // textually distinct non-literal probes in the same file are distinct findings and
     // baselining one cannot mask another; two byte-identical occurrences in the same file and
-    // the same enclosing item still collapse to one (a stated bound: at that granularity no
-    // further source content distinguishes them, mirroring `module-boundary`'s "same import on
-    // multiple lines is one violation").
-    let mut unauditable: Vec<(&str, &str, &str)> = probes
+    // the same marker and enclosing item still collapse to one (a stated bound: at that
+    // granularity no further source content distinguishes them, mirroring `module-boundary`'s
+    // "same import on multiple lines is one violation").
+    let mut unauditable: Vec<(&str, &str, &str, &str)> = probes
         .iter()
         .filter_map(|p| match p {
-            Probe::Unauditable { file, owner, expr } => {
-                Some((file.as_str(), owner.as_str(), expr.as_str()))
-            }
+            Probe::Unauditable {
+                marker,
+                file,
+                owner,
+                expr,
+            } => Some((
+                marker.as_str(),
+                file.as_str(),
+                owner.as_str(),
+                expr.as_str(),
+            )),
             Probe::Literal(_) => None,
         })
         .collect();
     unauditable.sort_unstable();
     unauditable.dedup();
-    for (file, owner, expr) in unauditable {
+    for (marker, file, owner, expr) in unauditable {
         // The offending source file, owner, and expression are in hand here (the probe scan
         // captured them). Project the file into the `file` field as well as the finding text: it
         // is a genuine observation, so reporting `null` would be a dishonest null. This is the
@@ -232,9 +240,10 @@ pub fn audit_probe_coverage_with_markers(
         violations.push(
             audit_violation(
                 "<un-auditable probe>",
-                "an assert_boundary! seam must be a string literal to be auditable",
+                "a configured probe marker's seam must be a string literal to be auditable",
                 AuditRule::LiteralProbeSeam.key(),
                 RuntimeFact::UnauditableProbe {
+                    marker: marker.to_string(),
                     file: file.to_string(),
                     owner: owner.to_string(),
                     expr: expr.to_string(),

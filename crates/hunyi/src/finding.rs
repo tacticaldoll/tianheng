@@ -736,7 +736,7 @@ fn reject_positional_identity<'a>(
         if identity
             .key()
             .fields()
-            .any(|(_, value)| value.contains("_#") || value.contains("trait_#"))
+            .any(|(_, value)| value.contains("_#"))
         {
             return Err(
                 "cannot identify semantic fact without a stable structural label".to_string(),

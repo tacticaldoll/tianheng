@@ -1,3 +1,5 @@
+//! Async-exposure boundary declaration DSL.
+
 use xuanji::{RuleKey, ScanDepth, Severity};
 
 /// An async-exposure boundary: a module's public API must not declare an `async fn`. The
@@ -29,13 +31,7 @@ pub struct AsyncExposureBoundary {
 impl AsyncExposureBoundary {
     /// Stable semantic identity for this async-exposure rule.
     pub fn rule_key(&self) -> RuleKey {
-        RuleKey::of(
-            "tianheng.rule/hunyi/async-exposure",
-            [(
-                "including_submodules",
-                self.including_submodules().to_string(),
-            )],
-        )
+        RuleKey::of::<_, &str, &str>("tianheng.rule/hunyi/async-exposure", [])
     }
 
     /// The observation scan depth for this boundary.
