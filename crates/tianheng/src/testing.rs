@@ -14,6 +14,14 @@ fn bless_enabled() -> bool {
     std::env::var("BLESS").is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
+fn resolve_relative(path: &Path, base: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    }
+}
+
 /// A test harness for asserting architectural governance properties in `cargo test`.
 ///
 /// Wraps a [`Constitution`] and provides fluent assertion methods for workspace governance,
@@ -81,11 +89,7 @@ impl GovernanceTest {
 
     /// Helper to resolve a fixture manifest path (absolute or relative to `manifest_dir`).
     fn resolve_fixture_manifest(&self, path: impl AsRef<Path>) -> Option<PathBuf> {
-        let target_path = if path.as_ref().is_absolute() {
-            path.as_ref().to_path_buf()
-        } else {
-            self.manifest_dir.join(path.as_ref())
-        };
+        let target_path = resolve_relative(path.as_ref(), &self.manifest_dir);
         self.check_manifest_exists(ensure_cargo_toml_path(&target_path), true)
     }
 
@@ -167,12 +171,8 @@ impl GovernanceTest {
             return self;
         };
 
-        let target_path = if projection_path.as_ref().is_absolute() {
-            projection_path.as_ref().to_path_buf()
-        } else {
-            let root = manifest.parent().unwrap_or_else(|| Path::new("."));
-            root.join(projection_path.as_ref())
-        };
+        let root = manifest.parent().unwrap_or_else(|| Path::new("."));
+        let target_path = resolve_relative(projection_path.as_ref(), root);
 
         let projection = constitution_markdown(&self.constitution);
         let expected = if preamble.is_empty() {
@@ -274,6 +274,18 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn relative_paths_resolve_from_their_callers_base() {
+        let base = std::env::temp_dir().join("tianheng-relative-path-base");
+        assert_eq!(
+            resolve_relative(Path::new("fixtures/violating"), &base),
+            base.join("fixtures/violating")
+        );
+
+        let absolute = base.join("law.md");
+        assert_eq!(resolve_relative(&absolute, Path::new("ignored")), absolute);
     }
 
     #[test]
