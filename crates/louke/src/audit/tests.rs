@@ -619,6 +619,10 @@ fn probe_first_arg_with_generic_comma_preserves_full_span() {
             "& /* comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM",
         ),
         (
+            "fn f() { assert_boundary!(& /* outer /* nested */ comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM, ()); }",
+            "& /* outer /* nested */ comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM",
+        ),
+        (
             "fn f() { assert_boundary!(& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM, ()); }",
             "& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM",
         ),

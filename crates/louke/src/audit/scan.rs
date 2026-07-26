@@ -1145,33 +1145,14 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
     b.len()
 }
 
-/// If `b[i..]` starts a line or block comment, return the index past its end; otherwise `None`.
-/// Ignores string/char value literals so value operands are not skipped as trivia.
-fn skip_comment(b: &[u8], i: usize) -> Option<usize> {
-    if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
-        let mut j = i + 2;
-        while j < b.len() && b[j] != b'\n' {
-            j += 1;
-        }
-        return Some(j);
-    }
-    if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
-        return Some(skip_block_comment(b, i));
-    }
-    None
-}
-
 /// Whether `b` consists only of ASCII whitespace, comments, and unary / prefix operator tokens
 /// (`&`, `*`, `!`, `-`, `+`, `mut`, `ref`). Value literals (strings, chars, numbers) return false.
 fn is_unary_prefix_span(b: &[u8]) -> bool {
     let mut i = 0;
     while i < b.len() {
-        if let Some(next) = skip_comment(b, i) {
+        let next = skip_trivia(b, i);
+        if next != i {
             i = next;
-            continue;
-        }
-        if b[i].is_ascii_whitespace() {
-            i += 1;
             continue;
         }
         if matches!(b[i], b'&' | b'*' | b'!' | b'-' | b'+') {
