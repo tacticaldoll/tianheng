@@ -39,6 +39,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   impl-trait's written `-> impl Trait` and async-exposure's implicit `impl Future` — the two
   existential-leak signals — into one declaration, mirroring `SansIoPure`. Each composed boundary
   keeps its own separate identity; adds no new reaction.
+- `louke::audit_probe_coverage_with_markers(...)`: CI probe-coverage audits can recognize
+  adopter-defined probe macro names while `audit_probe_coverage(...)` preserves
+  `assert_boundary!` as the compatible default.
 
 ### Fixed
 - 圭表 now union-scans every physically existing path candidate when one module declaration mixes
@@ -58,6 +61,15 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   with an un-auditable-probe entry goes stale and needs `--write-baseline`, never silently
   reinterpreted. Two byte-identical expressions in the same file and the same enclosing item still
   collapse to one finding — a stated bound.
+- 圭表 now preserves `cfg_if!` bodies as transparent control-flow wrappers, so enclosed imports,
+  module declarations, and inline symbol calls remain observable instead of being stripped as
+  macro-generated code.
+- 圭表's `must_not_import` now fails closed on ancestor glob hazards such as `use crate::a::*;`
+  when `crate::a::b` is forbidden, while unrelated and non-glob ancestor imports remain clean.
+- 渾儀's signature-coupling alias resolver now walks nested nominal targets in non-generic tuple,
+  array, slice, reference, raw-pointer, group, and parenthesized aliases.
+- 圭表 now normalizes embedded `self` and `super` segments throughout grouped imports and inline
+  symbol paths before evaluating module boundaries.
 
 ### Changed
 - **Breaking:** violation and baseline identity is now exactly governed target + semantic rule key
