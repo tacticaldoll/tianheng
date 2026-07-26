@@ -163,6 +163,29 @@ fn is_transparent_macro_name(bytes: &[u8], bang: usize) -> bool {
     name == b"cfg_if"
 }
 
+/// If `bytes[bang]` is the `!` of a transparent control-flow macro invocation (`cfg_if!`),
+/// return `Some((open_delim_pos, close_delim_pos))`; otherwise `None`. `open_delim_pos` is the
+/// index of `{`, `(`, or `[`, and `close_delim_pos` is the index just past the matching closing
+/// delimiter.
+pub(super) fn transparent_macro_body_at(bytes: &[u8], bang: usize) -> Option<(usize, usize)> {
+    if bytes.get(bang) != Some(&b'!')
+        || !preceding_macro_name(bytes, bang)
+        || !is_transparent_macro_name(bytes, bang)
+    {
+        return None;
+    }
+    let mut j = bang + 1;
+    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+        j += 1;
+    }
+    let open_pos = j;
+    if open_pos >= bytes.len() || !matches!(bytes[open_pos], b'{' | b'(' | b'[') {
+        return None;
+    }
+    let close_pos = balanced_group_end(bytes, open_pos)?;
+    Some((open_pos, close_pos))
+}
+
 /// Whether `word` is a Rust keyword — a word that, before a `!`, marks a unary negation rather than
 /// a macro name (see [`preceding_macro_name`]). Mirrors the 漏刻 audit scanner's own keyword guard;
 /// 三儀 ⊥ 三儀 forbids sharing it, so the two scanners keep parallel copies until the deferred

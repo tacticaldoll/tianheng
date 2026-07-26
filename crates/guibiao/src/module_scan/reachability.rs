@@ -2,7 +2,10 @@
 //! selects governed source files, excluding undeclared orphans, inline shadows, and
 //! remap-shadowed paths. Depends on [`super::lexer`] and [`super::path_vocab`].
 
-use super::lexer::{balanced_group_end, clean_with_positions, is_ident_byte, read_path_string};
+use super::lexer::{
+    balanced_group_end, clean_with_positions, is_ident_byte, read_path_string,
+    transparent_macro_body_at,
+};
 use super::path_vocab::{canonical_segment, is_mod_declaration_keyword, path_within};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -646,53 +649,64 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
     let end = range.end.min(bytes.len());
     let mut declared = Vec::new();
     let mut i = range.start.min(end);
-    // In `cleaned`, non-transparent macro bodies have already been stripped; a `{` preceded by `!`
-    // therefore always opens a transparent macro body (cfg_if!). Inside that macro body, top-level
-    // arm braces (`if #[cfg(...)] { … }` / `else { … }`) are also transparent so their top-level
-    // `mod` declarations are observed. Any `{` opened inside an arm's items (fn/struct/const/etc.)
-    // is a regular block that increments `effective_depth`, hiding local modules.
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    enum BraceKind {
-        MacroBody,
-        Arm,
-        Regular,
-    }
-    let mut brace_stack: Vec<BraceKind> = Vec::new();
-    let mut effective_depth: usize = 0;
-    while i < end {
-        match bytes[i] {
-            b'{' => {
-                let is_after_bang = i > range.start && {
-                    let mut j = i - 1;
-                    while j > range.start && bytes[j].is_ascii_whitespace() {
-                        j -= 1;
-                    }
-                    bytes[j] == b'!'
-                };
-                let kind = if is_after_bang {
-                    BraceKind::MacroBody
-                } else if matches!(brace_stack.last(), Some(BraceKind::MacroBody)) {
-                    // Direct arm brace inside cfg_if! { ... }
-                    BraceKind::Arm
-                } else {
-                    BraceKind::Regular
-                };
 
-                if kind == BraceKind::Regular {
-                    effective_depth += 1;
-                }
-                brace_stack.push(kind);
-                i += 1;
+    struct MacroScope {
+        open_pos: usize,
+        close_pos: usize,
+        macro_depth: usize,
+    }
+    let mut macro_scopes: Vec<MacroScope> = Vec::new();
+    let mut file_depth = 0usize;
+
+    while i < end {
+        // Pop any completed macro scopes
+        while let Some(active) = macro_scopes.last() {
+            if i >= active.close_pos {
+                macro_scopes.pop();
+            } else {
+                break;
             }
-            b'}' => {
-                if let Some(kind) = brace_stack.pop() {
-                    if kind == BraceKind::Regular {
-                        effective_depth = effective_depth.saturating_sub(1);
+        }
+
+        // Check if `i` is the `!` of a transparent macro invocation (`cfg_if!`)
+        if let Some((open_pos, close_pos)) = transparent_macro_body_at(bytes, i) {
+            macro_scopes.push(MacroScope {
+                open_pos,
+                close_pos,
+                macro_depth: 0,
+            });
+            i += 1;
+            continue;
+        }
+
+        let is_top_level = if let Some(active) = macro_scopes.last() {
+            active.macro_depth == 1
+        } else {
+            file_depth == 0
+        };
+
+        match bytes[i] {
+            b'{' | b'(' | b'[' => {
+                if let Some(active) = macro_scopes.last_mut() {
+                    if i > active.open_pos {
+                        active.macro_depth += 1;
                     }
+                } else if bytes[i] == b'{' {
+                    file_depth += 1;
                 }
                 i += 1;
             }
-            b'm' if effective_depth == 0 && is_mod_declaration_keyword(bytes, i) => {
+            b'}' | b')' | b']' => {
+                if let Some(active) = macro_scopes.last_mut() {
+                    if i > active.open_pos {
+                        active.macro_depth = active.macro_depth.saturating_sub(1);
+                    }
+                } else if bytes[i] == b'}' {
+                    file_depth = file_depth.saturating_sub(1);
+                }
+                i += 1;
+            }
+            b'm' if is_top_level && is_mod_declaration_keyword(bytes, i) => {
                 let mut j = i + 3;
                 while j < end && bytes[j].is_ascii_whitespace() {
                     j += 1;
@@ -1663,6 +1677,28 @@ cfg_if::cfg_if! {
 }
 "#;
         assert_eq!(declared_modules(src), vec!["child".to_string()]);
+
+        // Parenthesized macro delimiter form `cfg_if!(...)`
+        let src_parens = r#"
+cfg_if::cfg_if!(
+    if #[cfg(feature = "x")] {
+        mod child_paren;
+    }
+);
+"#;
+        assert_eq!(
+            declared_modules(src_parens),
+            vec!["child_paren".to_string()]
+        );
+
+        // Unary negation `! { ... }` is NOT a macro and MUST NOT treat its block as top-level module scope
+        let src_unary = r#"
+const FLAG: bool = ! {
+    mod local_child {}
+    false
+};
+"#;
+        assert!(declared_modules(src_unary).is_empty());
     }
 
     #[test]
