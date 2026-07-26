@@ -383,7 +383,7 @@ fn usage(message: &str) -> u8 {
         "usage:\n  \
          tianheng check --manifest-path <path/to/Cargo.toml> \
          [--baseline <file> | --write-baseline <file>] [--format text|json|sarif] \
-         [--warn-uncovered]\n  \
+         [--warn-uncovered] [--disallow-stale]\n  \
          tianheng list [--format text|json|markdown]"
     );
     eprintln!("error: {message}");
