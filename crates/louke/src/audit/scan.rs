@@ -1097,10 +1097,10 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
             i += 2;
             continue;
         }
-        if b[i].is_ascii_alphanumeric() || b[i] == b'_' {
+        if is_ident_byte(b[i]) {
             last_token_was_ident_or_gt = true;
             last_token_was_double_colon = false;
-            while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+            while i < b.len() && is_ident_byte(b[i]) {
                 i += 1;
             }
             continue;

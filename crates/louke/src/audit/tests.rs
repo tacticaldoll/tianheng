@@ -598,6 +598,10 @@ fn probe_first_arg_with_generic_comma_preserves_full_span() {
             "fn f() { assert_boundary!(SEAM::<Outer /* comment */ <A, B>, C>, obj); }",
             "SEAM::<Outer /* comment */ <A, B>, C>",
         ),
+        (
+            "fn f() { assert_boundary!(seam::<Ω <A, B>, C>, obj); }",
+            "seam::<Ω <A, B>, C>",
+        ),
     ] {
         let mut probes = Vec::new();
         scan_source(src, "test.rs", &mut probes);
