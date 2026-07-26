@@ -270,13 +270,7 @@ enum PathAttrKind {
 }
 
 fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> PathAttrKind {
-    let mut start = 0;
-    for i in (0..mod_index).rev() {
-        if matches!(bytes[i], b';' | b'{' | b'}') {
-            start = i + 1;
-            break;
-        }
-    }
+    let start = attribute_prefix_start(bytes, mod_index);
     match attr_prefix_path_kind(&bytes[start..mod_index]) {
         PathAttrKind::Remaps {
             direct,
@@ -287,6 +281,17 @@ fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> PathAttrKind {
         },
         other => other,
     }
+}
+
+/// Start of the top-level attribute prefix immediately before the item at `item_index`.
+///
+/// A preceding item or block delimiter ends the candidate prefix; punctuation inside literals and
+/// comments has already been stripped by the reachability scan's cleaned source.
+fn attribute_prefix_start(bytes: &[u8], item_index: usize) -> usize {
+    (0..item_index)
+        .rev()
+        .find(|&i| matches!(bytes[i], b';' | b'{' | b'}'))
+        .map_or(0, |i| i + 1)
 }
 
 fn attr_prefix_path_kind(bytes: &[u8]) -> PathAttrKind {
@@ -442,13 +447,7 @@ fn cfg_attr_group_path_eqs<'a>(
 /// grant this tolerance (`#[cfg_attr(unix, allow(dead_code))] mod x;` with no backing file is a
 /// genuine compile error, E0583, on every platform).
 fn has_bare_cfg_attr_before_item(bytes: &[u8], mod_index: usize) -> bool {
-    let mut start = 0;
-    for i in (0..mod_index).rev() {
-        if matches!(bytes[i], b';' | b'{' | b'}') {
-            start = i + 1;
-            break;
-        }
-    }
+    let start = attribute_prefix_start(bytes, mod_index);
     attr_prefix_has_bare_cfg(&bytes[start..mod_index])
 }
 
