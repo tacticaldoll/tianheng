@@ -1080,6 +1080,7 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
     let mut depth = 0usize;
     let mut angle_depth = 0usize;
     let mut last_token_was_double_colon = false;
+    let mut last_token_was_ident_or_gt = false;
     let mut i = open;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
@@ -1092,7 +1093,16 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
         }
         if i + 1 < b.len() && b[i] == b':' && b[i + 1] == b':' {
             last_token_was_double_colon = true;
+            last_token_was_ident_or_gt = false;
             i += 2;
+            continue;
+        }
+        if b[i].is_ascii_alphanumeric() || b[i] == b'_' {
+            last_token_was_ident_or_gt = true;
+            last_token_was_double_colon = false;
+            while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+                i += 1;
+            }
             continue;
         }
         match b[i] {
@@ -1108,9 +1118,7 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
                     let is_qualified_start = i == open
                         || (i > open && b[open..i].iter().all(|c| c.is_ascii_whitespace()));
                     let is_turbofish = last_token_was_double_colon;
-                    let prev = if i > open { b[i - 1] } else { b'\0' };
-                    let is_inner_generic = angle_depth > 0
-                        && (prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>');
+                    let is_inner_generic = angle_depth > 0 && last_token_was_ident_or_gt;
                     let is_as_trait = i >= 3 && (&b[i - 3..i] == b"as " || &b[i - 2..i] == b"as");
                     if is_qualified_start || is_turbofish || is_inner_generic || is_as_trait {
                         angle_depth += 1;
@@ -1124,11 +1132,15 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
                         angle_depth -= 1;
                     }
                 }
+                last_token_was_ident_or_gt = true;
             }
             b',' if depth == 0 && angle_depth == 0 => return i,
             _ => {}
         }
         last_token_was_double_colon = false;
+        if b[i] != b'>' {
+            last_token_was_ident_or_gt = false;
+        }
         i += 1;
     }
     b.len()
