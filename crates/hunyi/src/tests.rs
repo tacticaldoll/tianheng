@@ -6133,13 +6133,20 @@ fn impl_trait_subtree_cfg_branches_never_share_an_unrenderable_owner_fallback() 
 }
 
 #[test]
-fn impl_trait_operand_scoped_boundary_rejects_subtree_scope() {
-    // A stated bound (not a silent gap): operand-scoping's per-branch principal-resolution
-    // machinery is proven only over a single module, so combining it with subtree scope fails
-    // loud with an actionable message rather than silently under- or mis-reacting.
+fn impl_trait_operand_scoped_boundary_reacts_across_file_and_inline_submodules() {
     let (metadata, _fixture) = fixture_metadata(
         "impltrait-operand-subtree",
-        &[("lib.rs", "pub fn make() -> impl crate::Port { todo!() }\n")],
+        &[
+            (
+                "lib.rs",
+                "pub trait Port {}\npub trait Other {}\npub mod file;\n\
+                 pub mod inline { pub fn other() -> impl crate::Other { todo!() } }\n",
+            ),
+            (
+                "file.rs",
+                "use crate::Port as ApiPort;\npub fn port() -> impl ApiPort { todo!() }\n",
+            ),
+        ],
     );
     let boundary = ImplTraitBoundary::in_crate("x")
         .module("crate")
@@ -6147,9 +6154,16 @@ fn impl_trait_operand_scoped_boundary_rejects_subtree_scope() {
         .including_submodules()
         .because("r");
     let mut violations = Vec::new();
-    let err = check_impl_trait_boundary(&metadata, &boundary, &mut violations).unwrap_err();
-    assert!(err.contains("not yet supported"), "{err}");
-    assert!(violations.is_empty());
+    check_impl_trait_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].target(), "crate");
+    assert!(violations[0].finding.contains("port"));
+    assert!(
+        violations[0]
+            .file
+            .as_deref()
+            .is_some_and(|file| file.ends_with("file.rs"))
+    );
 }
 
 // --- async-exposure -------------------------------------------------------

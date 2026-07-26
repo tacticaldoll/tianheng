@@ -8,7 +8,7 @@ use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
 use crate::collect::collect_item_return_impl_traits;
-use crate::crate_scope::dependency_names;
+use crate::crate_scope::{dependency_names, extern_resolution, file_extern_scope};
 use crate::driver::run_boundaries;
 use crate::dsl::ImplTraitBoundary;
 use crate::emit::{
@@ -17,10 +17,12 @@ use crate::emit::{
 };
 use crate::file_scope::resolve_crate;
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_attributed_facts};
-use crate::resolve::collect_uses;
+use crate::resolve::{canonical_path_str, collect_uses};
 use crate::rules::IMPL_TRAIT_RULE;
 use crate::scan::walk_subtree_modules;
-use crate::shape_scan::{operand_module_findings, shape_module_findings};
+use crate::shape_scan::{
+    matches_forbidden_principal, operand_module_findings, shape_module_findings,
+};
 
 /// Run the impl-trait boundaries against the Cargo workspace at `manifest_path`.
 ///
@@ -43,27 +45,24 @@ pub(crate) fn check_impl_trait_boundary(
 
     // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
     // The default path governs only the anchored module's own seam (byte-identical to before).
-    // Not yet combined with operand-scoping (a stated bound, not a silent gap — see
-    // `openspec/changes/existential-leak-profile`'s design): the per-branch principal-resolution
-    // machinery `impl_trait_operand_module_findings` uses is proven only over a single module's
-    // own branch structure, and extending it across a whole subtree is deferred to a real second
-    // consumer rather than attempted speculatively here.
     if boundary.including_submodules() {
-        if !boundary.forbidden_operands.is_empty() {
-            return Err(
-                "impl-trait subtree scope (including_submodules) is not yet supported combined \
-                 with operand-scoping (must_not_expose_impl_trait_of); use the shape-only \
-                 must_not_expose_impl_trait with including_submodules(), or drop \
-                 including_submodules() for an operand-scoped boundary"
-                    .to_string(),
-            );
-        }
-        let findings = impl_trait_subtree_findings(
-            src_dir,
-            &root_file,
-            &boundary.module,
-            &boundary.crate_package,
-        )?;
+        let findings = if boundary.forbidden_operands.is_empty() {
+            impl_trait_subtree_findings(
+                src_dir,
+                &root_file,
+                &boundary.module,
+                &boundary.crate_package,
+            )?
+        } else {
+            impl_trait_operand_subtree_findings(
+                src_dir,
+                &root_file,
+                &boundary.module,
+                &boundary.forbidden_operands,
+                &boundary.crate_package,
+                &dependency_names(package),
+            )?
+        };
         push_multi_module_violations(
             violations,
             MultiModuleViolationContext {
@@ -122,8 +121,7 @@ pub(crate) fn check_impl_trait_boundary(
 /// string alone, which misattributes a finding once two `#[cfg]`-split branches share one module
 /// path). The subtree analogue of [`impl_trait_module_findings`]: same per-item collector
 /// ([`collect_item_return_impl_traits`], so a seam finding is byte-identical to the single-module
-/// path), applied at every module the subtree walk yields. Shape-only — not available combined
-/// with operand-scoping (see [`check_impl_trait_boundary`]).
+/// path), applied at every module the subtree walk yields.
 ///
 /// The `ordinal` passed to the collector is ONE counter incrementing continuously across every
 /// item the subtree walk yields — never reset per module or per branch — because (unlike async's
@@ -157,6 +155,63 @@ pub(crate) fn impl_trait_subtree_findings(
             }));
         }
     }
+    sort_attributed_facts(&mut findings)?;
+    Ok(findings)
+}
+
+/// Operand-scoped subtree analogue of [`impl_trait_operand_module_findings`]. Module traversal
+/// remains owned by [`walk_subtree_modules`]; each returned branch builds its own `use` and
+/// extern-shadow scope while sharing one crate-wide extern/re-export resolution. This keeps
+/// mutually-exclusive cfg branches isolated and applies the same principal matcher as the
+/// single-module operand reaction.
+pub(crate) fn impl_trait_operand_subtree_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    forbidden: &[String],
+    crate_package: &str,
+    dep_names: &[String],
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
+    let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
+    let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
+    let forbidden: Vec<String> = forbidden
+        .iter()
+        .map(|path| canonical_path_str(path))
+        .collect();
+    let mut findings = Vec::new();
+    let mut ordinal = 0usize;
+
+    for (mod_path, items, file) in &modules {
+        let uses = collect_uses(items);
+        let file_scope = file_extern_scope(&resolution, items);
+        for item in items {
+            let mut collected = Vec::new();
+            collect_item_return_impl_traits(item, mod_path, &uses, ordinal, &mut collected);
+            ordinal += 1;
+            findings.extend(
+                collected
+                    .into_iter()
+                    .filter(|exposure| {
+                        matches_forbidden_principal(
+                            exposure,
+                            &uses,
+                            mod_path,
+                            &resolution,
+                            &file_scope,
+                            &forbidden,
+                        )
+                    })
+                    .map(|exposure| {
+                        (
+                            shape_finding(exposure, ExposureKind::ImplTrait),
+                            mod_path.clone(),
+                            file.clone(),
+                        )
+                    }),
+            );
+        }
+    }
+
     sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }

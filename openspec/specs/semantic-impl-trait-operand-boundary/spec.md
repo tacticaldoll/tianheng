@@ -22,10 +22,26 @@ trait** canonicalizes to a member of the set is a violation. The shape-only
 variant is a distinct, narrower rule on the same boundary type. The system MUST NOT require TOML,
 YAML, Markdown, or any generated policy file to declare or run the boundary.
 
+The operand filter SHALL compose with the boundary's `including_submodules()` scan depth. In that
+composition, the system SHALL apply the same operand-resolution ladder independently in every
+descendant module branch yielded by the subtree walk; module-local `use` aliases and extern-name
+shadowing MUST NOT leak between mutually exclusive cfg branches. The subtree walk's existing
+missing-module, `#[path]`, and cycle guards remain authoritative, so the composed reaction fails
+loud on an unobservable descendant rather than silently skipping it.
+
 #### Scenario: Operand-scoped boundary declared in Rust
 
 - **WHEN** a developer writes `ImplTraitBoundary::in_crate("core").module("crate::core").must_not_expose_impl_trait_of(["crate::ports::Port"]).because("the core seam may return impl Iterator but never an existential Port")`
 - **THEN** an impl-trait boundary is held, targeting `crate::core`, forbidding a returned `impl Trait` whose principal trait is `crate::ports::Port`, with a non-empty reason and a default `enforce` severity, ready to be composed with the semantic dimension at the gate
+
+#### Scenario: Operand scope composes with subtree scope
+
+- **WHEN** an operand-scoped boundary anchored at `crate::core` calls `including_submodules()`, and
+  `crate::core::adapter` returns `impl ApiPort` through a module-local
+  `use crate::ports::Port as ApiPort`
+- **THEN** the system resolves that descendant branch's alias, emits the forbidden-operand
+  violation attributed to the descendant's source file, and keeps the violation target anchored at
+  `crate::core`
 
 ### Requirement: A returned impl Trait of a forbidden operand is a violation
 
