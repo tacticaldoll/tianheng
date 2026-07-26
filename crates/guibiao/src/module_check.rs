@@ -66,6 +66,10 @@ fn within_scan_depth(candidate: &str, anchor: &str, depth: ScanDepth) -> bool {
     }
 }
 
+fn is_self_import_only(file_module: &str, governed_module: &str, depth: ScanDepth) -> bool {
+    depth == ScanDepth::Subtree && path_within(file_module, governed_module)
+}
+
 pub(crate) fn check_module_boundary(
     metadata: &Value,
     boundary: &ModuleBoundary,
@@ -200,7 +204,7 @@ pub(crate) fn check_module_boundary(
             // Fast path: a file whose module is within the protected subtree hosts only
             // self-imports (its inline descendants are within it, hence within the protected
             // module too), never an inbound edge — skip the read.
-            if boundary.depth == ScanDepth::Subtree && path_within(&file_module, &governed_module) {
+            if is_self_import_only(&file_module, &governed_module, boundary.depth) {
                 continue;
             }
             // Forbid-one perf pre-filter: the importers a file can carry are its own module and its
@@ -308,7 +312,7 @@ pub(crate) fn check_module_boundary(
         for (file, file_module) in all_files {
             // A file whose module is within the permitted subtree hosts only permitted imports
             // (its inline descendants are within it too) — skip the read.
-            if boundary.depth == ScanDepth::Subtree && path_within(&file_module, &governed_module) {
+            if is_self_import_only(&file_module, &governed_module, boundary.depth) {
                 continue;
             }
             let text = std::fs::read_to_string(&file)
