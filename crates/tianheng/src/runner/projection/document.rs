@@ -2,8 +2,8 @@ use guibiao::constitution_json;
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
-    UnsafeBoundary, VisibilityBoundary,
+    SIGNATURE_RULE, ScanDepth, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary,
+    UNSAFE_CONFINEMENT_RULE, UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary};
 use serde_json::Value;
@@ -140,6 +140,15 @@ fn shape_operand_boundary_json(
     }
     object
 }
+/// Project the shared subtree opt-in used by semantic seam boundaries. A shallow boundary remains
+/// byte-identical; a subtree boundary carries both its compatibility flag and canonical depth.
+fn subtree_scoped(mut object: Value, scan_depth: ScanDepth) -> Value {
+    if !scan_depth.is_shallow() {
+        object["including_submodules"] = serde_json::json!(true);
+        object["scan_depth"] = serde_json::json!(scan_depth.as_str());
+    }
+    object
+}
 /// The JSON projection of one dyn-trait boundary, mirroring a semantic boundary's shape (`kind`,
 /// `target`, `crate`, `rule`, `severity`, `reason`). An operand-scoped boundary additionally
 /// carries the `forbidden` operand set; a shape-only boundary (empty set) emits no such field.
@@ -155,45 +164,37 @@ pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) ->
     )
 }
 pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    let mut object = shape_operand_boundary_json(
-        boundary.module(),
-        boundary.crate_package(),
-        IMPL_TRAIT_RULE,
-        boundary.severity().as_str(),
-        boundary.reason(),
-        boundary.anchor(),
-        boundary.forbidden_operands(),
-    );
     // The subtree opt-in changes the reaction (whole subtree vs the anchored seam), so the
     // projected law must show it. Emitted only when set, so a bare boundary's JSON (and the
     // Markdown derived from it) stays byte-identical — mirrors async-exposure's own projection.
-    if boundary.including_submodules() {
-        object["including_submodules"] = serde_json::json!(true);
-    }
-    if !boundary.scan_depth().is_shallow() {
-        object["scan_depth"] = serde_json::json!(boundary.scan_depth().as_str());
-    }
-    object
+    subtree_scoped(
+        shape_operand_boundary_json(
+            boundary.module(),
+            boundary.crate_package(),
+            IMPL_TRAIT_RULE,
+            boundary.severity().as_str(),
+            boundary.reason(),
+            boundary.anchor(),
+            boundary.forbidden_operands(),
+        ),
+        boundary.scan_depth(),
+    )
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
-    let mut object = semantic_module_json(
-        boundary.module(),
-        boundary.crate_package(),
-        ASYNC_EXPOSURE_RULE,
-        boundary.severity().as_str(),
-        boundary.reason(),
-        boundary.anchor(),
-    );
     // The subtree opt-in changes the reaction (whole subtree vs the anchored seam), so the
     // projected law must show it. Emitted only when set, so a bare boundary's JSON (and the
     // Markdown derived from it) stays byte-identical.
-    if boundary.including_submodules() {
-        object["including_submodules"] = serde_json::json!(true);
-    }
-    if !boundary.scan_depth().is_shallow() {
-        object["scan_depth"] = serde_json::json!(boundary.scan_depth().as_str());
-    }
-    object
+    subtree_scoped(
+        semantic_module_json(
+            boundary.module(),
+            boundary.crate_package(),
+            ASYNC_EXPOSURE_RULE,
+            boundary.severity().as_str(),
+            boundary.reason(),
+            boundary.anchor(),
+        ),
+        boundary.scan_depth(),
+    )
 }
 /// The JSON projection of one unsafe-confinement boundary (`kind`, `target` = the confined crate,
 /// `crate`, `rule`, `severity`, `reason`) plus the `allowed_locations` subtree set.
