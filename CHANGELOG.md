@@ -30,6 +30,8 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - `ScanDepth::{Shallow, Subtree}` and explicit `.depth(...)` controls on supporting 圭表 and 渾儀
   boundaries. Legacy module boundaries retain subtree evaluation and identity; shallow scope is
   projected explicitly.
+- `check --disallow-stale` turns any stale baseline entry into a gate failure while preserving
+  constitution-error precedence and consistent text, JSON, and SARIF exit semantics.
 - `ImplTraitBoundary::including_submodules()`: an opt-in subtree scope for the impl-trait
   (existential RPIT) boundary, mirroring `AsyncExposureBoundary`'s existing depth. Defaults off;
   an existing boundary projects and reacts byte-identically.

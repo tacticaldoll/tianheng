@@ -10,10 +10,6 @@ use super::*;
 use serde_json::Value;
 use xuanji::pretty_json;
 
-/// Render the outcome as a JSON document for machine consumption: a faithful
-/// projection of [`Outcome`] with each violation's `kind`, the boundary `reason` as
-/// the repair hint, and `exit_code` mirroring the process exit. `stale` lists
-/// baseline entries matching no current violation (empty outside gate mode).
 /// Render the outcome as a JSON document for machine consumption, with optional stale-disallow policy:
 /// a faithful projection of [`Outcome`] with each violation's `kind`, the boundary `reason` as
 /// the repair hint, and `exit_code` mirroring the process exit. `stale` lists baseline entries
@@ -26,7 +22,8 @@ pub fn report_json_with_stale_policy(
     coverage: Option<&Coverage>,
     disallow_stale: bool,
 ) -> String {
-    let has_disallowed_stale = disallow_stale && !stale.is_empty();
+    let policy = stale_policy(outcome, stale, disallow_stale);
+    let has_disallowed_stale = policy.stale_disallowed;
     let (label, violations, error) = match outcome {
         Outcome::Clean => (
             if has_disallowed_stale {
@@ -52,26 +49,18 @@ pub fn report_json_with_stale_policy(
     let stale_baseline: Vec<Value> = stale
         .iter()
         .map(|entry| {
-            serde_json::json!({
-                "target": entry.id.target(),
-                "rule": entry.rule,
-                "finding": entry.finding,
-                "rule_key": entry.id.rule_key().to_json(),
-                "fact": entry.id.fact().to_json(),
-                "owner": entry.owner,
-                "tracker": entry.tracker,
-            })
+            let mut object = entry.id.to_json();
+            object["rule"] = serde_json::json!(entry.rule);
+            object["finding"] = serde_json::json!(entry.finding);
+            object["owner"] = serde_json::json!(entry.owner);
+            object["tracker"] = serde_json::json!(entry.tracker);
+            object
         })
         .collect();
-    let exit_code = if has_disallowed_stale && outcome.exit_code() == 0 {
-        1
-    } else {
-        outcome.exit_code()
-    };
     let mut document = serde_json::json!({
         "format": "tianheng.reaction/structured-facts",
         "outcome": label,
-        "exit_code": exit_code,
+        "exit_code": policy.exit_code,
         "violations": violations,
         "stale_baseline": stale_baseline,
         "stale_disallowed": has_disallowed_stale,
@@ -84,6 +73,36 @@ pub fn report_json_with_stale_policy(
         });
     }
     pretty_json(&document)
+}
+
+/// Pure result of applying the optional stale-baseline gate policy to an [`Outcome`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StalePolicy {
+    /// Whether stale entries exist and the caller requested that they fail the gate.
+    pub stale_disallowed: bool,
+    /// Final process exit code after applying the policy.
+    pub exit_code: u8,
+}
+
+/// Apply the stale-baseline gate policy once for every projection and runner consumer.
+///
+/// Disallowed stale entries turn an otherwise successful reaction into exit `1`; an existing
+/// violation or constitution error retains its own exit code.
+pub fn stale_policy(
+    outcome: &Outcome,
+    stale: &[BaselineEntry],
+    disallow_stale: bool,
+) -> StalePolicy {
+    let stale_disallowed = disallow_stale && !stale.is_empty();
+    let exit_code = if stale_disallowed && outcome.exit_code() == 0 {
+        1
+    } else {
+        outcome.exit_code()
+    };
+    StalePolicy {
+        stale_disallowed,
+        exit_code,
+    }
 }
 
 /// Render the outcome as a JSON document for machine consumption.

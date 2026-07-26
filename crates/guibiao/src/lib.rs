@@ -25,7 +25,8 @@ use serde_json::Value;
 mod module_scan;
 mod projection;
 pub use projection::{
-    constitution_json, constitution_text, report_json, report_json_with_stale_policy,
+    StalePolicy, constitution_json, constitution_text, report_json, report_json_with_stale_policy,
+    stale_policy,
 };
 mod cargo_metadata;
 pub(crate) use cargo_metadata::*;

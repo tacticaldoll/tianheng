@@ -875,11 +875,10 @@ fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
 }
 
-/// Whether the identifier run `word` is a Rust keyword (strict or reserved). A macro name is a real
-/// identifier and never a keyword, so a keyword immediately before `!` is unary negation
-/// (`return !(x)`, `if !(cond) {…}`), not a macro invocation — its operand must not be skipped as a
-/// macro body. `macro_rules` is deliberately absent (it is not a keyword and must reach the
-/// name-skip). A non-ASCII / non-UTF-8 run is never a keyword.
+/// Whether `marker` is one valid Rust macro identifier accepted by the configurable probe scan.
+///
+/// Plain keywords and invalid identifier spellings are rejected; raw identifiers may escape a
+/// keyword except for Rust's non-escapable path/self names.
 pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
     if marker.is_empty() {
         return false;
@@ -918,6 +917,11 @@ pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
         .all(|&b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
+/// Whether the identifier run `word` is a Rust keyword (strict or reserved). A macro name is a real
+/// identifier and never a keyword, so a keyword immediately before `!` is unary negation
+/// (`return !(x)`, `if !(cond) {…}`), not a macro invocation — its operand must not be skipped as a
+/// macro body. `macro_rules` is deliberately absent (it is not a keyword and must reach the
+/// name-skip). A non-ASCII / non-UTF-8 run is never a keyword.
 fn is_rust_keyword(word: &[u8]) -> bool {
     let Ok(word) = std::str::from_utf8(word) else {
         return false;

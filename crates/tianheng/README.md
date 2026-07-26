@@ -77,9 +77,10 @@ gate/write modes, coverage advisories, text/JSON/SARIF presentation, and process
 
 The same reaction model is available directly from `guibiao`, `hunyi`, and `louke`; each
 instrument can be adopted and inspected without importing this facade. Tianheng is the one
-built-in cross-instrument composer. This release adds neither a dimension/plugin trait nor a
-`tianheng::testing` assertion DSL: architecture tests call the existing pure check functions and
-assert on structured `Outcome` values.
+built-in cross-instrument composer. This release adds no dimension/plugin trait. Architecture
+tests may assert directly on structured `Outcome` values or use
+`tianheng::testing::GovernanceTest`, the shipped fluent harness for clean reactions, workspace
+coverage, projection freshness, and negative fixtures.
 
 `your-binary check --manifest-path path/to/Cargo.toml` reacts against *your* constitution:
 exit `0` (clean / warn-only / fully baselined), `1` (enforced violation), `2`

@@ -1,3 +1,5 @@
+//! Async-exposure boundary declaration DSL.
+
 use xuanji::{RuleKey, ScanDepth, Severity};
 
 /// An async-exposure boundary: a module's public API must not declare an `async fn`. The

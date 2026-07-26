@@ -28,7 +28,7 @@ use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
-    constitution_text, report_json, report_json_with_stale_policy,
+    constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
 use louke::audit_probe_coverage;
 use xingbiao::{cargo_metadata, member_root_files};
@@ -539,12 +539,7 @@ fn gate(
         _ => &empty,
     };
     let stale: Vec<BaselineEntry> = baseline.stale(report).into_iter().cloned().collect();
-    let has_stale = disallow_stale && !stale.is_empty();
-    let exit_code = if has_stale && outcome.exit_code() == 0 {
-        1
-    } else {
-        outcome.exit_code()
-    };
+    let policy = stale_policy(outcome, &stale, disallow_stale);
 
     match format {
         ReportFormat::Json => println!(
@@ -565,7 +560,7 @@ fn gate(
                     entry.finding
                 );
             }
-            if has_stale {
+            if policy.stale_disallowed {
                 eprintln!(
                     "Tianheng: --disallow-stale failed: {} stale baseline entry/entries found",
                     stale.len()
@@ -576,7 +571,7 @@ fn gate(
             }
         }
     }
-    exit_code
+    policy.exit_code
 }
 
 /// Fold two outcomes into one reaction. Reused across the composition chain — static + semantic,

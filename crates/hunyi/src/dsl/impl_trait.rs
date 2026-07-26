@@ -1,3 +1,5 @@
+//! Impl-trait exposure boundary declaration DSL.
+
 use xuanji::{RuleKey, ScanDepth, Severity};
 
 /// An impl-trait boundary: a module's public API must not **return** a written `impl Trait`

@@ -2222,6 +2222,38 @@ fn report_json_reflects_baseline_and_stale_in_gate() {
 }
 
 #[test]
+fn stale_policy_is_one_pure_exit_code_source_for_runner_and_projection() {
+    let baseline = Baseline::from_json(
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"old rule","finding":"gone",
+            "rule_key":{"type":"tianheng.rule/test/old","fields":{}},
+            "fact":{"type":"tianheng.fact/test/old","shape":"gone","fields":{}}
+        }]}"#,
+    )
+    .unwrap();
+    let stale: Vec<BaselineEntry> = baseline.entries().cloned().collect();
+
+    assert_eq!(
+        stale_policy(&Outcome::Clean, &stale, true),
+        StalePolicy {
+            stale_disallowed: true,
+            exit_code: 1,
+        }
+    );
+    assert_eq!(
+        stale_policy(
+            &Outcome::ConstitutionError("cannot judge".into()),
+            &stale,
+            true
+        )
+        .exit_code,
+        2,
+        "stale policy never masks a constitution error"
+    );
+    assert_eq!(stale_policy(&Outcome::Clean, &stale, false).exit_code, 0);
+}
+
+#[test]
 fn report_json_includes_coverage_when_present() {
     let coverage = Coverage {
         total: 3,
