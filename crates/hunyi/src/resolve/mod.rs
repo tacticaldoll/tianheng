@@ -584,7 +584,7 @@ pub(crate) fn canonicalize_through_single_alias_map(
 }
 
 /// The alias's targets as **bare nominal paths** — collects all `syn::Path` targets contained in
-/// `ty`, recursively walking non-generic compound type constructors (`Type::Reference`,
+/// `ty`, iteratively walking non-generic compound type constructors (`Type::Reference`,
 /// `Type::Ptr`, `Type::Tuple`, `Type::Slice`, `Type::Array`, `Type::Group`, `Type::Paren`). Any
 /// path with `qself` or generic arguments (`Vec<T>`) is skipped — a stated coverage bound, never a
 /// silent claim.
