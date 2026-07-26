@@ -587,12 +587,12 @@ fn probe_first_arg_with_generic_comma_preserves_full_span() {
             "SEAM::<[Foo<A, B>; 1], C>",
         ),
         (
-            "fn f() { assert_boundary!(seam:: <A, B>, obj); }",
-            "seam:: <A, B>",
+            "fn f() { assert_boundary!(seam:: // comment\n <A, B>, obj); }",
+            "seam:: // comment\n <A, B>",
         ),
         (
-            "fn f() { assert_boundary!(seam:: /* comment */ <A, C>, obj); }",
-            "seam:: /* comment */ <A, C>",
+            "fn f() { assert_boundary!(seam:: /* /* nested */ */ <A, C>, obj); }",
+            "seam:: /* /* nested */ */ <A, C>",
         ),
     ] {
         let mut probes = Vec::new();

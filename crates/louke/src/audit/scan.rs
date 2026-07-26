@@ -1079,10 +1079,20 @@ fn capture_probe(b: &[u8], i: usize, file: &str, owner: &str) -> (Option<Probe>,
 fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
     let mut depth = 0usize;
     let mut angle_depth = 0usize;
+    let mut last_token_was_double_colon = false;
     let mut i = open;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
             i = next;
+            continue;
+        }
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if i + 1 < b.len() && b[i] == b':' && b[i + 1] == b':' {
+            last_token_was_double_colon = true;
+            i += 2;
             continue;
         }
         match b[i] {
@@ -1097,7 +1107,7 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
                 if depth == 0 {
                     let is_qualified_start = i == open
                         || (i > open && b[open..i].iter().all(|c| c.is_ascii_whitespace()));
-                    let is_turbofish = preceding_is_double_colon(b, open, i);
+                    let is_turbofish = last_token_was_double_colon;
                     let prev = if i > open { b[i - 1] } else { b'\0' };
                     let is_inner_generic = angle_depth > 0
                         && (prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>');
@@ -1118,39 +1128,10 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
             b',' if depth == 0 && angle_depth == 0 => return i,
             _ => {}
         }
+        last_token_was_double_colon = false;
         i += 1;
     }
     b.len()
-}
-
-/// Check whether the non-trivia bytes before `pos` (bounded by `open`) end with `::`.
-/// Handles optional whitespace and block comments (`/* ... */`) between `::` and `<`.
-fn preceding_is_double_colon(b: &[u8], open: usize, pos: usize) -> bool {
-    let mut j = pos;
-    while j > open {
-        j -= 1;
-        if b[j].is_ascii_whitespace() {
-            continue;
-        }
-        if j > open && b[j] == b'/' && b[j - 1] == b'*' {
-            // Scan backward past block comment `/* ... */`
-            j -= 1;
-            while j > open {
-                j -= 1;
-                if b[j] == b'*' && j > open && b[j - 1] == b'/' {
-                    j -= 1;
-                    break;
-                }
-            }
-            continue;
-        }
-        // Check if current and previous byte form `::`
-        if b[j] == b':' && j > open && b[j - 1] == b':' {
-            return true;
-        }
-        return false;
-    }
-    false
 }
 
 /// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
