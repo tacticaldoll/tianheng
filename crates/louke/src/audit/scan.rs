@@ -1097,8 +1097,8 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
                 if depth == 0 {
                     let is_qualified_start = i == open
                         || (i > open && b[open..i].iter().all(|c| c.is_ascii_whitespace()));
+                    let is_turbofish = preceding_is_double_colon(b, open, i);
                     let prev = if i > open { b[i - 1] } else { b'\0' };
-                    let is_turbofish = prev == b':';
                     let is_inner_generic = angle_depth > 0
                         && (prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'>');
                     let is_as_trait = i >= 3 && (&b[i - 3..i] == b"as " || &b[i - 2..i] == b"as");
@@ -1121,6 +1121,36 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
         i += 1;
     }
     b.len()
+}
+
+/// Check whether the non-trivia bytes before `pos` (bounded by `open`) end with `::`.
+/// Handles optional whitespace and block comments (`/* ... */`) between `::` and `<`.
+fn preceding_is_double_colon(b: &[u8], open: usize, pos: usize) -> bool {
+    let mut j = pos;
+    while j > open {
+        j -= 1;
+        if b[j].is_ascii_whitespace() {
+            continue;
+        }
+        if j > open && b[j] == b'/' && b[j - 1] == b'*' {
+            // Scan backward past block comment `/* ... */`
+            j -= 1;
+            while j > open {
+                j -= 1;
+                if b[j] == b'*' && j > open && b[j - 1] == b'/' {
+                    j -= 1;
+                    break;
+                }
+            }
+            continue;
+        }
+        // Check if current and previous byte form `::`
+        if b[j] == b':' && j > open && b[j - 1] == b':' {
+            return true;
+        }
+        return false;
+    }
+    false
 }
 
 /// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
