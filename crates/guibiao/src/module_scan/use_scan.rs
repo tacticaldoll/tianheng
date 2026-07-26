@@ -2,10 +2,10 @@
 //! `crate::…` module paths it imports via `use` — grouped/glob forms expanded, raw
 //! identifiers canonicalized, external crates and out-of-scope forms (bare path
 //! expressions, macro-generated imports) dropped. A `::*` glob is observed at its **base**
-//! module only (`use a::b::*;` → `a::b`): a glob of an *ancestor* of a forbidden module does
-//! not surface the forbidden descendant as an edge — a declared partial-coverage bound of the
-//! denylist rule (`must_not_import`), documented on its builder. Inline `mod name { … }` nesting is
-//! tracked so `self`/`super` resolve against the real enclosing module. Depends downward
+//! module (`use a::b::*;` → `a::b`) and retains its glob shape, so `must_not_import` can react
+//! fail-closed when that base is equal to or an ancestor of a forbidden module. Inline
+//! `mod name { … }` nesting is tracked so `self`/`super` resolve against the real enclosing
+//! module. Depends downward
 //! on [`super::lexer`] (hygiene / token boundaries) and [`super::path_vocab`] (segment
 //! canonicalization, the `mod`-keyword test); pure string processing, no model type.
 
