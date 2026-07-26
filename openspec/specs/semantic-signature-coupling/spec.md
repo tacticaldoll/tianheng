@@ -151,7 +151,7 @@ The system SHALL resolve a type named in a signature using the **shared 渾儀 r
 - **A local type-namespace item shadows the extern prelude.** A bare head naming a local `struct`/`enum`/`union`/`trait`/`type`-alias/`mod` in the governed module denotes that local item, and the extern oracle SHALL NOT fire for it.
 - **A bare local-alias chain resolves regardless of collection order.** When a type alias's target is itself a bare local alias whose name shadows a dependency (`type serde = crate::infra::Db; type X = serde;`), the alias-collection ladder SHALL resolve the local alias before the extern oracle (identical to the query ladder), closing the chain to the defining path.
 
-A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a type defined only in a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed, so its types are collected and resolvable), a complex-target or generic type alias, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
+A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a type defined only in a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed, so its types are collected and resolvable), a generic type alias, nominal paths nested only inside alias-target forms outside the explicitly supported non-generic compound constructors below, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
 
 #### Scenario: A leading-`::` extern path resolves and reacts through a local shadow
 
