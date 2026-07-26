@@ -24,10 +24,11 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
-    Baseline, Coverage, Outcome, Report, ViolationId, apply_baseline, check_and_cover,
-    constitution_text, report_json,
+    Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
+    constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
 use louke::audit_probe_coverage;
 use xingbiao::{cargo_metadata, member_root_files};
@@ -48,7 +49,10 @@ use projection::*;
 pub use projection::{constitution_markdown, projection_gate};
 
 mod render;
-use render::{report, report_coverage, report_sarif, report_violations};
+use render::{
+    disallow_stale_message, report, report_coverage, report_sarif, report_sarif_with_stale,
+    report_violations,
+};
 mod term_color;
 use term_color::Style;
 
@@ -168,6 +172,7 @@ where
     let mut write_baseline_path: Option<String> = None;
     let mut format: Option<String> = None;
     let mut warn_uncovered = false;
+    let mut disallow_stale = false;
     let mut args = args.into_iter().map(Into::into).skip(1).peekable();
 
     // The command is the first positional token; an absent or unrecognized leading
@@ -203,6 +208,7 @@ where
             "--write-baseline" => write_baseline_path = Some(value!("--write-baseline")),
             "--format" => format = Some(value!("--format")),
             "--warn-uncovered" => warn_uncovered = true,
+            "--disallow-stale" => disallow_stale = true,
             other => {
                 if let Some(path) = other.strip_prefix("--manifest-path=") {
                     manifest_path = Some(path.to_string());
@@ -245,6 +251,7 @@ where
             || baseline_path.is_some()
             || write_baseline_path.is_some()
             || warn_uncovered
+            || disallow_stale
         {
             return usage("list takes only --format; other flags are check-only");
         }
@@ -309,6 +316,9 @@ where
     if baseline_path.is_some() && write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
+    if disallow_stale && baseline_path.is_none() {
+        return usage("--disallow-stale requires --baseline");
+    }
 
     // From here on the command is `check`: it requires a workspace to observe.
     // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
@@ -352,6 +362,7 @@ where
             report_format,
             coverage.as_ref(),
             warn_uncovered,
+            disallow_stale,
         );
     }
 
@@ -375,7 +386,7 @@ fn usage(message: &str) -> u8 {
         "usage:\n  \
          tianheng check --manifest-path <path/to/Cargo.toml> \
          [--baseline <file> | --write-baseline <file>] [--format text|json|sarif] \
-         [--warn-uncovered]\n  \
+         [--warn-uncovered] [--disallow-stale]\n  \
          tianheng list [--format text|json|markdown]"
     );
     eprintln!("error: {message}");
@@ -421,31 +432,38 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
         Outcome::Violations(report) => report,
         _ => &empty,
     };
-    // Metadata-preserving merge: carry each surviving entry's owner/tracker forward by identity, so
-    // re-running --write-baseline never silently wipes hand-added governance records. A missing file
-    // is the normal first write (no warning); an existing-but-unreadable/unparseable file falls back
-    // to a fresh baseline but WARNS, so the metadata loss is visible rather than silent.
-    let baseline = match std::fs::read_to_string(path) {
+    // Metadata-preserving merge applies only to a supported semantic baseline. Unsupported or
+    // unreadable content is preserved byte-for-byte: presentation cannot reconstruct identity, and
+    // overwriting would silently destroy annotations the adopter may still need to carry manually.
+    let (baseline, create_new) = match std::fs::read_to_string(path) {
         Ok(text) => match Baseline::from_json(&text) {
-            Ok(existing) => Baseline::of_preserving(report, &existing),
+            Ok(existing) => (Baseline::of_preserving(report, &existing), false),
             Err(err) => {
                 eprintln!(
-                    "Tianheng: existing baseline {path} could not be parsed ({err}); writing a \
-                     fresh baseline — owner/tracker metadata is not carried forward"
+                    "Tianheng: refusing to overwrite unsupported baseline {path} ({err}). Preserve \
+                     any desired owner/tracker annotations, move or delete the unsupported file, \
+                     then run `tianheng check --write-baseline {path}` again."
                 );
-                Baseline::of(report)
+                return EXIT_CANNOT_JUDGE;
             }
         },
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Baseline::of(report),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (Baseline::of(report), true),
         Err(err) => {
             eprintln!(
-                "Tianheng: existing baseline {path} could not be read ({err}); writing a fresh \
-                 baseline — owner/tracker metadata is not carried forward"
+                "Tianheng: refusing to overwrite unreadable baseline {path} ({err}). Preserve any \
+                 desired owner/tracker annotations, move or delete the unsupported file, then run \
+                 `tianheng check --write-baseline {path}` again."
             );
-            Baseline::of(report)
+            return EXIT_CANNOT_JUDGE;
         }
     };
-    match std::fs::write(path, baseline.to_json()) {
+    let document = baseline.to_json();
+    let write_result = if create_new {
+        create_baseline_file(path, &document)
+    } else {
+        std::fs::write(path, document)
+    };
+    match write_result {
         Ok(()) => {
             eprintln!(
                 "Tianheng: wrote {} violation(s) to baseline {path}",
@@ -453,11 +471,26 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
             );
             EXIT_OK
         }
+        Err(err) if create_new && err.kind() == std::io::ErrorKind::AlreadyExists => {
+            eprintln!(
+                "Tianheng: refusing to overwrite baseline {path} because it appeared while the \
+                 new snapshot was being prepared. Inspect the file, then rerun the command."
+            );
+            EXIT_CANNOT_JUDGE
+        }
         Err(err) => {
             eprintln!("Tianheng: cannot write baseline {path}: {err}");
             EXIT_CANNOT_JUDGE
         }
     }
+}
+
+fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .and_then(|mut file| file.write_all(document.as_bytes()))
 }
 
 /// Gate against a baseline: suppress recorded violations, fail only on new ones,
@@ -468,6 +501,7 @@ fn gate(
     format: ReportFormat,
     coverage: Option<&Coverage>,
     warn_uncovered: bool,
+    disallow_stale: bool,
 ) -> u8 {
     // A constitution error is the whole story: report it before reading the baseline, so
     // it is never masked by a missing or unreadable baseline file (both exit 2, but the
@@ -507,24 +541,37 @@ fn gate(
         Outcome::Violations(report) => report,
         _ => &empty,
     };
-    let stale: Vec<ViolationId> = baseline.stale(report).into_iter().cloned().collect();
+    let stale: Vec<BaselineEntry> = baseline.stale(report).into_iter().cloned().collect();
+    let policy = stale_policy(outcome, &stale, disallow_stale);
+
     match format {
-        ReportFormat::Json => println!("{}", report_json(outcome, &stale, coverage)),
-        ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+        ReportFormat::Json => println!(
+            "{}",
+            report_json_with_stale_policy(outcome, &stale, coverage, disallow_stale)
+        ),
+        ReportFormat::Sarif => println!(
+            "{}",
+            report_sarif_with_stale(outcome, &stale, disallow_stale)
+        ),
         ReportFormat::Text => {
             report_violations(report);
             for entry in &stale {
                 eprintln!(
                     "Tianheng: stale baseline entry (no longer violated): {} / {} / {}",
-                    entry.target, entry.rule, entry.finding
+                    entry.id.target(),
+                    entry.rule,
+                    entry.finding
                 );
+            }
+            if policy.stale_disallowed {
+                eprintln!("Tianheng: {}", disallow_stale_message(stale.len()));
             }
             if let Some(coverage) = coverage {
                 report_coverage(coverage, warn_uncovered);
             }
         }
     }
-    outcome.exit_code()
+    policy.exit_code
 }
 
 /// Fold two outcomes into one reaction. Reused across the composition chain — static + semantic,

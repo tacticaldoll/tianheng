@@ -42,6 +42,7 @@ Exit codes are the contract: `0` clean / warn-only / fully baselined · `1` enfo
 | restrict live objects crossing a port seam | [Govern which adapter crosses a seam](#govern-which-adapter-crosses-a-dyn-seam-at-runtime) |
 | introduce governance without making an existing project red | [Adopt on a dirty codebase](#adopt-on-a-dirty-codebase-without-a-red-wall) |
 | prove a declared boundary still has teeth | [Test that a boundary reacts](#test-that-a-boundary-actually-reacts) |
+| publish an imitable Agent Law for your codebase | [Publish an imitable Agent Law](#publish-an-imitable-agent-law-for-your-codebase-three-layer-agent-law) |
 
 The table routes by *observable architectural fact*, not by architecture-fashion label. A recipe's
 text immediately below its declaration states what the selected instrument observes; it makes no
@@ -60,6 +61,7 @@ claim outside that perimeter.
     ModuleBoundary::in_crate("my-app")
         .module("crate::domain")
         .must_not_import("crate::infra")
+        .depth(ScanDepth::Subtree)
         .because("the domain stays pure — it never depends on infrastructure"),
 )
 ```
@@ -469,10 +471,14 @@ existing entry's hand-added `owner` / `tracker` metadata when its identity still
 identities without metadata, and drops resolved identities. A missing baseline is an error in gate
 mode (exit `2`), never an empty baseline that silently passes.
 
-Refactoring the offending code or improving finding wording does **not** churn a version-2
-baseline: identity is `(target, rule, finding_key)`; the human `finding`, `file`, `anchor`, reason,
-and severity are presentation/metadata. A version-1 baseline still matches its old exact text triple
-until `--write-baseline` upgrades it. The runnable
+Refactoring the offending code or improving finding wording does **not** churn a baseline: identity
+is `(target, rule_key, fact)`; the human `finding`, `file`, `anchor`, reason, and severity are
+presentation/metadata. The baseline document itself is unversioned — it carries a semantic `format`
+string, never a numeric `version`. A baseline written before this shape (any file still carrying a
+numeric `version`) is unsupported: `--write-baseline` refuses to overwrite it and `--baseline` refuses
+to gate against it, both exiting `2` rather than silently upgrading or reinterpreting it. Preserve any
+desired `owner`/`tracker` annotations by hand, move or delete the unsupported file, then regenerate
+with `--write-baseline`. The runnable
 `examples/guibiao-standalone/tests/reaction.rs` proves identity stability and the new-violation
 gate; `scripts/test_examples.sh` drives the real CLI write/gate path.
 
@@ -533,15 +539,49 @@ Coverage changes no exit code on its own, so nothing gates unless *you* assert o
 against a new, ungoverned crate slipping in is one you build deliberately. This is exactly how
 Tianheng gates its own coverage in `crates/tianheng/tests/self_governance.rs`.
 
-### Put your declared law into an AI agent's context (kept fresh)
+### Publish an imitable Agent Law for your codebase (Three-Layer Agent Law)
 
-*Intent: the agent reads the law in imitable form, and the copy cannot silently rot.*
+*Intent: publish your declared governance as a 3-layer imitable Agent Law (`AGENTS.md` / `AGENTS.self-law.md`) so AI agents imitate your architecture by gravity (潛移) — and gate it in `cargo test` so the projection never rots.*
+
+Governance follows a **Three-Layer Architecture**:
+1. **Layer 1: Universal Preamble** — meta-instructions and working agreements only (`PREAMBLE` discipline; never crate-specific or un-reacted architectural claims).
+2. **Layer 2: Qiányí Gravity Pull (Prose Reason & Projection Body)** — `because(...)` reasons projected directly from your declared `Constitution` into `AGENTS.self-law.md` to condition LLM continuations.
+3. **Layer 3: Reaction Backstop (Rust Law Source)** — functional boundaries (`restrict_dependencies_to`, `must_not_call_inline`) in code, protected by `.github/CODEOWNERS` and verified by `cargo test`.
 
 ```rust
-let md = tianheng::constitution_markdown(&constitution());
-std::fs::write("AGENTS.my-project-law.md", md)?;
+use tianheng::prelude::*;
+
+const PREAMBLE: &str = r#"# AGENTS.self-law.md — My Project Law
+
+Working agreement for AI agents and humans. Read this before changing code.
+
+1. **Before changing code — read the declared law.** Read the boundaries below to understand the shape you must not drift.
+2. **After changing code — react.** Run `cargo test` or `your-binary check`.
+3. **On a violation — repair toward the declared reason.** Read `reason` first (it is the repair direction), then fix the code so the reason holds again. Never weaken a boundary to pass CI.
+"#;
+
+#[test]
+fn test_agent_law_freshness() {
+    GovernanceTest::for_constitution(constitution())
+        .assert_clean()                            // Asserts 0 violations returned
+        .assert_all_workspace_members_covered()    // Asserts 100% of workspace members are governed
+        .assert_projection_fresh_with_preamble("AGENTS.self-law.md", PREAMBLE); // Staleness test + BLESS=1 support
+}
 ```
 
-Gate it with `tianheng::projection_gate(...)` in a `cargo test` (see the root `README.md`) so CI
-fails the moment the written law drifts from the declared one — the same staleness reaction
-Tianheng runs on its own `AGENTS.self-law.md`.
+> **Reason Distillation Discipline (Important):** Write `because(...)` reasons strictly in a **forward voice** ("the domain logic depends inward only"), declaring the architectural shape to imitate. Never write historical debriefs ("we once hit a dependency cycle in 0.2.1"): **provenance belongs in `PROJECT.md` decisions and git history, not in live context reasons.**
+
+```rust
+// ❌ BAD: Historical backstory inflates context tokens and confuses agent continuation
+.because("the domain stays pure — we once hit a dependency cycle in v0.2.1 when infra was imported directly")
+
+// 🟢 GOOD: Forward voice declares the shape to imitate cleanly
+.because("the domain stays pure: domain logic inward-only dependent, infrastructure reached only via ports")
+```
+
+> **Minimalism Discipline (Important):** Do not add a redundant denylist for a prohibition an allowlist already enforces (e.g. adding `.forbid_dependency_on(["app"])` alongside `.restrict_dependencies_to(["core"])`). Minimalism keeps your law clean, while the allowlist's `because(...)` prose explicitly captures the architectural rule (e.g., `functional core ⊥ imperative shell`).
+
+> **Preamble Discipline (Important):** Keep Layer 1 strictly universal. A preamble MUST NOT contain crate-specific or un-reacted architectural rules (e.g., "all handlers must be in `src/handlers`"). Crate-specific architectural claims belong ONLY in Layer 2 (generated from `constitution()`), where every boundary carries a real, non-bypassable reaction. Un-reacted claims in preambles lead to rotted agent instructions over time.
+
+**Workflow (`BLESS=1` Regeneration):**
+Run `BLESS=1 cargo test` to automatically overwrite or update `AGENTS.self-law.md` when you update your `Constitution`. In CI, `cargo test` runs without `BLESS` and fails loudly if the checked-in Markdown file drifts from `constitution()`.

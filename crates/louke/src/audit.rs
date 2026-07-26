@@ -8,30 +8,83 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use xuanji::RuleKey;
 
 use crate::finding::RuntimeFact;
 use crate::registry::UNDECLARED_SEAM_REPAIR_HINT;
 use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation, ViolationId};
 
 mod scan;
-use scan::{Probe, collect_probes};
+use scan::{DEFAULT_MARKERS, Probe, collect_probes_with_markers};
+
+#[derive(Clone, Copy)]
+enum AuditRule {
+    UniqueSeamDeclaration,
+    DeclaredSeamProbed,
+    ProbeDeclaredSeam,
+    LiteralProbeSeam,
+}
+
+impl AuditRule {
+    fn rule_type(self) -> &'static str {
+        match self {
+            Self::UniqueSeamDeclaration => "tianheng.rule/louke/unique-seam-declaration",
+            Self::DeclaredSeamProbed => "tianheng.rule/louke/declared-seam-probed",
+            Self::ProbeDeclaredSeam => "tianheng.rule/louke/probe-declared-seam",
+            Self::LiteralProbeSeam => "tianheng.rule/louke/literal-probe-seam",
+        }
+    }
+
+    fn key(self) -> RuleKey {
+        RuleKey::of(self.rule_type(), std::iter::empty::<(&str, &str)>())
+    }
+}
+
+fn audit_violation(
+    target: &str,
+    rule: &str,
+    rule_key: RuleKey,
+    fact: RuntimeFact,
+    reason: String,
+    severity: Severity,
+) -> Violation {
+    let finding = fact.into_finding();
+    Violation::new(
+        BoundaryKind::Runtime,
+        ViolationId::new(target, rule_key, finding.fact().clone()),
+        rule,
+        finding.text(),
+        reason,
+        severity,
+    )
+}
 
 #[cfg(test)]
 use scan::scan_source;
 
-/// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** (the
-/// authoritative seam set — the constitution, not a source scan for declarations) by scanning
-/// the workspace's source inputs for `assert_boundary!` probes. A file input is treated as an
-/// exact Cargo target root and walked through reachable modules; a directory input retains the
-/// legacy recursive corpus for source compatibility. Reacts, with the static
-/// dimensions' exit-code contract, in both directions plus an un-auditable case:
+/// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** using
+/// the default `["assert_boundary"]` probe macro marker list. Delegates to
+/// [`audit_probe_coverage_with_markers`].
+pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
+    audit_probe_coverage_with_markers(declared, source_inputs, DEFAULT_MARKERS)
+}
+
+/// **CI face with custom probe markers.** Audit probe coverage against the **declared
+/// `RuntimeBoundary` objects** (the authoritative seam set — the constitution, not a source scan
+/// for declarations) by scanning the workspace's source inputs for probe macro invocations
+/// matching any identifier in `markers` (defaulting to `["assert_boundary"]` via
+/// [`audit_probe_coverage`]).
+///
+/// A file input is treated as an exact Cargo target root and walked through reachable modules;
+/// a directory input retains the legacy recursive corpus for source compatibility. Reacts,
+/// with the static dimensions' exit-code contract, in three directions:
 ///
 /// - **declared-but-unprobed** — a declared seam with no literal probe → a `Violation` at the
 ///   declaring boundary's severity (a `warn` boundary yields an advisory). Closes the
 ///   otherwise-essential "declared but never enforced" gap.
 /// - **probed-but-undeclared** — a literal probe whose seam is not in the declared set → an
 ///   enforce `Violation` (a typo against the declared seams).
-/// - **un-auditable probe** — an `assert_boundary!` whose seam argument is not a string literal
+/// - **un-auditable probe** — a probe macro whose seam argument is not a string literal
 ///   (e.g. a `const`) cannot be traced to a declared seam → an enforce `Violation` naming the
 ///   site, never a silent skip (a silent skip would be a false negative).
 ///
@@ -54,15 +107,27 @@ use scan::scan_source;
 /// cfg-conditional and its relocation is **not** followed (following it cfg-blind could read a file
 /// rustc does not compile in this configuration): the *relocated* file's probes are not counted, and
 /// — being cfg-blind — the scan instead resolves the module conventionally, counting the
-/// conventional `name.rs` if one is present (even where an active predicate makes rustc compile the
-/// relocated file and ignore the conventional one). This is the same cfg-blindness as the
-/// `#[cfg(test)]` bound above, in both directions; it is a stated bound, not exact rustc fidelity.
+/// conventional `name.rs` if one is present.
 ///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
-pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
+pub fn audit_probe_coverage_with_markers(
+    declared: &[RuntimeBoundary],
+    source_inputs: &[PathBuf],
+    markers: &[&str],
+) -> Outcome {
+    if markers.is_empty() {
+        return Outcome::ConstitutionError("custom probe markers list cannot be empty".to_string());
+    }
+    for &marker in markers {
+        if !scan::is_valid_macro_marker(marker) {
+            return Outcome::ConstitutionError(format!(
+                "custom probe marker '{marker}' is not a valid Rust macro identifier"
+            ));
+        }
+    }
     let mut probes = Vec::new();
     for input in source_inputs {
-        if let Err(message) = collect_probes(input, &mut probes) {
+        if let Err(message) = collect_probes_with_markers(input, markers, &mut probes) {
             return Outcome::ConstitutionError(message);
         }
     }
@@ -85,16 +150,13 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
         let seam = boundary.seam();
         if !seen_decl.insert(seam) && dup_reported.insert(seam) {
             violations.push(
-                Violation::new(
-                    BoundaryKind::Runtime,
-                    ViolationId::new(
-                        seam,
-                        "each runtime seam must be declared exactly once",
-                        RuntimeFact::DuplicateSeam {
-                            seam: seam.to_string(),
-                        }
-                        .into_finding(),
-                    ),
+                audit_violation(
+                    seam,
+                    "each runtime seam must be declared exactly once",
+                    AuditRule::UniqueSeamDeclaration.key(),
+                    RuntimeFact::DuplicateSeam {
+                        seam: seam.to_string(),
+                    },
                     "a duplicate declaration would silently shadow the earlier boundary at install"
                         .to_string(),
                     Severity::Enforce,
@@ -111,16 +173,13 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
         let seam = boundary.seam();
         if !probed_set.contains(seam) && seen.insert(seam) {
             violations.push(
-                Violation::new(
-                    BoundaryKind::Runtime,
-                    ViolationId::new(
-                        seam,
-                        "every declared runtime seam must be probed",
-                        RuntimeFact::UnprobedSeam {
-                            seam: seam.to_string(),
-                        }
-                        .into_finding(),
-                    ),
+                audit_violation(
+                    seam,
+                    "every declared runtime seam must be probed",
+                    AuditRule::DeclaredSeamProbed.key(),
+                    RuntimeFact::UnprobedSeam {
+                        seam: seam.to_string(),
+                    },
                     "a RuntimeBoundary with no probe is never enforced at runtime".to_string(),
                     boundary.severity(),
                 )
@@ -134,13 +193,11 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
     for probe in &probes {
         if let Probe::Literal(seam) = probe {
             if !declared_set.contains(seam.as_str()) && seen_probe.insert(seam.as_str()) {
-                violations.push(Violation::new(
-                    BoundaryKind::Runtime,
-                    ViolationId::new(
-                        seam,
-                        "every probe must reference a declared seam",
-                        RuntimeFact::UndeclaredProbe { seam: seam.clone() }.into_finding(),
-                    ),
+                violations.push(audit_violation(
+                    seam,
+                    "every probe must reference a declared seam",
+                    AuditRule::ProbeDeclaredSeam.key(),
+                    RuntimeFact::UndeclaredProbe { seam: seam.clone() },
                     format!("an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"),
                     Severity::Enforce,
                 ));
@@ -149,32 +206,48 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
     }
     // Un-auditable probes: a non-literal seam argument cannot be traced to a declared seam.
     // React rather than silently skip (a silent skip is a false negative). One reaction per
-    // file (deduped, sorted) so the finding names where to look and the baseline id is stable.
-    let mut unauditable_files: Vec<&str> = probes
+    // (marker, file, owner-qualified enclosing item, expression text) — deduped, sorted — so two
+    // textually distinct non-literal probes in the same file are distinct findings and
+    // baselining one cannot mask another; two byte-identical occurrences in the same file and
+    // the same marker and enclosing item still collapse to one (a stated bound: at that
+    // granularity no further source content distinguishes them, mirroring `module-boundary`'s
+    // "same import on multiple lines is one violation").
+    let mut unauditable: Vec<(&str, &str, &str, &str)> = probes
         .iter()
         .filter_map(|p| match p {
-            Probe::Unauditable { file } => Some(file.as_str()),
+            Probe::Unauditable {
+                marker,
+                file,
+                owner,
+                expr,
+            } => Some((
+                marker.as_str(),
+                file.as_str(),
+                owner.as_str(),
+                expr.as_str(),
+            )),
             Probe::Literal(_) => None,
         })
         .collect();
-    unauditable_files.sort_unstable();
-    unauditable_files.dedup();
-    for file in unauditable_files {
-        // The offending source file is in hand here (the probe scan captured it). Project it
-        // into the `file` field as well as the finding text: it is a genuine observation, so
-        // reporting `null` would be a dishonest null. This is the one runtime violation with a
-        // source location — the seam-level ones above name a seam, not a file.
+    unauditable.sort_unstable();
+    unauditable.dedup();
+    for (marker, file, owner, expr) in unauditable {
+        // The offending source file, owner, and expression are in hand here (the probe scan
+        // captured them). Project the file into the `file` field as well as the finding text: it
+        // is a genuine observation, so reporting `null` would be a dishonest null. This is the
+        // one runtime violation with a source location — the seam-level ones above name a seam,
+        // not a file.
         violations.push(
-            Violation::new(
-                BoundaryKind::Runtime,
-                ViolationId::new(
-                    "<un-auditable probe>",
-                    "an assert_boundary! seam must be a string literal to be auditable",
-                    RuntimeFact::UnauditableProbe {
-                        file: file.to_string(),
-                    }
-                    .into_finding(),
-                ),
+            audit_violation(
+                "<un-auditable probe>",
+                "a configured probe marker's seam must be a string literal to be auditable",
+                AuditRule::LiteralProbeSeam.key(),
+                RuntimeFact::UnauditableProbe {
+                    marker: marker.to_string(),
+                    file: file.to_string(),
+                    owner: owner.to_string(),
+                    expr: expr.to_string(),
+                },
                 "spell the seam as a string literal so probe coverage can be verified".to_string(),
                 Severity::Enforce,
             )

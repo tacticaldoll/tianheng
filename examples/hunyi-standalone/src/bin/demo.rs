@@ -17,7 +17,7 @@ fn main() -> ExitCode {
                 println!(
                     "⛒ {}\n    {} · {}\n    at: {}",
                     v.reason,
-                    v.target,
+                    v.target(),
                     v.finding,
                     v.file.as_deref().unwrap_or("(no single file)")
                 );

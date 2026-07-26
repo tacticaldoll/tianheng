@@ -4,17 +4,16 @@
 
 Define the composed wildcard entrypoint and its external compilation reaction so Tianheng's
 documented adoption path remains usable and semantically honest across the 0.2 line.
-
 ## Requirements
-
 ### Requirement: The prelude is the composed adopter entrypoint
 
 `tianheng::prelude::*` SHALL expose the existing declaration and execution surface: `Constitution`,
 `CrateBoundary`, `ModuleBoundary`, `SemanticBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`, `AsyncExposureBoundary`,
-`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `DependencyKind`, `SourceKind`,
-`VisibilityCeiling`, `Severity`, and `run`. An external consumer SHALL be able to compose boundaries
-from all three instruments through one `Constitution` without importing dimension crates.
+`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
+`ScanDepth`, `DependencyKind`, `SourceKind`, `VisibilityCeiling`, `Severity`, and `run`. An
+external consumer SHALL be able to compose boundaries from all three instruments through one
+`Constitution` without importing dimension crates.
 
 #### Scenario: A consumer declares the composed law from one import
 
@@ -28,50 +27,79 @@ from all three instruments through one `Constitution` without importing dimensio
 
 ### Requirement: The prelude supports reaction inspection
 
-`tianheng::prelude::*` SHALL expose `Boundary`, `BoundaryKind`, `Rule`, `ModuleRule`, `Baseline`,
-`BaselineEntry`, `Finding`, `FindingKey`, `Outcome`, `Polarity`, `Report`, `Violation`, `ViolationId`,
-the pure static `check` entrypoint, and the unified `check_constitution` entrypoint. These names SHALL
-form an inspection tier, not a second construction path around builder-owned rule models. The
-declaration/execution and inspection tiers SHALL have the same 0.2.x compatibility status; the tier
-names distinguish purpose only.
+`tianheng::prelude::*` SHALL expose the existing boundary, rule, baseline, report, violation, and
+Outcome inspection surface, plus the vocabulary-neutral `RuleKey` and `StructuredFactIdentity`
+types used by live `ViolationId`. The obsolete public `FindingKey` SHALL be removed as an
+intentional 0.3.0 break. These names SHALL form an inspection tier, not a second construction path around validated
+identity or builder-owned rules. Standalone instrument APIs SHALL expose the same reaction model
+without requiring the composed facade.
 
-#### Scenario: A consumer inspects a reaction
+The public surface SHALL NOT promise a `Dimension`/`ObservedFact` plugin trait or runtime plugin
+loading. Rust architecture tests MAY use the promised `GovernanceTest` harness or invoke the
+existing pure standalone/composed checks and inspect structured `Outcome` values.
 
-- **WHEN** an external crate receives an `Outcome` through a prelude entrypoint
-- **THEN** it can inspect reports, violations, stable identity, finding data, polarity, boundary kind, and baseline metadata using the existing prelude names
+#### Scenario: A consumer inspects a composed reaction
 
-#### Scenario: A consumer inspects the composed reaction
+- **WHEN** an external crate checks a unified `Constitution`
+- **THEN** it can inspect target, rule key, structured fact, presentation, metadata, and outcome without decoding CLI text
 
-- **WHEN** an external crate imports the wildcard prelude and checks a unified `Constitution`
-- **THEN** `check_constitution` returns an inspectable combined Outcome without driving CLI presentation
+#### Scenario: A consumer inspects a standalone reaction
+
+- **WHEN** an external crate calls an instrument's public check directly
+- **THEN** it can inspect the same vocabulary-neutral reaction identity without importing `tianheng`
 
 #### Scenario: Rule inspection remains builder-owned
 
-- **WHEN** an external crate inspects `Rule` or `ModuleRule` through a builder-produced boundary
-- **THEN** the prelude provides both read-side types without enabling direct construction of a non-exhaustive rule variant
+- **WHEN** an external crate inspects a builder-produced rule and its emitted reaction
+- **THEN** it can read rule presentation and semantic key without directly constructing an invalid rule or identity
 
-#### Scenario: Module rule inspection is symmetric
+#### Scenario: Architecture tests use the reaction model
 
-- **WHEN** an external crate imports the wildcard prelude and matches the value returned by `ModuleBoundary::rule()`
-- **THEN** `ModuleRule` is nameable beside `Rule` without an additional root or dimension-crate import
+- **WHEN** an adopter wants a Rust test for an architectural boundary
+- **THEN** it uses `GovernanceTest` or invokes an existing pure check and asserts against structured Outcome data
 
 ### Requirement: The adopter surface has an external compilation reaction
 
-The repository SHALL compile an integration-test consumer that imports the wildcard prelude, names
-every promised declaration/execution and reaction-inspection export, and type-checks representative
-builder chains for the static, semantic, runtime, and composed-profile surfaces. The test SHALL NOT
-depend on source-text matching or execute process and filesystem side effects merely to prove API
-availability.
+The repository SHALL compile integration-test consumers for the wildcard composed prelude and for
+each standalone instrument's promised check/reaction surface. The tests SHALL name the structured
+identity inspection types, the promised harness and depth selector, and type-check representative
+builder/check chains including `NoExistentialLeak`. They SHALL NOT invoke CLI, filesystem, or
+process side effects merely to prove API availability, and SHALL NOT imply an unimplemented plugin
+protocol.
 
-#### Scenario: An export is accidentally removed
+#### Scenario: A composed export is accidentally removed
 
-- **WHEN** a promised prelude name is removed, relocated, or made unusable from an external crate
-- **THEN** the integration compile contract fails in the repository test gate
+- **WHEN** a promised prelude name is removed, relocated, or unusable
+- **THEN** the composed external compile contract fails
+
+#### Scenario: A standalone reaction surface drifts
+
+- **WHEN** an instrument can no longer emit or expose the common reaction identity independently
+- **THEN** its external compile contract fails
 
 #### Scenario: Runtime behavior is outside the compile contract
 
-- **WHEN** the adopter-surface test references `run` or a check function
-- **THEN** it type-checks the callable signature without invoking CLI parsing, workspace scanning, or process output
+- **WHEN** the compile consumer references a run or check function
+- **THEN** it type-checks the signature without executing observation or presentation side effects
+
+### Requirement: Shipped prelude additions are explicit compile-reacted promises
+
+The composed wildcard prelude SHALL expose `NoExistentialLeak`, `ScanDepth`, and `GovernanceTest`
+alongside the existing adopter surface. The external compilation reaction SHALL name each type and
+type-check `Constitution::no_existential_leak(...)` without executing workspace observation.
+`GovernanceTest` SHALL be the promised architecture-test harness; older prose denying any testing
+harness promise MUST NOT remain in this capability.
+
+#### Scenario: Composed existential profile is compile-reacted
+
+- **WHEN** an external-view integration test imports only `tianheng::prelude::*`
+- **THEN** it can name `NoExistentialLeak` and build a constitution through
+  `.no_existential_leak(...)`
+
+#### Scenario: Harness and depth selector are compile-reacted
+
+- **WHEN** the wildcard prelude contract is compiled
+- **THEN** `GovernanceTest` and `ScanDepth` resolve as public types
 
 ### Requirement: Focused semantic checks remain explicit
 

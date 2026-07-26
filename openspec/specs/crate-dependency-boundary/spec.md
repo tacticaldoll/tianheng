@@ -246,7 +246,7 @@ governed under two tables stays distinct. The human `finding` SHALL remain kind-
 `Normal` finding is the bare dependency name (preserving version-1 text compatibility), while
 `Dev`/`Build` findings carry a ` (dev)`/` (build)` suffix. Without the kind in the key, two
 boundaries governing the same crate under the same rule but different kinds would emit the identical
-`(target, rule, finding_key)`, and baselining one table's violation would mask a new violation of the
+`(target, rule_key, fact)`, and baselining one table's violation would mask a new violation of the
 same dependency in the other table (the one forbidden bug).
 
 #### Scenario: The same dependency in two tables stays distinct findings
@@ -402,7 +402,7 @@ is a plain feature name (Cargo forbids the `dep:`, `pkg/feat`, and `pkg?/feat` s
 dependency's `features` list; those exist only in a manifest's `[features]` table, which this rule
 does not read), the feature name contains no `/`, so `C/feature` is unambiguous. The feature-rule
 polarities (restrict / forbid) SHALL each carry a `rule` label distinct from each other and from the
-crate rules, so that `(target, rule, finding_key)` stays injective: a `restrict` and a `forbid` rule that
+crate rules, so that `(target, rule_key, fact)` stays injective: a `restrict` and a `forbid` rule that
 both flag `C/unstable` on the same target remain distinct triples. Baselining one feature's violation
 SHALL NOT mask a new violation of a different feature of the same dependency. When the selected
 dependency kind is not `Normal`, the finding SHALL additionally carry the kind qualifier consistent
@@ -417,3 +417,17 @@ with Dependency kind selection.
 
 - **WHEN** a feature rule on `C` is violated by the declared feature `unstable`
 - **THEN** the report names the target crate, the feature rule, the finding `C/unstable`, the boundary's reason, and indicates the reaction failed
+
+### Requirement: Dependency observations use semantic reaction identity
+
+Every dependency violation SHALL identify the governed crate, a structured rule key, and a
+structured dependency fact whose fields preserve dependency name, dependency kind, source/feature
+roles when observed. Human finding text SHALL NOT provide version-1 compatibility or identity.
+
+#### Scenario: Dependency kind remains injective
+- **WHEN** the same dependency appears as normal and development edges that both violate a boundary
+- **THEN** their structured facts differ by dependency kind without relying on rendered suffixes
+
+#### Scenario: Presentation cannot provide legacy matching
+- **WHEN** a numeric or text-identity baseline carries the same displayed dependency
+- **THEN** baseline parsing fails rather than matching it to the current fact

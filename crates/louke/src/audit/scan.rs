@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// What the source scan found for a probe occurrence (`assert_boundary!`).
@@ -8,18 +8,42 @@ pub(super) enum Probe {
     Literal(String),
     /// A probe whose seam argument is NOT a string literal (a const or expression): the CI
     /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
-    /// source file so the reaction is actionable (and the baseline identity stable).
-    Unauditable { file: String },
+    /// matched marker, source file, an owner-qualified enclosing item (never a bare name — two
+    /// owners may share a method name), and the offending expression's own trimmed source text,
+    /// so distinct non-literal probes in one file are distinct findings (never an absolute byte
+    /// offset; an anonymous lexical scope may carry a parent-local equal-header discriminator —
+    /// see `fn_scopes`/`first_macro_arg_end`).
+    Unauditable {
+        marker: String,
+        file: String,
+        owner: String,
+        expr: String,
+    },
 }
 
-pub(super) fn collect_probes(input: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+pub(super) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
+
+pub(super) fn collect_probes_with_markers(
+    input: &Path,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+) -> Result<(), String> {
     if input.is_file() {
-        return collect_reachable_probes(input, probes);
+        return collect_reachable_probes(input, markers, probes);
     }
-    collect_directory_probes(input, probes)
+    let mut visited = HashSet::new();
+    collect_directory_probes(input, markers, probes, &mut visited)
 }
 
-fn collect_directory_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+fn collect_directory_probes(
+    dir: &Path,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+    visited: &mut HashSet<PathBuf>,
+) -> Result<(), String> {
+    if !xingbiao::try_visit(visited, dir)? {
+        return Ok(());
+    }
     let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
     // Sort entries so the scan order — and thus the violation order in the report — is
     // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
@@ -37,27 +61,28 @@ fn collect_directory_probes(dir: &Path, probes: &mut Vec<Probe>) -> Result<(), S
     paths.sort();
     for (is_dir, path) in paths {
         if is_dir {
-            collect_directory_probes(&path, probes)?;
-        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+            collect_directory_probes(&path, markers, probes, visited)?;
+        } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
+            && xingbiao::try_visit(visited, &path)?
+        {
             let source = std::fs::read_to_string(&path)
                 .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
-            scan_source(&source, &path.display().to_string(), probes);
+            scan_source_with_markers(&source, &path.display().to_string(), markers, probes);
         }
     }
     Ok(())
 }
 
-fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), String> {
+fn collect_reachable_probes(
+    root: &Path,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+) -> Result<(), String> {
     let root_parent = root
         .parent()
         .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
     let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
-    // Canonicalized, via the shared primitive 圭表/渾儀 already route their own module-graph
-    // cycle guards through — a symlinked directory (or a circular `#[path]` chain) reached via two
-    // distinct literal paths to the identical real file must be recognized as the same node, or
-    // this walk's explicit work-queue can grow without bound on a genuine cycle (a hang, not a
-    // stack overflow, since the walk is iterative). Previously deduped on the literal path alone —
-    // a pre-existing cross-dimension inconsistency (BACKLOG, 0.2.2 lesson).
+    // Uses canonicalized path visit tracking to prevent cycle loops on symlinks.
     let mut visited: HashSet<PathBuf> = HashSet::new();
     while let Some((file, child_base)) = pending.pop() {
         if !xingbiao::try_visit(&mut visited, &file)? {
@@ -65,7 +90,7 @@ fn collect_reachable_probes(root: &Path, probes: &mut Vec<Probe>) -> Result<(), 
         }
         let source = std::fs::read_to_string(&file)
             .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
-        scan_source(&source, &file.display().to_string(), probes);
+        scan_source_with_markers(&source, &file.display().to_string(), markers, probes);
         // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
         // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
         // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
@@ -565,8 +590,21 @@ fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
 /// probe marker appears in code, record whether its seam argument is a string literal
 /// (auditable) or not (un-auditable). Declarations come from the passed `RuntimeBoundary` objects.
 /// `file` labels an un-auditable probe so the reaction is actionable.
+#[cfg(test)]
 pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
+    scan_source_with_markers(source, file, DEFAULT_MARKERS, probes);
+}
+
+pub(super) fn scan_source_with_markers(
+    source: &str,
+    file: &str,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+) {
     let b = source.as_bytes();
+    // Resolved once per file: every `fn` body's byte range, owner-qualified (never a bare name —
+    // see `fn_scopes`), so an un-auditable probe's enclosing item is looked up by position below.
+    let scopes = fn_scopes(b);
     let mut i = 0;
     while i < b.len() {
         // Comments and string/char literals are skipped whole (one shared definition below), so
@@ -580,8 +618,9 @@ pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
         // marker embedded in a longer identifier is not mis-counted as a probe.
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
-            if let Some(rest) = match_probe_marker(b, i) {
-                let (probe, next) = capture_probe(b, rest, file);
+            if let Some((rest, marker)) = match_probe_marker(b, i, markers) {
+                let owner = owner_for(&scopes, i);
+                let (probe, next) = capture_probe(b, rest, marker, file, &owner);
                 if let Some(probe) = probe {
                     probes.push(probe);
                 }
@@ -806,27 +845,25 @@ fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
     None
 }
 
-/// Match the probe marker at `i`: the identifier `assert_boundary` at a word boundary, then — as
+/// Match a configured probe marker at `i`: the identifier at a word boundary, then — as
 /// `ident ! (…)` with whitespace/comments between the name and `!` is valid Rust (`println !("x")`
 /// compiles) — its `!`. Returns the index just past the `!`, whence [`capture_probe`] skips trivia
 /// to the opening delimiter; `None` otherwise. The right word boundary rejects a longer identifier
-/// like `assert_boundaryx`; the caller checks the left boundary. Tolerating the gap closes a false
-/// negative: a probe written `assert_boundary !("seam")` was silently dropped by a contiguous match.
-fn match_probe_marker(b: &[u8], i: usize) -> Option<usize> {
-    const NAME: &[u8] = b"assert_boundary";
-    if i + NAME.len() > b.len() || &b[i..i + NAME.len()] != NAME {
-        return None;
+/// like `assert_boundaryx`; the caller checks the left boundary. Identifier matching delegates to
+/// [`match_keyword`] so probe markers and structural keywords share one right-boundary rule.
+/// Tolerating the gap closes a false negative: a probe written `assert_boundary !("seam")` was
+/// silently dropped by a contiguous match.
+fn match_probe_marker<'a>(b: &[u8], i: usize, markers: &[&'a str]) -> Option<(usize, &'a str)> {
+    for &marker in markers {
+        let name = marker.as_bytes();
+        if let Some(after_name) = match_keyword(b, i, name) {
+            let bang = skip_trivia(b, after_name);
+            if b.get(bang) == Some(&b'!') {
+                return Some((bang + 1, marker));
+            }
+        }
     }
-    let after_name = i + NAME.len();
-    // Right word boundary: `assert_boundaryx` / `assert_boundary_probe` is a different identifier.
-    if b.get(after_name).is_some_and(|&c| is_ident_byte(c)) {
-        return None;
-    }
-    let bang = skip_trivia(b, after_name);
-    if b.get(bang) != Some(&b'!') {
-        return None;
-    }
-    Some(bang + 1)
+    None
 }
 
 /// An identifier byte — ASCII `[A-Za-z0-9_]` or any UTF-8 non-ASCII byte (`>= 0x80`). Used for the
@@ -836,6 +873,48 @@ fn match_probe_marker(b: &[u8], i: usize) -> Option<usize> {
 /// falsely match (a false coverage / fabricated probed-but-undeclared reaction).
 fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
+}
+
+/// Whether `marker` is one valid Rust macro identifier accepted by the configurable probe scan.
+///
+/// Plain keywords and invalid identifier spellings are rejected; raw identifiers may escape a
+/// keyword except for Rust's non-escapable path/self names.
+pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
+    if marker.is_empty() {
+        return false;
+    }
+    let (ident_str, is_raw) = if let Some(stripped) = marker.strip_prefix("r#") {
+        (stripped, true)
+    } else {
+        (marker, false)
+    };
+
+    if ident_str.is_empty() {
+        return false;
+    }
+
+    if is_raw {
+        if matches!(ident_str, "self" | "Self" | "super" | "crate" | "_") {
+            return false;
+        }
+    } else {
+        if ident_str == "_" {
+            return false;
+        }
+        if is_rust_keyword(ident_str.as_bytes()) {
+            return false;
+        }
+    }
+
+    let bytes = ident_str.as_bytes();
+    let first = bytes[0];
+    if !first.is_ascii_alphabetic() && first != b'_' {
+        return false;
+    }
+
+    bytes
+        .iter()
+        .all(|&b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 /// Whether the identifier run `word` is a Rust keyword (strict or reserved). A macro name is a real
@@ -926,13 +1005,21 @@ fn skip_trivia(b: &[u8], mut i: usize) -> usize {
     }
 }
 
-/// After the `assert_boundary!` marker, classify the probe by its first argument and return
+/// After a configured probe marker, classify the probe by its first argument and return
 /// `(probe, next_index)`. Skip trivia, expect a macro opening delimiter (`(`, `{`, or `[`),
 /// skip trivia; a plain or raw string first argument is an auditable [`Probe::Literal`] (its
 /// value); any other first token (a `const`, an expression, a byte string) is
 /// [`Probe::Unauditable`] — never a silent skip. `None` (with `next` past the marker) only when
-/// the marker is not actually a probe call (no opening delimiter follows).
-fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
+/// the marker is not actually a probe call (no opening delimiter follows). `owner` is the
+/// caller-supplied, already-resolved owner-qualified enclosing item (see `fn_scopes`), threaded
+/// straight into an `Unauditable` probe's identity.
+fn capture_probe(
+    b: &[u8],
+    i: usize,
+    marker: &str,
+    file: &str,
+    owner: &str,
+) -> (Option<Probe>, usize) {
     let i = skip_trivia(b, i);
     // Rust macros accept `( )`, `{ }`, or `[ ]` interchangeably; a probe written
     // `assert_boundary!{"s", o}` or `["s", o]` is a real probe. Accept any of the three
@@ -945,18 +1032,26 @@ fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
     if i >= b.len() {
         return (None, i);
     }
+    // The offending expression's own trimmed source text, captured once regardless of which
+    // un-auditable branch below is taken — this is the identity discriminator (never a byte
+    // offset), so two textually distinct non-literal probes never collapse to one finding.
+    let unauditable = |b: &[u8]| -> Probe {
+        let end = first_macro_arg_end(b, i);
+        let expr = String::from_utf8_lossy(trim_bytes(&b[i..end])).into_owned();
+        Probe::Unauditable {
+            marker: marker.to_string(),
+            file: file.to_string(),
+            owner: owner.to_string(),
+            expr,
+        }
+    };
     // A raw string `r"…"` / `r#"…"#` is a traceable literal — parse its value rather than
     // rejecting it as un-auditable (which would mis-flag a legitimate probe and double-report).
     if b[i] == b'r' && matches!(b.get(i + 1), Some(b'"') | Some(b'#')) {
         if let Some((seam, next)) = raw_string_value(b, i) {
             return (Some(Probe::Literal(seam)), next);
         }
-        return (
-            Some(Probe::Unauditable {
-                file: file.to_string(),
-            }),
-            i,
-        );
+        return (Some(unauditable(b)), i);
     }
     // A plain string literal. Find its end (the `\\`-skip only keeps a `\"` from ending the
     // string early), then DECODE its escapes to the value the compiler produces — the declared
@@ -978,21 +1073,472 @@ fn capture_probe(b: &[u8], i: usize, file: &str) -> (Option<Probe>, usize) {
         }
         return match decode_str_escapes(&b[start..j]) {
             Some(seam) => (Some(Probe::Literal(seam)), j + 1),
-            None => (
-                Some(Probe::Unauditable {
-                    file: file.to_string(),
-                }),
-                j + 1,
-            ),
+            None => (Some(unauditable(b)), j + 1),
         };
     }
     // Anything else (a const, an expression, a byte string) cannot be traced to a declared seam.
-    (
-        Some(Probe::Unauditable {
-            file: file.to_string(),
-        }),
-        i,
-    )
+    (Some(unauditable(b)), i)
+}
+
+/// Find the end of a macro's first argument starting at `open` (just past the opening delimiter
+/// and any leading trivia): the index of a top-level comma, or the matching close delimiter if no
+/// comma precedes it. Tracks nesting over all three delimiter kinds — the same one-depth-counter
+/// model `foreign_macro_body_end` uses for a whole macro body — so a nested call or index in the
+/// seam expression (`assert_boundary!(some_fn(a, b), obj)`, `assert_boundary!(TABLE[i], obj)`) is
+/// not mistaken for the argument's own end.
+fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
+    let mut depth = 0usize;
+    let mut angle_depth = 0usize;
+    let mut last_token_was_double_colon = false;
+    let mut last_token_was_ident_or_gt = false;
+    let mut last_token_was_as = false;
+    let mut i = open;
+    while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        if b[i].is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+        if i + 1 < b.len() && b[i] == b':' && b[i + 1] == b':' {
+            last_token_was_double_colon = true;
+            last_token_was_ident_or_gt = false;
+            last_token_was_as = false;
+            i += 2;
+            continue;
+        }
+        if is_ident_byte(b[i]) {
+            let start = i;
+            last_token_was_ident_or_gt = true;
+            last_token_was_double_colon = false;
+            while i < b.len() && is_ident_byte(b[i]) {
+                i += 1;
+            }
+            last_token_was_as = &b[start..i] == b"as";
+            continue;
+        }
+        match b[i] {
+            b'(' | b'{' | b'[' => depth += 1,
+            b')' | b'}' | b']' => {
+                if depth == 0 {
+                    return i;
+                }
+                depth = depth.saturating_sub(1);
+            }
+            b'<' => {
+                if depth == 0 {
+                    let is_qualified_start = is_unary_prefix_span(&b[open..i]);
+                    let is_turbofish = last_token_was_double_colon;
+                    let is_inner_generic = angle_depth > 0 && last_token_was_ident_or_gt;
+                    if is_qualified_start || is_turbofish || is_inner_generic || last_token_was_as {
+                        angle_depth += 1;
+                    }
+                }
+            }
+            b'>' => {
+                if depth == 0 && angle_depth > 0 {
+                    let prev = if i > open { b[i - 1] } else { b'\0' };
+                    if prev != b'-' {
+                        angle_depth -= 1;
+                    }
+                }
+                last_token_was_ident_or_gt = true;
+            }
+            b',' if depth == 0 && angle_depth == 0 => return i,
+            _ => {}
+        }
+        last_token_was_double_colon = false;
+        last_token_was_as = false;
+        if b[i] != b'>' {
+            last_token_was_ident_or_gt = false;
+        }
+        i += 1;
+    }
+    b.len()
+}
+
+/// Whether `b` consists only of ASCII whitespace, comments, and unary / prefix operator tokens
+/// (`&`, `*`, `!`, `-`, `+`, `mut`, `ref`). Value literals (strings, chars, numbers) return false.
+fn is_unary_prefix_span(b: &[u8]) -> bool {
+    let mut i = 0;
+    while i < b.len() {
+        let next = skip_trivia(b, i);
+        if next != i {
+            i = next;
+            continue;
+        }
+        if matches!(b[i], b'&' | b'*' | b'!' | b'-' | b'+') {
+            i += 1;
+            continue;
+        }
+        if b[i..].starts_with(b"mut") && (i + 3 == b.len() || !is_ident_byte(b[i + 3])) {
+            i += 3;
+            continue;
+        }
+        if b[i..].starts_with(b"ref") && (i + 3 == b.len() || !is_ident_byte(b[i + 3])) {
+            i += 3;
+            continue;
+        }
+        return false;
+    }
+    true
+}
+
+/// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
+/// since the captured text is not yet known to be valid UTF-8 at the trim point).
+fn trim_bytes(b: &[u8]) -> &[u8] {
+    let start = b
+        .iter()
+        .position(|c| !c.is_ascii_whitespace())
+        .unwrap_or(b.len());
+    let end = b
+        .iter()
+        .rposition(|c| !c.is_ascii_whitespace())
+        .map_or(start, |p| p + 1);
+    &b[start..end]
+}
+
+/// An `impl`'s owner context: an inherent impl carries only its `Self` type; a trait impl also
+/// carries the trait path. Qualifies a nested `fn`'s owner (never a bare method name — two owners
+/// may share one), mirroring `hunyi`'s `owner`/`trait_ref` qualification for the identical
+/// same-named-item collision (`semantic-unsafe-confinement`).
+enum ImplOrTraitContext {
+    Impl {
+        trait_ref: Option<String>,
+        self_ty: String,
+    },
+    Trait(String),
+}
+
+/// Render a `fn`'s owner-qualified identity string from the accumulated inline-`mod` path, the
+/// innermost enclosing `impl`/`trait` context (if any), and the fn's own name. Never a bare method
+/// or fn name alone: the module path additionally disambiguates two same-named free `fn`s (or two
+/// same-named local types) declared in different inline `mod { … }` blocks of the *same* file —
+/// two same-named items in *different files* are already distinguished by the outer `file` field,
+/// so this only needs to cover same-file `mod` nesting, not cross-file module identity.
+fn render_owner(
+    module_path: &str,
+    enclosing_fn: Option<&str>,
+    context_stack: &[(usize, ImplOrTraitContext)],
+    fn_name: &str,
+) -> String {
+    let prefix = if module_path.is_empty() {
+        String::new()
+    } else {
+        format!("{module_path}::")
+    };
+    let body = match context_stack.last() {
+        Some((
+            _,
+            ImplOrTraitContext::Impl {
+                trait_ref: Some(trait_ref),
+                self_ty,
+            },
+        )) => format!("impl {trait_ref} for {self_ty}::{fn_name}"),
+        Some((
+            _,
+            ImplOrTraitContext::Impl {
+                trait_ref: None,
+                self_ty,
+            },
+        )) => {
+            format!("impl {self_ty}::{fn_name}")
+        }
+        Some((_, ImplOrTraitContext::Trait(name))) => format!("trait {name}::{fn_name}"),
+        None => format!("fn {fn_name}"),
+    };
+    match enclosing_fn {
+        Some(enclosing) => format!("{enclosing}::{body}"),
+        None => format!("{prefix}{body}"),
+    }
+}
+
+pub(super) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> String {
+    let header = String::from_utf8_lossy(trim_bytes(&b[start..brace]));
+    let normalized = header.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        "<block>".to_string()
+    } else {
+        normalized
+    }
+}
+
+fn enclosing_owner(
+    named_owner: Option<&str>,
+    anonymous_stack: &[(usize, String)],
+) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(named_owner) = named_owner {
+        parts.push(named_owner.to_string());
+    }
+    parts.extend(anonymous_stack.iter().map(|(_, scope)| scope.clone()));
+    (!parts.is_empty()).then(|| parts.join("::"))
+}
+
+/// Match a bare keyword identifier at `i` (e.g. `fn`, `impl`, `trait`), requiring a right word
+/// boundary so `implx`/`fnx` is not mistaken for the keyword — mirrors [`match_probe_marker`]'s
+/// own boundary discipline. The caller checks the left boundary.
+fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
+    if i + name.len() > b.len() || &b[i..i + name.len()] != name {
+        return None;
+    }
+    let after = i + name.len();
+    if b.get(after).is_some_and(|&c| is_ident_byte(c)) {
+        return None;
+    }
+    Some(after)
+}
+
+/// Find `keyword` (`for` or `where`) at top-level depth (outside any `<…>`/`(…)`/`[…]`) in
+/// `header`, respecting word boundaries and skipping string/char/comment content, returning its
+/// start index. Used to split an `impl` header without being fooled by a `for`/`where` nested in a
+/// generic bound (e.g. an HRTB `for<'a>` inside `<…>`). `>` only closes a generic level when not
+/// preceded by `-` (excluding a `->` return-arrow), matching `skip_to_item_body`'s own rule.
+fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < header.len() {
+        if let Some(next) = skip_literal_or_comment(header, i) {
+            i = next;
+            continue;
+        }
+        match header[i] {
+            b'(' | b'[' | b'<' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b'>' if i == 0 || header[i - 1] != b'-' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        if depth == 0 {
+            let left_boundary = i == 0 || !is_ident_byte(header[i - 1]);
+            if left_boundary && match_keyword(header, i, keyword).is_some() {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Skip from `i` (just past a `fn`/`trait` name, or the start of an `impl` header) past any
+/// generics/parameter-list/return-type/where-clause to the item's own opening `{`, returning the
+/// index just past that brace — or `None` if a top-level `;` is reached first (a body-less trait
+/// method declaration, which contributes no scope). Tracks `(`/`)`/`[`/`]`/`<`/`>` nesting (not
+/// `{`/`}`, which is exactly what the caller is deciding whether it has reached) so a generic
+/// bound or parameter type containing any of these does not false-trigger the terminator search.
+/// Stated bound: a const-generic default expression using a shift operator (`<<`/`>>`) before the
+/// item's own body is not specially handled — vanishingly rare in a bare `fn`/`impl`/`trait`
+/// header and not attempted here.
+fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        match b[i] {
+            b'(' | b'[' | b'<' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b'>' if i == 0 || b[i - 1] != b'-' => depth = depth.saturating_sub(1),
+            b'{' if depth == 0 => return Some(i + 1),
+            b';' if depth == 0 => return None,
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// After the `fn`/`trait` keyword (`after_keyword` just past it), parse the item's name and skip
+/// to its opening `{`. Returns `None` for a malformed/nameless item or a body-less declaration.
+fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
+    let name_start = skip_trivia(b, after_keyword);
+    let ident_start = if b.get(name_start..name_start + 2) == Some(b"r#") {
+        name_start + 2
+    } else {
+        name_start
+    };
+    let mut name_end = ident_start;
+    while name_end < b.len() && is_ident_byte(b[name_end]) {
+        name_end += 1;
+    }
+    if name_end == ident_start {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&b[ident_start..name_end]).into_owned();
+    let body_start = skip_to_item_body(b, name_end)?;
+    Some((name, body_start))
+}
+
+/// After the `impl` keyword (`after_impl` just past it), parse the header up to its opening `{`,
+/// splitting an optional `Trait for Self` header into `(Some(trait), self)` and an inherent
+/// `impl Self` header into `(None, self)`. The split searches for a top-level `for` only before
+/// any top-level `where` (a `where`-clause `for<'a>` HRTB must never be mistaken for the impl's
+/// own `for`). Returns `None` only on malformed/truncated input (an `impl` always has a body).
+fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext, usize)> {
+    let header_start = skip_trivia(b, after_impl);
+    let body_start = skip_to_item_body(b, header_start)?;
+    let header = &b[header_start..body_start - 1];
+    let search_region = match find_top_level_keyword(header, b"where") {
+        Some(w) => &header[..w],
+        None => header,
+    };
+    let ctx = match find_top_level_keyword(search_region, b"for") {
+        Some(for_at) => ImplOrTraitContext::Impl {
+            trait_ref: Some(String::from_utf8_lossy(trim_bytes(&header[..for_at])).into_owned()),
+            self_ty: String::from_utf8_lossy(trim_bytes(&header[for_at + 3..])).into_owned(),
+        },
+        None => ImplOrTraitContext::Impl {
+            trait_ref: None,
+            self_ty: String::from_utf8_lossy(trim_bytes(header)).into_owned(),
+        },
+    };
+    Some((ctx, body_start))
+}
+
+/// Every owner-qualified `fn` body in this source file, as `(body_start, body_end, owner)` byte
+/// ranges — `body_start`/`body_end` bound just inside the fn's own `{ … }` (excluding the braces
+/// themselves). Looked up by [`owner_for`] so an un-auditable probe's identity is qualified by a
+/// real structural discriminator, never a bare name or a position.
+///
+/// Deliberately does not skip macro-invocation/`macro_rules!` bodies the way `scan_source` does:
+/// a probe is never found inside one (that exclusion already happens in `scan_source` before a
+/// probe is ever captured), so a phantom `fn`/`impl`/`trait` this function might mis-parse out of
+/// macro-template text can never overlap the position of a real probe — it is inert, not a
+/// correctness risk.
+fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
+    let mut depth = 0usize;
+    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
+    // file) contributes nothing here, since its content is scanned separately, as its own file,
+    // where the outer `file` identity field already disambiguates it.
+    let mut mod_stack: Vec<(usize, String)> = Vec::new();
+    let mut context_stack: Vec<(usize, ImplOrTraitContext)> = Vec::new();
+    let mut fn_stack: Vec<(usize, usize, String)> = Vec::new();
+    let mut anonymous_stack: Vec<(usize, String)> = Vec::new();
+    let mut anonymous_siblings: HashMap<(String, String), usize> = HashMap::new();
+    let mut out = Vec::new();
+    let mut i = 0;
+    // Start of the current code header, advanced only by code delimiters observed by this
+    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
+    // anonymous-scope boundary.
+    let mut anonymous_header_start = 0usize;
+    while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
+        let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
+        if left_boundary {
+            if let Some(rest) = match_keyword(b, i, b"mod") {
+                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                    mod_stack.push((depth, name));
+                    depth += 1;
+                    anonymous_header_start = body_start;
+                    i = body_start;
+                    continue;
+                }
+            } else if let Some(rest) = match_keyword(b, i, b"impl") {
+                if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
+                    context_stack.push((depth, ctx));
+                    depth += 1;
+                    anonymous_header_start = body_start;
+                    i = body_start;
+                    continue;
+                }
+            } else if let Some(rest) = match_keyword(b, i, b"trait") {
+                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                    context_stack.push((depth, ImplOrTraitContext::Trait(name)));
+                    depth += 1;
+                    anonymous_header_start = body_start;
+                    i = body_start;
+                    continue;
+                }
+            } else if let Some(rest) = match_keyword(b, i, b"fn") {
+                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                    let module_path = mod_stack
+                        .iter()
+                        .map(|(_, name)| name.as_str())
+                        .collect::<Vec<_>>()
+                        .join("::");
+                    let enclosing = enclosing_owner(
+                        fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+                        &anonymous_stack,
+                    );
+                    let owner =
+                        render_owner(&module_path, enclosing.as_deref(), &context_stack, &name);
+                    fn_stack.push((depth, body_start, owner));
+                    depth += 1;
+                    anonymous_header_start = body_start;
+                    i = body_start;
+                    continue;
+                }
+            }
+        }
+        match b[i] {
+            b'{' => {
+                let header = anonymous_scope_header(b, anonymous_header_start, i);
+                let parent = enclosing_owner(
+                    fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+                    &anonymous_stack,
+                )
+                .unwrap_or_else(|| "<module scope>".to_string());
+                let sibling = anonymous_siblings
+                    .entry((parent, header.clone()))
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+                anonymous_stack.push((depth, format!("block {header}#{sibling}")));
+                depth += 1;
+                anonymous_header_start = i + 1;
+            }
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if fn_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _, _)| open_depth == depth)
+                {
+                    let (_, body_start, owner) = fn_stack.pop().expect("checked Some above");
+                    out.push((body_start, i, owner));
+                }
+                if context_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _)| open_depth == depth)
+                {
+                    context_stack.pop();
+                }
+                if mod_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _)| open_depth == depth)
+                {
+                    mod_stack.pop();
+                }
+                if anonymous_stack
+                    .last()
+                    .is_some_and(|&(open_depth, _)| open_depth == depth)
+                {
+                    anonymous_stack.pop();
+                }
+                anonymous_header_start = i + 1;
+            }
+            b';' => anonymous_header_start = i + 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Look up the innermost owner-qualified `fn` scope containing byte position `pos` (the smallest
+/// enclosing range, in case of nested `fn`s), or a stated fallback if `pos` falls inside no known
+/// `fn` body (a probe outside any function — not a realistic `assert_boundary!` call site, but
+/// handled rather than panicking).
+fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
+    scopes
+        .iter()
+        .filter(|(start, end, _)| *start <= pos && pos < *end)
+        .min_by_key(|(start, end, _)| end - start)
+        .map(|(_, _, owner)| owner.clone())
+        .unwrap_or_else(|| "<module scope>".to_string())
 }
 
 /// Parse a raw string literal `r"…"` / `r#…"…"#…` starting at `i`, returning `(value, next)`.

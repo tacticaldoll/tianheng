@@ -29,13 +29,18 @@
 #[doc = include_str!("../README.md")]
 pub struct ReadmeDoctests;
 
+mod existential;
 mod runner;
 mod sans_io;
+pub mod testing;
+
+pub use testing::GovernanceTest;
 
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
-    Finding, FindingKey, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, Severity,
-    SourceKind, Violation, ViolationId, check, workspace_member_src_dirs,
+    Finding, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, RuleKey, ScanDepth,
+    Severity, SourceKind, StructuredFactIdentity, Violation, ViolationId, check,
+    workspace_member_src_dirs,
 };
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
@@ -90,9 +95,12 @@ pub use hunyi::{
 #[doc(hidden)]
 pub use louke::{RuntimeBoundaryDraft, RuntimeSeamDraft};
 
-// The shell's own composed profile: a convenience that folds two dimensions' boundaries into one
-// declaration (see [`Constitution::sans_io_pure`]). The terminal `SansIoPure` is the documented
-// surface; its builder intermediates are hidden like every other `*Draft`.
+// The shell's own composed profiles: a convenience that folds boundaries into one declaration
+// (see [`Constitution::sans_io_pure`] / [`Constitution::no_existential_leak`]). The terminal types
+// are the documented surface; their builder intermediates are hidden like every other `*Draft`.
+pub use existential::NoExistentialLeak;
+#[doc(hidden)]
+pub use existential::{NoExistentialLeakCrateDraft, NoExistentialLeakModuleDraft};
 pub use sans_io::SansIoPure;
 #[doc(hidden)]
 pub use sans_io::{SansIoPureCrateDraft, SansIoPureDraft, SansIoPureModuleDraft};
@@ -225,7 +233,7 @@ impl From<GnomonConstitution> for Constitution {
 ///
 /// # Compatibility contract
 ///
-/// The wildcard prelude has two usage tiers with the same 0.2.x compatibility status:
+/// The wildcard prelude has two usage tiers:
 ///
 /// - **Declaration and execution:** `Constitution`, the terminal boundary and composed-profile
 ///   types, their selector enums, [`Severity`], and [`run`]. This is the normal adopter path.
@@ -240,10 +248,10 @@ impl From<GnomonConstitution> for Constitution {
 pub mod prelude {
     pub use super::{
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
-        CrateBoundary, DependencyKind, DynTraitBoundary, Finding, FindingKey,
-        ForbiddenMarkerBoundary, ImplTraitBoundary, ModuleBoundary, ModuleRule, Outcome, Polarity,
-        Report, Rule, RuntimeBoundary, SansIoPure, SemanticBoundary, Severity, SourceKind,
-        TraitImplBoundary, UnsafeBoundary, Violation, ViolationId, VisibilityBoundary,
-        VisibilityCeiling, check, check_constitution, run,
+        CrateBoundary, DependencyKind, DynTraitBoundary, Finding, ForbiddenMarkerBoundary,
+        GovernanceTest, ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome,
+        Polarity, Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, SemanticBoundary,
+        Severity, SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
+        ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
     };
 }

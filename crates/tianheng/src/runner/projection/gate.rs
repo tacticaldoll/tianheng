@@ -9,8 +9,8 @@
 /// - `path` — the checked-in artifact.
 /// - `regenerate` — the command echoed in the error (e.g. `"BLESS=1 cargo test --test law"`).
 /// - `bless` — when `true`, overwrite `path` with `live` (creating any missing parent directories);
-///   when `false`, compare. The **caller** supplies this (typically
-///   `std::env::var_os("BLESS").is_some()`), so this function reads no environment and is a pure
+///   when `false`, compare. The **caller** supplies this (typically accepting only `BLESS=1` or
+///   `BLESS=true`), so this function reads no environment and is a pure
 ///   function of its arguments — no process-global state, safe under parallel tests.
 ///
 /// Returns `Ok(())` when the file byte-matches `live` (or was blessed); `Err` — naming both the path
@@ -21,7 +21,8 @@
 /// use tianheng::prelude::*;
 /// let c = Constitution::new("my-project"); // … your declared boundaries
 /// let live = tianheng::constitution_markdown(&c);
-/// let bless = std::env::var_os("BLESS").is_some();
+/// let bless = std::env::var("BLESS")
+///     .is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
 /// // Call this inside a `#[test]`:
 /// tianheng::projection_gate(
 ///     &live,

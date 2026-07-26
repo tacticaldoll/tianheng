@@ -26,6 +26,9 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<UnsafeBoundary>();
     assert_public_type::<RuntimeBoundary>();
     assert_public_type::<SansIoPure>();
+    assert_public_type::<NoExistentialLeak>();
+    assert_public_type::<GovernanceTest>();
+    assert_public_type::<ScanDepth>();
     assert_public_type::<DependencyKind>();
     assert_public_type::<SourceKind>();
     assert_public_type::<VisibilityCeiling>();
@@ -39,12 +42,42 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<Baseline>();
     assert_public_type::<BaselineEntry>();
     assert_public_type::<Finding>();
-    assert_public_type::<FindingKey>();
+    assert_public_type::<RuleKey>();
+    assert_public_type::<StructuredFactIdentity>();
     assert_public_type::<Outcome>();
     assert_public_type::<Polarity>();
     assert_public_type::<Report>();
     assert_public_type::<Violation>();
     assert_public_type::<ViolationId>();
+
+    let violation = Violation::new(
+        BoundaryKind::Crate,
+        ViolationId::new(
+            "consumer-core",
+            RuleKey::of("tianheng.rule/test/adopter", [] as [(&str, &str); 0]),
+            StructuredFactIdentity::new(
+                "tianheng.fact/test/adopter",
+                "fact",
+                [] as [(&str, &str); 0],
+            )
+            .unwrap(),
+        ),
+        "adopter rule",
+        "adopter fact",
+        "the consumer core stays governed".to_string(),
+        Severity::Enforce,
+    );
+    assert_eq!(violation.target(), "consumer-core");
+
+    let finding = Finding::new(
+        "adopter fact",
+        StructuredFactIdentity::of(
+            "tianheng.fact/test/adopter",
+            "fact",
+            [] as [(&str, &str); 0],
+        ),
+    );
+    assert_eq!(finding.fact(), finding.key());
 
     let crate_boundary = CrateBoundary::crate_("consumer-core")
         .restrict_dependency_sources_to([SourceKind::Registry, SourceKind::Path])
@@ -62,7 +95,10 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     let module_boundary = ModuleBoundary::in_crate("consumer-core")
         .module("crate::domain")
         .must_not_import("crate::adapter")
+        .depth(ScanDepth::Shallow)
+        .including_submodules()
         .because("the domain depends inward only");
+    assert_eq!(module_boundary.scan_depth(), ScanDepth::Subtree);
     let _: Boundary = module_boundary.clone().into();
     match module_boundary.rule() {
         ModuleRule::MustNotImport { module, .. } => assert_eq!(module, "crate::adapter"),
@@ -84,6 +120,9 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .module("crate::domain")
         .reading_clock_via("std::time", ["now"])
         .because("the domain receives time through its seam");
+    let existential_profile = NoExistentialLeak::in_crate("consumer-core")
+        .module("crate::api")
+        .because("the public API names concrete return types");
 
     let constitution = Constitution::new("consumer")
         .boundary(crate_boundary)
@@ -91,7 +130,8 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .signature_boundary(signature_boundary)
         .visibility_boundary(visibility_boundary)
         .runtime(runtime_boundary)
-        .sans_io_pure(profile);
+        .sans_io_pure(profile)
+        .no_existential_leak(existential_profile);
 
     // Function items and closures are type-checked but never invoked: this contract proves the
     // public call shapes without parsing a CLI, scanning a workspace, or writing process output.

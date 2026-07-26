@@ -339,3 +339,115 @@ module, while an absent target for an unconditional `#[path]` is a fail-loud con
 
 - **WHEN** a direct caller passes a source directory instead of a target root file
 - **THEN** the audit retains the recursive directory scan and the caller requires no source change
+
+### Requirement: An un-auditable probe's identity distinguishes distinct offending expressions
+
+An un-auditable-probe fact SHALL identify the offending non-literal seam expression's own source
+text (its first macro-argument span, trimmed) and its **owner-qualified enclosing item**, alongside
+its file, so two non-literal expressions differing by file, enclosing item, or expression text
+remain distinct findings, and baselining one SHALL NOT mask another. The owner-qualified enclosing
+item SHALL NOT be a bare innermost name: for a free `fn` it is the module path plus the fn name; for
+a method inside `impl Type { … }` it is the `Self` type plus the method name; for a method inside
+`impl Trait for Type { … }` it is the trait path, the `Self` type, and the method name; for a
+trait's own default-body method it is the trait name plus the method name — mirroring the owner/
+trait_ref qualification `semantic-unsafe-confinement` already uses for the identical same-named-item
+collision. A bare method name alone SHALL NOT be used, since two distinct owners may share one.
+
+Byte-identical expression text within the same file and the same owner-qualified enclosing item
+collapses to one finding — a stated bound, not a silent gap: at that granularity no further source
+content distinguishes the two occurrences, so they represent the same restated fact (mirroring
+`module-boundary`'s "the same import on multiple lines is one violation" precedent), not two masked
+problems. Neither the enclosing-item qualification nor the expression text SHALL be derived from
+byte offset, line number, or occurrence count.
+
+#### Scenario: Same expression in two different free functions stays distinct
+
+- **WHEN** `fn a() { assert_boundary!(SEAM_A, obj); }` and `fn b() { assert_boundary!(SEAM_A, obj); }` appear in the same file
+- **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by their enclosing function, and baselining one does not suppress the other
+
+#### Scenario: Same-named method in two different impls stays distinct
+
+- **WHEN** a file contains `impl A { fn probe(&self) { assert_boundary!(SEAM_A, obj); } }` and `impl B { fn probe(&self) { assert_boundary!(SEAM_A, obj); } }`
+- **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by their owner (`A` vs `B`), even though the method name and expression text are identical, and baselining one does not suppress the other
+
+#### Scenario: Same-named method in two different trait impls of the same type stays distinct
+
+- **WHEN** a file contains `impl Foo for T { fn probe(&self) { assert_boundary!(SEAM_A, obj); } }` and `impl Bar for T { fn probe(&self) { assert_boundary!(SEAM_A, obj); } }`
+- **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by their trait (`Foo` vs `Bar`) even though the `Self` type, method name, and expression text are identical
+
+#### Scenario: Two distinct expressions in the same function stay distinct
+
+- **WHEN** a single `fn` contains both `assert_boundary!(SEAM_A, obj)` and `assert_boundary!(compute_seam(), obj)`
+- **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by their expression text
+
+#### Scenario: Identical expression repeated in the same function collapses to one finding
+
+- **WHEN** a single `fn` contains `assert_boundary!(SEAM_A, obj)` written twice, verbatim
+- **THEN** `audit_probe_coverage` emits one un-auditable-probe violation for that site — a stated bound, since no further source content distinguishes the two occurrences
+
+#### Scenario: Two files with the identical expression stay distinct by file
+
+- **WHEN** `assert_boundary!(SEAM_A, obj)` appears in `src/a.rs` and, separately, in `src/b.rs`
+- **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by file
+
+### Requirement: Un-auditable probe identity includes lexical ownership
+
+An un-auditable runtime probe fact SHALL identify its complete enclosing lexical item context within
+the source file. Equal nested function names, methods on equal local type names, or local impl
+contexts in distinct enclosing functions SHALL remain distinct without using absolute byte
+offsets, global traversal ordinals, or collection positions. Anonymous equal-header siblings MAY
+use a parent-local discriminator that is stable under differently-shaped unrelated insertion.
+
+#### Scenario: Equal nested functions in distinct outer functions remain distinct
+
+- **WHEN** two outer functions in one file each define the same-named nested function containing byte-identical non-literal probes
+- **THEN** the audit emits two distinct structured fact identities so baselining either cannot suppress the other
+
+#### Scenario: Unrelated insertion preserves lexical identity
+
+- **WHEN** an unrelated item is inserted before a nested un-auditable probe
+- **THEN** the probe retains the same structured fact identity
+
+### Requirement: Anonymous lexical scopes distinguish un-auditable probes
+
+An un-auditable probe's complete lexical owner SHALL include anonymous block scopes that enclose a
+named item, including closure bodies. Equal nested function names and expression text under
+distinct closures in the same named owner SHALL remain distinct facts. The discriminator MUST NOT
+use an absolute byte offset; equal structural siblings MAY use a parent-local discriminator that
+is stable when a differently-shaped unrelated item is inserted.
+
+#### Scenario: Equal nested functions under distinct closures stay distinct
+
+- **WHEN** one function contains two closure bodies that each declare `fn inner()` with the same
+  non-literal `assert_boundary!` expression
+- **THEN** the audit emits two distinct un-auditable-probe identities
+
+#### Scenario: Unrelated insertion preserves anonymous ownership
+
+- **WHEN** a differently-shaped unrelated statement or item is inserted before one of those
+  closures
+- **THEN** the pre-existing closure probe retains its structured fact identity
+
+### Requirement: CI face accepts configurable custom probe macro markers
+
+The `audit_probe_coverage` scanner SHALL support custom probe macro marker names (`&[&str]`), defaulting to `["assert_boundary"]`. Each custom marker identifier SHALL be a valid ASCII Rust identifier (`[A-Za-z_][A-Za-z0-9_]*`, strictly excluding keywords, raw identifiers, and non-ASCII characters). Custom markers SHALL be matched at a valid word boundary followed by optional whitespace and `!`, applying the same lexical scanning, seam argument decoding, and macro-body exclusion rules as `assert_boundary!`. A custom marker probe referencing a declared seam SHALL count toward probe coverage for that seam.
+
+#### Scenario: A custom probe macro wrapper is recognized in CI coverage
+
+- **WHEN** a project wraps `assert_boundary!` in a custom macro `company_seam!` and runs `audit_probe_coverage_with_markers` configured with `["assert_boundary", "company_seam"]`
+- **THEN** calls to `company_seam!("seam-name", obj)` are scanned as valid auditable probes for seam `"seam-name"`
+
+#### Scenario: Non-ASCII or invalid identifier markers cause a constitution error
+
+- **WHEN** `audit_probe_coverage_with_markers` is called with a marker containing non-ASCII characters, keywords, or invalid identifier characters
+- **THEN** the action fails loud with `Outcome::ConstitutionError`
+
+#### Scenario: Unregistered custom macro markers are ignored
+
+- **WHEN** a file contains `other_macro!("seam-name", obj)` where `"other_macro"` is not in the configured marker list
+- **THEN** the scanner ignores it and does not record a probe
+
+#### Scenario: Empty or blank marker list is a constitution error
+
+- **WHEN** `audit_probe_coverage_with_markers` is called with an empty marker list or a marker string that is empty or blank
+- **THEN** the action fails loud with `Outcome::ConstitutionError`, never silently flooding violations or matching empty strings

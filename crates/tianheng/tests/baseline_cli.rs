@@ -39,9 +39,10 @@ fn run_with(manifest: &Path, flag: &str, baseline: &Path) -> Output {
 }
 
 fn wrong_typed_baseline() -> &'static str {
-    r#"{"version":2,"violations":[{
+    r#"{"format":"tianheng.baseline/structured-facts","violations":[{
         "target":"example-core","rule":"deny external dependencies","finding":"serde",
-        "finding_key":{"namespace":"crate","code":"dependency","fields":{"package":"serde"}},
+        "rule_key":{"type":"tianheng.rule/guibiao/deny-external-dependencies","fields":{"allowed":"[]","dependency_kind":"normal"}},
+        "fact":{"type":"tianheng.fact/guibiao/dependency","shape":"dependency-edge","fields":{"kind":"normal","package":"serde"}},
         "owner":["team-core"]
     }]}"#
 }
@@ -73,7 +74,7 @@ fn baseline_gate_rejects_wrong_typed_metadata_through_the_cli() {
 }
 
 #[test]
-fn baseline_rewrite_warns_before_replacing_wrong_typed_metadata() {
+fn baseline_rewrite_refuses_wrong_typed_metadata_and_preserves_the_file() {
     let Some(manifest) = fixture_manifest("clean") else {
         return;
     };
@@ -81,22 +82,152 @@ fn baseline_rewrite_warns_before_replacing_wrong_typed_metadata() {
     std::fs::write(&path, wrong_typed_baseline()).expect("write malformed baseline");
 
     let output = run_with(&manifest, "--write-baseline", &path);
-    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
-    let warning = stderr
-        .find("could not be parsed")
-        .expect("warning names parse failure");
-    let loss = stderr
-        .find("owner/tracker metadata is not carried forward")
-        .expect("warning names metadata loss");
-    let written = stderr
-        .find("wrote 0 violation(s)")
-        .expect("write follows warning");
-    assert!(warning < loss && loss < written, "{stderr}");
+    for guidance in [
+        "refusing to overwrite unsupported baseline",
+        "Preserve any desired owner/tracker annotations",
+        "move or delete the unsupported file",
+        "--write-baseline",
+    ] {
+        assert!(stderr.contains(guidance), "missing `{guidance}`: {stderr}");
+    }
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        wrong_typed_baseline(),
+        "unsupported input must remain byte-for-byte unchanged"
+    );
 
-    let rewritten = std::fs::read_to_string(&path).expect("fresh baseline written");
-    assert!(rewritten.contains("\"version\": 2"), "{rewritten}");
-    assert!(!rewritten.contains("owner"), "{rewritten}");
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn disallow_stale_without_baseline_is_a_usage_error() {
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let output = command_for(&manifest)
+        .arg("--disallow-stale")
+        .output()
+        .expect("run CLI");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    assert!(
+        stderr.contains("--disallow-stale requires --baseline"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("[--disallow-stale]"),
+        "usage synopsis must advertise the supported flag: {stderr}"
+    );
+}
+
+#[test]
+fn disallow_stale_fails_gate_when_stale_entry_is_present() {
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let path = temp_baseline("stale-gate");
+    let stale_baseline_text = r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+        "target":"clean","rule":"test-rule","finding":"test-finding",
+        "rule_key":{"type":"tianheng.rule/test","fields":{}},
+        "fact":{"type":"tianheng.fact/test","shape":"test","fields":{}}
+    }]}"#;
+    std::fs::write(&path, stale_baseline_text).expect("write baseline with stale entry");
+
+    // Normal gate without --disallow-stale exits 0 (stale entries are advisory)
+    let normal_output = run_with(&manifest, "--baseline", &path);
+    assert_eq!(normal_output.status.code(), Some(0));
+
+    // Gate with --disallow-stale fails and exits 1
+    let stale_output = command_for(&manifest)
+        .args(["--baseline", path.to_str().unwrap(), "--disallow-stale"])
+        .output()
+        .expect("run CLI");
+    assert_eq!(stale_output.status.code(), Some(1));
+    let stderr = String::from_utf8(stale_output.stderr).expect("UTF-8 stderr");
+    assert!(stderr.contains("stale baseline entry"), "{stderr}");
+    assert!(stderr.contains("--disallow-stale failed"), "{stderr}");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn disallow_stale_json_and_sarif_projections_are_consistent_with_exit_code() {
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let path = temp_baseline("stale-projections");
+    let stale_baseline_text = r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+        "target":"clean","rule":"test-rule","finding":"test-finding",
+        "rule_key":{"type":"tianheng.rule/test","fields":{}},
+        "fact":{"type":"tianheng.fact/test","shape":"test","fields":{}}
+    }]}"#;
+    std::fs::write(&path, stale_baseline_text).expect("write baseline with stale entry");
+
+    // JSON format under --disallow-stale
+    let json_output = command_for(&manifest)
+        .args([
+            "--baseline",
+            path.to_str().unwrap(),
+            "--disallow-stale",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("run CLI");
+    assert_eq!(json_output.status.code(), Some(1));
+    let json_doc: serde_json::Value =
+        serde_json::from_slice(&json_output.stdout).expect("valid JSON");
+    assert_eq!(json_doc["exit_code"], 1);
+    assert_eq!(json_doc["outcome"], "violations");
+    assert_eq!(json_doc["stale_disallowed"], true);
+    assert_eq!(json_doc["stale_baseline"].as_array().unwrap().len(), 1);
+
+    // SARIF format under --disallow-stale
+    let sarif_output = command_for(&manifest)
+        .args([
+            "--baseline",
+            path.to_str().unwrap(),
+            "--disallow-stale",
+            "--format",
+            "sarif",
+        ])
+        .output()
+        .expect("run CLI");
+    assert_eq!(sarif_output.status.code(), Some(1));
+    let sarif_doc: serde_json::Value =
+        serde_json::from_slice(&sarif_output.stdout).expect("valid SARIF JSON");
+    let run = &sarif_doc["runs"][0];
+    assert_eq!(run["results"].as_array().unwrap().len(), 1);
+    assert_eq!(run["results"][0]["level"], "error");
+    assert_eq!(run["invocations"][0]["executionSuccessful"], false);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn disallow_stale_equals_form_is_unrecognized_argument_usage_error() {
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let path = temp_baseline("stale-equals");
+    std::fs::write(&path, wrong_typed_baseline()).expect("write baseline");
+
+    let output = command_for(&manifest)
+        .args([
+            "--baseline",
+            path.to_str().unwrap(),
+            "--disallow-stale=false",
+        ])
+        .output()
+        .expect("run CLI");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    assert!(
+        stderr.contains("unrecognized argument '--disallow-stale=false'"),
+        "{stderr}"
+    );
 
     let _ = std::fs::remove_file(path);
 }

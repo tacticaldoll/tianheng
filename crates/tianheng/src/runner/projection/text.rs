@@ -166,12 +166,25 @@ pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> St
         "Impl-trait",
         &boundaries
             .iter()
-            .map(|b| ModuleBlockSpec {
-                severity: b.severity().as_str(),
-                target: format!("module {} in {}", b.module(), b.crate_package()),
-                rule_line: shape_rule_text(IMPL_TRAIT_RULE, b.forbidden_operands()),
-                reason: b.reason(),
-                anchor: b.anchor(),
+            .map(|b| {
+                // The subtree opt-in changes the reaction, so the projected law shows it (parity
+                // with the JSON/Markdown projections); a bare boundary's text stays byte-identical.
+                let scope = if b.including_submodules() {
+                    " (including submodules)"
+                } else {
+                    ""
+                };
+                ModuleBlockSpec {
+                    severity: b.severity().as_str(),
+                    target: format!("module {} in {}", b.module(), b.crate_package()),
+                    rule_line: format!(
+                        "{}{}",
+                        shape_rule_text(IMPL_TRAIT_RULE, b.forbidden_operands()),
+                        scope
+                    ),
+                    reason: b.reason(),
+                    anchor: b.anchor(),
+                }
             })
             .collect::<Vec<_>>(),
     )

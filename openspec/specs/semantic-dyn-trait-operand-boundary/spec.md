@@ -112,7 +112,7 @@ The operand-scoped dyn boundary SHALL share the 渾儀 dyn-trait reaction contra
 into the same aggregated report and exit-code outcome (**0** clean, **1** enforce violation, **2**
 constitution/scan error such as an unresolvable crate or module); the boundary carries a severity
 (`enforce` default, or `warn`) and is gated against the same `Baseline` under the shared violation
-identity `(target, rule, finding_key)`, the finding being the seam-qualified rendered `dyn …` shape (as in the shape-only rule); and the rule
+identity `(target, rule_key, fact)`, the finding being the seam-qualified rendered `dyn …` shape (as in the shape-only rule); and the rule
 projects through the existing dyn-trait `list` text/JSON/markdown projection, adding a `forbidden`
 parameter listing the operand set when non-empty (a shape-only, empty-set boundary projects
 unchanged). The implementation SHALL keep the `syn` dependency quarantined in `hunyi` (no new
@@ -138,3 +138,12 @@ dependency) and SHALL NOT change the public-surface walk.
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** an operand-scoped boundary appears with its target, module, rule, the forbidden operand set, severity, and reason — through the existing dyn-trait projection, no separate projector; a shape-only boundary appears exactly as before, with no operand parameter
 
+### Requirement: Dyn-trait operand facts share structured shape semantics
+
+Operand-specific dyn-trait reactions SHALL use the same structured subject/seam roles as the
+shape-only rule and a distinct semantic rule key for operand policy. Presentation SHALL NOT define
+their relationship or identity.
+
+#### Scenario: Shape and operand rules do not collide
+- **WHEN** the same seam violates both shape-only and operand-specific laws
+- **THEN** their semantic rule keys keep the violation identities distinct

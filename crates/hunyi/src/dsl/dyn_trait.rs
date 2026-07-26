@@ -1,6 +1,6 @@
 //! Dyn-trait-boundary declaration DSL — [`DynTraitBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// A dyn-trait boundary: a module's public API must not **expose** trait-object (`dyn`)
 /// syntax. The type-shape complement of [`SemanticBoundary`] (signature-coupling): where
@@ -30,6 +30,17 @@ pub struct DynTraitBoundary {
 }
 
 impl DynTraitBoundary {
+    /// Stable semantic identity for this dyn-trait exposure rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/dyn-trait-exposure",
+            [(
+                "forbidden_operands",
+                super::canonical_path_set(&self.forbidden_operands),
+            )],
+        )
+    }
+
     /// Begin a dyn-trait boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> DynTraitCrateDraft {
         DynTraitCrateDraft {

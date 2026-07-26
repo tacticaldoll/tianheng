@@ -12,6 +12,98 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-26
+
+### Documentation
+- Archived historical 0.1.x–0.3.0 shipped backlog ledgers into `docs/history/0.1.0-0.3.0-built-ledger.md` and pruned `BACKLOG.md` to optimize context gravity.
+- Reconciled the 0.3.0 migration guide with the separately shipped testing harness and restored
+  the deferred baseline debt-ratchet WATCH decision after backlog pruning.
+
+### Added
+- Semantic `RuleKey` and `StructuredFactIdentity` inspection across 圭表, 渾儀, 漏刻, 璇璣, and
+  `tianheng::prelude::*`; all three instruments remain directly adoptable and return the same
+  structured reaction model.
+- Explicit machine-contract formats: `tianheng.baseline/structured-facts`,
+  `tianheng.reaction/structured-facts`, and `tianheng.constitution/declared-boundaries`.
+- `tianheng::testing::GovernanceTest`: a reusable fluent architecture-test harness for clean
+  reactions, complete workspace-member coverage, projection freshness with explicit
+  `BLESS=1`/`BLESS=true` regeneration, and negative fixture checks. Tianheng's own self-law
+  dogfoods the same public projection gate.
+- `ScanDepth::{Shallow, Subtree}` and explicit `.depth(...)` controls on supporting 圭表 and 渾儀
+  boundaries. Legacy module boundaries retain subtree evaluation and identity; shallow scope is
+  projected explicitly.
+- `check --disallow-stale` turns any stale baseline entry into a gate failure while preserving
+  constitution-error precedence and consistent text, JSON, and SARIF exit semantics.
+- `ImplTraitBoundary::including_submodules()`: an opt-in subtree scope for the impl-trait
+  (existential RPIT) boundary, mirroring `AsyncExposureBoundary`'s existing depth. Defaults off;
+  an existing boundary projects and reacts byte-identically.
+- `NoExistentialLeak` / `Constitution::no_existential_leak(...)`: a composed profile folding
+  impl-trait's written `-> impl Trait` and async-exposure's implicit `impl Future` — the two
+  existential-leak signals — into one declaration, mirroring `SansIoPure`. Each composed boundary
+  keeps its own separate identity; adds no new reaction.
+- `louke::audit_probe_coverage_with_markers(...)`: CI probe-coverage audits can recognize
+  adopter-defined probe macro names while `audit_probe_coverage(...)` preserves
+  `assert_boundary!` as the compatible default.
+
+### Fixed
+- 圭表 now union-scans every physically existing path candidate when one module declaration mixes
+  direct `#[path = "…"]` and conditional `cfg_attr(..., path = "…")` remaps, independent of
+  attribute order. A candidate selected by a real rustc configuration can no longer disappear
+  behind the scanner's former direct-path early return.
+- 漏刻's un-auditable-probe identity now includes the full enclosing lexical function chain, so
+  byte-identical probes in same-named nested functions or local contexts under different outer
+  functions remain distinct and baselining one cannot suppress another.
+- Module-boundary constitution projection now omits the legacy/default subtree scan depth and emits
+  the non-legacy shallow depth, preserving old projection bytes while exposing the real opt-in.
+- 漏刻's un-auditable-probe finding identity is no longer file-granular: it is now qualified by the
+  offending non-literal seam expression's own source text and its owner-qualified enclosing item
+  (module path plus `fn`/`impl`/`trait` context), so two distinct non-literal probes in the same
+  file react as distinct findings and baselining one can no longer mask another. A false-negative
+  closure (a patch, per the standing v0.1.3 re-export-exposure precedent): an existing baseline
+  with an un-auditable-probe entry goes stale and needs `--write-baseline`, never silently
+  reinterpreted. Two byte-identical expressions in the same file and the same enclosing item still
+  collapse to one finding — a stated bound.
+- 圭表 now preserves `cfg_if!` bodies as transparent control-flow wrappers, so enclosed imports,
+  module declarations, and inline symbol calls remain observable instead of being stripped as
+  macro-generated code.
+- 圭表's `must_not_import` now fails closed on ancestor glob hazards such as `use crate::a::*;`
+  when `crate::a::b` is forbidden, while unrelated and non-glob ancestor imports remain clean.
+- 渾儀's signature-coupling alias resolver now walks nested nominal targets in non-generic tuple,
+  array, slice, reference, raw-pointer, group, and parenthesized aliases.
+- 圭表 now normalizes embedded `self` and `super` segments throughout grouped imports and inline
+  symbol paths before evaluating module boundaries.
+
+### Changed
+- **Breaking:** violation and baseline identity is now exactly governed target + semantic rule key
+  + structured fact identity. Rule/finding wording and all diagnostics remain available but cannot
+  affect matching, ordering, or SARIF fingerprints.
+- **Breaking:** SARIF partial fingerprints now use `tianheng/structured-fact-identity`, derived
+  solely from canonical semantic identity; `tianhengViolationId/v1` is no longer emitted.
+
+### Removed
+- **Breaking:** `FindingKey`, presentation-derived `ViolationId` construction, numeric baseline
+  generations, legacy text matching, and automatic baseline upgrade behavior.
+
+### Migration
+- Preserve desired `owner` / `tracker` annotations externally, move or delete the old baseline,
+  run `tianheng check --write-baseline <file>`, then restore annotations onto the newly observed
+  facts. Unsupported existing files are never overwritten. There is no automatic adapter.
+- Architecture tests should call an existing standalone `check*` function or
+  `check_constitution`, then assert on `Violation::target()`, `Violation::rule_key()`, and
+  `Violation::fact()`. The identity migration adds no plugin protocol; the separately specified
+  `tianheng::testing::GovernanceTest` harness is available for repository architecture tests.
+
+### Compatibility evidence
+- Pacta `d3e24df`'s unpublished `pacta-governance` consumer compiled against this checkout's local
+  `tianheng` and `guibiao` crates (`cargo check -p pacta-governance`) from a temporary copy; no
+  Pacta source migration was required. This is recorded historical external evidence, not a
+  sibling-repository dependency of Tianheng's required CI. Ongoing local reaction is provided by
+  the external-view `tianheng` and `guibiao` `adopter_surface` tests; those fixtures protect the
+  corresponding public call shapes without claiming to re-verify that external commit.
+
+- Refined core project documentation density (`PROJECT.md`, `BACKLOG.md`) to archive verbose
+  historical post-mortems and prune redundant release ledgers, reducing context token overhead.
+
 ## [0.2.3] - 2026-07-22
 
 ### Fixed
@@ -399,7 +491,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...v0.2.1

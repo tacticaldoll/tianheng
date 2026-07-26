@@ -37,13 +37,34 @@ fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<u
         .collect()
 }
 
+/// Whether any principal trait on `exposure` resolves into `forbidden` in this module branch.
+///
+/// Both the single-module and subtree operand reactions use this leaf so their resolution
+/// semantics cannot drift. The caller owns branch isolation: `uses` and `file_scope` must both
+/// come from the exact branch that produced `exposure`.
+pub(crate) fn matches_forbidden_principal(
+    exposure: &ShapeExposure,
+    uses: &UseMap,
+    module: &str,
+    resolution: &crate::crate_scope::ExternResolution,
+    file_scope: &crate::crate_scope::FileExternScope,
+    forbidden: &[String],
+) -> bool {
+    forbidden.is_empty()
+        || exposure.principals.iter().any(|path| {
+            resolve_principal(path, uses, module, resolution, file_scope)
+                .is_some_and(|canonical| matches_forbidden(&canonical, forbidden))
+        })
+}
+
 /// Resolve `module`'s items, collect each item's exposures with `collect`, render each to a finding
 /// with `render`, then sort + dedup. The shape-only heart shared by the dyn / impl-trait / async
 /// boundaries: `collect` is the only per-boundary difference. The dyn and impl-trait boundaries
 /// collect [`ShapeExposure`] and pass [`shape_finding`] as `render`; async collects owner-qualified
 /// `String` identities directly and passes the identity `render`. `uses` is collected because the
 /// collectors canonicalize an inherent impl's self-type owner in the seam (a finding-identity
-/// concern), even where the boundary itself needs no name resolution. Each finding pairs with the
+/// concern), even where the boundary itself needs no name resolution. A collector may fail loud
+/// when it cannot produce non-positional identity. Each finding pairs with the
 /// real file its own item's branch was resolved from — never a single first-branch file for the
 /// whole module, which would misattribute a finding produced by a non-first `#[cfg]`-split branch.
 pub(crate) fn shape_module_findings<E>(
@@ -51,7 +72,7 @@ pub(crate) fn shape_module_findings<E>(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-    collect: impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<E>),
+    collect: impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<E>) -> Result<(), String>,
     render: impl Fn(E) -> SemanticFact,
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
@@ -61,14 +82,14 @@ pub(crate) fn shape_module_findings<E>(
     for (ordinal, (item, file, branch)) in items_with_files.iter().enumerate() {
         let uses = &uses_by_branch[branch];
         let mut buf = Vec::new();
-        collect(item, module, uses, ordinal, &mut buf);
+        collect(item, module, uses, ordinal, &mut buf)?;
         collected.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
     }
     let mut findings: Vec<(SemanticFact, PathBuf)> = collected
         .into_iter()
         .map(|(exposure, file)| (render(exposure), file))
         .collect();
-    sort_faceted_facts(&mut findings);
+    sort_faceted_facts(&mut findings)?;
     Ok(findings)
 }
 
@@ -134,14 +155,10 @@ pub(crate) fn operand_module_findings(
         .filter(|(exposure, _file, branch)| {
             let uses = &uses_by_branch[branch];
             let file_scope = &file_scopes[branch];
-            forbidden.is_empty()
-                || exposure.principals.iter().any(|path| {
-                    resolve_principal(path, uses, module, &resolution, file_scope)
-                        .is_some_and(|canonical| matches_forbidden(&canonical, &forbidden))
-                })
+            matches_forbidden_principal(exposure, uses, module, &resolution, file_scope, &forbidden)
         })
         .map(|(exposure, file, _branch)| (shape_finding(exposure, fact_kind), file))
         .collect();
-    sort_faceted_facts(&mut findings);
+    sort_faceted_facts(&mut findings)?;
     Ok(findings)
 }

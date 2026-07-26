@@ -16,16 +16,217 @@ fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
         None => crate::finding::CrateFact::dependency(finding.to_string(), DependencyKind::Normal)
             .into_finding(),
     };
-    ViolationId::new(target, rule, finding)
+    ViolationId::new(
+        target,
+        RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
+        finding.key().clone(),
+    )
 }
 
 fn one_enforce_violation() -> Report {
     Report::new(vec![Violation::new(
         BoundaryKind::Crate,
         test_id("core", "deny external dependencies", "serde"),
+        "deny external dependencies",
+        "serde",
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     )])
+}
+
+#[test]
+fn every_static_rule_has_an_exact_semantic_key() {
+    let crate_rules = vec![
+        (
+            Rule::DenyExternalDependencies {
+                allowed: vec!["serde".to_string()],
+            },
+            "tianheng.rule/guibiao/deny-external-dependencies",
+            vec![("allowed", "[\"serde\"]")],
+        ),
+        (
+            Rule::ForbidDependencyOn {
+                crates: vec!["serde".to_string()],
+            },
+            "tianheng.rule/guibiao/forbid-dependency-on",
+            vec![("crates", "[\"serde\"]")],
+        ),
+        (
+            Rule::RestrictDependenciesTo {
+                allowed: vec!["serde".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-dependencies-to",
+            vec![("allowed", "[\"serde\"]")],
+        ),
+        (
+            Rule::RestrictWorkspaceDependenciesTo {
+                allowed: vec!["domain".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-workspace-dependencies-to",
+            vec![("allowed", "[\"domain\"]")],
+        ),
+        (
+            Rule::RestrictDependencySourcesTo {
+                allowed: vec![SourceKind::Registry],
+            },
+            "tianheng.rule/guibiao/restrict-dependency-sources-to",
+            vec![("allowed", "[\"registry\"]")],
+        ),
+        (
+            Rule::RestrictFeaturesOf {
+                crate_: "serde".to_string(),
+                allowed: vec!["derive".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-features-of",
+            vec![("allowed", "[\"derive\"]"), ("crate", "serde")],
+        ),
+        (
+            Rule::ForbidFeaturesOf {
+                crate_: "serde".to_string(),
+                forbidden: vec!["unstable".to_string()],
+            },
+            "tianheng.rule/guibiao/forbid-features-of",
+            vec![("crate", "serde"), ("forbidden", "[\"unstable\"]")],
+        ),
+    ];
+    for (rule, expected, fields) in crate_rules {
+        assert_eq!(rule.key().rule_type(), expected);
+        assert_eq!(rule.key().fields().collect::<Vec<_>>(), fields);
+    }
+
+    let module_rules = vec![
+        (
+            ModuleRule::MustNotImport {
+                module: "crate::adapter".to_string(),
+            },
+            "tianheng.rule/guibiao/must-not-import",
+            vec![("module", "crate::adapter")],
+        ),
+        (
+            ModuleRule::RestrictImportsTo {
+                allowed: vec!["crate::types".to_string()],
+            },
+            "tianheng.rule/guibiao/restrict-imports-to",
+            vec![("allowed", "[\"crate::types\"]")],
+        ),
+        (
+            ModuleRule::MustNotBeImportedBy {
+                importer: "crate::http".to_string(),
+            },
+            "tianheng.rule/guibiao/must-not-be-imported-by",
+            vec![("importer", "crate::http")],
+        ),
+        (
+            ModuleRule::MustOnlyBeImportedBy {
+                allowed: vec!["crate::facade".to_string()],
+            },
+            "tianheng.rule/guibiao/must-only-be-imported-by",
+            vec![("allowed", "[\"crate::facade\"]")],
+        ),
+        (
+            ModuleRule::ConfineExternalCrate {
+                crate_name: "libc".to_string(),
+            },
+            "tianheng.rule/guibiao/confine-external-crate",
+            vec![("crate", "libc")],
+        ),
+        (
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix: "std::time".to_string(),
+                ending_with: Some(vec!["now".to_string()]),
+                strict: false,
+                strict_external: false,
+            },
+            "tianheng.rule/guibiao/confine-inline-symbol-path",
+            vec![
+                ("ending_with", "[\"now\"]"),
+                ("prefix", "std::time"),
+                ("strict", "false"),
+            ],
+        ),
+    ];
+    for (rule, expected, fields) in module_rules {
+        assert_eq!(rule.key().rule_type(), expected);
+        assert_eq!(rule.key().fields().collect::<Vec<_>>(), fields);
+    }
+}
+
+#[test]
+fn rule_set_order_is_canonical_and_presentation_is_not_identity() {
+    let left = Rule::ForbidDependencyOn {
+        crates: vec!["serde".to_string(), "tokio".to_string()],
+    };
+    let right = Rule::ForbidDependencyOn {
+        crates: vec!["tokio".to_string(), "serde".to_string()],
+    };
+    assert_eq!(left.key(), right.key());
+    let changed_law = Rule::ForbidDependencyOn {
+        crates: vec!["serde".to_string(), "tracing".to_string()],
+    };
+    assert_ne!(left.key(), changed_law.key());
+
+    let default = ModuleRule::ConfineInlineSymbolPath {
+        prefix: "std::time".to_string(),
+        ending_with: Some(vec!["now".to_string()]),
+        strict: false,
+        strict_external: false,
+    };
+    let strict_external = ModuleRule::ConfineInlineSymbolPath {
+        prefix: "std::time".to_string(),
+        ending_with: Some(vec!["now".to_string()]),
+        strict: false,
+        strict_external: true,
+    };
+    assert_ne!(default.text(), strict_external.text());
+    assert_eq!(default.key(), strict_external.key());
+
+    let raw = ModuleRule::MustNotImport {
+        module: "crate::r#type".to_string(),
+    };
+    let plain = ModuleRule::MustNotImport {
+        module: "crate::type".to_string(),
+    };
+    assert_eq!(raw.key(), plain.key());
+}
+
+#[test]
+fn dependency_fact_identity_survives_reorder_and_unrelated_insertion() {
+    fn identities(package: &serde_json::Value) -> Vec<StructuredFactIdentity> {
+        Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry],
+        }
+        .facts(package, &[], DependencyKind::Normal)
+        .into_iter()
+        .map(|fact| fact.into_finding().key().clone())
+        .collect()
+    }
+
+    let before = serde_json::json!({
+        "dependencies": [
+            { "name": "blocked", "source": "git+https://example.invalid/blocked", "kind": null }
+        ]
+    });
+    let after = serde_json::json!({
+        "dependencies": [
+            { "name": "allowed", "source": "registry+https://example.invalid/index", "kind": null },
+            { "name": "blocked", "source": "git+https://example.invalid/blocked", "kind": null }
+        ]
+    });
+    assert_eq!(identities(&before), identities(&after));
+
+    let distinct_sources = serde_json::json!({
+        "dependencies": [
+            { "name": "same", "source": null, "kind": null },
+            { "name": "same", "source": "git+https://example.invalid/same", "kind": null }
+        ]
+    });
+    let facts = Rule::RestrictDependencySourcesTo { allowed: vec![] }
+        .facts(&distinct_sources, &[], DependencyKind::Normal)
+        .into_iter()
+        .map(|fact| fact.into_finding().key().clone())
+        .collect::<Vec<_>>();
+    assert_eq!(facts.len(), 2);
+    assert_ne!(facts[0], facts[1]);
 }
 
 /// A unique, self-cleaning temp Cargo-package-shaped `src/` tree: write source files, add
@@ -184,7 +385,7 @@ fn a_plain_child_reached_only_through_a_symlinked_directory_is_governed() {
 
     result.expect("a symlinked-directory-reached child is a valid, governable target");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::mymod");
+    assert_eq!(violations[0].target(), "crate::mymod");
     let file = violations[0]
         .file
         .as_deref()
@@ -235,7 +436,7 @@ fn a_symlinked_module_aliasing_an_unrelated_walked_file_is_still_governed_under_
         "crate::kernel is a valid, governable target even though it aliases crate::real's file",
     );
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(violations[0].target(), "crate::kernel");
 }
 
 #[test]
@@ -279,10 +480,16 @@ fn a_use_in_a_whitespace_spaced_macro_body_is_not_a_real_import() {
     // Rust allows whitespace between a macro path and its `!` (`cfg_if ! { … }`). The body is a
     // macro-generated context, out of scope per the module-boundary spec, so its `use` must be
     // stripped — not observed as a real import (a false positive).
-    let spaced = "cfg_if ! { use crate::secret::X; }\n";
+    let spaced = "my_macro ! { use crate::secret::X; }\n";
     assert!(
         imported_module_paths(spaced, "crate::m", &[]).is_empty(),
         "a use inside a whitespace-spaced macro invocation body is macro-generated, not a real import"
+    );
+    let transparent = "cfg_if ! { use crate::secret::X; }\n";
+    assert_eq!(
+        imported_module_paths(transparent, "crate::m", &[]),
+        vec![crate::module_scan::ImportedPath::plain("crate::secret::X")],
+        "a use inside a transparent control-flow macro (cfg_if!) is observed"
     );
     // But a unary `!` on a real block after a keyword (`return !{ … }`) is NOT a macro — its block
     // is real code, and a `use` inside it must still be observed (guarding against a false negative
@@ -318,15 +525,20 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
         "the submodule file must resolve, not raise a false exit-2: {result:?}"
     );
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::foo::lib");
+    assert_eq!(violations[0].target(), "crate::foo::lib");
     assert_eq!(violations[0].rule, "module must not import");
     assert_eq!(violations[0].finding, "crate::sink");
     let id = violations[0].id();
-    let key = id
-        .finding_key()
-        .expect("a production violation has structured identity");
-    assert_eq!(key.namespace(), "guibiao");
-    assert_eq!(key.code(), "imported_path");
+    assert_eq!(id.target(), "crate::foo::lib");
+    let rule = id.rule_key();
+    assert_eq!(rule.rule_type(), "tianheng.rule/guibiao/must-not-import");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![("module", "crate::sink")]
+    );
+    let key = id.fact();
+    assert_eq!(key.fact_type(), "tianheng.fact/guibiao/imported-path");
+    assert_eq!(key.shape(), "module-path");
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![("path", "crate::sink")]
@@ -439,7 +651,7 @@ fn a_raw_identifier_module_is_governed_and_its_import_observed() {
         1,
         "the forbidden import from inside the raw-identifier module must be observed: {violations:?}"
     );
-    assert_eq!(violations[0].target, "crate::type");
+    assert_eq!(violations[0].target(), "crate::type");
     assert_eq!(violations[0].finding, "crate::mod::Thing");
 }
 
@@ -503,7 +715,7 @@ fn path_remapped_module_is_followed_not_governed_via_a_conventional_orphan() {
 
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(violations[0].target(), "crate::kernel");
     assert_eq!(
         violations[0].finding, "crate::projection::Thing",
         "the real target's import is observed, never the orphan's: {violations:?}"
@@ -545,7 +757,7 @@ fn an_unconditional_path_on_an_inline_module_relocates_its_own_file_form_childre
     );
     result.expect("the relocated child must be a valid, governable target");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::thread");
+    assert_eq!(violations[0].target(), "crate::thread");
     let file = violations[0]
         .file
         .as_deref()
@@ -928,7 +1140,7 @@ fn a_cfg_gated_unconditional_path_target_is_tolerated_regardless_of_attribute_or
 /// not silently governed as the wrong module.
 #[test]
 fn a_cfg_attr_wrapped_path_is_recognized_as_a_remap() {
-    let (result, _violations) = run_module_check(
+    let (result, violations) = run_module_check(
         "cfg-attr-path",
         &[
             (
@@ -943,14 +1155,14 @@ fn a_cfg_attr_wrapped_path_is_recognized_as_a_remap() {
             .must_not_import("crate::forbidden")
             .because("foo must not import forbidden"),
     );
-    // crate::foo is a remapped module, out of scope — so a boundary anchored on it is a constitution
-    // error (exit 2), matching a direct `#[path]` remap. The conventional foo.rs is NOT governed as
-    // crate::foo (no false positive on the active-cfg configuration, no silent guess).
+    // Under union-scan semantics, crate::foo performs a reachability walk across all candidate files
+    // that physically exist on disk (both foo.rs and weird.rs), observing the forbidden import in foo.rs.
     assert!(
-        result.is_err(),
-        "a cfg_attr-remapped module is out of scope; a boundary on it must fail loud, not guess \
-         the conventional file"
+        result.is_ok(),
+        "a cfg_attr-remapped module performs union-scan over physically existing target files"
     );
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].finding, "crate::forbidden::Y");
 }
 
 /// Run a module boundary against a synthetic one-package workspace whose `src`
@@ -1011,7 +1223,7 @@ fn restrict_imports_to_flags_an_import_outside_the_allowlist() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::kernel");
+    assert_eq!(violations[0].target(), "crate::kernel");
     assert_eq!(violations[0].finding, "crate::io::Sink");
 }
 
@@ -1223,7 +1435,7 @@ fn restrict_imports_to_honors_warn_severity_and_its_distinct_label() {
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert_eq!(violations[0].severity, Severity::Warn);
-    // A label distinct from `must not import`, so baseline identity does not collide.
+    // A distinct rule family and semantic key prevent baseline identity collision.
     assert_eq!(violations[0].rule, "restrict imports to");
 }
 
@@ -1250,9 +1462,26 @@ fn must_not_be_imported_by_flags_the_forbidden_importer_only() {
     // Only crate::http is beneath the forbidden importer; crate::api imports internal
     // too but is outside crate::http, so it is clean.
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].target(), "crate::internal");
     assert_eq!(violations[0].finding, "crate::http");
     assert_eq!(violations[0].rule, "module must not be imported by");
+}
+
+#[test]
+fn must_not_be_imported_by_flags_ancestor_glob_import() {
+    let (result, violations) = run_module_check(
+        "inbound-ancestor-glob",
+        &[
+            ("lib.rs", "pub mod internal;\npub mod http;\n"),
+            ("internal.rs", "// protected\n"),
+            ("http.rs", "use crate::*;\n"),
+        ],
+        protect_internal_from("crate::http"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::internal");
+    assert_eq!(violations[0].finding, "crate::http");
 }
 
 #[test]
@@ -1274,7 +1503,7 @@ fn must_not_be_imported_by_flags_an_inline_module_importer() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].target(), "crate::internal");
     assert_eq!(violations[0].finding, "crate::http");
 }
 
@@ -1477,6 +1706,7 @@ fn must_not_be_imported_by_projects_its_importer() {
     );
 
     let doc: serde_json::Value = serde_json::from_str(&constitution_json(&constitution)).unwrap();
+    assert_eq!(doc["format"], "tianheng.constitution/declared-boundaries");
     assert_eq!(
         doc["boundaries"][0]["rule"],
         "module must not be imported by"
@@ -1562,7 +1792,7 @@ fn must_not_be_imported_by_protects_a_raw_identifier_module() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::type");
+    assert_eq!(violations[0].target(), "crate::type");
     assert_eq!(violations[0].finding, "crate::http");
 }
 
@@ -1665,6 +1895,116 @@ fn must_not_import_dedups_a_finding_across_subtree_files() {
 }
 
 #[test]
+fn must_not_import_flags_ancestor_glob_hazard() {
+    // When a boundary forbids `crate::a::b`, importing an ancestor wildcard (`use crate::a::*;`)
+    // brings `crate::a::b` into scope and MUST trigger a Glob Hazard violation (fail-closed).
+    let (result, violations) = run_module_check(
+        "glob-hazard-ancestor",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            ("app.rs", "use crate::a::*;"),
+            ("a.rs", "pub mod b;"),
+            ("a/b.rs", "pub struct Secret;"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_import("crate::a::b")
+            .because("app must not import b"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "importing an ancestor module wildcard violates a descendant forbidden boundary: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::a");
+}
+
+#[test]
+fn must_not_import_allows_plain_ancestor_module_import() {
+    // When a boundary forbids `crate::a::b`, importing the parent module without a wildcard
+    // (`use crate::a;`) does NOT bring `crate::a::b` into scope and MUST stay clean.
+    let (result, violations) = run_module_check(
+        "plain-ancestor-import",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            ("app.rs", "use crate::a;"),
+            ("a.rs", "pub mod b;"),
+            ("a/b.rs", "pub struct Secret;"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_import("crate::a::b")
+            .because("app must not import b"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "plain non-glob ancestor import must remain clean: {violations:?}"
+    );
+}
+
+#[test]
+fn must_not_import_flags_midpath_super_import() {
+    // When a grouped use or nested import contains a mid-path `super` (e.g. `use crate::a::b::{super::secret::X}`),
+    // it resolves to `crate::a::secret::X` and MUST trigger a violation when `crate::a::secret` is forbidden.
+    let (result, violations) = run_module_check(
+        "midpath-super-import",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            ("app.rs", "use crate::a::b::{super::secret::X};"),
+            ("a.rs", "pub mod b;\npub mod secret;\n"),
+            ("a/b.rs", "pub struct Dummy;"),
+            ("a/secret.rs", "pub struct X;"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_import("crate::a::secret")
+            .because("app must not import secret"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "mid-path super import must be normalized and flagged as a violation: {violations:?}"
+    );
+    assert_eq!(violations[0].finding, "crate::a::secret::X");
+}
+
+#[test]
+fn inline_symbol_confinement_flags_midpath_super_call() {
+    // Both direct calls (crate::a::b::super::secret::helper()) and group-imported alias calls
+    // with mid-path super must normalize to crate::a::secret::helper and react when crate::a::secret is forbidden.
+    let (result, violations) = run_module_check(
+        "symbol-midpath-super",
+        &[
+            ("lib.rs", "pub mod app;\npub mod a;\n"),
+            (
+                "app.rs",
+                "use crate::a::b::{super::secret::helper as h};\npub fn run() { h(); crate::a::b::super::secret::helper(); }",
+            ),
+            ("a.rs", "pub mod b;\npub mod secret;\n"),
+            ("a/b.rs", "pub fn dummy() {}"),
+            ("a/secret.rs", "pub fn helper() {}"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::app")
+            .must_not_call_inline("crate::a::secret")
+            .because("app must not call inline symbol in secret"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "inline symbol calls with mid-path super must normalize and react: {violations:?}"
+    );
+    assert_eq!(
+        violations[0].finding,
+        "crate::a::secret::helper in crate::app"
+    );
+}
+
+#[test]
 fn restrict_imports_to_dedups_a_finding_across_subtree_files() {
     let (result, violations) = run_module_check(
         "dedup-rit-subtree",
@@ -1713,7 +2053,7 @@ fn outbound_dedup_collapses_identical_findings_but_keeps_distinct_ones() {
     // And no two violations share an identity (target, rule, finding).
     let mut ids: Vec<_> = violations
         .iter()
-        .map(|v| (&v.target, &v.rule, &v.finding))
+        .map(|v| (v.target(), &v.rule, &v.finding))
         .collect();
     let before = ids.len();
     ids.sort();
@@ -1777,10 +2117,14 @@ fn a_baselined_enforce_violation_does_not_fail() {
 
 #[test]
 fn a_new_enforce_violation_fails_against_a_baseline() {
-    let baseline = Baseline::from_json(
-            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"other"}]}"#,
-        )
-        .unwrap();
+    let baseline = Baseline::of(&Report::new(vec![Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "deny external dependencies", "other"),
+        "deny external dependencies",
+        "other",
+        "core must stay dependency-light".to_string(),
+        Severity::Enforce,
+    )]));
     let mut report = one_enforce_violation();
     apply_baseline(&mut report, &baseline);
     assert!(
@@ -1793,10 +2137,14 @@ fn a_new_enforce_violation_fails_against_a_baseline() {
 #[test]
 fn stale_finds_entries_with_no_current_match() {
     let report = one_enforce_violation();
-    let baseline = Baseline::from_json(
-            r#"{"version":1,"violations":[{"target":"core","rule":"deny external dependencies","finding":"gone"}]}"#,
-        )
-        .unwrap();
+    let baseline = Baseline::of(&Report::new(vec![Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "deny external dependencies", "gone"),
+        "deny external dependencies",
+        "gone",
+        "core must stay dependency-light".to_string(),
+        Severity::Enforce,
+    )]));
     let stale = baseline.stale(&report);
     assert_eq!(stale.len(), 1);
     assert_eq!(stale[0].finding, "gone");
@@ -1809,11 +2157,16 @@ fn report_json_projects_a_violation_with_its_kind() {
     assert_eq!(doc["outcome"], "violations");
     assert_eq!(doc["exit_code"], 1);
     let violation = &doc["violations"][0];
+    assert_eq!(doc["format"], "tianheng.reaction/structured-facts");
     assert_eq!(violation["kind"], "crate");
     assert_eq!(violation["finding"], "serde");
-    assert_eq!(violation["finding_key"]["namespace"], "guibiao");
-    assert_eq!(violation["finding_key"]["code"], "dependency");
-    assert_eq!(violation["finding_key"]["fields"]["package"], "serde");
+    assert_eq!(
+        violation["fact"]["type"],
+        "tianheng.fact/guibiao/dependency"
+    );
+    assert_eq!(violation["fact"]["shape"], "dependency-edge");
+    assert_eq!(violation["fact"]["fields"]["package"], "serde");
+    assert!(violation["rule_key"].is_object());
     assert_eq!(violation["severity"], "enforce");
     assert_eq!(violation["baselined"], false);
     // `reason` is the repair hint; there is no separate field.
@@ -1847,29 +2200,57 @@ fn report_json_reflects_baseline_and_stale_in_gate() {
     let baseline = Baseline::of(&report);
     apply_baseline(&mut report, &baseline);
     // A baseline entry that no current violation matches is stale.
-    let stale = vec![test_id("core", "deny external dependencies", "gone")];
+    let stale_baseline = Baseline::from_json(
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"deny external dependencies","finding":"gone",
+            "rule_key":{"type":"tianheng.rule/test/policy","fields":{"policy":"deny external dependencies"}},
+            "fact":{"type":"tianheng.fact/guibiao/dependency","shape":"declared-dependency","fields":{"kind":"normal","package":"gone"}}
+        }]}"#,
+    )
+    .unwrap();
+    let stale: Vec<BaselineEntry> = stale_baseline
+        .stale(&Report::empty())
+        .into_iter()
+        .cloned()
+        .collect();
     let doc: serde_json::Value =
         serde_json::from_str(&report_json(&Outcome::Violations(report), &stale, None)).unwrap();
     assert_eq!(doc["exit_code"], 0, "a fully baselined run does not fail");
     assert_eq!(doc["violations"][0]["baselined"], true);
     assert_eq!(doc["stale_baseline"][0]["finding"], "gone");
-    assert!(doc["stale_baseline"][0]["finding_key"].is_object());
+    assert!(doc["stale_baseline"][0]["fact"].is_object());
+}
 
-    let legacy = Baseline::from_json(
-        r#"{"version":1,"violations":[{
-            "target":"core","rule":"deny external dependencies","finding":"legacy-gone"
+#[test]
+fn stale_policy_is_one_pure_exit_code_source_for_runner_and_projection() {
+    let baseline = Baseline::from_json(
+        r#"{"format":"tianheng.baseline/structured-facts","violations":[{
+            "target":"core","rule":"old rule","finding":"gone",
+            "rule_key":{"type":"tianheng.rule/test/old","fields":{}},
+            "fact":{"type":"tianheng.fact/test/old","shape":"gone","fields":{}}
         }]}"#,
     )
     .unwrap();
-    let legacy_stale: Vec<ViolationId> = legacy
-        .stale(&Report::empty())
-        .into_iter()
-        .cloned()
-        .collect();
-    let legacy_doc: serde_json::Value =
-        serde_json::from_str(&report_json(&Outcome::Clean, &legacy_stale, None)).unwrap();
-    assert_eq!(legacy_doc["stale_baseline"][0]["finding"], "legacy-gone");
-    assert_eq!(legacy_doc["stale_baseline"][0]["finding_key"], Value::Null);
+    let stale: Vec<BaselineEntry> = baseline.entries().cloned().collect();
+
+    assert_eq!(
+        stale_policy(&Outcome::Clean, &stale, true),
+        StalePolicy {
+            stale_disallowed: true,
+            exit_code: 1,
+        }
+    );
+    assert_eq!(
+        stale_policy(
+            &Outcome::ConstitutionError("cannot judge".into()),
+            &stale,
+            true
+        )
+        .exit_code,
+        2,
+        "stale policy never masks a constitution error"
+    );
+    assert_eq!(stale_policy(&Outcome::Clean, &stale, false).exit_code, 0);
 }
 
 #[test]
@@ -2533,6 +2914,19 @@ fn source_boundary_carries_its_severity_and_gates_against_the_baseline() {
     assert_eq!(violations[0].severity, Severity::Warn);
     assert_eq!(violations[0].rule, "restrict dependency sources to");
     assert_eq!(violations[0].finding, "gitdep");
+    let id = violations[0].id();
+    assert_eq!(id.target(), "infra");
+    assert_eq!(
+        id.rule_key().rule_type(),
+        "tianheng.rule/guibiao/restrict-dependency-sources-to"
+    );
+    let fact = id.fact();
+    assert_eq!(fact.fact_type(), "tianheng.fact/guibiao/dependency-source");
+    assert_eq!(fact.shape(), "declared-source");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![("kind", "normal"), ("package", "gitdep"), ("source", "git")]
+    );
     assert!(
         violations[0].file.is_none(),
         "a source violation is a manifest relation, not a source line",
@@ -3106,13 +3500,13 @@ fn two_forbidden_features_of_the_same_crate_stay_distinct() {
     // Baseline records ONLY C/unstable (a prior accepted state). Re-applying it must mark
     // C/unstable baselined while leaving C/nightly live — the finding, not the (target, rule)
     // pair, is the baseline key, so one feature's acceptance never masks another's.
+    let accepted = v
+        .iter()
+        .find(|violation| violation.finding == "C/unstable")
+        .expect("C/unstable present")
+        .clone();
     let mut report = Report::new(v);
-    let baseline = Baseline::of(&Report::new(vec![Violation::new(
-        BoundaryKind::Crate,
-        test_id("target", "forbid features of", "C/unstable"),
-        "no unstable/nightly features of C".to_string(),
-        Severity::Enforce,
-    )]));
+    let baseline = Baseline::of(&Report::new(vec![accepted]));
     apply_baseline(&mut report, &baseline);
 
     let unstable = report
@@ -3143,7 +3537,7 @@ fn two_forbidden_features_of_the_same_crate_stay_distinct() {
 }
 
 #[test]
-fn the_two_feature_rule_labels_are_distinct_and_keep_identity_injective() {
+fn the_two_feature_rule_families_keep_identity_injective() {
     // A restrict and a forbid rule that both flag C/unstable on the same target stay distinct
     // triples, because their `rule` labels differ.
     assert_ne!(
@@ -3207,13 +3601,13 @@ fn the_two_feature_rule_labels_are_distinct_and_keep_identity_injective() {
     assert_eq!(rules, vec!["forbid features of", "restrict features of"]);
 
     // Baseline ONLY the restrict-rule C/unstable; the forbid-rule C/unstable must stay live.
+    let accepted = v
+        .iter()
+        .find(|violation| violation.rule == "restrict features of")
+        .expect("restrict violation present")
+        .clone();
     let mut report = Report::new(v);
-    let baseline = Baseline::of(&Report::new(vec![Violation::new(
-        BoundaryKind::Crate,
-        test_id("target", "restrict features of", "C/unstable"),
-        "C's feature surface is closed".to_string(),
-        Severity::Enforce,
-    )]));
+    let baseline = Baseline::of(&Report::new(vec![accepted]));
     apply_baseline(&mut report, &baseline);
     let restrict_v = report
         .violations
@@ -3258,7 +3652,7 @@ fn feature_report_names_target_rule_finding_and_reason() {
     let mut v = Vec::new();
     check_crate_boundary(&metadata, &[], &boundary, &mut v).unwrap();
     assert_eq!(v.len(), 1);
-    assert_eq!(v[0].target, "app");
+    assert_eq!(v[0].target(), "app");
     assert_eq!(v[0].rule, "forbid features of");
     assert_eq!(v[0].finding, "C/unstable");
     assert_eq!(v[0].reason, "C's unstable API face is off-limits");
@@ -3636,7 +4030,7 @@ fn must_only_be_imported_by_flags_an_importer_outside_the_allowlist() {
     assert!(result.is_ok(), "{result:?}");
     // facade is allowlisted (clean); consumer is not (violates).
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "crate::internal");
+    assert_eq!(violations[0].target(), "crate::internal");
     assert_eq!(violations[0].finding, "crate::consumer");
     assert_eq!(violations[0].rule, "module may only be imported by");
 }
@@ -3667,7 +4061,7 @@ fn must_only_be_imported_by_authorizes_an_allowed_inline_importer() {
 #[test]
 fn must_only_be_imported_by_flags_a_disallowed_inline_importer_by_its_true_identity() {
     // A disallowed INLINE importer is flagged with its true identity `crate::rogue` (not the file's
-    // `crate`), so the finding — and thus the baseline identity `(target, rule, finding)` — is
+    // `crate`), so the structured fact — and thus `(target, rule key, fact)` identity — is
     // correct rather than shifted onto the file module.
     let (result, violations) = run_module_check(
         "only-inline-disallowed",
@@ -3854,7 +4248,7 @@ fn confine_flags_an_external_import_outside_the_subtree() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "libc");
+    assert_eq!(violations[0].target(), "libc");
     assert_eq!(violations[0].finding, "crate::service");
     let file = violations[0].file.as_deref().expect("carries its file");
     assert!(file.ends_with("service.rs"), "names the offender: {file}");
@@ -4072,8 +4466,8 @@ fn confine_identity_is_injective_across_confined_crates() {
     assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
     assert_eq!(libc_v.len(), 1, "{libc_v:?}");
     assert_eq!(winapi_v.len(), 1, "{winapi_v:?}");
-    assert_eq!(libc_v[0].target, "libc");
-    assert_eq!(winapi_v[0].target, "winapi");
+    assert_eq!(libc_v[0].target(), "libc");
+    assert_eq!(winapi_v[0].target(), "winapi");
     assert_eq!(
         libc_v[0].finding, winapi_v[0].finding,
         "same offending importer — only the target (confined crate) differs"
@@ -4113,7 +4507,7 @@ fn confine_canonicalizes_a_raw_identifier_crate_name() {
         1,
         "raw and plain crate-name forms are one identity: {violations:?}"
     );
-    assert_eq!(violations[0].target, "async");
+    assert_eq!(violations[0].target(), "async");
 }
 
 #[test]
@@ -4239,7 +4633,7 @@ fn confine_matches_a_hyphenated_package_name_against_its_underscore_identifier()
         1,
         "a hyphenated package name matches its underscore import identifier: {violations:?}"
     );
-    assert_eq!(violations[0].target, "windows_sys");
+    assert_eq!(violations[0].target(), "windows_sys");
     assert_eq!(violations[0].finding, "crate::service");
 }
 
@@ -4262,7 +4656,7 @@ fn confine_observes_an_aliased_import_of_the_confined_crate() {
         1,
         "an aliased import is still observed: {violations:?}"
     );
-    assert_eq!(violations[0].target, "libc");
+    assert_eq!(violations[0].target(), "libc");
     assert_eq!(violations[0].finding, "crate::service");
 }
 
@@ -4290,7 +4684,7 @@ fn inline_default_reacts_on_an_associated_fn_call() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "std::time");
+    assert_eq!(violations[0].target(), "std::time");
     assert!(
         violations[0].finding.contains("std::time::SystemTime::now"),
         "{violations:?}"
@@ -4786,7 +5180,7 @@ fn inline_strict_external_reacts_on_a_fully_qualified_external_call() {
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].target, "chrono::Utc");
+    assert_eq!(violations[0].target(), "chrono::Utc");
     assert!(
         violations[0].finding.contains("chrono::Utc::now"),
         "{violations:?}"
@@ -5035,7 +5429,7 @@ fn inline_strict_external_adds_nothing_to_paths_that_already_react() {
 fn inline_strict_external_preserves_identity_no_baseline_churn() {
     // 4.10 Baseline-churn guard: a sysroot `std::time::…::now()` finding must have byte-identical
     // (target, rule, finding) whether or not `.strict_external()` is added — so a baselined finding
-    // survives the flag (identity parity, task 1.3). Locks label()/target/finding.
+    // survives the flag (identity parity, task 1.3). Locks target/rule-key/fact.
     let files: &[(&str, &str)] = &[
         ("lib.rs", "pub mod core;\n"),
         (
@@ -5064,12 +5458,12 @@ fn inline_strict_external_preserves_identity_no_baseline_churn() {
     assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
     assert_eq!(plain.len(), 1, "{plain:?}");
     assert_eq!(flagged.len(), 1, "{flagged:?}");
-    assert_eq!(plain[0].target, flagged[0].target, "target parity");
+    assert_eq!(plain[0].target(), flagged[0].target(), "target parity");
     assert_eq!(plain[0].rule, flagged[0].rule, "rule (label) parity");
     assert_eq!(plain[0].finding, flagged[0].finding, "finding parity");
     assert_eq!(
         plain[0].rule, "inline symbol path confined to module",
-        "the identity label is unchanged by the flag"
+        "the presentation label is unchanged by the flag"
     );
 }
 
@@ -5133,7 +5527,7 @@ fn inline_strict_external_cross_module_local_item_does_not_mask() {
         1,
         "a same-named item of ANOTHER module must not mask a real external call: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5171,7 +5565,7 @@ fn inline_strict_external_block_local_item_does_not_mask() {
         1,
         "a block-local item (depth ≥ 1) must not mask a same-module external call: {violations:?}"
     );
-    assert_eq!(violations[0].target, "log");
+    assert_eq!(violations[0].target(), "log");
     assert!(
         violations[0].finding.contains("log::logger"),
         "{violations:?}"
@@ -5408,10 +5802,11 @@ fn inline_prefix_is_carried_in_the_violation_target() {
             .because("no std calls"),
     );
     assert!(r1.is_ok() && r2.is_ok(), "{r1:?} {r2:?}");
-    assert_eq!(v1[0].target, "std::time");
-    assert_eq!(v2[0].target, "std");
+    assert_eq!(v1[0].target(), "std::time");
+    assert_eq!(v2[0].target(), "std");
     assert_ne!(
-        v1[0].target, v2[0].target,
+        v1[0].target(),
+        v2[0].target(),
         "distinct prefixes → distinct identity"
     );
 }
@@ -5527,7 +5922,7 @@ fn inline_strict_external_inline_submodule_call_is_not_masked() {
         1,
         "a file-top item must not mask an external call inside an inline submodule: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5589,7 +5984,7 @@ fn inline_strict_external_deeply_nested_submodule_reacts() {
         1,
         "a file-top item must not mask a call in a deeply nested submodule: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5624,7 +6019,7 @@ fn inline_strict_external_cfg_gated_submodule_reacts() {
         1,
         "a cfg-gated inline submodule must not perturb brace tracking: {violations:?}"
     );
-    assert_eq!(violations[0].target, "rand");
+    assert_eq!(violations[0].target(), "rand");
     assert!(
         violations[0].finding.contains("rand::random"),
         "{violations:?}"
@@ -5656,5 +6051,262 @@ fn inline_strict_external_default_path_module_attribution_unshifted() {
     assert!(
         violations[0].finding.ends_with("in crate::core"),
         "default attribution must stay on the FILE module, not the inline submodule: {violations:?}"
+    );
+}
+
+#[test]
+fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "pub mod sub;\nuse crate::forbidden_on_core;\n"),
+        ("core/sub.rs", "use crate::forbidden_on_sub;\n"),
+    ];
+
+    // 1. Shallow depth: boundary on crate::core only governs core.rs, so import in core/sub.rs does NOT react
+    let shallow_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::forbidden_on_sub")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("core seam does not import forbidden_on_sub");
+    let (res1, shallow_violations) =
+        run_module_check("scan-depth-shallow", files, shallow_boundary);
+    assert!(res1.is_ok(), "{res1:?}");
+    assert_eq!(
+        shallow_violations.len(),
+        0,
+        "Shallow depth ignores submodule files"
+    );
+
+    // 2. Subtree depth: boundary on crate::core governs core.rs AND core/sub.rs, so import in core/sub.rs DOES react
+    let subtree_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::forbidden_on_sub")
+        .depth(xuanji::ScanDepth::Subtree)
+        .because("core subtree does not import forbidden_on_sub");
+    let (res2, subtree_violations) =
+        run_module_check("scan-depth-subtree", files, subtree_boundary);
+    assert!(res2.is_ok(), "{res2:?}");
+    assert_eq!(
+        subtree_violations.len(),
+        1,
+        "Subtree depth evaluates submodule files"
+    );
+    assert_eq!(
+        subtree_violations[0]
+            .rule_key()
+            .fields()
+            .collect::<Vec<_>>(),
+        vec![("module", "crate::forbidden_on_sub")]
+    );
+}
+
+#[test]
+fn module_boundary_including_submodules_is_a_compatible_subtree_modifier() {
+    let default = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .because("r");
+    let explicit = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .depth(xuanji::ScanDepth::Subtree)
+        .because("r");
+    let ergonomic = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .depth(xuanji::ScanDepth::Shallow)
+        .including_submodules()
+        .because("r");
+
+    assert_eq!(default.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(explicit.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(ergonomic.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(default.rule_key(), ergonomic.rule_key());
+}
+
+#[test]
+fn shallow_restrict_imports_to_ignores_descendant_imports() {
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "pub mod detail;\n"),
+        ("core/detail.rs", "use crate::adapter;\n"),
+    ];
+    let shallow = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .restrict_imports_to(["crate::core"])
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("the core seam depends inward");
+    let (shallow_result, shallow_violations) =
+        run_module_check("shallow-restrict-imports", files, shallow);
+    assert!(shallow_result.is_ok(), "{shallow_result:?}");
+    assert!(shallow_violations.is_empty(), "{shallow_violations:?}");
+
+    let subtree = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .restrict_imports_to(["crate::core"])
+        .because("the core subtree depends inward");
+    let (subtree_result, subtree_violations) =
+        run_module_check("subtree-restrict-imports", files, subtree);
+    assert!(subtree_result.is_ok(), "{subtree_result:?}");
+    assert_eq!(subtree_violations.len(), 1, "{subtree_violations:?}");
+}
+
+#[test]
+fn shallow_inbound_rules_protect_only_the_exact_module() {
+    let files = &[
+        ("lib.rs", "pub mod protected;\npub mod client;\n"),
+        ("protected.rs", "pub mod detail;\n"),
+        ("protected/detail.rs", "pub struct Item;\n"),
+        ("client.rs", "use crate::protected::detail::Item;\n"),
+    ];
+
+    let shallow_forbid = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_not_be_imported_by("crate::client")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("only the protected seam rejects this importer");
+    let (_, shallow_forbid_violations) =
+        run_module_check("shallow-inbound-forbid", files, shallow_forbid);
+    assert!(
+        shallow_forbid_violations.is_empty(),
+        "{shallow_forbid_violations:?}"
+    );
+
+    let subtree_forbid = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_not_be_imported_by("crate::client")
+        .because("the protected subtree rejects this importer");
+    let (_, subtree_forbid_violations) =
+        run_module_check("subtree-inbound-forbid", files, subtree_forbid);
+    assert_eq!(
+        subtree_forbid_violations.len(),
+        1,
+        "{subtree_forbid_violations:?}"
+    );
+
+    let shallow_allow = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("only the protected seam has a closed importer set");
+    let (_, shallow_allow_violations) =
+        run_module_check("shallow-inbound-allow", files, shallow_allow);
+    assert!(
+        shallow_allow_violations.is_empty(),
+        "{shallow_allow_violations:?}"
+    );
+
+    let subtree_allow = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .because("the protected subtree has a closed importer set");
+    let (_, subtree_allow_violations) =
+        run_module_check("subtree-inbound-allow", files, subtree_allow);
+    assert_eq!(
+        subtree_allow_violations.len(),
+        1,
+        "{subtree_allow_violations:?}"
+    );
+}
+
+#[test]
+fn shallow_external_confinement_permits_only_the_exact_module() {
+    let files = &[
+        ("lib.rs", "pub mod secret;\n"),
+        ("secret.rs", "pub mod detail;\n"),
+        ("secret/detail.rs", "use libc::c_int;\n"),
+    ];
+    let shallow = ModuleBoundary::in_crate("x")
+        .module("crate::secret")
+        .confine_external_crate("libc")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("only the secret seam may import libc");
+    let (shallow_result, shallow_violations) =
+        run_module_check("shallow-external-confinement", files, shallow);
+    assert!(shallow_result.is_ok(), "{shallow_result:?}");
+    assert_eq!(shallow_violations.len(), 1, "{shallow_violations:?}");
+
+    let subtree = ModuleBoundary::in_crate("x")
+        .module("crate::secret")
+        .confine_external_crate("libc")
+        .because("the secret subtree may import libc");
+    let (subtree_result, subtree_violations) =
+        run_module_check("subtree-external-confinement", files, subtree);
+    assert!(subtree_result.is_ok(), "{subtree_result:?}");
+    assert!(subtree_violations.is_empty(), "{subtree_violations:?}");
+}
+
+#[test]
+fn scan_depth_projection_omits_legacy_subtree_and_emits_shallow() {
+    let legacy = Constitution::new("legacy").boundary(
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_import("crate::adapter")
+            .because("core depends inward only"),
+    );
+    let legacy_json: serde_json::Value = serde_json::from_str(&constitution_json(&legacy)).unwrap();
+    assert!(
+        legacy_json["boundaries"][0].get("scan_depth").is_none(),
+        "legacy subtree projection must stay byte-compatible: {legacy_json}"
+    );
+
+    let shallow = Constitution::new("shallow").boundary(
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_import("crate::adapter")
+            .depth(xuanji::ScanDepth::Shallow)
+            .because("only the core seam depends inward"),
+    );
+    let shallow_json: serde_json::Value =
+        serde_json::from_str(&constitution_json(&shallow)).unwrap();
+    assert_eq!(shallow_json["boundaries"][0]["scan_depth"], "shallow");
+}
+
+#[test]
+fn legacy_inline_confinement_defaults_to_subtree_and_preserves_identity() {
+    let files = &[
+        ("lib.rs", "pub mod core;\n"),
+        ("core.rs", "pub mod sub;\n"),
+        (
+            "core/sub.rs",
+            "fn t() { let _ = std::time::SystemTime::now(); }\n",
+        ),
+    ];
+
+    // 1. Legacy inline boundary without explicit depth -> defaults to Subtree -> catches call in core/sub.rs
+    let legacy_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_call_inline("std::time")
+        .because("core reads no wall clock");
+    let (res, violations) = run_module_check("legacy-inline-subtree", files, legacy_boundary);
+    assert!(res.is_ok(), "{res:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "Legacy inline boundary governs submodules"
+    );
+    // Verify legacy RuleKey identity has NO "scan_depth" field (zero baseline breakage)
+    assert_eq!(
+        violations[0].rule_key().fields().collect::<Vec<_>>(),
+        vec![
+            ("ending_with", "[]"),
+            ("prefix", "std::time"),
+            ("strict", "false")
+        ]
+    );
+
+    // 2. Explicit Shallow depth -> restricts observation seam to core.rs -> ignores call in core/sub.rs
+    let shallow_boundary = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_call_inline("std::time")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("core seam reads no wall clock");
+    let (res2, shallow_violations) =
+        run_module_check("shallow-inline-seam", files, shallow_boundary);
+    assert!(res2.is_ok(), "{res2:?}");
+    assert_eq!(
+        shallow_violations.len(),
+        0,
+        "Explicit Shallow depth ignores submodule calls"
     );
 }

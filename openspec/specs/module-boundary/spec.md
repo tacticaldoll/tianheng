@@ -97,10 +97,56 @@ The system SHALL observe module imports by scanning the target crate's source `u
 - **WHEN** a file declares a string literal containing `//` followed, later on the same line, by a real `use crate::projection::Thing;`
 - **THEN** the system observes the import `crate::projection::Thing`
 
-#### Scenario: An unknown governed module is a constitution error
+#### Scenario: A constitution error emits exit 2
+- **WHEN** a module boundary targets a module path that matches no reachable file
+- **THEN** the runner exits with status 2 and names the unknown module
 
-- **WHEN** a module boundary governs a module path that matches no reachable source file in the crate
-- **THEN** the system reports a constitution error and exits 2
+### Requirement: Transparent control-flow macro body unstripping
+
+The system SHALL recognize transparent control-flow macros (specifically `cfg_if!`) during macro body stripping and SHALL NOT remove their inner structural body contents. Enclosed `use` import declarations, `mod` module declarations, and inline symbol call paths inside `cfg_if!` macro bodies SHALL be observed by `use_scan`, `reachability`, and `symbol_scan` as real items, matching the system's cfg-blind union-scanning policy. Other code-generating or declarative macro bodies (`macro_rules!` definitions and non-transparent macro invocations) SHALL continue to be stripped as macro-generated items.
+
+#### Scenario: A use declaration inside a cfg_if macro body is observed
+
+- **WHEN** a governed file contains a `cfg_if!` macro invocation containing `use crate::projection::Thing;` and a boundary forbids `crate::projection`
+- **THEN** the system observes `crate::projection::Thing` inside the `cfg_if!` body and emits an enforced violation (exit 1), rather than silently stripping the import
+
+#### Scenario: An inline mod declaration inside a cfg_if macro body is reachable
+
+- **WHEN** a governed file contains a `cfg_if!` macro invocation declaring `mod child;` and `child.rs` exists containing a forbidden import
+- **THEN** the system reaches `child.rs` through the `cfg_if!` declaration and reports the forbidden import violation
+
+### Requirement: Ancestor glob import fail-closed hazard detection
+
+The system SHALL detect when an observed glob import's base path (`crate::a`) is an ancestor of a forbidden target path (`crate::a::b`) under a `must_not_import` module boundary. When an observed glob import base path is equal to or an ancestor of the forbidden target path (`path_within(forbidden_target, glob_base)` is true), the system SHALL treat the wildcard import as a Glob Hazard violation and emit an enforced violation (exit 1), preventing bypass of module boundaries via wildcard ancestor imports.
+
+#### Scenario: An ancestor glob import of a forbidden module is a violation
+
+- **WHEN** a file in a governed module declares `use crate::a::*;` and a boundary governs the module forbidding `crate::a::b`
+- **THEN** the system emits an enforced Glob Hazard violation (exit 1), because `crate::a` is an ancestor of the forbidden path `crate::a::b`
+
+#### Scenario: A glob import of an unrelated module is not a glob hazard
+
+- **WHEN** a file in a governed module declares `use crate::c::*;` and a boundary governs the module forbidding `crate::a::b`
+- **THEN** the system reports no violation for that glob import, because `crate::c` is not an ancestor of `crate::a::b`
+
+#### Scenario: A plain non-glob ancestor import of a forbidden module is clean
+
+- **WHEN** a file in a governed module declares `use crate::a;` (non-glob) and a boundary governs the module forbidding `crate::a::b`
+- **THEN** the system reports no violation for that import, because `use crate::a;` does not bring `crate::a::b` into scope
+
+### Requirement: Mid-path relative segment normalization
+
+The system SHALL normalize embedded `self` and `super` segments appearing anywhere in an observed module import or symbol path (e.g. `crate::a::b::super::c` -> `crate::a::c`, `crate::a::self::b` -> `crate::a::b`). Over-popping `super` segments past the `crate` root SHALL resolve to `None` (an invalid path) and SHALL NOT produce a false-positive or false-negative boundary finding.
+
+#### Scenario: A mid-path super import of a forbidden module is observed
+
+- **WHEN** a governed module declares `use crate::a::b::{super::forbidden::Thing};` and a boundary forbids `crate::a::forbidden`
+- **THEN** the system normalizes the import path to `crate::a::forbidden::Thing` and emits an enforced violation (exit 1)
+
+#### Scenario: A mid-path self import is normalized to its parent module
+
+- **WHEN** a governed module declares `use crate::a::{self::b::Thing};` and a boundary governs `crate::a::b`
+- **THEN** the system normalizes the import path to `crate::a::b::Thing` and evaluates boundary rules against the canonical path
 
 #### Scenario: An unreadable governed source file is a scan error
 
@@ -236,7 +282,7 @@ A module boundary SHALL support an inbound rule: `ModuleBoundary::in_crate(p).mo
 
 ### Requirement: A boundary reports each violation once
 
-A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule, finding_key)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or a module backed by both `lib.rs` and `main.rs` (which both resolve to `crate`) — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
+A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule_key, fact)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or a module backed by both `lib.rs` and `main.rs` (which both resolve to `crate`) — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
 
 #### Scenario: A finding produced by two files in the governed subtree is reported once
 
@@ -312,7 +358,7 @@ The system SHALL follow a file-form module declared with an **unconditional, dir
 
 An unconditional target that does not exist on disk is a genuine broken reference (rustc itself errors on it) and SHALL be a scan error (exit 2), never a silent skip. A `#[path]` chain that resolves back to a source file already open on the path from the crate root (only possible through `#[path]`, since ordinary conventional/inline nesting is bounded by the crate's finite file list) SHALL likewise be a scan error, never an unbounded walk — tracked by the set of files open on the *current descent path*, not a monotonic whole-crate visited set, so two sibling or cousin declarations legitimately sharing one `#[path]` target (rustc compiles the same file twice, as two distinct modules) is never misreported as a cycle.
 
-The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes, but only the **direct, unconditional** form is followed. A `cfg_attr`-wrapped `path` remains a stated, cfg-conditional coverage bound (the same family as inline and macro-generated items — see the scanner decision in `PROJECT.md`): it is cfg-conditional, so following it cfg-blind could read a file rustc does not compile in the active configuration; a `cfg_attr` whose applied metas contain no genuine `path` name-value SHALL remain an ordinary module. This cfg-blind exclusion prevents a conditional remap from silently governing a same-named conventional orphan. An **unconditional, direct** `path` attribute on an inline module (`mod foo { … }`) does not relocate the module's own content (rustc treats the attribute as a no-op for that purpose — the body already IS the module) and SHALL NOT make that inline module disappear from reachability, but it DOES relocate the base directory the inline body's OWN file-form children resolve from, exactly as it would for a file-form declaration — the system SHALL follow it there too, resolved from the declaring source's own `path_base`. A `cfg_attr`-wrapped `path` preceding an inline module remains the same stated, cfg-conditional coverage bound as the file-form case (never followed cfg-blind; the inline body's own default child directory is used instead).
+The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes. When a direct `#[path = "…"]` attribute is present, it SHALL take precedence over any sibling `cfg_attr` paths on the same declaration. When no direct `#[path = "…"]` attribute is present and one or more `cfg_attr(..., path = "...")` attributes are recognized, the scanner SHALL collect all candidate remapped targets and perform a union-scan across all candidate target files that physically exist on disk (`path.exists()`). Candidate files that do not exist on disk SHALL be safely skipped without triggering a scan error (treating them as absent under the active compilation target). An unconditional `#[path]` attribute on an inline module (`mod foo { … }`) does not relocate the module's own content (rustc treats the attribute as a no-op for that purpose — the body already IS the module) and SHALL NOT make that inline module disappear from reachability, but it DOES relocate the base directory the inline body's OWN file-form children resolve from, exactly as it would for a file-form declaration — the system SHALL follow it there too, resolved from the declaring source's own `path_base`.
 
 #### Scenario: A path-remapped module's imports are observed at its real target
 
@@ -369,15 +415,20 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 - **WHEN** a crate declares `#[path = "other/weird.rs"] mod kernel;`, `other/weird.rs` declares a plain `mod child;` (resolved to the real `other/child.rs`), and an unrelated, wholly undeclared file also happens to physically sit at `kernel/child.rs` (the location a plain `mod child;` inside a NON-remapped `kernel` would occupy)
 - **THEN** the system governs only `other/child.rs` under `crate::kernel::child` — the stray file at `kernel/child.rs` is never compiled by rustc (`kernel` is wholly remapped) and must never be phantom-governed alongside the real one merely for coincidentally sharing its naive structural path
 
-#### Scenario: A cfg_attr-wrapped path attribute is recognized as a remap
+#### Scenario: A cfg_attr-wrapped path attribute undergoes union-scan when target file exists
 
-- **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, a conventional `foo.rs` exists containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
-- **THEN** the system treats `crate::foo` as remapped and reports it as out of scope (exit 2), rather than governing the conventional orphan or silently passing; the scanner does not evaluate whether `unix` is active
+- **WHEN** a crate declares `#[cfg_attr(unix, path = "weird.rs")] mod foo;`, `weird.rs` exists on disk containing `use crate::forbidden::Y;`, and a boundary governs `crate::foo` forbidding `crate::forbidden`
+- **THEN** the system observes the import in `weird.rs` for `crate::foo` and reports the violation, performing union-scan over all physically existing candidate files rather than marking the module out of scope
 
-#### Scenario: A nested cfg_attr-wrapped path attribute is recognized as a remap
+#### Scenario: A missing cfg_attr-wrapped path target is safely skipped
 
-- **WHEN** a crate declares `#[cfg_attr(a, cfg_attr(b, path = "weird.rs"))] mod foo;`
-- **THEN** the system recursively recognizes the applied `path` name-value and treats `crate::foo` as remapped and out of scope
+- **WHEN** a crate declares `#[cfg_attr(windows, path = "win_only.rs")] mod foo;` and `win_only.rs` does not exist on disk
+- **THEN** the system skips `win_only.rs` without raising a scan error, treating absent conditional targets as inactive under the current source checkout
+
+#### Scenario: A nested cfg_attr-wrapped path attribute is recognized as a candidate remap
+
+- **WHEN** a crate declares `#[cfg_attr(a, cfg_attr(b, path = "weird.rs"))] mod foo;` and `weird.rs` exists on disk
+- **THEN** the system recursively recognizes the applied `path` target and includes `weird.rs` in the union-scan for `crate::foo`
 
 #### Scenario: A cfg_attr without an applied path remains governable
 
@@ -455,3 +506,42 @@ The finding SHALL be the importing module path, deduplicated so one offending im
 
 - **WHEN** a boundary declares `must_only_be_imported_by([x])` on `crate` (the crate root)
 - **THEN** the system emits a self-describing constitution error and exits 2 — distinct from a boundary violation, never a silent pass — because every internal import would be within the protected subtree and the rule could never react as an inbound rule
+
+### Requirement: Module violations de-duplicate by semantic identity
+
+Module-boundary findings SHALL de-duplicate by governed target, structured rule key, and structured
+observed fact. Source file, rendered import text, and traversal order SHALL NOT affect identity.
+
+#### Scenario: Repeated imports remain one fact
+- **WHEN** the same governed module observes the same violating import in multiple files or lines
+- **THEN** it emits one identity while a structurally different import remains distinct
+
+### Requirement: Mixed direct and conditional path remaps remain observable
+
+When one file-module declaration carries both direct `#[path = "…"]` and one or more `cfg_attr(..., path = "…")` remaps, 圭表 SHALL conservatively resolve every physically existing written candidate and SHALL scan their union. Attribute order SHALL NOT silently remove a candidate, and canonically identical candidates SHALL be evaluated once.
+
+#### Scenario: Conditional remap after a direct remap is observed
+
+- **WHEN** a module declares a direct path followed by a conditional path whose physical target contains a forbidden import
+- **THEN** the forbidden import reacts even though current rustc configurations may select only one candidate
+
+#### Scenario: Conditional remap before a direct remap is observed
+
+- **WHEN** the same two remaps are written in the opposite order and either physical target contains a forbidden import
+- **THEN** each physical candidate remains in the governed source union
+
+### Requirement: Module projection preserves legacy depth shape
+
+A legacy module boundary whose evaluation depth is `Subtree` SHALL omit `scan_depth` from its
+projection so its JSON and derived Markdown remain byte-compatible. A boundary configured with the
+non-legacy `Shallow` depth SHALL emit `scan_depth: "shallow"`.
+
+#### Scenario: Legacy subtree projection is unchanged
+
+- **WHEN** a module boundary is constructed without an explicit depth modifier
+- **THEN** its projection contains no `scan_depth` field
+
+#### Scenario: Shallow projection is explicit
+
+- **WHEN** a module boundary is configured with `ScanDepth::Shallow`
+- **THEN** its projection contains `scan_depth: "shallow"`

@@ -24,6 +24,33 @@ fn literal_seams(probes: &[Probe]) -> Vec<String> {
         .collect()
 }
 
+#[test]
+fn every_audit_rule_family_has_exact_semantic_identity() {
+    let cases = [
+        (
+            AuditRule::UniqueSeamDeclaration,
+            "tianheng.rule/louke/unique-seam-declaration",
+        ),
+        (
+            AuditRule::DeclaredSeamProbed,
+            "tianheng.rule/louke/declared-seam-probed",
+        ),
+        (
+            AuditRule::ProbeDeclaredSeam,
+            "tianheng.rule/louke/probe-declared-seam",
+        ),
+        (
+            AuditRule::LiteralProbeSeam,
+            "tianheng.rule/louke/literal-probe-seam",
+        ),
+    ];
+    for (rule, expected_type) in cases {
+        let key = rule.key();
+        assert_eq!(key.rule_type(), expected_type);
+        assert_eq!(key.fields().count(), 0);
+    }
+}
+
 /// A unique, self-cleaning temp base directory for an `assert_boundary!`-probe source fixture:
 /// write source files under it, then hand its root (or a derived path) to `audit_probe_coverage`
 /// — replaces the hand-rolled `temp_dir().join(format!(...))` + manual `remove_dir_all` at both
@@ -114,7 +141,7 @@ fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
         Outcome::Violations(report) => report.violations,
         other => panic!("orphan and inline shadow must stay unprobed: {other:?}"),
     };
-    let mut targets: Vec<_> = violations.iter().map(|v| v.target.as_str()).collect();
+    let mut targets: Vec<_> = violations.iter().map(|v| v.target()).collect();
     targets.sort_unstable();
     assert_eq!(targets, ["inline-shadow", "orphan"]);
 }
@@ -535,6 +562,119 @@ fn a_non_ascii_prefixed_lookalike_is_not_a_probe() {
 }
 
 #[test]
+fn probe_first_arg_with_generic_comma_preserves_full_span() {
+    for (src, expected_expr) in [
+        (
+            "fn f() { assert_boundary!(SEAM::<A, B>, o); }",
+            "SEAM::<A, B>",
+        ),
+        ("fn f() { assert_boundary!(a < b, o); }", "a < b"),
+        ("fn f() { assert_boundary!(a < b, c > d); }", "a < b"),
+        (
+            "fn f() { assert_boundary!(SEAM::<fn() -> A, B>, o); }",
+            "SEAM::<fn() -> A, B>",
+        ),
+        (
+            "fn f() { assert_boundary!(SEAM::<{ A > B }, C>, o); }",
+            "SEAM::<{ A > B }, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as /* gap */ Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as /* gap */ Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(<Foo<A, B> as\n    Trait<C, D>>::SEAM, o); }",
+            "<Foo<A, B> as\n    Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(value as /* gap */ <Foo<A, B> as Trait<C, D>>::Assoc, o); }",
+            "value as /* gap */ <Foo<A, B> as Trait<C, D>>::Assoc",
+        ),
+        (
+            "fn f() { assert_boundary!(value as\n    <Foo<A, B> as Trait<C, D>>::Assoc, o); }",
+            "value as\n    <Foo<A, B> as Trait<C, D>>::Assoc",
+        ),
+        (
+            "fn f() { assert_boundary!(SEAM::<[Foo<A, B>; 1], C>, o); }",
+            "SEAM::<[Foo<A, B>; 1], C>",
+        ),
+        (
+            "fn f() { assert_boundary!(seam:: // comment\n <A, B>, obj); }",
+            "seam:: // comment\n <A, B>",
+        ),
+        (
+            "fn f() { assert_boundary!(seam:: /* /* nested */ */ <A, C>, obj); }",
+            "seam:: /* /* nested */ */ <A, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(SEAM::<Outer /* comment */ <A, B>, C>, obj); }",
+            "SEAM::<Outer /* comment */ <A, B>, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(seam::<Ω <A, B>, C>, obj); }",
+            "seam::<Ω <A, B>, C>",
+        ),
+        (
+            "fn f() { assert_boundary!(&<Foo<u8, u16> as Trait<u32, u64>>::SEAM, ()); }",
+            "&<Foo<u8, u16> as Trait<u32, u64>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(*<Foo<A, B> as Trait<C, D>>::SEAM, ()); }",
+            "*<Foo<A, B> as Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(!<Foo<A, B> as Trait<C, D>>::SEAM, ()); }",
+            "!<Foo<A, B> as Trait<C, D>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(& /* comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM, ()); }",
+            "& /* comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(& /* outer /* nested */ comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM, ()); }",
+            "& /* outer /* nested */ comment */ <Foo<u8, u16> as Trait<u32, u64>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM, ()); }",
+            "& // comment\n <Foo<u8, u32> as Trait<u64, u128>>::SEAM",
+        ),
+        (
+            "fn f() { assert_boundary!(&\"a\" < &Foo::<u8, u16>::X, ()); }",
+            "&\"a\" < &Foo::<u8, u16>::X",
+        ),
+        (
+            "fn f() { assert_boundary!(&'a' < &'b', ()); }",
+            "&'a' < &'b'",
+        ),
+        (
+            "fn f() { assert_boundary!(&b\"a\" < &b\"b\", ()); }",
+            "&b\"a\" < &b\"b\"",
+        ),
+        (
+            "fn f() { assert_boundary!(&r#\"a\"# < &r#\"b\"#, ()); }",
+            "&r#\"a\"# < &r#\"b\"#",
+        ),
+    ] {
+        let mut probes = Vec::new();
+        scan_source(src, "test.rs", &mut probes);
+        assert_eq!(probes.len(), 1, "failed for {src}");
+        match &probes[0] {
+            crate::audit::scan::Probe::Unauditable { expr, .. } => {
+                assert_eq!(
+                    expr, expected_expr,
+                    "first macro arg must match for {src}: got {expr:?}"
+                );
+            }
+            other => panic!("expected Unauditable probe, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn a_probe_with_a_gap_before_the_bang_is_captured() {
     // `ident ! (…)` with whitespace or a comment between the name and `!` is valid Rust
     // (`println !("x")` compiles), so a probe written that way must still count — a contiguous-only
@@ -750,7 +890,7 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
                 report
                     .violations
                     .iter()
-                    .any(|v| v.finding.contains("has no assert_boundary! probe")),
+                    .any(|v| v.finding.contains("has no configured probe marker")),
                 "the 3-char declared seam must be reported unprobed: {:?}",
                 report.violations
             );
@@ -970,7 +1110,7 @@ fn audit_reacts_to_a_duplicate_declared_seam() {
             report
                 .violations
                 .iter()
-                .any(|v| v.target == "twice" && v.finding.contains("declared more than once")),
+                .any(|v| v.target() == "twice" && v.finding.contains("declared more than once")),
             "a duplicate declared seam must react: {:?}",
             report.violations
         ),
@@ -1016,6 +1156,30 @@ fn audit_probe_coverage_reacts_both_directions() {
     // probed but undeclared (a typo) → react at CI, not a prod panic (exit 1)
     let typo = tb.dir("typo", "fn f() { assert_boundary!(\"ghost\", o); }");
     assert_eq!(audit_probe_coverage(&[], &[typo]).exit_code(), 1);
+}
+
+#[test]
+fn audit_production_violation_separates_target_rule_and_fact_roles() {
+    let tb = TempBase::new("audit-structured-identity");
+    let dir = tb.dir("unprobed", "fn f() {}");
+    let outcome = audit_probe_coverage(&[boundary("checkout", Severity::Enforce)], &[dir]);
+    let report = match outcome {
+        Outcome::Violations(report) => report,
+        other => panic!("expected an unprobed-seam violation, got {other:?}"),
+    };
+    let violation = report.violations.first().expect("one unprobed seam");
+    let id = violation.id();
+    assert_eq!(violation.target(), "checkout");
+    let rule = id.rule_key();
+    assert_eq!(rule.rule_type(), "tianheng.rule/louke/declared-seam-probed");
+    assert_eq!(rule.fields().count(), 0);
+    let fact = id.fact();
+    assert_eq!(fact.fact_type(), "tianheng.fact/louke/runtime-seam-audit");
+    assert_eq!(fact.shape(), "unprobed-declaration");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![("seam", "checkout")]
+    );
 }
 
 #[test]
@@ -1075,6 +1239,332 @@ fn an_unauditable_probe_reacts() {
     assert!(
         file.ends_with("a.rs"),
         "file names the probe's source: {file}"
+    );
+}
+
+/// Un-auditable-probe violations from `outcome` (identified by carrying a `file` — the one
+/// runtime violation kind that does; a seam-level runtime violation names a seam, never a file).
+fn unauditable_violations(outcome: &Outcome) -> Vec<&crate::Violation> {
+    match outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .filter(|v| v.file.is_some())
+            .collect(),
+        other => panic!("expected violations, got {other:?}"),
+    }
+}
+
+#[test]
+fn two_distinct_expressions_in_the_same_function_react_separately() {
+    let tb = TempBase::new("audit-unaud-two-exprs");
+    let dir = tb.dir(
+        "two",
+        "fn compute_seam() -> &'static str { \"s\" } \
+         fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(compute_seam(), o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "two textually distinct non-literal expressions must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "their identities must be distinct: {violations:?}"
+    );
+}
+
+#[test]
+fn same_expression_in_two_different_free_functions_reacts_separately() {
+    let tb = TempBase::new("audit-unaud-two-fns");
+    let dir = tb.dir(
+        "two",
+        "fn a() { assert_boundary!(SEAM_A, o); } fn b() { assert_boundary!(SEAM_A, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "the same expression in two different functions must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by enclosing function, not collapsed: {violations:?}"
+    );
+}
+
+#[test]
+fn raw_identifier_function_names_keep_probe_owners_distinct() {
+    let tb = TempBase::new("audit-unaud-two-raw-ident-fns");
+    let dir = tb.dir(
+        "two",
+        "fn r#type() { assert_boundary!(SEAM_A, o); } \
+         fn r#async() { assert_boundary!(SEAM_A, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "raw identifier names must not collapse to their leading `r`: {violations:?}"
+    );
+    let owners: std::collections::BTreeSet<_> = violations
+        .iter()
+        .map(|violation| {
+            violation
+                .fact()
+                .fields()
+                .find_map(|(name, value)| (name == "owner").then_some(value.to_string()))
+                .expect("unauditable probe identity carries its owner")
+        })
+        .collect();
+    assert_eq!(
+        owners,
+        ["fn async".to_string(), "fn type".to_string()].into(),
+        "raw item names use the scanner's canonical de-prefixed vocabulary"
+    );
+}
+
+#[test]
+fn same_named_nested_functions_in_different_outer_functions_react_separately() {
+    let tb = TempBase::new("audit-unaud-two-nested-fns");
+    let dir = tb.dir(
+        "two",
+        "fn outer_a() { fn inner() { assert_boundary!(SEAM_A, o); } } \
+         fn outer_b() { fn inner() { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named nested functions in distinct outer functions must not collapse: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(facts.len(), 2, "lexical owner chains must differ");
+}
+
+#[test]
+fn same_named_nested_functions_in_equal_closures_react_separately_and_stably() {
+    let tb = TempBase::new("audit-unaud-two-closures");
+    let dir = tb.dir(
+        "two",
+        "fn outer() { \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         }",
+    );
+    let before = audit_probe_coverage(
+        &[boundary("s", Severity::Enforce)],
+        std::slice::from_ref(&dir),
+    );
+    let before_violations = unauditable_violations(&before);
+    assert_eq!(
+        before_violations.len(),
+        2,
+        "equal nested functions under distinct closures must not collapse: {before_violations:?}"
+    );
+    let before_facts: std::collections::BTreeSet<_> = before_violations
+        .iter()
+        .map(|violation| violation.fact().clone())
+        .collect();
+    assert_eq!(before_facts.len(), 2, "closure owners must differ");
+
+    std::fs::write(
+        dir.join("a.rs"),
+        "fn outer() { \
+         let unrelated = 1; \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
+         }",
+    )
+    .unwrap();
+    let after = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let after_facts: std::collections::BTreeSet<_> = unauditable_violations(&after)
+        .iter()
+        .map(|violation| violation.fact().clone())
+        .collect();
+    assert_eq!(
+        before_facts, after_facts,
+        "a differently-shaped unrelated insertion must not re-key closure ownership"
+    );
+}
+
+#[test]
+fn same_named_local_impl_methods_in_different_outer_functions_react_separately() {
+    let tb = TempBase::new("audit-unaud-two-local-impls");
+    let dir = tb.dir(
+        "two",
+        "fn outer_a() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } } \
+         fn outer_b() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named local impl methods in distinct outer functions must not collapse: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "outer lexical owners must qualify local impls"
+    );
+}
+
+#[test]
+fn nested_function_identity_survives_unrelated_item_insertion() {
+    let tb = TempBase::new("audit-unaud-nested-stable");
+    let dir = tb.dir(
+        "same",
+        "fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
+    );
+    let before_fact = unauditable_violations(&audit_probe_coverage(
+        &[boundary("s", Severity::Enforce)],
+        std::slice::from_ref(&dir),
+    ))[0]
+        .fact()
+        .clone();
+    std::fs::write(
+        dir.join("a.rs"),
+        "fn unrelated() {} fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
+    )
+    .expect("rewrite fixture with unrelated item");
+    let after_fact = unauditable_violations(&audit_probe_coverage(
+        &[boundary("s", Severity::Enforce)],
+        &[dir],
+    ))[0]
+        .fact()
+        .clone();
+    assert_eq!(before_fact, after_fact);
+}
+
+#[test]
+fn same_named_method_in_two_different_impls_reacts_separately() {
+    // The regression case an unqualified bare enclosing-fn/impl name would have missed: two
+    // owners sharing a method name and an identical expression must not collapse to one finding.
+    let tb = TempBase::new("audit-unaud-two-impls");
+    let dir = tb.dir(
+        "two",
+        "struct A; struct B; \
+         impl A { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
+         impl B { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named method on two different owners must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by owner, not collapsed under a bare method name: {violations:?}"
+    );
+}
+
+#[test]
+fn same_named_free_fn_in_two_different_inline_mods_reacts_separately() {
+    // The regression an adversarial review of this exact change caught empirically: without
+    // module-path qualification, two same-named free fns in different inline `mod` blocks of one
+    // file collapsed to one finding — the identical false-negative class this change exists to
+    // close, just via a dimension (module path) the first cut of `render_owner` didn't track.
+    let tb = TempBase::new("audit-unaud-two-inline-mods");
+    let dir = tb.dir(
+        "two",
+        "mod a { pub fn probe() { assert_boundary!(SEAM_A, o); } } \
+         mod b { pub fn probe() { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named free fn in two different inline mods must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by module path, not collapsed under a bare fn name: {violations:?}"
+    );
+}
+
+#[test]
+fn same_named_method_in_two_different_trait_impls_reacts_separately() {
+    let tb = TempBase::new("audit-unaud-two-trait-impls");
+    let dir = tb.dir(
+        "two",
+        "struct T; trait Foo { fn probe(&self); } trait Bar { fn probe(&self); } \
+         impl Foo for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
+         impl Bar for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "same-named method on the same Self type via two different traits must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by trait, not collapsed: {violations:?}"
+    );
+}
+
+#[test]
+fn identical_expression_repeated_in_the_same_function_collapses_to_one_violation() {
+    let tb = TempBase::new("audit-unaud-dup");
+    let dir = tb.dir(
+        "dup",
+        "fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(SEAM_A, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        1,
+        "a verbatim-repeated expression in the same scope is a stated bound, not two findings: {violations:?}"
+    );
+}
+
+#[test]
+fn same_expression_in_two_files_reacts_separately() {
+    let tb = TempBase::new("audit-unaud-two-files");
+    let dir_a = tb.dir("file-a", "fn f() { assert_boundary!(SEAM_A, o); }");
+    let dir_b = tb.dir("file-b", "fn f() { assert_boundary!(SEAM_A, o); }");
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir_a, dir_b]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "the same expression in two different files must react separately: {violations:?}"
+    );
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "distinguished by file, not collapsed: {violations:?}"
     );
 }
 
@@ -1157,4 +1647,197 @@ fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
         Outcome::Clean,
         "a real, declared, and probed seam must be covered, not hang or error: {outcome:?}"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn directory_audit_does_not_hang_on_a_symlinked_directory_cycle() {
+    let tb = TempBase::new("dir-symlink-cycle");
+    let _src = tb.source("main.rs", "fn f() { assert_boundary!(\"a\", o); }\n");
+    tb.symlink(tb.path(), "loop_dir");
+    let outcome = audit_probe_coverage(
+        &[boundary("a", Severity::Enforce)],
+        &[tb.path().to_path_buf()],
+    );
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "directory scan on a cyclic symlinked dir must be covered without hanging or looping: {outcome:?}"
+    );
+}
+
+#[test]
+fn custom_marker_list_recognizes_user_probe_wrapper() {
+    let tb = TempBase::new("custom-marker");
+    let root = tb.source(
+        "main.rs",
+        "fn f() { my_custom_seam!(\"custom-seam\", obj); }\n",
+    );
+    let outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[root],
+        &["assert_boundary", "my_custom_seam"],
+    );
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "custom registered probe macro wrapper must cover the seam: {outcome:?}"
+    );
+}
+
+#[test]
+fn custom_marker_messages_name_the_configuration_and_actual_matched_marker() {
+    let tb = TempBase::new("custom-marker-wording");
+    let missing = tb.source("missing.rs", "fn f() {}\n");
+    let missing_outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[missing],
+        &["my_custom_seam"],
+    );
+    let Outcome::Violations(missing_report) = missing_outcome else {
+        panic!("expected an unprobed violation");
+    };
+    assert!(
+        missing_report.violations[0]
+            .finding
+            .contains("no configured probe marker")
+    );
+    assert!(
+        !missing_report.violations[0]
+            .finding
+            .contains("assert_boundary")
+    );
+
+    let unauditable = tb.source("unauditable.rs", "fn f() { my_custom_seam!(SEAM, obj); }\n");
+    let unauditable_outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[unauditable],
+        &["my_custom_seam"],
+    );
+    let Outcome::Violations(unauditable_report) = unauditable_outcome else {
+        panic!("expected unprobed and unauditable violations");
+    };
+    let violation = unauditable_report
+        .violations
+        .iter()
+        .find(|violation| {
+            violation.rule
+                == "a configured probe marker's seam must be a string literal to be auditable"
+        })
+        .expect("unauditable violation");
+    assert!(violation.finding.contains("my_custom_seam! probe"));
+}
+
+#[test]
+fn anonymous_scope_header_ignores_delimiters_inside_literals_and_comments() {
+    let source = br#"if value == "};" /* ; { } */ {"#;
+    let brace = source.len() - 1;
+    assert_eq!(
+        scan::anonymous_scope_header(source, 0, brace),
+        r#"if value == "};" /* ; { } */"#
+    );
+}
+
+#[test]
+fn literal_punctuation_in_anonymous_scopes_keeps_probe_owners_distinct_end_to_end() {
+    let tb = TempBase::new("anonymous-owner-literal-punctuation");
+    let dir = tb.dir(
+        "two",
+        r#"
+fn outer() {
+    if "a;b" == "x" {
+        fn probe() { assert_boundary!(SEAM_A, o); }
+    }
+    if "a{b" == "x" {
+        fn probe() { assert_boundary!(SEAM_A, o); }
+    }
+}
+"#,
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "literal punctuation must not collapse distinct anonymous owners: {violations:?}"
+    );
+    let owners: std::collections::BTreeSet<_> = violations
+        .iter()
+        .map(|violation| {
+            violation
+                .fact()
+                .fields()
+                .find_map(|(name, value)| (name == "owner").then_some(value.to_string()))
+                .expect("unauditable probe identity carries its owner")
+        })
+        .collect();
+    assert_eq!(
+        owners.len(),
+        2,
+        "the full audit path must retain both literal-distinguished owner headers: {violations:?}"
+    );
+    assert!(owners.iter().any(|owner| owner.contains(r#"if "a;b""#)));
+    assert!(owners.iter().any(|owner| owner.contains(r#"if "a{b""#)));
+}
+
+#[test]
+fn unregistered_custom_marker_is_ignored_by_audit() {
+    let tb = TempBase::new("unregistered-marker");
+    let root = tb.source(
+        "main.rs",
+        "fn f() { unknown_seam!(\"custom-seam\", obj); }\n",
+    );
+    let outcome = audit_probe_coverage_with_markers(
+        &[boundary("custom-seam", Severity::Enforce)],
+        &[root],
+        &["assert_boundary", "my_custom_seam"],
+    );
+    assert!(
+        matches!(outcome, Outcome::Violations(_)),
+        "unregistered custom macro wrapper must be ignored and report declared seam unprobed: {outcome:?}"
+    );
+}
+
+#[test]
+fn empty_marker_list_is_constitution_error() {
+    let tb = TempBase::new("empty-marker-list");
+    let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
+    let outcome =
+        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &[]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(_)),
+        "empty markers list must be a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn blank_marker_string_is_constitution_error() {
+    let tb = TempBase::new("blank-marker");
+    let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
+    let outcome =
+        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &["  "]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(_)),
+        "blank marker string must be a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn invalid_marker_string_is_constitution_error() {
+    let tb = TempBase::new("invalid-marker");
+    let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
+    for invalid in [
+        "if", "match", "123foo", "foo::bar", "foo-bar", "_", "r#self", "r#super", "r#crate", "r#_",
+        "💥", "a💥", "café",
+    ] {
+        let outcome = audit_probe_coverage_with_markers(
+            &[boundary("seam", Severity::Enforce)],
+            std::slice::from_ref(&root),
+            &[invalid],
+        );
+        assert!(
+            matches!(outcome, Outcome::ConstitutionError(_)),
+            "invalid marker '{invalid}' must be a constitution error: {outcome:?}"
+        );
+    }
 }

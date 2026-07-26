@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 struct TempPath(PathBuf);
 
 impl TempPath {
+    fn named(label: &str) -> Self {
+        Self::new(std::env::temp_dir().join(format!("tianheng-{label}-{}", std::process::id())))
+    }
+
     fn new(path: PathBuf) -> Self {
         let guard = Self(path);
         guard.clean();
@@ -44,11 +48,8 @@ impl Drop for TempPath {
 fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
     ViolationId::new(
         target,
-        rule,
-        Finding::new(
-            finding,
-            FindingKey::new("tianheng-test", "fact", [("value", finding)]).unwrap(),
-        ),
+        RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
+        StructuredFactIdentity::new("tianheng-test", "fact", [("value", finding)]).unwrap(),
     )
 }
 
@@ -56,6 +57,8 @@ fn violation(target: &str, rule: &str, finding: &str, file: Option<&str>) -> Vio
     Violation::new(
         BoundaryKind::Crate,
         test_id(target, rule, finding),
+        rule,
+        finding,
         format!("reason-for-{target}"),
         Severity::Enforce,
     )
@@ -66,6 +69,8 @@ fn enforce_violation(kind: BoundaryKind, finding: &str) -> Violation {
     Violation::new(
         kind,
         test_id("target", "rule", finding),
+        "rule",
+        finding,
         "reason".to_string(),
         Severity::Enforce,
     )
@@ -208,8 +213,11 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
     let c = Constitution::new("app").signature_boundary(anchored);
     let json = serde_json::to_string(&list_document(&c)).expect("json");
     assert!(json.contains("\"anchor\":\"ADR-014\""), "{json}");
-    // Markdown derives from the JSON params generically, so the anchor surfaces there too.
-    assert!(constitution_markdown(&c).contains("ADR-014"));
+    let markdown = constitution_markdown(&c);
+    assert!(
+        markdown.contains("\n- **anchor**: ADR-014\n"),
+        "markdown must render the anchor as its own element: {markdown}"
+    );
     // Parity: the text projection surfaces the anchor too (it appeared in json/markdown but not
     // text before — the `list` three-format parity gap).
     assert!(
@@ -227,6 +235,11 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
     let bare_c = Constitution::new("app").signature_boundary(bare);
     let bare_json = serde_json::to_string(&list_document(&bare_c)).expect("json");
     assert!(!bare_json.contains("anchor"), "{bare_json}");
+    let bare_markdown = constitution_markdown(&bare_c);
+    assert!(
+        !bare_markdown.contains("**anchor**"),
+        "a boundary without an anchor must render no anchor element: {bare_markdown}"
+    );
     // And a bare boundary's text stays byte-identical (no stray `anchor:` line).
     assert!(
         !semantic_text(std::slice::from_ref(
@@ -241,7 +254,7 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
 fn markdown_params_exclude_exactly_the_structural_base_keys() {
     // Guard the hand-maintained `STRUCTURAL` list (markdown.rs) against drift from the keys
     // `boundary_json_base` emits: a boundary JSON with every base field set (crate + anchor) plus a
-    // rule param must render the non-structural keys as params and NONE of the structural six. A
+    // rule param must render the non-structural keys as params and NONE of the structural seven. A
     // future always-present base key added without updating `STRUCTURAL` would leak into params here.
     let boundary = serde_json::json!({
         "kind": "semantic", "target": "app", "crate": "app",
@@ -249,7 +262,9 @@ fn markdown_params_exclude_exactly_the_structural_base_keys() {
         "forbidden": ["Foo"], "anchor": "ADR-014",
     });
     let params = boundary_params(&boundary);
-    for structural in ["kind", "target", "crate", "rule", "severity", "reason"] {
+    for structural in [
+        "kind", "target", "crate", "rule", "severity", "reason", "anchor",
+    ] {
         assert!(
             !params.contains(&format!("{structural}:")),
             "structural base key `{structural}` leaked into markdown params: {params}"
@@ -258,10 +273,6 @@ fn markdown_params_exclude_exactly_the_structural_base_keys() {
     assert!(
         params.contains("forbidden:"),
         "a rule param must surface: {params}"
-    );
-    assert!(
-        params.contains("anchor:"),
-        "anchor is a non-structural param: {params}"
     );
 }
 
@@ -319,11 +330,8 @@ fn report_sarif_merges_anchor_and_polarity_into_one_property_bag() {
 
 #[test]
 fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
-    // SARIF v1 fingerprints retain the human triple for wire compatibility, but SARIF's
-    // ruleId/message carry only rule and finding. For a file-less violation `target` is the sole
-    // discriminator, so two violations differing ONLY in target rendered byte-identical and a
-    // fingerprint-deduping ingester (GitHub code scanning) collapsed them. Each now carries a
-    // partialFingerprint over the full identity, keeping distinct violations distinct.
+    // SARIF presentation carries no target, so target-differing file-less violations need the
+    // canonical structured identity fingerprint to remain distinct alerts.
     let same_rule = "deny external dependencies";
     let same_finding = "serde";
     let same_reason = "keep the graph lean";
@@ -331,6 +339,8 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
         Violation::new(
             BoundaryKind::Crate,
             test_id(target, same_rule, same_finding),
+            same_rule,
+            same_finding,
             same_reason.to_string(),
             Severity::Enforce,
         )
@@ -346,7 +356,7 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
         "two violations differing only in target are two results: {results:?}"
     );
     let fp = |r: &Value| {
-        r["partialFingerprints"]["tianhengViolationId/v1"]
+        r["partialFingerprints"]["tianheng/structured-fact-identity"]
             .as_str()
             .expect("a fingerprint string")
             .to_string()
@@ -356,11 +366,75 @@ fn sarif_fingerprints_file_less_violations_by_their_full_identity() {
         fp0, fp1,
         "target-differing violations must get distinct fingerprints: {fp0} vs {fp1}"
     );
-    // Both targets appear across the fingerprints (message alone could not distinguish them).
-    let joined = format!("{fp0}{fp1}");
+    let identity0: Value = serde_json::from_str(&fp0).expect("canonical identity JSON");
+    let identity1: Value = serde_json::from_str(&fp1).expect("canonical identity JSON");
+    assert_eq!(identity0["target"], "web");
+    assert_eq!(identity1["target"], "cli");
     assert!(
-        joined.contains("web") && joined.contains("cli"),
-        "the fingerprint carries the discriminating target: {joined}"
+        results.iter().all(|result| result["partialFingerprints"]
+            .get("tianhengViolationId/v1")
+            .is_none()),
+        "the presentation-derived fingerprint property is removed"
+    );
+}
+
+#[test]
+fn sarif_fingerprint_ignores_presentation_diagnostics_and_result_order() {
+    let identity = ViolationId::new(
+        "core",
+        RuleKey::of("tianheng.rule/test/deny", [("policy", "external")]),
+        StructuredFactIdentity::of(
+            "tianheng.fact/test/dependency",
+            "dependency-edge",
+            [("package", "serde")],
+        ),
+    );
+    let old = Violation::new(
+        BoundaryKind::Crate,
+        identity.clone(),
+        "old rule",
+        "old finding",
+        "old reason".to_string(),
+        Severity::Warn,
+    );
+    let changed = Violation::new(
+        BoundaryKind::Runtime,
+        identity,
+        "new rule",
+        "new finding with signature diagnostics",
+        "new reason".to_string(),
+        Severity::Enforce,
+    )
+    .with_file(Some("src/new.rs".to_string()))
+    .with_anchor(Some("law".to_string()))
+    .with_polarity(Polarity::AllowlistGap);
+    let unrelated = violation("other", "other rule", "other fact", None);
+
+    let fingerprint_of = |report: Report, index: usize| {
+        let sarif: Value =
+            serde_json::from_str(&report_sarif(&Outcome::Violations(report))).unwrap();
+        sarif["runs"][0]["results"][index]["partialFingerprints"]
+            ["tianheng/structured-fact-identity"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let first = fingerprint_of(Report::new(vec![old, unrelated.clone()]), 0);
+    let reordered = fingerprint_of(Report::new(vec![unrelated, changed]), 1);
+    assert_eq!(first, reordered);
+
+    let changed_identity = Violation::new(
+        BoundaryKind::Crate,
+        test_id("core", "old rule", "tokio"),
+        "old rule",
+        "old finding",
+        "old reason".to_string(),
+        Severity::Warn,
+    );
+    assert_ne!(
+        first,
+        fingerprint_of(Report::new(vec![changed_identity]), 0),
+        "an identity-bearing fact change must change the fingerprint"
     );
 }
 
@@ -822,8 +896,8 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
             report
                 .violations
                 .iter()
-                .any(|v| v.target == "a-seam-no-probe-covers"
-                    && v.finding.contains("no assert_boundary! probe")),
+                .any(|v| v.target() == "a-seam-no-probe-covers"
+                    && v.finding.contains("no configured probe marker")),
             "the declared-unprobed seam must be the reported finding: {:?}",
             report.violations
         ),
@@ -833,9 +907,7 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 
 #[test]
 fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
-    let base = TempPath::new(
-        std::env::temp_dir().join(format!("tianheng-runtime-root-{}", std::process::id())),
-    );
+    let base = TempPath::named("runtime-root");
     let base = base.path();
     std::fs::create_dir_all(base).unwrap();
     std::fs::write(
@@ -877,7 +949,7 @@ fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
         1,
         "reachable custom-root module stays covered"
     );
-    assert_eq!(violations[0].target, "orphan");
+    assert_eq!(violations[0].target(), "orphan");
 
     let _ = std::fs::remove_dir_all(base);
 }
@@ -890,6 +962,7 @@ fn list_document_covers_every_populated_dimension() {
     // adds no key (the static-only projection stays byte-identical).
     let empty = Constitution::new("empty");
     let doc = list_document(&empty);
+    assert_eq!(doc["format"], "tianheng.constitution/declared-boundaries");
     assert!(
         doc.get("semantic_boundaries").is_none(),
         "empty adds no key: {doc}"
@@ -1458,6 +1531,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
             "must not expose",
             "crate::infra::Db exposed by fn crate::domain::leak",
         ),
+        "must not expose",
+        "crate::infra::Db exposed by fn crate::domain::leak",
         "domain must not expose infra".to_string(),
         Severity::Enforce,
     )
@@ -1469,6 +1544,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
             "must be implemented only in the allowed locations",
             "crate::plugins (impl for crate::plugins::P)",
         ),
+        "must be implemented only in the allowed locations",
+        "crate::plugins (impl for crate::plugins::P)",
         "Command impls live in crate::allowed".to_string(),
         Severity::Enforce,
     )
@@ -1476,6 +1553,8 @@ fn semantic_violation_projects_its_file_in_json_and_sarif() {
     let file_less = Violation::new(
         BoundaryKind::Crate,
         test_id("dep-crate", "deny external", "serde"),
+        "deny external",
+        "serde",
         "core must stay dependency-light".to_string(),
         Severity::Enforce,
     );
@@ -1869,9 +1948,7 @@ fn warn_uncovered_never_changes_the_exit_code() {
 fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // `check` defaults its target to the nearest `Cargo.toml`, cargo-style. Drive the pure
     // ascent over a real temp tree so the walk is proven without touching the process cwd.
-    let root = TempPath::new(
-        std::env::temp_dir().join(format!("tianheng-nearest-{}", std::process::id())),
-    );
+    let root = TempPath::named("nearest");
     let root = root.path();
     let outer = root.join("outer");
     let inner = outer.join("inner");
@@ -1907,10 +1984,7 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
 fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     // The metadata-preserving merge, driven through the real write path + a temp file: write a
     // baseline, hand-annotate an entry, re-write from the same report — the annotation survives.
-    let path = TempPath::new(std::env::temp_dir().join(format!(
-        "tianheng-baseline-merge-{}.json",
-        std::process::id()
-    )));
+    let path = TempPath::named("baseline-merge");
     let path = path.path();
     let path_str = path.to_str().expect("utf-8 temp path");
 
@@ -1920,8 +1994,9 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     assert_eq!(super::write_baseline(&outcome, path_str), 0);
     let first = std::fs::read_to_string(path).expect("baseline written");
     let first_doc: Value = serde_json::from_str(&first).unwrap();
-    assert_eq!(first_doc["version"], 2);
-    assert!(first_doc["violations"][0]["finding_key"].is_object());
+    assert_eq!(first_doc["format"], "tianheng.baseline/structured-facts");
+    assert!(first_doc.get("version").is_none());
+    assert!(first_doc["violations"][0]["fact"].is_object());
     assert!(
         !first.contains("owner"),
         "fresh baseline has no metadata: {first}"
@@ -1943,34 +2018,49 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
 }
 
 #[test]
-fn write_baseline_upgrades_version_one_and_preserves_exact_match_metadata() {
-    let path = TempPath::new(std::env::temp_dir().join(format!(
-        "tianheng-baseline-v1-upgrade-{}.json",
-        std::process::id()
-    )));
+fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_it() {
+    let path = TempPath::named("baseline-v1-upgrade");
     let path = path.path();
     let path_str = path.to_str().expect("utf-8 temp path");
-    let legacy = r#"{"version":1,"violations":[{
-        "target":"core","rule":"rule","finding":"serde",
-        "owner":"team-core","tracker":"ISSUE-8"
-    }]}"#;
-    std::fs::write(path, legacy).expect("write legacy baseline");
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
+    for unsupported in [
+        r#"{"version":1,"violations":[]}"#,
+        r#"{"version":2,"violations":[]}"#,
+        r#"{"violations":[]}"#,
+        r#"{"format":"tianheng.baseline/unknown","violations":[]}"#,
+        "{ malformed",
+    ] {
+        std::fs::write(path, unsupported).expect("write unsupported baseline");
+        assert_eq!(super::write_baseline(&outcome, path_str), 2);
+        assert_eq!(
+            std::fs::read_to_string(path).unwrap(),
+            unsupported,
+            "refusal must preserve the existing file byte-for-byte"
+        );
+    }
+}
 
-    assert_eq!(super::write_baseline(&outcome, path_str), 0);
-    let rewritten: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(rewritten["version"], 2);
-    assert!(rewritten["violations"][0]["finding_key"].is_object());
-    assert_eq!(rewritten["violations"][0]["owner"], "team-core");
-    assert_eq!(rewritten["violations"][0]["tracker"], "ISSUE-8");
+#[test]
+fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
+    let path = TempPath::named("baseline-create-race");
+    let path = path.path();
+    std::fs::write(path, "appeared concurrently").unwrap();
+
+    let err = super::create_baseline_file(path.to_str().unwrap(), "replacement")
+        .expect_err("create-new write must refuse an existing path");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+    assert_eq!(
+        std::fs::read_to_string(path).unwrap(),
+        "appeared concurrently"
+    );
 }
 
 #[test]
 fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
     // Pass `bless` as a bool (the helper reads no environment), so this test mutates no
     // process-global state and cannot race the parallel self-law gate.
-    let dir =
-        TempPath::new(std::env::temp_dir().join(format!("tianheng-gate-{}", std::process::id())));
+    let dir = TempPath::named("gate");
     // A not-yet-existing subdir, so bless must `create_dir_all` the parent.
     let path = dir.path().join("sub").join("law.md");
     let hint = "BLESS=1 cargo test";

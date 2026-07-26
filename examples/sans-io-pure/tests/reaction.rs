@@ -21,8 +21,8 @@ fn the_clock_axis_reacts() {
         panic!("the inline clock read must produce a structured violation");
     };
     assert!(report.violations.iter().any(|violation| {
-        violation.finding_key().namespace() == "guibiao"
-            && violation.finding_key().code() == "inline_path"
+        violation.fact().fact_type() == "tianheng.fact/guibiao/inline-path"
+            && violation.fact().shape() == "path-in-module"
     }));
     assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }
@@ -37,8 +37,11 @@ fn the_async_axis_reacts_across_the_subtree() {
         panic!("the subtree async seam must produce a structured violation");
     };
     assert!(report.violations.iter().any(|violation| {
-        violation.finding_key().namespace() == "hunyi"
-            && violation.finding_key().code() == "async_exposure"
+        violation.fact().fact_type() == "tianheng.fact/hunyi/async-exposure"
+            && matches!(
+                violation.fact().shape(),
+                "async-free-function" | "async-inherent-method" | "async-trait-method"
+            )
     }));
     assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }

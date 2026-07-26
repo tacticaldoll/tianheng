@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use xuanji::ScanDepth;
 
 use crate::cargo_metadata::{crate_root_file, find_package};
 use crate::errors::{
@@ -12,8 +13,8 @@ use crate::errors::{
 };
 use crate::finding::ModuleFact;
 use crate::module_scan::{
-    InlineFinding, canonical_module_path, external_imports_with_importers, governed_files,
-    imported_module_paths, imports_with_importers, inline_symbol_findings,
+    ImportedPath, InlineFinding, canonical_module_path, external_imports_with_importers,
+    governed_files, imported_module_paths, imports_with_importers, inline_symbol_findings,
     package_name_to_import_ident, path_within, reachable_modules, rust_files,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
@@ -41,10 +42,13 @@ fn push_module_violation(
     file: String,
     boundary: &ModuleBoundary,
 ) {
+    let finding = fact.into_finding();
     violations.push(
         Violation::new(
             BoundaryKind::Module,
-            ViolationId::new(target, rule, fact.into_finding()),
+            ViolationId::new(target, boundary.rule_key(), finding.fact().clone()),
+            rule,
+            finding.text(),
             boundary.reason.clone(),
             boundary.severity,
         )
@@ -52,6 +56,18 @@ fn push_module_violation(
         .with_anchor(boundary.anchor.clone())
         .with_polarity(boundary.rule.polarity()),
     );
+}
+
+fn within_scan_depth(candidate: &str, anchor: &str, depth: ScanDepth) -> bool {
+    if depth == ScanDepth::Shallow {
+        candidate == anchor
+    } else {
+        path_within(candidate, anchor)
+    }
+}
+
+fn is_self_import_only(file_module: &str, governed_module: &str, depth: ScanDepth) -> bool {
+    depth == ScanDepth::Subtree && path_within(file_module, governed_module)
 }
 
 pub(crate) fn check_module_boundary(
@@ -96,6 +112,7 @@ pub(crate) fn check_module_boundary(
         &remapped,
         &remap_shadowed,
         root_relative.as_deref(),
+        boundary.depth,
     );
     if governed.is_empty() {
         // Two distinct misconfigurations, kept apart so the error is self-describing
@@ -173,6 +190,7 @@ pub(crate) fn check_module_boundary(
             &remapped,
             &remap_shadowed,
             root_relative.as_deref(),
+            ScanDepth::Subtree,
         );
         // Collect `(importer module, offending file)` pairs *before* de-duplication: the file
         // is in hand here (the scan reads it to observe the import) but is gone once the list
@@ -186,7 +204,7 @@ pub(crate) fn check_module_boundary(
             // Fast path: a file whose module is within the protected subtree hosts only
             // self-imports (its inline descendants are within it, hence within the protected
             // module too), never an inbound edge — skip the read.
-            if path_within(&file_module, &governed_module) {
+            if is_self_import_only(&file_module, &governed_module, boundary.depth) {
                 continue;
             }
             // Forbid-one perf pre-filter: the importers a file can carry are its own module and its
@@ -205,7 +223,7 @@ pub(crate) fn check_module_boundary(
             for (importer, import) in imports_with_importers(&text, &file_module, &root_modules) {
                 // A module importing from within the protected subtree is not an inbound edge
                 // (an inline submodule of the protected module resolves to within it here).
-                if path_within(&importer, &governed_module) {
+                if within_scan_depth(&importer, &governed_module, boundary.depth) {
                     continue;
                 }
                 // Forbid-one: only the forbidden importer (or beneath, `::`-delimited) can violate.
@@ -214,8 +232,12 @@ pub(crate) fn check_module_boundary(
                         continue;
                     }
                 }
-                // This importer must actually import the protected module.
-                if !path_within(&import, &governed_module) {
+                // This importer must actually import the protected module (either directly,
+                // via descendant path, or via an ancestor glob wildcard import).
+                let imports_protected =
+                    within_scan_depth(&import, &governed_module, boundary.depth)
+                        || (import.is_glob && path_within(&governed_module, &import.path));
+                if !imports_protected {
                     continue;
                 }
                 // Closed allowlist: an importer within any allowed entry (or beneath it) is
@@ -281,6 +303,7 @@ pub(crate) fn check_module_boundary(
             &remapped,
             &remap_shadowed,
             root_relative.as_deref(),
+            ScanDepth::Subtree,
         );
         // `(offending importer module, file)` collected before de-dup, for the same reason as
         // the inbound rule: the file is in hand during the scan but lost once the list
@@ -289,7 +312,7 @@ pub(crate) fn check_module_boundary(
         for (file, file_module) in all_files {
             // A file whose module is within the permitted subtree hosts only permitted imports
             // (its inline descendants are within it too) — skip the read.
-            if path_within(&file_module, &governed_module) {
+            if is_self_import_only(&file_module, &governed_module, boundary.depth) {
                 continue;
             }
             let text = std::fs::read_to_string(&file)
@@ -301,7 +324,7 @@ pub(crate) fn check_module_boundary(
                 if external != confined {
                     continue;
                 }
-                if path_within(&importer, &governed_module) {
+                if within_scan_depth(&importer, &governed_module, boundary.depth) {
                     continue;
                 }
                 offenders.push((importer, file.display().to_string()));
@@ -357,6 +380,7 @@ pub(crate) fn check_module_boundary(
             &remapped,
             &remap_shadowed,
             root_relative.as_deref(),
+            ScanDepth::Subtree,
         );
         // The rename-aware declared-dependency import identifiers back the strict-external head
         // ladder — read ONLY when the external variant is in play, so the default path reads
@@ -389,10 +413,13 @@ pub(crate) fn check_module_boundary(
     // for `RestrictImportsTo`, a crate-root pre-check) differ. Containment is
     // `::`-delimited throughout (exact match OR an `x::` prefix), so a sibling like
     // `crate::types_extra` is never mistaken for being beneath `crate::types`.
-    let is_violation: Box<dyn Fn(&str) -> bool> = match &boundary.rule {
+    let is_violation: Box<dyn Fn(&ImportedPath) -> bool> = match &boundary.rule {
         ModuleRule::MustNotImport { module } => {
             let forbidden = canonical_module_path(module);
-            Box::new(move |import: &str| path_within(import, &forbidden))
+            Box::new(move |import: &ImportedPath| {
+                path_within(&import.path, &forbidden)
+                    || (import.is_glob && path_within(&forbidden, &import.path))
+            })
         }
         ModuleRule::RestrictImportsTo { allowed } => {
             // The crate root has no outward internal edge — every import is within its
@@ -408,9 +435,9 @@ pub(crate) fn check_module_boundary(
                 .map(|entry| canonical_module_path(entry))
                 .collect();
             let governed_self = governed_module.clone();
-            Box::new(move |import: &str| {
-                let within_own = path_within(import, &governed_self);
-                let within_allowed = allowed.iter().any(|entry| path_within(import, entry));
+            Box::new(move |import: &ImportedPath| {
+                let within_own = path_within(&import.path, &governed_self);
+                let within_allowed = allowed.iter().any(|entry| path_within(&import.path, entry));
                 // A violation is any outward edge: neither within the module's own subtree
                 // nor within an allowlist entry.
                 !(within_own || within_allowed)
@@ -435,7 +462,7 @@ pub(crate) fn check_module_boundary(
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
         for import in imported_module_paths(&text, &current_module, &root_modules) {
             if is_violation(&import) {
-                findings.push((import, file.display().to_string()));
+                findings.push((import.path, file.display().to_string()));
             }
         }
     }

@@ -33,9 +33,9 @@ pub(crate) type UseMap = HashMap<String, String>;
 pub(crate) type ReexportMap = HashMap<String, String>;
 
 /// A type-alias closure: a `type X = <path>;` alias's canonical path (`{module}::X`) → the
-/// canonical path of its nominal target. Followed together with the re-export closure to a
+/// canonical paths of its nominal targets. Followed together with the re-export closure to a
 /// fixpoint, so a forbidden type reached through an alias resolves to its defining path.
-pub(crate) type AliasMap = HashMap<String, String>;
+pub(crate) type AliasMap = HashMap<String, Vec<String>>;
 
 /// Whether a bare/relative name (not in the `use`-map, not `crate`/`self`/`super`)
 /// resolves against the current module, or is left unresolved.
@@ -440,23 +440,131 @@ pub(crate) fn canonicalize_through_reexports(path: &str, reexports: &ReexportMap
     canonicalize_through_aliases(path, &AliasMap::new(), reexports)
 }
 
-/// Follow the **alias** and **re-export** closures together from `path` to a fixpoint, so a
-/// name reached through a `type X = <path>;` alias and/or a `pub use` facade resolves to the
-/// defining path. An alias hop is tried before a re-export hop at each step; the two maps are
-/// keyed by canonical path and cannot collide (a `type X` and a `pub use … as X` in one module
-/// is a name clash that does not compile). Cycle-guarded. For a `path` in neither map this is
-/// identical to [`canonicalize_through_reexports`], so a non-alias finding is unchanged.
+fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<String>> {
+    let segments: Vec<&str> = path.split("::").collect();
+    for end in (1..=segments.len()).rev() {
+        let prefix = segments[..end].join("::");
+        if let Some(targets) = map.get(&prefix) {
+            let tail = if end == segments.len() {
+                ""
+            } else {
+                &path[prefix.len()..]
+            };
+            return Some(targets.iter().map(|t| format!("{t}{tail}")).collect());
+        }
+    }
+    None
+}
+
+pub(crate) fn expand_canonical_paths(
+    path: &str,
+    aliases: &AliasMap,
+    reexports: &ReexportMap,
+) -> Vec<String> {
+    if aliases.is_empty() && reexports.is_empty() {
+        return vec![path.to_string()];
+    }
+    // Iterative post-order DFS over the alias/re-export graph.
+    //
+    // Each stack entry is `(node, returning, depth)`. On the first visit (`returning = false`) we push the
+    // node's children (unresolved dependencies) and then push a `returning = true` sentinel that
+    // fires only after all children have been resolved. Cycle detection uses `in_stack` (for exact
+    // node cycles) and `depth >= max_steps` (where `max_steps = aliases.len() + reexports.len() + 1`,
+    // the mathematical maximum path length in a non-looping rewrite system) to terminate self-growing
+    // prefix loops (such as `crate::a -> crate::a::b`).
+    let max_steps = aliases.len() + reexports.len() + 1;
+    let mut memo: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut in_stack: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut work: Vec<(String, bool, usize)> = vec![(path.to_string(), false, 0)];
+
+    while let Some((current, returning, depth)) = work.pop() {
+        if returning {
+            in_stack.remove(&current);
+            if memo.contains_key(&current) {
+                continue;
+            }
+            let mut results = Vec::new();
+            if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
+                for t in &targets {
+                    let child = memo
+                        .get(t.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| vec![t.clone()]);
+                    for r in child {
+                        if !results.contains(&r) {
+                            results.push(r);
+                        }
+                    }
+                }
+            } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+                let child = memo
+                    .get(&next)
+                    .cloned()
+                    .unwrap_or_else(|| vec![next.clone()]);
+                for r in child {
+                    if !results.contains(&r) {
+                        results.push(r);
+                    }
+                }
+            } else {
+                results.push(current.clone());
+            }
+            memo.insert(current, results);
+            continue;
+        }
+
+        // Pre-visit.
+        if memo.contains_key(&current) {
+            continue;
+        }
+        if in_stack.contains(&current) || depth >= max_steps {
+            // Active-path cycle or self-growing prefix loop cap reached.
+            continue;
+        }
+
+        in_stack.insert(current.clone());
+
+        // Push the returning sentinel first (processed after all children).
+        work.push((current.clone(), true, depth));
+
+        // Push unresolved children (reversed so the first target is processed first).
+        if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
+            for target in targets.into_iter().rev() {
+                if !memo.contains_key(&target) {
+                    work.push((target, false, depth + 1));
+                }
+            }
+        } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
+            if !memo.contains_key(&next) {
+                work.push((next, false, depth + 1));
+            }
+        }
+    }
+
+    memo.remove(path).unwrap_or_else(|| vec![path.to_string()])
+}
+
+/// Follow the **alias** and **re-export** closures together from `path` to a single fixpoint path.
+/// Delegates to [`expand_canonical_paths`] and yields the first resolved target path.
 pub(crate) fn canonicalize_through_aliases(
     path: &str,
     aliases: &AliasMap,
     reexports: &ReexportMap,
 ) -> String {
+    expand_canonical_paths(path, aliases, reexports)
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| path.to_string())
+}
+
+/// Follow a single-target alias map (`HashMap<String, String>`) and re-export closure to a fixpoint.
+pub(crate) fn canonicalize_through_single_alias_map(
+    path: &str,
+    aliases: &std::collections::HashMap<String, String>,
+    reexports: &ReexportMap,
+) -> String {
     let mut current = path.to_string();
     let mut seen = std::collections::HashSet::new();
-    // Same hop cap as [`canonicalize_through_reexports`], summed over both maps: a terminating
-    // interleaved chain traverses each map's edges at most once, so `aliases.len() +
-    // reexports.len() + 1` distinct paths bounds it. The cap hard-guarantees termination against
-    // a divergent rewrite the exact-repeat `seen` set cannot catch.
     let cap = aliases.len() + reexports.len() + 1;
     while seen.insert(current.clone()) {
         if seen.len() > cap {
@@ -475,23 +583,36 @@ pub(crate) fn canonicalize_through_aliases(
     current
 }
 
-/// The alias's target as a **bare nominal path** — `Some(path)` iff `ty` is a `Type::Path` with
-/// no `qself` and no generic arguments on any segment (`type X = a::b::C`), the only alias shape
-/// this resolver follows. `None` for a complex target (`Vec<T>`, `&T`, a tuple, `dyn`/`impl`, or
-/// any generic-argument-bearing path) — a stated coverage bound, never a silent claim.
-pub(crate) fn alias_nominal_target(ty: &syn::Type) -> Option<&syn::Path> {
-    if let syn::Type::Path(tp) = ty {
-        if tp.qself.is_none()
-            && tp
-                .path
-                .segments
-                .iter()
-                .all(|s| matches!(s.arguments, syn::PathArguments::None))
-        {
-            return Some(&tp.path);
+/// The alias's targets as **bare nominal paths** — collects all `syn::Path` targets contained in
+/// `ty`, iteratively walking non-generic compound type constructors (`Type::Reference`,
+/// `Type::Ptr`, `Type::Tuple`, `Type::Slice`, `Type::Array`, `Type::Group`, `Type::Paren`). Any
+/// path with `qself` or generic arguments (`Vec<T>`) is skipped — a stated coverage bound, never a
+/// silent claim.
+pub(crate) fn alias_nominal_targets<'a>(ty: &'a syn::Type, acc: &mut Vec<&'a syn::Path>) {
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            syn::Type::Path(tp) => {
+                if tp.qself.is_none()
+                    && tp
+                        .path
+                        .segments
+                        .iter()
+                        .all(|s| matches!(s.arguments, syn::PathArguments::None))
+                {
+                    acc.push(&tp.path);
+                }
+            }
+            syn::Type::Reference(tr) => pending.push(&tr.elem),
+            syn::Type::Ptr(tp) => pending.push(&tp.elem),
+            syn::Type::Tuple(tt) => pending.extend(tt.elems.iter().rev()),
+            syn::Type::Slice(ts) => pending.push(&ts.elem),
+            syn::Type::Array(ta) => pending.push(&ta.elem),
+            syn::Type::Group(tg) => pending.push(&tg.elem),
+            syn::Type::Paren(tp) => pending.push(&tp.elem),
+            _ => {}
         }
     }
-    None
 }
 
 /// A bare, single-segment exposed path (`H`) that names a local `type` alias in `module`
@@ -524,4 +645,30 @@ pub(crate) fn bare_single_segment_ident(path: &syn::Path) -> Option<String> {
         return None;
     }
     Some(strip_raw(&seg.ident.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::alias_nominal_targets;
+
+    #[test]
+    fn deeply_nested_alias_targets_use_a_bounded_native_stack() {
+        const DEPTH: usize = 32_768;
+        let mut ty: syn::Type = syn::parse_quote!(Leaf);
+        for _ in 0..DEPTH {
+            ty = syn::Type::Paren(syn::TypeParen {
+                paren_token: syn::token::Paren::default(),
+                elem: Box::new(ty),
+            });
+        }
+        // Leak the adversarially deep fixture so its recursive syn-owned drop cannot become the
+        // native-stack behavior under test; production AST lifetime is owned by the parsed file.
+        let ty = Box::leak(Box::new(ty));
+        let mut targets = Vec::new();
+
+        alias_nominal_targets(ty, &mut targets);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].segments[0].ident, "Leaf");
+    }
 }

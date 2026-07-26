@@ -73,7 +73,7 @@ A re-export finding SHALL be seam-qualified as `{canonical forbidden type} expos
 {exported-path}`, where `{exported-path}` is the module-qualified name the re-export publishes (the
 alias when `as` is used, otherwise the re-exported leaf name). Two re-exports of the **same** forbidden
 type under **different** exported names SHALL therefore produce **distinct** findings, so baselining
-one MUST NOT mask the other under the `(target, rule, finding_key)` baseline identity (the one forbidden
+one MUST NOT mask the other under the `(target, rule_key, fact)` baseline identity (the one forbidden
 false negative). Re-export findings SHALL share the `(target, rule)` of the signature-coupling
 boundary (`rule` = "must not expose").
 
@@ -436,3 +436,13 @@ AST + declared manifest:
 
 - **WHEN** the governed module declares both `pub use worklane_core::spi::Foo;` and a local child `mod worklane_core { … }` (which rustc lets shadow the extern head — E0432 if the path is absent there), under `must_not_expose("worklane_core::spi")`
 - **THEN** the system does not misattribute the `worklane_core` head to the dependency: the re-exporting module's own child module `worklane_core` is excluded from its re-export extern set, so the head is not resolved as the dependency and no violation is emitted (a genuine extern re-export coexisting with the local module is still reachable via `pub use ::worklane_core::spi::Foo;`)
+
+### Requirement: Re-export identity is the exported public seam
+
+A re-export exposure fact SHALL encode its forbidden subject and exported module/name path as
+separate structured roles. Private source path spelling and human rendering SHALL NOT define the
+public seam identity.
+
+#### Scenario: Two exported names stay distinct
+- **WHEN** the same subject is re-exported under two public names
+- **THEN** the exported-path fields produce two identities

@@ -15,17 +15,12 @@ contract).
 ## Requirements
 ### Requirement: Self-law projection is generated from the enforced self-constitution
 
-The repository SHALL carry an agent-readable Markdown artifact projecting Tianheng's self-governance law. The projection SHALL be derived from the **same** constitution object the self-governance gate reacts against (`tianheng_constitution()`), never a hand-written restatement, so the projected law and the enforced law cannot diverge into two sources of truth. The projection SHALL cover every boundary the self-constitution declares, each with its target, rule, and declared `reason`.
+The repository SHALL carry an agent-readable Markdown artifact projecting Tianheng's self-governance law. The projection SHALL be derived from the **same** constitution object the self-governance gate reacts against (`tianheng_constitution()`), never a hand-written restatement, so the projected law and the enforced law cannot diverge into two sources of truth. The projection SHALL cover every boundary the self-constitution declares, each with its target, rule, and declared `reason`. Boundary `because(...)` reasons SHALL be distilled into forward-looking shape declarations, avoiding historical debug text. Crate dependency allowlists SHALL be minimal and un-duplicated, and file-system path canonicalization SHALL be confined crate-wide across observation crates.
 
 #### Scenario: The projection carries the enforced self-law
 
 - **WHEN** the self-law projection is generated
-- **THEN** it contains every boundary `tianheng_constitution()` declares — each crate boundary with its rule and declared `reason`, including 圭表's two (its dependency allowlist and its forbid-dependency-on-shell)
-
-#### Scenario: Adding a boundary to the self-law changes the projection
-
-- **WHEN** a boundary is added to or amended in `tianheng_constitution()` and the projection is regenerated
-- **THEN** the regenerated projection reflects that boundary, because it is rendered from that same object
+- **THEN** it contains every boundary `tianheng_constitution()` declares — each crate boundary with its distilled forward-looking `reason`, with `guibiao`'s allowlist carrying the functional core ⊥ shell clause without a redundant denylist boundary, and `std::fs::canonicalize` boundaries enforced at crate-root subtree depth for `guibiao`, `hunyi`, and `louke`
 
 ### Requirement: A staleness test reacts when the checked-in projection drifts
 
@@ -80,4 +75,13 @@ The artifact's fixed preamble SHALL describe only how to read and use the projec
 
 - **WHEN** the preamble is read
 - **THEN** it describes the reaction loop and how to read the projection, and makes no crate-specific architectural claim — such claims appear only in the generated boundary projection below it
+
+### Requirement: The Three-Layer Agent Law structure is formalized and documented
+
+The repository documentation SHALL define and teach the **Three-Layer Agent Law** structure: Layer 1 (Universal Preamble), Layer 2 (Generated Projection Body from `constitution_markdown()`), and Layer 3 (Rust Law Source governed by `CODEOWNERS`). The preamble discipline SHALL be explicitly documented in [`COOKBOOK.md`](file:///home/qaz/work/tianheng/COOKBOOK.md), restricting preambles to universal meta-instructions and vocabulary while forbidding crate-specific architectural claims.
+
+#### Scenario: COOKBOOK documents the Three-Layer Agent Law recipe
+
+- **WHEN** an adopter reads [`COOKBOOK.md`](file:///home/qaz/work/tianheng/COOKBOOK.md)
+- **THEN** it contains a dedicated recipe teaching how to assemble the preamble, generate the projection body, gate staleness with `GovernanceTest`, and update the law with `BLESS=1`
 

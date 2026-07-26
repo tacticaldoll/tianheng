@@ -127,7 +127,7 @@ The dependency-source boundary SHALL share the 圭表 reaction contract with the
 dependency rules: findings fold into the same aggregated report and exit-code outcome (**0** clean,
 **1** enforce violation, **2** constitution/scan error such as an unreadable workspace or an absent
 target crate); the boundary carries a severity (`enforce` default, or `warn`) and is gated against
-the same `Baseline` under the shared violation identity `(target, rule, finding_key)`, the finding being
+the same `Baseline` under the shared violation identity `(target, rule_key, fact)`, the finding being
 the offending dependency's real package name (kind-qualified with a ` (dev)`/` (build)` suffix for a
 non-`Normal` boundary, per `crate-dependency-boundary`'s Dependency kind selection); and the rule projects through the existing generic
 `CrateBoundary` text/JSON/markdown projection, its parameters being the allowed source-kind list.
@@ -153,3 +153,13 @@ the `--no-deps` invocation.
 
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** the source boundary appears with its target, rule label, allowed source kinds, severity, and reason — through the existing generic crate-boundary projection, no separate projector
+
+### Requirement: Source-policy reactions use semantic identity
+
+Every source-policy violation SHALL identify its governed target, structured rule key (including
+identity-bearing policy roles), and dimension-owned source fact. Presentation and policy rendering
+SHALL remain outside identity.
+
+#### Scenario: Source presentation changes without re-keying
+- **WHEN** only the displayed source-policy wording changes
+- **THEN** an existing target/rule/fact baseline match remains valid

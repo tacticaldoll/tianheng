@@ -108,7 +108,7 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 
 ### Requirement: CI reaction, severity, and baseline parity
 
-The system SHALL fold forbidden-marker findings into the same exit-code contract as the other dimensions (0 clean / 1 enforce violation / 2 constitution or scan error) and aggregate them with the other boundaries. A boundary SHALL carry a severity (`enforce` default, or `warn`, which reports without failing), and its violations SHALL be gated against the same `Baseline` (identity `(target, rule, finding_key)`, the rule a fixed string), so a project may adopt the boundary on a dirty codebase and gate only on new acquisitions.
+The system SHALL fold forbidden-marker findings into the same exit-code contract as the other dimensions (0 clean / 1 enforce violation / 2 constitution or scan error) and aggregate them with the other boundaries. A boundary SHALL carry a severity (`enforce` default, or `warn`, which reports without failing), and its violations SHALL be gated against the same `Baseline` (identity `(target, rule_key, fact)`, the rule a fixed string), so a project may adopt the boundary on a dirty codebase and gate only on new acquisitions.
 
 #### Scenario: A warn boundary reports without failing
 
@@ -128,3 +128,13 @@ A forbidden-marker violation report SHALL identify the governed subtree anchor, 
 
 - **WHEN** `crate::domain::order` declares `#[derive(serde::Serialize)] pub struct Order;` under a boundary forbidding `serde::Serialize` on `crate::domain`
 - **THEN** the report names the anchor `crate::domain`, the rule "must not acquire trait", the finding `derive serde::Serialize on crate::domain::order::Order` (canonical-path-keyed), the boundary's reason, and indicates CI failed
+
+### Requirement: Forbidden-marker acquisitions are structured facts
+
+A marker-acquisition violation SHALL encode acquisition form, marker, module, owner/type, and item
+roles where observed under a structured rule key. Rendered acquisition text and scan position SHALL
+NOT define identity.
+
+#### Scenario: Different acquisitions stay distinct
+- **WHEN** two forbidden acquisitions differ by form, marker, module, or owner
+- **THEN** their structured facts differ in that observed role

@@ -12,3 +12,9 @@ pub fn dyn_port() -> Box<dyn Port> {
 pub fn numbers() -> impl Iterator<Item = u8> {
     [1].into_iter()
 }
+
+/// Exposes the implicit, compiler-inserted `impl Future` existential — the other signal
+/// `no_existential_leak` composes alongside the written-`impl Trait` one above.
+pub async fn fetch() -> u8 {
+    0
+}

@@ -11,16 +11,17 @@ The repository SHALL maintain an executable, reviewable inventory mapping the pu
 `Constitution` boundary-family set to at least one repository-owned self-governance or isolated
 example reaction. That set is: static crate and module boundaries; signature, trait-impl,
 visibility, forbidden-marker, dyn-trait, impl-trait, async-exposure, and unsafe semantic
-boundaries; the `sans_io_pure` composed profile; and runtime boundaries. A family SHALL count as
-fulfilled only after its owner executes the real evaluator against source or Cargo metadata and
-observes its declared structured reaction; construction, projection, an exit code that another
-family could cause, or a free-standing coverage claim SHALL NOT count. The dogfood gate SHALL fail
-when any inventoried family has no fulfilled owner or an owner claims a family absent from the
-inventory.
+boundaries; the `sans_io_pure` and `no_existential_leak` composed profiles; and runtime boundaries.
+A family SHALL count as fulfilled only after its owner executes the real evaluator against source
+or Cargo metadata and observes its declared structured reaction; construction, projection, an exit
+code that another family could cause, or a free-standing coverage claim SHALL NOT count. The
+dogfood gate SHALL fail when any inventoried family has no fulfilled owner or an owner claims a
+family absent from the inventory. The self-governance suite SHALL dogfood `tianheng::testing::GovernanceTest`
+to execute reaction, workspace member coverage, and projection freshness assertions.
 
 #### Scenario: Every public family has a fulfilled reaction owner
 
-- **WHEN** the dogfood suite runs against the current public `Constitution` surface
+- **WHEN** the dogfood suite runs against the current public `Constitution` surface via `tianheng::testing::GovernanceTest`
 - **THEN** every inventoried boundary family has at least one owner whose real evaluator and
   structured reaction assertions completed successfully
 
@@ -28,17 +29,6 @@ inventory.
 
 - **WHEN** an inventoried published family has no successfully fulfilled reaction owner
 - **THEN** the dogfood gate fails and names the missing family identity
-
-#### Scenario: Unknown ownership claims fail the gate
-
-- **WHEN** an example or self-governance owner claims a family identity absent from the inventory
-- **THEN** the dogfood gate fails and names the unknown family identity
-
-#### Scenario: The inventory does not classify future methods automatically
-
-- **WHEN** a future change proposes another public boundary-family insertion path
-- **THEN** its OpenSpec and API review deliberately classifies it as a family, depth, modifier, or
-  shorthand, and only a new family extends the executable inventory
 
 ### Requirement: Breadth stays separate from teaching examples
 
@@ -54,8 +44,8 @@ funnel, sans-I/O, and unsafe-confinement examples SHALL retain their focused nar
 
 ### Requirement: Dogfood assertions preserve presentation freedom
 
-Dogfood SHALL identify expected reactions through structured boundary kind, stable rule identity,
-dimension-owned `FindingKey`, and declared reason or anchor where needed. It SHALL NOT pin an entire
+Dogfood SHALL identify expected reactions through structured boundary kind, validated `RuleKey`,
+dimension-owned `StructuredFactIdentity`, and declared reason or anchor where needed. It SHALL NOT pin an entire
 JSON report, ANSI output, or human finding sentence. The examples script SHALL execute the catalog
 through the public shell in addition to its library-level structured assertions.
 
@@ -150,3 +140,51 @@ concurrent runs.
 
 - **WHEN** any quality or reaction assertion terminates the examples gate early
 - **THEN** the invocation-local artifact directory is removed by the exit cleanup
+
+### Requirement: Dogfood reacts to semantic identity schemas
+
+Tianheng's governance dogfood SHALL exercise production-emitted target, rule key, and structured
+fact roles for every shipped dimension. It SHALL pin semantic identifiers and identity-bearing
+fields without pinning human presentation or whole report documents.
+
+#### Scenario: A schema drifts silently
+- **WHEN** a fact/rule identity field or canonical value changes without an explicit catalog update
+- **THEN** the dogfood compatibility reaction fails
+
+#### Scenario: Presentation changes freely
+- **WHEN** only rule/finding wording or diagnostics change
+- **THEN** the identity dogfood remains green
+
+### Requirement: Self-law projection freshness dogfoods the public harness
+
+Tianheng's repository self-law freshness test SHALL execute projection comparison and regeneration
+through `tianheng::testing::GovernanceTest`, including the fixed universal preamble, rather than
+calling only the lower-level projection helper.
+
+#### Scenario: Self-law uses the adopter-shaped projection gate
+
+- **WHEN** the repository self-governance test suite verifies `AGENTS.self-law.md`
+- **THEN** it invokes the public harness projection-freshness surface with the same BLESS semantics taught to adopters
+
+### Requirement: False-negative closure reaction fixtures
+
+The repository SHALL maintain isolated test fixtures under `crates/tianheng/tests/fixtures/` and integrated example checks for transparent macro unstripping (`cfg_if!`) and ancestor glob hazard reactions. The test harness SHALL assert that a `cfg_if!`-wrapped violation and an ancestor glob hazard violation both react with an enforced exit code 1 when checked through the shell facade.
+
+#### Scenario: Transparent macro violation fixture reacts with exit 1
+
+- **WHEN** `tianheng check` runs against the `cfg_if_violation` fixture manifest
+- **THEN** the runner exits with status 1 and reports the structured module violation enclosed in `cfg_if!`
+
+#### Scenario: Glob hazard violation fixture reacts with exit 1
+
+- **WHEN** `tianheng check` runs against the `glob_hazard_violation` fixture manifest
+- **THEN** the runner exits with status 1 and reports the structured Glob Hazard violation
+
+### Requirement: Mid-path relative import dogfood coverage
+
+The repository unit and integration test suites SHALL include lock assertions verifying that mid-path `super` and `self` imports inside grouped `use` trees and inline submodules are normalized to canonical `crate::...` paths and trigger module boundary violations when targeting forbidden subtrees.
+
+#### Scenario: Mid-path super grouped import triggers module boundary violation
+
+- **WHEN** the test harness evaluates a module boundary against source containing `use crate::a::b::{super::forbidden::X};`
+- **THEN** the harness detects `crate::a::forbidden` and reports the expected violation

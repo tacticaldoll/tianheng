@@ -4,9 +4,13 @@
 //! presented" surface is self-contained, beside the `list`-projection sibling
 //! `runner/projection.rs`.
 
-use guibiao::{Coverage, Outcome, Report, Severity};
+use guibiao::{Coverage, Outcome, Report, Severity, stale_policy};
 
 use super::term_color::Style;
+
+pub(crate) fn disallow_stale_message(count: usize) -> String {
+    format!("--disallow-stale failed: {count} stale baseline entry/entries found")
+}
 
 /// The human-readable `check` report goes to **stderr** as a single stream — clean
 /// line, violation/advisory blocks, the baseline summary, coverage, and stale entries
@@ -67,9 +71,7 @@ pub(crate) fn violations_text_styled(report: &Report, style: Style) -> String {
     }
     let baselined = report.violations.iter().filter(|v| v.baselined).count();
     let mut shown: Vec<_> = report.violations.iter().filter(|v| !v.baselined).collect();
-    shown.sort_by(|a, b| {
-        (a.target.as_str(), a.rule.as_str()).cmp(&(b.target.as_str(), b.rule.as_str()))
-    });
+    shown.sort_by(|a, b| (a.target(), a.rule.as_str()).cmp(&(b.target(), b.rule.as_str())));
 
     let mut out = String::new();
     for violation in shown {
@@ -88,7 +90,7 @@ pub(crate) fn violations_text_styled(report: &Report, style: Style) -> String {
         writeln!(out, "{header}").unwrap();
         writeln!(out).unwrap();
         writeln!(out, "Reason:\n  {}", style.reason(&violation.reason)).unwrap();
-        writeln!(out, "Boundary:\n  {}", violation.target).unwrap();
+        writeln!(out, "Boundary:\n  {}", violation.target()).unwrap();
         writeln!(out, "Rule:\n  {}", violation.rule).unwrap();
         writeln!(out, "Found:\n  {}", violation.finding).unwrap();
         if let Some(file) = &violation.file {
@@ -160,9 +162,19 @@ pub(crate) fn coverage_report(coverage: &Coverage, warn_uncovered: bool) -> Stri
 /// `executionSuccessful` is `false` (required on any SARIF invocation). Clean → empty `results`.
 /// Presentation only: the outcome and exit code are unchanged.
 pub(crate) fn report_sarif(outcome: &Outcome) -> String {
+    report_sarif_with_stale(outcome, &[], false)
+}
+
+pub(crate) fn report_sarif_with_stale(
+    outcome: &Outcome,
+    stale: &[guibiao::BaselineEntry],
+    disallow_stale: bool,
+) -> String {
     use serde_json::{Value, json};
     let mut results: Vec<Value> = Vec::new();
     let mut invocations: Vec<Value> = Vec::new();
+    let has_disallowed_stale = stale_policy(outcome, stale, disallow_stale).stale_disallowed;
+
     match outcome {
         Outcome::Violations(report) => {
             for v in report.violations.iter().filter(|v| !v.baselined) {
@@ -175,15 +187,10 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
                     "level": level,
                     "message": { "text": format!("{} (found: {})", v.reason, v.finding) },
                 });
-                // A violation's identity is (target, rule, finding) — but SARIF's `ruleId`/message
-                // carry only rule and finding. For a file-less violation (a dependency edge, a
-                // runtime seam) `target` is the SOLE discriminator, so two violations differing only
-                // in target would otherwise render byte-identical and a fingerprint-deduping ingester
-                // (GitHub code scanning) would collapse them — masking the second in the SARIF surface
-                // even though exit/JSON/text keep both. Emit the full identity as a partialFingerprint
-                // so distinct violations stay distinct alerts.
+                let canonical_identity = serde_json::to_string(&v.id().to_json())
+                    .expect("canonical violation identity is JSON-serializable");
                 result["partialFingerprints"] = json!({
-                    "tianhengViolationId/v1": format!("{}\u{1f}{}\u{1f}{}", v.target, v.rule, v.finding),
+                    "tianheng/structured-fact-identity": canonical_identity,
                 });
                 if let Some(file) = &v.file {
                     // File-level only: artifactLocation.uri, no `region` (line is not observed).
@@ -220,6 +227,33 @@ pub(crate) fn report_sarif(outcome: &Outcome) -> String {
         // Clean (and any future outcome) contributes no results.
         _ => {}
     }
+
+    if has_disallowed_stale {
+        for entry in stale {
+            results.push(json!({
+                "ruleId": entry.rule,
+                "level": "error",
+                "message": {
+                    "text": format!(
+                        "Stale baseline entry disallowed: {} / {} / {}",
+                        entry.id.target(),
+                        entry.rule,
+                        entry.finding
+                    )
+                },
+            }));
+        }
+        if invocations.is_empty() {
+            invocations.push(json!({
+                "executionSuccessful": false,
+                "toolExecutionNotifications": [{
+                    "level": "error",
+                    "message": { "text": disallow_stale_message(stale.len()) },
+                }],
+            }));
+        }
+    }
+
     let mut run = json!({
         "tool": { "driver": { "name": "tianheng" } },
         "results": results,

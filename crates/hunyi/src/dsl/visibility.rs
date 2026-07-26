@@ -1,6 +1,6 @@
 //! Visibility-boundary declaration DSL — [`VisibilityBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 use crate::rules::{VISIBILITY_MODULE_RULE, VISIBILITY_RULE, VISIBILITY_SUPER_RULE};
 
@@ -18,6 +18,14 @@ pub enum VisibilityCeiling {
 }
 
 impl VisibilityCeiling {
+    fn key_label(self) -> &'static str {
+        match self {
+            VisibilityCeiling::Crate => "crate",
+            VisibilityCeiling::Super => "super",
+            VisibilityCeiling::Module => "module",
+        }
+    }
+
     /// The ceiling's rank on the `pub`(3) > `pub(crate)`(2) > `pub(super)`(1) > private(0) scale;
     /// an item reacts iff its own rank is strictly greater.
     pub(crate) fn rank(self) -> u8 {
@@ -58,6 +66,14 @@ pub struct VisibilityBoundary {
 }
 
 impl VisibilityBoundary {
+    /// Stable semantic identity for this visibility-ceiling rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/visibility-ceiling",
+            [("ceiling", self.ceiling.key_label())],
+        )
+    }
+
     /// Begin a visibility boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> VisibilityCrateDraft {
         VisibilityCrateDraft {

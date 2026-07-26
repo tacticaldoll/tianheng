@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::containment::leaf_of;
 use crate::crate_scope::dependency_names;
 use crate::errors::{missing_module_file_error, unknown_module_error, unknown_trait_error};
+use crate::finding::SemanticFact;
 use crate::module_resolve::resolve_module_file;
 
 /// A unique, self-cleaning temp `src/` tree: write source files (and, where needed, a symlink),
@@ -74,42 +75,15 @@ impl Drop for TempSrcTree {
     }
 }
 
-/// Write `files` (each `(relative path, contents)`) under a unique temp `src` dir, then
-/// return the findings for `module` against `forbidden`. Exercises the whole evaluator
-/// (module resolution → exposure → use-resolution → match) without spawning `cargo`.
-fn findings(
+/// Write `files` under a unique temp `src` tree and exercise the semantic evaluator without
+/// spawning `cargo`. Capability-facing helpers below name the posture they need while this
+/// function owns the shared module-resolution → exposure → use-resolution → match pipeline.
+fn semantic_findings(
     name: &str,
     files: &[(&str, &str)],
     module: &str,
     forbidden: &[&str],
-) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(name);
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-    let result = module_findings(
-        tree.src(),
-        &tree.root(),
-        module,
-        &forbidden,
-        "x",
-        false,
-        &[],
-    );
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
-}
-
-/// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
-/// normalized, as `dependency_names` produces), so an external-crate exposure resolves.
-fn findings_with_deps(
-    name: &str,
-    files: &[(&str, &str)],
-    module: &str,
-    forbidden: &[&str],
+    include_trait_impls: bool,
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
     let tree = TempSrcTree::new(name);
@@ -122,7 +96,7 @@ fn findings_with_deps(
         module,
         &forbidden,
         "x",
-        false,
+        include_trait_impls,
         &deps,
     );
     result.map(|facts| {
@@ -133,6 +107,102 @@ fn findings_with_deps(
     })
 }
 
+type ShapeModuleEvaluator =
+    fn(&Path, &Path, &str, &str) -> Result<Vec<(SemanticFact, PathBuf)>, String>;
+type ShapeSubtreeEvaluator =
+    fn(&Path, &Path, &str, &str) -> Result<Vec<(SemanticFact, String, PathBuf)>, String>;
+type OperandModuleEvaluator = fn(
+    &Path,
+    &Path,
+    &str,
+    &[String],
+    &str,
+    &[String],
+) -> Result<Vec<(SemanticFact, PathBuf)>, String>;
+
+/// Exercise one of hunyi's shape-only module observers and project its facts to the strings
+/// capability tests assert. The observer remains capability-specific; only fixture plumbing and
+/// the common reaction projection live here.
+fn shape_findings(
+    family: &str,
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    evaluate: ShapeModuleEvaluator,
+) -> Result<Vec<String>, String> {
+    let tree = TempSrcTree::new(&format!("{family}-{name}"));
+    tree.write_all(files);
+    evaluate(tree.src(), &tree.root(), module, "x").map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
+}
+
+/// Exercise a shape observer across a governed subtree while retaining module attribution.
+fn subtree_findings(
+    family: &str,
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    evaluate: ShapeSubtreeEvaluator,
+) -> Result<Vec<(String, String)>, String> {
+    let tree = TempSrcTree::new(&format!("{family}-sub-{name}"));
+    tree.write_all(files);
+    evaluate(tree.src(), &tree.root(), module, "x").map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, module, _file)| (fact.to_string(), module))
+            .collect()
+    })
+}
+
+/// Exercise an operand-scoped shape observer with the same canonical forbidden/dependency inputs
+/// production receives, then project its facts to the reaction strings capability tests assert.
+fn operand_findings(
+    family: &str,
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    forbidden: &[&str],
+    deps: &[&str],
+    evaluate: OperandModuleEvaluator,
+) -> Result<Vec<String>, String> {
+    let tree = TempSrcTree::new(&format!("{family}op-{name}"));
+    tree.write_all(files);
+    let forbidden: Vec<String> = forbidden.iter().map(|value| value.to_string()).collect();
+    let deps: Vec<String> = deps.iter().map(|value| value.to_string()).collect();
+    evaluate(tree.src(), &tree.root(), module, &forbidden, "x", &deps).map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _file)| fact.to_string())
+            .collect()
+    })
+}
+
+/// Return the default semantic findings for `module` against `forbidden`.
+fn findings(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    forbidden: &[&str],
+) -> Result<Vec<String>, String> {
+    semantic_findings(name, files, module, forbidden, false, &[])
+}
+
+/// Like [`findings`] but with a declared **dependency-name set** (already `-`→`_`
+/// normalized, as `dependency_names` produces), so an external-crate exposure resolves.
+fn findings_with_deps(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+    forbidden: &[&str],
+    deps: &[&str],
+) -> Result<Vec<String>, String> {
+    semantic_findings(name, files, module, forbidden, false, deps)
+}
+
 /// Like [`findings`] but with the `semantic-trait-impl-exposure` opt-in enabled, so a trait
 /// `impl` block's impl-site-authored positions are also observed.
 fn findings_including_trait_impls(
@@ -141,16 +211,7 @@ fn findings_including_trait_impls(
     module: &str,
     forbidden: &[&str],
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(name);
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
-    let result = module_findings(tree.src(), &tree.root(), module, &forbidden, "x", true, &[]);
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    semantic_findings(name, files, module, forbidden, true, &[])
 }
 
 // --- extern-path exposure (the external-crate name set) -------------------
@@ -174,21 +235,30 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
     // fold collapses them by id and keeps the more-severe reaction, so a warn duplicate never masks
     // an enforce one and the fact is reported once (parity with the 圭表 static dimension's dedup).
     let mk = |sev| {
+        let finding = crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::Signature,
+            subject: "crate::infra::Db".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::m".to_string(),
+                name: "f".to_string(),
+            },
+        }
+        .into_finding();
         Violation::new(
             BoundaryKind::Semantic,
             ViolationId::new(
                 "crate::m",
-                SIGNATURE_RULE,
-                crate::finding::SemanticFact::Exposed {
-                    kind: crate::finding::ExposureKind::Signature,
-                    subject: "crate::infra::Db".to_string(),
-                    seam: crate::finding::PublicSeam::FreeFn {
-                        module: "crate::m".to_string(),
-                        name: "f".to_string(),
-                    },
-                }
-                .into_finding(),
+                RuleKey::of(
+                    "tianheng.rule/hunyi/signature-exposure",
+                    [
+                        ("forbidden", "[\"crate::infra::Db\"]"),
+                        ("including_trait_impls", "false"),
+                    ],
+                ),
+                finding.key().clone(),
             ),
+            SIGNATURE_RULE,
+            finding.text(),
             "reason".to_string(),
             sev,
         )
@@ -851,12 +921,12 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
     // each iteration, never exactly repeating — the outer exact-repeat `seen` guard alone could
     // not catch that. The assertion is simply that this terminates.
     use crate::containment::resolve_self_type;
-    use crate::resolve::{AliasMap, ReexportMap, UseMap};
+    use crate::resolve::{ReexportMap, UseMap};
     use std::collections::HashSet;
 
     let self_ty: syn::Type = syn::parse_str("Foo").unwrap();
     let uses = UseMap::new();
-    let aliases = AliasMap::new();
+    let aliases = std::collections::HashMap::new();
     let mut reexports = ReexportMap::new();
     reexports.insert("crate::a::Foo".to_string(), "crate::a::Foo::b".to_string());
     let landing = resolve_self_type(
@@ -870,6 +940,90 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
     assert!(
         landing.is_some(),
         "canonicalization must terminate on a key⊂value reexport entry: {landing:?}"
+    );
+}
+
+#[test]
+fn diamond_alias_graph_expansion_terminates_and_memoizes_intermediate_nodes() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+
+    // Multi-tier diamond graph:
+    // A -> (B, C)
+    // B -> D
+    // C -> D
+    // D -> Secret
+    aliases.insert(
+        "crate::A".to_string(),
+        vec!["crate::B".to_string(), "crate::C".to_string()],
+    );
+    aliases.insert("crate::B".to_string(), vec!["crate::D".to_string()]);
+    aliases.insert("crate::C".to_string(), vec!["crate::D".to_string()]);
+    aliases.insert("crate::D".to_string(), vec!["crate::Secret".to_string()]);
+
+    let res = expand_canonical_paths("crate::A", &aliases, &reexports);
+    assert_eq!(res, vec!["crate::Secret".to_string()]);
+}
+
+#[test]
+fn cycle_branch_with_terminal_sibling_preserves_sibling() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+
+    // A -> [B, Secret]
+    // B -> A
+    aliases.insert(
+        "crate::A".to_string(),
+        vec!["crate::B".to_string(), "crate::Secret".to_string()],
+    );
+    aliases.insert("crate::B".to_string(), vec!["crate::A".to_string()]);
+
+    let res = expand_canonical_paths("crate::A", &aliases, &reexports);
+    assert!(
+        res.contains(&"crate::Secret".to_string()),
+        "sibling Secret target must be preserved even if child branch B cycles back to A: got {res:?}"
+    );
+}
+
+#[test]
+fn deep_chain_expansion_reaches_terminal_without_truncation() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    // Build a 99-hop linear chain: N0 -> N1 -> … -> N99 (no alias on N99, so it is the fixpoint).
+    // The iterative expansion must traverse the full chain without truncation or stack overflow.
+    let mut aliases: AliasMap = std::collections::HashMap::new();
+    let reexports = ReexportMap::new();
+    for i in 0..99usize {
+        aliases.insert(format!("crate::N{i}"), vec![format!("crate::N{}", i + 1)]);
+    }
+
+    let res = expand_canonical_paths("crate::N0", &aliases, &reexports);
+    assert_eq!(
+        res,
+        vec!["crate::N99".to_string()],
+        "full 99-hop chain must resolve to the terminal node N99, got {res:?}"
+    );
+}
+
+#[test]
+fn self_growing_reexport_prefix_loop_terminates_without_hanging() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+
+    let aliases: AliasMap = std::collections::HashMap::new();
+    let mut reexports = ReexportMap::new();
+
+    // A self-similar re-export entry `crate::a -> crate::a::b` creates a self-growing path chain:
+    // crate::a::foo -> crate::a::b::foo -> crate::a::b::b::foo -> ...
+    reexports.insert("crate::a".to_string(), "crate::a::b".to_string());
+
+    let res = expand_canonical_paths("crate::a::foo", &aliases, &reexports);
+    assert!(
+        !res.is_empty(),
+        "expansion must terminate without hanging on self-growing prefix loops: got {res:?}"
     );
 }
 
@@ -2757,11 +2911,9 @@ fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_impl_fin
     // Round-6 finding: resolve_child_modules (scan.rs, backing the whole-crate scan) had no
     // canonical-file dedup for two mutually-exclusive #[cfg] arms plainly declaring the IDENTICAL
     // name resolving to the ONE real file -- unlike module_resolve.rs's descend(), which gained
-    // exactly this dedup in 0.2.2. Because the self-type's generic argument here is an
-    // unrenderable const-generic block expression, canonical_self_owner falls back to a positional
-    // `_#{ordinal}` marker computed from the scan Vec's own position -- so the two duplicate scan
-    // entries got DIFFERENT ordinals and escaped the eventual fact-identity dedup, inflating one
-    // real impl into two findings. Verified against real rustc: both `cargo check --features u`
+    // exactly this dedup in 0.2.2. A renderable const-generic owner keeps this test focused on the
+    // cfg/file de-duplication contract; unrenderable identity is covered separately by a fail-loud
+    // reaction. Verified against real rustc: both `cargo check --features u`
     // and `--features w` compile cleanly with exactly one `impl Command for Arr<2>`.
     let out = locality_findings(
         "cfg-dual-same-file",
@@ -2771,10 +2923,7 @@ fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_impl_fin
                 "pub trait Command {}\npub struct Arr<const N: usize>;\n\
                  #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
             ),
-            (
-                "foo.rs",
-                "impl crate::Command for crate::Arr<{ 1 + 1 }> {}\n",
-            ),
+            ("foo.rs", "impl crate::Command for crate::Arr<2> {}\n"),
         ],
         "crate::Command",
         &["crate::allowed_elsewhere"],
@@ -3261,14 +3410,10 @@ fn two_impls_in_one_module_are_distinct_findings_by_self_type() {
 }
 
 #[test]
-fn const_generic_expr_self_types_stay_distinct_owners() {
-    // Two inherent impls whose self types differ ONLY in a complex const-generic
-    // *expression* argument (`Arr<{ 1 + 1 }>` vs `Arr<{ 2 + 2 }>`). The expression is
-    // unrenderable, so the owner falls back to `{base}<_#{ordinal}>` keyed on the impl
-    // block's position among the module's items — keeping the two blocks INJECTIVE.
-    // Previously both collapsed to `fn <_>::a`, masking one leak behind the other.
-    // Items in `domain`: 0 = `struct Arr`, 1 = first impl, 2 = second impl.
-    let out = findings(
+fn const_generic_expr_self_types_fail_loud_without_positional_identity() {
+    // The ordinary owner renderer cannot distinguish these complex const expressions. Publishing
+    // scan position would make identity drift under reorder/insertion, so observation must fail.
+    let error = findings(
         "const-generic-expr",
         &[
             ("lib.rs", "pub mod domain;\n"),
@@ -3282,15 +3427,9 @@ fn const_generic_expr_self_types_stay_distinct_owners() {
         "crate::domain",
         &["crate::infra"],
     )
-    .unwrap();
-    assert_eq!(
-        out,
-        [
-            "crate::infra::T exposed by fn <crate::domain::Arr<_#1>>::a",
-            "crate::infra::T exposed by fn <crate::domain::Arr<_#2>>::a",
-        ],
-        "two const-generic-expr self types yield two distinct positional owners, not one",
-    );
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
 }
 
 #[test]
@@ -3386,6 +3525,138 @@ fn the_builder_carries_severity() {
     assert_eq!(enforce.severity(), Severity::Enforce);
 }
 
+#[test]
+fn every_hunyi_rule_family_has_exact_semantic_identity() {
+    fn assert_rule(rule: xuanji::RuleKey, expected_type: &str, expected_fields: &[(&str, &str)]) {
+        assert_eq!(rule.rule_type(), expected_type);
+        assert_eq!(rule.fields().collect::<Vec<_>>(), expected_fields);
+    }
+
+    let signature = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("r#crate::infra")
+        .and_not_expose("crate::storage")
+        .including_trait_impls()
+        .because("presentation only");
+    assert_rule(
+        signature.rule_key(),
+        "tianheng.rule/hunyi/signature-exposure",
+        &[
+            ("forbidden", "[\"crate::infra\",\"crate::storage\"]"),
+            ("including_trait_impls", "true"),
+        ],
+    );
+
+    let dyn_trait = DynTraitBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose_dyn_of(["crate::Port", "crate::Other"])
+        .because("r");
+    assert_rule(
+        dyn_trait.rule_key(),
+        "tianheng.rule/hunyi/dyn-trait-exposure",
+        &[("forbidden_operands", "[\"crate::Other\",\"crate::Port\"]")],
+    );
+
+    let impl_trait = ImplTraitBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose_impl_trait_of(["crate::Port"])
+        .including_submodules()
+        .because("r");
+    assert_rule(
+        impl_trait.rule_key(),
+        "tianheng.rule/hunyi/impl-trait-exposure",
+        &[("forbidden_operands", "[\"crate::Port\"]")],
+    );
+
+    let locality = TraitImplBoundary::in_crate("x")
+        .trait_("r#crate::Port")
+        .only_implemented_in("crate::adapter")
+        .and_in("crate::infra")
+        .because("r");
+    assert_rule(
+        locality.rule_key(),
+        "tianheng.rule/hunyi/trait-impl-locality",
+        &[
+            ("allowed_locations", "[\"crate::adapter\",\"crate::infra\"]"),
+            ("trait", "crate::Port"),
+        ],
+    );
+
+    let marker = ForbiddenMarkerBoundary::in_crate("x")
+        .module("crate::domain")
+        .must_not_acquire("serde::Serialize")
+        .and_not_acquire("serde::Deserialize")
+        .because("r");
+    assert_rule(
+        marker.rule_key(),
+        "tianheng.rule/hunyi/forbidden-marker",
+        &[("forbidden", "[\"serde::Deserialize\",\"serde::Serialize\"]")],
+    );
+
+    let visibility = VisibilityBoundary::in_crate("x")
+        .module("crate::internal")
+        .max_visibility(VisibilityCeiling::Super)
+        .because("r");
+    assert_rule(
+        visibility.rule_key(),
+        "tianheng.rule/hunyi/visibility-ceiling",
+        &[("ceiling", "super")],
+    );
+
+    let async_exposure = AsyncExposureBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("r");
+    assert_rule(
+        async_exposure.rule_key(),
+        "tianheng.rule/hunyi/async-exposure",
+        &[],
+    );
+
+    let unsafe_confinement = UnsafeBoundary::in_crate("x")
+        .only_under(["crate::ffi", "crate::platform"])
+        .because("r");
+    assert_rule(
+        unsafe_confinement.rule_key(),
+        "tianheng.rule/hunyi/unsafe-confinement",
+        &[("allowed", "[\"crate::ffi\",\"crate::platform\"]")],
+    );
+}
+
+#[test]
+fn hunyi_rule_identity_is_set_order_stable_and_parameter_sensitive() {
+    let left = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("crate::infra")
+        .and_not_expose("crate::storage")
+        .because("first wording");
+    let reordered = SemanticBoundary::in_crate("other")
+        .module("crate::elsewhere")
+        .must_not_expose("crate::storage")
+        .and_not_expose("crate::infra")
+        .and_not_expose("crate::infra")
+        .warn()
+        .because("different wording")
+        .with_anchor("GOV-1");
+    let expanded = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("crate::infra")
+        .and_not_expose("crate::storage")
+        .and_not_expose("crate::transport")
+        .because("first wording");
+    let deeper = SemanticBoundary::in_crate("x")
+        .module("crate::api")
+        .must_not_expose("crate::infra")
+        .and_not_expose("crate::storage")
+        .including_trait_impls()
+        .because("first wording");
+
+    assert_eq!(left.rule_key(), reordered.rule_key());
+    assert_ne!(left.rule_key(), expanded.rule_key());
+    assert_ne!(left.rule_key(), deeper.rule_key());
+}
+
 // --- unsafe confinement --------------------------------------------------
 
 fn unsafe_labels(
@@ -3401,6 +3672,77 @@ fn unsafe_labels(
             .map(|(finding, _, _)| finding.to_string())
             .collect()
     })
+}
+
+fn unsafe_keys(name: &str, source: &str) -> Result<Vec<StructuredFactIdentity>, String> {
+    let tree = TempSrcTree::new(&format!("unsafe-keys-{name}"));
+    tree.write_all(&[("lib.rs", "pub mod net;\n"), ("net.rs", source)]);
+    unsafe_findings(tree.src(), &tree.root(), &["crate::ffi".to_string()], "x").map(|findings| {
+        findings
+            .into_iter()
+            .map(|(fact, _, _)| fact.into_finding().key().clone())
+            .collect()
+    })
+}
+
+#[test]
+fn unsafe_identity_survives_reorder_and_unrelated_insertion() {
+    let before = unsafe_keys(
+        "reorder-before",
+        "pub struct Api;\nunsafe impl Send for Api {}\n",
+    )
+    .unwrap();
+    let after = unsafe_keys(
+        "reorder-after",
+        "pub const UNRELATED: usize = 1;\npub struct Api;\nunsafe impl Send for Api {}\n",
+    )
+    .unwrap();
+    assert_eq!(before, after);
+}
+
+#[test]
+fn unrenderable_unsafe_owner_fails_loud_without_an_ordinal_identity() {
+    let error = unsafe_keys(
+        "unrenderable-owner",
+        "pub struct Arr<const N: usize>;\npub const N: usize = 1;\nunsafe impl Send for Arr<{ N + 1 }> {}\n",
+    )
+    .unwrap_err();
+    assert!(error.contains("without a positional fallback"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn unsafe_production_violation_separates_target_rule_and_fact_roles() {
+    let (metadata, _fixture) = fixture_metadata(
+        "unsafe-identity",
+        &[
+            ("lib.rs", "pub mod net;\npub mod ffi;\n"),
+            ("net.rs", "pub unsafe fn decode() {}\n"),
+            ("ffi.rs", ""),
+        ],
+    );
+    let boundary = UnsafeBoundary::in_crate("x")
+        .only_under(["crate::raw", "crate::ffi"])
+        .because("unsafe stays behind the audited adapter");
+    let mut violations = Vec::new();
+    check_unsafe_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+
+    let id = violations[0].id();
+    assert_eq!(id.target(), "x");
+    let rule = id.rule_key();
+    assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/unsafe-confinement");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![("allowed", "[\"crate::ffi\",\"crate::raw\"]")]
+    );
+    let fact = id.fact();
+    assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/unsafe-site");
+    assert_eq!(fact.shape(), "unsafe-free-function");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![("module", "crate::net"), ("name", "decode")]
+    );
 }
 
 #[test]
@@ -4509,11 +4851,10 @@ fn distinct_generic_marker_instantiations_stay_distinct_findings() {
 }
 
 #[test]
-fn unrenderable_generic_marker_instantiations_stay_distinct() {
-    // Round-2 fix: even when the trait's generic arg is an unrenderable const expression, two
-    // distinct impls on one type must stay distinct (positional fallback), not collapse to the
-    // config leaf `Marker` (which had no ordinal, so both rendered identically).
-    let out = marker_findings(
+fn unrenderable_generic_marker_instantiations_fail_loud_without_positional_identity() {
+    // The ordinary trait renderer cannot distinguish these const expressions. Failing loud keeps
+    // either acquisition from being hidden behind scan-order-derived public identity.
+    let error = marker_findings(
         "const-marker",
         &[
             ("lib.rs", "pub mod domain;\n"),
@@ -4525,12 +4866,9 @@ fn unrenderable_generic_marker_instantiations_stay_distinct() {
         "crate::domain",
         &["Marker"],
     )
-    .unwrap();
-    assert_eq!(
-        out.len(),
-        2,
-        "two unrenderable-const-arg acquisitions must stay distinct: {out:?}"
-    );
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
 }
 
 #[test]
@@ -4908,9 +5246,9 @@ fn two_same_named_types_in_different_submodules_stay_distinct() {
 fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_marker_finding() {
     // The forbidden-marker impl form shares resolve_child_modules/scan.impls with trait-impl-
     // locality, so it has the identical round-6 duplication hazard: two mutually-exclusive
-    // #[cfg] arms declaring the same name resolving to one real file, whose self-type generic
-    // argument is unrenderable (falling back to a positional ordinal), used to inflate one real
-    // marker acquisition into two findings.
+    // #[cfg] arms declaring the same name resolving to one real file used to inflate one real
+    // marker acquisition into two findings. Keep the owner renderable so this test isolates cfg
+    // de-duplication; positional fallback rejection has its own reaction.
     let out = marker_findings(
         "cfg-dual-same-file",
         &[
@@ -4919,10 +5257,7 @@ fn a_cfg_dual_declared_module_backed_by_one_file_does_not_duplicate_its_marker_f
                 "pub struct Arr<const N: usize>;\n\
                  #[cfg(feature = \"u\")]\npub mod foo;\n#[cfg(feature = \"w\")]\npub mod foo;\n",
             ),
-            (
-                "foo.rs",
-                "impl crate::Marker for crate::Arr<{ 1 + 1 }> {}\n",
-            ),
+            ("foo.rs", "impl crate::Marker for crate::Arr<2> {}\n"),
         ],
         "crate",
         &["crate::Marker"],
@@ -4952,15 +5287,7 @@ fn the_forbidden_marker_builder_carries_severity() {
 /// Like [`findings`] but for the dyn-trait capability: write `files`, return the rendered
 /// `dyn` shapes exposed by `module`. Shape-only, so it takes no forbidden set.
 fn dyn_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("dyn-{name}"));
-    tree.write_all(files);
-    let result = dyn_module_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    shape_findings("dyn", name, files, module, dyn_module_findings)
 }
 
 fn dyn_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -4980,18 +5307,15 @@ fn dyn_operand_findings(
     forbidden: &[&str],
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("dynop-{name}"));
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
-    let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
-    let result =
-        dyn_operand_module_findings(tree.src(), &tree.root(), module, &forbidden, "x", &deps);
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    operand_findings(
+        "dyn",
+        name,
+        files,
+        module,
+        forbidden,
+        deps,
+        dyn_operand_module_findings,
+    )
 }
 
 fn dyn_operand_mod(name: &str, body: &str, forbidden: &[&str]) -> Result<Vec<String>, String> {
@@ -5295,15 +5619,7 @@ fn impl_trait_findings(
     files: &[(&str, &str)],
     module: &str,
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("impl-{name}"));
-    tree.write_all(files);
-    let result = impl_trait_module_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    shape_findings("impl", name, files, module, impl_trait_module_findings)
 }
 
 fn impl_trait_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5429,24 +5745,15 @@ fn impl_trait_operand_findings(
     forbidden: &[&str],
     deps: &[&str],
 ) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("implop-{name}"));
-    tree.write_all(files);
-    let forbidden: Vec<String> = forbidden.iter().map(|f| f.to_string()).collect();
-    let deps: Vec<String> = deps.iter().map(|d| d.to_string()).collect();
-    let result = impl_trait_operand_module_findings(
-        tree.src(),
-        &tree.root(),
+    operand_findings(
+        "impl",
+        name,
+        files,
         module,
-        &forbidden,
-        "x",
-        &deps,
-    );
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+        forbidden,
+        deps,
+        impl_trait_operand_module_findings,
+    )
 }
 
 fn impl_trait_operand_mod(
@@ -5634,18 +5941,235 @@ fn impl_trait_operand_boundary_carries_operands_and_severity() {
     assert!(shape.forbidden_operands().is_empty());
 }
 
+#[test]
+fn impl_trait_boundary_carries_anchor_and_including_submodules() {
+    let b = ImplTraitBoundary::in_crate("core")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .warn()
+        .because("the core seam must return named types, not an existential");
+    assert_eq!(b.severity(), Severity::Warn);
+    // The subtree opt-in defaults off and threads through `.because`.
+    assert!(!b.including_submodules());
+    let sub = ImplTraitBoundary::in_crate("core")
+        .module("crate")
+        .must_not_expose_impl_trait()
+        .including_submodules()
+        .because("no existential anywhere under the kernel");
+    assert!(sub.including_submodules());
+}
+
+// --- impl-trait: subtree scope (`including_submodules`) -------------------
+
+fn impl_trait_subtree(
+    name: &str,
+    files: &[(&str, &str)],
+    module: &str,
+) -> Result<Vec<(String, String)>, String> {
+    subtree_findings("impl", name, files, module, impl_trait_subtree_findings)
+}
+
+/// Just the finding strings, sorted — for cases where the module attribution rides inside the
+/// finding string anyway.
+fn impl_trait_subtree_labels(name: &str, files: &[(&str, &str)], module: &str) -> Vec<String> {
+    impl_trait_subtree(name, files, module)
+        .unwrap()
+        .into_iter()
+        .map(|(finding, _module)| finding)
+        .collect()
+}
+
+#[test]
+fn impl_trait_subtree_reacts_to_a_submodule_return_the_seam_scope_misses() {
+    // The crux this opt-in exists for, mirroring async-exposure's own: a returned `impl Trait` in a
+    // *submodule* is invisible to the default seam scope (anchored at `crate`, it sees only
+    // crate-root items) — the gap the `no_existential_leak` composed profile's own honesty
+    // requires closed for its impl-trait half. The subtree scope catches it.
+    let files = &[
+        ("lib.rs", "pub mod net;\n"),
+        ("net.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+    ];
+    // Default seam scope at `crate` misses it entirely…
+    assert_eq!(
+        impl_trait_findings("seam-misses-sub", files, "crate").unwrap(),
+        Vec::<String>::new(),
+    );
+    // …the subtree scope reacts, attributing it to the submodule.
+    let subtree = impl_trait_subtree("sub-reacts", files, "crate").unwrap();
+    assert_eq!(subtree.len(), 1);
+    assert_eq!(subtree[0].1, "crate::net");
+    assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
+}
+
+#[test]
+fn impl_trait_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
+    // The anchor module's own returned `impl Trait` is still caught, and its finding string is
+    // byte-identical to the single-module path — so enabling the opt-in on a seam-only boundary
+    // adds deeper findings without re-identifying the seam ones (baseline stability).
+    let files = &[
+        ("lib.rs", "pub mod m;\n"),
+        (
+            "m.rs",
+            "pub fn own() -> impl crate::Port { todo!() }\npub mod deep;\n",
+        ),
+        (
+            "m/deep.rs",
+            "pub fn nested() -> impl crate::Port { todo!() }\n",
+        ),
+    ];
+    let seam = impl_trait_findings("seam-parity", files, "crate::m").unwrap();
+    assert_eq!(seam.len(), 1);
+    let subtree = impl_trait_subtree_labels("subtree-parity", files, "crate::m");
+    assert_eq!(subtree.len(), 2);
+    // The seam finding appears verbatim in the subtree result.
+    assert!(subtree.contains(&seam[0]));
+}
+
+#[test]
+fn impl_trait_subtree_scopes_to_the_anchored_subtree_not_the_whole_crate() {
+    let files = &[
+        ("lib.rs", "pub mod a;\npub mod c;\n"),
+        (
+            "a.rs",
+            "pub mod b;\npub fn make() -> impl crate::Port { todo!() }\n",
+        ),
+        ("a/b.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+        ("c.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+    ];
+    let subtree = impl_trait_subtree("bounded", files, "crate::a").unwrap();
+    let modules: Vec<&str> = subtree.iter().map(|(_, m)| m.as_str()).collect();
+    assert!(modules.contains(&"crate::a"));
+    assert!(modules.contains(&"crate::a::b"));
+    assert!(!modules.contains(&"crate::c"), "{:?}", modules);
+}
+
+#[test]
+fn impl_trait_subtree_tolerates_a_cfg_gated_fileless_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"never\")]\npub mod optional;\npub mod present;\n",
+        ),
+        (
+            "present.rs",
+            "pub fn make() -> impl crate::Port { todo!() }\n",
+        ),
+    ];
+    let subtree = impl_trait_subtree("cfg-fileless", files, "crate").unwrap();
+    assert_eq!(subtree.len(), 1);
+    assert_eq!(subtree[0].1, "crate::present");
+}
+
+#[test]
+fn impl_trait_subtree_errors_on_a_non_cfg_missing_submodule() {
+    let files = &[("lib.rs", "pub mod missing;\n")];
+    let err = impl_trait_subtree("non-cfg-missing", files, "crate").unwrap_err();
+    assert!(err.contains("missing"), "{err}");
+}
+
+#[test]
+fn impl_trait_subtree_does_not_observe_a_body_nested_module() {
+    let files = &[(
+        "lib.rs",
+        "pub fn outer() { mod inner { pub fn hidden() -> impl crate::Port { todo!() } } }\n",
+    )];
+    let subtree = impl_trait_subtree("body-nested", files, "crate").unwrap();
+    assert!(subtree.is_empty(), "{:?}", subtree);
+}
+
+#[test]
+fn impl_trait_subtree_and_seam_both_fail_loud_on_an_unrenderable_owner() {
+    // Mirrors `async_subtree_and_seam_both_fail_loud_on_an_unrenderable_owner` exactly: impl-trait's
+    // owner resolution (`canonical_self_owner`) produces an internal positional sentinel for a
+    // genuinely unrenderable self type, caught by the shared `reject_positional_identity` gate
+    // (invoked via `sort_attributed_facts`/`sort_faceted_facts`) — never published as identity,
+    // under either scope.
+    let files = &[(
+        "lib.rs",
+        "pub struct Arr<const N: usize>;\npub struct Marker;\nimpl Marker { pub fn before() -> impl crate::Port { todo!() } }\nimpl<const N: usize> Arr<{ N + 1 }> { pub fn unrenderable() -> impl crate::Port { todo!() } }\n",
+    )];
+    let seam = impl_trait_findings("const-generic-owner-parity-seam", files, "crate").unwrap_err();
+    let subtree =
+        impl_trait_subtree("const-generic-owner-parity-subtree", files, "crate").unwrap_err();
+    assert!(seam.contains("without a stable structural label"), "{seam}");
+    assert!(
+        subtree.contains("without a stable structural label"),
+        "{subtree}"
+    );
+    assert!(!seam.contains("_#") && !subtree.contains("_#"));
+}
+
+#[test]
+fn impl_trait_subtree_cfg_branches_never_share_an_unrenderable_owner_fallback() {
+    // Mirrors `async_cfg_branches_never_share_an_unrenderable_owner_fallback` exactly: two
+    // mutually-exclusive `#[cfg]` branches of the same module each declare a same-named type with
+    // an unrenderable const-generic self-type argument (`Arr<{ N + 1 }>` vs `Arr<{ N + 2 }>`). This
+    // is the actual case task 1.3a's continuous-ordinal threading protects: a hardcoded or
+    // reset-per-module ordinal would let the two branches' sentinels collide into one internal
+    // value before `reject_positional_identity` ever runs. The gate still fails loud either way, so
+    // this proves the ordinal is threaded correctly, not merely that the gate exists (the single-site
+    // test above already proves the gate; this one proves the counter feeding it).
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg(feature = \"u\")]\npub mod m;\n#[cfg(feature = \"w\")]\n#[path = \"m_w.rs\"]\npub mod m;\n",
+        ),
+        (
+            "m.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 1 }> { pub fn run() -> impl crate::Port { todo!() } }\n",
+        ),
+        (
+            "m_w.rs",
+            "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 2 }> { pub fn run() -> impl crate::Port { todo!() } }\n",
+        ),
+    ];
+    let error =
+        impl_trait_subtree("cfg-split-owner-fallback-collision", files, "crate::m").unwrap_err();
+    assert!(
+        error.contains("without a stable structural label"),
+        "{error}"
+    );
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn impl_trait_operand_scoped_boundary_reacts_across_file_and_inline_submodules() {
+    let (metadata, _fixture) = fixture_metadata(
+        "impltrait-operand-subtree",
+        &[
+            (
+                "lib.rs",
+                "pub trait Port {}\npub trait Other {}\npub mod file;\n\
+                 pub mod inline { pub fn other() -> impl crate::Other { todo!() } }\n",
+            ),
+            (
+                "file.rs",
+                "use crate::Port as ApiPort;\npub fn port() -> impl ApiPort { todo!() }\n",
+            ),
+        ],
+    );
+    let boundary = ImplTraitBoundary::in_crate("x")
+        .module("crate")
+        .must_not_expose_impl_trait_of(["crate::Port"])
+        .including_submodules()
+        .because("r");
+    let mut violations = Vec::new();
+    check_impl_trait_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].target(), "crate");
+    assert!(violations[0].finding.contains("port"));
+    assert!(
+        violations[0]
+            .file
+            .as_deref()
+            .is_some_and(|file| file.ends_with("file.rs"))
+    );
+}
+
 // --- async-exposure -------------------------------------------------------
 
 fn async_findings(name: &str, files: &[(&str, &str)], module: &str) -> Result<Vec<String>, String> {
-    let tree = TempSrcTree::new(&format!("async-{name}"));
-    tree.write_all(files);
-    let result = async_exposure_module_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, _file)| fact.to_string())
-            .collect()
-    })
+    shape_findings("async", name, files, module, async_exposure_module_findings)
 }
 
 fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
@@ -5654,6 +6178,98 @@ fn async_mod(name: &str, body: &str) -> Result<Vec<String>, String> {
         &[("lib.rs", "pub mod m;\n"), ("m.rs", body)],
         "crate::m",
     )
+}
+
+fn async_observations(
+    name: &str,
+    body: &str,
+) -> Result<Vec<(StructuredFactIdentity, String)>, String> {
+    let tree = TempSrcTree::new(&format!("async-observation-{name}"));
+    tree.write_all(&[("lib.rs", "pub mod registry;\n"), ("registry.rs", body)]);
+    async_exposure_module_findings(tree.src(), &tree.root(), "crate::registry", "x").map(|facts| {
+        facts
+            .into_iter()
+            .map(|(fact, _)| {
+                let finding = fact.into_finding();
+                (finding.key().clone(), finding.text().to_string())
+            })
+            .collect()
+    })
+}
+
+#[test]
+fn pacta_shaped_registry_signature_changes_preserve_async_seam_identity() {
+    let first = async_observations(
+        "pacta-v1",
+        "pub struct Registry;\npub struct Contract;\nimpl Registry { pub async fn register(&self, contract: Contract) {} }\n",
+    )
+    .unwrap();
+    let second = async_observations(
+        "pacta-v2",
+        "pub struct Registry;\npub struct Receipt;\nimpl Registry { pub async fn register(&mut self, name: &str, version: u64) -> Receipt { Receipt } }\n",
+    )
+    .unwrap();
+    assert_eq!(first.len(), 1);
+    assert_eq!(second.len(), 1);
+    assert_eq!(first[0].0, second[0].0);
+    assert_ne!(first[0].1, second[0].1);
+}
+
+#[test]
+fn async_production_violation_separates_target_rule_and_seam() {
+    let (metadata, _fixture) = fixture_metadata(
+        "async-identity",
+        &[
+            ("lib.rs", "pub mod registry;\n"),
+            ("registry.rs", "pub async fn register(name: &str) {}\n"),
+        ],
+    );
+    let boundary = AsyncExposureBoundary::in_crate("x")
+        .module("crate::registry")
+        .must_not_expose_async_fn()
+        .because("registry operations keep a synchronous seam");
+    let mut violations = Vec::new();
+    check_async_exposure_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+
+    let id = violations[0].id();
+    assert_eq!(id.target(), "crate::registry");
+    let rule = id.rule_key();
+    assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/async-exposure");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        Vec::<(&str, &str)>::new()
+    );
+    let fact = id.fact();
+    assert_eq!(fact.fact_type(), "tianheng.fact/hunyi/async-exposure");
+    assert_eq!(fact.shape(), "async-free-function");
+    assert_eq!(
+        fact.fields().collect::<Vec<_>>(),
+        vec![
+            ("module", "crate::registry"),
+            ("name", "register"),
+            ("owner", "crate::registry"),
+            ("owner_kind", "module"),
+        ]
+    );
+}
+
+#[test]
+fn subtree_opt_in_preserves_anchored_finding_violation_id_identity() {
+    let default_rule = AsyncExposureBoundary::in_crate("pkg")
+        .module("crate::m")
+        .must_not_expose_async_fn()
+        .because("test");
+    let subtree_rule = AsyncExposureBoundary::in_crate("pkg")
+        .module("crate::m")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("test");
+    assert_eq!(
+        default_rule.rule_key(),
+        subtree_rule.rule_key(),
+        "toggling including_submodules must not alter RuleKey identity"
+    );
 }
 
 #[test]
@@ -5770,15 +6386,13 @@ fn async_subtree(
     files: &[(&str, &str)],
     module: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    let tree = TempSrcTree::new(&format!("async-sub-{name}"));
-    tree.write_all(files);
-    let result = async_exposure_subtree_findings(tree.src(), &tree.root(), module, "x");
-    result.map(|facts| {
-        facts
-            .into_iter()
-            .map(|(fact, module, _file)| (fact.to_string(), module))
-            .collect()
-    })
+    subtree_findings(
+        "async",
+        name,
+        files,
+        module,
+        async_exposure_subtree_findings,
+    )
 }
 
 /// Just the finding strings, sorted — for cases where the module attribution rides inside the
@@ -5840,44 +6454,23 @@ fn async_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
 }
 
 #[test]
-fn async_subtree_and_seam_agree_on_the_owner_fallback_for_an_unrenderable_const_generic_self_type()
-{
-    // Round-11 finding: the subtree path's `ordinal` (fed to `collect_item_async_exposures`, and
-    // from there into `canonical_self_owner`'s `_#{ordinal}` fallback for an impl block whose
-    // self-type carries an unrenderable const-generic argument) used to reset to 0 for EACH
-    // `(module, items, file)` tuple `walk_subtree_modules` returns, while the seam path
-    // (`shape_module_findings`) enumerates continuously over the flattened branch union and never
-    // resets. For the anchor module's own items this desynced the two paths' owner-fallback
-    // strings for the identical impl block -- contradicting this function's own doc promise that a
-    // seam finding is "byte-identical to the single-module path". `ordinal` is now one counter
-    // incrementing continuously across every tuple the subtree walk visits, matching the seam
-    // path's own continuous enumerate.
+fn async_subtree_and_seam_both_fail_loud_on_an_unrenderable_owner() {
     let files = &[(
         "lib.rs",
         "pub struct Arr<const N: usize>;\npub struct Marker;\nimpl Marker { pub async fn before() {} }\nimpl<const N: usize> Arr<{ N + 1 }> { pub async fn unrenderable() {} }\n",
     )];
-    let seam = async_findings("const-generic-owner-parity-seam", files, "crate").unwrap();
-    let subtree = async_subtree_labels("const-generic-owner-parity-subtree", files, "crate");
-    assert_eq!(
-        seam, subtree,
-        "the seam and subtree paths must assign the identical owner-fallback string to the same \
-         impl block's unrenderable const-generic self type: seam={seam:?} subtree={subtree:?}"
+    let seam = async_findings("const-generic-owner-parity-seam", files, "crate").unwrap_err();
+    let subtree = async_subtree("const-generic-owner-parity-subtree", files, "crate").unwrap_err();
+    assert!(seam.contains("without a positional fallback"), "{seam}");
+    assert!(
+        subtree.contains("without a positional fallback"),
+        "{subtree}"
     );
+    assert!(!seam.contains("_#") && !subtree.contains("_#"));
 }
 
 #[test]
-fn async_subtree_does_not_collapse_two_cfg_split_branches_sharing_an_unrenderable_owner_fallback() {
-    // Round-11 finding (the severe half): because `AsyncInherentMethod`'s identity is `(owner,
-    // name, tail)` with no module field (unlike its `AsyncFreeFn`/`AsyncTraitMethod` siblings), and
-    // the shared fact-only dedup (`sort_attributed_facts`) never consults the carried module/file
-    // either, two mutually-exclusive `#[cfg]` branches of the SAME anchor module, each declaring a
-    // same-named type with an unrenderable const-generic self-type argument at the same
-    // per-branch position, used to collide on the identical `_#{ordinal}` owner-fallback string
-    // (ordinal reset to 0 for each branch's own tuple) -- collapsing two genuinely distinct async
-    // fns, compiled under two different, mutually-exclusive configs, into ONE reported finding. A
-    // continuously-incrementing ordinal across the whole subtree walk (never reset per branch)
-    // means two different branches' items can never share an ordinal, so their fallback labels can
-    // never collide by construction.
+fn async_cfg_branches_never_share_an_unrenderable_owner_fallback() {
     let files = &[
         (
             "lib.rs",
@@ -5892,14 +6485,9 @@ fn async_subtree_does_not_collapse_two_cfg_split_branches_sharing_an_unrenderabl
             "pub struct Arr<const N: usize>;\nimpl<const N: usize> Arr<{ N + 2 }> { pub async fn run() {} }\n",
         ),
     ];
-    let subtree = async_subtree_labels("cfg-split-owner-fallback-collision", files, "crate::m");
-    assert_eq!(
-        subtree.len(),
-        2,
-        "both cfg branches' own async fn are genuinely distinct violations and must not \
-         dedup-collapse into one merely because their unrenderable-self-type owner fallbacks \
-         previously collided: {subtree:?}"
-    );
+    let error = async_subtree("cfg-split-owner-fallback-collision", files, "crate::m").unwrap_err();
+    assert!(error.contains("without a positional fallback"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
 }
 
 #[test]
@@ -6654,14 +7242,21 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     let mut violations = Vec::new();
     check_boundary(&metadata, &boundary, &mut violations).unwrap();
     assert_eq!(violations.len(), 1, "one exposure violation");
-    assert_eq!(violations[0].target, "crate::domain");
+    assert_eq!(violations[0].target(), "crate::domain");
     assert_eq!(violations[0].rule, SIGNATURE_RULE);
     let id = violations[0].id();
-    let key = id
-        .finding_key()
-        .expect("a production violation has structured identity");
-    assert_eq!(key.namespace(), "hunyi");
-    assert_eq!(key.code(), "signature_exposure");
+    let key = id.fact();
+    let rule = id.rule_key();
+    assert_eq!(rule.rule_type(), "tianheng.rule/hunyi/signature-exposure");
+    assert_eq!(
+        rule.fields().collect::<Vec<_>>(),
+        vec![
+            ("forbidden", "[\"crate::infra\"]"),
+            ("including_trait_impls", "false"),
+        ]
+    );
+    assert_eq!(key.fact_type(), "tianheng.fact/hunyi/signature-exposure");
+    assert_eq!(key.shape(), "public-seam");
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![
@@ -8357,4 +8952,186 @@ fn derive_renamed_to_a_nonforbidden_local_trait_stays_clean() {
     )
     .unwrap();
     assert_eq!(out, Vec::<String>::new());
+}
+
+#[test]
+fn hunyi_boundary_depth_getters_and_delegation_parity() {
+    use xuanji::ScanDepth;
+
+    // AsyncExposureBoundary
+    let async_b = AsyncExposureBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .because("sync core");
+    assert_eq!(async_b.scan_depth(), ScanDepth::Shallow);
+
+    let async_subtree = AsyncExposureBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .depth(ScanDepth::Subtree)
+        .because("sync core subtree");
+    assert_eq!(async_subtree.scan_depth(), ScanDepth::Subtree);
+
+    let async_submodules = AsyncExposureBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_async_fn()
+        .including_submodules()
+        .because("sync core submodules");
+    assert_eq!(async_submodules.scan_depth(), ScanDepth::Subtree);
+
+    // ImplTraitBoundary
+    let impl_b = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .because("no RPIT leak");
+    assert_eq!(impl_b.scan_depth(), ScanDepth::Shallow);
+
+    let impl_subtree = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .depth(ScanDepth::Subtree)
+        .because("no RPIT leak in subtree");
+    assert_eq!(impl_subtree.scan_depth(), ScanDepth::Subtree);
+
+    let impl_submodules = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait()
+        .including_submodules()
+        .because("no RPIT leak in submodules");
+    assert_eq!(impl_submodules.scan_depth(), ScanDepth::Subtree);
+}
+
+#[test]
+fn non_generic_compound_type_alias_target_walk_detects_nested_exposure() {
+    let out = findings(
+        "compound-alias-walk",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
+            (
+                "domain.rs",
+                "pub type TupleAlias = (crate::infra::DbPool, u32);\n\
+                 pub type RefAlias = &'static crate::infra::DbPool;\n\
+                 pub type SliceAlias = [crate::infra::DbPool];\n\
+                 pub fn leak_tuple() -> TupleAlias { loop {} }\n\
+                 pub fn leak_ref() -> RefAlias { loop {} }\n\
+                 pub fn leak_slice() -> &'static SliceAlias { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct DbPool;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        6,
+        "6 exposures (3 type aliases + 3 functions using them) must be detected: {out:?}"
+    );
+}
+
+#[test]
+fn tuple_alias_with_forbidden_type_in_first_position_and_private_helper_reacts() {
+    let out = findings(
+        "tuple-alias-first-pos",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\npub mod api;\n"),
+            (
+                "domain.rs",
+                "type PrivateHelper = (crate::infra::DbPool, crate::api::Public);\n\
+                 pub fn leak_first_pos() -> PrivateHelper { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct DbPool;\n"),
+            ("api.rs", "pub struct Public;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "private helper tuple alias with forbidden type in first position must react: {out:?}"
+    );
+    assert!(out[0].contains("crate::infra::DbPool exposed by fn crate::domain::leak_first_pos"));
+}
+
+#[test]
+fn raw_pointer_type_alias_target_walk_detects_nested_exposure() {
+    let out = findings(
+        "ptr-alias-walk",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
+            (
+                "domain.rs",
+                "pub type PtrAlias = *const crate::infra::DbPool;\n\
+                 pub fn leak_ptr() -> PtrAlias { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct DbPool;\n"),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        2,
+        "raw pointer type alias declaration and function return type must react: {out:?}"
+    );
+}
+
+#[test]
+fn wide_tuple_alias_with_forbidden_first_member_expands_without_truncation() {
+    let out = findings(
+        "wide-tuple-alias",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\npub mod api;\n"),
+            (
+                "domain.rs",
+                "type Inner = crate::infra::Secret;\n\
+                 type Wide = (Inner, crate::api::A, crate::api::B, crate::api::C, crate::api::D, crate::api::E);\n\
+                 pub fn leak_wide() -> Wide { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "pub struct A;\npub struct B;\npub struct C;\npub struct D;\npub struct E;\n",
+            ),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::domain::leak_wide"],
+        "wide tuple alias with 6 resolvable targets and forbidden target first must expand without truncation: {out:?}"
+    );
+}
+
+#[test]
+fn diamond_alias_expansion_does_not_leak_intermediate_aliases() {
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
+    let mut aliases = AliasMap::new();
+    aliases.insert(
+        "crate::domain::Mid".to_string(),
+        vec!["crate::infra::Secret".to_string()],
+    );
+    aliases.insert(
+        "crate::domain::Other".to_string(),
+        vec!["crate::domain::Mid".to_string()],
+    );
+    aliases.insert(
+        "crate::domain::Diamond".to_string(),
+        vec![
+            "crate::domain::Mid".to_string(),
+            "crate::domain::Other".to_string(),
+        ],
+    );
+    let reexports = ReexportMap::new();
+    let expanded = expand_canonical_paths("crate::domain::Diamond", &aliases, &reexports);
+    assert_eq!(
+        expanded,
+        vec!["crate::infra::Secret"],
+        "diamond alias expansion must yield strictly terminal target without intermediate alias leakage: {expanded:?}"
+    );
 }

@@ -44,10 +44,9 @@ pub(crate) fn check_unsafe_boundary(
         .collect();
     let findings = unsafe_findings(src_dir, &root_file, &allowed, &boundary.crate_package)?;
 
-    // A fixed rule string: the allowed subtree(s) are policy configuration (surfaced in the `list`
-    // projection and the reason), not part of the violation's identity — editing the allowed set
-    // does not turn a still-misplaced site into a "new" violation against a baseline (mirroring
-    // trait-impl-locality). The violation `target` is the crate package (the confinement scope).
+    // Human rule text stays fixed, while the semantic rule key carries the canonical allowed set:
+    // changing where unsafe is permitted changes the law and therefore re-keys the reaction. The
+    // violation target remains the crate package (the confinement scope).
     // The shared emit helper resolves each finding's module source file and stamps the
     // allowlist-gap polarity.
     push_multi_module_violations(
@@ -55,6 +54,7 @@ pub(crate) fn check_unsafe_boundary(
         MultiModuleViolationContext {
             target: &boundary.crate_package,
             rule: UNSAFE_CONFINEMENT_RULE,
+            rule_key: boundary.rule_key(),
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
@@ -92,14 +92,14 @@ pub(crate) fn unsafe_findings(
             let module = site.module;
             (
                 SemanticFact::UnsafeSite {
-                    label: site.label,
                     module: module.clone(),
+                    site: site.site,
                 },
                 module,
                 site.file,
             )
         })
         .collect();
-    sort_attributed_facts(&mut findings);
+    sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }

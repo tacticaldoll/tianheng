@@ -1,5 +1,33 @@
 use super::*;
+use crate::module_scan::{canonical_module_path, package_name_to_import_ident};
 use serde_json::Value;
+use xuanji::RuleKey;
+
+fn canonical_set<I, S>(values: I) -> String
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut values: Vec<String> = values
+        .into_iter()
+        .map(|value| value.as_ref().to_string())
+        .collect();
+    values.sort_unstable();
+    values.dedup();
+    serde_json::to_string(&values).expect("a list of strings always serializes")
+}
+
+fn canonical_module_set<I, S>(values: I) -> String
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    canonical_set(
+        values
+            .into_iter()
+            .map(|value| canonical_module_path(value.as_ref())),
+    )
+}
 
 /// The governed shape, declared in Rust (the single source of truth).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,7 +91,7 @@ impl DependencyKind {
         }
     }
 
-    /// The published version-2 identity value for a dependency table. This is baseline wire, not a
+    /// The published identity value for a dependency table. This is baseline wire, not a
     /// presentation label; changing a byte re-keys every matching 圭表 finding.
     pub(crate) fn key_label(&self) -> &'static str {
         match self {
@@ -299,12 +327,55 @@ pub enum Rule {
 }
 
 impl Rule {
+    /// Stable semantic identity for this declared crate rule.
+    pub fn key(&self) -> RuleKey {
+        match self {
+            Rule::DenyExternalDependencies { allowed } => RuleKey::of(
+                "tianheng.rule/guibiao/deny-external-dependencies",
+                [("allowed", canonical_set(allowed))],
+            ),
+            Rule::ForbidDependencyOn { crates } => RuleKey::of(
+                "tianheng.rule/guibiao/forbid-dependency-on",
+                [("crates", canonical_set(crates))],
+            ),
+            Rule::RestrictDependenciesTo { allowed } => RuleKey::of(
+                "tianheng.rule/guibiao/restrict-dependencies-to",
+                [("allowed", canonical_set(allowed))],
+            ),
+            Rule::RestrictWorkspaceDependenciesTo { allowed } => RuleKey::of(
+                "tianheng.rule/guibiao/restrict-workspace-dependencies-to",
+                [("allowed", canonical_set(allowed))],
+            ),
+            Rule::RestrictDependencySourcesTo { allowed } => RuleKey::of(
+                "tianheng.rule/guibiao/restrict-dependency-sources-to",
+                [(
+                    "allowed",
+                    canonical_set(allowed.iter().map(SourceKind::label)),
+                )],
+            ),
+            Rule::RestrictFeaturesOf { crate_, allowed } => RuleKey::of(
+                "tianheng.rule/guibiao/restrict-features-of",
+                [
+                    ("allowed", canonical_set(allowed)),
+                    ("crate", crate_.clone()),
+                ],
+            ),
+            Rule::ForbidFeaturesOf { crate_, forbidden } => RuleKey::of(
+                "tianheng.rule/guibiao/forbid-features-of",
+                [
+                    ("crate", crate_.clone()),
+                    ("forbidden", canonical_set(forbidden)),
+                ],
+            ),
+        }
+    }
+
     /// Each crate rule is the single source of truth for its own behavior: its
     /// label, text and JSON projection, and which declared dependencies it flags
     /// (including its observation source). Every method is one exhaustive match, so
     /// adding a variant is a compile error until it is handled everywhere
-    /// (see PROJECT.md). The label in particular feeds the violation `rule` string,
-    /// the baseline identity, and the projection — one source, no silent divergence.
+    /// (see PROJECT.md). The label feeds human violation/projection text; [`Rule::key`]
+    /// separately carries semantic identity so wording remains free to evolve.
     pub(crate) fn label(&self) -> &'static str {
         match self {
             Rule::DenyExternalDependencies { .. } => "deny external dependencies",
@@ -480,7 +551,12 @@ impl Rule {
                 })
                 .collect(),
             Rule::RestrictDependencySourcesTo { allowed } => {
-                dependencies_with_disallowed_source(package, kind, allowed)
+                return dependencies_with_disallowed_source(package, kind, allowed)
+                    .into_iter()
+                    .map(|(dependency, source)| {
+                        crate::finding::CrateFact::source(dependency, source, kind)
+                    })
+                    .collect();
             }
             // Feature-granularity rules observe the target's DECLARED feature request on
             // `crate_` (declared-not-resolved; see `declared_features`) and qualify each
@@ -786,6 +862,7 @@ pub struct ModuleBoundary {
     pub(crate) reason: String,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<String>,
+    pub(crate) depth: ScanDepth,
 }
 
 impl ModuleBoundary {
@@ -807,6 +884,25 @@ impl ModuleBoundary {
     /// The durable governance anchor recorded with the boundary, if any.
     pub fn anchor(&self) -> Option<&str> {
         self.anchor.as_deref()
+    }
+
+    /// The scan depth / granularity recorded with the boundary.
+    pub fn scan_depth(&self) -> ScanDepth {
+        self.depth
+    }
+
+    /// Stable semantic identity for this declared module boundary.
+    pub fn rule_key(&self) -> RuleKey {
+        let key = self.rule.key();
+        if self.depth == ScanDepth::Shallow {
+            RuleKey::of(
+                key.rule_type(),
+                key.fields()
+                    .chain(std::iter::once(("scan_depth", self.depth.as_str()))),
+            )
+        } else {
+            key
+        }
     }
 
     /// The rule this boundary declares, exposed read-only for projection and model inspection.
@@ -907,8 +1003,8 @@ pub enum ModuleRule {
     },
 }
 
-/// The inline-confinement text projection. Not identity — [`ModuleRule::label`] is the identity
-/// string for both default and strict-external forms.
+/// The inline-confinement text projection. Neither it nor [`ModuleRule::label`] is identity;
+/// [`ModuleRule::key`] carries the semantic rule identity.
 fn inline_confinement_text(
     prefix: &str,
     ending_with: &Option<Vec<String>>,
@@ -947,6 +1043,53 @@ fn inline_confinement_json(
 }
 
 impl ModuleRule {
+    /// Stable semantic identity for this declared module rule.
+    pub fn key(&self) -> RuleKey {
+        match self {
+            ModuleRule::MustNotImport { module } => RuleKey::of(
+                "tianheng.rule/guibiao/must-not-import",
+                [("module", canonical_module_path(module))],
+            ),
+            ModuleRule::RestrictImportsTo { allowed } => RuleKey::of(
+                "tianheng.rule/guibiao/restrict-imports-to",
+                [("allowed", canonical_module_set(allowed))],
+            ),
+            ModuleRule::MustNotBeImportedBy { importer } => RuleKey::of(
+                "tianheng.rule/guibiao/must-not-be-imported-by",
+                [("importer", canonical_module_path(importer))],
+            ),
+            ModuleRule::MustOnlyBeImportedBy { allowed } => RuleKey::of(
+                "tianheng.rule/guibiao/must-only-be-imported-by",
+                [("allowed", canonical_module_set(allowed))],
+            ),
+            ModuleRule::ConfineExternalCrate { crate_name } => RuleKey::of(
+                "tianheng.rule/guibiao/confine-external-crate",
+                [("crate", package_name_to_import_ident(crate_name))],
+            ),
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix,
+                ending_with,
+                strict,
+                strict_external: _,
+            } => RuleKey::of(
+                "tianheng.rule/guibiao/confine-inline-symbol-path",
+                [
+                    (
+                        "ending_with",
+                        canonical_set(
+                            ending_with
+                                .iter()
+                                .flat_map(|values| values.iter())
+                                .map(|verb| canonical_module_path(verb)),
+                        ),
+                    ),
+                    ("prefix", canonical_module_path(prefix)),
+                    ("strict", strict.to_string()),
+                ],
+            ),
+        }
+    }
+
     /// The label feeding the violation `rule` string and the projection — one source.
     pub(crate) fn label(&self) -> &'static str {
         match self {
@@ -955,8 +1098,8 @@ impl ModuleRule {
             ModuleRule::MustNotBeImportedBy { .. } => "module must not be imported by",
             ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
             ModuleRule::ConfineExternalCrate { .. } => "external crate confined to module",
-            // IDENTITY PARITY: the modifier never enters the label, so adding
-            // `.strict_external()` never re-keys a finding (`rule` is a `ViolationId` field).
+            // Presentation parity: the modifier remains a projection detail of the same
+            // inline-rule family; `key()` separately preserves the established no-rekey contract.
             ModuleRule::ConfineInlineSymbolPath { .. } => "inline symbol path confined to module",
         }
     }
@@ -1098,12 +1241,11 @@ pub struct ModuleTargetDraft {
 impl ModuleTargetDraft {
     /// Forbid the governed module from importing `module` (or anything beneath it).
     ///
-    /// **Stated bound (glob of an ancestor):** a `use`-glob is observed at its base module only,
-    /// so a glob of an *ancestor* of the forbidden module (`use crate::*;` while forbidding
-    /// `crate::secret`) is recorded as the base (`crate`) — not as the forbidden descendant edge —
-    /// and does not react, though it does bring the forbidden module into nameable scope. The
-    /// narrow forms (`use crate::secret;`, `use crate::secret::*;`) are caught. This is a declared
-    /// partial-coverage bound, not a silent gap: forbid or confine the *parent* to close it.
+    /// A `use`-glob is observed at its base module and retains its glob shape. A glob whose base is
+    /// equal to or an ancestor of the forbidden module (`use crate::*;` while forbidding
+    /// `crate::secret`) therefore reacts fail-closed, as do the narrow forms
+    /// (`use crate::secret;`, `use crate::secret::*;`). A plain non-glob ancestor import
+    /// (`use crate;`) remains clean because it does not bring the descendant into scope.
     pub fn must_not_import(self, module: &str) -> ModuleBoundaryDraft {
         self.with_rule(ModuleRule::MustNotImport {
             module: module.to_string(),
@@ -1194,6 +1336,7 @@ impl ModuleTargetDraft {
             strict: false,
             external: false,
             severity: Severity::Enforce,
+            depth: ScanDepth::Subtree,
         }
     }
 
@@ -1203,6 +1346,7 @@ impl ModuleTargetDraft {
             module: self.module,
             rule,
             severity: Severity::Enforce,
+            depth: ScanDepth::Subtree,
         }
     }
 }
@@ -1213,9 +1357,25 @@ pub struct ModuleBoundaryDraft {
     module: String,
     rule: ModuleRule,
     severity: Severity,
+    depth: ScanDepth,
 }
 
 impl ModuleBoundaryDraft {
+    /// Configure the observation scan depth / granularity level.
+    pub fn depth(mut self, depth: ScanDepth) -> Self {
+        self.depth = depth;
+        self
+    }
+
+    /// Convenience modifier setting the scan depth to [`ScanDepth::Subtree`].
+    ///
+    /// Module rules retain their legacy subtree default, so this is a source-compatible
+    /// ergonomic spelling for existing declarations and an explicit override when a draft was
+    /// previously changed to [`ScanDepth::Shallow`].
+    pub fn including_submodules(self) -> Self {
+        self.depth(ScanDepth::Subtree)
+    }
+
     /// Make this boundary advisory: its violations are reported but do not fail CI.
     pub fn warn(mut self) -> Self {
         self.severity = Severity::Warn;
@@ -1231,6 +1391,7 @@ impl ModuleBoundaryDraft {
             reason: reason.to_string(),
             severity: self.severity,
             anchor: None,
+            depth: self.depth,
         }
     }
 }
@@ -1249,9 +1410,16 @@ pub struct InlineConfinementDraft {
     strict: bool,
     external: bool,
     severity: Severity,
+    depth: ScanDepth,
 }
 
 impl InlineConfinementDraft {
+    /// Configure the observation scan depth / granularity level.
+    pub fn depth(mut self, depth: ScanDepth) -> Self {
+        self.depth = depth;
+        self
+    }
+
     /// Narrow the confinement to react only on calls whose **terminal segment** (leaf-exact) is
     /// one of `verbs` (e.g. `["now"]`) — the adopter's declared read verbs. The adopter owns any
     /// false negative from omitting a verb (a future `::current()` passes); the engine bakes in no
@@ -1345,6 +1513,7 @@ impl InlineConfinementDraft {
             reason: reason.to_string(),
             severity: self.severity,
             anchor: None,
+            depth: self.depth,
         }
     }
 }

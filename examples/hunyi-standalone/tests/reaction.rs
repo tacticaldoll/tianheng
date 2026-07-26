@@ -18,8 +18,8 @@ fn the_api_leak_reacts_with_exit_1() {
         panic!("the deliberately exposed type must produce a structured violation");
     };
     assert!(report.violations.iter().any(|violation| {
-        violation.finding_key().namespace() == "hunyi"
-            && violation.finding_key().code() == "signature_exposure"
+        violation.fact().fact_type() == "tianheng.fact/hunyi/signature-exposure"
+            && violation.fact().shape() == "public-seam"
     }));
     assert_eq!(Outcome::Violations(report).exit_code(), 1);
 }
@@ -48,8 +48,8 @@ fn an_over_pub_item_breaches_the_crate_visibility_ceiling() {
     assert_eq!(outcome.exit_code(), 1);
     if let Outcome::Violations(report) = &outcome {
         assert!(report.violations.iter().any(|violation| {
-            violation.finding_key().namespace() == "hunyi"
-                && violation.finding_key().code() == "visibility_exposure"
+            violation.fact().fact_type() == "tianheng.fact/hunyi/visibility-exposure"
+                && violation.fact().shape() == "declared-item-visibility"
         }));
         let findings: Vec<&str> = report
             .violations

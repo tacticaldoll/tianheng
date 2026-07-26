@@ -1,6 +1,6 @@
 //! Forbidden-marker declaration DSL — [`ForbiddenMarkerBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// A forbidden-marker boundary: types **defined in a module subtree** must not acquire a
 /// forbidden trait — by `#[derive(T)]` or a hand-written `impl T for <a subtree type>`.
@@ -17,6 +17,14 @@ pub struct ForbiddenMarkerBoundary {
 }
 
 impl ForbiddenMarkerBoundary {
+    /// Stable semantic identity for this forbidden-marker acquisition rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/forbidden-marker",
+            [("forbidden", super::canonical_path_set(&self.forbidden))],
+        )
+    }
+
     /// Begin a forbidden-marker boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> ForbiddenMarkerCrateDraft {
         ForbiddenMarkerCrateDraft {

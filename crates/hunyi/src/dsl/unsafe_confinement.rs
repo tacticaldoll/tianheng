@@ -1,6 +1,6 @@
 //! Unsafe-confinement declaration DSL — [`UnsafeBoundary`] and its draft chain.
 
-use xuanji::Severity;
+use xuanji::{RuleKey, Severity};
 
 /// An unsafe-confinement boundary: within a target crate, `unsafe` (blocks, `unsafe fn`/`impl`/
 /// `trait`, `unsafe extern`) may appear **only under** the declared subtree(s); a site outside all
@@ -20,6 +20,17 @@ pub struct UnsafeBoundary {
 }
 
 impl UnsafeBoundary {
+    /// Stable semantic identity for this unsafe-confinement rule.
+    pub fn rule_key(&self) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/unsafe-confinement",
+            [(
+                "allowed",
+                super::canonical_path_set(&self.allowed_locations),
+            )],
+        )
+    }
+
     /// Begin an unsafe-confinement boundary in the crate named `package`.
     pub fn in_crate(package: &str) -> UnsafeCrateDraft {
         UnsafeCrateDraft {

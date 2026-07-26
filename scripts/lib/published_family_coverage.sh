@@ -18,6 +18,7 @@ PUBLISHED_BOUNDARY_FAMILIES=(
     hunyi/async-exposure
     hunyi/unsafe
     tianheng/sans-io-pure
+    tianheng/no-existential-leak
     louke/runtime
 )
 

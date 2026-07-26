@@ -121,13 +121,13 @@ A trait-impl exposure finding SHALL be **seam-qualified with the impl-site posit
 `trait-arg`, `self`, `assoc {name}`, `where {bounded-type}`, or `method {name} return`. Two positions
 that expose the **same** forbidden type SHALL therefore produce **distinct** findings, so baselining
 one exposure MUST NOT mask a new exposure of the same type at another position under the
-`(target, rule, finding_key)` baseline identity (the one forbidden false negative). Findings SHALL share
+`(target, rule_key, fact)` baseline identity (the one forbidden false negative). Findings SHALL share
 the `(target, rule)` of the signature-coupling boundary that carries them.
 
 #### Scenario: Two positions in one impl exposing the same type stay distinct findings
 
 - **WHEN** one impl exposes `crate::infra::DbPool` at both the `trait-arg` and `self` positions, and the `trait-arg` finding is recorded in the baseline as accepted
-- **THEN** the `self` finding still reacts: its seam names its own position, so the baseline identity `(target, rule, finding_key)` does not mask it
+- **THEN** the `self` finding still reacts: its seam names its own position, so the baseline identity `(target, rule_key, fact)` does not mask it
 
 #### Scenario: Two where-bounds on distinct type parameters exposing the same type stay distinct
 
@@ -201,3 +201,16 @@ no projection-specific code). The projection remains a pure projection and SHALL
 - **WHEN** `list --format markdown` renders a boundary with `.including_trait_impls()`
 - **THEN** the boundary's rule parameters include `including_trait_impls: true`, carried generically from the JSON with no projection-specific code
 
+### Requirement: Trait-impl exposure uses observed structural seams
+
+Trait-impl exposure facts SHALL encode trait, canonical self type, associated item role/name, and
+forbidden subject where observed. A traversal position or impl/item ordinal SHALL NOT substitute for
+an unrenderable structural role.
+
+#### Scenario: Inherent and trait-impl seams stay distinct
+- **WHEN** the same subject appears in an inherent item and a trait-impl item on one self type
+- **THEN** their owner/trait/item roles keep the identities distinct
+
+#### Scenario: An unrenderable seam fails safely
+- **WHEN** ordinary rendering cannot distinguish two structural seams
+- **THEN** an observed discriminator separates them or scanning fails loud, never a positional fallback

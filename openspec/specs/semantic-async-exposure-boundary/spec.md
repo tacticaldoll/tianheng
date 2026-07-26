@@ -82,7 +82,7 @@ crate. Within the observed subtree there SHALL be no false negative: a public `a
 descendant module MUST react.
 
 The violation `target` SHALL remain the boundary's anchored module (not the deeper enclosing
-module), so a finding's identity `(target, rule, finding_key)` is stable whether or not the opt-in is
+module), so a finding's identity `(target, rule_key, fact)` is stable whether or not the opt-in is
 set — enabling it adds only new, deeper findings and never re-identifies a seam finding (baseline
 stability). A seam finding (one in the anchored module itself) under the opt-in SHALL be
 byte-identical to the same finding under the default scope.
@@ -136,29 +136,41 @@ bare boundary's projection stays byte-identical.
 
 ### Requirement: The finding is an owner-qualified item identity
 
-The finding SHALL be an owner-qualified item identity — the owner kind, the owner path or type, the
-function name, and a stable render of the parameters and return type — NOT a bare function name and
-NOT a future type-shape. Two distinct public async fns SHALL yield two distinct findings, so that
-baselining one never masks the other under the `(target, rule, finding_key)` identity. The owner render
-SHALL preserve generic arguments (`Foo<u8>` and `Foo<u16>` stay distinct). The rendered return type
-serves readability and collision-avoidance, not to represent the implicit future.
+An async-exposure fact SHALL identify the governed public seam by module, owner kind, canonical
+owner, and item name, with a trait-impl role when required to distinguish two seams on the same
+owner. The complete parameter/return signature, generic spelling, and implicit future SHALL remain
+human diagnostic presentation and SHALL NOT enter violation identity. A signature-only change to
+the same named seam SHALL therefore preserve its baseline identity, while two different owners or
+item names SHALL remain distinct.
 
-The system MAY render an unrenderable owner or parameter type as `_` — a **stated
-render-granularity bound**, the same class the `dyn` / `impl Trait` shape renderers carry: two
-DISTINCT but unrenderable-typed items with an identical name and signature would then share a
-finding. This is unreachable for a valid inherent `impl` (its self type is always a concrete nominal
-path, which renders), so it is stated rather than guarded — never a silent claim that such a case is
-distinguished.
+No unrenderable owner SHALL fall back to a traversal ordinal, item index, or branch-local position.
+If ordinary canonical rendering cannot distinguish two structurally distinct seams, the observation
+SHALL use an observed structural discriminator or fail loud rather than collapse them.
 
-#### Scenario: Two same-named async methods across two impls yield distinct findings
+#### Scenario: Two same-named async methods across owners stay distinct
 
-- **WHEN** the governed module declares `impl A { pub async fn run(&self) {} }` and `impl B { pub async fn run(&self) {} }`
-- **THEN** the system emits two distinct violations whose findings are owner-qualified (naming `A` and `B` respectively), never a single finding that would let a baselined `run` mask the other
+- **WHEN** `impl A { pub async fn run(&self) {} }` and `impl B { pub async fn run(&self) {} }` are observed
+- **THEN** two fact identities name their distinct canonical owners
 
-#### Scenario: Two same-named async methods across two traits yield distinct findings
+#### Scenario: Trait and inherent seams stay distinct
 
-- **WHEN** the governed module declares `pub trait T { async fn run(&self); }` and `pub trait U { async fn run(&self); }`
-- **THEN** the system emits two distinct violations whose findings name the trait owners `T` and `U` respectively
+- **WHEN** inherent and trait-impl async methods share the same owner and item name
+- **THEN** owner kind and trait-impl role keep the public seams distinct
+
+#### Scenario: A signature-only change preserves the seam
+
+- **WHEN** parameters, return type, or generic spelling change while module, owner role, canonical owner, and item name remain the same
+- **THEN** presentation changes but structured fact and baseline identity remain unchanged
+
+#### Scenario: Pacta-shaped operations preserve identity across sync and async signatures
+
+- **WHEN** a local fixture models Pacta's same registry operation with two signature shapes
+- **THEN** Tianheng emits one stable seam identity while retaining each complete signature as diagnosis
+
+#### Scenario: Cfg branches do not share a positional fallback
+
+- **WHEN** distinct cfg branches contain structurally distinct but ordinarily unrenderable owners at the same local item position
+- **THEN** their identities remain distinct or observation fails loud, never assigning equal ordinal-derived identities
 
 ### Requirement: CI reaction, severity, baseline, and projection parity
 
@@ -166,7 +178,7 @@ The async-exposure boundary SHALL share the 渾儀 reaction contract with the si
 findings fold into the same aggregated report and exit-code outcome (**0** clean, **1** enforce
 violation, **2** constitution/scan error such as an unresolvable crate or module); the boundary
 carries a severity (`enforce` default, or `warn`) and is gated against the same `Baseline` under
-the shared violation identity `(target, rule, finding_key)`; and the rule projects through the `list`
+the shared violation identity `(target, rule_key, fact)`; and the rule projects through the `list`
 text/JSON/markdown projection with its own boundary section. The implementation SHALL keep the
 `syn` dependency quarantined in `hunyi` (no new dependency) and SHALL NOT change existing rules.
 

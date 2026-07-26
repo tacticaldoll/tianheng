@@ -82,7 +82,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 
 ### Requirement: Public-signature observation governs exposure
 
-The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule, finding_key)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
+The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule_key, fact)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
 
 #### Scenario: A forbidden type in a public return is a violation
 
@@ -151,7 +151,7 @@ The system SHALL resolve a type named in a signature using the **shared 渾儀 r
 - **A local type-namespace item shadows the extern prelude.** A bare head naming a local `struct`/`enum`/`union`/`trait`/`type`-alias/`mod` in the governed module denotes that local item, and the extern oracle SHALL NOT fire for it.
 - **A bare local-alias chain resolves regardless of collection order.** When a type alias's target is itself a bare local alias whose name shadows a dependency (`type serde = crate::infra::Db; type X = serde;`), the alias-collection ladder SHALL resolve the local alias before the extern oracle (identical to the query ladder), closing the chain to the defining path.
 
-A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a type defined only in a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed, so its types are collected and resolvable), a complex-target or generic type alias, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
+A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a type defined only in a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed, so its types are collected and resolvable), a generic type alias, nominal paths nested only inside alias-target forms outside the explicitly supported non-generic compound constructors below, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
 
 #### Scenario: A leading-`::` extern path resolves and reacts through a local shadow
 
@@ -189,14 +189,14 @@ The system SHALL fold semantic-boundary findings into the same exit-code contrac
 
 ### Requirement: Severity and baseline parity
 
-A semantic boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as a static boundary: a `warn` violation is reported but does not by itself fail the reaction. Semantic violations SHALL be gated against the same `Baseline` mechanism as static violations, sharing the violation identity `(target, rule, finding_key)`, so a project may adopt a semantic boundary on a dirty codebase and gate only on new exposure.
+A semantic boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as a static boundary: a `warn` violation is reported but does not by itself fail the reaction. Semantic violations SHALL be gated against the same `Baseline` mechanism as static violations, sharing the violation identity `(target, rule_key, fact)`, so a project may adopt a semantic boundary on a dirty codebase and gate only on new exposure.
 
 The `finding` SHALL be **seam-qualified**: it names both the exposed type and the public **seam** (the owning item / sub-element — a free fn, an inherent method owner-qualified by self type, a trait method, a field, a variant, a type alias, a const/static, a supertrait or associated-item position) that exposes it, rendered as `{canonical type} exposed by {seam}`. Two distinct seams exposing the *same* forbidden type therefore SHALL produce distinct findings, so baselining one exposure MUST NOT mask a new exposure of the same type at another seam (the one forbidden bug — the same guarantee async-exposure secures with its owner-qualified identity).
 
 #### Scenario: Two seams exposing the same forbidden type stay distinct findings
 
 - **WHEN** two public functions in the governed module each expose the forbidden type `crate::infra::DbPool`, and one is recorded in the baseline as accepted
-- **THEN** the second still reacts: its finding is qualified by its own seam, so the baseline identity `(target, rule, finding_key)` does not mask it
+- **THEN** the second still reacts: its finding is qualified by its own seam, so the baseline identity `(target, rule_key, fact)` does not mask it
 
 #### Scenario: A warn semantic boundary reports without failing
 
@@ -291,3 +291,35 @@ path as written in the governed source.
 - **WHEN** the governed module exposes `pub fn make() -> worklane_core::api::Handle` under `must_not_expose("worklane_core::spi")`
 - **THEN** the system reports no violation (`worklane_core::api::Handle` is neither the forbidden path nor beneath `worklane_core::spi::`)
 
+### Requirement: Signature exposure facts use structural seam roles
+
+Every signature-coupling fact SHALL separately encode the forbidden subject and the public seam
+roles that make the exposure distinct. Semantic member positions such as tuple-field indices MAY be
+identity-bearing observations; scan order, item ordinal, and renderer fallback position SHALL NOT.
+
+#### Scenario: Two exposed seams stay distinct
+- **WHEN** the same forbidden subject appears at two public seams
+- **THEN** their structured seam roles differ and accepting one does not mask the other
+
+#### Scenario: Reordering does not alter a seam
+- **WHEN** unrelated items are inserted or declarations reordered
+- **THEN** pre-existing exposure identities remain unchanged
+
+### Requirement: Non-generic compound type aliases inspect nested nominal targets
+
+The type alias extraction scanner SHALL inspect non-generic type alias declarations (`type Alias = Target;`) and walk nested compound type constructors—including references (`&T`), tuples (`(A, B)`), slices (`[T]`), arrays (`[T; N]`), groups, and parens—extracting all nested nominal target paths (`syn::Path`). Each nested nominal target SHALL be registered into the alias map so signature coupling boundaries react when a forbidden type is exposed through a compound type alias.
+
+#### Scenario: Non-generic tuple type alias target is inspected
+
+- **WHEN** a governed module declares `pub type Pair = (crate::infra::DbConn, String);` and exposes `pub fn get_pair() -> Pair` under `must_not_expose("crate::infra")`
+- **THEN** the semantic boundary reacts on `crate::infra::DbConn` exposed via `Pair`
+
+#### Scenario: Non-generic reference type alias target is inspected
+
+- **WHEN** a governed module declares `pub type ConnRef = &'a crate::infra::DbConn;` and exposes `pub fn get_ref() -> ConnRef` under `must_not_expose("crate::infra")`
+- **THEN** the semantic boundary reacts on `crate::infra::DbConn` exposed via `ConnRef`
+
+#### Scenario: Non-generic slice type alias target is inspected
+
+- **WHEN** a governed module declares `pub type ConnSlice = [crate::infra::DbConn];` and exposes `pub fn get_slice() -> ConnSlice` under `must_not_expose("crate::infra")`
+- **THEN** the semantic boundary reacts on `crate::infra::DbConn` exposed via `ConnSlice`

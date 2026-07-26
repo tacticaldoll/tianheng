@@ -136,7 +136,7 @@ The system SHALL fold visibility findings into the same exit-code contract as th
 
 ### Requirement: Severity and baseline parity
 
-A visibility boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries: a `warn` violation is reported but does not by itself fail the reaction. Its violations SHALL be gated against the same `Baseline` mechanism, sharing the violation identity `(target, rule, finding_key)` — where the rule is a fixed string and the finding identifies the offending item — so a project may adopt the boundary on a dirty codebase and gate only on new `pub` items.
+A visibility boundary SHALL carry a severity (`enforce` by default, or `warn`) with the same meaning as other boundaries: a `warn` violation is reported but does not by itself fail the reaction. Its violations SHALL be gated against the same `Baseline` mechanism, sharing the violation identity `(target, rule_key, fact)` — where the rule is a fixed string and the finding identifies the offending item — so a project may adopt the boundary on a dirty codebase and gate only on new `pub` items.
 
 #### Scenario: A warn boundary reports without failing
 
@@ -161,3 +161,13 @@ A visibility violation report SHALL identify the governed module anchor, the rul
 
 - **WHEN** the module `crate::internal` of crate `app` declares `pub struct Pool` under a `Crate`-ceiling visibility boundary
 - **THEN** the report names the anchor `crate::internal`, the rule (that it must not declare `pub` items), the finding identifying `pub struct Pool`, the boundary's reason, and indicates CI failed
+
+### Requirement: Visibility violations identify the declared item structurally
+
+A visibility violation SHALL encode item kind, module, owner, and item name where observed under a
+structured visibility rule key. Rendered visibility/item text and declaration order SHALL NOT enter
+identity.
+
+#### Scenario: Same-named items on different owners stay distinct
+- **WHEN** two violating public items share a name but differ by module or owner
+- **THEN** their structured facts remain distinct

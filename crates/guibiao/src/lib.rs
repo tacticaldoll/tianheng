@@ -24,7 +24,10 @@ use serde_json::Value;
 
 mod module_scan;
 mod projection;
-pub use projection::{constitution_json, constitution_text, report_json};
+pub use projection::{
+    StalePolicy, constitution_json, constitution_text, report_json, report_json_with_stale_policy,
+    stale_policy,
+};
 mod cargo_metadata;
 pub(crate) use cargo_metadata::*;
 mod crate_check;
@@ -52,8 +55,8 @@ pub use model::*;
 // (PROJECT.md). Only the per-type vocabulary moved; the report/constitution *assembly*
 // (projection.rs), which folds in the static `Coverage`, stays in this crate.
 pub use xuanji::{
-    Baseline, BaselineEntry, BoundaryKind, Finding, FindingKey, Outcome, Polarity, Report,
-    Severity, Violation, ViolationId, apply_baseline,
+    Baseline, BaselineEntry, BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, ScanDepth,
+    Severity, StructuredFactIdentity, Violation, ViolationId, apply_baseline,
 };
 
 /// Run the constitution's boundaries against the Cargo workspace at `manifest_path`.

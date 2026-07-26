@@ -26,8 +26,8 @@ use serde_json::Value;
 // The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
 // hunyi's surface; these names are also used internally below.
 pub use xuanji::{
-    Baseline, BoundaryKind, Finding, FindingKey, Outcome, Polarity, Report, Severity, Violation,
-    ViolationId, apply_baseline,
+    Baseline, BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, ScanDepth, Severity,
+    StructuredFactIdentity, Violation, ViolationId, apply_baseline,
 };
 
 mod dsl;
@@ -89,7 +89,9 @@ pub(crate) use exposure::module_findings;
 #[cfg(test)]
 pub(crate) use forbidden_marker::forbidden_marker_findings;
 #[cfg(test)]
-pub(crate) use impl_trait::{impl_trait_module_findings, impl_trait_operand_module_findings};
+pub(crate) use impl_trait::{
+    impl_trait_module_findings, impl_trait_operand_module_findings, impl_trait_subtree_findings,
+};
 #[cfg(test)]
 pub(crate) use trait_impl::trait_impl_findings;
 #[cfg(test)]
@@ -143,6 +145,39 @@ impl SemanticBoundaries {
             && self.impl_trait.is_empty()
             && self.async_exposure.is_empty()
             && self.unsafe_confinement.is_empty()
+    }
+
+    /// The target crate package of every declared semantic boundary, across all capabilities.
+    ///
+    /// Centralizes crate-target enumeration for composed consumers such as workspace coverage, so
+    /// adding a capability cannot require a second hand-maintained list in the shell.
+    pub fn crate_packages(&self) -> impl Iterator<Item = &str> {
+        self.signature
+            .iter()
+            .map(SemanticBoundary::crate_package)
+            .chain(self.trait_impl.iter().map(TraitImplBoundary::crate_package))
+            .chain(
+                self.visibility
+                    .iter()
+                    .map(VisibilityBoundary::crate_package),
+            )
+            .chain(
+                self.forbidden_marker
+                    .iter()
+                    .map(ForbiddenMarkerBoundary::crate_package),
+            )
+            .chain(self.dyn_trait.iter().map(DynTraitBoundary::crate_package))
+            .chain(self.impl_trait.iter().map(ImplTraitBoundary::crate_package))
+            .chain(
+                self.async_exposure
+                    .iter()
+                    .map(AsyncExposureBoundary::crate_package),
+            )
+            .chain(
+                self.unsafe_confinement
+                    .iter()
+                    .map(UnsafeBoundary::crate_package),
+            )
     }
 }
 

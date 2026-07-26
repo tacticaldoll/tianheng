@@ -17,7 +17,8 @@
 #![deny(missing_docs)]
 
 pub use xuanji::{
-    BoundaryKind, Finding, FindingKey, Outcome, Polarity, Report, Severity, Violation, ViolationId,
+    BoundaryKind, Finding, Outcome, Polarity, Report, RuleKey, ScanDepth, Severity,
+    StructuredFactIdentity, Violation, ViolationId,
 };
 
 mod dsl;
@@ -31,7 +32,7 @@ mod tracked;
 #[cfg(feature = "audit")]
 mod audit;
 #[cfg(feature = "audit")]
-pub use audit::audit_probe_coverage;
+pub use audit::{audit_probe_coverage, audit_probe_coverage_with_markers};
 
 // Public re-exports — all previously-public items, same paths as before.
 pub use dsl::{OriginEntry, Posture, RuntimeBoundary, RuntimeBoundaryDraft, RuntimeSeamDraft};

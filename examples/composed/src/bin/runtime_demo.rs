@@ -11,7 +11,9 @@ fn main() {
     set_sink(|v| {
         eprintln!(
             "⛒ runtime reaction — {} · {}\n    {}",
-            v.target, v.finding, v.reason
+            v.target(),
+            v.finding,
+            v.reason
         )
     });
 
