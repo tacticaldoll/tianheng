@@ -3,7 +3,7 @@
 #
 # Each example is its own workspace — its *deliberate* faults (a bad import, an API leak, a rogue
 # runtime origin) must never be swept by Tianheng's workspace-wide gates. Each commits the
-# adopter's real dependency form (`guibiao = "0.2"`), so we resolve the family to LOCAL source via
+# adopter's real dependency form (`guibiao = "0.3"`), so we resolve the family to LOCAL source via
 # `--config patch.crates-io.<crate>.path=...` — the same idiom the `packaged-selftest` CI job uses:
 # the committed Cargo.toml stays copy-paste-honest while CI exercises the in-development tree.
 #

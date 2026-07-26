@@ -12,6 +12,8 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-26
+
 ### Documentation
 - Archived historical 0.1.x–0.3.0 shipped backlog ledgers into `docs/history/0.1.0-0.3.0-built-ledger.md` and pruned `BACKLOG.md` to optimize context gravity.
 - Reconciled the 0.3.0 migration guide with the separately shipped testing harness and restored
@@ -489,7 +491,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/tianheng/compare/v0.2.0...v0.2.1
