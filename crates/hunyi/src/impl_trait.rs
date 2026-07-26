@@ -8,7 +8,9 @@ use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
 use crate::collect::collect_item_return_impl_traits;
-use crate::crate_scope::{dependency_names, extern_resolution, file_extern_scope};
+use crate::crate_scope::{
+    ExternResolution, dependency_names, extern_resolution, file_extern_scope,
+};
 use crate::driver::run_boundaries;
 use crate::dsl::ImplTraitBoundary;
 use crate::emit::{
@@ -17,7 +19,7 @@ use crate::emit::{
 };
 use crate::file_scope::resolve_crate;
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_attributed_facts};
-use crate::resolve::{canonical_path_str, collect_uses};
+use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
 use crate::rules::IMPL_TRAIT_RULE;
 use crate::scan::walk_subtree_modules;
 use crate::shape_scan::{
@@ -138,25 +140,7 @@ pub(crate) fn impl_trait_subtree_findings(
     crate_package: &str,
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
-    let mut findings: Vec<(SemanticFact, String, PathBuf)> = Vec::new();
-    let mut ordinal = 0usize;
-    for (mod_path, items, file) in &modules {
-        let uses = collect_uses(items);
-        for item in items {
-            let mut collected = Vec::new();
-            collect_item_return_impl_traits(item, mod_path, &uses, ordinal, &mut collected);
-            ordinal += 1;
-            findings.extend(collected.into_iter().map(|exposure| {
-                (
-                    shape_finding(exposure, ExposureKind::ImplTrait),
-                    mod_path.clone(),
-                    file.clone(),
-                )
-            }));
-        }
-    }
-    sort_attributed_facts(&mut findings)?;
-    Ok(findings)
+    collect_impl_trait_subtree_findings(modules, &ImplTraitSubtreeFilter::Any)
 }
 
 /// Operand-scoped subtree analogue of [`impl_trait_operand_module_findings`]. Module traversal
@@ -174,41 +158,63 @@ pub(crate) fn impl_trait_operand_subtree_findings(
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
-    let forbidden: Vec<String> = forbidden
-        .iter()
-        .map(|path| canonical_path_str(path))
-        .collect();
+    let filter = ImplTraitSubtreeFilter::Forbidden {
+        resolution,
+        paths: forbidden
+            .iter()
+            .map(|path| canonical_path_str(path))
+            .collect(),
+    };
+    collect_impl_trait_subtree_findings(modules, &filter)
+}
+
+enum ImplTraitSubtreeFilter {
+    Any,
+    Forbidden {
+        resolution: ExternResolution,
+        paths: Vec<String>,
+    },
+}
+
+impl ImplTraitSubtreeFilter {
+    fn retain(
+        &self,
+        module: &str,
+        items: &[syn::Item],
+        uses: &UseMap,
+        exposures: &mut Vec<ShapeExposure>,
+    ) {
+        let Self::Forbidden { resolution, paths } = self else {
+            return;
+        };
+        let file_scope = file_extern_scope(resolution, items);
+        exposures.retain(|exposure| {
+            matches_forbidden_principal(exposure, uses, module, resolution, &file_scope, paths)
+        });
+    }
+}
+
+fn collect_impl_trait_subtree_findings(
+    modules: Vec<(String, Vec<syn::Item>, PathBuf)>,
+    filter: &ImplTraitSubtreeFilter,
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let mut findings = Vec::new();
     let mut ordinal = 0usize;
 
     for (mod_path, items, file) in &modules {
         let uses = collect_uses(items);
-        let file_scope = file_extern_scope(&resolution, items);
         for item in items {
             let mut collected = Vec::new();
             collect_item_return_impl_traits(item, mod_path, &uses, ordinal, &mut collected);
             ordinal += 1;
-            findings.extend(
-                collected
-                    .into_iter()
-                    .filter(|exposure| {
-                        matches_forbidden_principal(
-                            exposure,
-                            &uses,
-                            mod_path,
-                            &resolution,
-                            &file_scope,
-                            &forbidden,
-                        )
-                    })
-                    .map(|exposure| {
-                        (
-                            shape_finding(exposure, ExposureKind::ImplTrait),
-                            mod_path.clone(),
-                            file.clone(),
-                        )
-                    }),
-            );
+            filter.retain(mod_path, items, &uses, &mut collected);
+            findings.extend(collected.into_iter().map(|exposure| {
+                (
+                    shape_finding(exposure, ExposureKind::ImplTrait),
+                    mod_path.clone(),
+                    file.clone(),
+                )
+            }));
         }
     }
 
