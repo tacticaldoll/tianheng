@@ -4,7 +4,7 @@
 //! presented" surface is self-contained, beside the `list`-projection sibling
 //! `runner/projection.rs`.
 
-use guibiao::{Coverage, Outcome, Report, Severity};
+use guibiao::{Coverage, Outcome, Report, Severity, stale_policy};
 
 use super::term_color::Style;
 
@@ -169,7 +169,7 @@ pub(crate) fn report_sarif_with_stale(
     use serde_json::{Value, json};
     let mut results: Vec<Value> = Vec::new();
     let mut invocations: Vec<Value> = Vec::new();
-    let has_disallowed_stale = disallow_stale && !stale.is_empty();
+    let has_disallowed_stale = stale_policy(outcome, stale, disallow_stale).stale_disallowed;
 
     match outcome {
         Outcome::Violations(report) => {
