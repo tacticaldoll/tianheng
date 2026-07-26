@@ -126,7 +126,19 @@ fn macro_invocation_body_end(bytes: &[u8], i: usize) -> Option<usize> {
 /// `use`) and must not be stripped. No preceding identifier (`!x`, a leading `!`) is likewise not an
 /// invocation. A raw identifier is always a name (never a keyword), so `r#try ! { … }` strips.
 fn preceding_macro_name(bytes: &[u8], bang: usize) -> bool {
-    let mut end = bang;
+    let Some((start, word)) = word_before(bytes, bang) else {
+        return false;
+    };
+    is_raw_ident_prefixed(bytes, start) || !is_rust_keyword(word)
+}
+
+/// The identifier word immediately before `at`, skipping optional ASCII whitespace.
+///
+/// Returns its start position as well as the word because callers need the position to distinguish
+/// a raw identifier (`r#word`) from the same bare word. The returned slice excludes the `r#`
+/// prefix, matching the scanner's canonical identifier vocabulary.
+fn word_before(bytes: &[u8], at: usize) -> Option<(usize, &[u8])> {
+    let mut end = at;
     while end > 0 && bytes[end - 1].is_ascii_whitespace() {
         end -= 1;
     }
@@ -135,32 +147,15 @@ fn preceding_macro_name(bytes: &[u8], bang: usize) -> bool {
         start -= 1;
     }
     if start == end {
-        return false; // no identifier word precedes the `!`
+        return None;
     }
-    is_raw_ident_prefixed(bytes, start) || !is_rust_keyword(&bytes[start..end])
+    Some((start, &bytes[start..end]))
 }
 
 /// Whether the macro invocation at `bang` is a **transparent control-flow macro** (specifically
 /// `cfg_if!`), whose structural contents should be preserved during macro stripping.
 fn is_transparent_macro_name(bytes: &[u8], bang: usize) -> bool {
-    let mut end = bang;
-    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
-        end -= 1;
-    }
-    let mut start = end;
-    while start > 0 && is_ident_byte(bytes[start - 1]) {
-        start -= 1;
-    }
-    if start == end {
-        return false;
-    }
-    let word = &bytes[start..end];
-    let name = if is_raw_ident_prefixed(bytes, start) && word.starts_with(b"r#") {
-        &word[2..]
-    } else {
-        word
-    };
-    name == b"cfg_if"
+    word_before(bytes, bang).is_some_and(|(_, word)| word == b"cfg_if")
 }
 
 /// If `bytes[bang]` is the `!` of a transparent control-flow macro invocation (`cfg_if!`),
