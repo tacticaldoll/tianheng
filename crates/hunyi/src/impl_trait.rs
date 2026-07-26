@@ -9,7 +9,7 @@ use xuanji::{Outcome, Polarity, Violation};
 
 use crate::collect::collect_item_return_impl_traits;
 use crate::crate_scope::{
-    ExternResolution, dependency_names, extern_resolution, file_extern_scope,
+    ExternResolution, FileExternScope, dependency_names, extern_resolution, file_extern_scope,
 };
 use crate::driver::run_boundaries;
 use crate::dsl::ImplTraitBoundary;
@@ -180,16 +180,17 @@ impl ImplTraitSubtreeFilter {
     fn retain(
         &self,
         module: &str,
-        items: &[syn::Item],
         uses: &UseMap,
+        file_scope: Option<&FileExternScope>,
         exposures: &mut Vec<ShapeExposure>,
     ) {
         let Self::Forbidden { resolution, paths } = self else {
             return;
         };
-        let file_scope = file_extern_scope(resolution, items);
+        let file_scope =
+            file_scope.expect("a forbidden subtree filter precomputes one scope per module");
         exposures.retain(|exposure| {
-            matches_forbidden_principal(exposure, uses, module, resolution, &file_scope, paths)
+            matches_forbidden_principal(exposure, uses, module, resolution, file_scope, paths)
         });
     }
 }
@@ -203,11 +204,17 @@ fn collect_impl_trait_subtree_findings(
 
     for (mod_path, items, file) in &modules {
         let uses = collect_uses(items);
+        let file_scope = match filter {
+            ImplTraitSubtreeFilter::Any => None,
+            ImplTraitSubtreeFilter::Forbidden { resolution, .. } => {
+                Some(file_extern_scope(resolution, items))
+            }
+        };
         for item in items {
             let mut collected = Vec::new();
             collect_item_return_impl_traits(item, mod_path, &uses, ordinal, &mut collected);
             ordinal += 1;
-            filter.retain(mod_path, items, &uses, &mut collected);
+            filter.retain(mod_path, &uses, file_scope.as_ref(), &mut collected);
             findings.extend(collected.into_iter().map(|exposure| {
                 (
                     shape_finding(exposure, ExposureKind::ImplTrait),
