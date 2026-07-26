@@ -278,6 +278,37 @@ fn a_cfg_attr_nested_path_collects_conditional_remaps() {
 }
 
 #[test]
+fn a_deeply_nested_cfg_attr_path_is_followed_without_native_recursion() {
+    const DEPTH: usize = 512;
+    let tree = TempSrcTree::new("deeply-nested-cfg-attr");
+    let src = tree.src().to_path_buf();
+    let mut attribute = String::from("#[cfg_attr");
+    for _ in 0..DEPTH {
+        attribute.push_str("(predicate, cfg_attr");
+    }
+    attribute.push_str("(predicate, path = \"target.rs\")");
+    for _ in 0..=DEPTH {
+        attribute.push(')');
+    }
+    attribute.push_str("]\npub mod target;\n");
+    std::fs::write(src.join("lib.rs"), attribute).expect("write lib.rs");
+    let target = src.join("target.rs");
+    std::fs::write(&target, "use crate::projection::Thing;\n").expect("write target.rs");
+
+    let files = rust_files(&src).expect("list files");
+    let (reachable, _inline_only, remapped, _remap_shadowed) =
+        reachable_modules(&src, &files, None).expect("walk deeply nested cfg_attr");
+
+    assert!(reachable.contains("crate::target"), "{reachable:?}");
+    assert!(
+        remapped
+            .iter()
+            .any(|(file, module)| file == &target && module == "crate::target"),
+        "{remapped:?}"
+    );
+}
+
+#[test]
 fn mixed_direct_and_conditional_path_attrs_keep_the_module_regardless_of_order() {
     assert_eq!(
         declared_modules(

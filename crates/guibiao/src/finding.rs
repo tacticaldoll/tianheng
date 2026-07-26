@@ -152,8 +152,6 @@ fn fact<const N: usize>(
 mod tests {
     use super::*;
 
-    type KeyCase<F> = (F, Vec<(&'static str, &'static str)>);
-
     fn assert_dependency_kind_is_cataloged(kind: DependencyKind) {
         match kind {
             DependencyKind::Normal | DependencyKind::Dev | DependencyKind::Build => {}
@@ -267,47 +265,57 @@ mod tests {
 
     #[test]
     fn published_module_fact_identity_schema_is_exact_and_exhaustive() {
-        let cases: Vec<KeyCase<ModuleFact>> = vec![
-            (
-                ModuleFact::ImportedPath("crate::ports".to_string()),
-                vec![("path", "crate::ports")],
-            ),
-            (
-                ModuleFact::ImporterModule("crate::api".to_string()),
-                vec![("module", "crate::api")],
-            ),
-            (
-                ModuleFact::ExternalImporter("crate::ffi".to_string()),
-                vec![("module", "crate::ffi")],
-            ),
-            (
-                ModuleFact::InlinePath {
+        struct ModuleKeyCase {
+            fact: ModuleFact,
+            fields: Vec<(&'static str, &'static str)>,
+            family: &'static str,
+            shape: &'static str,
+        }
+
+        let cases = vec![
+            ModuleKeyCase {
+                fact: ModuleFact::ImportedPath("crate::ports".to_string()),
+                fields: vec![("path", "crate::ports")],
+                family: "imported-path",
+                shape: "module-path",
+            },
+            ModuleKeyCase {
+                fact: ModuleFact::ImporterModule("crate::api".to_string()),
+                fields: vec![("module", "crate::api")],
+                family: "importer-module",
+                shape: "module-path",
+            },
+            ModuleKeyCase {
+                fact: ModuleFact::ExternalImporter("crate::ffi".to_string()),
+                fields: vec![("module", "crate::ffi")],
+                family: "external-importer",
+                shape: "module-path",
+            },
+            ModuleKeyCase {
+                fact: ModuleFact::InlinePath {
                     path: "std::time::SystemTime::now".to_string(),
                     module: "crate::kernel".to_string(),
                 },
-                vec![
+                fields: vec![
                     ("module", "crate::kernel"),
                     ("path", "std::time::SystemTime::now"),
                 ],
-            ),
-            (
-                ModuleFact::InlineGlob {
+                family: "inline-path",
+                shape: "path-in-module",
+            },
+            ModuleKeyCase {
+                fact: ModuleFact::InlineGlob {
                     path: "std::time::*".to_string(),
                     module: "crate::kernel".to_string(),
                 },
-                vec![("module", "crate::kernel"), ("path", "std::time::*")],
-            ),
+                fields: vec![("module", "crate::kernel"), ("path", "std::time::*")],
+                family: "inline-glob",
+                shape: "path-in-module",
+            },
         ];
-        let shapes = [
-            ("imported-path", "module-path"),
-            ("importer-module", "module-path"),
-            ("external-importer", "module-path"),
-            ("inline-path", "path-in-module"),
-            ("inline-glob", "path-in-module"),
-        ];
-        for ((fact, fields), (family, shape)) in cases.into_iter().zip(shapes) {
-            assert_module_fact_is_cataloged(&fact);
-            assert_key(fact, family, shape, &fields);
+        for case in cases {
+            assert_module_fact_is_cataloged(&case.fact);
+            assert_key(case.fact, case.family, case.shape, &case.fields);
         }
     }
 
