@@ -1150,6 +1150,10 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
 fn is_unary_prefix_span(b: &[u8]) -> bool {
     let mut i = 0;
     while i < b.len() {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next;
+            continue;
+        }
         if b[i].is_ascii_whitespace() {
             i += 1;
             continue;
