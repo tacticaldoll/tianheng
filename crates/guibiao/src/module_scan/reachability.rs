@@ -647,19 +647,21 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
     let mut declared = Vec::new();
     let mut i = range.start.min(end);
     // In `cleaned`, non-transparent macro bodies have already been stripped; a `{` preceded by `!`
-    // therefore always opens a transparent macro body (cfg_if!). Within that body, ALL nested
-    // braces are also transparent — cfg_if! arms (`if #[cfg(...)] { … }`) are top-level item
-    // scopes, and the scanner cannot distinguish arm braces from item-body braces without a full
-    // parse. `effective_depth` counts only non-transparent braces; `mod` is observed only at
-    // effective_depth 0, matching the caller-supplied range's own top-level scope.
-    let mut brace_stack: Vec<bool> = Vec::new(); // true = transparent (inside cfg_if! body)
-    let mut transparent_count: usize = 0; // number of currently open transparent braces
+    // therefore always opens a transparent macro body (cfg_if!). Inside that macro body, top-level
+    // arm braces (`if #[cfg(...)] { … }` / `else { … }`) are also transparent so their top-level
+    // `mod` declarations are observed. Any `{` opened inside an arm's items (fn/struct/const/etc.)
+    // is a regular block that increments `effective_depth`, hiding local modules.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum BraceKind {
+        MacroBody,
+        Arm,
+        Regular,
+    }
+    let mut brace_stack: Vec<BraceKind> = Vec::new();
     let mut effective_depth: usize = 0;
     while i < end {
         match bytes[i] {
             b'{' => {
-                // A `{` preceded by `!` opens a transparent macro body. Any `{` encountered
-                // while already inside a transparent context is also transparent.
                 let is_after_bang = i > range.start && {
                     let mut j = i - 1;
                     while j > range.start && bytes[j].is_ascii_whitespace() {
@@ -667,20 +669,24 @@ fn declared_modules_in(cleaned: &str, range: std::ops::Range<usize>) -> Vec<Decl
                     }
                     bytes[j] == b'!'
                 };
-                if is_after_bang || transparent_count > 0 {
-                    brace_stack.push(true);
-                    transparent_count += 1;
+                let kind = if is_after_bang {
+                    BraceKind::MacroBody
+                } else if matches!(brace_stack.last(), Some(BraceKind::MacroBody)) {
+                    // Direct arm brace inside cfg_if! { ... }
+                    BraceKind::Arm
                 } else {
-                    brace_stack.push(false);
+                    BraceKind::Regular
+                };
+
+                if kind == BraceKind::Regular {
                     effective_depth += 1;
                 }
+                brace_stack.push(kind);
                 i += 1;
             }
             b'}' => {
-                if let Some(was_transparent) = brace_stack.pop() {
-                    if was_transparent {
-                        transparent_count = transparent_count.saturating_sub(1);
-                    } else {
+                if let Some(kind) = brace_stack.pop() {
+                    if kind == BraceKind::Regular {
                         effective_depth = effective_depth.saturating_sub(1);
                     }
                 }
@@ -1648,6 +1654,11 @@ mod tests {
 cfg_if::cfg_if! {
     if #[cfg(feature = "x")] {
         mod child;
+        fn f() {
+            mod local_inner {
+                use crate::secret;
+            }
+        }
     }
 }
 "#;
