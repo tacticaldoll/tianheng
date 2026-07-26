@@ -1707,6 +1707,48 @@ fn anonymous_scope_header_ignores_delimiters_inside_literals_and_comments() {
 }
 
 #[test]
+fn literal_punctuation_in_anonymous_scopes_keeps_probe_owners_distinct_end_to_end() {
+    let tb = TempBase::new("anonymous-owner-literal-punctuation");
+    let dir = tb.dir(
+        "two",
+        r#"
+fn outer() {
+    if "a;b" == "x" {
+        fn probe() { assert_boundary!(SEAM_A, o); }
+    }
+    if "a{b" == "x" {
+        fn probe() { assert_boundary!(SEAM_A, o); }
+    }
+}
+"#,
+    );
+    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let violations = unauditable_violations(&outcome);
+    assert_eq!(
+        violations.len(),
+        2,
+        "literal punctuation must not collapse distinct anonymous owners: {violations:?}"
+    );
+    let owners: std::collections::BTreeSet<_> = violations
+        .iter()
+        .map(|violation| {
+            violation
+                .fact()
+                .fields()
+                .find_map(|(name, value)| (name == "owner").then_some(value.to_string()))
+                .expect("unauditable probe identity carries its owner")
+        })
+        .collect();
+    assert_eq!(
+        owners.len(),
+        2,
+        "the full audit path must retain both literal-distinguished owner headers: {violations:?}"
+    );
+    assert!(owners.iter().any(|owner| owner.contains(r#"if "a;b""#)));
+    assert!(owners.iter().any(|owner| owner.contains(r#"if "a{b""#)));
+}
+
+#[test]
 fn unregistered_custom_marker_is_ignored_by_audit() {
     let tb = TempBase::new("unregistered-marker");
     let root = tb.source(
