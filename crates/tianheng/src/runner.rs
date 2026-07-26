@@ -49,7 +49,10 @@ use projection::*;
 pub use projection::{constitution_markdown, projection_gate};
 
 mod render;
-use render::{report, report_coverage, report_sarif, report_sarif_with_stale, report_violations};
+use render::{
+    disallow_stale_message, report, report_coverage, report_sarif, report_sarif_with_stale,
+    report_violations,
+};
 mod term_color;
 use term_color::Style;
 
@@ -561,10 +564,7 @@ fn gate(
                 );
             }
             if policy.stale_disallowed {
-                eprintln!(
-                    "Tianheng: --disallow-stale failed: {} stale baseline entry/entries found",
-                    stale.len()
-                );
+                eprintln!("Tianheng: {}", disallow_stale_message(stale.len()));
             }
             if let Some(coverage) = coverage {
                 report_coverage(coverage, warn_uncovered);

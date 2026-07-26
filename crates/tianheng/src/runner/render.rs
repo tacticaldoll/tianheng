@@ -8,6 +8,10 @@ use guibiao::{Coverage, Outcome, Report, Severity, stale_policy};
 
 use super::term_color::Style;
 
+pub(crate) fn disallow_stale_message(count: usize) -> String {
+    format!("--disallow-stale failed: {count} stale baseline entry/entries found")
+}
+
 /// The human-readable `check` report goes to **stderr** as a single stream — clean
 /// line, violation/advisory blocks, the baseline summary, coverage, and stale entries
 /// alike — so a CI log shows them in a deterministic order rather than interleaving a
@@ -244,7 +248,7 @@ pub(crate) fn report_sarif_with_stale(
                 "executionSuccessful": false,
                 "toolExecutionNotifications": [{
                     "level": "error",
-                    "message": { "text": format!("--disallow-stale failed: {} stale baseline entry/entries found", stale.len()) },
+                    "message": { "text": disallow_stale_message(stale.len()) },
                 }],
             }));
         }
