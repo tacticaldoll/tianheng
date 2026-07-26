@@ -80,8 +80,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ### Compatibility evidence
 - Pacta `d3e24df`'s unpublished `pacta-governance` consumer compiled against this checkout's local
   `tianheng` and `guibiao` crates (`cargo check -p pacta-governance`) from a temporary copy; no
-  Pacta source migration was required. This is recorded external evidence, not a sibling-repository
-  dependency of Tianheng's required CI.
+  Pacta source migration was required. This is recorded historical external evidence, not a
+  sibling-repository dependency of Tianheng's required CI. Ongoing local reaction is provided by
+  the external-view `tianheng` and `guibiao` `adopter_surface` tests; those fixtures protect the
+  corresponding public call shapes without claiming to re-verify that external commit.
 
 - Refined core project documentation density (`PROJECT.md`, `BACKLOG.md`) to archive verbose
   historical post-mortems and prune redundant release ledgers, reducing context token overhead.

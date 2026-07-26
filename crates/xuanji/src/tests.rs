@@ -17,8 +17,14 @@ fn test_id(target: &str, rule: &str, finding: &str) -> ViolationId {
     ViolationId::new(
         target,
         RuleKey::of("tianheng.rule/test/policy", [("policy", rule)]),
-        test_finding(finding).key().clone(),
+        test_finding(finding).fact().clone(),
     )
+}
+
+#[test]
+fn finding_fact_accessor_keeps_the_key_compatibility_alias() {
+    let finding = test_finding("observed");
+    assert_eq!(finding.fact(), finding.key());
 }
 
 #[test]

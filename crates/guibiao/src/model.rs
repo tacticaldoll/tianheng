@@ -1369,6 +1369,10 @@ impl ModuleBoundaryDraft {
     }
 
     /// Convenience modifier setting the scan depth to [`ScanDepth::Subtree`].
+    ///
+    /// Module rules retain their legacy subtree default, so this is a source-compatible
+    /// ergonomic spelling for existing declarations and an explicit override when a draft was
+    /// previously changed to [`ScanDepth::Shallow`].
     pub fn including_submodules(self) -> Self {
         self.depth(ScanDepth::Subtree)
     }

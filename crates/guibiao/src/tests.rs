@@ -6069,6 +6069,30 @@ fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
 }
 
 #[test]
+fn module_boundary_including_submodules_is_a_compatible_subtree_modifier() {
+    let default = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .because("r");
+    let explicit = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .depth(xuanji::ScanDepth::Subtree)
+        .because("r");
+    let ergonomic = ModuleBoundary::in_crate("x")
+        .module("crate::core")
+        .must_not_import("crate::adapter")
+        .depth(xuanji::ScanDepth::Shallow)
+        .including_submodules()
+        .because("r");
+
+    assert_eq!(default.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(explicit.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(ergonomic.scan_depth(), xuanji::ScanDepth::Subtree);
+    assert_eq!(default.rule_key(), ergonomic.rule_key());
+}
+
+#[test]
 fn shallow_restrict_imports_to_ignores_descendant_imports() {
     let files = &[
         ("lib.rs", "pub mod core;\n"),

@@ -6,15 +6,15 @@ use crate::StructuredFactIdentity;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Finding {
     pub(crate) text: String,
-    pub(crate) key: StructuredFactIdentity,
+    pub(crate) fact: StructuredFactIdentity,
 }
 
 impl Finding {
-    /// Pair human finding text with dimension-owned stable key.
-    pub fn new(text: impl Into<String>, key: StructuredFactIdentity) -> Self {
+    /// Pair human finding text with a dimension-owned stable observed-fact identity.
+    pub fn new(text: impl Into<String>, fact: StructuredFactIdentity) -> Self {
         Self {
             text: text.into(),
-            key,
+            fact,
         }
     }
 
@@ -23,8 +23,16 @@ impl Finding {
         &self.text
     }
 
-    /// Stable structured identity key.
+    /// Structured observed-fact identity.
+    pub fn fact(&self) -> &StructuredFactIdentity {
+        &self.fact
+    }
+
+    /// Compatibility alias for [`Finding::fact`].
+    ///
+    /// New code should use `fact` so the same concept has the same name on [`Finding`] and
+    /// [`crate::Violation`]. This alias remains source-compatible for existing consumers.
     pub fn key(&self) -> &StructuredFactIdentity {
-        &self.key
+        self.fact()
     }
 }

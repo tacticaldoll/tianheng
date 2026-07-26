@@ -897,7 +897,7 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
                 .violations
                 .iter()
                 .any(|v| v.target() == "a-seam-no-probe-covers"
-                    && v.finding.contains("no assert_boundary! probe")),
+                    && v.finding.contains("no configured probe marker")),
             "the declared-unprobed seam must be the reported finding: {:?}",
             report.violations
         ),

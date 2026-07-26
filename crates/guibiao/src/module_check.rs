@@ -46,7 +46,7 @@ fn push_module_violation(
     violations.push(
         Violation::new(
             BoundaryKind::Module,
-            ViolationId::new(target, boundary.rule_key(), finding.key().clone()),
+            ViolationId::new(target, boundary.rule_key(), finding.fact().clone()),
             rule,
             finding.text(),
             boundary.reason.clone(),

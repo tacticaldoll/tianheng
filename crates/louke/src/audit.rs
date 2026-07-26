@@ -51,7 +51,7 @@ fn audit_violation(
     let finding = fact.into_finding();
     Violation::new(
         BoundaryKind::Runtime,
-        ViolationId::new(target, rule_key, finding.key().clone()),
+        ViolationId::new(target, rule_key, finding.fact().clone()),
         rule,
         finding.text(),
         reason,
