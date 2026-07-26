@@ -588,30 +588,29 @@ pub(crate) fn canonicalize_through_single_alias_map(
 /// `Type::Ptr`, `Type::Tuple`, `Type::Slice`, `Type::Array`, `Type::Group`, `Type::Paren`). Any path with `qself`
 /// or generic arguments (`Vec<T>`) is skipped — a stated coverage bound, never a silent claim.
 pub(crate) fn alias_nominal_targets<'a>(ty: &'a syn::Type, acc: &mut Vec<&'a syn::Path>) {
-    match ty {
-        syn::Type::Path(tp) => {
-            if tp.qself.is_none()
-                && tp
-                    .path
-                    .segments
-                    .iter()
-                    .all(|s| matches!(s.arguments, syn::PathArguments::None))
-            {
-                acc.push(&tp.path);
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            syn::Type::Path(tp) => {
+                if tp.qself.is_none()
+                    && tp
+                        .path
+                        .segments
+                        .iter()
+                        .all(|s| matches!(s.arguments, syn::PathArguments::None))
+                {
+                    acc.push(&tp.path);
+                }
             }
+            syn::Type::Reference(tr) => pending.push(&tr.elem),
+            syn::Type::Ptr(tp) => pending.push(&tp.elem),
+            syn::Type::Tuple(tt) => pending.extend(tt.elems.iter().rev()),
+            syn::Type::Slice(ts) => pending.push(&ts.elem),
+            syn::Type::Array(ta) => pending.push(&ta.elem),
+            syn::Type::Group(tg) => pending.push(&tg.elem),
+            syn::Type::Paren(tp) => pending.push(&tp.elem),
+            _ => {}
         }
-        syn::Type::Reference(tr) => alias_nominal_targets(&tr.elem, acc),
-        syn::Type::Ptr(tp) => alias_nominal_targets(&tp.elem, acc),
-        syn::Type::Tuple(tt) => {
-            for elem in &tt.elems {
-                alias_nominal_targets(elem, acc);
-            }
-        }
-        syn::Type::Slice(ts) => alias_nominal_targets(&ts.elem, acc),
-        syn::Type::Array(ta) => alias_nominal_targets(&ta.elem, acc),
-        syn::Type::Group(tg) => alias_nominal_targets(&tg.elem, acc),
-        syn::Type::Paren(tp) => alias_nominal_targets(&tp.elem, acc),
-        _ => {}
     }
 }
 
@@ -645,4 +644,30 @@ pub(crate) fn bare_single_segment_ident(path: &syn::Path) -> Option<String> {
         return None;
     }
     Some(strip_raw(&seg.ident.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::alias_nominal_targets;
+
+    #[test]
+    fn deeply_nested_alias_targets_use_a_bounded_native_stack() {
+        const DEPTH: usize = 32_768;
+        let mut ty: syn::Type = syn::parse_quote!(Leaf);
+        for _ in 0..DEPTH {
+            ty = syn::Type::Paren(syn::TypeParen {
+                paren_token: syn::token::Paren::default(),
+                elem: Box::new(ty),
+            });
+        }
+        // Leak the adversarially deep fixture so its recursive syn-owned drop cannot become the
+        // native-stack behavior under test; production AST lifetime is owned by the parsed file.
+        let ty = Box::leak(Box::new(ty));
+        let mut targets = Vec::new();
+
+        alias_nominal_targets(ty, &mut targets);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].segments[0].ident, "Leaf");
+    }
 }
