@@ -24,6 +24,7 @@ pub(crate) struct ImportedPath {
 }
 
 impl ImportedPath {
+    #[cfg(test)]
     pub(crate) fn plain(path: impl Into<String>) -> Self {
         ImportedPath {
             path: path.into(),
@@ -44,48 +45,6 @@ impl std::ops::Deref for ImportedPath {
     type Target = str;
     fn deref(&self) -> &str {
         &self.path
-    }
-}
-
-impl std::borrow::Borrow<str> for ImportedPath {
-    fn borrow(&self) -> &str {
-        &self.path
-    }
-}
-
-impl From<&str> for ImportedPath {
-    fn from(s: &str) -> Self {
-        ImportedPath::plain(s)
-    }
-}
-
-impl From<String> for ImportedPath {
-    fn from(s: String) -> Self {
-        ImportedPath::plain(s)
-    }
-}
-
-impl PartialEq<String> for ImportedPath {
-    fn eq(&self, other: &String) -> bool {
-        &self.path == other
-    }
-}
-
-impl PartialEq<ImportedPath> for String {
-    fn eq(&self, other: &ImportedPath) -> bool {
-        self == &other.path
-    }
-}
-
-impl PartialEq<str> for ImportedPath {
-    fn eq(&self, other: &str) -> bool {
-        self.path == other
-    }
-}
-
-impl PartialEq<&str> for ImportedPath {
-    fn eq(&self, other: &&str) -> bool {
-        self.path == *other
     }
 }
 
@@ -453,7 +412,7 @@ mod tests {
         // leave `use` unrecognized and the import dropped.
         assert_eq!(
             imported_module_paths("use/*re-export*/crate::secret::Thing;", "crate", &[]),
-            vec!["crate::secret::Thing".to_string()],
+            vec![ImportedPath::plain("crate::secret::Thing")],
             "a block comment after `use` must not swallow the import",
         );
     }
@@ -468,15 +427,15 @@ mod tests {
         assert_eq!(
             imports,
             vec![
-                "crate::config".to_string(),
-                "crate::config::Setting".to_string(),
+                ImportedPath::plain("crate::config"),
+                ImportedPath::plain("crate::config::Setting"),
             ],
             "a `self as alias` in a group resolves to the prefix module: {imports:?}"
         );
         // A lone `{self as x}` likewise resolves to the prefix module, never `…::self`.
         assert_eq!(
             imported_module_paths("use crate::config::{self as cfg};", "crate", &[]),
-            vec!["crate::config".to_string()],
+            vec![ImportedPath::plain("crate::config")],
         );
     }
 
