@@ -91,6 +91,25 @@ whole requirement, so any paragraph or scenario missing from the delta is delete
 are built by extracting the requirement verbatim from the main spec and editing it, never retyped,
 and the sync is still verified by count.
 
+### Decision 5: The un-auditable probe's owner keeps its anonymous arm scopes (measured, then decided)
+
+`fn_scopes` resolves an un-auditable probe's lexical owner and deliberately does not skip macro
+bodies, justified in its own doc by "a probe is never found inside one" — a premise transparency
+retires. Measured after the probe pass landed: a probe inside an arm renders as
+`block cfg_if::cfg_if!#1::block if #[cfg(unix)]#1::fn f`, against `fn f` at top level.
+
+Kept as-is rather than made transparent there too. It is this function's **existing** rule for any
+anonymous scope — a real `if` block's braces read the same way — so accepting it keeps 漏刻 internally
+consistent instead of special-casing arms; the rendering names the arm, which an adopter reading the
+violation wants; and the alternative needs the name test plus arm-brace tracking in a third place for
+a cosmetic gain. The owner string is pinned by a test and the stale justification is rewritten to
+state both cases (transparent bodies now yield probes and are read as ordinary code; other macro
+bodies stay inert because the probe scan still skips them).
+
+The spec is left silent on the rendering: this is an existing rule applied unchanged, not a new one,
+and the requirements that own owner identity already cover "enclosing items and anonymous scopes".
+Writing the exact string into a requirement would over-specify an incidental rendering.
+
 ## Risks / Trade-offs
 
 - **[Trade-off] Newly caught findings for `cfg_if!` adopters.** A typo'd or un-auditable probe inside

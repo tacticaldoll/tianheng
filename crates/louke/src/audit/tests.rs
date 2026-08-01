@@ -1841,3 +1841,436 @@ fn invalid_marker_string_is_constitution_error() {
         );
     }
 }
+
+// --- transparent control-flow macro (`cfg_if!`) arms ------------------------
+//
+// `cfg_if!` wraps human-authored code in arms without transforming identities, so an arm's contents
+// are real, compiled code. Skipping such a body like any foreign macro broke two of the audit's
+// three reaction directions, measured on ordinary compilable source: a seam whose only probe lived
+// in an arm was reported unprobed (a false alarm against real coverage), while a typo'd seam and an
+// un-auditable probe inside an arm escaped entirely — the forbidden false negative, and a
+// contradiction of `audit_probe_coverage`'s own never-a-silent-skip rule. 圭表 has read these bodies
+// since 0.2.3 and 渾儀 joined in 0.3.1; these tests are 漏刻's half of one shared rule.
+
+#[test]
+fn a_probe_inside_a_cfg_if_arm_is_counted() {
+    let src = "cfg_if::cfg_if! { if #[cfg(unix)] { fn f(o: u8) { assert_boundary!(\"arm\", o); } } }\n\
+               fn g(o: u8) { assert_boundary!(\"top\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["arm", "top"],
+        "a probe inside a cfg_if arm must count, and the probe after the body must still be seen: {probes:?}"
+    );
+}
+
+#[test]
+fn probes_in_every_cfg_if_arm_are_counted() {
+    // if / else-if / else — arms are a cfg-blind union, so all three count. The audit never
+    // evaluates `cfg`, exactly as its contract already states for `#[cfg]`-gated probes.
+    let src = "cfg_if::cfg_if! {\n\
+               if #[cfg(unix)] { fn a(o: u8) { assert_boundary!(\"a\", o); } }\n\
+               else if #[cfg(windows)] { fn b(o: u8) { assert_boundary!(\"b\", o); } }\n\
+               else { fn c(o: u8) { assert_boundary!(\"c\", o); } }\n\
+               }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["a", "b", "c"],
+        "every arm of an else-if chain must be scanned: {probes:?}"
+    );
+}
+
+#[test]
+fn a_probe_inside_a_nested_cfg_if_is_counted() {
+    let src = "cfg_if::cfg_if! { if #[cfg(unix)] {\n\
+               cfg_if::cfg_if! { if #[cfg(target_pointer_width = \"64\")] {\n\
+               fn f(o: u8) { assert_boundary!(\"inner\", o); } } }\n\
+               } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["inner"],
+        "a nested cfg_if's arm must be scanned: {probes:?}"
+    );
+}
+
+#[test]
+fn a_paren_delimited_and_unqualified_cfg_if_are_both_transparent() {
+    // The invocation's own delimiter is irrelevant, and an adopter who wrote `use cfg_if::cfg_if;`
+    // invokes it bare — the name test matches the identifier before `!`, so both spellings are one
+    // shape (the same last-segment match 圭表 and 渾儀 apply).
+    let src = "cfg_if!( if #[cfg(unix)] { fn f(o: u8) { assert_boundary!(\"paren\", o); } } );\n\
+               cfg_if! { if #[cfg(unix)] { fn g(o: u8) { assert_boundary!(\"brace\", o); } } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["paren", "brace"],
+        "paren-delimited and unqualified cfg_if invocations must both be transparent: {probes:?}"
+    );
+}
+
+#[test]
+fn a_cfg_if_inside_a_macro_rules_body_is_still_skipped() {
+    // Ordering guard: the outer `macro_rules!` body is skipped first, so a transparent invocation
+    // written inside a macro TEMPLATE is never reached and its probe stays macro-generated. The
+    // macro-definition exclusion is unaffected by transparency.
+    let src = "macro_rules! gen { () => { cfg_if::cfg_if! { if #[cfg(unix)] { assert_boundary!(\"dead\", o) } } }; }\n\
+               fn f(o: u8) { assert_boundary!(\"live\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["live"],
+        "a cfg_if inside a macro_rules template must stay skipped: {probes:?}"
+    );
+}
+
+#[test]
+fn a_foreign_macro_body_inside_a_cfg_if_arm_is_still_skipped() {
+    // Transparency is not contagious: the arm is real code, but a foreign macro invoked INSIDE the
+    // arm is still macro-generated, so its probe must not count while the arm's own does.
+    let src = "cfg_if::cfg_if! { if #[cfg(unix)] {\n\
+               fn f(o: u8) { wrap!( assert_boundary!(\"dead\", o) ); assert_boundary!(\"live\", o); }\n\
+               } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["live"],
+        "a foreign macro body inside a transparent arm must still be skipped: {probes:?}"
+    );
+}
+
+#[test]
+fn a_seam_probed_only_inside_a_cfg_if_arm_is_covered() {
+    let tb = TempBase::new("arm-covered");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seam\", o); } } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a seam probed only inside an arm must be covered, not reported unprobed: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_seam_probed_nowhere_is_still_reported_unprobed() {
+    // The control for the test above: without it, "Clean" could hold for a fixture whose boundary
+    // never reacts at all rather than because the arm's probe was found.
+    let tb = TempBase::new("arm-control");
+    let root = tb.source("lib.rs", "pub fn f() {}");
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "an unprobed seam must still react: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_typod_seam_inside_a_cfg_if_arm_reacts() {
+    // Closed false negative #1: probed-but-undeclared never fired inside an arm, so a mis-typed
+    // seam — which panics at runtime against a seam nobody declared — passed CI.
+    let tb = TempBase::new("arm-typo");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seaam\", o); } } }\n\
+         pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a typo'd seam inside an arm must react as probed-but-undeclared: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner() {
+    // Closed false negative #2, with its identity pinned. The owner qualifies the probe by the
+    // anonymous block scopes it genuinely sits in — the invocation's own body and the arm — exactly
+    // as it would for a real `if` block's braces. That is 漏刻's existing rule for any anonymous
+    // scope, applied unchanged rather than special-cased for arms, and it names the arm in the
+    // message, which an adopter reading a violation wants.
+    let tb = TempBase::new("arm-unauditable");
+    let root = tb.source(
+        "lib.rs",
+        "const S: &str = \"seam\";\n\
+         cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(S, o); } } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let text = format!("{outcome:?}");
+    assert!(
+        text.contains("non-literal seam `S`"),
+        "an un-auditable probe inside an arm must react, never a silent skip: {text}"
+    );
+    assert!(
+        text.contains("block cfg_if::cfg_if!#1::block if #[cfg(unix)]#1::fn f"),
+        "the un-auditable probe's owner must name its real lexical scopes: {text}"
+    );
+}
+
+#[test]
+fn a_module_declared_inside_a_cfg_if_arm_covers_a_seam() {
+    // The module-graph half: a dimension blind to the arm never reaches the file at all, so every
+    // probe beneath it is invisible — a coverage false negative that costs a whole subtree.
+    let tb = TempBase::new("arm-mod");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod net; } }",
+    );
+    tb.source(
+        "net.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "an arm-declared module's probe must count: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_module_declared_after_a_cfg_if_body_is_still_reached() {
+    // Range-resumption guard: the arm descent must not consume the enclosing walk's cursor past the
+    // invocation, or a declaration following the body would be dropped (and its probes with it).
+    let tb = TempBase::new("arm-then-mod");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod first; } }\npub mod second;",
+    );
+    tb.source(
+        "first.rs",
+        "pub fn a(o: u8) { assert_boundary!(\"one\", o); }",
+    );
+    tb.source(
+        "second.rs",
+        "pub fn b(o: u8) { assert_boundary!(\"two\", o); }",
+    );
+    let outcome = audit_probe_coverage(
+        &[
+            boundary("one", Severity::Enforce),
+            boundary("two", Severity::Enforce),
+        ],
+        &[root],
+    );
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a module declared after a transparent body must still be reached: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_arm_declared_module_with_no_file_is_tolerated() {
+    // Arm membership is cfg-conditional: the predicate lives in the macro header, so rustc strips
+    // the whole arm and the crate compiles with no such file. 圭表's settled rule, adopted.
+    let tb = TempBase::new("arm-absent");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod unix_impl; } else { pub mod windows_impl; } }",
+    );
+    tb.source(
+        "unix_impl.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a fileless arm declaration must be tolerated, not a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn the_same_fileless_declaration_outside_an_arm_still_fails_loud() {
+    // The control for the tolerance: an unconditional declaration with no file is a broken
+    // reference (exit 2), so the tolerance above is a decision about arms, not a blanket softening.
+    let tb = TempBase::new("arm-absent-control");
+    let root = tb.source("lib.rs", "pub mod windows_impl;");
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "an unconditional fileless declaration must stay a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn arm_membership_is_not_inherited_into_an_inline_module_body() {
+    // The tolerance covers the arm's own declarations, not everything beneath them: a bare `#[cfg]`
+    // on an outer `mod` does not tolerate an absent file for an inner `mod` either, in any of the
+    // three dimensions. Keeping that asymmetry identical across them is the point.
+    let tb = TempBase::new("arm-inline-inherit");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod outer { pub mod missing; } } }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "arm membership must not be inherited into an inline module body: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_arm_declared_dual_backed_module_is_still_a_constitution_error() {
+    // Arm membership makes an ABSENCE tolerable, never an ambiguity resolvable: no predicate value
+    // makes two conventional files compile as one module. The same ordering all three dimensions
+    // apply to this shape.
+    let tb = TempBase::new("arm-dual-backed");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod child; } }",
+    );
+    tb.source("child.rs", "pub fn a() {}");
+    tb.source("child/mod.rs", "pub fn b() {}");
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "an arm-declared dual-backed module must stay a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_clean_cfg_if_arm_stays_clean() {
+    // Transparency observes contents; it does not react to the macro. A crate using `cfg_if!`
+    // cleanly must not acquire a finding merely for using it.
+    let tb = TempBase::new("arm-clean");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f() -> u8 { 0 } } }\n\
+         pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a clean cfg_if arm must stay clean: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_spaced_transparent_invocation_is_transparent_in_both_passes() {
+    // `cfg_if ! { … }` is valid Rust, and both passes look back past whitespace for the name before
+    // deciding a `!` opens a macro — so the spaced form must be recognized as transparent too. Were
+    // it recognized as a macro but not as transparent, the probe pass would skip its body and the
+    // module pass would swallow the arm as an opaque block: the false negative in both halves.
+    let src = "cfg_if ! { if #[cfg(unix)] { fn f(o: u8) { assert_boundary!(\"spaced\", o); } } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["spaced"],
+        "a spaced transparent invocation must be scanned into: {probes:?}"
+    );
+
+    let tb = TempBase::new("spaced-arm-mod");
+    let root = tb.source("lib.rs", "cfg_if ! { if #[cfg(unix)] { pub mod net; } }");
+    tb.source(
+        "net.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a module declared inside a spaced transparent invocation's arm must be reached: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_similarly_named_macro_is_not_transparent() {
+    // The name gate compares the MAXIMAL identifier run, so `my_cfg_if!` is a different macro and its
+    // body stays skipped. A suffix/substring match here would read an arbitrary macro's nested blocks
+    // as arms — the false-positive direction the gate exists to prevent.
+    let src = "fn f(o: u8) { my_cfg_if!( assert_boundary!(\"dead\", o) ); assert_boundary!(\"live\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["live"],
+        "only the exact `cfg_if` name is transparent: {probes:?}"
+    );
+}
+
+#[test]
+fn a_module_declared_inside_a_nested_cfg_if_arm_is_reached() {
+    // The module pass's arm descent re-enters the walk, so a nested invocation is covered by the same
+    // recursion rather than a second mechanism — pinned here because the probe pass's nesting test
+    // exercises a different code path.
+    let tb = TempBase::new("nested-arm-mod");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] {\n\
+         cfg_if::cfg_if! { if #[cfg(target_pointer_width = \"64\")] { pub mod deep; } }\n\
+         } }",
+    );
+    tb.source(
+        "deep.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a module declared inside a nested cfg_if arm must be reached: {outcome:?}"
+    );
+}
+
+#[test]
+fn twin_arms_declaring_one_module_do_not_double_report_its_probe() {
+    // The per-platform shim spelled with ONE file: both arms declare the same module, so the arm
+    // descent collects it twice. The walk's canonical-path visit tracking must collapse that to one
+    // scan — otherwise a single un-auditable probe beneath it would be reported twice, inflating one
+    // real finding into two (the false-positive direction of this change).
+    let tb = TempBase::new("twin-arms");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod imp; } else { pub mod imp; } }",
+    );
+    tb.source(
+        "imp.rs",
+        "const S: &str = \"seam\";\npub fn f(o: u8) { assert_boundary!(S, o); }\n\
+         pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let count = match &outcome {
+        Outcome::Violations(report) => report.violations.len(),
+        other => panic!("expected violations, got {other:?}"),
+    };
+    assert_eq!(
+        count, 1,
+        "twin arms declaring one module must yield exactly one un-auditable finding: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
+    // The other absence site reads the same gate: a bare `#[cfg]` co-occurring with an unconditional
+    // `#[path]` removes the whole item, `#[path]` included, and arm membership expresses the same
+    // intent. Written because the delta claims it — an untested spec claim is the shape that rots.
+    let tb = TempBase::new("arm-absent-path");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(windows)] { #[path = \"windows_impl.rs\"] pub mod imp; } }\n\
+         pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "an absent unconditional #[path] target inside an arm must be tolerated: {outcome:?}"
+    );
+}

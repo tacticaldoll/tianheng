@@ -116,6 +116,7 @@ fn external_module_files(
         child_base,
         file_dir,
         &mut modules,
+        false,
     )?;
     Ok(modules)
 }
@@ -127,6 +128,7 @@ fn collect_scope_modules(
     child_base: &Path,
     file_dir: &Path,
     modules: &mut Vec<(PathBuf, PathBuf)>,
+    in_transparent_arm: bool,
 ) -> Result<(), String> {
     let mut i = start;
     while i < end {
@@ -135,6 +137,38 @@ fn collect_scope_modules(
             continue;
         }
         if bytes[i] == b'!' && preceding_token_is_ident(bytes, i) {
+            // The one transparent macro's arms hold real declarations: descend each as its own
+            // scope instead of skipping the body. This must be a POSITIVE descent, not merely a
+            // skipped skip — the walk's own catch-all `{` handling below treats any other brace
+            // block as opaque, so a removed skip alone would still swallow the arm.
+            let mut name_end = i;
+            while name_end > 0 && bytes[name_end - 1].is_ascii_whitespace() {
+                name_end -= 1;
+            }
+            if is_transparent_macro_name(bytes, name_end) {
+                if let Some(body_end) = foreign_macro_body_end(bytes, i) {
+                    for (arm_start, arm_end) in transparent_arm_ranges(bytes, i, body_end) {
+                        // The ENCLOSING bases, unchanged: an arm is not a module and adds no
+                        // directory component the way an inline `mod` does. Accumulating one here
+                        // would resolve an arm-declared `mod net;` under a phantom directory and
+                        // drop every probe beneath it — the coverage false negative this walk
+                        // exists to prevent, one layer down. Everything found inside an arm is
+                        // cfg-conditional: the predicate lives in the macro's `if #[cfg(..)]`
+                        // header, not on the item.
+                        collect_scope_modules(
+                            bytes,
+                            arm_start,
+                            arm_end.min(end),
+                            child_base,
+                            file_dir,
+                            modules,
+                            true,
+                        )?;
+                    }
+                    i = body_end.min(end);
+                    continue;
+                }
+            }
             if let Some(next) = foreign_macro_body_end(bytes, i) {
                 i = next.min(end);
                 continue;
@@ -181,7 +215,16 @@ fn collect_scope_modules(
                         // configuration (an off feature / another platform), so tolerate it — it
                         // compiles no probes here, so skipping it cannot silently cover a seam. A
                         // non-cfg missing module is a real broken reference: fail loud (exit 2).
-                        None if attrs.cfg => {}
+                        // Membership in a transparent macro arm is the second cfg-conditional
+                        // source, treated identically because it expresses one intent: the arm's
+                        // predicate lives in the macro's `if #[cfg(..)]` header rather than on the
+                        // item, and every arm is conditionally compiled by construction (the
+                        // trailing `else` on its predicates' negation). 圭表 settled this rule for
+                        // the same shape and 渾儀 adopted it; a third derivation here would be the
+                        // silent-divergence class the cross-dimension ledger exists to catch.
+                        // An ambiguity (both conventional forms present) stays an error above,
+                        // under every gate — no predicate value makes two files one module.
+                        None if attrs.cfg || in_transparent_arm => {}
                         None => {
                             return Err(format!(
                                 "cannot resolve reachable module `{name}` under {}",
@@ -213,6 +256,10 @@ fn collect_scope_modules(
                         &inline_base,
                         &inline_base,
                         modules,
+                        // Arm membership is NOT inherited into an inline `mod`'s body: a bare
+                        // `#[cfg]` on an outer `mod` does not tolerate an absent file for an inner
+                        // one either, in any of the three dimensions.
+                        false,
                     )?;
                     i = close;
                     continue;
@@ -365,6 +412,41 @@ fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
         i += 1;
     }
     i
+}
+
+/// The **interior** byte ranges of each arm of a transparent macro invocation whose `!` is at `bang`
+/// and whose balanced body ends at `body_end` (as [`foreign_macro_body_end`] reports it, one past the
+/// closing delimiter).
+///
+/// `cfg_if!`'s grammar is `if #[cfg(a)] { items } else if #[cfg(b)] { items } else { items }`, so the
+/// body's top-level **brace** groups are exactly the arms. A `#[cfg(…)]` predicate is a `#` plus a
+/// *bracket* group and `if` / `else` are bare identifiers, so those bytes are simply walked over: the
+/// only way a `{` could hide inside a predicate is within a string literal, which
+/// `skip_literal_or_comment` consumes first. The invocation's own outer delimiter is irrelevant —
+/// `cfg_if!( … )` works the same as `cfg_if! { … }`.
+fn transparent_arm_ranges(b: &[u8], bang: usize, body_end: usize) -> Vec<(usize, usize)> {
+    let mut arms = Vec::new();
+    let open = skip_trivia(b, bang + 1);
+    if !matches!(b.get(open), Some(b'{') | Some(b'(') | Some(b'[')) {
+        return arms;
+    }
+    // Just inside the invocation's own delimiter, up to (not including) its closer.
+    let limit = body_end.saturating_sub(1);
+    let mut i = open + 1;
+    while i < limit {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next.min(limit);
+            continue;
+        }
+        if b[i] == b'{' {
+            let close = balanced_brace_end(b, i, limit);
+            arms.push((i + 1, close.saturating_sub(1)));
+            i = close;
+            continue;
+        }
+        i += 1;
+    }
+    arms
 }
 
 fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
@@ -661,7 +743,14 @@ pub(super) fn scan_source_with_markers(
             // `match !(x)`), never a macro — treating its parenthesized operand as a macro body would
             // skip real code (and drop any probe inside it). `macro_rules` is not a keyword, so it
             // still reaches `foreign_macro_body_end`'s name-skip.
-            if name_start < name_end && (is_raw_ident || !is_rust_keyword(&b[name_start..name_end]))
+            // The one transparent macro is NOT skipped: its arms hold real, compiled code, so the
+            // scan walks into the body and observes a probe (or a typo'd seam, or an un-auditable
+            // probe) there exactly as at top level. Ordering matters — a transparent invocation
+            // written inside a `macro_rules!` definition is never reached, because that outer body
+            // is skipped first, so the macro-definition exclusion is unaffected.
+            if name_start < name_end
+                && !is_transparent_macro_name(b, name_end)
+                && (is_raw_ident || !is_rust_keyword(&b[name_start..name_end]))
             {
                 if let Some(end) = foreign_macro_body_end(b, i) {
                     i = end;
@@ -733,6 +822,25 @@ fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
         start -= 1;
     }
     &b[start..end] == target
+}
+
+/// The identifier run ending immediately before `end` (whitespace already stepped over by the
+/// caller) is the one **transparent control-flow macro**, `cfg_if!`. Its arms wrap human-authored
+/// code without transforming identities, so what an adopter writes inside an arm is real, compiled
+/// code — not the macro-generated text the body skip exists to exclude. Skipping it produced errors
+/// in both directions on compilable source: a seam whose only probe lived in an arm was reported
+/// unprobed, while a typo'd seam and an un-auditable probe inside an arm escaped entirely (the
+/// audit's forbidden false negative, and a contradiction of `audit_probe_coverage`'s own
+/// never-a-silent-skip claim).
+///
+/// Gated on the **name**, matching 圭表's `is_transparent_macro_name` and 渾儀's own test — the same
+/// rule in three hand-written copies, never a shared scanner (三儀 ⊥ 三儀), with
+/// `cfg_if_transparency_conformance.rs` as the drift reaction. The gate is load-bearing here rather
+/// than cautious: a byte scanner has no way to tell a transparent macro's arms from an arbitrary
+/// macro's nested blocks, so widening it would read code the macro may never emit. A body-wrapping
+/// macro under any other name therefore stays excluded — a stated bound, shared across the three.
+fn is_transparent_macro_name(b: &[u8], end: usize) -> bool {
+    preceding_ident_is(b, end, b"cfg_if")
 }
 
 /// Given `bang` where `b[bang] == b'!'` and the preceding byte is an identifier byte, return the
@@ -1402,11 +1510,23 @@ fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext,
 /// themselves). Looked up by [`owner_for`] so an un-auditable probe's identity is qualified by a
 /// real structural discriminator, never a bare name or a position.
 ///
-/// Deliberately does not skip macro-invocation/`macro_rules!` bodies the way `scan_source` does:
-/// a probe is never found inside one (that exclusion already happens in `scan_source` before a
-/// probe is ever captured), so a phantom `fn`/`impl`/`trait` this function might mis-parse out of
-/// macro-template text can never overlap the position of a real probe — it is inert, not a
-/// correctness risk.
+/// Deliberately does not skip macro-invocation/`macro_rules!` bodies the way `scan_source` does.
+/// The two cases this leaves, both fine:
+///
+/// - A **non-transparent** macro body still yields no probe (`scan_source` skips it before a probe
+///   is ever captured), and a phantom `fn`/`impl`/`trait` mis-parsed out of its macro-template text
+///   lies wholly inside that body's balanced braces, so its range can never overlap a real probe's
+///   position — inert, not a correctness risk. (This was once the *whole* justification, resting on
+///   "a probe is never found inside a macro body". Transparency retired that premise, so it is now
+///   only half the story.)
+/// - A **transparent** `cfg_if!` body does now yield probes, and this walk reads it as ordinary code
+///   — which is exactly right: a `fn` inside an arm becomes a real scope. The invocation's own body
+///   braces and the arm braces are counted as the anonymous block scopes they lexically are, so such
+///   a probe's owner renders as `block cfg_if::cfg_if!#1::block if #[cfg(unix)]#1::fn f`. That is
+///   this function's existing rule for any anonymous scope (a real `if` block reads the same way),
+///   applied unchanged rather than special-cased for arms, and it names the arm in the violation
+///   message — which an adopter reading it wants. Pinned by
+///   `an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner`.
 fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
     let mut depth = 0usize;
     // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this

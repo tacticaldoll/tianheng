@@ -23,6 +23,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change — the requirement truth catches up to the reaction.
 
 ### Fixed
+- 漏刻's CI probe audit now reads the arms of a `cfg_if!` invocation as real code, in both of its
+  passes, completing the family: all three dimensions now share one transparency rule and are pinned
+  on one shared fixture (`cfg_if_transparency_conformance.rs`). Skipping such a body like any foreign
+  macro broke two of the audit's three reaction directions, in both error directions at once. **Two
+  false negatives close:** a probe naming a mis-typed seam inside an arm escaped the
+  probed-but-undeclared reaction entirely (at runtime it asserts against a seam nobody declared), and
+  an un-auditable probe (a non-literal seam argument) inside an arm was silently skipped —
+  contradicting `audit_probe_coverage`'s own documented promise that a silent skip never happens. **A
+  false alarm retires:** a seam whose only production probe lived inside an arm was reported unprobed,
+  failing an adopter's CI over coverage they actually had; the same held for every probe beneath a
+  `mod` declared only inside an arm, since that module never entered the reachable corpus. An
+  arm-declared module is now also treated as cfg-conditional, so an absent conventional file is
+  tolerated exactly as under a bare `#[cfg]` (圭表's rule, adopted), while a resolution ambiguity stays
+  a constitution error under every gate. Bounds unchanged and now uniform across the three: only
+  `cfg_if` is transparent, and observation stays cfg-blind. A newly caught typo'd or un-auditable probe
+  is a real finding and absorbable by baseline.
 - 渾儀 now reads the arms of a `cfg_if!` invocation as real code, in every walk it performs. Closes an
   exposure false negative measured on ordinary, compilable source: a `pub fn` returning a forbidden
   type reacted at a module's top level and **passed** when the identical function sat inside a
