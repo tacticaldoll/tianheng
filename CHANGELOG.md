@@ -15,6 +15,12 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ### Documentation
 - Ignored `.github/skills/`, openspec's per-clone generated skills directory, alongside its
   already-ignored `.github/prompts/` sibling.
+- Specified 圭表's plain-`mod` conventional-file resolution outcomes in `module-boundary`, which had
+  shipped and been tested since 0.2.3 with no requirement of their own: both forms present is an
+  ambiguity constitution error (ahead of the absent-file tolerance, so a `#[cfg]`-gated-off
+  declaration still reacts even though the crate compiles), an unconditionally absent file is a
+  constitution error, a bare `#[cfg]` tolerates absence, and a `#[cfg_attr]` wrapper does not. No
+  behavior change — the requirement truth catches up to the reaction.
 
 ## [0.3.0] - 2026-07-26
 

@@ -352,6 +352,35 @@ A same-named conventional source file (`name.rs` / `name/mod.rs`) that sits besi
 - **WHEN** a boundary governs a module path that is not reachable in the crate at all (e.g. a typo)
 - **THEN** the system reports a constitution error (exit 2) that the module was not found among the crate's reachable modules
 
+### Requirement: A plain module declaration resolves to exactly one conventional file
+
+A plain `mod name;` declaration SHALL resolve to exactly one conventional source file — `name.rs` or `name/mod.rs` — and the system SHALL react rather than guess in every other outcome, never silently dropping the module from the reachable set (which would hide every import beneath it, the false negative the core contract forbids). When **both** forms are present the system SHALL report a constitution error (exit 2) naming both resolved paths and the exactly-one-file rule. The ambiguity test SHALL precede the absent-file tolerance below, so a declaration carrying a `#[cfg(...)]` gate whose predicate is off — which rustc strips before module resolution, leaving a crate that compiles cleanly and raises no E0761 — is still a constitution error: the scanner is cfg-blind and cannot know which arm is live, and treating one arm's ambiguity as resolvable would require evaluating `cfg`. When **neither** form is present the system SHALL report a constitution error (exit 2) naming both expected paths, EXCEPT when a **bare** `#[cfg(...)]` precedes the declaration, in which case the module may legitimately have no file in the current configuration and SHALL be skipped rather than errored. A `#[cfg_attr(...)]` wrapper SHALL NOT grant that tolerance: `cfg_attr` never removes the item, it only conditionally applies its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583) in every configuration. Either constitution error SHALL abort the whole reachability walk rather than excluding one module, since a crate whose module graph cannot be resolved cannot be judged. This is the static dimension's own independently-implemented policy for these outcomes; the runtime dimension states the same rules for its own probe-coverage walker (三儀 ⊥ 三儀: the same rule, not the same function).
+
+#### Scenario: A module backed by both conventional forms is a constitution error
+
+- **WHEN** a crate declares a plain `mod child;` and both `src/child.rs` and `src/child/mod.rs` exist
+- **THEN** the system reports a constitution error (exit 2) naming both resolved paths and the exactly-one-file rule, rather than accepting either form as the module's source or treating the two as separate sources of one module path
+
+#### Scenario: A cfg-gated dual-backed declaration is still an ambiguity, though the crate compiles
+
+- **WHEN** the dual-backed `mod child;` declaration carries a bare `#[cfg(...)]` gate whose predicate is off, so rustc strips the declaration before module resolution and the crate compiles
+- **THEN** the system still reports the ambiguity constitution error (exit 2) — the cfg tolerance covers an *absent* conventional file and never two present ones
+
+#### Scenario: An unconditionally missing conventional file is a constitution error
+
+- **WHEN** a crate declares a plain `mod child;` with no `#[cfg]` gate and neither `src/child.rs` nor `src/child/mod.rs` exists
+- **THEN** the system reports a constitution error (exit 2) naming both expected paths, rather than silently dropping `crate::child` from the reachable set
+
+#### Scenario: A bare cfg-gated missing file is tolerated
+
+- **WHEN** a crate declares `#[cfg(feature = "extra")] mod child;` and neither conventional file exists
+- **THEN** the system skips the declaration rather than erroring, since an off predicate legitimately leaves the module with no file in this configuration
+
+#### Scenario: A cfg_attr-wrapped missing file is not tolerated
+
+- **WHEN** a crate declares `#[cfg_attr(unix, allow(dead_code))] mod child;` and neither conventional file exists
+- **THEN** the system reports the missing-file constitution error (exit 2), because `cfg_attr` never removes the item — the absent file is a genuine compile error in every configuration, so tolerating it would be a silent pass over source that cannot build
+
 ### Requirement: An unconditional path-remapped module is followed to its target
 
 The system SHALL follow a file-form module declared with an **unconditional, direct** `#[path = "…"]` attribute (`mod foo;`) to its author-chosen target: the target's imports SHALL be observed under the declared module's logical path, and the module SHALL be a governable target at that path — matching 渾儀 (semantic) and 漏刻 (runtime), which already follow this same relocation, so all three observation dimensions agree on what rustc actually compiles. The target is resolved relative to `path_base`: the declaring file's own directory, with each enclosing inline `mod` name accumulated onto it (rustc's rule) — the crate root's own directory for a `#[path]` written there, or `<accumulated dir>/<name>` for one written inside an inline `mod name { … }`. A `#[path]`-loaded file is itself mod-rs-like, so a `#[path]` or conventional child written inside it resolves from ITS OWN directory in turn. A same-named conventional file beside the remapped declaration (e.g. `foo.rs` beside a `#[path = "weird.rs"] mod foo;`) remains an orphan Rust never compiles as that module — it SHALL NOT be governed in the remap's target place, the same "not compiled ⇒ not governed" rule as an undeclared orphan and an inline-only shadow, now applied to the remap case instead of excluding the whole logical path.
