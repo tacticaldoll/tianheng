@@ -11,6 +11,9 @@ pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) reason: &'a str,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
+    /// The crate this boundary was declared against (`boundary.crate_package`) — threaded into the
+    /// fact's identity so two crates sharing the identical module path + rule stay distinct.
+    pub(crate) crate_package: &'a str,
 }
 
 /// Add deny-style violations for a boundary whose findings all sit on one governed module seam.
@@ -27,7 +30,7 @@ pub(crate) fn push_single_module_violations(
 ) {
     let anchor = context.anchor.map(str::to_string);
     for (finding, file) in findings {
-        let finding = finding.into_finding();
+        let finding = finding.into_finding(context.crate_package);
         let id = ViolationId::new(
             context.module,
             context.rule_key.clone(),
@@ -61,6 +64,12 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     /// The finding's polarity metadata (deny-breach vs allowlist-gap). Not part of the violation
     /// identity, so each capability passes its own without shifting structured identity.
     pub(crate) polarity: Polarity,
+    /// The crate this boundary was declared against (`boundary.crate_package`) — threaded into the
+    /// fact's identity so two crates sharing the identical anchor + rule stay distinct.
+    /// `unsafe_confinement`'s own fact conversion ignores this (its `target` above is already
+    /// `boundary.crate_package`, so its identity already varies by crate); every other capability
+    /// routed through this context consumes it.
+    pub(crate) crate_package: &'a str,
 }
 
 /// Add violations for a boundary whose findings sit across many modules — the shared emitter for
@@ -81,7 +90,7 @@ pub(crate) fn push_multi_module_violations(
 ) {
     let anchor = context.anchor.map(str::to_string);
     for (finding, _module, file) in findings {
-        let finding = finding.into_finding();
+        let finding = finding.into_finding(context.crate_package);
         let id = ViolationId::new(
             context.target,
             context.rule_key.clone(),

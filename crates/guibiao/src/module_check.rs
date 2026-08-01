@@ -42,7 +42,7 @@ fn push_module_violation(
     file: String,
     boundary: &ModuleBoundary,
 ) {
-    let finding = fact.into_finding();
+    let finding = fact.into_finding(&boundary.crate_package);
     violations.push(
         Violation::new(
             BoundaryKind::Module,

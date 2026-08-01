@@ -84,6 +84,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   圭表 and 漏刻 each already apply). A constitution error never enters a baseline; the repair is to
   delete whichever of the two files is not the module. All four outcomes of the lookup are now pinned
   across all three dimensions in `dual_backed_module_conformance.rs`.
+- **BREAKING**: 圭表's and 渾儀's violation identity now carries the crate a boundary was declared
+  against. Neither dimension's fact construction previously named the declaring crate — only a bare
+  module path — so two workspace members declaring the identical rule against the identical module
+  path collapsed into one `ViolationId`: the composed report silently dropped the second crate's real
+  violation, and a baseline accepted for one crate could suppress the other's never-accepted one (the
+  false negative PROJECT.md's Core Contract forbids outright). Every `ModuleFact` and `SemanticFact`
+  variant now carries a `governing_package` identity field equal to the boundary's declared crate
+  (`unsafe_confinement` excepted — its identity already varies by crate through `target`). **Any
+  existing `--write-baseline` output for a module or semantic boundary is now stale** (identity
+  gained a required field) and must be regenerated; every previously accepted violation reappears as
+  new exactly once. No DSL, builder, or CLI surface change — only the identity `fact` payload gains a
+  field.
 
 ## [0.3.0] - 2026-07-26
 

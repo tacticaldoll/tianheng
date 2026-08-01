@@ -57,6 +57,7 @@ pub(crate) fn check_forbidden_marker_boundary(
             severity: boundary.severity,
             anchor: boundary.anchor(),
             polarity: Polarity::DenyBreach,
+            crate_package: &boundary.crate_package,
         },
         findings,
     );

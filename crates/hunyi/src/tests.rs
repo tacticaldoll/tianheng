@@ -245,7 +245,7 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
                 name: "f".to_string(),
             },
         }
-        .into_finding();
+        .into_finding("app");
         Violation::new(
             BoundaryKind::Semantic,
             ViolationId::new(
@@ -3682,7 +3682,7 @@ fn unsafe_keys(name: &str, source: &str) -> Result<Vec<StructuredFactIdentity>, 
     unsafe_findings(tree.src(), &tree.root(), &["crate::ffi".to_string()], "x").map(|findings| {
         findings
             .into_iter()
-            .map(|(fact, _, _)| fact.into_finding().key().clone())
+            .map(|(fact, _, _)| fact.into_finding("app").key().clone())
             .collect()
     })
 }
@@ -6195,7 +6195,7 @@ fn async_observations(
         facts
             .into_iter()
             .map(|(fact, _)| {
-                let finding = fact.into_finding();
+                let finding = fact.into_finding("app");
                 (finding.key().clone(), finding.text().to_string())
             })
             .collect()
@@ -6251,6 +6251,7 @@ fn async_production_violation_separates_target_rule_and_seam() {
     assert_eq!(
         fact.fields().collect::<Vec<_>>(),
         vec![
+            ("governing_package", "x"),
             ("module", "crate::registry"),
             ("name", "register"),
             ("owner", "crate::registry"),
@@ -7476,6 +7477,7 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![
+            ("governing_package", "x"),
             ("seam_kind", "free_fn"),
             ("seam_module", "crate::domain"),
             ("seam_name", "leak"),
@@ -10150,5 +10152,68 @@ fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
         out,
         vec!["crate::infra::Secret exposed by fn crate::api::leak"],
         "an absent unconditional #[path] target inside an arm must be tolerated: {out:?}"
+    );
+}
+
+/// Two-crate reproduction of the audit-sweep finding at hunyi's own composed dedup
+/// (`driver::outcome_from`, the analogue of guibiao's `evaluate`) — not just the per-fact catalog
+/// tests. Identical governed module path + rule declared against two different workspace members
+/// must survive as two distinct violations, mirroring the guibiao-side regression in
+/// `crates/guibiao/src/tests.rs`.
+#[test]
+fn two_crates_with_the_identical_async_exposure_boundary_stay_distinct_violations() {
+    fn tree_and_metadata(label: &str, package: &str) -> (TempSrcTree, Value) {
+        let tree = TempSrcTree::new(label);
+        tree.write_all(&[("lib.rs", "pub mod registry;\npub async fn register() {}\n")]);
+        let metadata = serde_json::json!({
+            "packages": [{
+                "name": package,
+                "dependencies": [],
+                "targets": [{ "kind": ["lib"], "src_path": tree.root().to_string_lossy().into_owned() }],
+            }],
+        });
+        (tree, metadata)
+    }
+
+    let (_alpha_tree, alpha_metadata) = tree_and_metadata("async-identity-alpha", "alpha");
+    let (_beta_tree, beta_metadata) = tree_and_metadata("async-identity-beta", "beta");
+    let combined_metadata = serde_json::json!({
+        "packages": [
+            alpha_metadata["packages"][0].clone(),
+            beta_metadata["packages"][0].clone(),
+        ],
+    });
+
+    fn boundary_for(package: &str) -> AsyncExposureBoundary {
+        AsyncExposureBoundary::in_crate(package)
+            .module("crate")
+            .must_not_expose_async_fn()
+            .because("no async seam here")
+    }
+
+    let mut violations = Vec::new();
+    eval_into(
+        &combined_metadata,
+        &[boundary_for("alpha"), boundary_for("beta")],
+        check_async_exposure_boundary,
+        &mut violations,
+    )
+    .expect("both boundaries resolve");
+    let outcome = outcome_from(violations);
+    let report = match outcome {
+        Outcome::Violations(report) => report,
+        other => panic!("expected two violations, got {other:?}"),
+    };
+    assert_eq!(
+        report.violations.len(),
+        2,
+        "each crate's async-exposure violation must survive dedup: {:?}",
+        report.violations
+    );
+    let ids: std::collections::BTreeSet<_> = report.violations.iter().map(Violation::id).collect();
+    assert_eq!(
+        ids.len(),
+        2,
+        "identity must differ by crate, not collapse to one"
     );
 }

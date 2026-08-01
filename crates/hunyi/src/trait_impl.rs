@@ -71,6 +71,7 @@ pub(crate) fn check_trait_impl_boundary(
             severity: boundary.severity,
             anchor: boundary.anchor(),
             polarity: Polarity::AllowlistGap,
+            crate_package: &boundary.crate_package,
         },
         findings,
     );

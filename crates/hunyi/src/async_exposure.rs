@@ -59,6 +59,7 @@ pub(crate) fn check_async_exposure_boundary(
                 severity: boundary.severity,
                 anchor: boundary.anchor(),
                 polarity: Polarity::DenyBreach,
+                crate_package: &boundary.crate_package,
             },
             findings,
         );
@@ -81,6 +82,7 @@ pub(crate) fn check_async_exposure_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
+            crate_package: &boundary.crate_package,
         },
         findings,
     );

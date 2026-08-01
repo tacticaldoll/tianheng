@@ -59,6 +59,9 @@ pub(crate) fn check_unsafe_boundary(
             severity: boundary.severity,
             anchor: boundary.anchor(),
             polarity: Polarity::AllowlistGap,
+            // unsafe_confinement's target above is already boundary.crate_package, so this fact
+            // is already crate-scoped; SemanticFact::UnsafeSite deliberately ignores this value.
+            crate_package: &boundary.crate_package,
         },
         findings,
     );
