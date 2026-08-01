@@ -1,36 +1,45 @@
 ## 1. guibiao — thread the governed crate into `ModuleFact` identity
 
 - [ ] 1.1 Change `ModuleFact::into_finding(self)` (`crates/guibiao/src/finding.rs`) to
-      `into_finding(self, package: &str)`, adding `("package", package)` to every variant's
-      `fact(...)` field list (mirrors the existing `CrateFact` `"package"` field convention in the
-      same file).
+      `into_finding(self, governing_package: &str)`, adding `("governing_package", governing_package)`
+      to every variant's `fact(...)` field list. **Do not** name it `"package"` — that literal is
+      already used by `CrateFact::dependency`/`CrateFact::feature` (same file, lines 52/68/82) for
+      the *observed dependency's* name, a different referent; reusing it would collide two meanings
+      under one field name (caught in propose-stage adversarial review).
 - [ ] 1.2 Update `push_module_violation` (`crates/guibiao/src/module_check.rs:37`) to accept and
       forward `boundary.crate_package` into `finding.into_finding(...)`.
 - [ ] 1.3 Update all four `push_module_violation` call sites (`module_check.rs:265,338,405,477`) —
       each already has `boundary` in scope, so `&boundary.crate_package` requires no new plumbing.
 - [ ] 1.4 Update guibiao's fact-compatibility catalog test (the `#[cfg(test)]` module in
       `finding.rs`, `assert_key`/`IntoFinding` helpers and `published_crate_fact_identity_schema_is_
-      exact_and_exhaustive`-style test) to pass a package value through `into_finding` and assert
-      the new `"package"` field appears in every module-fact case.
+      exact_and_exhaustive`-style test) to pass a `governing_package` value through `into_finding`
+      and assert the new field appears in every module-fact case.
 
 ## 2. hunyi — thread the governed crate through the shared emitter
 
 - [ ] 2.1 Change `SemanticFact::into_finding(self)` (`crates/hunyi/src/finding.rs`) to accept
-      `package: &str`, adding `("package", package)` to every variant's `fact(...)` fields, mirroring
-      guibiao's `fact()` helper.
+      `governing_package: &str`, adding `("governing_package", governing_package)` to every
+      variant's `fact(...)` fields — **except** the variant `unsafe_confinement.rs` produces (check
+      which `SemanticFact` variant that is before starting; do not add the field there — see 2.6).
 - [ ] 2.2 Add `crate_package: &'a str` to both `SingleModuleViolationContext` and
-      `MultiModuleViolationContext` (`crates/hunyi/src/emit.rs`).
+      `MultiModuleViolationContext` (`crates/hunyi/src/emit.rs`) — added uniformly to both structs
+      even though `unsafe_confinement`'s own fact conversion won't consume it, so every caller's
+      construction stays structurally the same.
 - [ ] 2.3 Update `push_single_module_violations` and `push_multi_module_violations` to pass
       `context.crate_package` into `finding.into_finding(...)`.
 - [ ] 2.4 Update every context-construction call site to supply `crate_package: &boundary.
-      crate_package` — confirmed sites: `visibility.rs:45`, `exposure.rs:62`, `dyn_trait.rs:61`,
-      `async_exposure.rs:77` (Single) and `:54` (Multi), `impl_trait.rs:106` (Single) and `:70`
-      (Multi), `unsafe_confinement.rs:54`, `forbidden_marker.rs:52`, `trait_impl.rs:66`. Re-grep
-      both context struct names before calling this task done — an added, unmigrated call site is a
-      compile error, not a silent gap, but confirm the count matches (10 total) rather than trusting
-      this list alone.
-- [ ] 2.5 Update hunyi's fact-compatibility catalog test in `finding.rs` to pass a package value and
-      assert the new field for every `SemanticFact` variant.
+      crate_package` — confirmed sites (verified during propose-stage review, re-grep both context
+      struct names before calling this task done): `visibility.rs:45`, `exposure.rs:62`,
+      `dyn_trait.rs:61` (Single); `async_exposure.rs:77` (Single) and `:54` (Multi);
+      `impl_trait.rs:106` (Single) and `:70` (Multi); `forbidden_marker.rs:52` (Multi);
+      `trait_impl.rs:66` (Multi); `unsafe_confinement.rs:54` (Multi, see 2.6).
+- [ ] 2.5 Update hunyi's fact-compatibility catalog test in `finding.rs` to pass a
+      `governing_package` value and assert the new field for every affected `SemanticFact` variant.
+- [ ] 2.6 Confirm `unsafe_confinement.rs:55`'s `target: &boundary.crate_package` really is already
+      crate-scoped (re-verify, don't just trust this file), and confirm its fact variant's
+      compatibility-catalog test entry deliberately does **not** gain `governing_package` — add a
+      one-line comment at the fact-construction site (not a redundant field) explaining why, so a
+      future reader doesn't "fix" the asymmetry by adding it back.
 
 ## 3. Cross-crate collision regression
 

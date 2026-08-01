@@ -20,10 +20,19 @@ identity actually captures that value — crate was never one of them.
 
 - guibiao's module-boundary fact construction (`ModuleFact` in `crates/guibiao/src/finding.rs`,
   and the `target` passed into `push_module_violation` in `crates/guibiao/src/module_check.rs`)
-  gains the governed target crate as an identity-bearing field.
+  gains the governing crate as an identity-bearing field.
 - hunyi's shared semantic-violation emission (`SemanticFact` in `crates/hunyi/src/finding.rs`, and
   `crates/hunyi/src/emit.rs`'s `push_single_module_violations` / `push_multi_module_violations`,
-  which every semantic capability funnels through) gains the same.
+  which every module-path-scoped semantic capability funnels through) gains the same — **except**
+  `unsafe_confinement`, whose `MultiModuleViolationContext` already sets `target: &boundary.
+  crate_package` directly (confirmed: `crates/hunyi/src/unsafe_confinement.rs:55`), so it is
+  already crate-scoped and adding a redundant field there would duplicate identity information
+  rather than fix a gap.
+- The new field is named `governing_package`, not `package` — guibiao's existing `CrateFact`
+  family already uses `"package"` to mean the *observed dependency's* name (the object of a
+  `must_depend_on`/confinement rule), a different referent from "the crate that declared this
+  boundary." Reusing the same field name for two different meanings inside one identity model
+  would be its own hazard.
 - Each dimension's own published-fact compatibility catalog (`structured-violation-identity`'s
   "every shipped fact family cataloged" tests) is updated to the new field so the compatibility
   reaction actually proves the new discriminator, not just documents it.
@@ -40,10 +49,12 @@ identity actually captures that value — crate was never one of them.
 
 ### Modified Capabilities
 
-- `structured-violation-identity`: adds a requirement that identity is scoped to its governing
-  crate whenever a boundary kind can be declared against more than one crate, so two crates'
-  otherwise-identical observations never collapse into one and a baseline accepted for one crate
-  never suppresses another's unaccepted violation.
+- `structured-violation-identity`: extends the existing "Distinct facts carry distinct identities"
+  requirement with scenarios covering the cross-crate case, rather than adding a new requirement
+  that would dictate specific dimensions' fact-field content — that capability's own Purpose
+  already disclaims owning crate-/module-/semantic-specific fact vocabulary, so the delta stays at
+  the level of "an identity-bearing observed value" (crate is one, when it varies) instead of
+  naming a literal field name in the spec text.
 
 ## Impact
 

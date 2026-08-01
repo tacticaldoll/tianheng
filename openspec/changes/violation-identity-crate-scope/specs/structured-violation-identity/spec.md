@@ -1,29 +1,46 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
-### Requirement: Identity is scoped to its governing crate
+### Requirement: A finding has stable structured identity and human presentation
 
-Identity SHALL include the target crate whenever a boundary kind can be declared against more than
-one crate in a workspace. A dimension's fact construction for any such boundary kind SHALL carry the
-boundary's declared crate package as a named identity-bearing field, separate from the human-anchored
-module or target path, so that two crates declaring the same governed path under the same rule
-produce distinct `ViolationId`s rather than one collapsing into the other.
+The shared reaction model SHALL represent an observed finding as both human-readable presentation
+and a validated `StructuredFactIdentity`. The identity SHALL contain a non-empty semantic fact type,
+a non-empty semantic shape, and zero or more uniquely named scalar string fields in canonical name
+order. A semantic identifier SHALL name enduring meaning rather than a revision ordinal. Construction
+SHALL reject empty identifiers/field names and duplicate field names, and SHALL NOT admit arbitrary
+recursive values. Storage SHALL be private behind validated construction and read-only accessors.
 
-#### Scenario: Two crates with the identical boundary shape stay distinct
+#### Scenario: Presentation changes without changing fact identity
 
-- **WHEN** two workspace members each declare a boundary of the same kind, same rule, and same
-  governed module path, and each crate independently violates it
-- **THEN** the composed report contains one violation per crate, each carrying its own file and
-  crate-scoped identity, and neither is dropped by dedup
+- **WHEN** a dimension renders the same observed fact with improved human wording or diagnostics
+- **THEN** its presentation may change while its structured fact and violation identity remain unchanged
 
-#### Scenario: A baseline accepted for one crate does not suppress another crate's violation
+#### Scenario: Distinct facts carry distinct identities
 
-- **WHEN** a baseline records an accepted violation observed in one crate, and a different crate
-  later produces a violation with the same module path, rule, and un-scoped fact fields
-- **THEN** the gate treats the second crate's violation as new and unaccepted, because its
-  crate-scoped identity differs from the baselined entry
+- **WHEN** two observations differ in any identity-bearing observed value
+- **THEN** their semantic type, shape, or named field values differ, so accepting one cannot suppress the other
 
-#### Scenario: A dimension without multi-crate boundaries is unaffected
+#### Scenario: An ambiguous identity is rejected
 
-- **WHEN** a dimension's boundary kind can only ever be declared against a single, fixed crate
-- **THEN** this requirement does not obligate that dimension to add a crate-scoped field it has no
-  varying value for
+- **WHEN** a caller supplies an empty type/shape/field name, duplicate field name, or recursive value
+- **THEN** construction reports an error rather than normalizing or overwriting the ambiguous input
+
+#### Scenario: A semantic identifier is not a generation number
+
+- **WHEN** another fact family or compatible diagnostic field is added
+- **THEN** existing identifiers remain unchanged and no global v3/v4 identity generation is introduced
+
+#### Scenario: The declaring crate is an identity-bearing observed value when it can vary
+
+- **WHEN** a boundary kind can be declared against more than one crate in a workspace, and two
+  crates each declare the identical rule against the identical governed target
+- **THEN** the crate each was declared against is itself an identity-bearing observed value, so the
+  two observations' identities differ and one being accepted does not suppress the other — unless a
+  dimension already encodes the declaring crate in the target or another identity role it uses for
+  that boundary kind, in which case no additional field is needed to satisfy this scenario
+
+#### Scenario: A boundary kind that already encodes its crate in another identity role is not double-counted
+
+- **WHEN** a boundary kind's identity already varies by crate through its target (or another
+  identity role), because the boundary is inherently crate-scoped rather than module-path-scoped
+- **THEN** this requirement does not obligate that boundary kind's fact to carry the same crate a
+  second time as a redundant field
