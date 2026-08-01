@@ -49,6 +49,7 @@ pub(crate) fn check_visibility_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
+            crate_package: &boundary.crate_package,
         },
         findings,
     );

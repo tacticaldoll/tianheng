@@ -541,7 +541,7 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
     assert_eq!(key.shape(), "module-path");
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
-        vec![("path", "crate::sink")]
+        vec![("governing_package", "x"), ("path", "crate::sink")]
     );
 }
 
@@ -6494,5 +6494,109 @@ fn legacy_inline_confinement_defaults_to_subtree_and_preserves_identity() {
         shallow_violations.len(),
         0,
         "Explicit Shallow depth ignores submodule calls"
+    );
+}
+
+/// Two-crate reproduction of the audit-sweep finding: identical governed module path + rule
+/// declared against two different workspace members must stay two distinct violations, never
+/// dedup into one and never let one crate's baseline suppress the other's unaccepted violation.
+/// Mirrors the exact shape `crates/tianheng/tests/self_governance.rs` declares on itself
+/// (the identical rule on guibiao/hunyi/louke).
+#[test]
+fn two_crates_with_the_identical_module_boundary_stay_distinct_violations() {
+    let alpha = TempWorkspace::new("identity-scope-alpha");
+    alpha.write("lib.rs", "pub mod app;\npub mod secret;\n");
+    alpha.write("app.rs", "use crate::secret::S;\n");
+    alpha.write("secret.rs", "pub struct S;\n");
+
+    let beta = TempWorkspace::new("identity-scope-beta");
+    beta.write("lib.rs", "pub mod app;\npub mod secret;\n");
+    beta.write("app.rs", "use crate::secret::S;\n");
+    beta.write("secret.rs", "pub struct S;\n");
+
+    fn package_json(ws: &TempWorkspace, name: &str) -> serde_json::Value {
+        let manifest = ws.dir().join("Cargo.toml");
+        serde_json::json!({
+            "name": name,
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        })
+    }
+    let metadata = serde_json::json!({
+        "packages": [package_json(&alpha, "alpha"), package_json(&beta, "beta")]
+    });
+
+    fn boundary_for(package: &str) -> ModuleBoundary {
+        ModuleBoundary::in_crate(package)
+            .module("crate::app")
+            .must_not_import("crate::secret")
+            .because("app must not touch secret")
+    }
+
+    // Both crates violating, evaluated together: must yield two distinct violations, not one.
+    let constitution = Constitution::new("probe")
+        .boundary(boundary_for("alpha"))
+        .boundary(boundary_for("beta"));
+    let outcome = evaluate(&constitution, &metadata);
+    let report = match outcome {
+        Outcome::Violations(report) => report,
+        other => panic!("expected two violations, got {other:?}"),
+    };
+    assert_eq!(
+        report.violations.len(),
+        2,
+        "each crate's violation must survive dedup: {:?}",
+        report.violations
+    );
+    let ids: std::collections::BTreeSet<_> = report.violations.iter().map(Violation::id).collect();
+    assert_eq!(
+        ids.len(),
+        2,
+        "identity must differ by crate, not collapse to one"
+    );
+    let files: std::collections::BTreeSet<_> = report
+        .violations
+        .iter()
+        .map(|v| v.file.clone().expect("each violation carries a file"))
+        .collect();
+    assert_eq!(
+        files.len(),
+        2,
+        "each violation must keep its own crate's file, not share one"
+    );
+
+    // Baseline written against alpha alone must not suppress beta's unaccepted violation.
+    let alpha_only_constitution = Constitution::new("probe").boundary(boundary_for("alpha"));
+    let alpha_only_report = match evaluate(&alpha_only_constitution, &metadata) {
+        Outcome::Violations(report) => report,
+        other => panic!("expected alpha's violation, got {other:?}"),
+    };
+    assert_eq!(alpha_only_report.violations.len(), 1);
+    let baseline = Baseline::of(&alpha_only_report);
+
+    let both_constitution = Constitution::new("probe")
+        .boundary(boundary_for("alpha"))
+        .boundary(boundary_for("beta"));
+    let mut both_report = match evaluate(&both_constitution, &metadata) {
+        Outcome::Violations(report) => report,
+        other => panic!("expected two violations, got {other:?}"),
+    };
+    apply_baseline(&mut both_report, &baseline);
+    let alpha_violation = both_report
+        .violations
+        .iter()
+        .find(|v| v.target() == "crate::app" && baseline.contains(v))
+        .expect("alpha's violation must match the baseline");
+    assert!(alpha_violation.baselined, "alpha's violation was accepted");
+    let unbaselined: Vec<_> = both_report
+        .violations
+        .iter()
+        .filter(|v| !v.baselined)
+        .collect();
+    assert_eq!(
+        unbaselined.len(),
+        1,
+        "beta's violation must react as new, not be suppressed by alpha's baseline: {:?}",
+        both_report.violations
     );
 }

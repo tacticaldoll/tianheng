@@ -245,7 +245,7 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
                 name: "f".to_string(),
             },
         }
-        .into_finding();
+        .into_finding("app");
         Violation::new(
             BoundaryKind::Semantic,
             ViolationId::new(
@@ -3682,7 +3682,7 @@ fn unsafe_keys(name: &str, source: &str) -> Result<Vec<StructuredFactIdentity>, 
     unsafe_findings(tree.src(), &tree.root(), &["crate::ffi".to_string()], "x").map(|findings| {
         findings
             .into_iter()
-            .map(|(fact, _, _)| fact.into_finding().key().clone())
+            .map(|(fact, _, _)| fact.into_finding("app").key().clone())
             .collect()
     })
 }
@@ -6195,7 +6195,7 @@ fn async_observations(
         facts
             .into_iter()
             .map(|(fact, _)| {
-                let finding = fact.into_finding();
+                let finding = fact.into_finding("app");
                 (finding.key().clone(), finding.text().to_string())
             })
             .collect()
@@ -6251,6 +6251,7 @@ fn async_production_violation_separates_target_rule_and_seam() {
     assert_eq!(
         fact.fields().collect::<Vec<_>>(),
         vec![
+            ("governing_package", "x"),
             ("module", "crate::registry"),
             ("name", "register"),
             ("owner", "crate::registry"),
@@ -7476,6 +7477,7 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![
+            ("governing_package", "x"),
             ("seam_kind", "free_fn"),
             ("seam_module", "crate::domain"),
             ("seam_name", "leak"),
