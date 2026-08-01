@@ -12,6 +12,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+### Documentation
+- Ignored `.github/skills/`, openspec's per-clone generated skills directory, alongside its
+  already-ignored `.github/prompts/` sibling.
+
 ## [0.3.0] - 2026-07-26
 
 ### Documentation
