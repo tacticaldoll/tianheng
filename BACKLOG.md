@@ -29,6 +29,15 @@ live item is promoted, it must name: **class**, **observed pressure**, **observa
   requirements live in [`openspec/specs/*`](openspec/specs) and settled rationale in [`PROJECT.md`](PROJECT.md).
   Detailed historical ledgers for 0.1.x – 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
+## Open defect queue
+
+Measured defects awaiting repair live in [`docs/audit/0.3.1-adversarial-sweep.md`](docs/audit/0.3.1-adversarial-sweep.md)
+— 22 verified plus 14 unverified findings from a two-round adversarial sweep of
+`v0.2.3..release/0.3.1`, each sized to become one OpenSpec change, with the provenance and the
+trust level of each entry stated there. That file is a **queue**, not a decision index: an entry
+leaves it by being fixed (or by failing to reproduce, struck with a note). This section is only its
+pointer, so the index below stays about *capability* decisions.
+
 ## Live decision index
 
 ### DESIGN-BREAKING
