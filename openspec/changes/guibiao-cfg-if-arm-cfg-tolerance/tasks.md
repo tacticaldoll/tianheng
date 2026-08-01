@@ -1,0 +1,10 @@
+# tasks: Guibiao cfg_if Arm Declaration Is Cfg-Conditional Implementation Plan
+
+- [ ] Add `TopLevelTracker::in_transparent_macro(&self) -> bool` in `crates/guibiao/src/module_scan/reachability/declarations.rs`, returning whether a transparent-macro scope is active at the current scan position. <!-- id: 0 -->
+- [ ] Rename `DeclaredModule::has_bare_cfg` to `is_cfg_conditional` across its nine sites in `declarations.rs` and `walk.rs`, and rewrite its doc comment to name both sources and to drop the claim of parity with 渾儀's `has_cfg_attr`, which no longer holds. <!-- id: 1 -->
+- [ ] Set the flag at the file-form declaration branch from the item's own bare-`#[cfg]` prefix OR arm membership, leaving the `is_top_level` gate untouched so "observed at all" stays the tracker's existing answer. <!-- id: 2 -->
+- [ ] Add unit coverage in `crates/guibiao/src/module_scan/reachability/tests.rs` for an arm-declared module with an absent conventional file (tolerated) and for an arm-declared module whose file exists and carries a forbidden import (still governed — the control without which the tolerance test could pass vacuously). <!-- id: 3 -->
+- [ ] Pin that arm membership does not weaken the ambiguity reaction: an arm-declared `mod` backed by both conventional forms is still a constitution error, and an unconditional missing file outside any macro still errors (the over-tolerance guard). <!-- id: 4 -->
+- [ ] Pin the second absence outcome the shared flag governs: an absent `#[path]` remap target declared inside a `cfg_if!` arm is tolerated rather than reported as remap-target-missing. <!-- id: 5 -->
+- [ ] Add the adopter-facing `CHANGELOG.md` `[Unreleased]` → `### Fixed` entry, stating that a previously-refused compilable crate is now judged and naming the two-spellings inconsistency the fix removes. <!-- id: 6 -->
+- [ ] Run the full Definition of Done from the workspace root and report actual output, including the two isolated clippy passes and both release-coherence scripts. <!-- id: 7 -->
