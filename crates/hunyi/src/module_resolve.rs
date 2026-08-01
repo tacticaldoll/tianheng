@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::errors::{
-    missing_module_file_error, unknown_module_error, unparseable_source_error,
-    unreadable_source_error,
+    dual_backed_module_error, missing_module_file_error, unknown_module_error,
+    unparseable_source_error, unreadable_source_error,
 };
 use crate::resolve::strip_raw;
 use crate::syn_util::{direct_path_value, has_cfg_attr, has_path_attr};
@@ -268,12 +268,29 @@ fn descend(
                 // this single-module-anchored descent no longer disagrees with its own sibling
                 // walker on the identical shape (the 0.2.2 lesson: the two walkers' missing-file
                 // policies had silently drifted apart). An unconditional missing file stays a real
-                // scan error (exit 2).
-                let Some(file) = locate_module_file(&branch.child_dir, seg) else {
-                    if has_cfg_attr(&module_item.attrs) {
-                        continue;
+                // scan error (exit 2). BOTH conventional forms present is checked FIRST and is never
+                // tolerated: no predicate value makes two files compile as one module, so unlike an
+                // absence it cannot be a legitimate configuration — the same ordering 圭表 and 漏刻
+                // each independently apply to this shape.
+                let file = match locate_module_file(&branch.child_dir, seg) {
+                    ModuleFile::One(file) => file,
+                    ModuleFile::Ambiguous { flat, nested } => {
+                        // `seg`, not `module`: the ambiguous declaration may be an ANCESTOR of the
+                        // anchor being resolved, and the two paths below are that ancestor's.
+                        return Err(dual_backed_module_error(
+                            module,
+                            seg,
+                            crate_package,
+                            &flat,
+                            &nested,
+                        ));
                     }
-                    return Err(missing_module_file_error(module, crate_package));
+                    ModuleFile::Absent => {
+                        if has_cfg_attr(&module_item.attrs) {
+                            continue;
+                        }
+                        return Err(missing_module_file_error(module, crate_package));
+                    }
                 };
                 if !xingbiao::try_visit(&mut seen_files, &file)? {
                     continue;
@@ -306,16 +323,32 @@ fn descend(
     descend(next_branches, &segments[1..], module, crate_package)
 }
 
-pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> Option<PathBuf> {
+/// The outcome of resolving a plain `mod name;` to its conventional source file.
+///
+/// The two conventional forms are mutually exclusive in source rustc accepts, so "both present" is
+/// its own variant rather than collapsing into a first-form pick: an item written in the unselected
+/// form would otherwise escape observation entirely, and whether the module is governed at all would
+/// depend on which file its author happened to write it in (a false negative).
+pub(crate) enum ModuleFile {
+    /// Neither conventional form exists. The caller decides whether this is a legitimate
+    /// `#[cfg]`-gated absence or an unconditional missing file (a hard error).
+    Absent,
+    /// Exactly one conventional form exists.
+    One(PathBuf),
+    /// Both `name.rs` and `name/mod.rs` exist — rustc E0761 for a live declaration. Unresolvable
+    /// under every `#[cfg]` predicate value, so callers react ahead of any absence tolerance.
+    Ambiguous { flat: PathBuf, nested: PathBuf },
+}
+
+pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> ModuleFile {
     let flat = child_dir.join(format!("{seg}.rs"));
-    if flat.is_file() {
-        return Some(flat);
-    }
     let nested = child_dir.join(seg).join("mod.rs");
-    if nested.is_file() {
-        return Some(nested);
+    match (flat.is_file(), nested.is_file()) {
+        (true, true) => ModuleFile::Ambiguous { flat, nested },
+        (true, false) => ModuleFile::One(flat),
+        (false, true) => ModuleFile::One(nested),
+        (false, false) => ModuleFile::Absent,
     }
-    None
 }
 
 pub(crate) fn read_parse(file: &Path) -> Result<syn::File, String> {

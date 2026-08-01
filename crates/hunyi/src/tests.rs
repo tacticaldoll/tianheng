@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use crate::containment::leaf_of;
 use crate::crate_scope::dependency_names;
-use crate::errors::{missing_module_file_error, unknown_module_error, unknown_trait_error};
+use crate::errors::{
+    dual_backed_module_error, missing_module_file_error, unknown_module_error, unknown_trait_error,
+};
 use crate::finding::SemanticFact;
 use crate::module_resolve::resolve_module_file;
 
@@ -7093,6 +7095,217 @@ fn descend_does_not_tolerate_a_cfg_attr_decorated_missing_file_only_bare_cfg() {
     )
     .expect_err("a cfg_attr-decorated (not cfg-gated) missing file must still be a scan error");
     assert_eq!(err, missing_module_file_error("crate::gated", "x"));
+}
+
+/// A plain `mod child;` backed by BOTH conventional forms at once (`child.rs` AND `child/mod.rs`) is
+/// a genuine rustc compile error (E0761) for a live declaration. `locate_module_file` previously
+/// returned the FIRST form it probed, so the anchor silently resolved to `child.rs` and the other
+/// file was never read. 圭表 and 漏刻 each already hard-error on this exact shape; this brings the
+/// semantic dimension into that agreement (pinned across all three in
+/// `crates/tianheng/tests/dual_backed_module_conformance.rs`).
+#[test]
+fn a_dual_backed_module_anchor_is_a_constitution_error() {
+    let tree = TempSrcTree::new("dual-backed-anchor");
+    tree.write_all(&[
+        ("lib.rs", "pub mod child;\n"),
+        ("child.rs", "// flat form\n"),
+        ("child/mod.rs", "// nested form\n"),
+    ]);
+    let err = resolve_module_file(tree.src(), &tree.root(), "crate::child", "x")
+        .expect_err("both conventional forms present must be a constitution error, not a pick");
+    assert_eq!(
+        err,
+        dual_backed_module_error(
+            "crate::child",
+            "child",
+            "x",
+            &tree.src().join("child.rs"),
+            &tree.src().join("child").join("mod.rs"),
+        )
+    );
+}
+
+/// When the ambiguous declaration is an ANCESTOR of the anchor, the error must name the anchor being
+/// resolved AND the ambiguous `mod` declaration separately — the two resolved paths belong to the
+/// ancestor, so attributing them to the deeper anchor would point a reader at the wrong module. The
+/// `openspec` requirement claims this case explicitly, so it is pinned rather than assumed.
+#[test]
+fn a_dual_backed_ancestor_reacts_when_the_anchor_is_a_deeper_segment() {
+    let tree = TempSrcTree::new("dual-backed-ancestor");
+    tree.write_all(&[
+        ("lib.rs", "pub mod child;\n"),
+        ("child.rs", "pub mod deep;\n"),
+        ("child/mod.rs", "pub mod deep;\n"),
+        ("child/deep.rs", "pub struct A;\n"),
+    ]);
+    let err = resolve_module_file(tree.src(), &tree.root(), "crate::child::deep", "x")
+        .expect_err("a dual-backed ancestor must react before the deeper segment resolves");
+    assert_eq!(
+        err,
+        dual_backed_module_error(
+            "crate::child::deep",
+            "child",
+            "x",
+            &tree.src().join("child.rs"),
+            &tree.src().join("child").join("mod.rs"),
+        ),
+        "the anchor and the ambiguous declaration must be named separately"
+    );
+}
+
+/// The motivating false negative, through the real capability rather than the resolver alone: with
+/// `child.rs` clean and the forbidden exposure written only in `child/mod.rs`, the previous
+/// first-form pick read the clean file and returned **zero findings** — a silent pass. Whether the
+/// module was governed at all therefore depended on which of the two files its author wrote the item
+/// in (the same boundary reacts when the exposure sits in `child.rs`, the sibling control below).
+#[test]
+fn a_dual_backed_anchor_does_not_let_an_exposure_in_the_unselected_form_escape() {
+    let err = findings(
+        "dual-backed-escape",
+        &[
+            ("lib.rs", "pub mod child;\npub mod infra;\n"),
+            ("infra.rs", "pub struct DbPool;\n"),
+            ("child.rs", "// nothing exposed here\n"),
+            (
+                "child/mod.rs",
+                "pub fn pools() -> crate::infra::DbPool { crate::infra::DbPool }\n",
+            ),
+        ],
+        "crate::child",
+        &["crate::infra"],
+    )
+    .expect_err("an exposure in the unselected conventional form must never be a silent pass");
+    assert!(
+        err.contains("resolves to both"),
+        "the ambiguity must be named, not the exposure: {err}"
+    );
+}
+
+/// The control for the test above: the identical boundary and forbidden type DO react when the
+/// exposure sits in the single conventional form. Without this, the `expect_err` above could pass on
+/// a misconfigured boundary that never reacts to anything.
+#[test]
+fn a_single_form_anchor_still_reacts_on_the_same_exposure() {
+    let out = findings(
+        "single-form-control",
+        &[
+            ("lib.rs", "pub mod child;\npub mod infra;\n"),
+            ("infra.rs", "pub struct DbPool;\n"),
+            (
+                "child.rs",
+                "pub fn pools() -> crate::infra::DbPool { crate::infra::DbPool }\n",
+            ),
+        ],
+        "crate::child",
+        &["crate::infra"],
+    )
+    .expect("a single-form anchor resolves and the boundary reacts");
+    assert_eq!(
+        out,
+        ["crate::infra::DbPool exposed by fn crate::child::pools"]
+    );
+}
+
+/// A `mod.rs`-only module must still resolve — the ambiguity reaction must not have collapsed the
+/// nested branch along with the ambiguous one.
+#[test]
+fn a_nested_only_module_still_resolves_to_its_mod_rs() {
+    let file = resolve_file(
+        "nested-only",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            ("domain/mod.rs", "pub struct A;\n"),
+        ],
+        "crate::domain",
+    )
+    .expect("a `mod.rs`-only module resolves to that file");
+    assert!(file.ends_with("domain/mod.rs"), "got {}", file.display());
+}
+
+/// Unlike an ABSENT conventional file, an ambiguity is not a legitimate configuration: no `#[cfg]`
+/// predicate value makes two files compile as one module. So the ambiguity test runs ahead of the
+/// bare-`#[cfg]` absence tolerance, exactly as 圭表's `resolve_plain_sources` and 漏刻's
+/// `resolve_external_module` each independently order it.
+///
+/// Worth stating plainly: with the predicate off, rustc strips the declaration before module
+/// resolution, so this crate COMPILES and raises no E0761 — the reaction here is deliberately not
+/// confined to uncompilable source, because a cfg-blind scanner cannot know which arm is live.
+#[test]
+fn a_cfg_gated_dual_backed_declaration_is_still_an_ambiguity() {
+    let tree = TempSrcTree::new("dual-backed-cfg");
+    tree.write_all(&[
+        ("lib.rs", "#[cfg(feature = \"never\")]\npub mod child;\n"),
+        ("child.rs", "// flat form\n"),
+        ("child/mod.rs", "// nested form\n"),
+    ]);
+    let err = resolve_module_file(tree.src(), &tree.root(), "crate::child", "x")
+        .expect_err("a cfg gate tolerates an absent file, never two present ones");
+    assert_eq!(
+        err,
+        dual_backed_module_error(
+            "crate::child",
+            "child",
+            "x",
+            &tree.src().join("child.rs"),
+            &tree.src().join("child").join("mod.rs"),
+        )
+    );
+}
+
+/// The `cfg_attr` counterpart of the test above. `has_cfg_attr` deliberately does not match
+/// `cfg_attr` (it never removes the item), so a `cfg_attr`-decorated declaration is not even
+/// eligible for the absence tolerance — but the requirement claims the ambiguity reacts "regardless
+/// of any `#[cfg(...)]` or `#[cfg_attr(...)]` gate", so both gate spellings are pinned rather than
+/// one being left to structural inference.
+#[test]
+fn a_cfg_attr_decorated_dual_backed_declaration_is_still_an_ambiguity() {
+    let tree = TempSrcTree::new("dual-backed-cfg-attr");
+    tree.write_all(&[
+        (
+            "lib.rs",
+            "#[cfg_attr(unix, allow(dead_code))]\npub mod child;\n",
+        ),
+        ("child.rs", "// flat form\n"),
+        ("child/mod.rs", "// nested form\n"),
+    ]);
+    let err = resolve_module_file(tree.src(), &tree.root(), "crate::child", "x")
+        .expect_err("a cfg_attr-decorated dual-backed declaration is still an ambiguity");
+    assert_eq!(
+        err,
+        dual_backed_module_error(
+            "crate::child",
+            "child",
+            "x",
+            &tree.src().join("child.rs"),
+            &tree.src().join("child").join("mod.rs"),
+        )
+    );
+}
+
+/// The crate-wide walk (`scan::resolve_child_modules`, behind trait-impl locality, forbidden marker,
+/// unsafe confinement, and signature-coupling's own alias/extern scan) reacts on the same shape as
+/// the anchored descent — the two walkers must not disagree on it, the 0.2.2 lesson that their
+/// missing-file policies once silently had. The dual-backed module here is unrelated to the
+/// boundary's own trait, so this also pins the wider blast radius: a crate whose module graph cannot
+/// be resolved cannot be judged, rather than the one module being quietly excluded.
+#[test]
+fn the_crate_wide_walk_reacts_on_a_dual_backed_module_elsewhere_in_the_crate() {
+    let err = locality_findings(
+        "dual-backed-crate-wide",
+        &[
+            ("lib.rs", "pub mod command;\npub mod child;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            ("child.rs", "// flat form\n"),
+            ("child/mod.rs", "// nested form\n"),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .expect_err("the crate-wide walk must refuse to judge a crate with an unresolvable module");
+    assert!(
+        err.contains("resolves to both") && err.contains("crate::child"),
+        "the crate-wide walk must name the ambiguous module: {err}"
+    );
 }
 
 /// A BARE `#[cfg(pred)]` co-occurring with an unconditional `#[path = "…"]` on the SAME item
