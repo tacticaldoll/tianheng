@@ -80,6 +80,32 @@ pub(crate) fn missing_module_file_error(module: &str, crate_package: &str) -> St
     )
 }
 
+// A plain `mod name;` backed by BOTH conventional forms at once. Deliberately NOT claimed as a twin
+// of 圭表's or 漏刻's own message for this shape: those two already differ from each other (a
+// quoted full module path vs a backticked bare name, and a trailing rule clause present in one and
+// absent in the other), so a parity claim here would pick a side while sounding like agreement. The
+// three dimensions agree on the *reaction* — exit 2, pinned by
+// `crates/tianheng/tests/dual_backed_module_conformance.rs` — never on the text.
+// `module` is the module being resolved (an anchor, which may be DEEPER than the ambiguous
+// declaration) and `declaration` is the ambiguous `mod` name itself — the two differ whenever an
+// ancestor is the dual-backed one, so naming only `module` would attribute the two paths below to a
+// module they do not belong to.
+pub(crate) fn dual_backed_module_error(
+    module: &str,
+    declaration: &str,
+    crate_package: &str,
+    flat: &Path,
+    nested: &Path,
+) -> String {
+    format!(
+        "cannot resolve module '{module}' of crate '{crate_package}': its `mod {declaration};` \
+         declaration resolves to both '{}' and '{}' — a plain `mod` must be backed by exactly one \
+         file, so which of the two governs cannot be judged",
+        flat.display(),
+        nested.display()
+    )
+}
+
 pub(crate) fn unreadable_source_error(file: &Path, err: &str) -> String {
     format!("cannot read source file '{}': {err}", file.display())
 }

@@ -16,6 +16,21 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 - Ignored `.github/skills/`, openspec's per-clone generated skills directory, alongside its
   already-ignored `.github/prompts/` sibling.
 
+### Fixed
+- 渾儀 now reacts with a constitution error (exit 2) when a plain `mod name;` is backed by BOTH
+  conventional forms at once (`name.rs` AND `name/mod.rs`), instead of silently resolving to the
+  first form it probes and never reading the other. Closes an exposure false negative: with the two
+  files present, moving a forbidden exposure from `name.rs` into `name/mod.rs` turned a reaction into
+  a clean pass, so whether the module was governed at all depended on which file its author wrote the
+  item in. 圭表 and 漏刻 have both reacted to this shape since 0.2.3 and earlier, and the composed
+  `tianheng check` therefore already exited 2 on it — the gap was reachable by a **standalone 渾儀**
+  consumer. Two trigger shapes, stated plainly: a live declaration of this kind is a rustc compile
+  error (E0761), but a `#[cfg]`-gated-off one is stripped before module resolution and **compiles**,
+  and it also now reacts, because cfg-blind observation cannot know which arm is live (the ordering
+  圭表 and 漏刻 each already apply). A constitution error never enters a baseline; the repair is to
+  delete whichever of the two files is not the module. All four outcomes of the lookup are now pinned
+  across all three dimensions in `dual_backed_module_conformance.rs`.
+
 ## [0.3.0] - 2026-07-26
 
 ### Documentation

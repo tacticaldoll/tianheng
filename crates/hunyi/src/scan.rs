@@ -14,9 +14,9 @@ use syn::visit::{self, Visit};
 
 use crate::collect::type_param_names;
 use crate::crate_scope::{child_module_names, local_type_namespace_names};
-use crate::errors::missing_module_file_error;
+use crate::errors::{dual_backed_module_error, missing_module_file_error};
 use crate::finding::UnsafeSiteFact;
-use crate::module_resolve::{locate_module_file, read_parse, resolve_module_branches};
+use crate::module_resolve::{ModuleFile, locate_module_file, read_parse, resolve_module_branches};
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_targets,
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
@@ -346,7 +346,7 @@ fn resolve_child_modules(
             // `file_dir` is the located file's directory (`<dir>` for `x.rs`, `<dir>/x` for
             // `x/mod.rs`), which is where a `#[path]` inside it resolves from.
             None => match locate_module_file(child_dir, &name) {
-                Some(file) => {
+                ModuleFile::One(file) => {
                     // A file already on the current descent path (an ANCESTOR, by canonical
                     // symlink-resolved path) is a genuine module cycle — a symlinked directory or a
                     // circular `#[path]` looping the `mod` graph back on itself. Stop with a scan
@@ -376,10 +376,25 @@ fn resolve_child_modules(
                         file,
                     ));
                 }
+                // BOTH conventional forms present is unresolvable under every predicate value — no
+                // `#[cfg]` makes two files compile as one module — so unlike an absence it is never
+                // a legitimate configuration, and it reacts regardless of any gate. Erroring out of
+                // the whole walk rather than dropping this one module matches 圭表's own
+                // `resolve_plain_sources`: a crate whose module graph cannot be resolved cannot be
+                // judged, and excluding the module would hide every import beneath it.
+                ModuleFile::Ambiguous { flat, nested } => {
+                    return Err(dual_backed_module_error(
+                        &child_module,
+                        &name,
+                        crate_package,
+                        &flat,
+                        &nested,
+                    ));
+                }
                 // A `#[cfg]`-gated module may legitimately have no source file when the feature is
                 // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
                 // error. A non-cfg missing file is a real scan error: fail loud (exit 2).
-                None => {
+                ModuleFile::Absent => {
                     if !has_cfg_attr(&module_item.attrs) {
                         return Err(missing_module_file_error(&child_module, crate_package));
                     }
