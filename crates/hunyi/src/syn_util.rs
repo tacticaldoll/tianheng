@@ -72,6 +72,160 @@ pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("cfg"))
 }
 
+/// The one macro whose body this dimension reads as ordinary code: `cfg_if!`. Its arms wrap
+/// human-authored items without transforming their identities, so an item written inside an arm is
+/// a real declaration of the enclosing module — which is why 圭表 already observes them
+/// (`guibiao::module_scan::…::is_transparent_macro_name`) and why 渾儀 must too: the same source
+/// otherwise reacts in the static dimension and passes in the semantic one (a measured exposure
+/// false negative, the one bug class the core contract forbids).
+///
+/// Gating on the macro **name** is load-bearing, not conservatism. [`transparent_macro_arm_items`]
+/// reads every top-level brace group of the body as an arm, and for an arbitrary macro that is
+/// wrong: in `wrap! { impl Foo { pub fn hidden() -> Forbidden { … } } }` the `impl` body's braces
+/// ARE a top-level brace group, so the same walk would recover a `fn hidden` the macro may never
+/// emit verbatim — a false positive (measured; see the change's `design.md`). Restricting the
+/// mechanism to the one macro whose grammar puts items **directly** in braces is what keeps it
+/// sound. Another body-wrapping macro is therefore not observed: a stated bound, shared with 圭表
+/// and written into the spec rather than left implicit.
+fn is_transparent_macro(item: &syn::ItemMacro) -> bool {
+    // `ident.is_none()` excludes a definition (`macro_rules! cfg_if { … }`, whose invocation path
+    // is `macro_rules`) from ever being read as an invocation of it. Matched on the LAST segment,
+    // so the qualified `cfg_if::cfg_if! { … }` spelling counts — the same test 圭表 applies.
+    item.ident.is_none()
+        && item
+            .mac
+            .path
+            .segments
+            .last()
+            .is_some_and(|seg| seg.ident == "cfg_if")
+}
+
+/// The items of every arm of a transparent macro invocation, in source order.
+///
+/// `cfg_if!`'s grammar is `if #[cfg(a)] { items } else if #[cfg(b)] { items } else { items }`, so
+/// the body's top-level **brace** groups are exactly the arms: a `#[cfg(…)]` predicate is a `#`
+/// followed by a *bracket* group, and `if` / `else` are bare identifiers. Each arm is parsed as a
+/// [`syn::File`] — the same parse the crate applies to a real source file, so an arm's items are
+/// observed identically to top-level ones.
+///
+/// A body that does not parse as items yields **nothing** rather than failing the scan: a
+/// same-named macro that is not `cfg_if!` at all (or a `cfg_if!` invocation whose arm holds
+/// statements) is then invisible, which is the pre-existing state for every macro — never a hard
+/// error on source rustc accepts. Arms are independent, so one unparseable arm does not cost the
+/// others their items.
+///
+/// **Item position only** — a stated bound, measured. Inside an `impl` or `trait` body `syn` gives an
+/// `ImplItem::Macro` / `TraitItem::Macro`, whose arms parse as impl/trait items rather than items and
+/// are reached through a different set of walkers, so such an invocation is not flattened and its
+/// contents stay unobserved (pinned by `a_cfg_if_inside_an_impl_body_is_a_stated_bound`, declared in
+/// the spec, and owned by its own change). A `cfg_if!` in a **function body** never reaches here at
+/// all: `syn` places it as a statement, not an item.
+fn transparent_macro_arm_items(mac: &syn::Macro) -> Vec<syn::Item> {
+    mac.parse_body_with(parse_transparent_arms)
+        .unwrap_or_default()
+}
+
+fn parse_transparent_arms(input: syn::parse::ParseStream) -> syn::Result<Vec<syn::Item>> {
+    let mut items = Vec::new();
+    while !input.is_empty() {
+        if input.peek(syn::token::Brace) {
+            let arm;
+            syn::braced!(arm in input);
+            match arm.parse::<syn::File>() {
+                Ok(file) => items.extend(file.items),
+                // Drain the arm buffer: syn reports a partially-consumed nested buffer as an
+                // "unexpected token" error against the ENCLOSING parse, which would discard the
+                // arms that did parse.
+                Err(_) => drain(&arm)?,
+            }
+        } else {
+            skip_token(input)?;
+        }
+    }
+    Ok(items)
+}
+
+fn drain(input: syn::parse::ParseStream) -> syn::Result<()> {
+    while !input.is_empty() {
+        skip_token(input)?;
+    }
+    Ok(())
+}
+
+/// Advance one token tree, whatever it is — the predicate attributes and `if` / `else` keywords
+/// between arms. Never names a `proc_macro2` type: 渾儀's dependency surface is `syn` only
+/// (`self_governance.rs`'s own crate boundary), so the cursor's token tree is stepped over rather
+/// than matched on.
+fn skip_token(input: syn::parse::ParseStream) -> syn::Result<()> {
+    input.step(|cursor| match cursor.token_tree() {
+        Some((_, rest)) => Ok(((), rest)),
+        None => Err(cursor.error("unexpected end of macro body")),
+    })
+}
+
+/// An item observed after transparent-macro flattening, paired with how it was reached.
+pub(crate) struct FlatItem {
+    pub(crate) item: syn::Item,
+    /// Reached through a transparent macro arm, hence **conditionally compiled by construction**:
+    /// every `cfg_if!` arm is gated by a predicate in the macro header (the trailing `else` by the
+    /// negation of all the others). The module walkers treat this exactly like a bare `#[cfg]` on
+    /// the item itself — 圭表's settled rule, adopted rather than re-derived so the two dimensions
+    /// cannot disagree on one shape (the 0.2.2 lesson, found once as a silent divergence).
+    pub(crate) in_transparent_arm: bool,
+}
+
+impl FlatItem {
+    fn plain(item: syn::Item) -> Self {
+        Self {
+            item,
+            in_transparent_arm: false,
+        }
+    }
+
+    fn in_arm(mut self) -> Self {
+        self.in_transparent_arm = true;
+        self
+    }
+}
+
+/// `items` with every transparent-macro invocation replaced by its arms' items, recursively (a
+/// nested `cfg_if!` inside an arm is flattened too). The invocation itself is dropped: no
+/// capability observes `syn::Item::Macro`, so keeping it would only be a duplicate the arms
+/// already cover. Idempotent — a flattened list holds no transparent invocation left to expand.
+///
+/// Flattening is **shallow** with respect to module bodies: an inline `mod x { … }` inside an arm
+/// is returned as one item, and the arm tag does not propagate into its body (that body is
+/// flattened on its own when the walk descends into it, with `in_transparent_arm` false). This is
+/// deliberate — it is exactly how a bare `#[cfg] mod x { … }` already behaves here, where the
+/// gate on the outer `mod` does not tolerate an absent file for an inner `mod y;` — so arm
+/// membership introduces no divergence from the existing rule.
+pub(crate) fn flatten_transparent_macros(items: &[syn::Item]) -> Vec<FlatItem> {
+    let mut out = Vec::new();
+    for item in items {
+        match item {
+            syn::Item::Macro(mac) if is_transparent_macro(mac) => {
+                let arm_items = transparent_macro_arm_items(&mac.mac);
+                out.extend(
+                    flatten_transparent_macros(&arm_items)
+                        .into_iter()
+                        .map(FlatItem::in_arm),
+                );
+            }
+            other => out.push(FlatItem::plain(other.clone())),
+        }
+    }
+    out
+}
+
+/// [`flatten_transparent_macros`] for the observers that only read items and never judge a
+/// module's absent source file, so arm membership is not theirs to consult.
+pub(crate) fn flatten_transparent_macro_items(items: &[syn::Item]) -> Vec<syn::Item> {
+    flatten_transparent_macros(items)
+        .into_iter()
+        .map(|flat| flat.item)
+        .collect()
+}
+
 fn is_path_remap(attr: &syn::Attribute) -> bool {
     if attr.path().is_ident("path") {
         return true;

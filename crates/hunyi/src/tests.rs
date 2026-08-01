@@ -4182,7 +4182,10 @@ fn unsafe_in_a_body_nested_mod_reacts() {
 #[test]
 fn unsafe_in_a_macro_body_is_a_stated_bound() {
     // Macro bodies are unexpanded (the dimension's inherited macro bound): the unsafe inside a
-    // never-invoked macro definition is not observed — stated, not a silent claim.
+    // never-invoked macro definition is not observed — stated, not a silent claim. The one
+    // carve-out is the transparent `cfg_if!`, whose arms are read as real code
+    // (`an_unsafe_site_inside_a_cfg_if_arm_is_confined`); a `macro_rules!` definition transforms
+    // identities and stays opaque.
     let out = unsafe_labels(
         "macro",
         &[
@@ -9346,5 +9349,806 @@ fn diamond_alias_expansion_does_not_leak_intermediate_aliases() {
         expanded,
         vec!["crate::infra::Secret"],
         "diamond alias expansion must yield strictly terminal target without intermediate alias leakage: {expanded:?}"
+    );
+}
+
+// --- transparent macro (`cfg_if!`) arm observation --------------------------
+//
+// `cfg_if!` wraps human-authored items in arms without transforming their identities, so 圭表 reads
+// them as real code. 渾儀 did not: `syn` parses the invocation as an opaque `Item::Macro`, and every
+// capability matches concrete item variants — a measured exposure false negative on ordinary,
+// compilable source (the identical function reacted at module top level and passed inside an arm).
+// The shapes below are the ten a feasibility spike measured, plus the controls without which an
+// emptiness assertion could pass vacuously.
+
+/// Shape 1: `if` / `else`. BOTH arms are observed — the union is cfg-blind, so a violation in the
+/// arm this build does not select still reacts (a stated bound: knowing which arm compiles requires
+/// evaluating the whole feature/target resolution, cargo's job, not a scanner's).
+#[test]
+fn cfg_if_if_else_arms_both_expose_forbidden_types() {
+    let out = findings(
+        "cfg-if-both-arms",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub fn unix_leak() -> crate::infra::Secret { loop {} }\n\
+                 	 } else {\n\
+                 	     pub fn fallback_leak() -> crate::infra::Secret { loop {} }\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec![
+            "crate::infra::Secret exposed by fn crate::api::fallback_leak",
+            "crate::infra::Secret exposed by fn crate::api::unix_leak",
+        ],
+        "both cfg_if arms' exposures must react (cfg-blind union): {out:?}"
+    );
+}
+
+/// Shape 2: a single `if` arm with no `else`.
+#[test]
+fn cfg_if_if_only_arm_exposes_a_forbidden_type() {
+    let out = findings(
+        "cfg-if-if-only",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "an if-only cfg_if arm must be observed: {out:?}"
+    );
+}
+
+/// Shape 3: an `else if` chain — every arm, not just the first and last.
+#[test]
+fn cfg_if_else_if_chain_exposes_every_arm() {
+    let out = findings(
+        "cfg-if-chain",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub fn a_leak() -> crate::infra::Secret { loop {} }\n\
+                 	 } else if #[cfg(windows)] {\n\
+                 	     pub fn b_leak() -> crate::infra::Secret { loop {} }\n\
+                 	 } else {\n\
+                 	     pub fn c_leak() -> crate::infra::Secret { loop {} }\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec![
+            "crate::infra::Secret exposed by fn crate::api::a_leak",
+            "crate::infra::Secret exposed by fn crate::api::b_leak",
+            "crate::infra::Secret exposed by fn crate::api::c_leak",
+        ],
+        "every arm of an else-if chain must be observed: {out:?}"
+    );
+}
+
+/// Shape 4: a `cfg_if!` nested inside an arm — the flattening recurses.
+#[test]
+fn nested_cfg_if_inside_an_arm_exposes_a_forbidden_type() {
+    let out = findings(
+        "cfg-if-nested",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     cfg_if::cfg_if! {\n\
+                 	         if #[cfg(target_pointer_width = \"64\")] {\n\
+                 	             pub fn inner_leak() -> crate::infra::Secret { loop {} }\n\
+                 	         }\n\
+                 	     }\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::inner_leak"],
+        "a nested cfg_if's arm must be observed: {out:?}"
+    );
+}
+
+/// Shape 5: an arm-declared **file** module enters the module walk. Were the declaration invisible,
+/// the anchor would not resolve at all (exit 2, "unknown module") — and in the whole-crate walk the
+/// entire subtree beneath it would go unobserved.
+#[test]
+fn a_cfg_if_arm_declared_file_module_is_walked() {
+    let out = findings(
+        "cfg-if-arm-mod",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub mod api;\n\
+                 	 }\n\
+                 }\n",
+            ),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "a mod declared only inside a cfg_if arm must be descended: {out:?}"
+    );
+}
+
+/// Shape 6: an arm-declared **inline** module.
+#[test]
+fn a_cfg_if_arm_declared_inline_module_is_walked() {
+    let out = findings(
+        "cfg-if-arm-inline-mod",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub mod api {\n\
+                 	         pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                 	     }\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "an inline mod declared inside a cfg_if arm must be descended: {out:?}"
+    );
+}
+
+/// Shape 7: the outer delimiter of the invocation is irrelevant — `cfg_if!( … );` is the same macro.
+#[test]
+fn a_paren_delimited_cfg_if_invocation_is_transparent() {
+    let out = findings(
+        "cfg-if-paren",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if!(\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                 	 }\n\
+                 );\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "a paren-delimited cfg_if invocation must be observed: {out:?}"
+    );
+}
+
+/// Shape 8: a `cfg_if!` written **inside an inline module** — the flattening applies at every level
+/// the walk descends to, not only a file's top level.
+#[test]
+fn a_cfg_if_inside_an_inline_module_is_transparent() {
+    let out = findings(
+        "cfg-if-in-inline-mod",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "pub mod inner {\n\
+                 	 cfg_if::cfg_if! {\n\
+                 	     if #[cfg(unix)] {\n\
+                 	         pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                 	     }\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api::inner",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::inner::leak"],
+        "a cfg_if inside an inline module must be observed: {out:?}"
+    );
+}
+
+/// Shape 9: an arm body that does not parse as items yields nothing — never a scan error. The
+/// invocation is `cfg_if!`-named, so the arm walk runs; its body is statements, which `syn::File`
+/// rejects. The forbidden exposure at top level is the control: it proves the fixture is otherwise
+/// live, so the arm's emptiness is not an artifact of nothing being observed at all.
+#[test]
+fn a_cfg_if_arm_body_that_does_not_parse_as_items_is_not_a_scan_error() {
+    let out = findings(
+        "cfg-if-unparseable-arm",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "pub fn control_leak() -> crate::infra::Secret { loop {} }\n\
+                 cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     let _not_an_item = 1;\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::control_leak"],
+        "an unparseable arm body must yield no items and no error, leaving the rest observed: {out:?}"
+    );
+}
+
+/// Shape 10: the **name gate**, and why it is load-bearing rather than conservative. Arm extraction
+/// reads every top-level brace group of the body as an arm; in an arbitrary macro's body an
+/// `impl Foo { … }`'s braces ARE such a group, so an unnamed-gated walk would recover a `fn hidden`
+/// this macro may never emit verbatim — a false positive. Paired with the control below, which
+/// proves the identical function DOES react when written as an item.
+#[test]
+fn an_arbitrary_macro_body_is_not_read_as_transparent_arms() {
+    let out = findings(
+        "arbitrary-macro-body",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "generate_wrapper! {\n\
+                 	 impl Foo {\n\
+                 	     pub fn hidden() -> crate::infra::Secret { loop {} }\n\
+                 	 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "only cfg_if is transparent: an arbitrary macro's body must not be read as arms: {out:?}"
+    );
+}
+
+/// The control for the name gate: the same `fn hidden` written as a real item reacts. Without this,
+/// the emptiness above could hold for any reason at all — an unresolvable anchor, a forbidden set
+/// that matches nothing — rather than because the macro body was left unread.
+#[test]
+fn the_same_exposure_written_as_an_item_reacts() {
+    let out = findings(
+        "arbitrary-macro-control",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "pub struct Foo;\n\
+                 impl Foo {\n\
+                 	 pub fn hidden() -> crate::infra::Secret { loop {} }\n\
+                 }\n\
+                 pub fn hidden() -> crate::infra::Secret { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec![
+            "crate::infra::Secret exposed by fn <crate::api::Foo>::hidden",
+            "crate::infra::Secret exposed by fn crate::api::hidden",
+        ],
+        "the control exposure must react as an item — both the inherent-impl method the macro \
+         fixture wrapped and the free function: {out:?}"
+    );
+}
+
+/// An arm-declared module is **cfg-conditional**: every arm is gated by a predicate in the macro
+/// header, so an absent conventional file is a legitimate configuration, not a broken declaration —
+/// 圭表's settled rule for the same shape, adopted rather than re-derived.
+#[test]
+fn a_cfg_if_arm_declared_module_with_no_source_file_is_tolerated() {
+    let out = findings(
+        "cfg-if-arm-absent-file",
+        &[
+            (
+                "lib.rs",
+                "pub mod api;\npub mod infra;\n\
+                 cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub mod unix_only;\n\
+                 	 }\n\
+                 }\n",
+            ),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "an arm-declared module with no file must be tolerated, not a scan error: {out:?}"
+    );
+}
+
+/// The control for that tolerance: the identical declaration **without** the arm still fails loud.
+/// Otherwise the tolerance above could be indistinguishable from never having read the declaration.
+#[test]
+fn the_same_module_declaration_outside_an_arm_still_fails_loud() {
+    let error = findings(
+        "cfg-if-arm-absent-control",
+        &[
+            (
+                "lib.rs",
+                "pub mod api;\npub mod infra;\npub mod unix_only;\n",
+            ),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("unix_only") || error.contains("no source file"),
+        "an unconditional declaration with no file must stay a scan error: {error}"
+    );
+}
+
+/// Arm membership tolerates an ABSENCE; it never tolerates an **ambiguity**. No predicate value
+/// makes two conventional files compile as one module, so a dual-backed arm-declared module stays a
+/// constitution error — the same ordering all three dimensions apply to this shape.
+#[test]
+fn a_cfg_if_arm_declared_dual_backed_module_is_still_a_scan_error() {
+    let error = findings(
+        "cfg-if-arm-dual-backed",
+        &[
+            (
+                "lib.rs",
+                "pub mod api;\npub mod infra;\n\
+                 cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub mod dual;\n\
+                 	 }\n\
+                 }\n",
+            ),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("dual.rs", "pub struct A;\n"),
+            ("dual/mod.rs", "pub struct A;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("resolves to both"),
+        "a dual-backed arm-declared module must stay a scan error: {error}"
+    );
+}
+
+/// The whole-crate walks read arms too, not only the anchored descent: an `unsafe` site written
+/// inside a `cfg_if!` arm is confined like any other. This exercises `walk_unsafe`, a separate
+/// descent from the one every test above goes through.
+#[test]
+fn an_unsafe_site_inside_a_cfg_if_arm_is_confined() {
+    let out = unsafe_labels(
+        "cfg-if-arm",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod net;\n"),
+            ("ffi.rs", ""),
+            (
+                "net.rs",
+                "cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     pub unsafe fn decode() {}\n\
+                 	 }\n\
+                 }\n",
+            ),
+        ],
+        &["crate::ffi"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["unsafe fn decode in crate::net"],
+        "an unsafe site inside a cfg_if arm must react: {out:?}"
+    );
+}
+
+/// A trait impl inside an arm enters the crate-wide impl scan (`walk_module`), which feeds
+/// trait-impl locality and the re-export/alias closures every other capability resolves through.
+#[test]
+fn a_trait_impl_inside_a_cfg_if_arm_is_located() {
+    let out = locality_findings(
+        "cfg-if-arm",
+        &[
+            ("lib.rs", "pub mod command;\npub mod domain;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            (
+                "domain.rs",
+                "use crate::command::Command;\n\
+                 pub struct Foo;\n\
+                 cfg_if::cfg_if! {\n\
+                 	 if #[cfg(unix)] {\n\
+                 	     impl Command for Foo {}\n\
+                 	 }\n\
+                 }\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::domain (impl crate::command::Command for crate::domain::Foo)"],
+        "a trait impl inside a cfg_if arm must be located: {out:?}"
+    );
+}
+
+// Task-1 verification rather than assumption: the four single-module-anchored capabilities share one
+// resolution entry, but "they share it" is a claim about the code, so each is measured on an
+// arm-wrapped construct of its own shape. The two crate-wide walks are covered above
+// (`an_unsafe_site_inside_a_cfg_if_arm_is_confined`, `a_trait_impl_inside_a_cfg_if_arm_is_located`).
+
+/// Visibility: a bare `pub` inside an arm is declared surface like any other.
+#[test]
+fn a_bare_pub_inside_a_cfg_if_arm_reacts() {
+    let out = vis_findings(
+        "cfg-if-arm",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub fn wide() {}\n\
+                 }\n\
+                 }\n",
+            ),
+        ],
+        "crate::m",
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["pub fn wide"],
+        "a bare pub inside a cfg_if arm must react: {out:?}"
+    );
+}
+
+/// dyn-trait: a `dyn` seam inside an arm crosses the boundary like any other.
+#[test]
+fn a_dyn_seam_inside_a_cfg_if_arm_reacts() {
+    let out = dyn_mod(
+        "cfg-if-arm",
+        "pub trait Port {}\n\
+         cfg_if::cfg_if! {\n\
+         if #[cfg(unix)] {\n\
+         pub fn get() -> Box<dyn Port> { loop {} }\n\
+         }\n\
+         }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "a dyn seam inside a cfg_if arm must react: {out:?}"
+    );
+}
+
+/// impl-trait: an existential return inside an arm is exposed like any other.
+#[test]
+fn an_impl_trait_seam_inside_a_cfg_if_arm_reacts() {
+    let out = impl_trait_mod(
+        "cfg-if-arm",
+        "pub trait Port {}\n\
+         cfg_if::cfg_if! {\n\
+         if #[cfg(unix)] {\n\
+         pub fn get() -> impl Port { loop {} }\n\
+         }\n\
+         }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "an impl-trait seam inside a cfg_if arm must react: {out:?}"
+    );
+}
+
+/// async-exposure: a public `async fn` inside an arm is an async seam like any other.
+#[test]
+fn an_async_fn_inside_a_cfg_if_arm_reacts() {
+    let out = async_mod(
+        "cfg-if-arm",
+        "cfg_if::cfg_if! {\n\
+         if #[cfg(unix)] {\n\
+         pub async fn serve() {}\n\
+         }\n\
+         }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "an async fn inside a cfg_if arm must react: {out:?}"
+    );
+}
+
+/// forbidden-marker: a derive inside an arm is acquired like any other. This capability walks the
+/// whole crate (`scan_crate`), so it also pins the type-definition half of that walk.
+#[test]
+fn a_forbidden_marker_inside_a_cfg_if_arm_reacts() {
+    let out = marker_findings(
+        "cfg-if-arm",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 #[derive(serde::Serialize)]\n\
+                 pub struct Order;\n\
+                 }\n\
+                 }\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out.len(),
+        1,
+        "a forbidden derive inside a cfg_if arm must react: {out:?}"
+    );
+}
+
+/// The subtree walk (`including_submodules`) records each module's items itself, on a descent
+/// separate from the anchored one every test above uses — so it needs its own arm coverage: an
+/// `async fn` inside a submodule's `cfg_if!` arm must react at the subtree scope.
+#[test]
+fn a_subtree_scope_observes_an_async_fn_inside_a_cfg_if_arm() {
+    let out = async_subtree_labels(
+        "cfg-if-arm",
+        &[
+            ("lib.rs", "pub mod net;\n"),
+            (
+                "net.rs",
+                "cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub async fn connect() {}\n\
+                 }\n\
+                 }\n",
+            ),
+        ],
+        "crate",
+    );
+    assert_eq!(
+        out.len(),
+        1,
+        "an async fn inside a submodule's cfg_if arm must react at the subtree scope: {out:?}"
+    );
+}
+
+/// The unqualified spelling. Every test above writes `cfg_if::cfg_if!`; an adopter who wrote
+/// `use cfg_if::cfg_if;` invokes it as a bare `cfg_if!`, and the name test matches the path's LAST
+/// segment precisely so both spellings are one shape (圭表 matches the same way).
+#[test]
+fn an_unqualified_cfg_if_invocation_is_transparent() {
+    let out = findings(
+        "cfg-if-unqualified",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "use cfg_if::cfg_if;\n\
+                 cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "the unqualified cfg_if! spelling must be transparent too: {out:?}"
+    );
+}
+
+/// Two arms declaring the SAME module name — the per-platform shim spelled with one file. Both
+/// declarations resolve to the identical file, so the walkers' dedup must collapse them: flattening
+/// must not inflate one real violation into two findings (the false-positive direction of this
+/// change).
+#[test]
+fn two_cfg_if_arms_declaring_one_module_name_do_not_double_report() {
+    let out = findings(
+        "cfg-if-arm-twin-mod",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n\
+                 cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub mod api;\n\
+                 } else {\n\
+                 pub mod api;\n\
+                 }\n\
+                 }\n",
+            ),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "two arms declaring the same module must dedup to one finding: {out:?}"
+    );
+}
+
+/// A `cfg_if!` inside an `impl` block: transparency is for **item position**, where `syn` gives an
+/// `Item::Macro` whose arms parse as items. Inside an `impl` (or `trait`) body the invocation is an
+/// `ImplItem::Macro` whose arms are impl items, a different flattening across a different set of
+/// walkers — its own change, not silently smuggled into this one. Pinned as a **stated bound** so
+/// the hole is discoverable rather than latent; when it closes, this test is the one that fails.
+#[test]
+fn a_cfg_if_inside_an_impl_body_is_a_stated_bound() {
+    let out = findings(
+        "cfg-if-impl-body",
+        &[
+            ("lib.rs", "pub mod api;\npub mod infra;\n"),
+            (
+                "api.rs",
+                "pub struct Api;\n\
+                 impl Api {\n\
+                 cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                 }\n\
+                 }\n\
+                 }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "an impl-body cfg_if is a stated bound, not a claimed reaction: {out:?}"
+    );
+}
+
+/// The other absence site reads the same gate: an **unconditional** `#[path = "…"]` inside an arm
+/// whose target file does not exist is tolerated, because the arm's predicate removes the whole item
+/// — `#[path]` included — exactly as a bare `#[cfg]` beside it would. Without this the two absence
+/// outcomes would drift apart, which is the divergence the shared gate exists to prevent (and 圭表
+/// states the same rule for its own walker).
+#[test]
+fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
+    let out = findings(
+        "cfg-if-arm-absent-path",
+        &[
+            (
+                "lib.rs",
+                "pub mod api;\npub mod infra;\n\
+                 cfg_if::cfg_if! {\n\
+                 if #[cfg(windows)] {\n\
+                 #[path = \"windows_impl.rs\"]\n\
+                 pub mod imp;\n\
+                 }\n\
+                 }\n",
+            ),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+        ],
+        "crate::api",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"],
+        "an absent unconditional #[path] target inside an arm must be tolerated: {out:?}"
     );
 }

@@ -9,7 +9,10 @@ use crate::errors::{
     unparseable_source_error, unreadable_source_error,
 };
 use crate::resolve::strip_raw;
-use crate::syn_util::{direct_path_value, has_cfg_attr, has_path_attr};
+use crate::syn_util::{
+    direct_path_value, flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
+    has_path_attr,
+};
 
 /// The path segments of a module relative to the crate root.
 fn module_segments(module: &str) -> Vec<String> {
@@ -33,10 +36,11 @@ pub(crate) fn resolve_module_items_with_files(
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
+        // Transparent-macro (`cfg_if!`) arms flattened in, so every capability reading a module's
+        // items observes what an adopter wrote inside an arm without knowing arms exist.
         items.extend(
-            branch_items
-                .iter()
-                .cloned()
+            flatten_transparent_macro_items(branch_items)
+                .into_iter()
                 .map(|item| (item, file.clone(), branch_index)),
         );
     }
@@ -79,7 +83,7 @@ pub(crate) fn resolve_module_root(
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_items, ..) in &branches {
-        items.extend(branch_items.iter().cloned());
+        items.extend(flatten_transparent_macro_items(branch_items));
     }
     let (_, file, child_dir, path_base) = &branches[0];
     Ok((items, file.clone(), child_dir.clone(), path_base.clone()))
@@ -108,6 +112,12 @@ pub(crate) fn resolve_module_branches(
         path_base: src_dir.to_path_buf(),
     };
     let branches = descend(vec![initial], &segments, module, crate_package)?;
+    // Items are returned UNFLATTENED, deliberately. Each caller flattens transparent-macro
+    // (`cfg_if!`) arms for itself: the two that only observe items do it at once
+    // ([`resolve_module_items_with_files`], `resolve_module_root`), while `scan::collect_subtree`
+    // must keep the raw list a moment longer — its own child-module resolution reads arm
+    // membership, which flattening erases. Flattening here would have silently cost that walk its
+    // absence tolerance (a legitimately fileless arm-declared child reported as exit 2).
     Ok(branches
         .into_iter()
         .map(|b| (b.items, b.current_file, b.child_dir, b.path_base))
@@ -150,6 +160,12 @@ fn descend(
     };
     let mut next_branches = Vec::new();
     for branch in &branches {
+        // Both passes below walk the branch's items with transparent-macro (`cfg_if!`) arms
+        // flattened in, so a `mod` declared only inside an arm is descended like any other — 圭表
+        // already observes such a declaration, and the two dimensions must not disagree on one
+        // shape. Each flattened item carries whether it came from an arm, which the absence
+        // tolerance below consults exactly like a bare `#[cfg]` on the declaration itself.
+        let flat_items = flatten_transparent_macros(&branch.items);
         // Every same-named **inline** `mod x { … }` for this segment produces its OWN branch, not
         // merged into a shared one: a `#[cfg(..)] mod x {..}` / `#[cfg(..)] mod x {..}` pair parses
         // as two separate inline items (syn does not evaluate `cfg`), and while both are
@@ -174,8 +190,8 @@ fn descend(
         // (or lack thereof) without one overwriting the other. A `cfg_attr`-wrapped `path` is not
         // followed (the same cfg-conditional bound as the file-form case below), so it does not
         // relocate.
-        for item in &branch.items {
-            if let syn::Item::Mod(module_item) = item {
+        for flat in &flat_items {
+            if let syn::Item::Mod(module_item) = &flat.item {
                 if strip_raw(&module_item.ident.to_string()) != *seg {
                     continue;
                 }
@@ -212,14 +228,21 @@ fn descend(
         // exact-string finding dedup to collapse them back (their internal unsupported-syntax
         // sentinels can differ before the public observation path rejects them).
         let mut seen_files: HashSet<PathBuf> = HashSet::new();
-        for item in &branch.items {
-            if let syn::Item::Mod(module_item) = item {
+        for flat in &flat_items {
+            if let syn::Item::Mod(module_item) = &flat.item {
                 if module_item.content.is_some() {
                     continue; // an inline body for this name is already collected above
                 }
                 if strip_raw(&module_item.ident.to_string()) != *seg {
                     continue;
                 }
+                // Whether this declaration may legitimately have no source file on this build:
+                // its own bare `#[cfg]`, or membership in a transparent macro arm (every
+                // `cfg_if!` arm is gated by a predicate in the macro header, the trailing `else`
+                // by the negation of the rest). Computed once so the two absence sites below
+                // cannot drift apart on it — the divergence class this walker's shared policy
+                // with `scan::resolve_child_modules` exists to prevent.
+                let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
                 // Follow an **unconditional** `#[path = "…"]` file module. rustc resolves a
                 // non-inline `#[path]` relative to `path_base` — the containing file's own
                 // directory, with each enclosing inline-`mod` name accumulated onto it — NOT
@@ -243,7 +266,7 @@ fn descend(
                         // build: this compiles cleanly with the target entirely absent). Tolerate
                         // exactly like the plain-missing-file case below; an unconditional item
                         // with no accompanying `#[cfg]` still fails loud.
-                        if has_cfg_attr(&module_item.attrs) {
+                        if cfg_conditional {
                             continue;
                         }
                         return Err(missing_module_file_error(module, crate_package));
@@ -286,7 +309,7 @@ fn descend(
                         ));
                     }
                     ModuleFile::Absent => {
-                        if has_cfg_attr(&module_item.attrs) {
+                        if cfg_conditional {
                             continue;
                         }
                         return Err(missing_module_file_error(module, crate_package));

@@ -23,6 +23,26 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change — the requirement truth catches up to the reaction.
 
 ### Fixed
+- 渾儀 now reads the arms of a `cfg_if!` invocation as real code, in every walk it performs. Closes an
+  exposure false negative measured on ordinary, compilable source: a `pub fn` returning a forbidden
+  type reacted at a module's top level and **passed** when the identical function sat inside a
+  `cfg_if!` arm, because `syn` parses the invocation as one opaque macro item and no capability
+  handled that variant. A `mod` declared only inside an arm was equally invisible, so its file's
+  `unsafe` sites, forbidden markers, trait impls, and re-exports went unobserved with it, and the
+  module could not be named as an anchor at all. 圭表 has read these bodies since 0.2.3, so an adopter
+  using `cfg_if!` was already seeing the static half of these findings — this adds the semantic half,
+  and the two dimensions are now pinned on one shared fixture
+  (`cfg_if_transparency_conformance.rs`). Three properties come with it, stated rather than implied:
+  an arm-declared module is cfg-conditional, so an absent conventional file is tolerated exactly as
+  under a bare `#[cfg]` (圭表's rule, adopted); both conventional forms present is still an ambiguity
+  constitution error under arm membership; and arms are unioned **cfg-blind**, so a violation in an
+  arm this build does not compile still reacts. Only `cfg_if!` is transparent — a body-wrapping macro
+  under any other name stays unobserved, which is load-bearing rather than cautious: reading an
+  arbitrary macro's braces as arms recovers items from a nested `impl` block that the macro may never
+  emit, a false positive. Transparency also covers **item position** only: an invocation written
+  inside an `impl` or `trait` body still goes unobserved, a measured gap left stated and owned by its
+  own change rather than half-closed here. New violations are ordinary findings and absorbable by
+  baseline.
 - 圭表 now treats a `mod` declared inside a `cfg_if!` arm as cfg-conditional, so an absent
   conventional file (or an absent unconditional `#[path]` target) is tolerated exactly as it already
   is for a bare `#[cfg]`-gated declaration. Completes the 0.2.3 transparency carve-out, which made arm

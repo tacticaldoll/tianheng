@@ -23,7 +23,10 @@ use crate::resolve::{
     is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path, strip_raw,
     type_to_string,
 };
-use crate::syn_util::{direct_path_value, has_cfg_attr, has_path_attr};
+use crate::syn_util::{
+    FlatItem, direct_path_value, flatten_transparent_macro_items, flatten_transparent_macros,
+    has_cfg_attr, has_path_attr,
+};
 
 /// One impl site observed in the crate: its enclosing module path, the **real file it was read
 /// from** (its own branch's file — never re-resolved afterward from the module string, which
@@ -83,7 +86,10 @@ pub(crate) struct CrateScan {
 /// binds only locally (collecting it crate-wide would false-positive on a same-named head elsewhere
 /// — a stated bound). `as _` / `X == Y` / `extern crate self as …` are no-ops.
 fn collect_crate_root_extern_renames(items: &[syn::Item], out: &mut ExternRenameMap) {
-    for item in items {
+    // Flattened here too, not only in the walkers: a platform-branching crate root may well write
+    // its `extern crate X as Y;` inside a `cfg_if!` arm, and a rename missed here silently
+    // mis-resolves every head that uses the alias (a false negative one hop from observation).
+    for item in flatten_transparent_macro_items(items) {
         if let syn::Item::ExternCrate(ec) = item {
             if let Some((_, rename)) = &ec.rename {
                 let alias = strip_raw(&rename.to_string());
@@ -176,6 +182,16 @@ fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String 
     )
 }
 
+/// The two views of a module's items each of the three walkers needs, from **one** flattening pass:
+/// the plain list its own observation reads, and the arm-membership-carrying list
+/// [`resolve_child_modules`] needs for its absence tolerance. Produced together here so no walker
+/// re-derives one from the other — flattening twice would erase the membership the second time.
+fn flatten_for_walk(items: &[syn::Item]) -> (Vec<syn::Item>, Vec<FlatItem>) {
+    let flat = flatten_transparent_macros(items);
+    let plain = flat.iter().map(|f| f.item.clone()).collect();
+    (plain, flat)
+}
+
 /// Resolve a module's direct child `mod` declarations to the `(items, module path, child dir)` each
 /// subtree walk recurses into — the single copy of the descent skeleton and its false-negative-
 /// critical guards, shared by [`walk_module`], [`collect_subtree`] (`walk_subtree_modules`), and
@@ -207,7 +223,7 @@ fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String 
 // the by-position destructuring at the three call sites; the shape is documented here.
 #[allow(clippy::type_complexity)]
 fn resolve_child_modules(
-    items: &[syn::Item],
+    items: &[FlatItem],
     module: &str,
     child_dir: &Path,
     file_dir: &Path,
@@ -241,12 +257,24 @@ fn resolve_child_modules(
     // mod b;`) are two real, separately-compiled modules — already an existing, tested case — and
     // must never collide with each other's own dedup entry.
     let mut seen_files: HashSet<(String, PathBuf)> = HashSet::new();
-    for item in items {
-        let syn::Item::Mod(module_item) = item else {
+    // Takes items with transparent-macro (`cfg_if!`) arms flattened in, so a `mod` declared only
+    // inside an arm is descended like any other — 圭表 already observes such a declaration
+    // (`declared_modules_observes_mod_inside_cfg_if_macro_body`), and a module invisible here costs
+    // the whole subtree beneath it its observation (its `unsafe` sites, markers, and trait impls).
+    // The parameter is `&[FlatItem]`, not `&[syn::Item]`, because arm MEMBERSHIP is load-bearing
+    // here (the absence tolerance below) and flattening erases it: handed an already-flattened
+    // plain list, this walker would report a legitimately fileless arm-declared module as exit 2.
+    // The type makes that mistake impossible rather than a comment asking callers not to make it.
+    for flat in items {
+        let syn::Item::Mod(module_item) = &flat.item else {
             continue;
         };
         let name = strip_raw(&module_item.ident.to_string());
         let child_module = format!("{module}::{name}");
+        // May this declaration legitimately have no source file on this build? Its own bare
+        // `#[cfg]`, or arm membership (every `cfg_if!` arm is gated by a predicate in the macro
+        // header). The same rule `module_resolve::descend` applies, and 圭表's own from `a567211`.
+        let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
         // An **unconditional** `#[path = "…"]` remap is now *followed* — its file (or inline body)
         // observed — closing the relocated-module coverage gap (its `unsafe` sites / items were
         // previously dropped, a false negative). rustc resolves a non-inline `#[path]` relative to
@@ -288,7 +316,7 @@ fn resolve_child_modules(
                         // rustc build: `#[cfg(windows)] #[path = "…"] mod x;` compiles cleanly on
                         // a non-windows host with the target entirely absent) — tolerate exactly
                         // like the plain-missing-file case elsewhere in this walker.
-                        if has_cfg_attr(&module_item.attrs) {
+                        if cfg_conditional {
                             continue;
                         }
                         return Err(missing_module_file_error(&child_module, crate_package));
@@ -395,7 +423,7 @@ fn resolve_child_modules(
                 // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
                 // error. A non-cfg missing file is a real scan error: fail loud (exit 2).
                 ModuleFile::Absent => {
-                    if !has_cfg_attr(&module_item.attrs) {
+                    if !cfg_conditional {
                         return Err(missing_module_file_error(&child_module, crate_package));
                     }
                 }
@@ -419,6 +447,12 @@ fn walk_module(
     ancestors: &HashSet<PathBuf>,
     scan: &mut CrateScan,
 ) -> Result<(), String> {
+    // ONE flattening pass, two views. `flat` retains arm membership for the child resolution below;
+    // `items` is the plain list this module's own observation reads — a re-export, trait definition,
+    // trait impl, or type definition written inside an arm is a real declaration of this module, and
+    // the crate-wide maps built here feed every capability's resolution, so a miss is not one lost
+    // fact but a mis-resolution everywhere downstream.
+    let (items, flat) = flatten_for_walk(&items);
     let uses = collect_uses(&items);
     // The re-export closure applies the same per-defining-module child-module shadow the direct
     // head oracle does: a bare `pub use dep::X;` / `pub use wc::X;` head named by this module's own
@@ -555,7 +589,7 @@ fn walk_module(
 
     for (child_items, child_module, sub_dir, sub_file_dir, opened, child_file) in
         resolve_child_modules(
-            &items,
+            &flat,
             &module,
             &child_dir,
             &file_dir,
@@ -675,9 +709,14 @@ fn collect_subtree(
     ancestors: &HashSet<PathBuf>,
     out: &mut Vec<(String, Vec<syn::Item>, PathBuf)>,
 ) -> Result<(), String> {
+    // Flattened before the items are recorded in `out`: a subtree reaction (`including_submodules`)
+    // observes each module's item list directly, so an arm item missing here is a false negative in
+    // the subtree scope even though the same item reacts at the anchor itself. `flat` keeps arm
+    // membership for the child resolution.
+    let (items, flat) = flatten_for_walk(&items);
     for (child_items, child_module, sub_dir, sub_file_dir, opened, child_file) in
         resolve_child_modules(
-            &items,
+            &flat,
             &module,
             &child_dir,
             &file_dir,
@@ -1059,7 +1098,11 @@ fn walk_unsafe(
     sites: &mut Vec<UnsafeSite>,
 ) -> Result<(), String> {
     // Feed the collector this module's items minus top-level `mod`s (walk-owned); body-nested
-    // `mod`s stay in and are caught by the collector's default `visit_item_mod` recursion.
+    // `mod`s stay in and are caught by the collector's default `visit_item_mod` recursion. Arms
+    // flattened first, so an `unsafe` site written inside a `cfg_if!` arm is confined like any
+    // other — the collector visits items, and an unflattened `Item::Macro` is an opaque token
+    // stream it cannot see into.
+    let (items, flat) = flatten_for_walk(&items);
     let uses = collect_uses(&items);
     let local_types = local_type_namespace_names(&items);
     let mut collector = UnsafeSiteCollector::new(&module, &uses, &local_types);
@@ -1082,7 +1125,7 @@ fn walk_unsafe(
 
     for (child_items, child_module, sub_dir, sub_file_dir, opened, child_file) in
         resolve_child_modules(
-            &items,
+            &flat,
             &module,
             &child_dir,
             &file_dir,

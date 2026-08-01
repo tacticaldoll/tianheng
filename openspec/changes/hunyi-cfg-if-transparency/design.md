@@ -56,6 +56,13 @@ mechanism to the `cfg_if` name is what keeps it sound, not a hedge.
   and carries the measured false positive above. The class is effectively a singleton, so a general
   mechanism buys nothing for a real cost.
 - Evaluating `cfg`. Arms are unioned cfg-blind, as everywhere else in 渾儀.
+- An invocation inside an `impl` or `trait` body. Measured during apply: `syn` gives an
+  `ImplItem::Macro` there, whose arms parse as impl items, not items — a parallel flattening for two
+  more item kinds threaded through ~10 `impl`/`trait` body walkers in `collect.rs` plus the `unsafe`
+  visitor. A real residual false negative, kept **stated** rather than silently absorbed: pinned by
+  `a_cfg_if_inside_an_impl_body_is_a_stated_bound`, declared in the requirement, and left to its own
+  change with its own review. Widening this change's blast radius to reach it would have shipped the
+  ~10 call-site edits without the review they deserve.
 - 漏刻's equivalent. Its `foreign_macro_body_end` is called in **two** passes —
   `collect_scope_modules` (module declarations) and `scan_source_with_markers` (probes) — and having no
   parser it would need 圭表's brace-kind model in both. That is a different cost class and gets its own
