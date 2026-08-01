@@ -56,17 +56,22 @@
       synthetic workspace member crates (`alpha`, `beta`, real temp source trees so the module scan
       genuinely runs), each governed by the identical module path + rule, each independently
       violating it, evaluated together via `guibiao::evaluate`. Asserts the composed report contains
-      **two** distinct violations, one per crate, each with its own `file`. (Scoped to module-boundary
-      only, not extended to a semantic capability too — the mechanism is identical and hunyi's own
-      catalog tests in 2.5 already prove its threading independently; a second full synthetic
-      multi-crate semantic fixture would duplicate this coverage for no new risk surface.)
+      **two** distinct violations, one per crate, each with its own `file`. Extended to hunyi's own
+      composed dedup too:
+      `two_crates_with_the_identical_async_exposure_boundary_stay_distinct_violations`
+      (`crates/hunyi/src/tests.rs`) exercises `driver::eval_into`/`outcome_from` directly (hunyi's
+      analogue of guibiao's `evaluate`) — an independent apply-stage review flagged the catalog-tests-
+      only coverage as a real, if narrow, gap ("an argument, not a demonstrated fact"), so this closes
+      it rather than leaving it as an accepted risk.
 - [x] 3.2 Folded into the same test: writes a baseline from crate `alpha`'s violation alone, applies
       it to both crates' violations, and asserts exactly one violation stays unbaselined (`beta`'s) —
       it reacts as new rather than being suppressed.
-- [x] 3.3 Non-vacuous verification performed directly: temporarily hardcoded a shared
-      `governing_package` value in `push_module_violation`, reran the new test, confirmed it failed
-      exactly as predicted (`left: 1, right: 2` — the collision reproduces byte-for-byte), then
-      restored the real fix and confirmed it passes again. See this PR's Verification section.
+- [x] 3.3 Non-vacuous verification performed directly on **both** crates: guibiao — temporarily
+      hardcoded a shared `governing_package` value in `push_module_violation`, reran the new test,
+      confirmed it failed exactly as predicted (`left: 1, right: 2`), restored, confirmed green again.
+      hunyi — same procedure on `emit.rs`'s two `into_finding` call sites, confirmed the async-exposure
+      regression fails identically (`left: 1, right: 2`), restored, confirmed green again. See this
+      PR's Verification section.
 
 ## 4. Documentation
 
