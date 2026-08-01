@@ -126,9 +126,10 @@ comment- and string-literal-aware (including raw and byte strings), tracking **n
 comments (a probe inside a nested comment is commented out and SHALL NOT count as coverage) and
 recognizing all three macro delimiters (`()`, `{}`, `[]`). A probe lexically inside a **macro body**
 — a `macro_rules!` definition body, or the body of any macro invocation `ident! (…)/{…}/[…]` other
-than the `assert_boundary!` probe itself — is macro-generated or dead code and SHALL NOT count as
-coverage: the scanner skips such a body (the same macro-body exclusion the static and semantic
-dimensions apply, reimplemented louke-locally because 三儀 ⊥ 三儀 forbids importing 圭表's scanner).
+than the `assert_boundary!` probe itself and the **transparent control-flow macro** carved out below
+— is macro-generated or dead code and SHALL NOT count as coverage: the scanner skips such a body (the
+same macro-body exclusion the static and semantic dimensions apply, reimplemented louke-locally
+because 三儀 ⊥ 三儀 forbids importing 圭表's scanner).
 Otherwise a probe in a never-invoked macro body would report its seam covered while the seam never
 enforces at runtime — the audit's forbidden false negative. The scan is lexical and does not
 evaluate `cfg`: a probe behind a non-production `#[cfg(...)]` is still counted, so a seam's
@@ -155,6 +156,23 @@ declared seam, and
 the system SHALL react to it (an enforce `Violation` naming the un-auditable probe site) rather than
 silently skip it — a silent skip would be a false negative, and erring toward a loud reaction is the
 project's forbidden-bug trade.
+
+One macro is **transparent** and SHALL be carved out of the macro-body exclusion above: `cfg_if!`,
+whose arms wrap human-authored items without transforming their identities, so code written inside an
+arm is real, compiled code rather than macro-generated. The scanner SHALL scan **into** a transparent
+invocation's body rather than skipping it, so a probe written in an arm counts as coverage, a probe in
+an arm naming an undeclared seam reacts as a typo, and an un-auditable probe in an arm reacts as
+un-auditable — each exactly as at top level. Skipping such a body produced errors in both directions
+on ordinary, compilable source: a seam whose only production probe lived in an arm was reported
+unprobed (a false alarm against real coverage), while a typo'd seam and an un-auditable probe inside
+an arm escaped entirely (the audit's forbidden false negative, contradicting the un-auditable rule
+stated above). Transparency SHALL be gated on the macro **name**, matching the static and semantic
+dimensions' identical gate rather than deriving a third rule: a byte scanner cannot distinguish an
+arbitrary macro's nested blocks from a transparent macro's arms, so a body-wrapping macro under any
+other name SHALL remain excluded — a stated bound, shared across all three dimensions. Observation
+SHALL stay **cfg-blind** here as everywhere in this scan: every arm is read, so a probe in an arm the
+current configuration does not compile still counts, consistent with the already-stated `#[cfg]`
+bound above.
 
 The CI face verifies coverage against the **declared** seams and the **source**; it does NOT
 observe the live, process-global install registry (which exists only in the adopter's running
@@ -224,6 +242,21 @@ NOT claim to verify installation.
 - **WHEN** a declared seam's only `assert_boundary!("s", o)` probe appears inside a `macro_rules!` body (or another macro invocation's body, e.g. `some_macro! { assert_boundary!("s", o) }`), and a real probe for a different declared seam `t` follows the macro body
 - **THEN** `audit_probe_coverage` reports seam `s` unprobed (the macro body is skipped, so its probe does not count) while still capturing the real probe for `t` after the body — the forbidden false negative (a "covered" seam that never enforces) is avoided
 
+#### Scenario: A probe inside a cfg_if arm counts as coverage
+
+- **WHEN** a declared seam's only `assert_boundary!("s", o)` probe sits inside `cfg_if! { if #[cfg(unix)] { … } }`
+- **THEN** `audit_probe_coverage` reports the seam covered, rather than reporting it unprobed against real coverage — the arm is transparent, not a macro-generated body
+
+#### Scenario: A typo'd seam inside a cfg_if arm is caught
+
+- **WHEN** a probe inside a `cfg_if!` arm names seam `seaam` while the declared set holds only `seam`
+- **THEN** the audit reacts to the probe as referencing an undeclared seam, exactly as it would at top level
+
+#### Scenario: An un-auditable probe inside a cfg_if arm reacts
+
+- **WHEN** a probe inside a `cfg_if!` arm passes a non-literal seam argument (a `const`)
+- **THEN** the audit reacts to it as un-auditable rather than silently skipping it, honoring the never-a-silent-skip rule inside arms too
+
 #### Scenario: An escaped plain-string probe matches its escaped declared seam
 
 - **WHEN** a `RuntimeBoundary::at("a\n")` seam is declared and its only probe in the workspace is `assert_boundary!("a\n", obj)`
@@ -265,7 +298,18 @@ another platform) and SHALL be skipped rather than errored — the same cfg-tole
 dimension applies, reimplemented louke-locally (三儀 ⊥ 三儀). This does not evaluate `cfg`: a
 *resolvable* cfg-gated module is still scanned and its probes still counted; only an *absent* file
 for a cfg-gated declaration is tolerated. A resolution ambiguity (both `name.rs` and `name/mod.rs`
-present) remains a constitution error regardless of any gate.
+present) remains a constitution error regardless of any gate. A declaration written inside a
+**transparent control-flow macro arm** (`cfg_if!`) SHALL be reached by this walker and treated as
+**cfg-conditional**: the walker SHALL descend each arm of such an invocation as a transparent scope
+— with the enclosing module bases unchanged, since an arm adds no directory component the way an
+inline `mod` does — so an arm-declared `mod` enters the reachable corpus and its file's probes are
+counted, and an absent conventional file (or absent unconditional `#[path]` target) for it SHALL be
+tolerated exactly as under a bare `#[cfg]`, because the arm's predicate lives in the macro's
+`if #[cfg(..)]` header rather than on the item and every arm is conditionally compiled by
+construction. Arm membership SHALL NOT be inherited into an inline `mod { … }` body descended from
+within an arm, matching the bare-`#[cfg]` case, and SHALL NOT make a resolution ambiguity tolerable.
+Without this, every probe beneath an arm-declared module was invisible — the coverage false negative
+this walker exists to prevent, reached through the module graph rather than the probe scan.
 
 A `mod name;` carrying an **unconditional** `#[path = "..."]` relocation SHALL be recognized
 **structurally** — an outer attribute whose meta name is exactly `path` followed by `=` and a string
@@ -294,6 +338,21 @@ module, while an absent target for an unconditional `#[path]` is a fail-loud con
 
 - **WHEN** a target root declares `mod adapter;` and the resolved `adapter.rs` or `adapter/mod.rs` contains the seam's probe
 - **THEN** the audit counts the probe as coverage
+
+#### Scenario: A module declared inside a cfg_if arm covers a seam
+
+- **WHEN** a target root declares `cfg_if! { if #[cfg(unix)] { mod adapter; } }` and the resolved `adapter.rs` contains the seam's only probe
+- **THEN** the audit descends the arm-declared module and counts the probe, rather than reporting the seam unprobed because the declaration sat inside a macro body
+
+#### Scenario: An arm-declared module with no file is tolerated
+
+- **WHEN** a target root declares `cfg_if! { if #[cfg(unix)] { mod unix_impl; } else { mod windows_impl; } }` and only `unix_impl.rs` exists
+- **THEN** the audit skips the fileless arm declaration rather than reporting a constitution error — the arm's predicate is the gate, so rustc strips the arm and the crate compiles — while the same declaration written outside any arm with no file remains a constitution error
+
+#### Scenario: An arm-declared dual-backed module is still an ambiguity
+
+- **WHEN** a `mod child;` declared inside a `cfg_if!` arm resolves to both `child.rs` and `child/mod.rs`
+- **THEN** the audit reports the resolution ambiguity as a constitution error — arm membership makes an absence tolerable, never two present files resolvable
 
 #### Scenario: Inline module shadow does not activate a sibling file
 
@@ -451,3 +510,4 @@ The `audit_probe_coverage` scanner SHALL support custom probe macro marker names
 
 - **WHEN** `audit_probe_coverage_with_markers` is called with an empty marker list or a marker string that is empty or blank
 - **THEN** the action fails loud with `Outcome::ConstitutionError`, never silently flooding violations or matching empty strings
+
