@@ -58,7 +58,13 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
     compatibility evidence recorded in `CHANGELOG.md`.
 - **ACCEPTED DEBT:**
   - Multi-target conventional-path conflation.
-  - Macro/configuration coverage bounds.
+  - Macro/configuration coverage bounds. Two named residuals after 渾儀 gained `cfg_if!`
+    transparency: it covers **item position** only (an invocation inside an `impl`/`trait` body holds
+    impl items, needing a parallel flattening across ~10 body walkers — measured, pinned by
+    `a_cfg_if_inside_an_impl_body_is_a_stated_bound`), and 漏刻 has no transparency at all yet (its
+    byte scanner reads macro bodies in two independent passes and would need 圭表's brace-kind model
+    in both). Each is its own change with its own spike; `cfg_if_transparency_conformance.rs` states
+    in its module doc that it pins two of three dimensions until 漏刻's lands.
   - File-granular un-auditable-probe identity.
 - **DECLINED:**
   - Wall-clock auto-decay / auto-expiration (breaks determinism).
@@ -75,6 +81,9 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
   - Non-generic compound type alias target traversal in `hunyi` (tuples, arrays, slices, references, raw pointers).
   - Mid-path `super` and `self` module path normalization in `guibiao`.
   - `cfg_if!` macro expansion unstripping and ancestor-glob fail-closed observation in `guibiao`.
+  - `cfg_if!` arm transparency in `hunyi` (item position: arm items collected, arm-declared modules
+    walked, arm membership treated as cfg-conditional), pinned against `guibiao` on one shared
+    fixture.
   - Configurable custom probe macro marker attributes in `louke`.
   - Three-layer agent-law artifact naming (Preamble + Projection + Law Source) and `COOKBOOK.md` recipe with `GovernanceTest` preamble discipline.
   - `cfg_attr(path)` observe-both semantics (union-scan over default and physically existing `cfg_attr(path)` target paths).

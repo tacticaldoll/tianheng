@@ -122,7 +122,10 @@ let async_boundary = AsyncExposureBoundary::in_crate("my-app")
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including
 multi-hop and `as`-aliased ones — *are* followed to the item they name. What `syn`'s syntactic
 view cannot see is **glob** imports (save a re-export glob whose root resolves in/under the
-forbidden set, which reacts), **cross-crate** re-exports, **macro**-generated names, and
+forbidden set, which reacts), **cross-crate** re-exports, **macro**-generated names — save the
+one **transparent** macro, `cfg_if!`, whose arms wrap human-authored items without transforming
+their identities and are therefore read as real code (any *other* body-wrapping macro is not, a
+stated bound shared with 圭表) — and
 types knowable only through **inference** (e.g. a return-position `impl Trait` hiding a concrete
 type). A `#[path]`-remapped module remains outside single-module resolution; 渾儀 does not govern
 it through a same-named conventional orphan file. These gaps are *stated*, not silently passed; an
