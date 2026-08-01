@@ -88,14 +88,14 @@ struct InlineBody {
 struct PlainSource {
     base: PathBuf,
     ancestors: HashSet<PathBuf>,
-    has_bare_cfg: bool,
+    is_cfg_conditional: bool,
 }
 
 struct DirectPathSource {
     relative: PathBuf,
     base: PathBuf,
     ancestors: HashSet<PathBuf>,
-    has_bare_cfg: bool,
+    is_cfg_conditional: bool,
 }
 
 struct ConditionalPathSource {
@@ -149,7 +149,7 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                             relative: PathBuf::from(rel),
                             base: loaded.path_base.clone(),
                             ancestors: loaded.ancestors.clone(),
-                            has_bare_cfg: declared.has_bare_cfg,
+                            is_cfg_conditional: declared.is_cfg_conditional,
                         });
                     }
                 }
@@ -158,7 +158,7 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                 child_sources.plain.push(PlainSource {
                     base: loaded.child_base.clone(),
                     ancestors: loaded.ancestors.clone(),
-                    has_bare_cfg: declared.has_bare_cfg,
+                    is_cfg_conditional: declared.is_cfg_conditional,
                 });
             }
             for &eq_cleaned in &declared.conditional_path_eqs {
@@ -227,7 +227,7 @@ fn resolve_plain_sources(
         let PlainSource {
             base,
             ancestors: source_ancestors,
-            has_bare_cfg,
+            is_cfg_conditional,
         } = plain_source;
         let flat = base.join(format!("{child}.rs"));
         let nested = base.join(child).join("mod.rs");
@@ -240,7 +240,7 @@ fn resolve_plain_sources(
             ));
         }
         if !flat.is_file() && !nested.is_file() {
-            if has_bare_cfg {
+            if is_cfg_conditional {
                 continue;
             }
             return Err(format!(
@@ -362,11 +362,11 @@ fn resolve_direct_paths(
             relative,
             base,
             ancestors: target_ancestors,
-            has_bare_cfg,
+            is_cfg_conditional,
         } = direct_source;
         let target = base.join(&relative);
         if !target.is_file() {
-            if has_bare_cfg {
+            if is_cfg_conditional {
                 continue;
             }
             return Err(format!(

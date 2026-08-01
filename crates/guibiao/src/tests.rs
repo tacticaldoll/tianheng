@@ -1021,6 +1021,192 @@ fn a_cfg_gated_missing_plain_module_file_does_not_fail_an_unrelated_boundary() {
     );
 }
 
+/// The same tolerance for the other spelling of one per-platform shim: a `mod` declared inside a
+/// `cfg_if!` arm carries no `#[cfg]` attribute of its own — the predicate sits in the macro's
+/// `if #[cfg(..)]` header — so before arm membership counted as cfg-conditional, this exact tree
+/// exited 2 while the bare-attribute form above exited 0. rustc strips the non-selected arm, so the
+/// source compiles: the scan was refusing to judge a working build, and refusing it for only one of
+/// two equivalent forms.
+#[test]
+fn a_missing_module_file_declared_inside_a_cfg_if_arm_is_tolerated() {
+    let (result, violations) = run_module_check(
+        "missing-plain-cfg-if-arm",
+        &[
+            (
+                "lib.rs",
+                "cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub mod unix_impl;\n\
+                 } else {\n\
+                 pub mod windows_impl;\n\
+                 }\n\
+                 }\n\
+                 pub mod present;\n",
+            ),
+            ("unix_impl.rs", "// clean\n"),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("an arm-declared module with no file must not fail an unrelated boundary");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
+/// The control for the test above: tolerating the fileless sibling arm must not stop the arm whose
+/// file DOES exist from being reached and governed. Without this, the tolerance could pass by
+/// dropping both arm modules from the graph.
+#[test]
+fn an_arm_declared_module_whose_file_exists_is_still_governed() {
+    let (result, violations) = run_module_check(
+        "present-plain-cfg-if-arm",
+        &[
+            (
+                "lib.rs",
+                "cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub mod unix_impl;\n\
+                 } else {\n\
+                 pub mod windows_impl;\n\
+                 }\n\
+                 }\n",
+            ),
+            ("unix_impl.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::unix_impl")
+            .must_not_import("crate::forbidden")
+            .because("the present arm's module is still observed"),
+    );
+    result.expect("the present arm's module must resolve");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the arm module whose file exists must still be governed: {violations:?}"
+    );
+}
+
+/// Arm membership makes an ABSENCE tolerable; it never makes two present files resolvable. The
+/// ambiguity test runs ahead of the tolerance, so an arm-declared module backed by both conventional
+/// forms is still a constitution error — the ordering this pins is the one a later "simplification"
+/// would be most likely to collapse.
+#[test]
+fn a_dual_backed_module_declared_inside_a_cfg_if_arm_is_still_a_scan_error() {
+    let (result, _violations) = run_module_check(
+        "dual-backed-cfg-if-arm",
+        &[
+            (
+                "lib.rs",
+                "cfg_if::cfg_if! {\n\
+                 if #[cfg(unix)] {\n\
+                 pub mod child;\n\
+                 }\n\
+                 }\n",
+            ),
+            ("child.rs", "// flat form\n"),
+            ("child/mod.rs", "// nested form\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("an arm-declared dual-backed module is still unresolvable"),
+    );
+    let err = result.expect_err("both conventional forms present is never tolerated");
+    assert!(
+        err.contains("resolves to both"),
+        "the ambiguity must be reported, not tolerated as a cfg-conditional absence: {err}"
+    );
+}
+
+/// The `cfg_attr` half of the cfg-conditional rule, which nothing in 圭表 previously pinned even
+/// though the requirement asserts it: `cfg_attr` never REMOVES the item, it only conditionally applies
+/// its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583) on every
+/// configuration and must not be tolerated. Without this test, an `attr_prefix_has_bare_cfg` that
+/// accidentally matched `cfg_attr` would turn a real build failure into a silent skip.
+#[test]
+fn a_cfg_attr_decorated_missing_module_file_is_not_tolerated() {
+    let (result, _violations) = run_module_check(
+        "missing-plain-cfg-attr",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(unix, allow(dead_code))]\npub mod child;\n",
+        )],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("a cfg_attr-decorated missing file is not cfg-conditional"),
+    );
+    let err = result.expect_err("cfg_attr must not grant the absent-file tolerance");
+    assert!(
+        err.contains("could not be located"),
+        "the absence must be reported, not tolerated: {err}"
+    );
+}
+
+/// A bare `#[cfg]` makes an ABSENCE tolerable, never two present files resolvable — the ambiguity test
+/// runs first. The requirement asserts this for the attribute form as well as the arm form; only the
+/// arm form was pinned.
+#[test]
+fn a_cfg_gated_dual_backed_module_is_still_a_scan_error() {
+    let (result, _violations) = run_module_check(
+        "dual-backed-cfg-gated",
+        &[
+            ("lib.rs", "#[cfg(feature = \"never\")]\npub mod child;\n"),
+            ("child.rs", "// flat form\n"),
+            ("child/mod.rs", "// nested form\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("a cfg-gated dual-backed module is still unresolvable"),
+    );
+    let err = result.expect_err("both conventional forms present is never tolerated");
+    assert!(
+        err.contains("resolves to both"),
+        "the ambiguity must be reported, not tolerated as a cfg-conditional absence: {err}"
+    );
+}
+
+/// The second absence outcome the same flag governs: an unconditional `#[path]` whose target is
+/// missing. Declared inside a `cfg_if!` arm, rustc strips the whole item — `#[path]` included — so
+/// this is tolerated exactly as the bare-`#[cfg]`-plus-`#[path]` shim already is. One flag, so the
+/// two outcomes cannot drift apart.
+#[test]
+fn a_missing_path_remap_target_declared_inside_a_cfg_if_arm_is_tolerated() {
+    let (result, violations) = run_module_check(
+        "missing-path-cfg-if-arm",
+        &[
+            (
+                "lib.rs",
+                "cfg_if::cfg_if! {\n\
+                 if #[cfg(windows)] {\n\
+                 #[path = \"windows_impl.rs\"]\n\
+                 pub mod imp;\n\
+                 }\n\
+                 }\n\
+                 pub mod present;\n",
+            ),
+            ("present.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::present")
+            .must_not_import("crate::forbidden")
+            .because("present must not import forbidden"),
+    );
+    result.expect("an arm-declared #[path] with a missing target must not fail the scan");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the unrelated boundary must still observe its own real violation: {violations:?}"
+    );
+}
+
 /// A boundary anchored DIRECTLY at a module whose sole declaration was `#[cfg]`-tolerated away
 /// (no surviving file) is "cannot judge," not a vacuous clean pass — matching 渾儀's own `descend`
 /// precedent for the identical shape (its empty-branches case also falls to

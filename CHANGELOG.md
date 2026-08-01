@@ -23,6 +23,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change — the requirement truth catches up to the reaction.
 
 ### Fixed
+- 圭表 now treats a `mod` declared inside a `cfg_if!` arm as cfg-conditional, so an absent
+  conventional file (or an absent unconditional `#[path]` target) is tolerated exactly as it already
+  is for a bare `#[cfg]`-gated declaration. Completes the 0.2.3 transparency carve-out, which made arm
+  bodies observable but left the absent-file tolerance keyed on an attribute preceding the item — a
+  `mod` inside an arm carries none, because the predicate lives in the macro's `if #[cfg(..)]` header.
+  The two spellings of one per-platform shim therefore gave opposite verdicts: with only one arm's file
+  committed, the bare-attribute form exited 0 while the `cfg_if!` form exited 2, reporting the absence
+  as unconditional — on source that compiles, since rustc strips the non-selected arm. Adopters who saw
+  that exit 2 now get a real verdict, which may surface violations in modules the aborted walk never
+  reached and therefore need baselining. Tolerating an absence cannot hide anything: a file that does
+  not exist holds no code. An arm module whose file exists is still reached and governed, and both
+  conventional forms present at once is still an ambiguity constitution error under every gate.
 - 渾儀 now reacts with a constitution error (exit 2) when a plain `mod name;` is backed by BOTH
   conventional forms at once (`name.rs` AND `name/mod.rs`), instead of silently resolving to the
   first form it probes and never reading the other. Closes an exposure false negative: with the two
