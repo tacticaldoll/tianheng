@@ -83,3 +83,6 @@
       restored. Full suite green after restore (117 tests, up from 116).
 - [x] 7.4 Updated `proposal.md`, `design.md`, and the `runtime-origin-assertion` spec delta (new
       scenario) to document this fourth sub-fix; re-ran `openspec validate` (valid, 0 issues).
+- [x] 7.5 A second adversarial review round (targeting the round-1 fix itself: the `is_dir()` gate's
+      soundness, multi-candidate composition, two-level-nested `cfg_attr` composition, and all three
+      fixes combined in one declaration) found nothing further — converged.
