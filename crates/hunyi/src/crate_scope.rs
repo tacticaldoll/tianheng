@@ -131,21 +131,19 @@ pub(crate) fn file_extern_scope(
 }
 
 /// Resolve a shape's **principal-trait** path through the same extern-aware ladder
-/// signature-coupling uses for an exposed type, minus the type-alias closure. To match
+/// signature-coupling uses for an exposed type, minus the type-alias closure — see
+/// `semantic-dyn-trait-operand-boundary`'s "A dyn of a forbidden trait operand is a violation"
+/// requirement for the full resolver-ladder and crate-root-rename rationale. To match
 /// `module_findings` exactly: a bare head uses the child-module-shadowed rename map
-/// ([`FileExternScope::renames_bare`]) while a leading-`::` head uses the full `extern_renames`;
-/// and after the re-export closure both the crate-relative spelling (`crate::Y::T`, via
-/// [`apply_crate_root_rename`]) and the bare spelling (`Y::T` from a private `use Y::…;`, via
-/// [`apply_bare_alias_rename`] with the child-shadowed map) of a crate-root `extern crate … as`
-/// rename are rewritten, so every alias spelling reacts alike (the specs' declared "same resolver
-/// ladder … with a crate-root rename applied"). `file_scope` MUST be the branch that OWNS `path`
+/// ([`FileExternScope::renames_bare`]) while a leading-`::` head uses the full `extern_renames`,
+/// and both the crate-relative (`crate::Y::T`, via [`apply_crate_root_rename`]) and bare (`Y::T`,
+/// via [`apply_bare_alias_rename`] with the child-shadowed map) spellings of a crate-root rename
+/// are rewritten after the re-export closure. `file_scope` MUST be the branch that OWNS `path`
 /// (the exposure's own file), never a different branch's scope.
 ///
 /// Returns **every** candidate canonical path, mirroring `module_findings`' own cfg-blind
-/// resolution: two mutually-exclusive `#[cfg]` branches' conflicting `use ... as Name;` (or
-/// `pub use ... as Name;` re-export target) are never compiled together, so neither candidate may
-/// be silently dropped in favor of the other. The caller checks every candidate against the
-/// forbidden set and reacts if any matches.
+/// resolution. The caller checks every candidate against the forbidden set and reacts if any
+/// matches.
 pub(crate) fn resolve_principal(
     path: &syn::Path,
     uses: &UseMap,

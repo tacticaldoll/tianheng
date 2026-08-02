@@ -75,13 +75,11 @@ pub(crate) fn canonical_path_str(path: &str) -> String {
 /// Whether a `::`-delimited operand string has an empty segment — a leading `::`, a
 /// trailing `::`, a doubled `::`, or the empty string itself (`"".split("::")` yields one
 /// empty segment). A caller comparing a forbidden/allowed operand against a canonical path
-/// this crate resolves MUST reject this before matching: `extern_verbatim_renamed`/
-/// `extern_verbatim_segs` build a resolved canonical path purely from `syn::Path` segments,
-/// never consulting `leading_colon`, so no canonical path this crate ever produces carries an
-/// empty segment (rustc's own grammar forbids one in real source either). An operand shaped
-/// this way can therefore never equal or prefix-contain a real canonical path, nor (past a
-/// trailing `::`) ever equal a real leaf identifier — a silent, permanent non-match rather
-/// than the loud constitution error a caller must raise instead.
+/// this crate resolves MUST reject this before matching — see `semantic-signature-coupling`'s
+/// "A malformed `::`-path forbidden operand is a constitution error" requirement for the full
+/// rationale. `extern_verbatim_renamed`/`extern_verbatim_segs` build a resolved canonical path
+/// purely from `syn::Path` segments, never consulting `leading_colon`, so no canonical path this
+/// crate ever produces carries an empty segment.
 pub(crate) fn has_empty_path_segment(operand: &str) -> bool {
     operand.split("::").any(str::is_empty)
 }
@@ -390,35 +388,20 @@ pub(crate) fn renames_shadowed(
 
 /// Collect the **local** `pub use` (and `pub(crate)`/`pub(in …)`) re-exports declared in
 /// `items` (which live in `module`) into `out`, keyed by the alias's canonical path. A
-/// glob contributes no local hop; a bare-headed target re-exporting an **external** crate
-/// (head ∈ `externs`) is retained verbatim, so a local facade chain terminating at an
-/// extern type canonicalizes to it. A private `use` is not collected — it is invisible from
+/// glob contributes no local hop; a private `use` is not collected — it is invisible from
 /// other modules, so it can only be a same-module name already in that module's [`UseMap`].
 ///
-/// A **bare** re-export head is shadowed by a same-named child module **of this defining module**
-/// (rustc resolves `pub use dep::X;` under a child `mod dep` to the local module — E0432 if absent),
-/// so it resolves against the extern set and the crate-root rename map with `child_mods` removed
-/// (`externs − child_mods` / `renames − child_mods`) — closing the facade-closure sibling of the
-/// direct head-shadow FP, since this crate-wide map is followed by every module's query. That
-/// shadow is computed **per re-export item**, via [`reexport_externs_for`] and
-/// [`reexport_renames_for`], rather than once for every item in `items`: a child `mod`
-/// [`provably_mutually_exclusive`](crate::syn_util::provably_mutually_exclusive) with a SPECIFIC
-/// `pub use` (a `#[cfg(unix)] mod dep;` beside this item's own `#[cfg(not(unix))]`, or a different
-/// arm of the same `cfg_if!`) never actually shadows that item's own head, even though both live
-/// in `items` — the identical per-item exclusion `module_findings`'s direct-head resolution
-/// applies, restored here for the crate-wide closure (round-9 finding, `exposure.rs:157`'s
-/// sibling: a facade reaching such a re-export through this closure was suppressed the same
-/// cfg-blind way). The rename-alias half of that shadow (`renames − child_mods`) needs the
-/// identical per-item treatment for the same reason `module_findings` does: a rename alias (e.g.
-/// `wc` from a crate-root `extern crate serde as wc;`) is never itself a member of the externs
-/// set, so a cfg-blindly-shadowed alias does not merely under-shadow a re-export through it — it
-/// drops the resolution outright once the shadowed alias falls through to an externs-set fallback
-/// with no candidate for it at all (found by an independent adversarial review of the fix above).
-/// A **leading-`::`** head (`pub use ::dep::X;`) is an unambiguous extern that no local module
-/// shadows, so it keeps the raw sets: `collect_use_tree` walks `use_item.tree`, which carries no
-/// leading colon, so the flag is read from the `ItemUse` here (mirroring the direct walker's
-/// `push_reexport`, which preserves it for the same escape-hatch reason). With `child_mods` empty
-/// the map is byte-identical to the raw-set behavior.
+/// See `semantic-reexport-exposure`'s "External-crate re-exports are observed by default"
+/// requirement (the crate-wide-closure paragraph, which names this function) for the full
+/// child-module shadow and cfg-aware carve-out rationale, applied here via
+/// [`reexport_externs_for`] / [`reexport_renames_for`], computed **per re-export item** rather
+/// than once for all of `items` (round-9 finding, `exposure.rs:157`'s sibling: a facade reaching
+/// such a re-export through this closure was suppressed the same cfg-blind way; the rename-alias
+/// half was found missing on an independent adversarial review of that fix). A **leading-`::`**
+/// head (`pub use ::dep::X;`) keeps the raw sets: `collect_use_tree` walks `use_item.tree`, which
+/// carries no leading colon, so the flag is read from the `ItemUse` here (mirroring the direct
+/// walker's `push_reexport`). With `child_mods` empty the map is byte-identical to the raw-set
+/// behavior.
 pub(crate) fn collect_reexports(
     items: &[FlatItem],
     module: &str,

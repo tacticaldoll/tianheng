@@ -130,13 +130,13 @@ pub(crate) fn check_impl_trait_boundary(
 /// path), applied at every module the subtree walk yields.
 ///
 /// The `ordinal` passed to the collector is ONE counter incrementing continuously across every
-/// item the subtree walk yields — never reset per module or per branch — because (unlike async's
-/// collector, which ignores it) impl-trait's owner resolution can fall back to an ordinal-keyed
-/// positional sentinel for a genuinely unrenderable self type. That sentinel is never published as
-/// identity regardless (`reject_positional_identity`, invoked by [`sort_attributed_facts`] below,
-/// fails the whole reaction loud the moment any sentinel-bearing fact appears), but a non-unique
-/// ordinal would still let two genuinely distinct unrenderable sites collide into one internal
-/// value before that gate ever runs — thread it correctly rather than relying on the gate alone.
+/// item the subtree walk yields — never reset per module or per branch (unlike async's collector,
+/// which ignores it). See `semantic-impl-trait-boundary`'s "Subtree scope opt-in" requirement's
+/// unrenderable-Self-type paragraph for why a positional fallback is never published as identity
+/// (`reject_positional_identity`, invoked by [`sort_attributed_facts`] below, fails the whole
+/// reaction loud instead); a non-unique ordinal would still let two genuinely distinct unrenderable
+/// sites collide into one internal value before that gate ever runs, so it must be threaded
+/// correctly rather than relying on the gate alone.
 pub(crate) fn impl_trait_subtree_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -264,14 +264,11 @@ pub(crate) fn impl_trait_module_findings(
 
 /// The pure heart of the **operand-scoped** impl-trait boundary: like [`impl_trait_module_findings`]
 /// but keeps only the returned `impl Trait` nodes **any of whose non-auto traits** resolves into
-/// the forbidden operand set — a returned `impl Trait` may name several (`impl Foo + Bar`), and
-/// forbidding any one flags it. The exact pipeline [`dyn_operand_module_findings`] uses
-/// (`resolve_principal` → `expand_canonical_paths` → `matches_forbidden`, exact-or-module-prefix,
-/// checking every cfg-blind candidate), so a re-exported/aliased trait facade matches its defining
-/// path. An
-/// empty set ⇒ any returned `impl Trait` (never a silent no-op). An unresolvable trait (a bare
-/// std trait, macro/glob re-export) is dropped — the stated resolver bound, never a silent pass of
-/// a *resolvable* operand. The finding stays the rendered `impl …` shape (parity with shape-only).
+/// the forbidden operand set. See `semantic-impl-trait-operand-boundary`'s "A returned impl Trait
+/// of a forbidden operand is a violation" requirement for the full multi-trait-bound and
+/// resolver-coverage rationale, and its "Empty operand set degenerates to shape-only" requirement
+/// for the empty-set behavior. The exact pipeline [`dyn_operand_module_findings`] uses
+/// (`resolve_principal` → `expand_canonical_paths` → `matches_forbidden`).
 pub(crate) fn impl_trait_operand_module_findings(
     src_dir: &Path,
     root_file: &Path,
