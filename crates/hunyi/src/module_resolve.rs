@@ -10,7 +10,7 @@ use crate::errors::{
 };
 use crate::resolve::strip_raw;
 use crate::syn_util::{
-    cfg_attr_path_value, direct_path_value, flatten_transparent_macro_items,
+    cfg_attr_path_values, direct_path_value, flatten_transparent_macro_items,
     flatten_transparent_macros, has_cfg_attr,
 };
 
@@ -286,9 +286,9 @@ fn descend(
                 // but a mutually-exclusive sibling declaration for the same name silently absorbed
                 // the branch count, so the cfg_attr target's own file was dropped with no error at
                 // all whenever ANY sibling resolved — never truly fail-loud in that case).
-                let cfg_attr_target = cfg_attr_path_value(&module_item.attrs);
+                let cfg_attr_targets = cfg_attr_path_values(&module_item.attrs);
                 let mut has_backing_source = false;
-                if let Some(rel) = &cfg_attr_target {
+                for rel in &cfg_attr_targets {
                     let file = branch.path_base.join(rel);
                     if file.is_file() {
                         has_backing_source = true;

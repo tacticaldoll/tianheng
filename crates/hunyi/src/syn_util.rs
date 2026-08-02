@@ -212,21 +212,27 @@ fn cfg_attr_metas(input: syn::parse::ParseStream) -> syn::Result<MetaList> {
     MetaList::parse_terminated(input)
 }
 
-/// The file path named by a `path = "…"` remap wrapped in `#[cfg_attr(<pred>, …, path = "…")]`
-/// (including arbitrarily nested `cfg_attr`), or `None` if this module carries no such conditional
-/// remap. Unlike [`direct_path_value`] (the unconditional `#[path = "…"]` form, followed as the
-/// sole source), the module declaration itself is never removed by `cfg_attr` (unlike a bare
-/// `#[cfg]`) — so this is ONE possible source among several a cfg-blind walker must union: the
-/// conventional file may equally be the one a given build actually compiles.
-pub(crate) fn cfg_attr_path_value(attrs: &[syn::Attribute]) -> Option<String> {
-    attrs.iter().find_map(|attr| {
-        if !attr.path().is_ident("cfg_attr") {
-            return None;
-        }
-        attr.parse_args_with(cfg_attr_metas)
-            .ok()
-            .and_then(|metas| applied_metas_path_value(&metas))
-    })
+/// Every file path named by a `path = "…"` remap wrapped in `#[cfg_attr(<pred>, …, path = "…")]`
+/// (including arbitrarily nested `cfg_attr`) — one module may carry more than one SEPARATE (not
+/// nested) `cfg_attr`-wrapped `#[path]` attribute, each gated by its own predicate for a different
+/// platform/feature (`#[cfg_attr(windows, path = "win.rs")] #[cfg_attr(target_os = "macos", path =
+/// "mac.rs")] mod foo;`), and every one is a candidate a cfg-blind walker must union — taking only
+/// the first (found on adversarial review: a `find_map` silently dropped every candidate but the
+/// first-declared) would silently drop whichever platform's file wasn't first. Unlike
+/// [`direct_path_value`] (the unconditional `#[path = "…"]` form, followed as the sole source), the
+/// module declaration itself is never removed by `cfg_attr` (unlike a bare `#[cfg]`) — so these are
+/// candidates among several a cfg-blind walker must union: the conventional file may equally be the
+/// one a given build actually compiles.
+pub(crate) fn cfg_attr_path_values(attrs: &[syn::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg_attr"))
+        .filter_map(|attr| {
+            attr.parse_args_with(cfg_attr_metas)
+                .ok()
+                .and_then(|metas| applied_metas_path_value(&metas))
+        })
+        .collect()
 }
 
 /// The **applied** metas of a `cfg_attr` (all but the first, which is the predicate): the value of

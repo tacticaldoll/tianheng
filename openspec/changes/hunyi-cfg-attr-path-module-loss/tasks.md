@@ -114,6 +114,23 @@ round's fix.
       (guibiao's and louke's own separate scanners' specs are out of scope for this hunyi-only
       change and were left untouched).
 
+## 3c. Round-4: stacked (non-nested) cfg_attr attributes (adversarial review)
+
+A fourth review, focused on round 3's `module_resolve.rs` fix specifically, constructed six
+counter-examples (two-different-files union, canonical-path dedup, a `cfg_attr`-wrapped ancestor
+segment, `seen_files` cross-branch scoping, nested `cfg_attr` on a multi-segment anchor, and the
+test-only single-branch helpers) — none found a bug. It found one real gap in the SHARED
+`cfg_attr_path_value` helper both walkers call: `find_map` returned only the first of possibly
+several SEPARATE (not nested) `#[cfg_attr(..., path = "…")]` attributes on one declaration.
+
+- [x] 3c.1 Renamed `cfg_attr_path_value` → `cfg_attr_path_values` (`syn_util.rs`), returning
+      `Vec<String>` (every stacked attribute's target) instead of the first match.
+- [x] 3c.2 Updated both consumers (`scan.rs::resolve_child_modules`,
+      `module_resolve.rs::descend`) to iterate every candidate instead of the single `Option`.
+- [x] 3c.3 `stacked_cfg_attr_wrapped_path_attributes_are_all_read_not_only_the_first` — reproduced
+      directly (a 3-attribute per-platform shim, only the second-declared target existing), fixed,
+      non-vacuously verified (reverted to the pre-3c state, confirmed the test fails, restored).
+
 ## 4. Documentation
 
 - [x] 4.1 Added a CHANGELOG `[Unreleased] ### Fixed` entry. No **BREAKING** marker — false negatives
@@ -130,8 +147,10 @@ round's fix.
 
 - [x] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`) —
-      re-run after round 3's `module_resolve.rs` fix.
-- [x] 5.2 Adversarial apply-stage review (rounds 2 and 3): round 2 confirmed the declared reaction
-      still bites and closed the `walk_subtree_modules` undercounting plus two stale doc comments;
-      round 3 found and closed a real, pre-existing gap in `module_resolve.rs` this change's own
-      commits had twice misdescribed as "already correct."
+      re-run after round 4's `cfg_attr_path_values` fix.
+- [x] 5.2 Adversarial apply-stage review (rounds 2, 3, and 4): round 2 confirmed the declared
+      reaction still bites and closed the `walk_subtree_modules` undercounting plus two stale doc
+      comments; round 3 found and closed a real, pre-existing gap in `module_resolve.rs` this
+      change's own commits had twice misdescribed as "already correct"; round 4 found and closed a
+      stacked-(non-nested)-`cfg_attr`-attributes gap shared by both walkers, then found nothing
+      further across six additional counter-examples.

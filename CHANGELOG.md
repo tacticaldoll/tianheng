@@ -162,7 +162,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   exclusive sibling declaration for the same module name silently absorbed the branch count, so the
   `cfg_attr` target's own file vanished with exit 0 whenever ANY sibling resolved, and even a LONE
   such declaration never followed an existing target file at all. Now it does, the same union as the
-  crate-wide walk. Not breaking — closes false negatives; no baseline identity shape changes.
+  crate-wide walk. A fourth review then found one more gap shared by both walkers: a module stacking
+  more than one SEPARATE `cfg_attr`-wrapped `#[path]` attribute (one per platform predicate — the
+  natural 3+-way per-platform shim) only ever had its first-declared candidate tried; every other
+  platform's target silently never was. Every stacked candidate is now read. Not breaking — closes
+  false negatives; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 

@@ -24,7 +24,7 @@ use crate::resolve::{
     resolve_path_all, strip_raw, type_to_string,
 };
 use crate::syn_util::{
-    FlatItem, cfg_attr_path_value, direct_path_value, flatten_transparent_macro_items,
+    FlatItem, cfg_attr_path_values, direct_path_value, flatten_transparent_macro_items,
     flatten_transparent_macros, has_cfg_attr,
 };
 
@@ -359,7 +359,7 @@ fn resolve_child_modules(
         // are both read when present, as separate sources for the same module name (mirroring the
         // existing per-platform-pair `seen_files` union above for two plain declarations of the
         // same name).
-        let cfg_attr_target = cfg_attr_path_value(&module_item.attrs);
+        let cfg_attr_targets = cfg_attr_path_values(&module_item.attrs);
         let sub_dir = child_dir.join(&name);
         match &module_item.content {
             // Inline `mod x { … }`: descend its lexical items (same file). Its own children — both
@@ -382,10 +382,11 @@ fn resolve_child_modules(
             // `x/mod.rs`), which is where a `#[path]` inside it resolves from.
             None => {
                 let mut has_backing_source = false;
-                // The `cfg_attr(path)` target, if this build's predicate selects it and the file
+                // Every `cfg_attr(path)` target this declaration carries (a module may stack more
+                // than one, each gated by its own predicate for a different platform), whichever
                 // exists — read alongside the conventional file below, never in place of it: cfg-blind
                 // observation cannot know which one this build actually compiles.
-                if let Some(rel) = &cfg_attr_target {
+                for rel in &cfg_attr_targets {
                     let file = file_dir.join(rel);
                     if file.is_file() {
                         has_backing_source = true;

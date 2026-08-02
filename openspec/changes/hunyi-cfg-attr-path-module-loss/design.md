@@ -208,6 +208,22 @@ trait-impl-exposure (which shares signature-coupling's resolver). `has_path_attr
 `is_path_remap`/`applied_metas_remap`/`meta_is_path_remap` are now fully dead (their only remaining
 caller adopted `cfg_attr_path_value`) and are deleted.
 
+## Round 4 (adversarial review of round 3)
+
+A fourth independent review, focused specifically on round 3's `module_resolve.rs` fix, constructed
+six counter-examples targeting the new code's own edge cases (two-different-files union, canonical-
+path dedup, a `cfg_attr`-wrapped ANCESTOR segment, `seen_files` cross-branch scoping, nested
+`cfg_attr` on a multi-segment anchor, and the test-only `branches[0]` helpers) — all six held up,
+no bug found. It found one real, more subtle gap in the SHARED helper both `scan.rs` and
+`module_resolve.rs` call: `cfg_attr_path_value` used `Iterator::find_map`, returning only the
+**first** matching `#[cfg_attr(..., path = "…")]` attribute's target. A module may carry more than
+one SEPARATE (not nested) such attribute — the natural 3+-way per-platform shim
+(`#[cfg_attr(windows, path = "win.rs")] #[cfg_attr(target_os = "macos", path = "mac.rs")] mod
+foo;`) — and every candidate but the first-declared silently never got tried. Reproduced directly:
+the `macos` target's file was never read even though nothing else backed the module. Renamed to
+`cfg_attr_path_values` (returns `Vec<String>`, collecting every stacked attribute's target); both
+consumers now iterate all candidates instead of the first.
+
 ## Open Questions
 
 None outstanding.

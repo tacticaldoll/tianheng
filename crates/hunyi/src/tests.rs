@@ -10834,6 +10834,38 @@ fn cfg_attr_wrapped_path_with_no_sibling_and_no_backing_file_still_fails_loud() 
     );
 }
 
+/// A module carrying TWO SEPARATE (not nested) `cfg_attr`-wrapped `#[path]` attributes — one per
+/// platform predicate, the natural 3+-way per-platform shim shape — must have EVERY candidate's
+/// target read, not only the first-declared one. Found on a fourth adversarial review of
+/// `hunyi-cfg-attr-path-module-loss`: `cfg_attr_path_value`'s `find_map` silently returned only the
+/// first matching attribute's target, dropping every other stacked candidate — the identical
+/// cfg-blind-union false negative this whole change closes, one level deeper (a module can stack
+/// attributes, not just nest them). Exercises both `descend` (`module_resolve.rs`, this test) and
+/// the crate-wide `resolve_child_modules` (`scan.rs`, shares the identical fixed helper).
+#[test]
+fn stacked_cfg_attr_wrapped_path_attributes_are_all_read_not_only_the_first() {
+    let out = semantic_findings(
+        "stacked-cfg-attr-path",
+        &[
+            ("lib.rs", "pub mod infra;\n#[cfg_attr(windows, path = \"win.rs\")]\n#[cfg_attr(target_os = \"macos\", path = \"mac.rs\")]\nmod foo;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "mac.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
 /// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` declarations for the identical local
 /// name, in the same file, must both react (cfg-blind: observation cannot know which is live).
 /// Before the fix, the second `use` silently overwrote the first in `UseMap` — a single
