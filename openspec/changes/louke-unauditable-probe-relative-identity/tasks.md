@@ -87,6 +87,26 @@
 - [x] 7.3 Added
       `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`, pinning
       the disagreement so a future fix has a failing case to work against.
-- [x] 7.4 Corrected `finding.rs`'s/`audit.rs`'s doc comments, `design.md`, `proposal.md`, the
-      `runtime-origin-assertion` spec delta, and the CHANGELOG entry to accurately describe the
-      residual gap instead of the false "both fall back" claim.
+- [x] 7.4 Corrected `design.md`, `proposal.md`, the `runtime-origin-assertion` spec delta, and the
+      CHANGELOG entry to accurately describe the residual gap instead of the false "both fall back"
+      claim. (`finding.rs`'s and `audit.rs`'s own doc comments were missed here — see section 8.)
+
+## 8. Adversarial review follow-up (round 3)
+
+- [x] 8.1 Round 3 caught that round 2 (task 7.4) corrected every surrounding document but left
+      `finding.rs`'s and `audit.rs`'s own doc comments still asserting the disproven round-1 claim
+      verbatim ("an absolute literal has no textual relationship to any anchor," stated as
+      universal, contradicting round 2's own finding).
+- [x] 8.2 Narrowed both doc comments to the same accurate framing already used in `spec.md`: the
+      fallback applies only when the target does not lie under the anchor; when it does, the
+      identical literal can still disagree across two checkouts, a known residual gap.
+
+## 9. Adversarial review follow-up (round 4)
+
+- [x] 9.1 Round 4 found nothing further in the code (`scan.rs`'s diff against `release/0.3.1` is
+      exactly the additive `labeled`/`common_ancestor` plumbing every doc now describes) — only a
+      small, low-risk historical-record inaccuracy in this file (task 7.4 claimed `finding.rs`/
+      `audit.rs` were corrected in round 2, when they were only corrected in round 3). Fixed by this
+      edit itself (splitting 7.4's claim and adding section 8 above). Converged: all of `finding.rs`,
+      `audit.rs`, `design.md`, `proposal.md`, `specs/runtime-origin-assertion/spec.md`, `CHANGELOG.md`,
+      and `docs/audit/0.3.1-adversarial-sweep.md` now tell one consistent, accurate story.
