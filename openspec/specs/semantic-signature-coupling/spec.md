@@ -38,7 +38,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 #### Scenario: A cfg-duplicated inline anchor governs every variant
 
 - **WHEN** the anchored module is declared as two `#[cfg(…)] mod x { … }` inline variants (which `syn` parses as two separate modules, evaluating no `cfg`), and only the source-*later* variant exposes a forbidden type
-- **THEN** the system observes the union of all same-named inline variants and reacts on the exposure, never resolving only the source-first variant (a `mod`-resolution divergence from the crate-wide scan is the false-negative class this resolver forbids). This anchor-resolution property is shared by every single-module-anchored semantic capability (visibility, dyn/impl-trait, async-exposure), not only signature-coupling; an **unconditional** `#[path = "…"]` file module is followed to its target, while an inline or `cfg_attr`-wrapped `#[path]` remains a stated (fail-loud) out-of-scope bound.
+- **THEN** the system observes the union of all same-named inline variants and reacts on the exposure, never resolving only the source-first variant (a `mod`-resolution divergence from the crate-wide scan is the false-negative class this resolver forbids). This anchor-resolution property is shared by every single-module-anchored semantic capability (visibility, dyn/impl-trait, async-exposure), not only signature-coupling; an **unconditional** `#[path = "…"]` file module is followed to its target, and a `cfg_attr`-wrapped `#[path]` module is followed too — its conventional file and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound, exactly like the crate-wide walk. Only when NEITHER a conventional file NOR an existing `cfg_attr` target backs a declaration, and it carries no other cfg-conditional gate, is resolution a genuine constitution error.
 
 #### Scenario: A cfg-mixed inline and file-form anchor governs both variants
 
@@ -79,6 +79,16 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 
 - **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, BOTH inline (`#[cfg(a)] mod x { .. }` / `#[cfg(b)] mod x { .. }`, sharing the identical enclosing file), each declaring its own `use <different real path> as Handle;` under the same local alias name, and only the FIRST arm's own bare `Handle` reference genuinely resolves to a forbidden type
 - **THEN** the system reacts on the first arm's own exposure, resolving its bare `Handle` reference through THAT arm's own `use` declaration — never through the second, mutually-exclusive arm's `use Handle` alias merely because both arms are inline and share one file; the same isolation holds for a local child module in one inline arm shadowing the other inline arm's own genuine extern re-export
+
+#### Scenario: A cfg_attr-wrapped-path anchor resolves through its own target with no resolving sibling at all
+
+- **WHEN** the anchored module `crate::foo` is declared only as `#[cfg_attr(windows, path = "win.rs")] mod foo;` with no conventional `foo.rs` present, and `win.rs` (the `cfg_attr` target) exists and exposes a forbidden type
+- **THEN** the system reads `win.rs` and reacts on the exposure, rather than reporting a constitution error — a `cfg_attr`-wrapped `#[path]` module's own target is now followed even with no sibling declaration to keep the branch count non-empty
+
+#### Scenario: A cfg_attr-wrapped-path sibling reacts through its own file, not absorbed by another sibling's success
+
+- **WHEN** the anchored module `crate::foo` is declared as two mutually-exclusive `#[cfg]` branches — one `#[cfg_attr(<pred>, path = "weird.rs")] mod foo;` and the other a plain `mod foo;` — and only the `cfg_attr` branch's target file exposes a forbidden type
+- **THEN** the system reacts on that exposure — the `cfg_attr` branch's own resolution is never silently dropped merely because the OTHER, mutually-exclusive branch's plain declaration also resolved successfully (found on adversarial review: the prior fail-loud-only-when-completely-unresolvable check never fired once any sibling succeeded, so the `cfg_attr` branch's file vanished with no error and no reaction at all)
 
 ### Requirement: Public-signature observation governs exposure
 
@@ -167,7 +177,7 @@ The system SHALL resolve a type named in a signature using the **shared 渾儀 r
 - **A bare local-alias chain resolves regardless of collection order.** When a type alias's target is itself a bare local alias whose name shadows a dependency (`type serde = crate::infra::Db; type X = serde;`), the alias-collection ladder SHALL resolve the local alias before the extern oracle (identical to the query ladder), closing the chain to the defining path.
 - **A mutually-exclusive `#[cfg]` collision on a `use`-map name or a `pub use` re-export target does not suppress either candidate.** When two mutually-exclusive `#[cfg]` branches (bare `#[cfg]` or `cfg_if!` arms alike) each declare `use ... as Name;` (or `pub use ... as Name;`) for the identical local name with different targets, the system SHALL treat both targets as candidates and react if resolving through EITHER one exposes a forbidden type — never silently keeping only the declaration that happens to be written last.
 
-A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a type defined only in a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed, so its types are collected and resolvable), a generic type alias, nominal paths nested only inside alias-target forms outside the explicitly supported non-generic compound constructors below, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
+A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a generic type alias, nominal paths nested only inside alias-target forms outside the explicitly supported non-generic compound constructors below, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction. A type defined only in a module reached through a `cfg_attr`-wrapped `#[path]` remap is NOT out of scope: like the already-followed **unconditional** `#[path = "…"]` form, its types, aliases, and re-exports ARE collected into the crate-wide closure and resolvable — an inline body regardless of the attribute (which has no effect on it), and a file module's conventional file and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound.
 
 #### Scenario: A leading-`::` extern path resolves and reacts through a local shadow
 
@@ -193,6 +203,11 @@ A type whose resolution would require capabilities beyond the local AST — a gl
 
 - **WHEN** a facade module declares `#[cfg(unix)] pub use crate::infra::Secret as Handle; #[cfg(not(unix))] pub use crate::safe::Thing as Handle;`, another module exposes `crate::facade::Handle`, and the boundary forbids `crate::infra`, in either declaration order
 - **THEN** the system emits a violation naming `crate::infra::Secret`, regardless of which `pub use` line is written first
+
+#### Scenario: A re-export declared only in a cfg_attr-wrapped-path module is resolved and reacts
+
+- **WHEN** a facade module is reached only via `#[cfg_attr(windows, path = "weird.rs")] pub mod facade;` with no conventional `facade.rs` present, `weird.rs` declares `pub use crate::infra::Secret;`, another module exposes `crate::facade::Secret`, and the boundary forbids `crate::infra`
+- **THEN** the system reads `weird.rs` into the crate-wide re-export closure and emits a violation naming `crate::infra::Secret`, rather than treating the facade module as out of scope and passing the exposure through unresolved
 
 ### Requirement: CI reaction
 

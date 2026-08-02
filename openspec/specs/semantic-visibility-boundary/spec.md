@@ -3,9 +3,7 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's visibility-hygiene capability: declare in Rust that a governed **module**'s direct items carry no more visibility than a declared **ceiling** — `Crate` (react on bare `pub`), `Super` (also on `pub(crate)`), or `Module` (any `pub`-family keyword). The rule is the item's **declared** visibility keyword on the module's own direct items, not crate-reachability. `must_not_declare_pub` is the `Crate`-ceiling sugar. Observed via the AST (`syn`), it is the cheapest case that earns `syn` — distinct from exposure (which types a `pub` API names) and impl locality.
-
 ## Requirements
-
 ### Requirement: Visibility boundary declared in Rust
 
 A visibility boundary SHALL be expressed as Rust code and is part of the single source of truth. A `VisibilityBoundary` SHALL name a target crate, a governed **module** path, a human-readable reason, and a severity, and SHALL declare a **maximum-visibility ceiling** — one of `Crate`, `Super`, or `Module` — via `max_visibility(ceiling)`. `must_not_declare_pub()` SHALL be preserved as sugar for `max_visibility(Crate)`, byte-identical in behavior, rule string, and findings to its prior form (so existing baselines never churn). The system MUST NOT require TOML, YAML, Markdown, or any generated policy file to declare or run a visibility boundary.
@@ -22,7 +20,7 @@ A visibility boundary SHALL be expressed as Rust code and is part of the single 
 
 ### Requirement: Module anchor resolution
 
-For each boundary, the system SHALL resolve the named governed module to a real module in the target crate's source (descending file-based `mod x;` and inline `mod x { … }` alike, as the semantic dimension's existing module-descent does) before evaluating it. If the anchor cannot be resolved — an unknown module path, a target crate absent from the workspace, or a module reachable only through a `cfg_attr`-wrapped/inline `#[path]` or a `#[cfg]`-gated-absent ancestor (the dimension's stated coverage bound; an **unconditional** `#[path = "…"]` file ancestor IS followed) — the system SHALL treat this as a **constitution error** (exit 2), failing loud and distinct from a boundary violation (exit 1), so a mistyped or ungovernable anchor is never reported as a visibility violation and never silently passed.
+For each boundary, the system SHALL resolve the named governed module to a real module in the target crate's source (descending file-based `mod x;` and inline `mod x { … }` alike, as the semantic dimension's existing module-descent does) before evaluating it. If the anchor cannot be resolved — an unknown module path, a target crate absent from the workspace, or a `#[cfg]`-gated-absent ancestor with no `cfg_attr`-wrapped `#[path]` target backing it either — the system SHALL treat this as a **constitution error** (exit 2), failing loud and distinct from a boundary violation (exit 1), so a mistyped or ungovernable anchor is never reported as a visibility violation and never silently passed. A module reached only through a `cfg_attr`-wrapped `#[path]` remap IS followed, exactly like an **unconditional** `#[path = "…"]` ancestor already is: its conventional file and its `cfg_attr` target are both read when they exist on disk, cfg-blind union rather than a skip bound — even when no sibling declaration for the same name would otherwise keep the descent alive.
 
 #### Scenario: Anchor resolves to a real module
 
@@ -33,6 +31,11 @@ For each boundary, the system SHALL resolve the named governed module to a real 
 
 - **WHEN** a boundary anchors to a module path that does not exist in the target crate's source
 - **THEN** the system emits a constitution error naming the unresolved anchor and exits 2, never exit 0 (no silent pass) and never exit 1
+
+#### Scenario: A cfg_attr-wrapped-path anchor resolves through its own target with no resolving sibling at all
+
+- **WHEN** a boundary anchors to `crate::foo`, declared only as `#[cfg_attr(windows, path = "win.rs")] mod foo;` with no conventional `foo.rs` present, and `win.rs` exists and declares a bare-`pub` item above the boundary's ceiling
+- **THEN** the system reads `win.rs` and reacts on the item, rather than reporting a constitution error — the `cfg_attr` target is now followed even with no sibling declaration to keep the branch count non-empty
 
 ### Requirement: Bare-pub item observation
 
@@ -94,7 +97,7 @@ The unit of judgment is the **item's own declared visibility**, not its members'
 
 The rule SHALL govern only the **declared** visibility keyword on the module's own direct items; the prior bounds hold verbatim, plus one added conservative bound:
 
-- **Incidental observation bounds** (stated, never a silent claim): an item produced by a macro expansion, a module reached through a `cfg_attr`-wrapped `#[path]` remap (an **unconditional** `#[path = "…"]` module is followed and observed), or a `pub macro` (declarative macros 2.0, which parses as an opaque token item with no readable visibility) is not observed; `#[cfg]`-gated code is observed **as written** (cfg-agnostic).
+- **Incidental observation bounds** (stated, never a silent claim): an item produced by a macro expansion, or a `pub macro` (declarative macros 2.0, which parses as an opaque token item with no readable visibility) is not observed; `#[cfg]`-gated code is observed **as written** (cfg-agnostic). A module reached through a `cfg_attr`-wrapped `#[path]` remap IS observed (its conventional file and its `cfg_attr` target both read when they exist on disk), exactly like an **unconditional** `#[path = "…"]` module already is.
 - **Out of declared scope (not this capability):** public surface that carries no visibility keyword *in this module* — a `#[macro_export] macro_rules!` (crate-public via attribute), a `#[no_mangle]`/`pub extern` symbol, or an item re-exported *from another module*. Governing attribute-derived public surface is the deferred attribute capability's domain; the static import dimension governs cross-module reachability. This capability makes no claim about them.
 - **Conservative `pub(in P)` upper bound** (stated, false-negative-safe): a `pub(in <non-canonical in-crate path>)` item ranks as `Crate`. Under a `Super` or `Module` ceiling this MAY over-react when the real path is narrow (effectively private), a loud over-reaction chosen over a silent pass. It never under-reacts.
 
@@ -171,3 +174,4 @@ identity.
 #### Scenario: Same-named items on different owners stay distinct
 - **WHEN** two violating public items share a name but differ by module or owner
 - **THEN** their structured facts remain distinct
+

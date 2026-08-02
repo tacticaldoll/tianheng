@@ -46,7 +46,7 @@ negative where only the `use`-aliased spelling reacted. A principal trait that i
 unresolvable** — a bare single-segment name with no `use` (neither a local item nor an extern head),
 a macro-generated trait, or a glob/foreign-module re-export — is dropped, the same stated
 resolver-coverage bound signature-coupling carries, never a silent pass of a *resolvable* operand.
-The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule. A mutually-exclusive `#[cfg]` collision on the `use`-map name the principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last.
+The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule. A mutually-exclusive `#[cfg]` collision on the `use`-map name the principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last. The crate-wide re-export closure this resolver walks includes a `pub use` declared in a module reached only through a `cfg_attr`-wrapped `#[path]` remap — the identical crate-wide collection signature-coupling's own closure gets, never a silent gap specific to this operand-scoped resolver.
 
 #### Scenario: A dyn of a named forbidden trait is flagged
 
@@ -97,6 +97,11 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 
 - **WHEN** the governed module declares `#[cfg(unix)] use crate::infra::Port as P; #[cfg(not(unix))] use crate::safe::SafePort as P;` and exposes `Box<dyn P>`, under an operand boundary forbidding `["crate::infra::Port"]`, in either declaration order
 - **THEN** the system emits a violation, regardless of which `use` line is written first — the verdict never depends on source order
+
+#### Scenario: A re-exported trait operand declared only in a cfg_attr-wrapped-path module still matches
+
+- **WHEN** a facade module is reached only via `#[cfg_attr(windows, path = "weird.rs")] pub mod facade;` with no conventional `facade.rs` present, `weird.rs` declares `pub use crate::infra::Port;`, the governed module exposes `Box<dyn crate::facade::Port>`, and the boundary forbids `["crate::infra::Port"]`
+- **THEN** the system reads `weird.rs` into the crate-wide re-export closure and emits a violation, rather than treating the facade module as unobserved and passing the exposure through unresolved
 
 ### Requirement: Empty operand set degenerates to shape-only, never a silent no-op
 
