@@ -388,8 +388,12 @@ pub(crate) fn renames_shadowed(
 
 /// Collect the **local** `pub use` (and `pub(crate)`/`pub(in …)`) re-exports declared in
 /// `items` (which live in `module`) into `out`, keyed by the alias's canonical path. A
-/// glob contributes no local hop; a private `use` is not collected — it is invisible from
-/// other modules, so it can only be a same-module name already in that module's [`UseMap`].
+/// glob contributes no local hop; a bare-headed target re-exporting an **external** crate
+/// (head ∈ `externs`) is retained verbatim, so a local facade chain terminating at an
+/// extern type canonicalizes to it — see `semantic-reexport-exposure`'s "A local facade
+/// chain of inline re-exports terminating at an extern type reacts" requirement. A private
+/// `use` is not collected — it is invisible from other modules, so it can only be a
+/// same-module name already in that module's [`UseMap`].
 ///
 /// See `semantic-reexport-exposure`'s "External-crate re-exports are observed by default"
 /// requirement (the crate-wide-closure paragraph, which names this function) for the full
