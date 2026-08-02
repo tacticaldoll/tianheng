@@ -38,7 +38,13 @@ is no identity collision risk in treating them identically for exposure purposes
 - Affected code: `crates/hunyi/src/collect.rs` only.
 - No public API/DSL/builder change, no baseline format change (this fixes a false negative, not an
   identity shape — an adopter's existing baseline is unaffected either way).
-- Out of scope: whether OTHER hunyi capabilities (visibility, async-exposure, unsafe-confinement,
-  etc.) also lack `ForeignMod` handling — a related, separately-tracked unverified finding
-  (`crates/hunyi/src/syn_util.rs:439`, the visibility capability's own item observer) will be
-  checked in its own verification pass, not folded in here without its own reproduction.
+- Out of scope, named explicitly rather than glossed over (an independent apply-stage review found
+  the first draft understated this): the identical `Item::Fn`/`Item::Static` + `is_public` pattern
+  with no `ForeignMod` arm also appears in `collect_item_async_exposures` and
+  `collect_item_return_impl_traits` — **in this same file** — and in `collect_item_dyn_exposures`
+  further down it. None of the three has its own audit reproduction, regression test, or spec-text
+  amendment yet; fixing them here would be folding un-reproduced findings into an unrelated PR,
+  against this project's own explore-before-propose discipline. Recorded as follow-up candidates,
+  not fixed now. The visibility capability's own item observer
+  (`crates/hunyi/src/syn_util.rs:439`) has a separate, already-tracked unverified audit finding for
+  the identical shape.

@@ -19,11 +19,14 @@ through every other `syn::Item` variant — including `ForeignMod` — to a bare
   item kind's own-visibility rule.
 
 **Non-Goals:**
-- Any other hunyi capability's own `ForeignMod` handling (visibility, async-exposure, unsafe-
-  confinement, dyn-trait, impl-trait, forbidden-marker, trait-impl-locality) — each has its own item
-  collector/observer, and whether each independently lacks the same case is a separate, unverified
-  question (see the audit's unverified finding at `syn_util.rs:439` for the visibility capability
-  specifically) requiring its own reproduction before being folded into a fix.
+- Fixing the identical `Item::Fn`/`Item::Static` + `is_public` pattern's missing `ForeignMod` arm in
+  `collect_item_async_exposures`, `collect_item_return_impl_traits` (both in this same file,
+  `crates/hunyi/src/collect.rs`), or `collect_item_dyn_exposures` further down it — an independent
+  apply-stage review confirmed all three have the identical gap. None has its own audit
+  reproduction, regression test, or spec-text amendment; fixing them here would fold un-reproduced
+  findings into an unrelated PR. Named explicitly as follow-up candidates, not silently left out.
+- The visibility capability's own item observer (`crates/hunyi/src/syn_util.rs:439`) has a separate,
+  already-tracked unverified audit finding for the identical shape — its own change, not this one.
 - Any change to how a *body-having* item (a regular `fn`) is collected — untouched.
 
 ## Decisions

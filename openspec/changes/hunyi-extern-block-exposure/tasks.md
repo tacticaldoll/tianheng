@@ -26,6 +26,20 @@
 
 ## 4. Definition of Done
 
-- [ ] 4.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
-      suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
-- [ ] 4.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste call.
+- [x] 4.1 Ran the full local gate list from `AGENTS.md` — all green: `cargo build --workspace
+      --all-targets`; the three clippy passes; `cargo fmt --all --check`;
+      `TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features` (every suite `ok`, 0
+      failed); both `cargo doc` passes; `cargo deny check`
+      (`advisories ok, bans ok, licenses ok, sources ok`); `scripts/test_release_coherence.sh` and
+      `check_release_coherence.sh` (`ok release coherence (development: 0.3.0)`);
+      `scripts/test_examples.sh` (`all examples reacted as declared`).
+- [x] 4.2 Independent apply-stage adversarial review performed (not self-assessment): confirmed
+      seam-identity matches an ordinary item's exactly (by direct code comparison, not the doc
+      comment alone), probed 3 further edge cases (foreign `Type`/macro items, multiple ABI
+      strings, restricted-visibility items) via temporary tests — none broke the fix — and
+      independently redid the non-vacuous revert-and-confirm. One real finding: the proposal's
+      Non-Goals section understated that the identical gap also exists in **this same file**
+      (`collect_item_async_exposures`, `collect_item_return_impl_traits`, and
+      `collect_item_dyn_exposures`), not only in the separately-cited `syn_util.rs:439`. Corrected
+      in `proposal.md`/`design.md` — named explicitly as follow-up candidates, not fixed here
+      (none has its own audit reproduction or regression test yet). PASS verdict overall.
