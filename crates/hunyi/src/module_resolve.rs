@@ -10,8 +10,8 @@ use crate::errors::{
 };
 use crate::resolve::strip_raw;
 use crate::syn_util::{
-    direct_path_value, flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
-    has_path_attr,
+    cfg_attr_path_value, direct_path_value, flatten_transparent_macro_items,
+    flatten_transparent_macros, has_cfg_attr,
 };
 
 /// The path segments of a module relative to the crate root.
@@ -251,11 +251,7 @@ fn descend(
                 // since a `#[path]`-loaded file is mod-rs-like, its own children (both
                 // conventional and any further `#[path]`) resolve from ITS OWN directory too — so
                 // `path_base` and the child-continuation directory are the SAME value here (unlike
-                // the plain, non-`#[path]` case below, where they differ for a flat `seg.rs`). An
-                // inline `#[path]` (has a body) or a `cfg_attr`-wrapped `#[path]` is not followed
-                // by this targeted resolver — a narrow **fail-loud** bound (exit 2 "cannot
-                // judge"), never a silent pass; the whole-crate walks follow the unconditional
-                // form.
+                // the plain, non-`#[path]` case below, where they differ for a flat `seg.rs`).
                 if let Some(rel) = direct_path_value(&module_item.attrs) {
                     let file = branch.path_base.join(&rel);
                     if !file.is_file() {
@@ -282,8 +278,29 @@ fn descend(
                     file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
                     continue;
                 }
-                if has_path_attr(&module_item.attrs) {
-                    continue;
+                // A `cfg_attr`-wrapped `#[path]` target is unioned with the conventional file
+                // below, not followed in its place: `cfg_attr` never removes the `mod` item, so
+                // cfg-blind observation cannot know which one a given build actually compiles.
+                // Mirrors `scan::resolve_child_modules`'s identical union (found on adversarial
+                // review: this targeted resolver's own doc once claimed to fail loud on this shape,
+                // but a mutually-exclusive sibling declaration for the same name silently absorbed
+                // the branch count, so the cfg_attr target's own file was dropped with no error at
+                // all whenever ANY sibling resolved — never truly fail-loud in that case).
+                let cfg_attr_target = cfg_attr_path_value(&module_item.attrs);
+                let mut has_backing_source = false;
+                if let Some(rel) = &cfg_attr_target {
+                    let file = branch.path_base.join(rel);
+                    if file.is_file() {
+                        has_backing_source = true;
+                        if xingbiao::try_visit(&mut seen_files, &file)? {
+                            let parsed = read_parse(&file)?;
+                            let next_dir = file
+                                .parent()
+                                .map(Path::to_path_buf)
+                                .unwrap_or_else(|| branch.child_dir.clone());
+                            file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
+                        }
+                    }
                 }
                 // A `#[cfg]`-gated plain module may legitimately have no source file when the
                 // predicate is off (a standard optional-feature pattern) — matching
@@ -291,10 +308,11 @@ fn descend(
                 // this single-module-anchored descent no longer disagrees with its own sibling
                 // walker on the identical shape (the 0.2.2 lesson: the two walkers' missing-file
                 // policies had silently drifted apart). An unconditional missing file stays a real
-                // scan error (exit 2). BOTH conventional forms present is checked FIRST and is never
-                // tolerated: no predicate value makes two files compile as one module, so unlike an
-                // absence it cannot be a legitimate configuration — the same ordering 圭表 and 漏刻
-                // each independently apply to this shape.
+                // scan error (exit 2), UNLESS the `cfg_attr` target above already backs this
+                // declaration on some other build. BOTH conventional forms present is checked
+                // FIRST and is never tolerated: no predicate value makes two files compile as one
+                // module, so unlike an absence it cannot be a legitimate configuration — the same
+                // ordering 圭表 and 漏刻 each independently apply to this shape.
                 let file = match locate_module_file(&branch.child_dir, seg) {
                     ModuleFile::One(file) => file,
                     ModuleFile::Ambiguous { flat, nested } => {
@@ -309,7 +327,7 @@ fn descend(
                         ));
                     }
                     ModuleFile::Absent => {
-                        if cfg_conditional {
+                        if has_backing_source || cfg_conditional {
                             continue;
                         }
                         return Err(missing_module_file_error(module, crate_package));

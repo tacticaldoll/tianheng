@@ -165,8 +165,49 @@ Added `MODIFIED Requirements` deltas to `semantic-async-exposure-boundary` and
 `semantic-impl-trait-boundary`'s own "Subtree scope opt-in" requirements, which had independently
 stated the same now-incorrect "`cfg_attr`-wrapped `#[path]` SHALL remain unfollowed" claim.
 
+## Round 3 (adversarial review of round 2)
+
+A third independent review re-examined round 2's own restated claim (inherited from round 1) that
+`module_resolve.rs`'s single-module-anchored descent was "already correct, fails loud" on a
+`cfg_attr`-wrapped `#[path]` — and disproved it with a live fixture, from a different angle than the
+prior two reviews used (they had tested only the LONE-declaration case, which genuinely does fail
+loud; this review tested the SIBLING case):
+
+```rust
+pub mod infra;
+#[cfg(windows)]
+#[cfg_attr(target_arch = "x86", path = "foo_x86.rs")]
+mod foo;
+#[cfg(not(windows))]
+mod foo;
+```
+
+`descend()`'s `if has_path_attr(&module_item.attrs) { continue; }` only skips the ONE declaration
+carrying the attribute; the surrounding loop still processes the sibling `#[cfg(not(windows))] mod
+foo;`, which resolves fine and populates `next_branches`. The `next_branches.is_empty()` check that
+would otherwise raise `unknown_module_error` (exit 2) therefore never fires — the `cfg_attr`
+branch's own file (`foo_x86.rs`, which under a windows+x86 build is what genuinely compiles) is
+silently dropped with **exit 0**, not exit 2. Reproduced for both a bare-`#[cfg]` sibling pair and a
+`cfg_if!` arm pair.
+
+This is a **pre-existing** gap (present before this whole change; none of the two prior commits
+touched `module_resolve.rs`), but this change's own commit messages twice asserted the opposite about
+this specific function. Fixing it turned out to be MORE thorough than "close the sibling-absorption
+gap" alone: testing revealed even a LONE `cfg_attr`-wrapped declaration with an EXISTING target file
+(no sibling at all) previously never followed it — the "fail loud" behavior only fired for the
+narrower case of NEITHER file existing. The fix therefore makes `descend()`'s handling of a
+`cfg_attr`-wrapped `#[path]` module fully identical in spirit to `resolve_child_modules`'s: read the
+conventional file AND the `cfg_attr` target when either exists on disk, unioned; fail loud only when
+truly nothing backs the declaration on any configuration.
+
+Fixing `descend()` closes the SAME false-negative class for every one of its callers:
+signature-coupling's own anchor resolution (`exposure.rs`'s module-items path, distinct from its
+`scan_crate`-backed alias/re-export closure already fixed), visibility (`visibility.rs`), dyn-trait's
+shape-only module-scoped resolution (`shape_scan.rs`'s `resolve_module_items_with_files`), and
+trait-impl-exposure (which shares signature-coupling's resolver). `has_path_attr` and its supporting
+`is_path_remap`/`applied_metas_remap`/`meta_is_path_remap` are now fully dead (their only remaining
+caller adopted `cfg_attr_path_value`) and are deleted.
+
 ## Open Questions
 
-None outstanding. `module_resolve.rs`'s separate, already-correct fail-loud bound (for
-signature-coupling's own anchor resolution, visibility, and dyn/impl-trait's MODULE-scoped,
-non-subtree variant) is an explicit non-goal, not an open question within this change.
+None outstanding.

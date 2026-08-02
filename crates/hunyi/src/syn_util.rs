@@ -5,35 +5,13 @@
 
 use crate::resolve::strip_raw;
 
-/// Whether a module's attributes remap its source file off the conventional path. This is the
-/// broader "is it remapped at all" test: it stays `true` for the `cfg_attr`-wrapped spelling, which
-/// [`crate::module_resolve`]'s single-module-anchored descent does **not** follow (cfg-conditional
-/// → following it cfg-blind could read a file rustc does not compile here) and must therefore skip
-/// rather than govern the wrong conventional file — a stated, fail-loud bound narrower than the
-/// whole-crate walks' own policy (`crates/hunyi/src/scan.rs`'s `resolve_child_modules` UNIONS the
-/// conventional file and the `cfg_attr` target instead of skipping; this predicate's only remaining
-/// caller is the targeted resolver). The **unconditional** `#[path = "…"]` form is instead *followed*
-/// via [`direct_path_value`]; this predicate still reports `true` for it, but callers consult
-/// `direct_path_value` first. Recognizes **both** the direct
-/// `#[path = "…"]` and the combined `#[cfg_attr(<pred>, …, path = "…")]` spelling (equivalent to
-/// `#[cfg(<pred>)] #[path = "…"]`), including arbitrarily **nested** `cfg_attr`
-/// (`#[cfg_attr(a, cfg_attr(b, path = "…"))]`). It matches only a genuine `path = "…"`
-/// **name-value** meta (the only valid `#[path]` form), so a `#[cfg_attr(<pred>, deprecated)]` on a
-/// normal file module is **not** mistaken for a remap (which would drop a governed module — the
-/// inverse false negative).
-pub(crate) fn has_path_attr(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(is_path_remap)
-}
-
 /// The file path of an **unconditional** `#[path = "…"]` remap (the direct name-value form only),
-/// or `None`. This is the value the whole-crate walks and the targeted resolver *follow* to
-/// observe a relocated module's source (closing the coverage false negative where its `unsafe`
-/// sites / items were silently dropped). A `cfg_attr`-wrapped `path` is deliberately **excluded**
-/// here: [`crate::scan`]'s whole-crate walks extract it separately via
-/// [`cfg_attr_path_value`] and union it with the conventional file, while
-/// [`crate::module_resolve`]'s targeted resolver still treats any `cfg_attr`-wrapped `path` as a
-/// skip bound via [`has_path_attr`]. A module has at most one applied unconditional `#[path]`, so
-/// the first match is the value.
+/// or `None`. This is the value both `crate::scan`'s whole-crate walks and
+/// `crate::module_resolve`'s targeted resolver *follow* to observe a relocated module's source
+/// (closing the coverage false negative where its `unsafe` sites / items were silently dropped).
+/// A `cfg_attr`-wrapped `path` is deliberately **excluded** here: both walkers instead extract it
+/// separately via [`cfg_attr_path_value`] and union it with the conventional file. A module has at
+/// most one applied unconditional `#[path]`, so the first match is the value.
 pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
     attrs.iter().find_map(|attr| {
         if !attr.path().is_ident("path") {
@@ -67,8 +45,8 @@ pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
 /// only conditionally applies its wrapped attribute(s) — the `mod` item itself is never removed,
 /// so a `#[cfg_attr(pred, allow(dead_code))] mod x;` with no `x.rs` is a genuine compile error
 /// (E0583) on every platform, not a legitimate absence. A `cfg_attr` wrapping `path` specifically
-/// is a different, already-handled case ([`has_path_attr`]'s broader test, matched before this one
-/// is ever consulted). 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only
+/// is a different, already-handled case ([`cfg_attr_path_value`], consulted separately from this
+/// absence test). 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only
 /// distinction for the same reason (`louke::audit::scan::mod_preamble_attrs`).
 pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("cfg"))
@@ -228,44 +206,10 @@ pub(crate) fn flatten_transparent_macro_items(items: &[syn::Item]) -> Vec<syn::I
         .collect()
 }
 
-fn is_path_remap(attr: &syn::Attribute) -> bool {
-    if attr.path().is_ident("path") {
-        return true;
-    }
-    // `cfg_attr(<predicate>, attr, …)`: the first meta is the predicate, the rest are attributes
-    // applied when it holds. A `path` among them (or nested in a further `cfg_attr`) is a remap.
-    if attr.path().is_ident("cfg_attr") {
-        if let Ok(metas) = attr.parse_args_with(cfg_attr_metas) {
-            return applied_metas_remap(&metas);
-        }
-    }
-    false
-}
-
 type MetaList = syn::punctuated::Punctuated<syn::Meta, syn::Token![,]>;
 
 fn cfg_attr_metas(input: syn::parse::ParseStream) -> syn::Result<MetaList> {
     MetaList::parse_terminated(input)
-}
-
-/// Whether the **applied** metas of a `cfg_attr` (all but the first, which is the predicate) carry a
-/// `path` remap — a `path = "…"` name-value, or one nested inside a further `cfg_attr`.
-fn applied_metas_remap(metas: &MetaList) -> bool {
-    metas.iter().skip(1).any(meta_is_path_remap)
-}
-
-fn meta_is_path_remap(meta: &syn::Meta) -> bool {
-    match meta {
-        // The only valid `#[path]` form is `path = "…"` (a name-value). A bare `path` or `path(…)`
-        // is not a remap — matching guibiao's byte scanner, which requires `path =`.
-        syn::Meta::NameValue(nv) => nv.path.is_ident("path"),
-        // A nested `cfg_attr(<pred>, …)`: recurse into ITS applied metas.
-        syn::Meta::List(list) if list.path.is_ident("cfg_attr") => list
-            .parse_args_with(cfg_attr_metas)
-            .map(|metas| applied_metas_remap(&metas))
-            .unwrap_or(false),
-        _ => false,
-    }
 }
 
 /// The file path named by a `path = "…"` remap wrapped in `#[cfg_attr(<pred>, …, path = "…")]`

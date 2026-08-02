@@ -80,6 +80,40 @@ undercounted and misattributed to `module_resolve.rs` in round 1's own commit me
       (deduped); deeply nested `cfg_attr(cfg_attr(path))`; an inline module's own nested file-children
       under a cfg_attr-wrapped path; `has_backing_source` combined with a co-occurring bare `#[cfg]`.
 
+## 3b. Round-3: `module_resolve.rs`'s own false-negative (adversarial review)
+
+A third independent review re-examined this change's OWN "already correct, fails loud" claim about
+`module_resolve.rs::descend` (restated across rounds 1 and 2) and disproved it: a `cfg_attr`-wrapped
+`#[path]` declaration silently absorbs into a resolving sibling's success (exit 0, not exit 2), and
+even a LONE such declaration with an existing target file was never followed at all before this
+round's fix.
+
+- [x] 3b.1 Extended `descend()` (`crates/hunyi/src/module_resolve.rs`) with the identical union
+      `resolve_child_modules` already applies: the `cfg_attr` target and the conventional file are
+      both read when they exist on disk; `has_backing_source` gates the absence-tolerance the same
+      way it does in `scan.rs`.
+- [x] 3b.2 Deleted the now-fully-dead `has_path_attr`, `is_path_remap`, `applied_metas_remap`, and
+      `meta_is_path_remap` (`syn_util.rs`) — `descend()` was their only remaining caller, now migrated
+      to `cfg_attr_path_value`. Updated the surrounding doc comments (`direct_path_value`,
+      `has_cfg_attr`) that referenced the deleted functions.
+- [x] 3b.3 `cfg_attr_wrapped_path_resolves_through_its_own_target_with_no_sibling_at_all` — the LONE
+      case (no sibling), now resolves rather than failing loud.
+- [x] 3b.4 `cfg_attr_wrapped_path_sibling_reacts_through_its_own_file_not_absorbed_by_a_sibling` +
+      `cfg_attr_wrapped_path_sibling_reacts_through_a_cfg_if_arm` — the sibling-absorption bug, both a
+      bare-`#[cfg]` pair and a `cfg_if!` arm pair.
+- [x] 3b.5 `cfg_attr_wrapped_path_with_no_sibling_and_no_backing_file_still_fails_loud` — confirms the
+      genuinely-unbacked case still fails loud (exit 2), never silently passing.
+- [x] 3b.6 Non-vacuous verification: reverted `module_resolve.rs`/`syn_util.rs` to the pre-3b state,
+      confirmed 3b.3/3b.4 fail in the predicted way, restored. Full suite green after restore.
+- [x] 3b.7 Added `MODIFIED Requirements` deltas closing the newly-corrected claim in
+      `semantic-signature-coupling` (both its "Anchor resolution" requirement — the shared
+      single-module-anchor property declaration — and its "Name resolution scope" requirement),
+      `semantic-visibility-boundary`, `semantic-dyn-trait-boundary` (shape-only, module-scoped
+      resolution), and `semantic-trait-impl-exposure` (shares signature-coupling's resolver). Swept
+      every remaining hunyi-owned spec mentioning `cfg_attr` to confirm no other stale claim survived
+      (guibiao's and louke's own separate scanners' specs are out of scope for this hunyi-only
+      change and were left untouched).
+
 ## 4. Documentation
 
 - [x] 4.1 Added a CHANGELOG `[Unreleased] ### Fixed` entry. No **BREAKING** marker — false negatives
@@ -87,16 +121,17 @@ undercounted and misattributed to `module_resolve.rs` in round 1's own commit me
 - [x] 4.2 Added `MODIFIED Requirements` deltas to `semantic-unsafe-confinement`,
       `semantic-trait-impl-locality`, `semantic-forbidden-marker`, `semantic-signature-coupling`,
       `semantic-dyn-trait-operand-boundary`, `semantic-impl-trait-operand-boundary`,
-      `semantic-async-exposure-boundary`, and `semantic-impl-trait-boundary` (the last two added
-      after round 2's review) — each replaces its stated "`cfg_attr`-wrapped `#[path]` is an
-      unfollowed bound" language (crate-wide walk / subtree walk only) with the union-observation
-      rule, while leaving each spec's SEPARATE single-module-anchor bound (where stated) untouched.
+      `semantic-async-exposure-boundary`, `semantic-impl-trait-boundary` (round 2), and — after round
+      3's `module_resolve.rs` fix — `semantic-visibility-boundary`, `semantic-dyn-trait-boundary`, and
+      `semantic-trait-impl-exposure`. Each replaces its stated "`cfg_attr`-wrapped `#[path]` is an
+      unfollowed/fail-loud bound" language with the union-observation rule.
 
 ## 5. Definition of Done
 
 - [x] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`) —
-      re-run after round 2's additions.
-- [x] 5.2 Adversarial apply-stage review (round 2): confirmed the declared reaction still bites, not
-      a taste call; found and closed the `walk_subtree_modules` undercounting and two stale doc
-      comments; found no further bug across six additional constructed counter-examples.
+      re-run after round 3's `module_resolve.rs` fix.
+- [x] 5.2 Adversarial apply-stage review (rounds 2 and 3): round 2 confirmed the declared reaction
+      still bites and closed the `walk_subtree_modules` undercounting plus two stale doc comments;
+      round 3 found and closed a real, pre-existing gap in `module_resolve.rs` this change's own
+      commits had twice misdescribed as "already correct."

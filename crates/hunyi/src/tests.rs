@@ -10715,6 +10715,125 @@ fn signature_coupling_reacts_through_a_cfg_attr_path_hidden_reexport() {
     );
 }
 
+/// `module_resolve.rs::descend`'s targeted, single-module-anchored resolution now follows a
+/// `cfg_attr`-wrapped `#[path]` target exactly like `scan::resolve_child_modules`'s crate-wide walk —
+/// found on adversarial review of `hunyi-cfg-attr-path-module-loss`, whose own commit claimed this
+/// function was "already correct, fails loud on this shape," a claim that did not survive scrutiny:
+/// even a LONE such declaration (no resolving sibling at all) previously never followed its target,
+/// no matter whether the file existed. Now it does, closing the same false-negative class this
+/// change already closed for the crate-wide walk, at this second, previously-unfixed entry point.
+#[test]
+fn cfg_attr_wrapped_path_resolves_through_its_own_target_with_no_sibling_at_all() {
+    let out = semantic_findings(
+        "cfg-attr-lone-target-resolves",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n#[cfg_attr(windows, path = \"win.rs\")]\nmod foo;\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "win.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// A `cfg_attr`-wrapped `#[path]` sibling (a mutually-exclusive `#[cfg]`/`cfg_if!` co-declaration of
+/// the identical module name) must still react through its own file, not be silently absorbed by a
+/// sibling's successful resolution. Before this fix, `has_path_attr`'s `continue` only skipped that
+/// one declaration; when ANY sibling for the same name resolved, the empty-branch check that would
+/// otherwise trigger a fail-loud error never fired, so the `cfg_attr` target's own file — and
+/// everything it exposes — silently vanished with exit 0 instead. Fixed by extending the same union
+/// `scan::resolve_child_modules` already applies: the `cfg_attr` target is read alongside the
+/// sibling's own resolution, not skipped.
+#[test]
+fn cfg_attr_wrapped_path_sibling_reacts_through_its_own_file_not_absorbed_by_a_sibling() {
+    let out = semantic_findings(
+        "cfg-attr-sibling-anchor",
+        &[
+            ("lib.rs", "pub mod infra;\n#[cfg(windows)]\n#[cfg_attr(target_arch = \"x86\", path = \"foo_x86.rs\")]\nmod foo;\n#[cfg(not(windows))]\nmod foo;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("foo.rs", "pub fn safe() {}\n"),
+            (
+                "foo_x86.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// The identical shape via `cfg_if!` arms rather than bare `#[cfg]` siblings.
+#[test]
+fn cfg_attr_wrapped_path_sibling_reacts_through_a_cfg_if_arm() {
+    let out = semantic_findings(
+        "cfg-attr-sibling-anchor-cfg-if",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\ncfg_if::cfg_if! {\n    if #[cfg(windows)] {\n        #[cfg_attr(target_arch = \"x86\", path = \"foo_x86.rs\")]\n        mod foo;\n    } else {\n        mod foo;\n    }\n}\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("foo.rs", "pub fn safe() {}\n"),
+            (
+                "foo_x86.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// A LONE `cfg_attr`-wrapped `#[path]` declaration (no resolving sibling) still fails loud when
+/// neither the conventional file nor the `cfg_attr` target exists — the genuinely fail-loud case
+/// that survives from the original bound, now reached only when `has_backing_source` is false.
+#[test]
+fn cfg_attr_wrapped_path_with_no_sibling_and_no_backing_file_still_fails_loud() {
+    let err = semantic_findings(
+        "cfg-attr-lone-fails-loud",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(windows, path = \"win.rs\")]\nmod foo;\n",
+        )],
+        "crate::foo",
+        &[],
+        false,
+        &[],
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("not found") || err.contains("could not"),
+        "a lone unbacked cfg_attr(path) declaration must still fail loud: {err}"
+    );
+}
+
 /// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` declarations for the identical local
 /// name, in the same file, must both react (cfg-blind: observation cannot know which is live).
 /// Before the fix, the second `use` silently overwrote the first in `UseMap` — a single
