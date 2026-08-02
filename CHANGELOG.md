@@ -290,6 +290,16 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   the body's own outermost block is recovered, never one nested a level further (inside an
   `if`/`loop`/closure/nested `fn`); and only a `const` initializer or a `fn` body is inspected, never
   a `static` initializer. New violations are ordinary findings and absorbable by baseline.
+- 漏刻's shipped default sink no longer silently discards a failed stderr write. An adopter who
+  never calls `set_sink` — the exact adopter the default sink exists for — lost an enforce-severity
+  `Violation` with zero trace whenever the write failed (a closed pipe after `myapp 2>&1 | consumer`
+  exits, a daemon with closed inherited fds, or plainly `myapp 2>&-`): the process correctly did not
+  crash, but nothing recorded that the reaction had even fired. A failed write is now counted by a
+  new public `louke::dropped_sink_events() -> u64`, a single lock-free atomic add that cannot itself
+  fail or panic, so an adopter can poll it into their own health check or diagnostics endpoint to
+  detect the loss from outside the process. Scope stays narrow: a custom sink's own success or
+  failure is opaque to the system (`set_sink` takes a `Fn(&Violation)` returning nothing) and is
+  never counted. Additive, non-breaking — the only public surface change is the new function.
 
 ## [0.3.0] - 2026-07-26
 
