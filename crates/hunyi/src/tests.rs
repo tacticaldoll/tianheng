@@ -3340,6 +3340,45 @@ fn an_unresolvable_trait_anchor_is_a_constitution_error() {
     assert_eq!(err, unknown_trait_error("crate::command::Ghost", "x"));
 }
 
+/// An `allowed_locations`/`only_implemented_in` entry with an empty `::`-segment (leading,
+/// trailing, or doubled `::`) must be a constitution error — never silently pass through into
+/// `matches_allowed`. Before the fix, `matches_allowed`'s plain `path_within` never matched a
+/// malformed entry against any real module location, so a legitimately-placed impl was reported
+/// as a spurious violation instead of naming the actual typo in the declaration (reproduced
+/// directly against this pure heart: `["::crate::api"]` on an impl genuinely under `crate::api`
+/// produced a finding, not a clean error, before this test was written to pin the fix).
+#[test]
+fn trait_impl_rejects_a_malformed_colon_allowed_location() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod api;\n"),
+        (
+            "api.rs",
+            "pub trait Command {}\npub struct Foo;\nimpl Command for Foo {}\n",
+        ),
+    ];
+    for bad in ["::crate::api", "crate::api::", "crate::api::::sub"] {
+        let err = locality_findings("malformed-allowed", files, "crate::api::Command", &[bad])
+            .unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed allowed entry {bad:?}: {err}"
+        );
+    }
+    // Control: the well-formed spelling for the identical, genuinely-in-place impl still passes
+    // clean — the rejection above is a spelling gate, never a locality regression.
+    let clean = locality_findings(
+        "malformed-allowed-control",
+        files,
+        "crate::api::Command",
+        &["crate::api"],
+    )
+    .unwrap();
+    assert!(
+        clean.is_empty(),
+        "a well-formed allowed entry must still admit the in-place impl: {clean:?}"
+    );
+}
+
 #[test]
 fn a_non_anchored_traits_impl_is_ignored() {
     let out = locality_findings(
@@ -4068,6 +4107,35 @@ fn empty_allowed_set_is_a_constitution_error() {
 fn crate_root_allowed_set_is_a_constitution_error() {
     let err = unsafe_labels("root", &[("lib.rs", "pub fn f() {}\n")], &["crate"]).unwrap_err();
     assert!(err.contains("crate root"), "{err}");
+}
+
+/// An `allowed_locations` entry with an empty `::`-segment (leading, trailing, or doubled `::`)
+/// must be a constitution error — never silently pass through into `matches_allowed`. Before the
+/// fix, a malformed entry never matched any real module location, so a genuinely-confined
+/// `unsafe` site was reported as a spurious violation instead of naming the actual typo in the
+/// declaration (reproduced directly against this pure heart: `["crate::ffi::"]` on an `unsafe fn`
+/// genuinely under `crate::ffi` produced a finding, not a clean error, before this test was
+/// written to pin the fix).
+#[test]
+fn unsafe_confinement_rejects_a_malformed_colon_allowed_location() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod ffi;\n"),
+        ("ffi.rs", "pub unsafe fn a() {}\n"),
+    ];
+    for bad in ["::crate::ffi", "crate::ffi::", "crate::ffi::::sub"] {
+        let err = unsafe_labels("malformed-allowed", files, &[bad]).unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed allowed entry {bad:?}: {err}"
+        );
+    }
+    // Control: the well-formed spelling for the identical, genuinely-confined site still passes
+    // clean — the rejection above is a spelling gate, never a confinement regression.
+    let clean = unsafe_labels("malformed-allowed-control", files, &["crate::ffi"]).unwrap();
+    assert!(
+        clean.is_empty(),
+        "a well-formed allowed entry must still confine the genuinely-placed unsafe site: {clean:?}"
+    );
 }
 
 #[test]

@@ -18,7 +18,7 @@ use crate::file_scope::resolve_crate;
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     AliasMap, BareFallback, canonical_path_str, canonical_self_owner, expand_canonical_paths,
-    render_last_segment_args, resolve_path_all,
+    render_last_segment_args, resolve_path_all, validate_path_operands,
 };
 use crate::rules::TRAIT_IMPL_RULE;
 use crate::scan::scan_crate;
@@ -89,6 +89,13 @@ pub(crate) fn trait_impl_findings(
     allowed: &[String],
     crate_package: &str,
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
+    // An allowed-location entry with an empty `::`-segment could never contain a real module
+    // location — checked before any scanning, the identical guard `must_not_expose`/
+    // `must_not_acquire`'s forbidden-operand family applies to their own operand lists
+    // (`resolve::validate_path_operands`). Left unvalidated, such an entry silently matched no
+    // real site in `matches_allowed`, misreporting every legitimately-placed impl as a spurious
+    // violation instead of naming the actual typo.
+    validate_path_operands(allowed)?;
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let given = canonical_path_str(trait_path);
     // Every re-export candidate the declared anchor's own facade could denote (cfg-blind): a

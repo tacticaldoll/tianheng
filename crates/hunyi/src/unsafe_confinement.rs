@@ -15,7 +15,7 @@ use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{unsafe_crate_root_allowed_error, unsafe_empty_allowed_error};
 use crate::file_scope::resolve_crate;
 use crate::finding::{SemanticFact, sort_attributed_facts};
-use crate::resolve::canonical_path_str;
+use crate::resolve::{canonical_path_str, validate_path_operands};
 use crate::rules::UNSAFE_CONFINEMENT_RULE;
 use crate::scan::scan_unsafe_sites;
 
@@ -87,6 +87,15 @@ pub(crate) fn unsafe_findings(
     if allowed.iter().any(|a| a == "crate") {
         return Err(unsafe_crate_root_allowed_error(crate_package));
     }
+    // An allowed-location entry with an empty `::`-segment could never contain a real module
+    // location — the identical guard `must_not_expose`/`must_not_acquire`'s forbidden-operand
+    // family applies to their own operand lists (`resolve::validate_path_operands`). Left
+    // unvalidated, such an entry silently matched no real site in `matches_allowed` below,
+    // misreporting every legitimately-placed `unsafe` site as a spurious violation instead of
+    // naming the actual typo. `allowed` here is already `canonical_path_str`-mapped by the caller,
+    // which never removes or collapses an empty segment, so this reacts identically to validating
+    // the raw declared strings.
+    validate_path_operands(allowed)?;
     let sites = scan_unsafe_sites(src_dir, root_file, crate_package)?;
     let mut findings: Vec<(SemanticFact, String, PathBuf)> = sites
         .into_iter()
