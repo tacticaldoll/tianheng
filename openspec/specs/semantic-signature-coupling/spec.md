@@ -80,6 +80,11 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 - **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, BOTH inline (`#[cfg(a)] mod x { .. }` / `#[cfg(b)] mod x { .. }`, sharing the identical enclosing file), each declaring its own `use <different real path> as Handle;` under the same local alias name, and only the FIRST arm's own bare `Handle` reference genuinely resolves to a forbidden type
 - **THEN** the system reacts on the first arm's own exposure, resolving its bare `Handle` reference through THAT arm's own `use` declaration — never through the second, mutually-exclusive arm's `use Handle` alias merely because both arms are inline and share one file; the same isolation holds for a local child module in one inline arm shadowing the other inline arm's own genuine extern re-export
 
+#### Scenario: A mutually-exclusive SIBLING ITEM's child module does not shadow the item's own extern re-export
+
+- **WHEN** the anchored module resolves to a SINGLE branch/file (no module-path split at all) that declares two mutually-exclusive sibling items directly — a `#[cfg(unix)] mod dep;` beside a `#[cfg(not(unix))] pub use dep::Something;` (real extern crate `dep`), or the identical pair as the two arms of one `cfg_if!` invocation
+- **THEN** the system reacts on the `not(unix)`/else arm's own re-export, resolving `dep` as the real extern crate: the branch-level fix above (two DIFFERENT branches/files never merging their child-module shadows) is a no-op here, since both sibling items share the identical branch and file — the exclusion must instead be computed per re-export ITEM against its own provably-mutually-exclusive siblings, not once over the branch's whole child-module set (`semantic-reexport-exposure` owns the detailed cfg-mutual-exclusion rule this scenario exercises)
+
 #### Scenario: A cfg_attr-wrapped-path anchor resolves through its own target with no resolving sibling at all
 
 - **WHEN** the anchored module `crate::foo` is declared only as `#[cfg_attr(windows, path = "win.rs")] mod foo;` with no conventional `foo.rs` present, and `win.rs` (the `cfg_attr` target) exists and exposes a forbidden type
