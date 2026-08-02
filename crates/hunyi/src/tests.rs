@@ -6425,6 +6425,40 @@ fn impl_trait_subtree_scopes_to_the_anchored_subtree_not_the_whole_crate() {
     assert!(!modules.contains(&"crate::c"), "{:?}", modules);
 }
 
+/// The BACKLOG false negative this change closes: `owner` is the self type's canonical path, not
+/// where the impl block is written, so two inherent impls of the SAME type in DIFFERENT modules
+/// (a platform-conditional split — here `plat_unix`/`plat_win` both writing `impl Conn` for a
+/// `Conn` declared in `common`) previously collapsed to one violation when both declared a
+/// same-named public RPIT method. `PublicSeam::InherentMethod` now carries the impl block's own
+/// declaring module, so both react — the two-module case impl-trait's subtree scan is the one
+/// capability that can currently observe in a single evaluation.
+#[test]
+fn impl_trait_subtree_two_platform_modules_impling_the_same_owner_stay_distinct() {
+    let files = &[
+        (
+            "lib.rs",
+            "pub mod common;\npub mod plat_unix;\npub mod plat_win;\n",
+        ),
+        ("common.rs", "pub struct Conn;\n"),
+        (
+            "plat_unix.rs",
+            "use crate::common::Conn;\nimpl Conn { pub fn open(&self) -> impl crate::Port { todo!() } }\n",
+        ),
+        (
+            "plat_win.rs",
+            "use crate::common::Conn;\nimpl Conn { pub fn open(&self) -> impl crate::Port { todo!() } }\n",
+        ),
+    ];
+    let subtree = impl_trait_subtree("plat-split", files, "crate").unwrap();
+    let modules: Vec<&str> = subtree.iter().map(|(_, m)| m.as_str()).collect();
+    assert_eq!(subtree.len(), 2, "{:?}", subtree);
+    assert!(modules.contains(&"crate::plat_unix"), "{:?}", subtree);
+    assert!(modules.contains(&"crate::plat_win"), "{:?}", subtree);
+    for (finding, _module) in &subtree {
+        assert!(finding.contains("impl crate::Port"), "{finding}");
+    }
+}
+
 #[test]
 fn impl_trait_subtree_tolerates_a_cfg_gated_fileless_submodule() {
     let files = &[

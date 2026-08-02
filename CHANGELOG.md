@@ -31,6 +31,25 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   hand-composing the identical sequence. No public API, wire format, or observable behavior change.
 
 ### Fixed
+- **BREAKING**: `PublicSeam::InherentMethod`/`InherentAssoc` now carry the impl **block's own**
+  declaring module, distinct from the self type's canonical `owner` path. `owner` names what the
+  impl is *for*, not where it is *written* — Rust's coherence rules let an inherent `impl` for one
+  type be written in any module of the same crate, a real, common platform-conditional idiom
+  (`impl Conn { … }` once in `plat_unix`, once in `plat_win`, both for a `Conn` declared in
+  `common`). Two such impl blocks declaring a same-named public method/associated item previously
+  resolved to the identical `{owner, name}` seam and collapsed to one violation: measured on the
+  real `hunyi::check_impl_trait`'s `including_submodules()` subtree scan, the second module's real
+  violation was silently dropped by the fact-only dedup, not merely deduplicated against an
+  equivalent finding — the false negative PROJECT.md's Core Contract forbids outright. dyn-trait and
+  signature-coupling build the identical seam through the same constructors but cannot currently
+  observe more than one module per evaluation, so they close the identical structural gap
+  pre-emptively rather than a second live false negative. **Any existing `--write-baseline` output
+  for an `InherentMethod`/`InherentAssoc`-seam finding is now stale** (the fact gained a required
+  field) and must be regenerated; every previously accepted violation reappears as new exactly once.
+  Rendered finding text is unchanged (the module is identity-only, matching
+  `AsyncInherentMethod`'s own already-shipped precedent). No DSL, builder, or CLI surface change —
+  only the identity `fact` payload gains a field, the identical shape this same `[Unreleased]`
+  window's own `governing_package` fix already took (below).
 - 渾儀 now rejects a forbidden/allowed operand whose `::`-delimited spelling has an empty segment
   (a leading `::`, a trailing `::`, a doubled `::`, or the empty string) as a constitution error,
   across `must_not_expose`/`and_not_expose`, `must_not_expose_dyn_of`, `must_not_expose_impl_trait_of`
