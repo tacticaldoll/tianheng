@@ -9,9 +9,7 @@ observed from the pure local AST signal `syn::Signature.asyncness`. Shape-only, 
 surface impl-trait governs (free fns, inherent methods, trait method declarations; trait-impl
 methods and private items excluded). Its finding is an owner-qualified item identity so distinct
 async fns never collide under the baseline.
-
 ## Requirements
-
 ### Requirement: Async-exposure boundary declared in Rust
 
 An async-exposure boundary SHALL be expressed as Rust code on an `AsyncExposureBoundary`, part of
@@ -88,13 +86,15 @@ stability). A seam finding (one in the anchored module itself) under the opt-in 
 byte-identical to the same finding under the default scope.
 
 The subtree walk SHALL inherit the crate-scan family's guards so it never silently under-reacts: an
-**unconditional** `#[path = "…"]` module SHALL be followed and observed, while a `cfg_attr`-wrapped
-`#[path]` SHALL remain a stated coverage bound (not followed cfg-blind); a `#[cfg]`-gated module
-absent when its feature is off SHALL be tolerated; a non-`#[cfg]` missing module file SHALL be a scan
-error (exit 2); a symlink module cycle SHALL be a scan error (exit 2), never a stack overflow. A
-`mod` declared inside a **function body** SHALL be a stated bound (not observed) — it is not part of
-the public module tree, so this rule, which governs the *public* seam, makes no claim about it,
-rather than silently asserting cleanliness.
+**unconditional** `#[path = "…"]` module SHALL be followed and observed; a module reached only
+through a `cfg_attr`-wrapped `#[path]` remap SHALL be observed too — an inline body regardless of the
+attribute (which has no effect on an inline module's content), and a file module's conventional file
+and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip
+bound; a `#[cfg]`-gated module absent when its feature is off SHALL be tolerated; a non-`#[cfg]`
+missing module file SHALL be a scan error (exit 2); a symlink module cycle SHALL be a scan error
+(exit 2), never a stack overflow. A `mod` declared inside a **function body** SHALL be a stated
+bound (not observed) — it is not part of the public module tree, so this rule, which governs the
+*public* seam, makes no claim about it, rather than silently asserting cleanliness.
 
 The subtree opt-in SHALL project through the `list` text/JSON/markdown output only when set, so a
 bare boundary's projection stays byte-identical.
@@ -133,6 +133,11 @@ bare boundary's projection stays byte-identical.
 
 - **WHEN** a subtree-scoped async-exposure boundary is projected via `list` (text/json/markdown)
 - **THEN** the projection surfaces the subtree scope (a `(including submodules)` marker / an `including_submodules: true` field), and a boundary without the opt-in projects byte-identically to before it existed
+
+#### Scenario: A cfg_attr-wrapped-path submodule reacts, whichever candidate file exists
+
+- **WHEN** a subtree-scoped boundary anchored at `crate` descends `#[cfg_attr(any(), path = "never.rs")] pub mod net;` with `net.rs` (the conventional file, present) declaring a public `async fn` and `never.rs` (the target) absent
+- **THEN** the system reads `net.rs` — the file every build actually compiles here — and reacts, attributed to `crate::net`, rather than treating the `cfg_attr` attribute as a bound to skip the submodule outright
 
 ### Requirement: The finding is an owner-qualified item identity
 
@@ -201,3 +206,4 @@ text/JSON/markdown projection with its own boundary section. The implementation 
 
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** the async-exposure boundary appears with its target, module, rule, severity, and reason — through its own projection section, parallel to the sibling boundaries
+

@@ -9,7 +9,6 @@ positions — method parameters and the receiver — stay out of scope, since th
 definition (which signature-coupling already governs). Opt-in, not default-on: a bare boundary
 declared trait impls out of scope, and the impl-authored/trait-dictated split is a real narrowing
 choice, so this is additive depth on the patch line, not a false-negative closure.
-
 ## Requirements
 ### Requirement: Opt-in modifier deepens signature-coupling to trait impls
 
@@ -147,13 +146,16 @@ fallback policy as signature-coupling** — a bare, unqualified local name SHALL
 against the current module (`BareFallback::Ignore`), so an impl position naming a bare local name is
 not turned into a same-module false positive. Resolution SHALL follow in-scope `use`s (incl.
 renames), `crate`/`self`/`super`-relative paths, and local `pub use` re-export chains. A type whose
-resolution requires a glob import, a macro-generated type, a `cfg_attr`-wrapped `#[path]` module (an
-**unconditional** `#[path = "…"]` module is followed and observed), or full
-inference SHALL be an inherited OUT-OF-SCOPE bound, never a silent pass, and no new hole SHALL be
-introduced. Within the resolved scope there SHALL be no false negative. Trait-impl exposure findings
-SHALL fold into the same exit-code contract (**0** clean, **1** enforced violation, **2** constitution
-/scan error), the same `Baseline` gating, and the same severity semantics (`enforce` default, `warn`)
-as signature-coupling.
+resolution requires a glob import, a macro-generated type, or full inference SHALL be an inherited
+OUT-OF-SCOPE bound, never a silent pass, and no new hole SHALL be introduced. A type defined only in
+a module reached through a `cfg_attr`-wrapped `#[path]` remap is NOT out of scope: like the
+already-followed **unconditional** `#[path = "…"]` form, it is collected into the crate-wide closure
+this capability shares with signature-coupling — a file module's conventional file and its
+`cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound. Within
+the resolved scope there SHALL be no false negative. Trait-impl exposure findings SHALL fold into the
+same exit-code contract (**0** clean, **1** enforced violation, **2** constitution/scan error), the
+same `Baseline` gating, and the same severity semantics (`enforce` default, `warn`) as
+signature-coupling.
 
 #### Scenario: A bare local name in an impl position is not a false positive
 
@@ -174,6 +176,11 @@ as signature-coupling.
 
 - **WHEN** an `enforce`-severity boundary's only trait-impl exposures are all present in the baseline
 - **THEN** the system reports them accepted and does not fail; and WHEN a new exposure not in the baseline appears at any position, the system fails the reaction (exit 1)
+
+#### Scenario: A forbidden type re-exported only from a cfg_attr-wrapped-path module resolves and reacts
+
+- **WHEN** a facade module is reached only via `#[cfg_attr(windows, path = "weird.rs")] pub mod facade;` with no conventional `facade.rs` present, `weird.rs` declares `pub use crate::infra::DbPool;`, the governed module declares `use crate::facade::DbPool; impl From<DbPool> for Service` under a boundary forbidding `crate::infra` with `.including_trait_impls()`
+- **THEN** the system reads `weird.rs` into the crate-wide re-export closure, resolves `DbPool` to `crate::infra::DbPool`, and emits a `trait-arg` violation rather than treating the facade module as out of scope
 
 ### Requirement: The opt-in is projected in the declared law
 
@@ -214,3 +221,4 @@ an unrenderable structural role.
 #### Scenario: An unrenderable seam fails safely
 - **WHEN** ordinary rendering cannot distinguish two structural seams
 - **THEN** an observed discriminator separates them or scanning fails loud, never a positional fallback
+

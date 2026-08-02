@@ -3339,10 +3339,11 @@ fn an_unconditional_path_remapped_module_is_followed_and_its_impl_reacts() {
 }
 
 #[test]
-fn a_cfg_attr_remapped_module_is_a_documented_bound() {
-    // `#[cfg_attr(<pred>, path = "…")]` is recognized as a remap (== the separate
-    // `#[cfg(<pred>)] #[path = "…"]`), so the module is out of scope — not scanned against a
-    // wrong/absent conventional file, and NOT a spurious exit-2. Mirrors the direct-#[path] bound.
+fn a_cfg_attr_remapped_module_target_is_followed_when_the_conventional_file_is_absent() {
+    // `#[cfg_attr(<pred>, path = "…")]` never removes the `mod` item the way a bare `#[cfg]`
+    // does, so SOME file must back it on every build; with no conventional `domain.rs` present,
+    // the `cfg_attr` target is the only candidate and is followed — closing the false negative
+    // where this module (and any impl inside it) silently vanished from the crate-wide scan.
     let out = locality_findings(
         "cfg-attr-remapped",
         &[
@@ -3360,13 +3361,14 @@ fn a_cfg_attr_remapped_module_is_a_documented_bound() {
         &["crate::commands"],
     )
     .unwrap();
-    assert!(
-        out.is_empty(),
-        "a cfg_attr-remapped module is out of scope, same as a direct #[path]: {out:?}"
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"],
+        "the impl in the cfg_attr-remapped module is followed and reacts: {out:?}"
     );
 
-    // A NESTED cfg_attr remap is recognized too, so hunyi stays
-    // consistent with guibiao (both treat it as the #[path] bound) rather than diverging.
+    // A NESTED cfg_attr remap's target is followed the identical way when the conventional file
+    // is absent.
     let nested = locality_findings(
         "cfg-attr-nested-remapped",
         &[
@@ -3384,9 +3386,10 @@ fn a_cfg_attr_remapped_module_is_a_documented_bound() {
         &["crate::commands"],
     )
     .unwrap();
-    assert!(
-        nested.is_empty(),
-        "a nested cfg_attr remap is out of scope: {nested:?}"
+    assert_eq!(
+        nested,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"],
+        "the impl in the nested-cfg_attr-remapped module is followed and reacts: {nested:?}"
     );
 }
 
@@ -3741,6 +3744,88 @@ fn unsafe_keys(name: &str, source: &str) -> Result<Vec<StructuredFactIdentity>, 
             .map(|(fact, _, _)| fact.into_finding("app").key().clone())
             .collect()
     })
+}
+
+/// A `cfg_attr`-wrapped `#[path]` on an INLINE module must never drop the body: `#[path]` has no
+/// effect on an inline `mod` at all (rustc always compiles the body regardless of the wrapped
+/// predicate), so treating the attribute as a skip bound here dropped the whole subtree's
+/// observation — closes the false negative where 圭表 and 漏刻 both reacted on the identical file
+/// and 渾儀 alone stayed silent.
+#[test]
+fn cfg_attr_wrapped_path_on_an_inline_module_is_still_observed() {
+    let out = unsafe_labels(
+        "cfg-attr-inline",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(windows, path = \"x.rs\")]\npub mod inner {\n    pub fn f() { unsafe {} }\n}\n",
+        )],
+        &["crate::nowhere"],
+    )
+    .unwrap();
+    assert_eq!(out, ["unsafe block in crate::inner"]);
+}
+
+/// A `cfg_attr`-wrapped `#[path]` FILE module's `cfg_attr` target is read when it exists and the
+/// conventional file does not — the predicate may genuinely select the target on some build, and
+/// `cfg_attr` never removes the `mod` item the way a bare `#[cfg]` does, so an absent conventional
+/// file here is not itself an error.
+#[test]
+fn cfg_attr_wrapped_path_target_is_read_when_the_conventional_file_is_absent() {
+    let out = unsafe_labels(
+        "cfg-attr-target-only",
+        &[
+            (
+                "lib.rs",
+                "#[cfg_attr(windows, path = \"win.rs\")]\npub mod imp;\n",
+            ),
+            ("win.rs", "pub fn f() { unsafe {} }\n"),
+        ],
+        &["crate::nowhere"],
+    )
+    .unwrap();
+    assert_eq!(out, ["unsafe block in crate::imp"]);
+}
+
+/// Neither the `cfg_attr` target nor the conventional file existing at all, with no other
+/// cfg-conditional gate on the declaration, is a genuine scan error (exit 2) — `cfg_attr` never
+/// removes the `mod` item, so on every configuration SOME file must back it. Never a silent pass.
+#[test]
+fn cfg_attr_wrapped_path_with_neither_candidate_present_fails_loud() {
+    let err = unsafe_labels(
+        "cfg-attr-both-absent",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(windows, path = \"win.rs\")]\npub mod imp;\n",
+        )],
+        &["crate::nowhere"],
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("could not be located"),
+        "neither candidate existing must fail loud, not silently pass: {err}"
+    );
+}
+
+/// A `cfg_attr`-wrapped `#[path]` FILE module's conventional file is read even when the wrapped
+/// predicate is always-false (`any()`) — the module declaration is never removed, so the
+/// conventional file is what every build actually compiles here, and it must not vanish from the
+/// crate-wide scan merely because a `cfg_attr(path)` attribute is present. Closes the false
+/// negative where 圭表 and 漏刻 both reacted on the identical file and 渾儀 alone stayed silent.
+#[test]
+fn cfg_attr_wrapped_path_conventional_file_is_read_when_the_predicate_is_always_false() {
+    let out = unsafe_labels(
+        "cfg-attr-file",
+        &[
+            (
+                "lib.rs",
+                "#[cfg_attr(any(), path = \"never.rs\")]\npub mod imp;\n",
+            ),
+            ("imp.rs", "pub fn f() { unsafe {} }\n"),
+        ],
+        &["crate::nowhere"],
+    )
+    .unwrap();
+    assert_eq!(out, ["unsafe block in crate::imp"]);
 }
 
 #[test]
@@ -6146,6 +6231,26 @@ fn impl_trait_subtree_reacts_to_a_submodule_return_the_seam_scope_misses() {
     assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
 }
 
+/// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
+/// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
+/// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
+/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
+/// same shared walker, independently reproduced here before being counted as fixed.
+#[test]
+fn impl_trait_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg_attr(any(), path = \"never.rs\")]\npub mod net;\n",
+        ),
+        ("net.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+    ];
+    let subtree = impl_trait_subtree("cfg-attr-path", files, "crate").unwrap();
+    assert_eq!(subtree.len(), 1);
+    assert_eq!(subtree[0].1, "crate::net");
+    assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
+}
+
 #[test]
 fn impl_trait_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
     // The anchor module's own returned `impl Trait` is still caught, and its finding string is
@@ -6820,6 +6925,29 @@ fn async_subtree_errors_on_a_non_cfg_missing_submodule() {
     // silent pass that would under-react.
     let files = &[("lib.rs", "pub mod gone;\n")];
     assert!(async_subtree("non-cfg-missing", files, "crate").is_err());
+}
+
+/// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
+/// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
+/// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
+/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
+/// same shared walker, independently reproduced here before being counted as fixed.
+#[test]
+fn async_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg_attr(any(), path = \"never.rs\")]\npub mod net;\n",
+        ),
+        ("net.rs", "pub async fn connect() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree("cfg-attr-path", files, "crate").unwrap(),
+        [(
+            "async fn crate::net::connect()".to_string(),
+            "crate::net".to_string()
+        )],
+    );
 }
 
 #[test]
@@ -10553,6 +10681,191 @@ fn type_alias_exposure_reacts_when_the_forbidden_alias_is_declared_second() {
     );
 }
 
+/// A cfg_attr(path)-hidden module's own `pub use` re-export must still be folded into the
+/// crate-wide re-export closure `exposure.rs`'s own `scan_crate` call builds — the same
+/// `resolve_child_modules` mechanism fixed by `hunyi-cfg-attr-path-module-loss`. Before the fix,
+/// `facade.rs` never entered the crate-wide scan (only reachable via the `cfg_attr`-wrapped
+/// `#[path]`'s conventional form), so its re-export was missing from `scan.reexports` and
+/// `crate::facade::Secret` never canonicalized to the real, forbidden `crate::infra::Secret`.
+#[test]
+fn signature_coupling_reacts_through_a_cfg_attr_path_hidden_reexport() {
+    let out = semantic_findings(
+        "cfg-attr-exposure-reexport",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n#[cfg_attr(windows, path = \"weird.rs\")]\npub mod facade;\npub mod api;\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("facade.rs", "pub use crate::infra::Secret;\n"),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::facade::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// `module_resolve.rs::descend`'s targeted, single-module-anchored resolution now follows a
+/// `cfg_attr`-wrapped `#[path]` target exactly like `scan::resolve_child_modules`'s crate-wide walk —
+/// found on adversarial review of `hunyi-cfg-attr-path-module-loss`, whose own commit claimed this
+/// function was "already correct, fails loud on this shape," a claim that did not survive scrutiny:
+/// even a LONE such declaration (no resolving sibling at all) previously never followed its target,
+/// no matter whether the file existed. Now it does, closing the same false-negative class this
+/// change already closed for the crate-wide walk, at this second, previously-unfixed entry point.
+#[test]
+fn cfg_attr_wrapped_path_resolves_through_its_own_target_with_no_sibling_at_all() {
+    let out = semantic_findings(
+        "cfg-attr-lone-target-resolves",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n#[cfg_attr(windows, path = \"win.rs\")]\nmod foo;\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "win.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// A `cfg_attr`-wrapped `#[path]` sibling (a mutually-exclusive `#[cfg]`/`cfg_if!` co-declaration of
+/// the identical module name) must still react through its own file, not be silently absorbed by a
+/// sibling's successful resolution. Before this fix, `has_path_attr`'s `continue` only skipped that
+/// one declaration; when ANY sibling for the same name resolved, the empty-branch check that would
+/// otherwise trigger a fail-loud error never fired, so the `cfg_attr` target's own file — and
+/// everything it exposes — silently vanished with exit 0 instead. Fixed by extending the same union
+/// `scan::resolve_child_modules` already applies: the `cfg_attr` target is read alongside the
+/// sibling's own resolution, not skipped.
+#[test]
+fn cfg_attr_wrapped_path_sibling_reacts_through_its_own_file_not_absorbed_by_a_sibling() {
+    let out = semantic_findings(
+        "cfg-attr-sibling-anchor",
+        &[
+            ("lib.rs", "pub mod infra;\n#[cfg(windows)]\n#[cfg_attr(target_arch = \"x86\", path = \"foo_x86.rs\")]\nmod foo;\n#[cfg(not(windows))]\nmod foo;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("foo.rs", "pub fn safe() {}\n"),
+            (
+                "foo_x86.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// The identical shape via `cfg_if!` arms rather than bare `#[cfg]` siblings.
+#[test]
+fn cfg_attr_wrapped_path_sibling_reacts_through_a_cfg_if_arm() {
+    let out = semantic_findings(
+        "cfg-attr-sibling-anchor-cfg-if",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\ncfg_if::cfg_if! {\n    if #[cfg(windows)] {\n        #[cfg_attr(target_arch = \"x86\", path = \"foo_x86.rs\")]\n        mod foo;\n    } else {\n        mod foo;\n    }\n}\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("foo.rs", "pub fn safe() {}\n"),
+            (
+                "foo_x86.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// A LONE `cfg_attr`-wrapped `#[path]` declaration (no resolving sibling) still fails loud when
+/// neither the conventional file nor the `cfg_attr` target exists — the genuinely fail-loud case
+/// that survives from the original bound, now reached only when `has_backing_source` is false.
+#[test]
+fn cfg_attr_wrapped_path_with_no_sibling_and_no_backing_file_still_fails_loud() {
+    let err = semantic_findings(
+        "cfg-attr-lone-fails-loud",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(windows, path = \"win.rs\")]\nmod foo;\n",
+        )],
+        "crate::foo",
+        &[],
+        false,
+        &[],
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("not found") || err.contains("could not"),
+        "a lone unbacked cfg_attr(path) declaration must still fail loud: {err}"
+    );
+}
+
+/// A module carrying TWO SEPARATE (not nested) `cfg_attr`-wrapped `#[path]` attributes — one per
+/// platform predicate, the natural 3+-way per-platform shim shape — must have EVERY candidate's
+/// target read, not only the first-declared one. Found on a fourth adversarial review of
+/// `hunyi-cfg-attr-path-module-loss`: `cfg_attr_path_value`'s `find_map` silently returned only the
+/// first matching attribute's target, dropping every other stacked candidate — the identical
+/// cfg-blind-union false negative this whole change closes, one level deeper (a module can stack
+/// attributes, not just nest them). Exercises both `descend` (`module_resolve.rs`, this test) and
+/// the crate-wide `resolve_child_modules` (`scan.rs`, shares the identical fixed helper).
+#[test]
+fn stacked_cfg_attr_wrapped_path_attributes_are_all_read_not_only_the_first() {
+    let out = semantic_findings(
+        "stacked-cfg-attr-path",
+        &[
+            ("lib.rs", "pub mod infra;\n#[cfg_attr(windows, path = \"win.rs\")]\n#[cfg_attr(target_os = \"macos\", path = \"mac.rs\")]\nmod foo;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "mac.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
 /// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` declarations for the identical local
 /// name, in the same file, must both react (cfg-blind: observation cannot know which is live).
 /// Before the fix, the second `use` silently overwrote the first in `UseMap` — a single
@@ -10711,6 +11024,51 @@ fn mutually_exclusive_reexport_targets_react_regardless_of_declaration_order() {
 /// semantics cannot drift"). Discovered while fixing the signature-coupling instance of this bug —
 /// not named in the original audit findings, but the identical mechanism, independently reproduced
 /// here before being fixed, per this project's own reproduce-before-fixing discipline.
+/// A cfg_attr(path)-hidden module's own `pub use` re-export must still be observed and folded into
+/// the crate-wide re-export closure `resolve_principal` (`crate_scope.rs::extern_resolution`)
+/// consumes — the identical `scan_crate` mechanism `dyn_operand_module_findings` and
+/// `impl_trait_operand_module_findings` share with signature-coupling, forbidden-marker, and
+/// trait-impl-locality, all fixed by the same `resolve_child_modules` change
+/// (`hunyi-cfg-attr-path-module-loss`). Independently reproduced here before being folded into
+/// that change's verification, per this project's reproduce-before-fixing discipline.
+#[test]
+fn dyn_trait_operand_resolution_reacts_through_a_cfg_attr_path_hidden_reexport() {
+    let tree = TempSrcTree::new("dyn-trait-cfg-attr-path-reexport");
+    tree.write_all(&[
+        (
+            "lib.rs",
+            "pub mod infra;\n#[cfg_attr(windows, path = \"weird.rs\")]\npub mod facade;\npub mod api;\n",
+        ),
+        ("infra.rs", "pub trait Port {}\n"),
+        ("facade.rs", "pub use crate::infra::Port;\n"),
+        (
+            "api.rs",
+            "pub fn f() -> Box<dyn crate::facade::Port> { loop {} }\n",
+        ),
+    ]);
+    let out = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::DynTrait,
+            subject: "dyn crate::facade::Port".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
 #[test]
 fn dyn_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order() {
     let tree = TempSrcTree::new("dyn-trait-principal-cfg-use-merge");

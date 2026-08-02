@@ -62,7 +62,7 @@ extern head), a macro-generated trait, or a glob/foreign-module re-export — is
 resolver-coverage bound, never a silent pass of a *resolvable* operand. Auto-trait and lifetime
 bounds are never operands. The finding is the **seam-qualified** rendered `impl …` shape (`{shape}
 exposed by {seam}`), and the return-position scoping is inherited unchanged (argument-position `impl
-Trait` and `async fn` are not governed). A mutually-exclusive `#[cfg]` collision on the `use`-map name a principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last.
+Trait` and `async fn` are not governed). A mutually-exclusive `#[cfg]` collision on the `use`-map name a principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last. The crate-wide re-export closure this resolver walks includes a `pub use` declared in a module reached only through a `cfg_attr`-wrapped `#[path]` remap — the identical crate-wide collection signature-coupling's own closure gets, never a silent gap specific to this operand-scoped resolver.
 
 #### Scenario: A returned impl Trait of a named forbidden trait is flagged
 
@@ -98,6 +98,11 @@ Trait` and `async fn` are not governed). A mutually-exclusive `#[cfg]` collision
 
 - **WHEN** the governed module declares `#[cfg(unix)] use crate::infra::Port as P; #[cfg(not(unix))] use crate::safe::SafePort as P;` and declares `pub fn make() -> impl P`, under an operand boundary forbidding `["crate::infra::Port"]`, in either declaration order
 - **THEN** the system emits a violation, regardless of which `use` line is written first — the verdict never depends on source order
+
+#### Scenario: A re-exported trait operand declared only in a cfg_attr-wrapped-path module still matches
+
+- **WHEN** a facade module is reached only via `#[cfg_attr(windows, path = "weird.rs")] pub mod facade;` with no conventional `facade.rs` present, `weird.rs` declares `pub use crate::infra::Port;`, the governed module declares `pub fn make() -> impl crate::facade::Port`, and the boundary forbids `["crate::infra::Port"]`
+- **THEN** the system reads `weird.rs` into the crate-wide re-export closure and emits a violation, rather than treating the facade module as unobserved and passing the returned principal through unresolved
 
 ### Requirement: Empty operand set degenerates to shape-only, never a silent no-op
 
