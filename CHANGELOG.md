@@ -119,6 +119,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `mod` declared after it. The check now measures a char literal's real UTF-8 byte length from its
   lead byte rather than assuming one. Not breaking — this closes a false negative against
   `module-boundary`'s already-stated import-detection contract; no baseline identity shape changes.
+- 渾儀's signature-coupling query now observes a `pub fn`/`pub static` declared inside an `extern`
+  block — the FFI declaration is a real, callable item in the enclosing module's own namespace,
+  exactly as public as a same-shaped ordinary item, but the exposure collector had no
+  `ForeignMod` handling at all, so a forbidden type named only there escaped the query entirely
+  (exit 0 Clean on source with a real, callable public API leak). Reuses the existing seam/path-
+  collection machinery verbatim — no new seam kind, since Rust cannot declare both an ordinary item
+  and a foreign one under the same name in one module, so there is no identity collision to design
+  around. Not breaking — closes a false negative; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 

@@ -480,6 +480,29 @@ pub(crate) fn collect_item_exposures(
                 is_reexport: true,
             });
         }
+        // A `pub fn`/`pub static` inside an `extern` block is a real item in this module's own
+        // namespace — the FFI declaration, not a definition, but still exactly as public as a
+        // same-shaped ordinary `Item::Fn`/`Item::Static` (Rust cannot even declare both under one
+        // name in the same module, so there is no identity collision to avoid by treating them
+        // differently). Reused verbatim so a forbidden type named only in an `extern` block's
+        // signature is not invisible to this query merely because it has no body.
+        syn::Item::ForeignMod(item) => {
+            for foreign_item in &item.items {
+                match foreign_item {
+                    syn::ForeignItem::Fn(f) if is_public(&f.vis) => {
+                        let seam = fn_seam(module, &f.sig.ident);
+                        out.extend(tag_paths(paths_in_signature(&f.sig), &seam));
+                    }
+                    syn::ForeignItem::Static(s) if is_public(&s.vis) => {
+                        out.extend(tag_paths(
+                            paths_in_type(&s.ty),
+                            &item_seam(ItemKind::Static, module, &s.ident),
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
         _ => {}
     }
 }
