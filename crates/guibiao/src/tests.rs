@@ -2759,6 +2759,76 @@ fn no_dependency_rule_ever_flags_a_crates_own_self_referential_dependency() {
 }
 
 #[test]
+fn every_crate_rule_still_flags_a_same_named_but_externally_sourced_dependency() {
+    // 0.3.1 audit finding (docs/audit/0.3.1-adversarial-sweep.md, "圭表 manifest/deps"):
+    // `is_self_dependency` matched by NAME ALONE, so a package `foo` depending on a *different*,
+    // externally-sourced package that merely shares its own name (a real wrapper/fork/
+    // self-comparison pattern — verified against real cargo: `foo = { git = "…" }` reads
+    // `{"name":"foo","source":"git+…"}`, no error) was wrongly swallowed by the identical
+    // self-dependency exemption meant only for the genuine null-source path idiom
+    // (`main = { path = "." }`). Every rule sharing the `dependencies()` /
+    // `dependencies_with_disallowed_source()` observation must react to this edge exactly as it
+    // would to any other same-shaped external dependency, not silently exempt it.
+    let package = serde_json::json!({
+        "name": "foo",
+        "dependencies": [
+            {
+                "name": "foo",
+                "source": "git+https://example.invalid/foo.git",
+                "kind": null,
+                "features": ["x"]
+            },
+        ]
+    });
+    let workspace = vec!["foo".to_string()];
+
+    assert_eq!(
+        Rule::ForbidDependencyOn {
+            crates: vec!["foo".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "ForbidDependencyOn must flag a same-named externally-sourced dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependenciesTo {
+            allowed: Vec::<String>::new()
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "RestrictDependenciesTo([]) must flag a same-named externally-sourced dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry, SourceKind::Path]
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "RestrictDependencySourcesTo must flag the same-named dependency's disallowed Git source"
+    );
+    assert_eq!(
+        Rule::RestrictWorkspaceDependenciesTo {
+            allowed: Vec::<String>::new()
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "RestrictWorkspaceDependenciesTo shares the identical dependencies() observation, so it \
+         must flag it too, exactly as it would flag any other external dependency whose name \
+         happens to match a workspace member's name (here, the target's own)"
+    );
+    assert_eq!(
+        Rule::RestrictFeaturesOf {
+            crate_: "foo".to_string(),
+            allowed: vec![]
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo/default".to_string(), "foo/x".to_string()],
+        "RestrictFeaturesOf must observe the same-named externally-sourced dependency's features \
+         (including the implicit default-features request, since uses_default_features is absent)"
+    );
+}
+
+#[test]
 fn coverage_counts_a_module_only_covered_crate_as_covered() {
     let members = vec!["app".to_string(), "core".to_string(), "memory".to_string()];
     let constitution = Constitution::new("c")
