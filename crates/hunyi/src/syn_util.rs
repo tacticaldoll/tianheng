@@ -61,7 +61,7 @@ pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
 /// otherwise reacts in the static dimension and passes in the semantic one (a measured exposure
 /// false negative, the one bug class the core contract forbids).
 ///
-/// Gating on the macro **name** is load-bearing, not conservatism. [`transparent_macro_arm_items`]
+/// Gating on the macro **name** is load-bearing, not conservatism. [`transparent_macro_arms`]
 /// reads every top-level brace group of the body as an arm, and for an arbitrary macro that is
 /// wrong: in `wrap! { impl Foo { pub fn hidden() -> Forbidden { … } } }` the `impl` body's braces
 /// ARE a top-level brace group, so the same walk would recover a `fn hidden` the macro may never
