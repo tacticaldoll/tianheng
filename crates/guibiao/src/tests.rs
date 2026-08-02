@@ -6600,3 +6600,66 @@ fn two_crates_with_the_identical_module_boundary_stay_distinct_violations() {
         both_report.violations
     );
 }
+
+/// A source file ending in an unterminated block comment (no closing `*/`, no trailing newline)
+/// that swallows a multi-byte UTF-8 character must react 0/1/2 like any other source, never
+/// panic. The trigger's exact shape matters: `strip_comments_and_strings_tracked`'s block-comment
+/// loop stops peeking once fewer than two bytes remain, which — for an unterminated comment — can
+/// leave exactly one trailing byte unconsumed. When that byte is the orphaned tail of a multi-byte
+/// character whose lead byte(s) were already dropped inside the comment, the outer loop used to
+/// re-scan it as ordinary code and push it into `out` alone, an invalid UTF-8 fragment that
+/// `String::from_utf8_lossy` then *lengthened* (1 byte becomes the 3-byte U+FFFD replacement),
+/// desynchronizing the position map from the string it indexes into and panicking the next
+/// stage's `input_positions[i]` lookup.
+#[test]
+fn an_unterminated_block_comment_swallowing_a_multibyte_char_does_not_panic() {
+    let (result, violations) = run_module_check(
+        "unterminated-block-comment-multibyte",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\npub mod child;\n/* \u{672a}\u{5b8c}",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+            ("child.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "an unterminated block comment must not abort the scan: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::child");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// The identical defect, triggered on the crate root file directly (governed at `crate` rather
+/// than a submodule) with only a single `pub mod` before the unterminated comment, so the
+/// swallowed trailing byte lands at a different absolute offset — exercising the same code path
+/// from a second, independently-chosen position rather than only the sibling test's exact shape.
+#[test]
+fn an_unterminated_block_comment_at_end_of_file_with_no_trailing_newline_does_not_panic() {
+    let (result, violations) = run_module_check(
+        "unterminated-block-comment-eof",
+        &[
+            ("lib.rs", "pub mod child;\n/*\u{7121}"),
+            ("child.rs", "use crate::forbidden::Thing;\n"),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "an unterminated block comment must not abort the scan: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::child");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
