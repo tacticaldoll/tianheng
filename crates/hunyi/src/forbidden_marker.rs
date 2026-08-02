@@ -15,7 +15,7 @@ use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::file_scope::resolve_crate;
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
-    BareFallback, canonical_path_str, canonical_self_owner, path_to_string, resolve_path,
+    BareFallback, canonical_path_str, canonical_self_owner, path_to_string, resolve_path_all,
 };
 use crate::rules::FORBIDDEN_MARKER_RULE;
 use crate::scan::scan_crate;
@@ -103,12 +103,21 @@ pub(crate) fn forbidden_marker_findings(
                 // leaf-matching, so a locally renamed derive macro (`use serde::Serialize as Ser;
                 // #[derive(Ser)]`) reacts by its true leaf; an unresolved bare/prelude/extern path
                 // falls back to its written leaf, so leaf-matching stays cross-crate-blind (a
-                // `serde_derive::Serialize` path still matches the leaf `Serialize`).
-                let derived_leaf =
-                    resolve_path(derived, &td.uses, &td.module, BareFallback::Ignore)
-                        .map(|p| leaf_of(&p).to_string())
-                        .unwrap_or_else(|| path_leaf(derived));
-                if derived_leaf == entry_leaf {
+                // `serde_derive::Serialize` path still matches the leaf `Serialize`). Checks EVERY
+                // use-map candidate (cfg-blind): a mutually-exclusive `#[cfg]`-gated alias for the
+                // derive's name must not have its other candidate's leaf silently dropped (found on
+                // adversarial review of `hunyi-cfg-branch-use-reexport-merging`).
+                let use_candidates =
+                    resolve_path_all(derived, &td.uses, &td.module, BareFallback::Ignore);
+                let derived_leaves: Vec<String> = if use_candidates.is_empty() {
+                    vec![path_leaf(derived)]
+                } else {
+                    use_candidates
+                        .iter()
+                        .map(|p| leaf_of(p).to_string())
+                        .collect()
+                };
+                if derived_leaves.iter().any(|leaf| leaf == entry_leaf) {
                     // A derive sits in the defining type's module — its source file, not any
                     // impl site's. Render the marker from the WRITTEN derive path so two distinct
                     // forbidden derives sharing a leaf on one type (`#[derive(a::Marker, b::Marker)]`)
@@ -135,15 +144,23 @@ pub(crate) fn forbidden_marker_findings(
             // so a locally renamed trait (`use serde::Serialize as Ser; impl Ser for …`) reacts by
             // its true leaf; an unresolved bare/prelude/extern path falls back to its written leaf,
             // keeping leaf-matching cross-crate-blind (a `serde_derive::Serialize` still matches).
-            let trait_leaf = resolve_path(
+            // Checks EVERY use-map candidate (cfg-blind), the identical treatment the derive form
+            // above gets (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`).
+            let use_candidates = resolve_path_all(
                 &site.trait_path,
                 &site.uses,
                 &site.module,
                 BareFallback::Ignore,
-            )
-            .map(|p| leaf_of(&p).to_string())
-            .unwrap_or_else(|| path_leaf(&site.trait_path));
-            if trait_leaf != entry_leaf {
+            );
+            let trait_leaves: Vec<String> = if use_candidates.is_empty() {
+                vec![path_leaf(&site.trait_path)]
+            } else {
+                use_candidates
+                    .iter()
+                    .map(|p| leaf_of(p).to_string())
+                    .collect()
+            };
+            if !trait_leaves.iter().any(|leaf| leaf == entry_leaf) {
                 continue;
             }
             // The concrete type the marker LANDS on: `resolve_self_type` follows the re-export and
@@ -154,17 +171,24 @@ pub(crate) fn forbidden_marker_findings(
             // type (`type Baz = Vec<u8>`) lands off the governed subtree — each rejected by the
             // `defined` + `under_subtree` gate below (a false positive). Only a crate-DEFINED type
             // under the subtree can acquire a marker.
-            let Some(landing) = resolve_self_type(
+            // Every landing candidate is checked (cfg-blind): a self type reached through a
+            // mutually-exclusive `#[cfg]`-gated alias must not have its other candidate's landing
+            // silently dropped (found on adversarial review of
+            // `hunyi-cfg-branch-use-reexport-merging`).
+            let landings = resolve_self_type(
                 &site.self_ty,
                 &site.uses,
                 &site.module,
                 &scan.alias_targets,
                 &scan.reexports,
                 &site.type_params,
-            ) else {
+            );
+            if landings.is_empty() {
                 continue; // self-type not placeable (glob/external/complex) — a stated bound
-            };
-            if !(under_subtree(&landing, &subtree) && defined.contains(landing.as_str())) {
+            }
+            if !landings.iter().any(|landing| {
+                under_subtree(landing, &subtree) && defined.contains(landing.as_str())
+            }) {
                 continue;
             }
             // Injective identity: the written trait path WITH generic args, the self type WITH

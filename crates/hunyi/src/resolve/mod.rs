@@ -456,38 +456,6 @@ fn is_strict_path_prefix(prefix: &str, path: &str) -> bool {
     path.len() > prefix.len() && path.starts_with(prefix) && path[prefix.len()..].starts_with("::")
 }
 
-/// Rewrite the **longest `::`-boundary prefix** of `path` that is a key in `map`, keeping the
-/// remaining tail, or `None` if no prefix matches. A whole-path match is the longest prefix (so
-/// this subsumes an exact-key lookup); a shorter prefix match rewrites a member reached *through* a
-/// re-exported module or aliased prefix — `crate::facade::sub::Foo` via the module re-export
-/// `crate::facade::sub -> crate::real::sub` becomes `crate::real::sub::Foo`, which a whole-key-only
-/// lookup would miss (a silent false negative). The most specific (longest) key wins, so a type
-/// re-export of `…::sub::Foo` still takes precedence over a module re-export of `…::sub`.
-fn rewrite_longest_prefix(
-    path: &str,
-    map: &std::collections::HashMap<String, String>,
-) -> Option<String> {
-    let segments: Vec<&str> = path.split("::").collect();
-    for end in (1..=segments.len()).rev() {
-        let prefix = segments[..end].join("::");
-        if let Some(target) = map.get(&prefix) {
-            if end == segments.len() {
-                return Some(target.clone());
-            }
-            return Some(format!("{target}::{}", segments[end..].join("::")));
-        }
-    }
-    None
-}
-
-/// Follow the re-export closure from `path` to a fixpoint, so a facade path becomes the
-/// canonical path of the item it denotes. Cycle-guarded. The re-export-only special case of
-/// [`canonicalize_through_aliases`] with an empty alias map, so the two share one fixpoint /
-/// hop-cap implementation and cannot drift.
-pub(crate) fn canonicalize_through_reexports(path: &str, reexports: &ReexportMap) -> String {
-    canonicalize_through_aliases(path, &AliasMap::new(), reexports)
-}
-
 fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<String>> {
     let segments: Vec<&str> = path.split("::").collect();
     for end in (1..=segments.len()).rev() {
@@ -594,51 +562,6 @@ pub(crate) fn expand_canonical_paths(
     }
 
     memo.remove(path).unwrap_or_else(|| vec![path.to_string()])
-}
-
-/// Follow the **alias** and **re-export** closures together from `path` to a single fixpoint path.
-/// Delegates to [`expand_canonical_paths`] and yields the first resolved target path.
-pub(crate) fn canonicalize_through_aliases(
-    path: &str,
-    aliases: &AliasMap,
-    reexports: &ReexportMap,
-) -> String {
-    expand_canonical_paths(path, aliases, reexports)
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| path.to_string())
-}
-
-/// Follow a single-target alias map (`HashMap<String, String>`) and re-export closure to a fixpoint.
-pub(crate) fn canonicalize_through_single_alias_map(
-    path: &str,
-    aliases: &std::collections::HashMap<String, String>,
-    reexports: &ReexportMap,
-) -> String {
-    let mut current = path.to_string();
-    let mut seen = std::collections::HashSet::new();
-    let cap = aliases.len() + reexports.len() + 1;
-    while seen.insert(current.clone()) {
-        if seen.len() > cap {
-            break;
-        }
-        if let Some(next) = rewrite_longest_prefix(&current, aliases) {
-            current = next;
-            continue;
-        }
-        // Deliberately takes only the first reexport candidate when a mutually-exclusive `#[cfg]`
-        // collision yields more than one — this function backs impl-locality's self-type/anchor
-        // resolution, which has no audit-verified need for cfg-blind multi-candidate treatment
-        // (unlike exposure-matching's `expand_canonical_paths`, which checks every candidate).
-        if let Some(next) = rewrite_longest_alias_prefixes(&current, reexports)
-            .and_then(|targets| targets.into_iter().next())
-        {
-            current = next;
-            continue;
-        }
-        break;
-    }
-    current
 }
 
 /// The alias's targets as **bare nominal paths** — collects all `syn::Path` targets contained in

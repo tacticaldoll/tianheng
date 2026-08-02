@@ -133,10 +133,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   single-valued (`HashMap<String, String>`), so the second declaration always overwrote the first —
   the verdict for a real forbidden-type exposure depended on which mutually-exclusive branch was
   written last, not on whether either branch's binding was genuinely forbidden. Both maps are now
-  multi-valued (mirroring the crate's existing type-alias map), and signature-coupling's exposure
-  resolution — plus dyn-trait's and impl-trait's shared operand-scoped principal-trait resolver,
-  discovered to have the identical gap while fixing this — check every candidate and react if any
-  is forbidden. Not breaking — closes false negatives; no baseline identity shape changes.
+  multi-valued (mirroring the crate's existing type-alias map). Every matcher that consumes them now
+  checks every candidate and reacts if any is forbidden, not only signature-coupling's exposure
+  resolution and dyn-trait's/impl-trait's shared operand-scoped principal-trait resolver (discovered
+  to have the identical gap while fixing this): an adversarial review of the fix itself found the
+  same order-dependent silent pass still reachable through forbidden-marker's derive and impl-form
+  leaf matching, its self-type/marker-acquisition landing (through a third, previously single-valued
+  type-alias map), and trait-impl-locality's anchor resolution — each independently reproduced before
+  being closed here too. Not breaking — closes false negatives; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 
