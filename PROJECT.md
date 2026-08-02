@@ -193,10 +193,16 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   its partial coverage — bare path expressions and macro-generated imports are out of scope —
   is acceptable because the drift law only enforces what is observed. An unconditional, direct
   `#[path = "…"]` remap is **followed** to its target (0.2.2), matching 渾儀/漏刻, so all three
-  observation dimensions agree on what rustc compiles; a `cfg_attr`-wrapped `path = "…"` stays a
-  cfg-conditional exclusion from the conventional module graph (following it cfg-blind could read
-  a file rustc does not compile in the active configuration), so it fails loud rather than
-  governing a same-named orphan. Comments and
+  observation dimensions agree on what rustc compiles; a `cfg_attr`-wrapped `path = "…"` is
+  **union-scanned** (0.3.x) — every candidate that physically exists on disk is followed, never
+  either silently preferred over the conventional file or dropped for being cfg-conditional. A
+  candidate that resolves is also treated as legitimate grounds for the conventional file's own
+  absence — the same "might legitimately be absent on this build" signal a bare `#[cfg]` or a
+  `cfg_if!` arm already carries — so a module backed only by one or more `cfg_attr(path)` remaps
+  (e.g. two stacked, jointly-exhaustive per-platform attributes, neither a plain file nor a direct
+  `#[path]`) is governed rather than hard-errored, matching 渾儀/漏刻's identical rule for the same
+  shape. Only when every candidate is absent, with no other cfg-conditional gate, does it fail
+  loud rather than governing a same-named orphan. Comments and
   string literals (normal, byte, and raw) are stripped so their text is never mistaken
   for a `use`. A module's identity is derived in three places — its file path, its `mod`
   declaration, and a `use` path that names it — and these MUST stay in lockstep, since a
