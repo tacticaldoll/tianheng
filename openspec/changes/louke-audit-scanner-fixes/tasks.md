@@ -64,5 +64,22 @@
 
 - [x] 6.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
-- [ ] 6.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste
+- [x] 6.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste
       call.
+
+## 7. Adversarial review follow-up
+
+- [x] 7.1 Review found `cfg_attr_paths` wired into only the external-`mod x;` consumer
+      (`collect_scope_modules`'s `;` branch) — the sibling inline-`mod x { … }` consumer still
+      computed `inline_base` from `attrs.path` alone, silently dropping the same field for the
+      identical shape. Fixed by unioning candidate BASE DIRECTORIES (not files to read) for the
+      inline case too, each descended only when it exists as a directory (`Path::is_dir`), falling
+      back to the conventional base when none does — avoids spuriously fail-louding x's other,
+      unrelated nested items over one absent platform directory while still catching a nested
+      reference broken on every configuration.
+- [x] 7.2 Regression: `a_cfg_attr_path_remap_on_an_inline_module_redirects_its_nested_items`.
+- [x] 7.3 Non-vacuous verification: reverted this fix alone (restoring the single-`attrs.path`
+      `inline_base` computation), confirmed the new test fails with the predicted constitution error,
+      restored. Full suite green after restore (117 tests, up from 116).
+- [x] 7.4 Updated `proposal.md`, `design.md`, and the `runtime-origin-assertion` spec delta (new
+      scenario) to document this fourth sub-fix; re-ran `openspec validate` (valid, 0 issues).

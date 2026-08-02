@@ -267,22 +267,50 @@ fn collect_scope_modules(
                     // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
                     // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
                     // component and read a same-named orphan — a false negative.)
-                    let inline_base = match &attrs.path {
-                        Some(rel) => file_dir.join(rel),
-                        None => child_base.join(name),
-                    };
-                    collect_scope_modules(
-                        bytes,
-                        cursor + 1,
-                        close.saturating_sub(1),
-                        &inline_base,
-                        &inline_base,
-                        modules,
-                        // Arm membership is NOT inherited into an inline `mod`'s body: a bare
-                        // `#[cfg]` on an outer `mod` does not tolerate an absent file for an inner
-                        // one either, in any of the three dimensions.
-                        false,
-                    )?;
+                    //
+                    // An unconditional `#[path]` is the sole authority, exactly as for an external
+                    // mod. A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which predicate a
+                    // given build selects — cfg-blind observation cannot know which, so the body is
+                    // descended once per candidate base that exists as a directory: every `cfg_attr`
+                    // target that resolves, AND the conventional base if IT resolves (the predicate
+                    // could evaluate false on every one, in which case rustc strips the attribute
+                    // entirely and the plain, unremapped base applies). A candidate base that isn't a
+                    // real directory contributes nothing — recursing into it would spuriously
+                    // fail-loud on x's own OTHER, unrelated nested items merely because this one
+                    // platform's directory happens not to exist, when another candidate already backs
+                    // them. If NO candidate resolves at all, fall back to the conventional base anyway
+                    // (the pre-existing, un-remapped behavior) so a nested reference that is genuinely
+                    // broken on every platform still fails loud rather than being silently dropped.
+                    let mut inline_bases: Vec<PathBuf> = Vec::new();
+                    match &attrs.path {
+                        Some(rel) => inline_bases.push(file_dir.join(rel)),
+                        None => {
+                            for rel in &attrs.cfg_attr_paths {
+                                let candidate = file_dir.join(rel);
+                                if candidate.is_dir() {
+                                    inline_bases.push(candidate);
+                                }
+                            }
+                            let conventional = child_base.join(name);
+                            if inline_bases.is_empty() || conventional.is_dir() {
+                                inline_bases.push(conventional);
+                            }
+                        }
+                    }
+                    for inline_base in &inline_bases {
+                        collect_scope_modules(
+                            bytes,
+                            cursor + 1,
+                            close.saturating_sub(1),
+                            inline_base,
+                            inline_base,
+                            modules,
+                            // Arm membership is NOT inherited into an inline `mod`'s body: a bare
+                            // `#[cfg]` on an outer `mod` does not tolerate an absent file for an
+                            // inner one either, in any of the three dimensions.
+                            false,
+                        )?;
+                    }
                     i = close;
                     continue;
                 }

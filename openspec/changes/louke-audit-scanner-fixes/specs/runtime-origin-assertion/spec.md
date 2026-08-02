@@ -67,6 +67,17 @@ genuinely broken reference on every configuration, so it SHALL still fail loud. 
 (unlike `hunyi`'s `syn`-based recursive resolution of the identical shape), never a silent claim of
 coverage.
 
+The identical union SHALL apply to a `cfg_attr`-wrapped `#[path]` on an **inline** `mod name { ... }`
+(a body, not a `;`-terminated declaration), where it governs the **base directory** `name`'s own
+nested items resolve from rather than a file to read (the body itself is already present in source
+regardless of which base applies). Each candidate base -- every `cfg_attr` target and the conventional
+directory -- SHALL be descended only when it exists as a directory; recursing into one that does not
+exist would spuriously fail loud on `name`'s other, unrelated nested items solely because one
+platform's directory happens to be absent, even when another candidate already backs them. If no
+candidate directory exists at all, the conventional base SHALL be descended anyway, so a nested
+reference genuinely broken on every platform still fails loud exactly as it did before this tolerance
+existed.
+
 #### Scenario: Orphan probe cannot cover a seam
 
 - **WHEN** a target root declares no module for `orphan.rs` and that orphan file contains the only probe for a declared seam
@@ -151,3 +162,8 @@ coverage.
 
 - **WHEN** a target root declares `#[cfg_attr(windows, path = "win.rs")] pub mod plat;` with `win.rs` absent but the conventional `plat.rs` present, holding a declared seam's probe
 - **THEN** the audit reads the conventional file and counts its probe, tolerating the absent `cfg_attr` target rather than treating its absence alone as a constitution error
+
+#### Scenario: A cfg_attr-wrapped #[path] on an inline module redirects its own nested items
+
+- **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_dir")] pub mod x { pub mod y; }` with `unix_dir/y.rs` present and holding a declared seam's probe, but the conventional `x/y.rs` absent
+- **THEN** the audit descends `y` from the `cfg_attr` target's directory and counts its probe, rather than reporting a constitution error against the absent conventional `x/y.rs`

@@ -181,9 +181,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   compiling cleanly everywhere) was reported a hard constitution error instead of being scanned — a
   false positive on entirely valid code. Every `cfg_attr` target that exists on disk is now read,
   unioned with the conventional file, matching the crate-wide walk 圭表 and 渾儀 both already apply to
-  the identical shape; a doubly-nested `cfg_attr(cfg_attr(path))` remains a stated, undetected bound
-  of this hand-rolled scanner. Not breaking — closes false negatives and one false positive, not an
-  identity shape; no baseline identity shape changes.
+  the identical shape; the same union now also applies to a `cfg_attr`-wrapped `#[path]` on an
+  *inline* `mod x { … }` (governing the base directory x's own nested items resolve from, descended
+  only when it exists as a directory, falling back to the conventional base when none does) — an
+  adversarial review round found the first cut had wired the union into only the external-`mod x;`
+  consumer. A doubly-nested `cfg_attr(cfg_attr(path))` remains a stated, undetected bound of this
+  hand-rolled scanner. Not breaking — closes false negatives and one false positive, not an identity
+  shape; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 

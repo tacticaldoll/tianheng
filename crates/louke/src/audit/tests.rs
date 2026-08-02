@@ -2436,3 +2436,26 @@ fn a_missing_cfg_attr_path_target_is_tolerated_when_the_conventional_file_backs_
          cfg_attr(path) target: {outcome:?}"
     );
 }
+
+/// A cfg_attr(path) remap on an INLINE `mod x { … }` (not the external `mod x;` form) redirects
+/// where x's own nested items resolve from — the same union rule applied to a base directory
+/// instead of a file existence check, since the inline body itself is always present in source.
+#[test]
+fn a_cfg_attr_path_remap_on_an_inline_module_redirects_its_nested_items() {
+    let tb = TempBase::new("cfg-attr-path-inline-module-redirect");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"unix_dir\")]\npub mod x {\n    pub mod y;\n}\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "unix_dir/y.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the cfg_attr(path)-remapped directory must be followed for x's nested `mod y;`, not the \
+         conventional (nonexistent) `x/y.rs`, and never a constitution error: {outcome:?}"
+    );
+}

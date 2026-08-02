@@ -44,6 +44,14 @@ that resolution, each reproduced directly:
   the conventional file resolves anywhere, and the declaration carries no other cfg-conditional gate
   (a bare `#[cfg]` or transparent-arm membership) — a genuinely broken reference on every
   configuration, so it still fails loud.
+- The identical `cfg_attr(path)` union also applies to an **inline** `mod x { … }` (a body, not a
+  `;`-terminated external declaration) — adversarial review found the first cut wired
+  `cfg_attr_paths` into only the external-module consumer, leaving the inline-module consumer still
+  reading `attrs.path` alone. Here the union governs which **base directory** x's own nested items
+  resolve from (not a file to read — the body is already present in source), so each candidate is
+  descended only when it exists as a directory; if none does, the conventional base is used anyway so
+  a nested reference genuinely broken on every platform still fails loud (unchanged from before this
+  fix existed).
 - A doubly-**nested** `#[cfg_attr(a, cfg_attr(b, path = "…"))]` is a stated, undetected bound here (a
   hand-rolled byte scanner, unlike `hunyi`'s `syn`-based recursive walk) — not attempted, and
   documented as such rather than silently claimed.

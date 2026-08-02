@@ -41,6 +41,23 @@ tolerance ("reads as `cfg`... an absent target is tolerated"), but the attribute
 checked for the literal identifier `cfg`, and `cfg_attr` is a different identifier — it matched
 neither the `path` arm nor the `cfg` arm, so the doc's claim was never implemented at all.
 
+A fourth gap surfaced by adversarial review of the first cut, same root cause narrowed to a second
+consumer:
+
+```rust
+// 4. cfg_attr(path) on an INLINE mod (a body, not `;`) — the union above only reached the
+//    external-module consumer, not this one.
+#[cfg_attr(unix, path = "unix_dir")]
+pub mod x {
+    pub mod y;
+}
+// unix_dir/y.rs exists; x/y.rs (conventional) does not.
+```
+Measured (first-cut fix): `Outcome::ConstitutionError("cannot resolve reachable module 'y' ...")` —
+`cfg_attr_paths` was populated on `attrs` uniformly, but the `Some(b'{')` branch of
+`collect_scope_modules` still computed its own `inline_base` from `attrs.path` alone, silently
+dropping the field the `Some(b';')` branch had just gained.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -50,7 +67,9 @@ neither the `path` arm nor the `cfg` arm, so the doc's claim was never implement
   item — the only way the legal block-scoped `#[path] mod` form can ever be found.
 - `cfg_attr`-wrapped `#[path]` targets are extracted (one or more per declaration) and unioned with
   the conventional file, exactly mirroring the crate-wide walk's own established per-platform-pair
-  handling — never silently preferred over, or excluded in favor of, the other.
+  handling — never silently preferred over, or excluded in favor of, the other. This union applies to
+  BOTH the external `mod x;` consumer and the inline `mod x { … }` consumer — the same field must not
+  silently reach only one of the two natural readers.
 - Absence tolerance stays additive, not broadened: neither ANY candidate resolving, nor another
   cfg-conditional gate present, remains a genuine, fail-loud constitution error.
 
@@ -84,6 +103,16 @@ neither the `path` arm nor the `cfg` arm, so the doc's claim was never implement
   recurses through `syn::Meta::List` for free, since it already parses the full attribute AST; this
   scanner would need to hand-roll a second level of paren-balanced sub-scanning for a shape none of
   the audit findings measured. Documented as a bound rather than silently unhandled.
+- **An inline mod's candidate base is descended only when it exists as a directory; the conventional
+  base is a required fallback when none does.** Unlike the external-module consumer (where
+  `resolve_path_module` returning `None` for a candidate is itself the existence test), an inline
+  mod's candidate is a *base directory* for further recursion, not a single file to read. Recursing
+  unconditionally into every candidate (including one that doesn't exist on disk at all) would make
+  x's OTHER, unrelated nested items fail loud merely because one platform's directory happens not to
+  exist — even though another candidate already backs them. Gating each candidate on `Path::is_dir`
+  avoids that false failure while still catching a reference genuinely broken on every platform: if no
+  candidate directory exists at all, the conventional base is descended anyway, preserving the
+  pre-existing fail-loud behavior for that case.
 
 ## Risks / Trade-offs
 
@@ -106,9 +135,11 @@ neither the `path` arm nor the `cfg` arm, so the doc's claim was never implement
    `find_path_meta_value`; union in the consumer with the conventional-file resolution.
 4. Regression: comment-before-name, comment-after-name, block-scoped `#[path] mod` (direct fn body
    and one bare block deeper), two-`cfg_attr`-covering-every-platform (both the reacting-typo and the
-   Clean case), and a missing `cfg_attr` target tolerated when the conventional file backs the module.
-5. Non-vacuous verification per fix layer: each of the three independently reverted, confirmed its
-   own regression tests fail in the predicted way, restored.
+   Clean case), a missing `cfg_attr` target tolerated when the conventional file backs the module, and
+   (found by adversarial review) a `cfg_attr(path)` remap on an inline `mod x { … }` redirecting x's
+   own nested-item resolution base.
+5. Non-vacuous verification per fix layer: each independently reverted, confirmed its own regression
+   tests fail in the predicted way, restored.
 6. Updated the stale doc comments (`ModPreambleAttrs`'s own fields, `mod_preamble_attrs`'s function
    doc, and `audit_probe_coverage_with_markers`'s public doc in `audit.rs`) to state the union rule
    instead of the unimplemented "reads as `cfg`" claim.
