@@ -48,5 +48,24 @@
 
 - [x] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
-- [ ] 5.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste
+- [x] 5.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste
       call.
+
+## 6. Adversarial review follow-up
+
+- [x] 6.1 Review found a narrow, real gap: a file reached only through an ABSOLUTE
+      `#[path = "/…"]` literal still falls back to the raw absolute label, since `Path::join`
+      discards the receiver entirely when the joinee is itself absolute — the resolved path has no
+      textual relationship to `anchor` at all (confirmed for both a target genuinely outside the
+      anchor's tree and one coincidentally nested inside it — both fall back, since `strip_prefix`
+      only succeeds by literal string-prefix match, never directory-tree nesting).
+- [x] 6.2 Reviewed and accepted as a stated, documented bound rather than fixed further: an
+      absolute-literal `#[path]` is already non-portable/machine-specific on its own. The realistic
+      relative sibling-share idiom (`#[path = "../../shared/thing.rs"]`) was separately confirmed to
+      already work correctly (identical label across two checkouts), since `join` never collapses
+      `..` components.
+- [x] 6.3 Added `an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound`, pinning
+      that the violation still reacts (never silently dropped) with the absolute label.
+- [x] 6.4 Updated `finding.rs`'s and `audit.rs`'s doc comments and the `runtime-origin-assertion`
+      spec delta to scope the "never absolute" claim to the realistic relative case, with this bound
+      stated explicitly rather than silently claimed as full coverage.

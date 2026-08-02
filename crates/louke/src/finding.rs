@@ -29,9 +29,13 @@ pub(crate) enum RuntimeFact {
     // `audit::scan`), `marker` the actual configured wrapper matched, and `expr` the offending
     // expression's own trimmed source text; together with `file` these are the identity
     // discriminator, never a byte offset or occurrence count. `file` is labeled relative to the
-    // common ancestor of every scanned root (see `audit::scan::labeled`/`common_ancestor`), never
-    // the raw absolute path — a checkout-dependent absolute path would make a recorded baseline
-    // stale in any other clone or CI runner.
+    // common ancestor of every scanned root (see `audit::scan::labeled`/`common_ancestor`) whenever
+    // that's possible, rather than the raw absolute path — a checkout-dependent absolute path would
+    // make a recorded baseline stale in any other clone or CI runner. Stated bound: an ABSOLUTE
+    // `#[path = "/…"]` literal has no textual relationship to the anchor at all (`Path::join`
+    // discards the receiver for an absolute joinee), so its label falls back to that absolute form
+    // — an absolute-literal `#[path]` is already a non-portable, machine-specific construct with or
+    // without this identity concern, not the realistic relative sibling-share idiom this fix targets.
     #[cfg(feature = "audit")]
     UnauditableProbe {
         marker: String,

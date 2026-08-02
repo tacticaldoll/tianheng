@@ -57,6 +57,23 @@ differs, so `ViolationId` differs, so a baseline recorded against one never matc
   identity VALUE (hence **BREAKING** for baseline compatibility specifically, not for any caller's
   compile-time contract).
 
+## Adversarial review follow-up
+
+Independent review found a narrow, real gap: a file reached only through an ABSOLUTE
+`#[path = "/…"]` literal still falls back to the raw absolute label. Root cause: `resolve_path_module`
+does `base.join(rel)`, and `Path::join`'s documented semantics discard the receiver entirely when
+`rel` is itself absolute — so the resolved path has no textual relationship to `anchor` at all
+(confirmed with two repros: a target genuinely outside the anchor's tree, and one coincidentally
+nested inside it — both fall back to absolute, since `strip_prefix` can only succeed by literal
+string-prefix match, never by directory-tree-nesting logic). Reviewed and accepted as a stated
+bound rather than fixed further: an absolute-literal `#[path]` is already non-portable and
+machine-specific with or without this identity concern (unlike the realistic relative
+sibling-share idiom — `#[path = "../../shared/thing.rs"]` — which the review separately confirmed
+DOES produce an identical, checkout-independent label across two checkouts, since `join` never
+collapses `..` components so the anchor's own prefix text survives). Documented in `finding.rs`'s
+and `audit.rs`'s doc comments, and pinned with a dedicated regression test asserting the violation
+still fires (never silently dropped) with the absolute label, not a silent regression.
+
 ## Risks / Trade-offs
 
 - **[Risk] Existing baselines naming an `unauditable-probe` violation go stale.** → **Mitigation**:

@@ -2542,3 +2542,44 @@ fn multi_root_probe_identity_is_relative_to_the_common_ancestor() {
          same-named files by their own member path"
     );
 }
+
+/// Stated bound (documented in `finding.rs`/`audit.rs`): a file reached only through an ABSOLUTE
+/// `#[path = "/…"]` literal has no textual relationship to any anchor (`Path::join` discards the
+/// receiver entirely for an absolute joinee), so its identity falls back to the raw absolute
+/// path — never silently dropped (the violation still fires), just not relabeled. An absolute
+/// literal is already a non-portable, machine-specific construct on its own.
+#[test]
+fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
+    let tb = TempBase::new("abs-path-literal-bound");
+    let target_dir = tb.path().join("shared_outside");
+    std::fs::create_dir_all(&target_dir).unwrap();
+    let abs_target = target_dir.join("thing.rs");
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        &format!(
+            "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+            abs_target.display().to_string()
+        ),
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected an unauditable-probe violation to fire: {outcome:?}");
+    };
+    let unauditable = report
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an absolute #[path] target's probe must still react, never silently dropped");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file,
+        abs_target.display().to_string(),
+        "an absolute #[path] literal's target has no relationship to any anchor, so its label \
+         stays the raw absolute path — a documented, deliberate bound, not a silent regression"
+    );
+}

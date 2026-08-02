@@ -212,7 +212,10 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   shared ancestor exists at all. No public function signature changed. **Any existing
   `--write-baseline` output naming an `unauditable-probe` violation is now stale** (its `file` field's
   value changed shape) and must be regenerated; every previously accepted one reappears as new
-  exactly once.
+  exactly once. Stated bound: a file reached only through an ABSOLUTE `#[path = "/…"]` literal keeps
+  its absolute label (the literal has no textual relationship to any anchor — `Path::join` discards
+  its receiver entirely for an absolute joinee), unlike the realistic relative sibling-share idiom
+  this fix targets, which is unaffected.
 
 ## [0.3.0] - 2026-07-26
 

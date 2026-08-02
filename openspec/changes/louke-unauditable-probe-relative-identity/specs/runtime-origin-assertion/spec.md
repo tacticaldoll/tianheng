@@ -26,7 +26,12 @@ path the scanner happened to read it from. An absolute path varies by checkout l
 clone path, a different CI runner) even for byte-identical source, so baking it unconditionally into
 the identity would make a recorded baseline match nothing in any other checkout — the accepted
 violation re-fires as new while the recorded entry is simultaneously reported stale. Only when no
-root shares a common ancestor with the observed file SHALL the absolute form be used instead.
+root shares a common ancestor with the observed file SHALL the absolute form be used instead. A file
+reached only through an ABSOLUTE `#[path = "/…"]` literal is a stated exception to this rule: such a
+literal has no textual relationship to any anchor, so its label remains the raw absolute path — an
+absolute-literal `#[path]` is already a non-portable, machine-specific construct on its own,
+unlike the realistic relative sibling-share idiom this rule targets, and the violation still reacts
+rather than being silently dropped.
 
 #### Scenario: Same expression in two different free functions stays distinct
 
@@ -66,3 +71,8 @@ root shares a common ancestor with the observed file SHALL the absolute form be 
 - **THEN** `audit_probe_coverage` emits identical un-auditable-probe violation identities in both
   runs, so a baseline recorded in one checkout remains valid in the other, rather than differing
   only in the `file` field's absolute prefix
+
+#### Scenario: An absolute #[path] literal's target keeps its absolute label
+
+- **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal and its body contains a non-literal probe
+- **THEN** `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to any scanned root's anchor

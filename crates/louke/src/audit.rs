@@ -88,8 +88,11 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
 ///   (e.g. a `const`) cannot be traced to a declared seam → an enforce `Violation` naming the
 ///   site, never a silent skip (a silent skip would be a false negative). Its identity's `file`
 ///   field is labeled relative to the common ancestor of every `source_inputs` root passed to this
-///   call (the real caller's actual checkout root, by construction), never the raw absolute path
-///   — so a recorded baseline stays valid across a different clone location or CI runner.
+///   call (the real caller's actual checkout root, by construction) whenever that's possible, so a
+///   recorded baseline stays valid across a different clone location or CI runner — except a file
+///   reached only through an ABSOLUTE `#[path = "/…"]` literal, a stated bound: an absolute literal
+///   has no textual relationship to any anchor and is already a non-portable, machine-specific
+///   construct on its own, unlike the realistic relative sibling-share idiom this labeling targets.
 ///
 /// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
 /// can no longer hide a seam. The probe scan is build/CI-time only (std-only, comment- and
