@@ -53,16 +53,25 @@ expect() { # expect <got> <want> <label>
 # resolved package's own source in parens for a path/patch dependency (absent for a registry
 # resolution), so its presence is a real signal the patch actually took effect — checked against
 # the SAME "$PATCH" args just built for this example, right before those args are used to run it.
+#
+# `cargo tree -p` can itself fail outright (e.g. an ambiguous `-p` match across two
+# semver-incompatible resolved versions) — under this script's `set -euo pipefail`, an unguarded
+# `resolved=$(cargo tree ... | tail -1)` would let that failure kill the whole script before this
+# function's own diagnostic ever ran, silently swallowing cargo's real error along with it (stderr
+# was discarded). `|| true` keeps that failure from aborting the script here, `2>&1` keeps cargo's
+# own message available to report, and grep for the crate's own line (rather than blindly trusting
+# the output's last line) tolerates a warning landing after the tree line in the merged stream.
 assert_patched() { # assert_patched <example-label> <crate>...
     local label="$1"
     shift
-    local c resolved
+    local c output line
     for c in "$@"; do
-        resolved="$(cargo tree -p "$c" "${PATCH[@]}" --depth 0 2>/dev/null | tail -1)"
-        case "$resolved" in
+        output="$(cargo tree -p "$c" "${PATCH[@]}" --depth 0 2>&1)" || true
+        line="$(printf '%s\n' "$output" | grep -m1 "^$c ")" || true
+        case "$line" in
             "$c "*" ($WS/crates/$c)") ;;
             *)
-                echo "::error::$label: $c did not resolve to local source — patch.crates-io was silently unused (fell back to a published release): $resolved"
+                echo "::error::$label: $c did not resolve to local source — patch.crates-io was silently unused (fell back to a published release), or \`cargo tree\` failed outright: ${output}"
                 exit 1
                 ;;
         esac

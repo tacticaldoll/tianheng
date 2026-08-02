@@ -39,5 +39,23 @@
 
 - [x] 4.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
-- [ ] 4.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste
+- [x] 4.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste
       call.
+
+## 5. Adversarial review follow-up
+
+- [x] 5.1 Review found `assert_patched`'s `resolved="$(cargo tree ... | tail -1)"` runs under the
+      script's own `set -euo pipefail` with no failure guard: if `cargo tree -p <crate>` itself
+      exits non-zero (e.g. an ambiguous `-p` match, or the crate not resolving at all), `pipefail`
+      propagates that exit code through the assignment and `errexit` kills the whole script right
+      there — the function's own diagnostic `case` branch, the entire point of `assert_patched`,
+      is never reached, and cargo's own error was discarded (`2>/dev/null`). Reproduced directly: a
+      nonexistent crate name silently exited 101 with zero output under the original code.
+- [x] 5.2 Fixed: capture merged stdout+stderr (`2>&1`) with `|| true` guarding the assignment so a
+      `cargo tree` failure can't abort the script, then `grep` for the crate's own line (rather than
+      blindly trusting the last line, tolerating a warning landing after the tree line in the merged
+      stream) so a genuine failure's real message reaches the reported diagnostic.
+- [x] 5.3 Non-vacuous verification: reproduced the exact silent-abort (nonexistent crate name,
+      original code: exit 101, zero output) and confirmed the fix instead reports a real diagnostic
+      and exits 1 cleanly. Re-ran the full `test_examples.sh` against the real workspace — still
+      green.

@@ -60,6 +60,19 @@ guibiao v0.3.0                                     # no local path in the tree o
   structure (`mapfile -d '' PATCH < <(patch ...)` immediately followed by the checks that consume
   it) rather than introducing a second, disconnected pass over the same data.
 
+## Adversarial review follow-up
+
+Independent review of the first cut found `assert_patched`'s `resolved="$(cargo tree ... | tail
+-1)"` had no failure guard under the script's own `set -euo pipefail`: if `cargo tree -p <crate>`
+itself exits non-zero (an ambiguous `-p` match, or the crate not resolving at all), `pipefail`
+propagates that exit code through the assignment and `errexit` kills the whole script before the
+function's own diagnostic `case` branch — the entire point of the check — is ever reached, with
+cargo's own error discarded (`2>/dev/null`). Reproduced directly: a nonexistent crate name silently
+exited 101 with zero output. Fixed by capturing merged stdout+stderr with `|| true` guarding the
+assignment (so a `cargo tree` failure can't abort the script) and `grep`-ing for the crate's own
+line rather than blindly trusting the last line of output (tolerating a warning landing after the
+tree line in the merged stream). Re-verified non-vacuously against the same repro.
+
 ## Risks / Trade-offs
 
 - **[Risk] `cargo tree`'s output format is not a stable, versioned contract.** → **Mitigation**: the
