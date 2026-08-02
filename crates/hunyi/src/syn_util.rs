@@ -266,6 +266,48 @@ fn meta_is_path_remap(meta: &syn::Meta) -> bool {
     }
 }
 
+/// The file path named by a `path = "…"` remap wrapped in `#[cfg_attr(<pred>, …, path = "…")]`
+/// (including arbitrarily nested `cfg_attr`), or `None` if this module carries no such conditional
+/// remap. Unlike [`direct_path_value`] (the unconditional `#[path = "…"]` form, followed as the
+/// sole source), the module declaration itself is never removed by `cfg_attr` (unlike a bare
+/// `#[cfg]`) — so this is ONE possible source among several a cfg-blind walker must union: the
+/// conventional file may equally be the one a given build actually compiles.
+pub(crate) fn cfg_attr_path_value(attrs: &[syn::Attribute]) -> Option<String> {
+    attrs.iter().find_map(|attr| {
+        if !attr.path().is_ident("cfg_attr") {
+            return None;
+        }
+        attr.parse_args_with(cfg_attr_metas)
+            .ok()
+            .and_then(|metas| applied_metas_path_value(&metas))
+    })
+}
+
+/// The **applied** metas of a `cfg_attr` (all but the first, which is the predicate): the value of
+/// a `path = "…"` name-value among them, or one nested inside a further `cfg_attr`.
+fn applied_metas_path_value(metas: &MetaList) -> Option<String> {
+    metas.iter().skip(1).find_map(meta_path_value)
+}
+
+fn meta_path_value(meta: &syn::Meta) -> Option<String> {
+    match meta {
+        syn::Meta::NameValue(syn::MetaNameValue {
+            path,
+            value:
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }),
+            ..
+        }) if path.is_ident("path") => Some(s.value()),
+        syn::Meta::List(list) if list.path.is_ident("cfg_attr") => list
+            .parse_args_with(cfg_attr_metas)
+            .ok()
+            .and_then(|metas| applied_metas_path_value(&metas)),
+        _ => None,
+    }
+}
+
 pub(crate) fn is_public(vis: &syn::Visibility) -> bool {
     matches!(vis, syn::Visibility::Public(_))
 }

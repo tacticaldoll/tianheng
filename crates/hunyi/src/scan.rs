@@ -24,8 +24,8 @@ use crate::resolve::{
     resolve_path_all, strip_raw, type_to_string,
 };
 use crate::syn_util::{
-    FlatItem, direct_path_value, flatten_transparent_macro_items, flatten_transparent_macros,
-    has_cfg_attr, has_path_attr,
+    FlatItem, cfg_attr_path_value, direct_path_value, flatten_transparent_macro_items,
+    flatten_transparent_macros, has_cfg_attr,
 };
 
 /// One impl site observed in the crate: its enclosing module path, the **real file it was read
@@ -312,7 +312,8 @@ fn resolve_child_modules(
                     if !file.is_file() {
                         // An unconditional `#[path]` target must exist (rustc errors otherwise), so
                         // an absent one is a genuine broken reference: fail loud (exit 2), never a
-                        // silent skip. A cfg-conditional `#[path]` is the `has_path_attr` skip below.
+                        // silent skip. A `cfg_attr`-wrapped `#[path]` is the union below, not this
+                        // unconditional branch at all (`direct_path_value` never matches it).
                         // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
                         // removes the whole item when `pred` is false (verified against a real
                         // rustc build: `#[cfg(windows)] #[path = "…"] mod x;` compiles cleanly on
@@ -349,12 +350,16 @@ fn resolve_child_modules(
             }
             continue;
         }
-        // A `cfg_attr`-wrapped `#[path]` is cfg-conditional: following it cfg-blind could read a
-        // file rustc does not compile here, so it stays a stated skip bound — and the conventional
-        // file is never governed in its place.
-        if has_path_attr(&module_item.attrs) {
-            continue;
-        }
+        // A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which file compiles, but — unlike a
+        // bare `#[cfg]` — `cfg_attr` never removes the `mod` item itself, so cfg-blind observation
+        // must union every candidate the predicate could select, never skip the module outright.
+        // An INLINE body is unaffected by `#[path]`/`cfg_attr(path)` at all (rustc ignores it for an
+        // inline `mod`; the body always compiles) and is unconditionally descended below, exactly
+        // like the no-attribute case. A FILE module's conventional file and its `cfg_attr` target
+        // are both read when present, as separate sources for the same module name (mirroring the
+        // existing per-platform-pair `seen_files` union above for two plain declarations of the
+        // same name).
+        let cfg_attr_target = cfg_attr_path_value(&module_item.attrs);
         let sub_dir = child_dir.join(&name);
         match &module_item.content {
             // Inline `mod x { … }`: descend its lexical items (same file). Its own children — both
@@ -375,61 +380,94 @@ fn resolve_child_modules(
             // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`; the child's own
             // `file_dir` is the located file's directory (`<dir>` for `x.rs`, `<dir>/x` for
             // `x/mod.rs`), which is where a `#[path]` inside it resolves from.
-            None => match locate_module_file(child_dir, &name) {
-                ModuleFile::One(file) => {
-                    // A file already on the current descent path (an ANCESTOR, by canonical
-                    // symlink-resolved path) is a genuine module cycle — a symlinked directory or a
-                    // circular `#[path]` looping the `mod` graph back on itself. Stop with a scan
-                    // error (exit 2 "cannot judge") rather than recursing into a stack overflow. Two
-                    // *sibling/cousin* declarations legitimately resolving to one file (e.g.
-                    // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
-                    // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
-                    // misreport them (that would be a false positive on compilable input).
-                    let canon = xingbiao::canonicalize_or_fail(&file)?;
-                    if ancestors.contains(&canon) {
-                        return Err(module_cycle_error(&child_module, crate_package, &file));
-                    }
-                    if !seen_files.insert((name.clone(), canon.clone())) {
-                        continue;
-                    }
-                    let parsed = read_parse(&file)?;
-                    let own_dir = file
-                        .parent()
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| sub_dir.clone());
-                    children.push((
-                        parsed.items,
-                        child_module,
-                        sub_dir,
-                        own_dir,
-                        Some(canon),
-                        file,
-                    ));
-                }
-                // BOTH conventional forms present is unresolvable under every predicate value — no
-                // `#[cfg]` makes two files compile as one module — so unlike an absence it is never
-                // a legitimate configuration, and it reacts regardless of any gate. Erroring out of
-                // the whole walk rather than dropping this one module matches 圭表's own
-                // `resolve_plain_sources`: a crate whose module graph cannot be resolved cannot be
-                // judged, and excluding the module would hide every import beneath it.
-                ModuleFile::Ambiguous { flat, nested } => {
-                    return Err(dual_backed_module_error(
-                        &child_module,
-                        &name,
-                        crate_package,
-                        &flat,
-                        &nested,
-                    ));
-                }
-                // A `#[cfg]`-gated module may legitimately have no source file when the feature is
-                // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
-                // error. A non-cfg missing file is a real scan error: fail loud (exit 2).
-                ModuleFile::Absent => {
-                    if !cfg_conditional {
-                        return Err(missing_module_file_error(&child_module, crate_package));
+            None => {
+                let mut has_backing_source = false;
+                // The `cfg_attr(path)` target, if this build's predicate selects it and the file
+                // exists — read alongside the conventional file below, never in place of it: cfg-blind
+                // observation cannot know which one this build actually compiles.
+                if let Some(rel) = &cfg_attr_target {
+                    let file = file_dir.join(rel);
+                    if file.is_file() {
+                        has_backing_source = true;
+                        let canon = xingbiao::canonicalize_or_fail(&file)?;
+                        if ancestors.contains(&canon) {
+                            return Err(module_cycle_error(&child_module, crate_package, &file));
+                        }
+                        if seen_files.insert((name.clone(), canon.clone())) {
+                            let parsed = read_parse(&file)?;
+                            let own_dir = file
+                                .parent()
+                                .map(Path::to_path_buf)
+                                .unwrap_or_else(|| file_dir.to_path_buf());
+                            children.push((
+                                parsed.items,
+                                child_module.clone(),
+                                own_dir.clone(),
+                                own_dir,
+                                Some(canon),
+                                file,
+                            ));
+                        }
                     }
                 }
-            },
+                match locate_module_file(child_dir, &name) {
+                    ModuleFile::One(file) => {
+                        // A file already on the current descent path (an ANCESTOR, by canonical
+                        // symlink-resolved path) is a genuine module cycle — a symlinked directory or a
+                        // circular `#[path]` looping the `mod` graph back on itself. Stop with a scan
+                        // error (exit 2 "cannot judge") rather than recursing into a stack overflow. Two
+                        // *sibling/cousin* declarations legitimately resolving to one file (e.g.
+                        // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
+                        // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
+                        // misreport them (that would be a false positive on compilable input).
+                        let canon = xingbiao::canonicalize_or_fail(&file)?;
+                        if ancestors.contains(&canon) {
+                            return Err(module_cycle_error(&child_module, crate_package, &file));
+                        }
+                        if seen_files.insert((name.clone(), canon.clone())) {
+                            let parsed = read_parse(&file)?;
+                            let own_dir = file
+                                .parent()
+                                .map(Path::to_path_buf)
+                                .unwrap_or_else(|| sub_dir.clone());
+                            children.push((
+                                parsed.items,
+                                child_module,
+                                sub_dir,
+                                own_dir,
+                                Some(canon),
+                                file,
+                            ));
+                        }
+                    }
+                    // BOTH conventional forms present is unresolvable under every predicate value — no
+                    // `#[cfg]` makes two files compile as one module — so unlike an absence it is never
+                    // a legitimate configuration, and it reacts regardless of any gate. Erroring out of
+                    // the whole walk rather than dropping this one module matches 圭表's own
+                    // `resolve_plain_sources`: a crate whose module graph cannot be resolved cannot be
+                    // judged, and excluding the module would hide every import beneath it.
+                    ModuleFile::Ambiguous { flat, nested } => {
+                        return Err(dual_backed_module_error(
+                            &child_module,
+                            &name,
+                            crate_package,
+                            &flat,
+                            &nested,
+                        ));
+                    }
+                    // A `#[cfg]`-gated module may legitimately have no source file when the feature is
+                    // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
+                    // error. A non-cfg missing conventional file is tolerated too when the `cfg_attr`
+                    // target above already backs this module on some other build; only when NEITHER
+                    // candidate exists, and this declaration is not otherwise cfg-conditional, is the
+                    // module truly unbacked on every configuration — a real scan error (exit 2).
+                    ModuleFile::Absent => {
+                        if !has_backing_source && !cfg_conditional {
+                            return Err(missing_module_file_error(&child_module, crate_package));
+                        }
+                    }
+                }
+            }
         }
     }
     Ok(children)

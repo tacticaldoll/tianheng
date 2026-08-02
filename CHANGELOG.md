@@ -141,6 +141,23 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   leaf matching, its self-type/marker-acquisition landing (through a third, previously single-valued
   type-alias map), and trait-impl-locality's anchor resolution — each independently reproduced before
   being closed here too. Not breaking — closes false negatives; no baseline identity shape changes.
+- 渾儀's crate-wide scan no longer drops a module reached only through a `cfg_attr`-wrapped `#[path]`
+  remap. `cfg_attr` never removes the `mod` item the way a bare `#[cfg]` does, so the module is
+  present on every configuration and needs SOME file to back it — treating the attribute as a blanket
+  skip bound dropped the whole subtree, not just the alternate target its predicate might select. Two
+  shapes: an **inline** module's body is unaffected by `#[path]` at all (rustc ignores it there; the
+  body always compiles) and is now always descended; a **file** module's conventional file and its
+  `cfg_attr` target are both read when they exist on disk, unioned rather than either being silently
+  preferred — matching 圭表's own already-fixed union-scan policy for the identical shape. Neither
+  candidate existing, with no other cfg-conditional gate, remains a genuine scan error. Since the
+  crate-wide scan backs signature-coupling's own alias/re-export closure and dyn-trait's/impl-trait's
+  shared operand-scoped principal-trait resolver, not only forbidden-marker, trait-impl-locality, and
+  unsafe-confinement (the two capabilities the discovering findings measured against), all five were
+  independently reproduced and confirmed fixed by this one change. `module_resolve.rs`'s separate
+  single-module-anchor resolution (signature-coupling's own anchor, visibility, async-exposure,
+  dyn/impl-trait's module-scoped variant) is untouched — it already, correctly, fails loud on this
+  shape rather than silently passing. Not breaking — closes false negatives; no baseline identity
+  shape changes.
 
 ## [0.3.0] - 2026-07-26
 
