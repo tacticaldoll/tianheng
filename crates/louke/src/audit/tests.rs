@@ -2543,11 +2543,15 @@ fn multi_root_probe_identity_is_relative_to_the_common_ancestor() {
     );
 }
 
-/// Stated bound (documented in `finding.rs`/`audit.rs`): a file reached only through an ABSOLUTE
-/// `#[path = "/…"]` literal has no textual relationship to any anchor (`Path::join` discards the
-/// receiver entirely for an absolute joinee), so its identity falls back to the raw absolute
-/// path — never silently dropped (the violation still fires), just not relabeled. An absolute
-/// literal is already a non-portable, machine-specific construct on its own.
+/// Stated bound (documented in `finding.rs`/`audit.rs`): an ABSOLUTE `#[path = "/…"]` literal whose
+/// target does NOT happen to lie under the scanning checkout's own anchor directory has no textual
+/// relationship to it (`Path::join` discards the receiver entirely for an absolute joinee), so its
+/// identity falls back to the raw absolute path — never silently dropped (the violation still
+/// fires), just not relabeled. (When the target DOES happen to lie under the anchor, the label is
+/// relative instead, and the identity can still disagree across checkouts — a separate, KNOWN
+/// residual gap pinned by `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`
+/// below, not silently ignored.) An absolute literal is already a non-portable, machine-specific
+/// construct on its own either way.
 #[test]
 fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
     let tb = TempBase::new("abs-path-literal-bound");
@@ -2581,5 +2585,66 @@ fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
         abs_target.display().to_string(),
         "an absolute #[path] literal's target has no relationship to any anchor, so its label \
          stays the raw absolute path — a documented, deliberate bound, not a silent regression"
+    );
+}
+
+/// KNOWN, DEFERRED residual gap (see `docs/audit/0.3.1-adversarial-sweep.md`'s 漏刻 identity
+/// section and this change's `design.md` Non-Goals): when an absolute `#[path]` literal's target
+/// happens to be textually nested under a GIVEN checkout's own anchor, `strip_prefix` succeeds by
+/// pure text match — producing a clean, relative-LOOKING label — even though the literal itself is
+/// fixed text that does not move with the checkout. The identical hardcoded literal scanned from a
+/// DIFFERENT checkout (where it no longer shares the anchor's prefix) falls back to the full
+/// absolute path instead, so the two checkouts still disagree — reproducing the very
+/// checkout-dependent-identity problem this whole fix exists to close, just for this one
+/// deliberately out-of-scope construct. Pinned here (not silently left untested) so a future fix
+/// has a failing case to work against, and so this test itself fails loud if that future fix
+/// changes this behavior without updating the assertion.
+#[test]
+fn a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap() {
+    let tb_a = TempBase::new("nested-abs-checkout-a");
+    let tb_b = TempBase::new("nested-abs-checkout-b");
+    let abs_target = tb_a
+        .path()
+        .join("crates/foo/src/nested_under_anchor/thing.rs");
+    std::fs::create_dir_all(abs_target.parent().unwrap()).unwrap();
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    // The identical hardcoded literal (checkout a's own absolute path) is committed into BOTH
+    // checkouts' source, exactly as a real clone would carry it verbatim.
+    let lib_body = format!(
+        "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+        abs_target.display().to_string()
+    );
+    let root_a = tb_a.source("crates/foo/src/lib.rs", &lib_body);
+    let root_b = tb_b.source("crates/foo/src/lib.rs", &lib_body);
+
+    let Outcome::Violations(report_a) =
+        audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_a])
+    else {
+        panic!("expected a violation from checkout a");
+    };
+    let Outcome::Violations(report_b) =
+        audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_b])
+    else {
+        panic!("expected a violation from checkout b");
+    };
+    let id_a = report_a
+        .violations
+        .iter()
+        .find_map(|v| v.rule.contains("string literal").then(|| v.id()));
+    let id_b = report_b
+        .violations
+        .iter()
+        .find_map(|v| v.rule.contains("string literal").then(|| v.id()));
+    assert_ne!(
+        id_a, id_b,
+        "this pins the KNOWN residual gap: a nested absolute #[path] literal's identity still \
+         differs across checkouts (checkout a's own anchor happens to make it relative; \
+         checkout b's does not) — if this ever starts passing with equal IDs, the gap has been \
+         fixed and this test's assertion (and the design.md/CHANGELOG note describing it as open) \
+         should be updated together"
     );
 }

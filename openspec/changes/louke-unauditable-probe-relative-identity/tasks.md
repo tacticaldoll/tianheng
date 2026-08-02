@@ -51,21 +51,42 @@
 - [x] 5.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste
       call.
 
-## 6. Adversarial review follow-up
+## 6. Adversarial review follow-up (round 1)
 
 - [x] 6.1 Review found a narrow, real gap: a file reached only through an ABSOLUTE
-      `#[path = "/…"]` literal still falls back to the raw absolute label, since `Path::join`
-      discards the receiver entirely when the joinee is itself absolute — the resolved path has no
-      textual relationship to `anchor` at all (confirmed for both a target genuinely outside the
-      anchor's tree and one coincidentally nested inside it — both fall back, since `strip_prefix`
-      only succeeds by literal string-prefix match, never directory-tree nesting).
-- [x] 6.2 Reviewed and accepted as a stated, documented bound rather than fixed further: an
-      absolute-literal `#[path]` is already non-portable/machine-specific on its own. The realistic
-      relative sibling-share idiom (`#[path = "../../shared/thing.rs"]`) was separately confirmed to
-      already work correctly (identical label across two checkouts), since `join` never collapses
-      `..` components.
+      `#[path = "/…"]` literal whose target does not lie under the anchor falls back to the raw
+      absolute label, since `Path::join` discards the receiver entirely when the joinee is itself
+      absolute — the resolved path has no textual relationship to `anchor` in that case.
+- [x] 6.2 Reviewed and (incompletely — see section 7) accepted as a stated bound: an absolute-literal
+      `#[path]` is already non-portable/machine-specific on its own. The realistic relative
+      sibling-share idiom (`#[path = "../../shared/thing.rs"]`) was separately confirmed to already
+      work correctly (identical label across two checkouts), since `join` never collapses `..`
+      components.
 - [x] 6.3 Added `an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound`, pinning
-      that the violation still reacts (never silently dropped) with the absolute label.
+      that the violation still reacts (never silently dropped) with the absolute label for a target
+      outside the anchor.
 - [x] 6.4 Updated `finding.rs`'s and `audit.rs`'s doc comments and the `runtime-origin-assertion`
-      spec delta to scope the "never absolute" claim to the realistic relative case, with this bound
-      stated explicitly rather than silently claimed as full coverage.
+      spec delta to scope the "never absolute" claim to the realistic relative case.
+
+## 7. Adversarial review follow-up (round 2)
+
+- [x] 7.1 Round 2 found round 1's own claim ("both repros fall back to absolute") was itself
+      incomplete: a target that happens to lie textually UNDER the anchor does NOT fall back —
+      `strip_prefix` succeeds by pure text match regardless of whether the nesting is a real,
+      portable directory relationship or a coincidence of one particular checkout's own absolute
+      path. Reproduced directly: the identical hardcoded absolute `#[path]` literal, committed into
+      two different checkouts, produces a clean relative label in the checkout whose own anchor
+      happens to match its prefix, and falls back to the full absolute path in the other — the two
+      checkouts' identities still disagree.
+- [x] 7.2 Not fixed in this change: properly closing it requires threading "was this file reached
+      via an absolute `#[path]` literal" as extra state through the whole
+      `resolve_path_module`/`external_module_files`/`collect_scope_modules`/`collect_reachable_probes`
+      `(PathBuf, PathBuf)` pipeline — a separate, scoped refactor. Recorded as a new finding in
+      `docs/audit/0.3.1-adversarial-sweep.md`'s 漏刻 identity section instead of silently left as an
+      inaccurate "stated bound."
+- [x] 7.3 Added
+      `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`, pinning
+      the disagreement so a future fix has a failing case to work against.
+- [x] 7.4 Corrected `finding.rs`'s/`audit.rs`'s doc comments, `design.md`, `proposal.md`, the
+      `runtime-origin-assertion` spec delta, and the CHANGELOG entry to accurately describe the
+      residual gap instead of the false "both fall back" claim.

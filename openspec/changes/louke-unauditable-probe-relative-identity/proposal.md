@@ -25,12 +25,17 @@ side, false-positive-on-the-other contradiction a baseline exists to prevent.
 - Falls back to the previous absolute form only when no shared ancestor exists at all (e.g. a lone,
   unrelated standalone path in a direct test) — never worse than before this fix, and no caller loses
   information it previously had.
-- **Stated bound (found by adversarial review):** a file reached only through an ABSOLUTE
-  `#[path = "/…"]` literal falls back to the raw absolute label too — `Path::join` discards its
-  receiver entirely when the joinee is absolute, so the resolved path has no textual relationship to
-  any anchor at all. An absolute-literal `#[path]` is already a non-portable, machine-specific
-  construct on its own (unlike the realistic relative sibling-share idiom this fix targets), so this
-  is documented as a deliberate, tested bound rather than chased further.
+- **Known residual gap (found by adversarial review, NOT closed by this change):** a file reached
+  only through an ABSOLUTE `#[path = "/…"]` literal remains checkout-dependent. When the target
+  does not lie under the scanning checkout's own anchor, the label falls back to the raw absolute
+  path (`Path::join` discards its receiver for an absolute joinee); when the SAME hardcoded literal
+  happens to lie under a given checkout's anchor, the label becomes relative-looking instead — so
+  two checkouts scanning the identical committed literal can still disagree. Properly closing this
+  requires threading "was this file reached via an absolute `#[path]` literal" as extra state through
+  the whole module-resolution pipeline so such a file's label is never relativized at all — a
+  separate, scoped refactor, not attempted here. Recorded as a new finding in
+  `docs/audit/0.3.1-adversarial-sweep.md`'s 漏刻 identity section and pinned with a regression test
+  proving the disagreement, rather than silently left untested.
 - No public function signature changed (`audit_probe_coverage`/`audit_probe_coverage_with_markers`
   keep their existing `source_inputs: &[PathBuf]` parameter); the anchor is computed entirely
   internally.

@@ -57,22 +57,45 @@ differs, so `ViolationId` differs, so a baseline recorded against one never matc
   identity VALUE (hence **BREAKING** for baseline compatibility specifically, not for any caller's
   compile-time contract).
 
-## Adversarial review follow-up
+## Adversarial review follow-up (round 1)
 
 Independent review found a narrow, real gap: a file reached only through an ABSOLUTE
-`#[path = "/…"]` literal still falls back to the raw absolute label. Root cause: `resolve_path_module`
-does `base.join(rel)`, and `Path::join`'s documented semantics discard the receiver entirely when
-`rel` is itself absolute — so the resolved path has no textual relationship to `anchor` at all
-(confirmed with two repros: a target genuinely outside the anchor's tree, and one coincidentally
-nested inside it — both fall back to absolute, since `strip_prefix` can only succeed by literal
-string-prefix match, never by directory-tree-nesting logic). Reviewed and accepted as a stated
-bound rather than fixed further: an absolute-literal `#[path]` is already non-portable and
-machine-specific with or without this identity concern (unlike the realistic relative
-sibling-share idiom — `#[path = "../../shared/thing.rs"]` — which the review separately confirmed
-DOES produce an identical, checkout-independent label across two checkouts, since `join` never
-collapses `..` components so the anchor's own prefix text survives). Documented in `finding.rs`'s
-and `audit.rs`'s doc comments, and pinned with a dedicated regression test asserting the violation
-still fires (never silently dropped) with the absolute label, not a silent regression.
+`#[path = "/…"]` literal WHOSE TARGET DOES NOT LIE UNDER THE ANCHOR falls back to the raw absolute
+label. Root cause: `resolve_path_module` does `base.join(rel)`, and `Path::join`'s documented
+semantics discard the receiver entirely when `rel` is itself absolute — so the resolved path has no
+textual relationship to `anchor` unless it happens to share one. Reviewed and accepted as a stated
+bound: an absolute-literal `#[path]` is already non-portable and machine-specific with or without
+this identity concern (unlike the realistic relative sibling-share idiom —
+`#[path = "../../shared/thing.rs"]` — which round 1 separately confirmed DOES produce an identical,
+checkout-independent label across two checkouts, since `join` never collapses `..` components so
+the anchor's own prefix text survives). Documented in `finding.rs`'s and `audit.rs`'s doc comments,
+and pinned with a dedicated regression test asserting the violation still fires (never silently
+dropped) with the absolute label.
+
+## Adversarial review follow-up (round 2)
+
+Round 1's own claim was itself incomplete, caught by round 2: it asserted "both repros fall back to
+absolute" as if that were the whole story, but a target that happens to lie textually UNDER the
+anchor does NOT fall back — `strip_prefix` succeeds by pure text match regardless of whether that
+nesting is a real, portable directory relationship or a coincidence of one particular checkout's own
+absolute path. Reproduced directly: the SAME hardcoded absolute `#[path]` literal, committed
+verbatim into two different checkouts, produces a clean relative label in the checkout whose own
+anchor happens to be a textual prefix of the literal, and falls back to the full absolute path (that
+first checkout's own path, visible in the second checkout's output) in the other — the two
+checkouts' identities still disagree, reproducing the exact checkout-dependent-identity problem this
+whole two-round fix exists to close, for this one already-non-portable construct.
+
+This residual inconsistency is NOT fixed in this change — doing so properly requires threading
+"was this file reached via an absolute `#[path]` literal" as extra state through
+`resolve_path_module`/`external_module_files`/`collect_scope_modules`/`collect_reachable_probes`'s
+whole `(PathBuf, PathBuf)` pipeline (so `labeled()` can unconditionally skip relativizing such a
+file, making its behavior deterministic rather than checkout-coincidental), which is a real,
+separate-scoped refactor, not a mechanical follow-up. Recorded as a new, explicit finding in
+`docs/audit/0.3.1-adversarial-sweep.md`'s 漏刻 identity section rather than silently left as an
+inaccurate "stated bound," and pinned with a dedicated regression test
+(`a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`) proving the
+two checkouts' identities differ, so a future fix has a failing case to work against and this test
+itself fails loud if that fix changes the behavior without updating the assertion.
 
 ## Risks / Trade-offs
 

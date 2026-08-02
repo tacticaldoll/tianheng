@@ -27,11 +27,14 @@ clone path, a different CI runner) even for byte-identical source, so baking it 
 the identity would make a recorded baseline match nothing in any other checkout — the accepted
 violation re-fires as new while the recorded entry is simultaneously reported stale. Only when no
 root shares a common ancestor with the observed file SHALL the absolute form be used instead. A file
-reached only through an ABSOLUTE `#[path = "/…"]` literal is a stated exception to this rule: such a
-literal has no textual relationship to any anchor, so its label remains the raw absolute path — an
-absolute-literal `#[path]` is already a non-portable, machine-specific construct on its own,
-unlike the realistic relative sibling-share idiom this rule targets, and the violation still reacts
-rather than being silently dropped.
+reached only through an ABSOLUTE `#[path = "/…"]` literal is a stated, KNOWN residual gap to this
+rule, not yet closed: such a literal's target has no textual relationship to a given checkout's
+anchor unless it happens to lie under it, so its label MAY be the raw absolute path in one checkout
+and a relative-looking one in another for the identical committed literal — the identity can still
+disagree across checkouts for this one construct. The violation SHALL still react rather than being
+silently dropped either way. An absolute-literal `#[path]` is already a non-portable,
+machine-specific construct on its own, unlike the realistic relative sibling-share idiom this rule
+targets, which SHALL remain checkout-independent.
 
 #### Scenario: Same expression in two different free functions stays distinct
 
@@ -72,7 +75,12 @@ rather than being silently dropped.
   runs, so a baseline recorded in one checkout remains valid in the other, rather than differing
   only in the `file` field's absolute prefix
 
-#### Scenario: An absolute #[path] literal's target keeps its absolute label
+#### Scenario: An absolute #[path] literal's target outside the anchor keeps its absolute label
 
-- **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal and its body contains a non-literal probe
-- **THEN** `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to any scanned root's anchor
+- **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target does not lie under the scanning checkout's own anchor, and its body contains a non-literal probe
+- **THEN** `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to the anchor
+
+#### Scenario: An absolute #[path] literal nested under the anchor still disagrees across checkouts (known residual gap)
+
+- **WHEN** the identical absolute `#[path = "/…"]` literal is committed into two different checkouts, and its target happens to lie under one checkout's own anchor but not the other's
+- **THEN** `audit_probe_coverage` emits DIFFERENT un-auditable-probe identities across the two checkouts (a relative-looking label in the one whose anchor matches, the raw absolute path in the other) — a known, not-yet-closed gap for this construct, deliberately not silently claimed as fixed
