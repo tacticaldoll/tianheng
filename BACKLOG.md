@@ -31,12 +31,12 @@ live item is promoted, it must name: **class**, **observed pressure**, **observa
 
 ## Open defect queue
 
-Measured defects awaiting repair live in [`docs/audit/0.3.1-adversarial-sweep.md`](docs/audit/0.3.1-adversarial-sweep.md)
-— 22 verified plus 14 unverified findings from a two-round adversarial sweep of
-`v0.2.3..release/0.3.1`, each sized to become one OpenSpec change, with the provenance and the
-trust level of each entry stated there. That file is a **queue**, not a decision index: an entry
-leaves it by being fixed (or by failing to reproduce, struck with a note). This section is only its
-pointer, so the index below stays about *capability* decisions.
+No live queue currently — the `v0.2.3..release/0.3.1` adversarial sweep's queue is fully drained:
+every entry reached a terminal state (fixed, verified moot, refuted, or promoted to a decision
+below), and its record is closed and retired to
+[`docs/history/0.3.1-adversarial-sweep.md`](docs/history/0.3.1-adversarial-sweep.md). A future sweep
+gets its own dated `docs/audit/*.md` queue file and its own pointer here; this section stays empty
+between sweeps rather than pointing at a stale one.
 
 ## Live decision index
 

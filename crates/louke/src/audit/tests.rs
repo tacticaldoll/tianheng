@@ -2588,7 +2588,7 @@ fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
     );
 }
 
-/// KNOWN, DEFERRED residual gap (see `docs/audit/0.3.1-adversarial-sweep.md`'s 漏刻 identity
+/// KNOWN, DEFERRED residual gap (see `docs/history/0.3.1-adversarial-sweep.md`'s 漏刻 identity
 /// section and this change's `design.md` Non-Goals): when an absolute `#[path]` literal's target
 /// happens to be textually nested under a GIVEN checkout's own anchor, `strip_prefix` succeeds by
 /// pure text match — producing a clean, relative-LOOKING label — even though the literal itself is
