@@ -2459,3 +2459,86 @@ fn a_cfg_attr_path_remap_on_an_inline_module_redirects_its_nested_items() {
          conventional (nonexistent) `x/y.rs`, and never a constitution error: {outcome:?}"
     );
 }
+
+/// The un-auditable-probe fact's identity must not embed a raw, checkout-dependent absolute path:
+/// a byte-identical source file scanned from two different absolute locations (the same
+/// relocation a different clone path / CI runner produces) must yield the IDENTICAL violation
+/// identity, or a baseline recorded in one checkout matches nothing in the other.
+#[test]
+fn unauditable_probe_identity_is_stable_across_checkout_locations() {
+    let tb1 = TempBase::new("probefix1");
+    let root1 = tb1.source(
+        "src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let tb2 = TempBase::new("probefix2");
+    let root2 = tb2.source(
+        "src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let outcome1 = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root1]);
+    let outcome2 = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root2]);
+    let Outcome::Violations(report1) = outcome1 else {
+        panic!("expected violations from checkout 1: {outcome1:?}");
+    };
+    let Outcome::Violations(report2) = outcome2 else {
+        panic!("expected violations from checkout 2: {outcome2:?}");
+    };
+    let ids1: Vec<_> = report1.violations.iter().map(|v| v.id()).collect();
+    let ids2: Vec<_> = report2.violations.iter().map(|v| v.id()).collect();
+    assert_eq!(
+        ids1, ids2,
+        "the same source scanned from two different absolute checkout locations must produce \
+         identical violation identities, or a baseline recorded in one never matches the other"
+    );
+    // Non-vacuous: the identity is not merely absent (e.g. both empty) — an unauditable-probe
+    // violation genuinely fired, and its `file` field is relative, never the raw absolute path.
+    let unauditable = report1
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an unauditable-probe violation must have fired");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file, "lib.rs",
+        "a single-root scan must label relative to its own directory"
+    );
+    assert!(
+        !file.starts_with('/'),
+        "the identity's file label must never be a raw absolute path: {file}"
+    );
+}
+
+/// Multiple workspace-member roots (the real `tianheng` caller's shape, one absolute `src_path`
+/// per member from `cargo_metadata`) share their actual checkout root as a common ancestor, so
+/// each one's identity is labeled relative to it — never a raw absolute path, and distinct
+/// members never collide despite sharing a bare `lib.rs` filename.
+#[test]
+fn multi_root_probe_identity_is_relative_to_the_common_ancestor() {
+    let tb = TempBase::new("multi-root-common-ancestor");
+    let root_a = tb.source(
+        "crate-a/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let root_b = tb.source(
+        "crate-b/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_a, root_b]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected violations: {outcome:?}");
+    };
+    let mut files: Vec<&str> = report
+        .violations
+        .iter()
+        .filter(|v| v.rule.contains("string literal"))
+        .filter_map(|v| v.file.as_deref())
+        .collect();
+    files.sort_unstable();
+    assert_eq!(
+        files,
+        vec!["crate-a/src/lib.rs", "crate-b/src/lib.rs"],
+        "each member's identity must be relative to the shared checkout root, distinguishing \
+         same-named files by their own member path"
+    );
+}

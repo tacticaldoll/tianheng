@@ -28,7 +28,10 @@ pub(crate) enum RuntimeFact {
     // `owner` is the owner-qualified enclosing item (never a bare name — see `fn_scopes` in
     // `audit::scan`), `marker` the actual configured wrapper matched, and `expr` the offending
     // expression's own trimmed source text; together with `file` these are the identity
-    // discriminator, never a byte offset or occurrence count.
+    // discriminator, never a byte offset or occurrence count. `file` is labeled relative to the
+    // common ancestor of every scanned root (see `audit::scan::labeled`/`common_ancestor`), never
+    // the raw absolute path — a checkout-dependent absolute path would make a recorded baseline
+    // stale in any other clone or CI runner.
     #[cfg(feature = "audit")]
     UnauditableProbe {
         marker: String,

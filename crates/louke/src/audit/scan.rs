@@ -23,20 +23,67 @@ pub(super) enum Probe {
 
 pub(super) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
 
+/// Every `source_inputs` entry is a caller-chosen path — in the real `tianheng` CLI caller, an
+/// absolute `cargo_metadata`-reported `src_path` — so its raw `display()` form varies with the
+/// checkout location and lands directly in `UnauditableProbe`'s identity (see `finding.rs`),
+/// making a recorded baseline stale in any other clone/CI runner. `anchor` (the common ancestor of
+/// every root passed to one `audit_probe_coverage` call — see [`common_ancestor`]) is stripped
+/// from each observed file's label before it becomes that identity's `file` field, so the label is
+/// checkout-independent as long as the file's position *relative to the workspace root* is
+/// unchanged — true for the real caller (every workspace member's root shares the actual
+/// checkout root as their common ancestor) regardless of where the process runs from or how it
+/// was invoked. Falls back to the absolute form (today's behavior) when stripping fails, e.g. an
+/// unrelated standalone path with no shared ancestor — never worse than before this fix existed.
+fn labeled(path: &Path, anchor: &Path) -> String {
+    path.strip_prefix(anchor)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+/// The directory every `source_inputs` root's label is made relative to (see [`labeled`]). A file
+/// input's own directory is used (not the file itself, which would strip to an empty label); a
+/// directory input is used as-is. Empty input has no meaningful anchor.
+pub(super) fn common_ancestor(paths: &[PathBuf]) -> PathBuf {
+    let mut candidates = paths.iter().map(|p| {
+        if p.is_file() {
+            p.parent().map_or_else(|| p.clone(), Path::to_path_buf)
+        } else {
+            p.clone()
+        }
+    });
+    let Some(first) = candidates.next() else {
+        return PathBuf::new();
+    };
+    let mut common: Vec<_> = first.components().collect();
+    for candidate in candidates {
+        let components: Vec<_> = candidate.components().collect();
+        let shared = common
+            .iter()
+            .zip(components.iter())
+            .take_while(|(a, b)| a == b)
+            .count();
+        common.truncate(shared);
+    }
+    common.into_iter().collect()
+}
+
 pub(super) fn collect_probes_with_markers(
     input: &Path,
+    anchor: &Path,
     markers: &[&str],
     probes: &mut Vec<Probe>,
 ) -> Result<(), String> {
     if input.is_file() {
-        return collect_reachable_probes(input, markers, probes);
+        return collect_reachable_probes(input, anchor, markers, probes);
     }
     let mut visited = HashSet::new();
-    collect_directory_probes(input, markers, probes, &mut visited)
+    collect_directory_probes(input, anchor, markers, probes, &mut visited)
 }
 
 fn collect_directory_probes(
     dir: &Path,
+    anchor: &Path,
     markers: &[&str],
     probes: &mut Vec<Probe>,
     visited: &mut HashSet<PathBuf>,
@@ -61,13 +108,13 @@ fn collect_directory_probes(
     paths.sort();
     for (is_dir, path) in paths {
         if is_dir {
-            collect_directory_probes(&path, markers, probes, visited)?;
+            collect_directory_probes(&path, anchor, markers, probes, visited)?;
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
             && xingbiao::try_visit(visited, &path)?
         {
             let source = std::fs::read_to_string(&path)
                 .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
-            scan_source_with_markers(&source, &path.display().to_string(), markers, probes);
+            scan_source_with_markers(&source, &labeled(&path, anchor), markers, probes);
         }
     }
     Ok(())
@@ -75,6 +122,7 @@ fn collect_directory_probes(
 
 fn collect_reachable_probes(
     root: &Path,
+    anchor: &Path,
     markers: &[&str],
     probes: &mut Vec<Probe>,
 ) -> Result<(), String> {
@@ -90,7 +138,7 @@ fn collect_reachable_probes(
         }
         let source = std::fs::read_to_string(&file)
             .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
-        scan_source_with_markers(&source, &file.display().to_string(), markers, probes);
+        scan_source_with_markers(&source, &labeled(&file, anchor), markers, probes);
         // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
         // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
         // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
