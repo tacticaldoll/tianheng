@@ -220,6 +220,9 @@ where
 /// How many `Violation` events the shipped default sink has dropped, for the whole process
 /// lifetime, because its write to stderr failed (a closed pipe, a closed fd) while `set_sink`
 /// was never called to receive them instead. Always `0` unless that has actually happened.
+/// A single process-wide count across every seam — it tells an adopter *that* a drop
+/// happened, never *which* boundary's violation was lost; attributing drops per seam would
+/// need its own design, not a bare counter.
 ///
 /// The default sink deliberately never panics on a broken pipe — the same
 /// no-panic-on-a-reaction invariant `Event` posture protects on the happy path — so without
