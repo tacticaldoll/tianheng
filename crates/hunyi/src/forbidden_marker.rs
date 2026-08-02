@@ -12,10 +12,12 @@ use crate::containment::{leaf_of, path_leaf, resolve_self_type, under_subtree};
 use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
+use crate::errors::malformed_path_operand_error;
 use crate::file_scope::resolve_crate;
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
-    BareFallback, canonical_path_str, canonical_self_owner, path_to_string, resolve_path_all,
+    BareFallback, canonical_path_str, canonical_self_owner, has_empty_path_segment, path_to_string,
+    resolve_path_all,
 };
 use crate::rules::FORBIDDEN_MARKER_RULE;
 use crate::scan::scan_crate;
@@ -75,6 +77,15 @@ pub(crate) fn forbidden_marker_findings(
     forbidden: &[String],
     crate_package: &str,
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
+    // A forbidden entry with an empty `::`-segment could never match a real leaf identifier — a
+    // trailing/doubled `::` (or the empty string) makes `leaf_of` compute an empty leaf, and no
+    // real identifier is ever empty; a leading `::` is harmless for leaf matching alone but
+    // rejected anyway, for consistency with every other forbidden/allowed-operand-shaped DSL
+    // method in this family (see `resolve::has_empty_path_segment`'s own doc). Checked before any
+    // scanning, mirroring `exposure::module_findings`'s guard for its own forbidden set.
+    if let Some(bad) = forbidden.iter().find(|f| has_empty_path_segment(f)) {
+        return Err(malformed_path_operand_error(bad));
+    }
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let subtree = canonical_path_str(subtree);
     // The canonical paths of every type the crate actually DEFINES — the only types that can

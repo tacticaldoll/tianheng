@@ -18,13 +18,14 @@ use crate::crate_scope::{
 use crate::driver::run_boundaries;
 use crate::dsl::SemanticBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
+use crate::errors::malformed_path_operand_error;
 use crate::file_scope::resolve_crate;
 use crate::finding::{ExposureKind, SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_cfg_tags;
 use crate::resolve::{
     BareFallback, apply_bare_alias_rename, apply_crate_root_rename, bare_local_alias,
     canonical_path_str, collect_uses, expand_canonical_paths, extern_verbatim_renamed,
-    renames_shadowed, resolve_path_all,
+    has_empty_path_segment, renames_shadowed, resolve_path_all,
 };
 use crate::rules::SIGNATURE_RULE;
 use crate::scan::scan_crate;
@@ -89,6 +90,12 @@ pub(crate) fn module_findings(
     include_trait_impls: bool,
     dep_names: &[String],
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
+    // A forbidden operand with an empty `::`-segment (leading, trailing, doubled, or the empty
+    // string) could never match a resolved canonical path — checked before any resolution work,
+    // like `unsafe_findings`'s own guard for its allowed set's analogous "could never react" shape.
+    if let Some(bad) = forbidden.iter().find(|f| has_empty_path_segment(f)) {
+        return Err(malformed_path_operand_error(bad));
+    }
     let items_with_files =
         resolve_module_items_with_cfg_tags(src_dir, root_file, module, crate_package)?;
     // Grouped by BRANCH INDEX, not by file and not one shared computation over the flattened

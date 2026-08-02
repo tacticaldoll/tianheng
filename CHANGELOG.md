@@ -24,6 +24,16 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   fix below in this same window, so it is stated there instead of restated here.)
 
 ### Fixed
+- 渾儀 now rejects a forbidden/allowed operand whose `::`-delimited spelling has an empty segment
+  (a leading `::`, a trailing `::`, a doubled `::`, or the empty string) as a constitution error,
+  across `must_not_expose`/`and_not_expose`, `must_not_expose_dyn_of`, `must_not_expose_impl_trait_of`
+  (module- and subtree-scoped alike), and `must_not_acquire`/`and_not_acquire`. `extern_verbatim_renamed`
+  builds a resolved canonical path purely from `syn::Path` segments — it never carries a leading `::`
+  regardless of how the scanned source is spelled — so an operand like `must_not_expose("::serde")`
+  could never equal or prefix-contain a real resolved path and silently, permanently never reacted;
+  `must_not_acquire`'s leaf-identifier matching has the mirror-image gap for a trailing `::`. No
+  existing usage in this repo used the malformed spelling, so this is a strict tightening of an
+  already-inert configuration, not an adopter-visible behavior change for any working boundary.
 - 漏刻's CI probe audit now reads the arms of a `cfg_if!` invocation as real code, in both of its
   passes, completing the family: all three dimensions now share one transparency rule and are pinned
   on one shared fixture (`cfg_if_transparency_conformance.rs`). Skipping such a body like any foreign

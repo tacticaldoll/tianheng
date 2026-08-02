@@ -10,9 +10,12 @@ use std::path::{Path, PathBuf};
 
 use crate::containment::matches_forbidden;
 use crate::crate_scope::{extern_resolution, file_extern_scope, resolve_principal};
+use crate::errors::malformed_path_operand_error;
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
-use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
+use crate::resolve::{
+    ShapeExposure, UseMap, canonical_path_str, collect_uses, has_empty_path_segment,
+};
 
 /// A `use`-map per BRANCH, not one shared map over the flattened cross-branch union: two
 /// mutually-exclusive `#[cfg]` branches are never compiled together, so merging their `use`
@@ -117,6 +120,13 @@ pub(crate) fn operand_module_findings(
         impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
+    // A forbidden operand with an empty `::`-segment could never match a resolved canonical
+    // principal — checked before any resolution work, exactly as `exposure::module_findings`
+    // guards its own forbidden set (both share the identical `extern_verbatim_renamed` resolver,
+    // which never produces a leading-`::` canonical path).
+    if let Some(bad) = forbidden.iter().find(|f| has_empty_path_segment(f)) {
+        return Err(malformed_path_operand_error(bad));
+    }
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let uses_by_branch = uses_by_branch(&items_with_files);
