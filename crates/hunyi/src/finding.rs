@@ -1231,6 +1231,11 @@ mod fact_tests {
         assert_ne!(original.text(), polished.text());
     }
 
+    /// Hand-maintained: a new `PublicSeam` variant needing its own module-equivalent identity
+    /// field is caught only if whoever adds it also extends this list — nothing structural ties
+    /// variant addition to this check (unlike `UnsafeSiteFact::key_fields`'s external injection,
+    /// which cannot be bypassed per-variant). Acceptable for now, absent a second forcing case;
+    /// stated here so the gap is known, not assumed closed.
     #[test]
     fn every_public_seam_shape_is_named_and_identity_injective() {
         let seams = vec![
