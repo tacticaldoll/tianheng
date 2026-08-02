@@ -10,9 +10,12 @@ use crate::errors::{
 };
 use crate::resolve::strip_raw;
 use crate::syn_util::{
-    FlatItem, body_nested_impls, cfg_attr_path_values, direct_path_value,
-    flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
+    FlatItem, cfg_attr_path_values, direct_path_value, flatten_transparent_macros,
+    flatten_with_body_nested_impls, has_cfg_attr,
 };
+// Test-only: `resolve_module_root` below is the sole (`#[cfg(test)]`) caller.
+#[cfg(test)]
+use crate::syn_util::flatten_transparent_macro_items;
 
 /// The path segments of a module relative to the crate root.
 fn module_segments(module: &str) -> Vec<String> {
@@ -36,16 +39,15 @@ pub(crate) fn resolve_module_items_with_files(
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
-        // Transparent-macro (`cfg_if!`) arms flattened in, so every capability reading a module's
-        // items observes what an adopter wrote inside an arm without knowing arms exist.
-        let flat = flatten_transparent_macro_items(branch_items);
-        // Every `impl` a `const`/`fn` among `flat` directly bodies (the const-eval-trick idiom
-        // and its fn-body sibling — see `body_nested_impls`), attributed to this SAME branch/file:
-        // the extraction never crosses a file boundary, so the impl's `use`-map and module
-        // resolution are unchanged from as if it were written at this branch's own top level.
-        let nested_impls = body_nested_impls(&flat);
+        // See `flatten_with_body_nested_impls`: transparent-macro (`cfg_if!`) arms flattened in,
+        // plus every `impl` a `const`/`fn` among them directly bodies, attributed to this SAME
+        // branch/file (extraction never crosses a file boundary). Tags discarded — nothing here
+        // consults arm membership.
+        let (flat, nested_impls) = flatten_with_body_nested_impls(branch_items);
+        let plain: Vec<syn::Item> = flat.into_iter().map(|f| f.item).collect();
         items.extend(
-            flat.into_iter()
+            plain
+                .into_iter()
                 .chain(nested_impls)
                 .map(|item| (item, file.clone(), branch_index)),
         );
@@ -69,12 +71,13 @@ pub(crate) fn resolve_module_items_with_cfg_tags(
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
-        let flat = flatten_transparent_macros(branch_items);
-        // See `resolve_module_items_with_files`: the same const/fn-body-nested impls, wrapped
-        // as plain `FlatItem`s (no arm membership — nothing that consults it ever matches an
-        // `Item::Impl`, so a synthetic tag would claim membership this walk never observed).
-        let plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
-        let nested_impls = body_nested_impls(&plain).into_iter().map(FlatItem::plain);
+        // See `flatten_with_body_nested_impls`; unlike `resolve_module_items_with_files`, `flat`'s
+        // own arm-membership tags survive into `items` here, while the const/fn-body-nested impls
+        // are wrapped as plain `FlatItem`s (no arm membership — nothing that consults it ever
+        // matches an `Item::Impl`, so a synthetic tag would claim membership this walk never
+        // observed).
+        let (flat, nested_impls) = flatten_with_body_nested_impls(branch_items);
+        let nested_impls = nested_impls.into_iter().map(FlatItem::plain);
         items.extend(
             flat.into_iter()
                 .chain(nested_impls)

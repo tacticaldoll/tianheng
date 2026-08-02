@@ -309,6 +309,39 @@ pub(crate) fn body_nested_impls(items: &[syn::Item]) -> Vec<syn::Item> {
     out
 }
 
+/// The two views every one of this dimension's module walkers needs from **one** flattening pass
+/// of `items`: `flat` — [`flatten_transparent_macros`]'s tagged output, arm membership intact —
+/// and `nested_impls` — every [`body_nested_impls`] finds directly inside a `const`/`fn` among
+/// `flat`'s plain projection (post-macro-flattening, so an `impl` nested inside a `cfg_if!` arm's
+/// own `const`/`fn` is covered too, the two mechanisms composing without special-casing). Produced
+/// together so no caller re-derives one from the other — flattening twice would erase the arm
+/// membership the second time, and computing `nested_impls` from anything but `flat`'s own plain
+/// projection would silently skip an arm-nested `const`/`fn`.
+///
+/// `flat` is returned **exactly as [`flatten_transparent_macros`] produced it — never itself
+/// extended with `nested_impls`**: nothing that consults `FlatItem`'s arm-membership tag
+/// (`resolve_child_modules`, `collect_reexports`) ever matches an `Item::Impl`, so giving one a
+/// synthetic arm tag would be an unearned claim about membership this walk never observed. Each
+/// recovered impl is implicitly attributed to the SAME enclosing module/file/`use`-map as the
+/// `const`/`fn` that lexically holds it — correct, since extraction never crosses a file or module
+/// boundary.
+///
+/// Deliberately returns the two views SEPARATELY rather than one pre-merged list: every caller
+/// needs `nested_impls` folded in somehow, but they differ in whether `flat`'s own tags survive
+/// into their result — the crate-wide walk needs both `flat` untouched (returned on its own) AND a
+/// separately-merged plain list; the anchored resolver discards `flat`'s tags entirely and chains a
+/// plain projection with `nested_impls`; its cfg-tag-preserving sibling keeps `flat` chained with
+/// `nested_impls` re-wrapped as untagged [`FlatItem::plain`]. That final wrapping is each caller's
+/// own local business, not shared here.
+pub(crate) fn flatten_with_body_nested_impls(
+    items: &[syn::Item],
+) -> (Vec<FlatItem>, Vec<syn::Item>) {
+    let flat = flatten_transparent_macros(items);
+    let plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
+    let nested_impls = body_nested_impls(&plain);
+    (flat, nested_impls)
+}
+
 /// The child-**module** declarations among `items`, each paired with the [`FlatItem`] of its OWN
 /// declaration (attrs + `cfg_if!` arm membership) — the item-level companion to
 /// [`crate::crate_scope::child_module_names`]'s flat name set. Needed wherever a re-export's own
