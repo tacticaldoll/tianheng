@@ -905,7 +905,7 @@ fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
     // directly, bypassing the build-time guard).
     use crate::resolve::{ReexportMap, canonicalize_through_reexports};
     let mut map = ReexportMap::new();
-    map.insert("crate::a".to_string(), "crate::a::b".to_string());
+    map.insert("crate::a".to_string(), vec!["crate::a::b".to_string()]);
     // Before the fix this never returned; the assertion is simply that it TERMINATES.
     let out = canonicalize_through_reexports("crate::a::foo", &map);
     assert!(
@@ -930,7 +930,10 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
     let uses = UseMap::new();
     let aliases = std::collections::HashMap::new();
     let mut reexports = ReexportMap::new();
-    reexports.insert("crate::a::Foo".to_string(), "crate::a::Foo::b".to_string());
+    reexports.insert(
+        "crate::a::Foo".to_string(),
+        vec!["crate::a::Foo::b".to_string()],
+    );
     let landing = resolve_self_type(
         &self_ty,
         &uses,
@@ -1020,7 +1023,7 @@ fn self_growing_reexport_prefix_loop_terminates_without_hanging() {
 
     // A self-similar re-export entry `crate::a -> crate::a::b` creates a self-growing path chain:
     // crate::a::foo -> crate::a::b::foo -> crate::a::b::b::foo -> ...
-    reexports.insert("crate::a".to_string(), "crate::a::b".to_string());
+    reexports.insert("crate::a".to_string(), vec!["crate::a::b".to_string()]);
 
     let res = expand_canonical_paths("crate::a::foo", &aliases, &reexports);
     assert!(
@@ -10292,4 +10295,234 @@ fn a_non_pub_extern_block_item_is_not_observed() {
     )
     .unwrap();
     assert_eq!(out, Vec::<String>::new());
+}
+
+/// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` declarations for the identical local
+/// name, in the same file, must both react (cfg-blind: observation cannot know which is live).
+/// Before the fix, the second `use` silently overwrote the first in `UseMap` — a single
+/// `HashMap<String, String>` — so the verdict depended on source order rather than on whether
+/// either branch's binding was genuinely forbidden.
+#[test]
+fn mutually_exclusive_cfg_gated_use_aliases_both_react() {
+    let out = semantic_findings(
+        "cfg-use-alias-merge-forbidden-first",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nuse crate::infra::Secret as Handle;\n#[cfg(not(unix))]\nuse crate::safe::Handle;\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical shape with the two `use` declarations in the OPPOSITE order — the forbidden
+/// binding declared second. Before the fix this silently passed (`Ok([])`): `resolve_path` took
+/// only the first `use`-map candidate, and here that candidate was the non-forbidden one.
+#[test]
+fn mutually_exclusive_cfg_gated_use_aliases_react_regardless_of_declaration_order() {
+    let out = semantic_findings(
+        "cfg-use-alias-merge-forbidden-second",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\nuse crate::safe::Handle;\n#[cfg(unix)]\nuse crate::infra::Secret as Handle;\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical `use`-alias collision expressed as a `cfg_if!` macro invocation rather than bare
+/// `#[cfg]` attributes — the audit's cited "identical shape via the 0.3.1 transparency" form, now
+/// that `cfg_if!` arm bodies are read as real code (a separate, already-closed finding).
+#[test]
+fn mutually_exclusive_cfg_if_use_aliases_both_react() {
+    let out = semantic_findings(
+        "cfg-if-use-alias-merge",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! { if #[cfg(unix)] { use crate::infra::Secret as Handle; } else { use crate::safe::Handle; } }\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// Two mutually-exclusive `pub use ... as X;` re-export targets for the identical local name, in
+/// the same file, must both canonicalize correctly through the crate-wide `ReexportMap` — a facade
+/// path reached through either branch's binding must resolve to ITS OWN target, not collapse to
+/// whichever branch was declared second. Before the fix, `ReexportMap` was a single
+/// `HashMap<String, String>`.
+#[test]
+fn mutually_exclusive_reexport_targets_both_canonicalize_correctly() {
+    let out = semantic_findings(
+        "reexport-map-merge-forbidden-first",
+        &[
+            (
+                "lib.rs",
+                "pub mod safe;\npub mod infra;\npub mod api;\npub mod facade;\n",
+            ),
+            ("safe.rs", "pub struct Thing;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\npub use crate::infra::Secret as Handle;\n#[cfg(not(unix))]\npub use crate::safe::Thing as Handle;\n",
+            ),
+            ("facade.rs", "pub fn f() -> crate::api::Handle { loop {} }\n"),
+        ],
+        "crate::facade",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::facade::f"]
+    );
+}
+
+/// The identical re-export collision with the two `pub use` declarations in the OPPOSITE order —
+/// the forbidden target declared second.
+#[test]
+fn mutually_exclusive_reexport_targets_react_regardless_of_declaration_order() {
+    let out = semantic_findings(
+        "reexport-map-merge-forbidden-second",
+        &[
+            (
+                "lib.rs",
+                "pub mod safe;\npub mod infra;\npub mod api;\npub mod facade;\n",
+            ),
+            ("safe.rs", "pub struct Thing;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\npub use crate::safe::Thing as Handle;\n#[cfg(unix)]\npub use crate::infra::Secret as Handle;\n",
+            ),
+            ("facade.rs", "pub fn f() -> crate::api::Handle { loop {} }\n"),
+        ],
+        "crate::facade",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::facade::f"]
+    );
+}
+
+/// The identical `use`-alias collision, this time exercising `resolve_principal`
+/// (`crates/hunyi/src/crate_scope.rs`) — the shared principal-trait resolver dyn-trait and
+/// impl-trait's *operand-scoped* boundaries both use (per `matches_forbidden_principal`'s own doc:
+/// "Both the single-module and subtree operand reactions use this leaf so their resolution
+/// semantics cannot drift"). Discovered while fixing the signature-coupling instance of this bug —
+/// not named in the original audit findings, but the identical mechanism, independently reproduced
+/// here before being fixed, per this project's own reproduce-before-fixing discipline.
+#[test]
+fn dyn_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order() {
+    let tree = TempSrcTree::new("dyn-trait-principal-cfg-use-merge");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\n#[cfg(unix)]\nuse crate::infra::Port as P;\npub fn f() -> Box<dyn P> { loop {} }\n",
+        ),
+    ]);
+    let out = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::DynTrait,
+            subject: "dyn P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
+/// The identical shape at impl-trait's own operand-scoped boundary — same shared
+/// `resolve_principal`/`matches_forbidden_principal` leaf as the dyn-trait test above.
+#[test]
+fn impl_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order() {
+    let tree = TempSrcTree::new("impl-trait-principal-cfg-use-merge");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\n#[cfg(unix)]\nuse crate::infra::Port as P;\npub fn f() -> impl P { loop {} }\n",
+        ),
+    ]);
+    let out = crate::impl_trait::impl_trait_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::ImplTrait,
+            subject: "impl P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
 }

@@ -66,6 +66,6 @@
 
 ## 5. Definition of Done
 
-- [ ] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
+- [x] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
 - [ ] 5.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste call.
