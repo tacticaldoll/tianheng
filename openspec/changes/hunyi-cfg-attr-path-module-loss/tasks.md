@@ -148,9 +148,11 @@ several SEPARATE (not nested) `#[cfg_attr(..., path = "…")]` attributes on one
 - [x] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`) —
       re-run after round 4's `cfg_attr_path_values` fix.
-- [x] 5.2 Adversarial apply-stage review (rounds 2, 3, and 4): round 2 confirmed the declared
+- [x] 5.2 Adversarial apply-stage review (rounds 2 through 5): round 2 confirmed the declared
       reaction still bites and closed the `walk_subtree_modules` undercounting plus two stale doc
       comments; round 3 found and closed a real, pre-existing gap in `module_resolve.rs` this
       change's own commits had twice misdescribed as "already correct"; round 4 found and closed a
-      stacked-(non-nested)-`cfg_attr`-attributes gap shared by both walkers, then found nothing
-      further across six additional counter-examples.
+      stacked-(non-nested)-`cfg_attr`-attributes gap shared by both walkers; round 5, narrowly
+      re-targeting round 4's own fix (mixed nested/stacked attrs, 3+ stacked attrs, duplicate
+      targets, a `path` meta among non-path siblings, the `has_backing_source` loop), found nothing
+      further — the fix converged.
