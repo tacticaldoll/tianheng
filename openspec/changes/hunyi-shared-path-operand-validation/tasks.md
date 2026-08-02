@@ -1,12 +1,12 @@
 # tasks: Hunyi Shared Path-Operand Validation Implementation Plan
 
-- [ ] Verify all four existing forbidden-operand call sites (`exposure.rs`, `forbidden_marker.rs`,
+- [x] Verify all four existing forbidden-operand call sites (`exposure.rs`, `forbidden_marker.rs`,
       `shape_scan.rs`, `impl_trait.rs`) are genuinely byte-identical in guard shape (type, predicate,
       error) before extracting, rather than assuming it from the prompt. <!-- id: 0 -->
-- [ ] Add `resolve::validate_path_operands` to `crates/hunyi/src/resolve/mod.rs`, beside
+- [x] Add `resolve::validate_path_operands` to `crates/hunyi/src/resolve/mod.rs`, beside
       `has_empty_path_segment`, and swap all four call sites to use it instead of the inline
       3-line guard — no behavior change at these four sites. <!-- id: 1 -->
-- [ ] Confirm the four Part-1 refactor sites' own existing tests still pass unmodified (no assertion
+- [x] Confirm the four Part-1 refactor sites' own existing tests still pass unmodified (no assertion
       touched), isolating the refactor from the Part-2 behavior change, and add the matching
       `CHANGELOG.md` `[Unreleased]` → `### Changed` entry. <!-- id: 2 -->
 - [ ] Reproduce the `BACKLOG.md`-recorded `allowed_locations` gap directly against

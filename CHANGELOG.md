@@ -29,6 +29,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
   now share one crate-private helper, `syn_util::flatten_with_body_nested_impls`, instead of each
   hand-composing the identical sequence. No public API, wire format, or observable behavior change.
+- Internal refactor: 渾儀's four call sites that guard a forbidden-operand list against a malformed
+  `::`-path entry (`exposure.rs`, `forbidden_marker.rs`, `shape_scan.rs`, `impl_trait.rs`) now share
+  one crate-private helper, `resolve::validate_path_operands`, instead of each repeating the
+  identical inline check. No public API, wire format, or observable behavior change at these four
+  sites.
 
 ### Fixed
 - **BREAKING**: `PublicSeam::InherentMethod`/`InherentAssoc` now carry the impl **block's own**

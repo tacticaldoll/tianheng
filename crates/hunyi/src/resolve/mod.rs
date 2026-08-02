@@ -86,6 +86,22 @@ pub(crate) fn has_empty_path_segment(operand: &str) -> bool {
     operand.split("::").any(str::is_empty)
 }
 
+/// Reject the first malformed entry in a forbidden- or allowed-operand list (per
+/// [`has_empty_path_segment`]) as a constitution error, else `Ok(())`. The one shared guard
+/// behind every forbidden/allowed-operand-shaped DSL method — `must_not_expose`,
+/// `must_not_acquire`, the dyn/impl-trait operand families, `only_implemented_in`'s
+/// `allowed_locations`, and unsafe-confinement's `allowed_locations` — so the check's wording and
+/// checked-before-any-resolution-work timing never drifts between call sites. Callers pass their
+/// own raw, pre-canonicalization operand list: [`canonical_path_str`] never removes or collapses
+/// an empty segment (it only strips a raw-identifier prefix per segment), so this reacts
+/// identically whether applied before or after that canonicalization.
+pub(crate) fn validate_path_operands(operands: &[String]) -> Result<(), String> {
+    if let Some(bad) = operands.iter().find(|op| has_empty_path_segment(op)) {
+        return Err(crate::errors::malformed_path_operand_error(bad));
+    }
+    Ok(())
+}
+
 /// Map each name a `use` brings into the module's scope to its full written path
 /// (`use a::b::C` → `C → a::b::C`; `use a::b::C as D` → `D → a::b::C`; `use a::b` →
 /// `b → a::b`). Glob imports bring no nameable leaf (a stated bound). Only the module's

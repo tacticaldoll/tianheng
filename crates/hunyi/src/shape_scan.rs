@@ -10,11 +10,10 @@ use std::path::{Path, PathBuf};
 
 use crate::containment::matches_forbidden;
 use crate::crate_scope::{extern_resolution, file_extern_scope, resolve_principal};
-use crate::errors::malformed_path_operand_error;
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{
-    ShapeExposure, UseMap, canonical_path_str, collect_uses, has_empty_path_segment,
+    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_path_operands,
 };
 
 /// A `use`-map per BRANCH, not one shared map over the flattened cross-branch union: two
@@ -124,9 +123,7 @@ pub(crate) fn operand_module_findings(
     // principal — checked before any resolution work, exactly as `exposure::module_findings`
     // guards its own forbidden set (both share the identical `extern_verbatim_renamed` resolver,
     // which never produces a leading-`::` canonical path).
-    if let Some(bad) = forbidden.iter().find(|f| has_empty_path_segment(f)) {
-        return Err(malformed_path_operand_error(bad));
-    }
+    validate_path_operands(forbidden)?;
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let uses_by_branch = uses_by_branch(&items_with_files);
