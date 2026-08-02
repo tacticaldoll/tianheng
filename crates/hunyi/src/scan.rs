@@ -699,11 +699,11 @@ fn walk_module(
 ///
 /// Inherits the crate walk's guards, so a subtree reaction never silently under-reacts: an
 /// **unconditional** `#[path]`-remapped module is followed like any other descendant (matching
-/// `resolve_child_modules`'s own policy), a `cfg_attr`-wrapped `#[path]` is the actual stated
-/// coverage bound (skipped, since following it cfg-blind could read a file rustc does not compile
-/// here), a `#[cfg]`-gated fileless module is tolerated, a non-`#[cfg]` missing module file is a
-/// scan error (exit 2), and a symlink module cycle is a scan error (exit 2), never a stack
-/// overflow.
+/// `resolve_child_modules`'s own policy), a `cfg_attr`-wrapped `#[path]` module is observed via the
+/// identical union `resolve_child_modules` applies (an inline body regardless of the attribute, a
+/// file module's conventional file and its `cfg_attr` target both read when they exist on disk),
+/// a `#[cfg]`-gated fileless module is tolerated, a non-`#[cfg]` missing module file is a scan
+/// error (exit 2), and a symlink module cycle is a scan error (exit 2), never a stack overflow.
 ///
 /// When the anchor (or any segment on the path to it) was reached through a mutually-exclusive
 /// `#[cfg]` split, [`resolve_module_branches`] keeps every surviving branch's own items paired

@@ -6231,6 +6231,26 @@ fn impl_trait_subtree_reacts_to_a_submodule_return_the_seam_scope_misses() {
     assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
 }
 
+/// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
+/// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
+/// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
+/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
+/// same shared walker, independently reproduced here before being counted as fixed.
+#[test]
+fn impl_trait_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg_attr(any(), path = \"never.rs\")]\npub mod net;\n",
+        ),
+        ("net.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+    ];
+    let subtree = impl_trait_subtree("cfg-attr-path", files, "crate").unwrap();
+    assert_eq!(subtree.len(), 1);
+    assert_eq!(subtree[0].1, "crate::net");
+    assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
+}
+
 #[test]
 fn impl_trait_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
     // The anchor module's own returned `impl Trait` is still caught, and its finding string is
@@ -6905,6 +6925,29 @@ fn async_subtree_errors_on_a_non_cfg_missing_submodule() {
     // silent pass that would under-react.
     let files = &[("lib.rs", "pub mod gone;\n")];
     assert!(async_subtree("non-cfg-missing", files, "crate").is_err());
+}
+
+/// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
+/// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
+/// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
+/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
+/// same shared walker, independently reproduced here before being counted as fixed.
+#[test]
+fn async_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg_attr(any(), path = \"never.rs\")]\npub mod net;\n",
+        ),
+        ("net.rs", "pub async fn connect() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree("cfg-attr-path", files, "crate").unwrap(),
+        [(
+            "async fn crate::net::connect()".to_string(),
+            "crate::net".to_string()
+        )],
+    );
 }
 
 #[test]

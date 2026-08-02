@@ -128,7 +128,45 @@ let a misplaced impl escape trait-impl-locality, exactly as it escaped unsafe-co
 5. CHANGELOG `[Unreleased]` entry. No **BREAKING** marker — false negatives closing, not an identity
    shape; no existing baseline is invalidated. No version bump (campaign-wide constraint).
 
+## Round 2 (adversarial review of round 1)
+
+An independent adversarial review re-examined round 1's "all five consumers, `module_resolve.rs`
+correctly out of scope" narrative rather than accepting it, and found it incomplete (not wrong about
+the fix itself, which held up against every constructed counter-example):
+
+- **A sixth and seventh consumer, undercounted.** `async_exposure_subtree_findings`
+  (`async_exposure.rs`) and `impl_trait_subtree_findings`/`impl_trait_operand_subtree_findings`
+  (`impl_trait.rs`) — the subtree-scope opt-in (`including_submodules()`) both capabilities support —
+  call `walk_subtree_modules` (`scan.rs`), which calls `collect_subtree`, which calls the EXACT SAME
+  `resolve_child_modules` this change patched. Round 1's commit message attributed these capabilities'
+  correctness to `module_resolve.rs`'s "already correct, fails loud" behavior — factually wrong for
+  this pathway; they never touch `module_resolve.rs`. Live-reproduced: both were broken pre-fix
+  (`Ok([])` on a cfg_attr(path)-hidden submodule's own async fn / returned `impl Trait`) and correctly
+  fixed post-fix, purely as a side effect of sharing one function — never independently reproduced,
+  tested, or named as a consumer until this review.
+- **Two stale doc comments**, left describing the pre-fix "skip" behavior after the code changed:
+  `scan.rs`'s `walk_subtree_modules` doc (claimed `cfg_attr`-wrapped `#[path]` "is the actual stated
+  coverage bound (skipped...)" — false now) and `syn_util.rs`'s `has_path_attr`/`direct_path_value`
+  docs (claimed "the whole-crate **walks** do not follow" it, plural — only true of
+  `module_resolve.rs`'s descent now, `has_path_attr`'s only remaining caller).
+- **No functional bug** in six additional constructed counter-examples: union of two different
+  existing files (both read, neither shadows the other); conventional-name/`cfg_attr`-target
+  resolving to the identical canonical file via a relative-path trick (deduped correctly via the
+  existing `seen_files` guard); deeply nested `cfg_attr(cfg_attr(path))` (correctly extracted);
+  an inline module's OWN nested file-children under a cfg_attr-wrapped `#[path]` (resolve from the
+  correct directory); `has_backing_source` combined with a co-occurring bare `#[cfg]` (correctly
+  tolerated, matching the intended OR-gate).
+
+Fixed: the two doc comments; added explicit regression tests for both newly-identified consumers
+(`async_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule`,
+`impl_trait_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule`), each independently
+non-vacuously verified (reverted to pre-fix `scan.rs`/`syn_util.rs`, confirmed failure, restored).
+Added `MODIFIED Requirements` deltas to `semantic-async-exposure-boundary` and
+`semantic-impl-trait-boundary`'s own "Subtree scope opt-in" requirements, which had independently
+stated the same now-incorrect "`cfg_attr`-wrapped `#[path]` SHALL remain unfollowed" claim.
+
 ## Open Questions
 
-None outstanding. `module_resolve.rs`'s separate, already-correct fail-loud bound is an explicit
-non-goal, not an open question within this change.
+None outstanding. `module_resolve.rs`'s separate, already-correct fail-loud bound (for
+signature-coupling's own anchor resolution, visibility, and dyn/impl-trait's MODULE-scoped,
+non-subtree variant) is an explicit non-goal, not an open question within this change.

@@ -56,20 +56,47 @@ not only the two the original audit findings measured against (unsafe-confinemen
       confirmed every one of 3.1–3.7 fails in the predicted way (including the two pre-existing tests
       at 3.5), restored. Full suite green after restore.
 
+## 3a. Round-2 consumers (adversarial apply-stage review)
+
+An independent review declined to accept round 1's "all five consumers, `module_resolve.rs`
+correctly out of scope" narrative on its own terms and found `walk_subtree_modules` (async-exposure's
+and impl-trait's SUBTREE-scope opt-in) shares the identical `resolve_child_modules` mechanism —
+undercounted and misattributed to `module_resolve.rs` in round 1's own commit message:
+
+- [x] 3a.1 `async_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule` —
+      `async_exposure_subtree_findings`'s own subtree walk, independently reproduced and fixed.
+- [x] 3a.2 `impl_trait_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule` — the identical
+      shape at `impl_trait_subtree_findings`'s own subtree walk.
+- [x] 3a.3 Non-vacuous verification for 3a.1 (reverted `scan.rs`/`syn_util.rs` to pre-fix, confirmed
+      failure, restored); 3a.2 relies on the identical, already-verified shared function
+      (`resolve_child_modules` via `walk_subtree_modules` → `collect_subtree`), not independently
+      re-verified by revert given it is the same code path already isolated at 3a.1 and in section 3.
+- [x] 3a.4 Fixed two stale doc comments describing the pre-fix "skip" behavior: `scan.rs`'s
+      `walk_subtree_modules` doc, and `syn_util.rs`'s `has_path_attr`/`direct_path_value` docs
+      (narrowed to correctly describe `module_resolve.rs`'s descent as the only remaining skip-bound
+      caller).
+- [x] 3a.5 Six additional counter-examples constructed by the review found no further bug: union of
+      two different existing files; conventional/target resolving to the identical canonical file
+      (deduped); deeply nested `cfg_attr(cfg_attr(path))`; an inline module's own nested file-children
+      under a cfg_attr-wrapped path; `has_backing_source` combined with a co-occurring bare `#[cfg]`.
+
 ## 4. Documentation
 
 - [x] 4.1 Added a CHANGELOG `[Unreleased] ### Fixed` entry. No **BREAKING** marker — false negatives
       closing, not an identity shape; no existing baseline is invalidated.
 - [x] 4.2 Added `MODIFIED Requirements` deltas to `semantic-unsafe-confinement`,
       `semantic-trait-impl-locality`, `semantic-forbidden-marker`, `semantic-signature-coupling`,
-      `semantic-dyn-trait-operand-boundary`, and `semantic-impl-trait-operand-boundary` — each
-      replaces its stated "`cfg_attr`-wrapped `#[path]` is an unfollowed bound" language (crate-wide
-      walk only) with the union-observation rule, while leaving each spec's SEPARATE
-      single-module-anchor bound (where stated) untouched.
+      `semantic-dyn-trait-operand-boundary`, `semantic-impl-trait-operand-boundary`,
+      `semantic-async-exposure-boundary`, and `semantic-impl-trait-boundary` (the last two added
+      after round 2's review) — each replaces its stated "`cfg_attr`-wrapped `#[path]` is an
+      unfollowed bound" language (crate-wide walk / subtree walk only) with the union-observation
+      rule, while leaving each spec's SEPARATE single-module-anchor bound (where stated) untouched.
 
 ## 5. Definition of Done
 
 - [x] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
-      suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
-- [ ] 5.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste call
-      — including whether any further `scan_crate` consumer or edge case was missed.
+      suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`) —
+      re-run after round 2's additions.
+- [x] 5.2 Adversarial apply-stage review (round 2): confirmed the declared reaction still bites, not
+      a taste call; found and closed the `walk_subtree_modules` undercounting and two stale doc
+      comments; found no further bug across six additional constructed counter-examples.

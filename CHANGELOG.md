@@ -152,12 +152,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   candidate existing, with no other cfg-conditional gate, remains a genuine scan error. Since the
   crate-wide scan backs signature-coupling's own alias/re-export closure and dyn-trait's/impl-trait's
   shared operand-scoped principal-trait resolver, not only forbidden-marker, trait-impl-locality, and
-  unsafe-confinement (the two capabilities the discovering findings measured against), all five were
-  independently reproduced and confirmed fixed by this one change. `module_resolve.rs`'s separate
-  single-module-anchor resolution (signature-coupling's own anchor, visibility, async-exposure,
-  dyn/impl-trait's module-scoped variant) is untouched — it already, correctly, fails loud on this
-  shape rather than silently passing. Not breaking — closes false negatives; no baseline identity
-  shape changes.
+  unsafe-confinement (the two capabilities the discovering findings measured against), and since
+  async-exposure's and impl-trait's own subtree-scope opt-in (`including_submodules()`) shares the
+  identical walker one hop further out (found on adversarial review), all seven were independently
+  reproduced and confirmed fixed by this one change. `module_resolve.rs`'s separate single-module-
+  anchor resolution (signature-coupling's own anchor, visibility, and dyn/impl-trait's module-scoped,
+  non-subtree variant) is untouched — it already, correctly, fails loud on this shape rather than
+  silently passing. Not breaking — closes false negatives; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 

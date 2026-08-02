@@ -22,8 +22,14 @@ Two shapes, both reproduced directly (matching the audit findings):
 Since `scan_crate` backs signature-coupling's own alias/re-export closures (`exposure.rs`), the shared
 principal-trait resolver dyn-trait/impl-trait's operand-scoped boundaries use
 (`crate_scope.rs::extern_resolution`), forbidden-marker, trait-impl-locality, and unsafe-confinement —
-all five, not only the two capabilities the original audit findings measured against — independently
+five capabilities, not only the two the original audit findings measured against — independently
 reproduced and confirmed to have the identical gap before being folded into this one fix.
+
+An independent adversarial apply-stage review then found two more consumers sharing the exact same
+`resolve_child_modules` mechanism via a SEPARATE entry point, `walk_subtree_modules` (used by
+async-exposure's and impl-trait's subtree-scope opt-in, `including_submodules()`): both had the
+identical gap, and both were independently reproduced before being counted as fixed. The review also
+found the fix's own doc comments had two stale references describing the pre-fix "skip" behavior.
 
 ## What Changes
 
@@ -64,6 +70,9 @@ reproduced and confirmed to have the identical gap before being folded into this
 - `semantic-dyn-trait-operand-boundary` / `semantic-impl-trait-operand-boundary`: the shared
   `resolve_principal`'s re-export closure (via `crate_scope.rs::extern_resolution`, itself a
   `scan_crate` caller) benefits the same way.
+- `semantic-async-exposure-boundary` / `semantic-impl-trait-boundary`: their subtree-scope opt-in
+  (`including_submodules()`, via `walk_subtree_modules` → `resolve_child_modules`) benefits the same
+  way — found by adversarial review, independently reproduced.
 
 ## Impact
 
@@ -71,7 +80,9 @@ reproduced and confirmed to have the identical gap before being folded into this
 - No public API/DSL/builder change, no baseline format change (this fixes false negatives, not an
   identity shape — an adopter's existing baseline is unaffected either way).
 - Out of scope, named explicitly rather than silently left: `module_resolve.rs`'s single-module-
-  anchored descent (signature-coupling's own anchor resolution, visibility, async-exposure,
-  dyn/impl-trait's module-scoped variant) keeps its existing, already-correct fail-loud bound for a
-  `cfg_attr`-wrapped `#[path]` — a narrower, accepted scope difference from the crate-wide walk, not a
-  silent pass, and not touched here.
+  anchored descent (signature-coupling's own anchor resolution, visibility, dyn/impl-trait's
+  MODULE-scoped, non-subtree, non-operand variant) keeps its existing, already-correct fail-loud
+  bound for a `cfg_attr`-wrapped `#[path]` — a narrower, accepted scope difference from the crate-wide
+  walk, not a silent pass, and not touched here. (async-exposure and impl-trait's own SUBTREE-scope
+  opt-in does NOT use `module_resolve.rs` at all — it shares `resolve_child_modules` via
+  `walk_subtree_modules`, and so IS fixed by this change; see Modified Capabilities above.)
