@@ -321,6 +321,20 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
                     i += 1;
                 }
             }
+            if depth > 0 {
+                // Unterminated (Rust itself would reject this as a compile error, but observation
+                // must still react 0/1/2, never panic or corrupt state): the loop above stops
+                // peeking once fewer than two bytes remain, which can leave exactly one trailing
+                // byte unconsumed — and that byte may be the orphaned tail of a multi-byte UTF-8
+                // character whose lead byte(s) were already dropped inside the (still-open)
+                // comment. Left in place, the outer loop would re-scan that lone byte as ordinary
+                // code and push it into `out` on its own, an invalid UTF-8 fragment that
+                // `String::from_utf8_lossy` below then *lengthens* (one byte becomes the 3-byte
+                // U+FFFD), desynchronizing `positions` from the string it maps into and panicking
+                // the next stage's indexing. An unterminated comment logically extends to EOF, so
+                // consume through EOF rather than leaving anything dangling to be re-read as code.
+                i = bytes.len();
+            }
             // Emit a separator so a comment wedged between two tokens does not fuse them: without
             // it, `use/*c*/crate::X;` becomes `usecrate::X;` and the `use` keyword is no longer
             // recognized (its following byte is an identifier byte), silently dropping the import.

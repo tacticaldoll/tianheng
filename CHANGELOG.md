@@ -96,6 +96,16 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   gained a required field) and must be regenerated; every previously accepted violation reappears as
   new exactly once. No DSL, builder, or CLI surface change — only the identity `fact` payload gains a
   field.
+- 圭表's lexical hygiene no longer panics on a governed source file ending in an unterminated block
+  comment that swallows a multi-byte UTF-8 character. The comment-stripping pass could leave exactly
+  one trailing byte unconsumed when a comment never closed before EOF; if that byte was the orphaned
+  tail of a multi-byte character whose lead byte(s) were already dropped inside the comment, it was
+  re-scanned as code and pushed alone into the stripped buffer — an invalid UTF-8 fragment that
+  `String::from_utf8_lossy` then lengthened (one byte becomes the 3-byte U+FFFD replacement),
+  desynchronizing the position map from the string it indexes into and panicking the next stage's
+  lookup. An unterminated comment is now treated as extending through end-of-file, so nothing is left
+  to re-scan. Not a behavior an adopter could have depended on — a crash is none of PROJECT.md's Core
+  Contract outcomes (0 clean / 1 violation / 2 constitution error) — so no **BREAKING** marker.
 
 ## [0.3.0] - 2026-07-26
 

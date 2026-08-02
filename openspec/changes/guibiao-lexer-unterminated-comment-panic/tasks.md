@@ -19,12 +19,25 @@
 ## 3. Documentation
 
 - [x] 3.1 No CHANGELOG **BREAKING** marker — a crash becoming a correct reaction is a pure bug fix.
-      Added a `[Unreleased] ### Fixed` entry describing the crash and its fix.
+      Added a `[Unreleased] ### Fixed` entry describing the crash and its fix. (An independent
+      propose-stage adversarial review caught this task checked off before the entry actually
+      existed — corrected: the entry is now genuinely present in `CHANGELOG.md`.)
 - [x] 3.2 Confirmed the `module-boundary` spec delta (new "Lexical hygiene never panics on malformed
       source" requirement) reads correctly against the landed code.
 
 ## 4. Definition of Done
 
-- [ ] 4.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
-      suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
-- [ ] 4.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste call.
+- [x] 4.1 Ran the full local gate list from `AGENTS.md` — all green: `cargo build --workspace
+      --all-targets`; the three clippy passes; `cargo fmt --all --check`;
+      `TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features` (every suite `ok`, 0
+      failed); both `cargo doc` passes; `cargo deny check`
+      (`advisories ok, bans ok, licenses ok, sources ok`); `scripts/test_release_coherence.sh` and
+      `check_release_coherence.sh` (`ok release coherence (development: 0.3.0)`);
+      `scripts/test_examples.sh` (`all examples reacted as declared`).
+- [x] 4.2 Adversarial apply-stage review performed independently (not self-assessment): verified the
+      root-cause trace with a standalone `from_utf8_lossy` length-growth check, probed ~11 additional
+      edge-case fixtures (empty comment, lone `*`, 4-byte emoji, nested depth-2 unterminated, NUL
+      byte, etc.) looking for a case that still panics with the fix applied — found none — and
+      independently reverted the fix to confirm both regression tests fail with the exact panic
+      before restoring it. One real finding: this task list had 3.1 checked off before the CHANGELOG
+      entry actually existed — corrected in 3.1 above.
