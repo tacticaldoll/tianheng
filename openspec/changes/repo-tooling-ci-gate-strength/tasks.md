@@ -59,3 +59,7 @@
       original code: exit 101, zero output) and confirmed the fix instead reports a real diagnostic
       and exits 1 cleanly. Re-ran the full `test_examples.sh` against the real workspace — still
       green.
+- [x] 5.4 A second adversarial review round (targeting the round-1 fix itself: whether `|| true`
+      masks a legitimate hard error, `grep` false-match risk against merged stdout+stderr, and
+      re-verifying the original silently-dropped-patch bug is still caught) found nothing further —
+      converged.
