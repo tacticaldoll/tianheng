@@ -93,6 +93,15 @@ reaction test from these quality gates.
 - **THEN** its existing Tianheng reaction test still observes the deliberately violated boundary
   rather than repairing or suppressing that architectural fault
 
+#### Scenario: A silently-dropped patch fails the gate
+
+- **WHEN** an example's committed family requirement no longer accepts the execution-time
+  `patch.crates-io` override (e.g. a local family version bump the requirement does not satisfy),
+  and Cargo silently falls back to resolving that family crate from crates.io instead
+- **THEN** the examples gate fails loud, naming the exact example and crate, rather than passing
+  its quality and reaction checks against the stale published crate as if the local patch had
+  applied
+
 ### Requirement: Every repository example has a fulfilled reaction owner
 
 The repository examples gate SHALL derive its executable example inventory from every immediate
@@ -188,3 +197,4 @@ The repository unit and integration test suites SHALL include lock assertions ve
 
 - **WHEN** the test harness evaluates a module boundary against source containing `use crate::a::b::{super::forbidden::X};`
 - **THEN** the harness detects `crate::a::forbidden` and reports the expected violation
+
