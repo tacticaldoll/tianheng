@@ -43,7 +43,9 @@ forbidden type that appears in any of them. The observed positions SHALL compris
 5. the impl method **return type as written at the impl site** (position `method {name} return`).
 
 A forbidden type reached only through an impl-site position SHALL react even when it appears in no
-signature-coupling position.
+signature-coupling position. A where-clause bounded type that cannot be rendered (a complex
+const-generic argument) SHALL NOT be silently keyed to a shared placeholder; see "Trait-impl exposure
+uses observed structural seams" for the fail-loud requirement this failure mode falls under.
 
 #### Scenario: A forbidden type in a trait's generic argument is a violation
 
@@ -210,9 +212,13 @@ no projection-specific code). The projection remains a pure projection and SHALL
 
 ### Requirement: Trait-impl exposure uses observed structural seams
 
-Trait-impl exposure facts SHALL encode trait, canonical self type, associated item role/name, and
-forbidden subject where observed. A traversal position or impl/item ordinal SHALL NOT substitute for
-an unrenderable structural role.
+Trait-impl exposure facts SHALL encode trait, canonical self type, associated item role/name, the
+where-clause bounded type, and forbidden subject where observed. A traversal position or impl/item
+ordinal SHALL NOT substitute for an unrenderable structural role: when a role's ordinary rendering
+fails (for example, a where-clause bounded type carrying a complex const-generic argument, such as
+`Arr<{ N + 1 }>`, which no observed shape in this capability renders), the system SHALL fail loud
+(a constitution error identifying the failure) rather than fall back to a shared literal that two
+structurally distinct roles could both produce.
 
 #### Scenario: Inherent and trait-impl seams stay distinct
 - **WHEN** the same subject appears in an inherent item and a trait-impl item on one self type
@@ -221,4 +227,15 @@ an unrenderable structural role.
 #### Scenario: An unrenderable seam fails safely
 - **WHEN** ordinary rendering cannot distinguish two structural seams
 - **THEN** an observed discriminator separates them or scanning fails loud, never a positional fallback
+
+#### Scenario: Distinct unrenderable where-clause bounds do not collapse by position
+
+- **WHEN** one impl block declares two where-clause bounds each naming a structurally distinct but
+  ordinarily unrenderable bounded type (for example `Arr<{ N + 1 }>: AsRef<crate::infra::Secret>`
+  and `Arr<{ N + 2 }>: AsRef<crate::infra::Secret>`), each independently exposing the same forbidden
+  type
+- **THEN** the system does not emit one shared fact for both bounds under a common literal
+  placeholder; scanning fails loud (a constitution error) rather than silently reporting only one of
+  the two bounds' violations, and a renderable where-clause bounded type is unaffected by this
+  fail-loud path
 
