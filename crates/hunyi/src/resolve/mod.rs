@@ -415,7 +415,7 @@ pub(crate) fn collect_reexports(
                         // nested under a same-named module). The latter is meaningless for
                         // type-path canonicalization (the module path `crate::x` still denotes the
                         // module; rewriting would fabricate a nonexistent `crate::x::x::…`) and,
-                        // left in the map, makes `rewrite_longest_prefix` re-fire on its own
+                        // left in the map, makes the longest-prefix rewrite re-fire on its own
                         // monotonically-growing output forever — the exact-repeat `seen` guard
                         // cannot catch a never-repeating sequence.
                         if target != alias && !is_strict_path_prefix(&alias, &target) {
@@ -451,7 +451,7 @@ fn canonicalize_use_target(
 
 /// Whether `prefix` is a strict `::`-boundary prefix of `path` — `crate::a` of `crate::a::b`, but
 /// not of the unrelated `crate::ab` (segment-boundary aware) nor of itself. Used to refuse a
-/// re-export map entry that would let `rewrite_longest_prefix` re-fire on its own growing output.
+/// re-export map entry that would let the longest-prefix rewrite re-fire on its own growing output.
 fn is_strict_path_prefix(prefix: &str, path: &str) -> bool {
     path.len() > prefix.len() && path.starts_with(prefix) && path[prefix.len()..].starts_with("::")
 }

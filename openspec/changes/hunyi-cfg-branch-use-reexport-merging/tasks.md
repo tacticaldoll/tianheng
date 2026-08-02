@@ -121,5 +121,12 @@ reproduced by the implementer before being fixed:
 - [x] 5.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
       suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`) —
       re-run after round 2's expanded scope, not just round 1's.
-- [ ] 5.2 Adversarial apply-stage review (round 3): confirm round 2's fixes are complete and
-      correct, not a taste call — including whether any further caller was missed.
+- [x] 5.2 Adversarial apply-stage review (round 3): confirmed round 2's fixes are complete and
+      correct — all remaining `resolve_path` callers are identity-label renderers, not reaction
+      deciders, and the 10 round-2 regression tests are non-vacuous (replayed against round-1-only
+      code in an isolated worktree; every "declared_second" test genuinely fails there). Found and
+      fixed two stale doc-comment references to the deleted `rewrite_longest_prefix`. Found and
+      independently reproduced a real, DIFFERENT-bug-class issue (identity-collision via dedup on
+      `canonical_self_owner`/`canonical_unsafe_owner`'s own single-candidate label rendering) — not
+      fixed here (different mechanism, real design work, own finding), documented in
+      proposal.md/design.md and queued in `docs/audit/0.3.1-adversarial-sweep.md`.

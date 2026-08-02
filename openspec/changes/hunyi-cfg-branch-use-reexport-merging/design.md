@@ -160,8 +160,37 @@ before design" discipline the rest of this campaign applies.
 7. CHANGELOG `[Unreleased]` entry. No **BREAKING** marker — false negatives closing, not an identity
    shape; no existing baseline is invalidated. No version bump (campaign-wide constraint).
 
+## Round 3 (adversarial review of round 2)
+
+A third independent review re-examined round 2's own "identity label, not a reaction" exemption for
+`canonical_self_owner`/`canonical_self_owner_without_fallback`/`canonical_unsafe_owner` — and, again,
+declined to accept it on its own terms. It reproduced a real, distinct bug: when two genuinely
+independent violations (at two different impl/exposure sites) share the identical written self-type
+name, and that name is a mutually-exclusive `#[cfg]`-gated `use` alias, both sites render the same
+(single-candidate, order-dependent) owner label and collapse to ONE finding under
+`sort_attributed_facts`/`sort_faceted_facts`'s exact-identity dedup — reproduced across all four
+consumers (trait-impl-locality, forbidden-marker, unsafe-confinement, signature-coupling),
+independently confirmed by the implementer.
+
+This is real, but it is NOT the same bug class this change fixes. Every fix in rounds 1–2 is:
+"a consumer decides whether a violation fires by checking only one candidate instead of every
+candidate" — a mechanical multi-candidate swap (`resolve_path` → `resolve_path_all`,
+`expand_canonical_paths` in place of a single-result fixpoint). This new finding is: "a consumer
+renders an identity LABEL from one candidate, and that label feeds a dedup key, so an ambiguous label
+silently merges two distinct violations" — the identity-collision bug class change 1 in this campaign
+fixed, for a different underlying cause. Fixing it properly requires an owner-identity design that
+stays injective across cfg-ambiguous self-type candidates (e.g. incorporating the impl/exposure
+site's own module+ordinal into the identity independent of the resolved candidate, or rendering every
+candidate rather than picking one) — real design work, not something this change's mechanism
+(`resolve_path_all`/`expand_canonical_paths`) can absorb as written, since an "owner" field is
+contractually one string per `SemanticFact`, and multi-valuing it would itself be a finding-identity
+shape change requiring its own scoped proposal.
+
+Documented as its own queued finding in `docs/audit/0.3.1-adversarial-sweep.md` (渾儀 cfg-branch
+merging section) rather than fixed here or silently dropped.
+
 ## Open Questions
 
 None outstanding. `exposure.rs:157`'s different mechanism, and the identity-label (not reaction)
-concerns in `canonical_self_owner` and siblings, are explicitly out of scope, not open questions
-within this change.
+concerns in `canonical_self_owner` and siblings — including the round-3-confirmed dedup-collapse risk
+— are explicitly out of scope, not open questions within this change.

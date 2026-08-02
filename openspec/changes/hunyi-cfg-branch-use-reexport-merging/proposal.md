@@ -111,4 +111,11 @@ each independently reproduced before being folded in:
   - `canonical_self_owner`/`canonical_self_owner_without_fallback`/`canonical_unsafe_owner`'s own
     single-candidate `resolve_path` calls — these render a finding's displayed identity LABEL from
     the self type as written; a wrong candidate under cfg collision is an identity-collision risk
-    (change 1's bug class), not a missed reaction. Not reproduced, not touched here.
+    (change 1's bug class), not a missed reaction. A round-3 adversarial review of THIS change
+    reproduced that risk directly (both declaration orders, across all four consumers —
+    trait-impl-locality, forbidden-marker, unsafe-confinement, signature-coupling): two genuinely
+    distinct violations sharing one cfg-collided self-type alias collapse to one finding via
+    exact-identity dedup. Confirmed real, but a different bug class and a different fix shape
+    (injective owner identity under an ambiguous candidate, not a mechanical multi-candidate swap) —
+    queued as its own finding in `docs/audit/0.3.1-adversarial-sweep.md` (渾儀 cfg-branch merging),
+    not fixed here.
