@@ -138,6 +138,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   collection machinery verbatim — no new seam kind, since Rust cannot declare both an ordinary item
   and a foreign one under the same name in one module, so there is no identity collision to design
   around. Not breaking — closes a false negative; no baseline identity shape changes.
+- 渾儀's visibility-boundary query (`must_not_declare_pub` / `max_visibility`) now observes a `pub
+  fn`, `pub static`, or `pub type` declared inside an `extern` block — the sibling gap the
+  signature-coupling fix above did not touch, since the two capabilities collect a module's direct
+  items through entirely independent per-item logic (`collect_item_exposures` vs.
+  `item_observation_parts`), sharing only the underlying module-item enumerator. A bare-`pub` foreign
+  item is exactly as visible as a same-shaped ordinary one, but `item_observation_parts` had no
+  `ForeignMod` arm at all, so an `extern` block's declarations were silently absent from the
+  module's observed direct items regardless of their declared visibility (exit 0 Clean on a module
+  whose only bare-`pub` item sat inside an `extern` block). `pub type` (an extern type declaration)
+  is included here though it carried no exposable signature and so was out of the
+  signature-coupling fix's own scope — this capability cares about the declared keyword, not a
+  type-signature leak. Reuses the existing `Fn`/`Static`/`Type` visibility kinds verbatim, no new
+  kind, for the identical no-identity-collision reason as the sibling fix. `item_observation`
+  widens from `Option` to `Vec` (an `extern` block can hold more than one independently-visible
+  foreign item, unlike every other observed item kind), with its one call site updated accordingly.
+  Not breaking — closes a false negative; no baseline identity shape changes.
 - 渾儀's shared `use`-map and re-export closure no longer silently drop one candidate when two
   mutually-exclusive `#[cfg]` branches (bare `#[cfg]` or `cfg_if!` arms alike) declare `use ... as
   Name;` (or `pub use ... as Name;`) for the identical name with different targets. Both were
