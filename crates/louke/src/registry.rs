@@ -219,20 +219,12 @@ where
 
 /// How many `Violation` events the shipped default sink has dropped, for the whole process
 /// lifetime, because its write to stderr failed (a closed pipe, a closed fd) while `set_sink`
-/// was never called to receive them instead. Always `0` unless that has actually happened.
-/// A single process-wide count across every seam — it tells an adopter *that* a drop
-/// happened, never *which* boundary's violation was lost; attributing drops per seam would
-/// need its own design, not a bare counter.
-///
-/// The default sink deliberately never panics on a broken pipe — the same
-/// no-panic-on-a-reaction invariant `Event` posture protects on the happy path — so without
-/// this counter a write failure would be silently and permanently unobservable. An adopter who
-/// ships the default sink can poll this into their own health check or diagnostics endpoint to
-/// detect that loss from outside the process. The increment that feeds this counter is a single
-/// lock-free atomic add: it cannot itself fail or panic, so exposing it cannot reopen the panic
-/// risk the silent-drop path exists to avoid. Scoped to the shipped default sink only — a custom
-/// sink's own success or failure is opaque to the system (`set_sink` takes a `Fn(&Violation)`
-/// returning nothing) and is never counted here.
+/// was never called to receive them instead. Always `0` unless that has actually happened. A
+/// single process-wide count across every seam — it tells an adopter *that* a drop happened,
+/// never *which* boundary's violation was lost. See `runtime-origin-assertion`'s "Default-safe
+/// reaction — a Violation event, panic opt-in" requirement for the full rationale: why the
+/// default sink never panics on a broken pipe instead, why the increment is a single infallible
+/// atomic add, and why a custom sink's own success/failure is never counted here.
 pub fn dropped_sink_events() -> u64 {
     DROPPED_SINK_EVENTS.load(Ordering::Relaxed)
 }

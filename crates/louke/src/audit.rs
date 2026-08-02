@@ -76,52 +76,21 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
 /// [`audit_probe_coverage`]).
 ///
 /// A file input is treated as an exact Cargo target root and walked through reachable modules;
-/// a directory input retains the legacy recursive corpus for source compatibility. Reacts,
-/// with the static dimensions' exit-code contract, in three directions:
-///
-/// - **declared-but-unprobed** — a declared seam with no literal probe → a `Violation` at the
-///   declaring boundary's severity (a `warn` boundary yields an advisory). Closes the
-///   otherwise-essential "declared but never enforced" gap.
-/// - **probed-but-undeclared** — a literal probe whose seam is not in the declared set → an
-///   enforce `Violation` (a typo against the declared seams).
-/// - **un-auditable probe** — a probe macro whose seam argument is not a string literal
-///   (e.g. a `const`) cannot be traced to a declared seam → an enforce `Violation` naming the
-///   site, never a silent skip (a silent skip would be a false negative). Its identity's `file`
-///   field is labeled relative to the common ancestor of every `source_inputs` root passed to this
-///   call (the real caller's actual checkout root, by construction) whenever that's possible, so a
-///   recorded baseline stays valid across a different clone location or CI runner. **Known residual
-///   gap, not fully closed:** a file reached only through an ABSOLUTE `#[path = "/…"]` literal whose
-///   target does not lie under the anchor falls back to the raw absolute label — but the SAME
-///   hardcoded literal, when it happens to lie under a given checkout's own anchor, gets a
-///   relative-looking label instead, so the identical literal can still disagree across two
-///   checkouts. An absolute-literal `#[path]` is already non-portable/machine-specific either way;
-///   the realistic relative sibling-share idiom this labeling targets is unaffected.
+/// a directory input retains the legacy recursive corpus for source compatibility. See
+/// `runtime-origin-assertion`'s "CI face — every declared seam is probed" requirement for the
+/// full three-direction reaction (declared-but-unprobed, probed-but-undeclared, un-auditable
+/// probe) and its lexical-not-semantic `cfg` bound; its "Root-aware audit excludes unreachable
+/// source files" requirement for this file-input mode's module-graph walk and `#[path]`/
+/// `cfg_attr`-wrapped-`#[path]` union-scan rules; and its "An un-auditable probe's identity
+/// distinguishes distinct offending expressions" requirement for why the `file` field is labeled
+/// relative to the common ancestor of every `source_inputs` root (including the stated,
+/// not-yet-closed residual gap for an absolute `#[path]` literal that lies under one checkout's
+/// anchor but not another's).
 ///
 /// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
-/// can no longer hide a seam. The probe scan is build/CI-time only (std-only, comment- and
-/// string-literal-aware including raw/byte strings); source outside a member's lib/bin target
-/// subtree is out of scope (the same bound as the semantic dimension). It does NOT observe the
-/// live install registry — install-vs-constitution consistency is the prod face's runtime
-/// fail-closed concern; this verifies coverage against the declared seams and the source.
-///
-/// **Stated bound (lexical, not semantic):** the scan is textual and does not evaluate `cfg`.
-/// A probe behind a non-production `#[cfg(...)]` (e.g. `#[cfg(test)]`) is still counted as
-/// covering its seam, so a seam whose *only* probe is compiled out of the production binary
-/// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
-///
-/// **`#[path]` relocation (followed, union rather than pick-one):** an **unconditional**
-/// `#[path = "…"] mod name;` is followed to its author-chosen file and its probes are counted — the
-/// base is the directory a conventional `mod name;` would use, and the loaded file is mod-rs-like,
-/// so its own children resolve from its directory. A **`cfg_attr`-wrapped** `#[path]` (one or more
-/// on the same declaration, each gated by its own platform predicate) is cfg-conditional, so `cfg`
-/// never resolves the module — `cfg_attr` never removes the `mod` item the way a bare `#[cfg]`
-/// does — but its own target is followed too, resolved the identical way an unconditional `#[path]`
-/// is: EVERY candidate that exists on disk is counted, unioned with the conventional `name.rs` if it
-/// too exists, since cfg-blind observation cannot know which one a given build actually compiles.
-/// Absence is tolerated only when NEITHER the conventional file NOR any `cfg_attr` target resolves
-/// anywhere, and the declaration carries no other cfg-conditional gate (a bare `#[cfg]` or
-/// transparent-macro-arm membership) — that combination is a genuinely broken reference on every
-/// configuration, so it fails loud (a constitution error), never a silent pass.
+/// can no longer hide a seam. It does NOT observe the live install registry —
+/// install-vs-constitution consistency is the prod face's runtime fail-closed concern; this
+/// verifies coverage against the declared seams and the source.
 ///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
 pub fn audit_probe_coverage_with_markers(
