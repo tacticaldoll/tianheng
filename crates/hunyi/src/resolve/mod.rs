@@ -21,6 +21,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::syn_util::{FlatItem, reexport_externs_for, reexport_renames_for};
+
 mod shape;
 pub(crate) use shape::*;
 
@@ -367,60 +369,75 @@ pub(crate) fn renames_shadowed(
 /// (rustc resolves `pub use dep::X;` under a child `mod dep` to the local module — E0432 if absent),
 /// so it resolves against the extern set and the crate-root rename map with `child_mods` removed
 /// (`externs − child_mods` / `renames − child_mods`) — closing the facade-closure sibling of the
-/// direct head-shadow FP, since this crate-wide map is followed by every module's query. A
-/// **leading-`::`** head (`pub use ::dep::X;`) is an unambiguous extern that no local module
+/// direct head-shadow FP, since this crate-wide map is followed by every module's query. That
+/// shadow is computed **per re-export item**, via [`reexport_externs_for`] and
+/// [`reexport_renames_for`], rather than once for every item in `items`: a child `mod`
+/// [`provably_mutually_exclusive`](crate::syn_util::provably_mutually_exclusive) with a SPECIFIC
+/// `pub use` (a `#[cfg(unix)] mod dep;` beside this item's own `#[cfg(not(unix))]`, or a different
+/// arm of the same `cfg_if!`) never actually shadows that item's own head, even though both live
+/// in `items` — the identical per-item exclusion `module_findings`'s direct-head resolution
+/// applies, restored here for the crate-wide closure (round-9 finding, `exposure.rs:157`'s
+/// sibling: a facade reaching such a re-export through this closure was suppressed the same
+/// cfg-blind way). The rename-alias half of that shadow (`renames − child_mods`) needs the
+/// identical per-item treatment for the same reason `module_findings` does: a rename alias (e.g.
+/// `wc` from a crate-root `extern crate serde as wc;`) is never itself a member of the externs
+/// set, so a cfg-blindly-shadowed alias does not merely under-shadow a re-export through it — it
+/// drops the resolution outright once the shadowed alias falls through to an externs-set fallback
+/// with no candidate for it at all (found by an independent adversarial review of the fix above).
+/// A **leading-`::`** head (`pub use ::dep::X;`) is an unambiguous extern that no local module
 /// shadows, so it keeps the raw sets: `collect_use_tree` walks `use_item.tree`, which carries no
 /// leading colon, so the flag is read from the `ItemUse` here (mirroring the direct walker's
-/// `push_reexport`, which preserves it for the same escape-hatch reason). This split mirrors
-/// `module_findings`' `externs_reexport` / `renames_bare`; with `child_mods` empty the map is
-/// byte-identical to the raw-set behavior.
+/// `push_reexport`, which preserves it for the same escape-hatch reason). With `child_mods` empty
+/// the map is byte-identical to the raw-set behavior.
 pub(crate) fn collect_reexports(
-    items: &[syn::Item],
+    items: &[FlatItem],
     module: &str,
     externs: &HashSet<String>,
-    child_mods: &HashSet<String>,
+    child_mods: &[(String, FlatItem)],
     renames: &ExternRenameMap,
     out: &mut ReexportMap,
 ) {
-    let externs_bare: HashSet<String> = externs.difference(child_mods).cloned().collect();
-    let renames_bare = renames_shadowed(renames, child_mods);
-    for item in items {
-        if let syn::Item::Use(use_item) = item {
-            if matches!(use_item.vis, syn::Visibility::Inherited) {
-                continue;
-            }
-            let mut local = UseMap::new();
-            collect_use_tree(&use_item.tree, String::new(), &mut local);
-            // A leading `::` on the `use` item marks an unambiguous extern head — unshadowed by any
-            // same-named child `mod`, so it keeps the raw sets; a bare head uses the child-excluded
-            // sets. The flag lives on `ItemUse`, not the `UseTree` `collect_use_tree` walked.
-            let (head_externs, head_renames) = if use_item.leading_colon.is_some() {
-                (externs, renames)
-            } else {
-                (&externs_bare, &renames_bare)
-            };
-            // `local` maps each name this ONE use item's tree brings in to its single written
-            // target — Rust rejects two same-named leaves within one item (E0252), so `written`
-            // never actually holds more than one candidate here; `collect_use_tree`'s multi-valued
-            // shape only matters once `out` accumulates across items/branches below.
-            for (name, written) in local {
-                let alias = format!("{module}::{name}");
-                for written in &written {
-                    if let Some(target) =
-                        canonicalize_use_target(written, module, head_externs, head_renames)
-                    {
-                        // Skip a self-referential entry (`target == alias`) and — critically — one
-                        // whose alias key is a strict `::`-prefix of its own target (`pub use
-                        // self::x::x;` → `crate::x -> crate::x::x`, a same-name value re-export
-                        // nested under a same-named module). The latter is meaningless for
-                        // type-path canonicalization (the module path `crate::x` still denotes the
-                        // module; rewriting would fabricate a nonexistent `crate::x::x::…`) and,
-                        // left in the map, makes the longest-prefix rewrite re-fire on its own
-                        // monotonically-growing output forever — the exact-repeat `seen` guard
-                        // cannot catch a never-repeating sequence.
-                        if target != alias && !is_strict_path_prefix(&alias, &target) {
-                            push_candidate(out, alias.clone(), target);
-                        }
+    for flat in items {
+        let syn::Item::Use(use_item) = &flat.item else {
+            continue;
+        };
+        if matches!(use_item.vis, syn::Visibility::Inherited) {
+            continue;
+        }
+        let mut local = UseMap::new();
+        collect_use_tree(&use_item.tree, String::new(), &mut local);
+        // A leading `::` on the `use` item marks an unambiguous extern head — unshadowed by any
+        // same-named child `mod`, so it keeps the raw sets; a bare head uses THIS item's own
+        // cfg-aware child-excluded sets (`reexport_externs_for` / `reexport_renames_for`). The
+        // flag lives on `ItemUse`, not the `UseTree` `collect_use_tree` walked.
+        let externs_bare = reexport_externs_for(externs, child_mods, flat);
+        let renames_bare = reexport_renames_for(renames, child_mods, flat);
+        let (head_externs, head_renames) = if use_item.leading_colon.is_some() {
+            (externs, renames)
+        } else {
+            (&externs_bare, &renames_bare)
+        };
+        // `local` maps each name this ONE use item's tree brings in to its single written
+        // target — Rust rejects two same-named leaves within one item (E0252), so `written`
+        // never actually holds more than one candidate here; `collect_use_tree`'s multi-valued
+        // shape only matters once `out` accumulates across items/branches below.
+        for (name, written) in local {
+            let alias = format!("{module}::{name}");
+            for written in &written {
+                if let Some(target) =
+                    canonicalize_use_target(written, module, head_externs, head_renames)
+                {
+                    // Skip a self-referential entry (`target == alias`) and — critically — one
+                    // whose alias key is a strict `::`-prefix of its own target (`pub use
+                    // self::x::x;` → `crate::x -> crate::x::x`, a same-name value re-export
+                    // nested under a same-named module). The latter is meaningless for
+                    // type-path canonicalization (the module path `crate::x` still denotes the
+                    // module; rewriting would fabricate a nonexistent `crate::x::x::…`) and,
+                    // left in the map, makes the longest-prefix rewrite re-fire on its own
+                    // monotonically-growing output forever — the exact-repeat `seen` guard
+                    // cannot catch a never-repeating sequence.
+                    if target != alias && !is_strict_path_prefix(&alias, &target) {
+                        push_candidate(out, alias.clone(), target);
                     }
                 }
             }

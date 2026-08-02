@@ -10,7 +10,7 @@ use crate::errors::{
 };
 use crate::resolve::strip_raw;
 use crate::syn_util::{
-    cfg_attr_path_values, direct_path_value, flatten_transparent_macro_items,
+    FlatItem, cfg_attr_path_values, direct_path_value, flatten_transparent_macro_items,
     flatten_transparent_macros, has_cfg_attr,
 };
 
@@ -46,6 +46,32 @@ pub(crate) fn resolve_module_items_with_files(
     }
     Ok(items)
 }
+
+/// Like [`resolve_module_items_with_files`], but retains each item's [`FlatItem`] tag (its own
+/// `cfg_if!` arm membership) instead of discarding it. A `#[cfg]`/`cfg_if!`-split at the MODULE
+/// level already gets its own branch index above; this is for the finer split that stays WITHIN
+/// one branch's own file — two mutually-exclusive sibling items (a `#[cfg(unix)] mod x;` beside a
+/// `#[cfg(not(unix))] pub use x::Y;`, or the two arms of one `cfg_if!` invocation) that share the
+/// identical branch index and file, but must not be treated as always coexisting when resolving
+/// one against the other (see `exposure.rs`'s cfg-aware re-export child-module shadow).
+pub(crate) fn resolve_module_items_with_cfg_tags(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(FlatItem, PathBuf, usize)>, String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    let mut items = Vec::new();
+    for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
+        items.extend(
+            flatten_transparent_macros(branch_items)
+                .into_iter()
+                .map(|flat| (flat, file.clone(), branch_index)),
+        );
+    }
+    Ok(items)
+}
+
 /// Resolves a module path to its primary source file (test-only helper).
 #[cfg(test)]
 pub(crate) fn resolve_module_file(
