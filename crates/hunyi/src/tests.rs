@@ -899,15 +899,15 @@ fn a_type_reached_through_a_reexported_module_facade_reacts() {
 fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
     // Termination guaranteed: a reexport map entry whose alias key is a strict
     // `::`-prefix of its own value — the shape a same-name nested re-export (`pub use self::x::x;`)
-    // yields — made `rewrite_longest_prefix` re-fire on its own monotonically-growing output; the
+    // yields — made the longest-prefix rewrite re-fire on its own monotonically-growing output; the
     // exact-repeat `seen` guard never fires on a never-repeating sequence, so the tool hung / OOMed.
     // The hop cap now bounds the fixpoint regardless of map contents (this exercises the cap
     // directly, bypassing the build-time guard).
-    use crate::resolve::{ReexportMap, canonicalize_through_reexports};
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
     let mut map = ReexportMap::new();
-    map.insert("crate::a".to_string(), "crate::a::b".to_string());
+    map.insert("crate::a".to_string(), vec!["crate::a::b".to_string()]);
     // Before the fix this never returned; the assertion is simply that it TERMINATES.
-    let out = canonicalize_through_reexports("crate::a::foo", &map);
+    let out = expand_canonical_paths("crate::a::foo", &AliasMap::new(), &map);
     assert!(
         !out.is_empty(),
         "canonicalization must terminate on a key⊂value reexport entry: {out:?}"
@@ -917,20 +917,23 @@ fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
 #[test]
 fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value() {
     // The sibling of the reexports test above, at `resolve_self_type`'s own resolver: before it
-    // was routed through the shared, hop-capped `canonicalize_through_aliases`, its hand-rolled
-    // outer loop re-ran the (already-capped) inner `canonicalize_through_reexports` call every
-    // iteration, so a key⊂value reexport entry made the outer `landing` grow by a bounded amount
-    // each iteration, never exactly repeating — the outer exact-repeat `seen` guard alone could
-    // not catch that. The assertion is simply that this terminates.
+    // was routed through the shared, hop-capped `expand_canonical_paths`, its hand-rolled outer
+    // loop re-ran an already-capped inner reexport-only fixpoint every iteration, so a key⊂value
+    // reexport entry made the outer `landing` grow by a bounded amount each iteration, never
+    // exactly repeating — the outer exact-repeat `seen` guard alone could not catch that. The
+    // assertion is simply that this terminates.
     use crate::containment::resolve_self_type;
-    use crate::resolve::{ReexportMap, UseMap};
+    use crate::resolve::{AliasMap, ReexportMap, UseMap};
     use std::collections::HashSet;
 
     let self_ty: syn::Type = syn::parse_str("Foo").unwrap();
     let uses = UseMap::new();
-    let aliases = std::collections::HashMap::new();
+    let aliases = AliasMap::new();
     let mut reexports = ReexportMap::new();
-    reexports.insert("crate::a::Foo".to_string(), "crate::a::Foo::b".to_string());
+    reexports.insert(
+        "crate::a::Foo".to_string(),
+        vec!["crate::a::Foo::b".to_string()],
+    );
     let landing = resolve_self_type(
         &self_ty,
         &uses,
@@ -940,7 +943,7 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
         &HashSet::new(),
     );
     assert!(
-        landing.is_some(),
+        !landing.is_empty(),
         "canonicalization must terminate on a key⊂value reexport entry: {landing:?}"
     );
 }
@@ -1020,7 +1023,7 @@ fn self_growing_reexport_prefix_loop_terminates_without_hanging() {
 
     // A self-similar re-export entry `crate::a -> crate::a::b` creates a self-growing path chain:
     // crate::a::foo -> crate::a::b::foo -> crate::a::b::b::foo -> ...
-    reexports.insert("crate::a".to_string(), "crate::a::b".to_string());
+    reexports.insert("crate::a".to_string(), vec!["crate::a::b".to_string()]);
 
     let res = expand_canonical_paths("crate::a::foo", &aliases, &reexports);
     assert!(
@@ -2849,6 +2852,59 @@ fn locality_findings(
             .map(|(finding, _module, _file)| finding.to_string())
             .collect()
     })
+}
+
+/// Two mutually-exclusive `#[cfg]`-gated `use ... as T;` aliases for an `impl T for Foo`'s trait
+/// name: the anchor match must react regardless of which alias is declared first. Before the fix,
+/// `resolve_path`'s single-candidate lookup (plus the single-candidate `canonicalize_through_reexports`)
+/// took only one `use`-map entry, so whether the anchored trait was ever seen depended on
+/// declaration order (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn trait_impl_anchor_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = locality_findings(
+        "anchor-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod command;\npub mod other;\npub mod domain;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            ("other.rs", "pub trait Other {}\n"),
+            (
+                "domain.rs",
+                "#[cfg(unix)]\nuse crate::command::Command as T;\n#[cfg(not(unix))]\nuse crate::other::Other as T;\npub struct Foo;\nimpl T for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
+}
+
+/// The identical shape with the anchored trait's alias declared SECOND. Before the fix this
+/// silently passed (`Ok([])`).
+#[test]
+fn trait_impl_anchor_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = locality_findings(
+        "anchor-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod command;\npub mod other;\npub mod domain;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            ("other.rs", "pub trait Other {}\n"),
+            (
+                "domain.rs",
+                "#[cfg(not(unix))]\nuse crate::other::Other as T;\n#[cfg(unix)]\nuse crate::command::Command as T;\npub struct Foo;\nimpl T for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
 }
 
 #[test]
@@ -4780,6 +4836,90 @@ fn a_hand_impl_outside_the_subtree_reacts_via_the_self_type() {
         ["impl serde::Serialize for crate::domain::Order in crate::wire"],
         "a hand impl written outside the subtree, for a subtree type, reacts: {out:?}"
     );
+}
+
+/// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` aliases for a `#[derive(Name)]`'s own
+/// name must both react (cfg-blind): before the fix, `resolve_path`'s single-candidate lookup took
+/// only one `use`-map entry before leaf-matching, so whether the derive's TRUE leaf was seen
+/// depended on which cfg branch's alias happened to be declared first (found on adversarial review
+/// of `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn forbidden_derive_leaf_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = marker_findings(
+        "derive-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "#[cfg(unix)]\nuse bad::Marker as M;\n#[cfg(not(unix))]\nuse good::NotBad as M;\n#[derive(M)]\npub struct Order;\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["derive M on crate::domain::Order"]);
+}
+
+/// The identical shape with the forbidden alias declared SECOND. Before the fix this silently
+/// passed (`Ok([])`): `resolve_path` took only the first `use`-map candidate, and here that
+/// candidate was the non-forbidden one.
+#[test]
+fn forbidden_derive_leaf_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = marker_findings(
+        "derive-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "#[cfg(not(unix))]\nuse good::NotBad as M;\n#[cfg(unix)]\nuse bad::Marker as M;\n#[derive(M)]\npub struct Order;\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["derive M on crate::domain::Order"]);
+}
+
+/// The identical collision at the impl form's trait-leaf match: `impl M for X` where `M` is a
+/// mutually-exclusive `#[cfg]`-gated `use` alias.
+#[test]
+fn forbidden_impl_trait_leaf_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = marker_findings(
+        "impl-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(unix)]\nuse bad::Marker as M;\n#[cfg(not(unix))]\nuse good::NotBad as M;\nimpl M for crate::domain::Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl M for crate::domain::Order in crate::wire"]);
+}
+
+#[test]
+fn forbidden_impl_trait_leaf_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = marker_findings(
+        "impl-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(not(unix))]\nuse good::NotBad as M;\n#[cfg(unix)]\nuse bad::Marker as M;\nimpl M for crate::domain::Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl M for crate::domain::Order in crate::wire"]);
 }
 
 #[test]
@@ -10292,4 +10432,353 @@ fn a_non_pub_extern_block_item_is_not_observed() {
     )
     .unwrap();
     assert_eq!(out, Vec::<String>::new());
+}
+
+/// A forbidden-marker impl's self type reached through a `type X = Y;` alias whose target `Y` is
+/// itself a mutually-exclusive `#[cfg]`-gated `use` alias: the self-type landing must react
+/// regardless of which cfg branch is declared first. Before the fix, `scan.alias_targets` was a
+/// single-valued `HashMap<String, String>` populated via `resolve_path`'s single-candidate lookup,
+/// so only one landing candidate for `X` was ever recorded (found on adversarial review of
+/// `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn forbidden_marker_self_type_landing_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = marker_findings(
+        "self-type-landing-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(unix)]\nuse crate::domain::Order as Y;\n#[cfg(not(unix))]\nuse crate::domain::NotOrder as Y;\ntype X = Y;\nimpl serde::Serialize for X {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::wire::X in crate::wire"],
+        "the marker-acquisition REACTION now checks every landing candidate (X resolves to the \
+         governed crate::domain::Order under one cfg branch), even though the finding's OWNER \
+         label renders the self type as written (`X`), a separate, deliberate identity concern \
+         from the landing/gating check: {out:?}"
+    );
+}
+
+/// The identical shape with the resolvable (defined) alias target declared SECOND. Before the fix
+/// this silently passed (`Ok([])`): only the first-declared (undefined `NotOrder`) landing was
+/// recorded, which fails the `defined` check, so the genuinely governed self type was never seen.
+#[test]
+fn forbidden_marker_self_type_landing_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = marker_findings(
+        "self-type-landing-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(not(unix))]\nuse crate::domain::NotOrder as Y;\n#[cfg(unix)]\nuse crate::domain::Order as Y;\ntype X = Y;\nimpl serde::Serialize for X {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::wire::X in crate::wire"],
+        "the marker-acquisition REACTION now checks every landing candidate (X resolves to the \
+         governed crate::domain::Order under one cfg branch), even though the finding's OWNER \
+         label renders the self type as written (`X`), a separate, deliberate identity concern \
+         from the landing/gating check: {out:?}"
+    );
+}
+
+/// A forbidden exposure reached through a `type X = Y;` alias whose target `Y` is itself a
+/// mutually-exclusive `#[cfg]`-gated `use` alias: the exposure must react regardless of which cfg
+/// branch is declared first. Before the fix, `scan.aliases` (the exposure-pipeline `AliasMap`) was
+/// populated via `resolve_path`'s single-candidate lookup even though the map itself was already
+/// multi-valued, so only one landing candidate for `X` was ever pushed (found on adversarial
+/// review of `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn type_alias_exposure_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = semantic_findings(
+        "type-alias-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nuse crate::infra::Secret as Y;\n#[cfg(not(unix))]\nuse crate::safe::Handle as Y;\ntype X = Y;\npub fn leak() -> X { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical shape with the forbidden alias declared SECOND. Before the fix this silently
+/// passed (`Ok([])`).
+#[test]
+fn type_alias_exposure_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = semantic_findings(
+        "type-alias-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\nuse crate::safe::Handle as Y;\n#[cfg(unix)]\nuse crate::infra::Secret as Y;\ntype X = Y;\npub fn leak() -> X { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` declarations for the identical local
+/// name, in the same file, must both react (cfg-blind: observation cannot know which is live).
+/// Before the fix, the second `use` silently overwrote the first in `UseMap` — a single
+/// `HashMap<String, String>` — so the verdict depended on source order rather than on whether
+/// either branch's binding was genuinely forbidden.
+#[test]
+fn mutually_exclusive_cfg_gated_use_aliases_both_react() {
+    let out = semantic_findings(
+        "cfg-use-alias-merge-forbidden-first",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nuse crate::infra::Secret as Handle;\n#[cfg(not(unix))]\nuse crate::safe::Handle;\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical shape with the two `use` declarations in the OPPOSITE order — the forbidden
+/// binding declared second. Before the fix this silently passed (`Ok([])`): `resolve_path` took
+/// only the first `use`-map candidate, and here that candidate was the non-forbidden one.
+#[test]
+fn mutually_exclusive_cfg_gated_use_aliases_react_regardless_of_declaration_order() {
+    let out = semantic_findings(
+        "cfg-use-alias-merge-forbidden-second",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\nuse crate::safe::Handle;\n#[cfg(unix)]\nuse crate::infra::Secret as Handle;\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical `use`-alias collision expressed as a `cfg_if!` macro invocation rather than bare
+/// `#[cfg]` attributes — the audit's cited "identical shape via the 0.3.1 transparency" form, now
+/// that `cfg_if!` arm bodies are read as real code (a separate, already-closed finding).
+#[test]
+fn mutually_exclusive_cfg_if_use_aliases_both_react() {
+    let out = semantic_findings(
+        "cfg-if-use-alias-merge",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! { if #[cfg(unix)] { use crate::infra::Secret as Handle; } else { use crate::safe::Handle; } }\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// Two mutually-exclusive `pub use ... as X;` re-export targets for the identical local name, in
+/// the same file, must both canonicalize correctly through the crate-wide `ReexportMap` — a facade
+/// path reached through either branch's binding must resolve to ITS OWN target, not collapse to
+/// whichever branch was declared second. Before the fix, `ReexportMap` was a single
+/// `HashMap<String, String>`.
+#[test]
+fn mutually_exclusive_reexport_targets_both_canonicalize_correctly() {
+    let out = semantic_findings(
+        "reexport-map-merge-forbidden-first",
+        &[
+            (
+                "lib.rs",
+                "pub mod safe;\npub mod infra;\npub mod api;\npub mod facade;\n",
+            ),
+            ("safe.rs", "pub struct Thing;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\npub use crate::infra::Secret as Handle;\n#[cfg(not(unix))]\npub use crate::safe::Thing as Handle;\n",
+            ),
+            ("facade.rs", "pub fn f() -> crate::api::Handle { loop {} }\n"),
+        ],
+        "crate::facade",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::facade::f"]
+    );
+}
+
+/// The identical re-export collision with the two `pub use` declarations in the OPPOSITE order —
+/// the forbidden target declared second.
+#[test]
+fn mutually_exclusive_reexport_targets_react_regardless_of_declaration_order() {
+    let out = semantic_findings(
+        "reexport-map-merge-forbidden-second",
+        &[
+            (
+                "lib.rs",
+                "pub mod safe;\npub mod infra;\npub mod api;\npub mod facade;\n",
+            ),
+            ("safe.rs", "pub struct Thing;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\npub use crate::safe::Thing as Handle;\n#[cfg(unix)]\npub use crate::infra::Secret as Handle;\n",
+            ),
+            ("facade.rs", "pub fn f() -> crate::api::Handle { loop {} }\n"),
+        ],
+        "crate::facade",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::facade::f"]
+    );
+}
+
+/// The identical `use`-alias collision, this time exercising `resolve_principal`
+/// (`crates/hunyi/src/crate_scope.rs`) — the shared principal-trait resolver dyn-trait and
+/// impl-trait's *operand-scoped* boundaries both use (per `matches_forbidden_principal`'s own doc:
+/// "Both the single-module and subtree operand reactions use this leaf so their resolution
+/// semantics cannot drift"). Discovered while fixing the signature-coupling instance of this bug —
+/// not named in the original audit findings, but the identical mechanism, independently reproduced
+/// here before being fixed, per this project's own reproduce-before-fixing discipline.
+#[test]
+fn dyn_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order() {
+    let tree = TempSrcTree::new("dyn-trait-principal-cfg-use-merge");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\n#[cfg(unix)]\nuse crate::infra::Port as P;\npub fn f() -> Box<dyn P> { loop {} }\n",
+        ),
+    ]);
+    let out = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::DynTrait,
+            subject: "dyn P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
+/// The identical shape at impl-trait's own operand-scoped boundary — same shared
+/// `resolve_principal`/`matches_forbidden_principal` leaf as the dyn-trait test above.
+#[test]
+fn impl_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order() {
+    let tree = TempSrcTree::new("impl-trait-principal-cfg-use-merge");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\n#[cfg(unix)]\nuse crate::infra::Port as P;\npub fn f() -> impl P { loop {} }\n",
+        ),
+    ]);
+    let out = crate::impl_trait::impl_trait_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::ImplTrait,
+            subject: "impl P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
 }

@@ -260,8 +260,9 @@ pub(crate) fn impl_trait_module_findings(
 /// but keeps only the returned `impl Trait` nodes **any of whose non-auto traits** resolves into
 /// the forbidden operand set — a returned `impl Trait` may name several (`impl Foo + Bar`), and
 /// forbidding any one flags it. The exact pipeline [`dyn_operand_module_findings`] uses
-/// (`resolve_path(BareFallback::Ignore)` → `canonicalize_through_reexports` → `matches_forbidden`,
-/// exact-or-module-prefix), so a re-exported/aliased trait facade matches its defining path. An
+/// (`resolve_principal` → `expand_canonical_paths` → `matches_forbidden`, exact-or-module-prefix,
+/// checking every cfg-blind candidate), so a re-exported/aliased trait facade matches its defining
+/// path. An
 /// empty set ⇒ any returned `impl Trait` (never a silent no-op). An unresolvable trait (a bare
 /// std trait, macro/glob re-export) is dropped — the stated resolver bound, never a silent pass of
 /// a *resolvable* operand. The finding stays the rendered `impl …` shape (parity with shape-only).

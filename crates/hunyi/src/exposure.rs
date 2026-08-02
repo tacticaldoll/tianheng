@@ -23,7 +23,7 @@ use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{
     BareFallback, apply_bare_alias_rename, apply_crate_root_rename, bare_local_alias,
     canonical_path_str, collect_uses, expand_canonical_paths, extern_verbatim_renamed,
-    renames_shadowed, resolve_path,
+    renames_shadowed, resolve_path_all,
 };
 use crate::rules::SIGNATURE_RULE;
 use crate::scan::scan_crate;
@@ -192,8 +192,8 @@ pub(crate) fn module_findings(
         .flat_map(|(exposure, file, branch)| {
             let scope = &scopes[branch];
             let uses = &scope.uses;
-            // `resolve_path` returns None for a bare head (not `crate`-relative, not in the
-            // `use`-map); the extern oracle then fires for an external-crate head, resolving
+            // `resolve_path_all` returns no candidates for a bare head (not `crate`-relative, not
+            // in the `use`-map); the extern oracle then fires for an external-crate head, resolving
             // the inline extern path to itself. Ordering guarantees a local `use … as <dep>`
             // alias (found in the `use`-map) still wins over a dependency of the same name. A
             // re-export head uses the child-module-excluded set (a same-named child `mod` shadows a
@@ -210,26 +210,47 @@ pub(crate) fn module_findings(
             // `::head` stays unresolved (a bound), never mis-attributed through the `use`-map.
             // `extern_verbatim_renamed` ignores `leading_colon` (it iterates the segments), so
             // the raw set makes it react to `::serde` under a local `mod serde` (the shadow case)
-            // while the rename hop is preserved; a local `mod` is never a rename, so no FP.
-            // Otherwise: a bare single-segment local `type` alias resolves before the extern
-            // oracle (a local alias shadows a same-named dependency), and the combined closure
-            // follows alias→alias / alias→re-export hops.
-            let resolved = if exposure.path.leading_colon.is_some() {
+            // while the rename hop is preserved; a local `mod` is never a rename, so no FP. This
+            // path is a deterministic syntactic short-circuit (no `use`-map involved), so it stays
+            // single-valued — cfg-blind multi-candidate resolution has nothing to disambiguate here.
+            // Otherwise: `resolve_path_all` returns every candidate the head resolves to through
+            // the `use`-map (cfg-blind: two mutually-exclusive `#[cfg]` branches' conflicting `use
+            // ... as Name;` are never compiled together, so neither candidate may be silently
+            // dropped in favor of the other purely because of source order). When the `use`-map has
+            // no candidate at all, the single-valued fallbacks apply exactly as before: a bare
+            // single-segment local `type` alias resolves before the extern oracle (a local alias
+            // shadows a same-named dependency), and the combined closure follows alias→alias /
+            // alias→re-export hops.
+            let resolved: Vec<String> = if exposure.path.leading_colon.is_some() {
                 extern_verbatim_renamed(&exposure.path, &externs, &extern_renames)
+                    .into_iter()
+                    .collect()
             } else {
-                resolve_path(&exposure.path, uses, module, BareFallback::Ignore)
-                    .or_else(|| bare_local_alias(&exposure.path, module, &aliases))
-                    // The bare-head extern-rename rewrite uses `renames_bare`: a `Y::…` head shadowed
-                    // by this module's own child `mod Y` is not rewritten to the crate (rustc resolves
-                    // it to the local module), while an unshadowed `Y::…` still rewrites (no FN).
-                    .or_else(|| {
-                        extern_verbatim_renamed(&exposure.path, type_externs, &scope.renames_bare)
-                    })
+                let use_map_candidates =
+                    resolve_path_all(&exposure.path, uses, module, BareFallback::Ignore);
+                if !use_map_candidates.is_empty() {
+                    use_map_candidates
+                } else {
+                    bare_local_alias(&exposure.path, module, &aliases)
+                        // The bare-head extern-rename rewrite uses `renames_bare`: a `Y::…` head
+                        // shadowed by this module's own child `mod Y` is not rewritten to the crate
+                        // (rustc resolves it to the local module), while an unshadowed `Y::…` still
+                        // rewrites (no FN).
+                        .or_else(|| {
+                            extern_verbatim_renamed(
+                                &exposure.path,
+                                type_externs,
+                                &scope.renames_bare,
+                            )
+                        })
+                        .into_iter()
+                        .collect()
+                }
             };
-            let canonicals = match resolved {
-                Some(canonical) => expand_canonical_paths(&canonical, &aliases, &reexports),
-                None => Vec::new(),
-            };
+            let canonicals: Vec<String> = resolved
+                .iter()
+                .flat_map(|canonical| expand_canonical_paths(canonical, &aliases, &reexports))
+                .collect();
             let file_ref = file.clone();
             let seam_ref = exposure.seam.clone();
             canonicals

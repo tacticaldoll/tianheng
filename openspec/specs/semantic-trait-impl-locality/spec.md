@@ -3,9 +3,7 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's impl-locality capability: declare in Rust that a trait may be implemented only within an allowed module location **inside the local crate** — "only `crate::commands::*` may `impl Command`". Observed via the AST (`syn`), it governs *impl locality* — the complement of exposure (`semantic-signature-coupling`) and of import (the static dimension). It governs only the crate's own impl sites; it makes no claim about downstream crates (external trait sealing is a rejected, essential-gap non-goal).
-
 ## Requirements
-
 ### Requirement: Trait-impl-locality boundary declared in Rust
 
 A trait-impl-locality boundary SHALL be expressed as Rust code and is part of the single source of truth. Mirroring the semantic dimension's other declarations, each dimension owns its own declaration DSL and the boundaries are **composed at the gate**. A `TraitImplBoundary` SHALL name: a target crate, a governed **trait** path, an **allowed-location** set (one or more module paths/prefixes within the crate where the trait MAY be implemented), a human-readable reason, and a severity. The system MUST NOT require TOML, YAML, Markdown, or any generated policy file to declare or run a trait-impl-locality boundary.
@@ -79,7 +77,7 @@ An allowed location SHALL match an impl's module location either by exact path o
 
 ### Requirement: Trait-path resolution scope and no false negative
 
-The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed and observed), or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait.
+The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed and observed), or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait. When a `use`-map name involved in resolution — on either the boundary's own declared anchor (reached through its re-export facade) or an impl site's written trait path — resolves to **more than one** candidate because of a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name, every candidate SHALL be checked, and the anchor match SHALL react if any impl-site candidate canonicalizes to any declared-anchor candidate, never silently keeping only the candidate from whichever declaration was written last (observation cannot know which `#[cfg]` branch is live).
 
 #### Scenario: A use-imported trait path resolves and reacts
 
@@ -135,6 +133,11 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 
 - **WHEN** an impl of the anchored trait is in a disallowed location and its trait path is resolvable by the shared resolver
 - **THEN** the system emits a violation, never exit 0 for that boundary
+
+#### Scenario: A mutually-exclusive cfg-gated use alias for the anchored trait's name reacts regardless of order
+
+- **WHEN** a disallowed module declares `#[cfg(unix)] use crate::command::Command as T; #[cfg(not(unix))] use crate::other::Other as T;` then `impl T for Foo { … }`, under a boundary anchored to `crate::command::Command`, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — every candidate the impl site's `T` could resolve to is checked against the anchor, so the verdict never depends on source order
 
 ### Requirement: CI reaction
 
@@ -192,3 +195,4 @@ classified as identity-bearing or presentation-only; rendered impl text SHALL NO
 #### Scenario: Two impls stay distinct
 - **WHEN** two misplaced impls differ by module, trait, or self type
 - **THEN** their structured facts differ in the corresponding role
+

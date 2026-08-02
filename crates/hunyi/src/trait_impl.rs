@@ -17,8 +17,8 @@ use crate::errors::unknown_trait_error;
 use crate::file_scope::resolve_crate;
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
-    BareFallback, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
-    render_last_segment_args, resolve_path,
+    AliasMap, BareFallback, canonical_path_str, canonical_self_owner, expand_canonical_paths,
+    render_last_segment_args, resolve_path_all,
 };
 use crate::rules::TRAIT_IMPL_RULE;
 use crate::scan::scan_crate;
@@ -91,27 +91,46 @@ pub(crate) fn trait_impl_findings(
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let given = canonical_path_str(trait_path);
-    let true_anchor = canonicalize_through_reexports(&given, &scan.reexports);
-    if !scan.trait_defs.contains(&true_anchor) {
+    // Every re-export candidate the declared anchor's own facade could denote (cfg-blind): a
+    // `pub use` closure reached through a mutually-exclusive `#[cfg]` collision must not have its
+    // other candidate silently dropped (found on adversarial review of
+    // `hunyi-cfg-branch-use-reexport-merging`).
+    let true_anchors = expand_canonical_paths(&given, &AliasMap::new(), &scan.reexports);
+    if !true_anchors
+        .iter()
+        .any(|anchor| scan.trait_defs.contains(anchor))
+    {
         return Err(unknown_trait_error(trait_path, crate_package));
     }
     let allowed: Vec<String> = allowed.iter().map(|a| canonical_path_str(a)).collect();
 
     let mut findings = Vec::new();
     for (ordinal, site) in scan.impls.iter().enumerate() {
-        let Some(resolved) = resolve_path(
+        let resolved_candidates = resolve_path_all(
             &site.trait_path,
             &site.uses,
             &site.module,
             BareFallback::CurrentModule,
-        ) else {
+        );
+        if resolved_candidates.is_empty() {
             // The trait path did not resolve (a glob/macro bound) — not silently matched.
             continue;
-        };
-        let canonical = canonicalize_through_reexports(&resolved, &scan.reexports);
-        if canonical != true_anchor {
-            continue;
         }
+        // Every candidate, through every re-export candidate, is checked against every possible
+        // anchor (cfg-blind on both sides of the match). The rendered identity below uses
+        // whichever candidate actually matched, so the label reflects the reason for the reaction.
+        let canonical_candidates: Vec<String> = resolved_candidates
+            .iter()
+            .flat_map(|resolved| {
+                expand_canonical_paths(resolved, &AliasMap::new(), &scan.reexports)
+            })
+            .collect();
+        let Some(canonical) = canonical_candidates
+            .iter()
+            .find(|candidate| true_anchors.contains(candidate))
+        else {
+            continue;
+        };
         if matches_allowed(&site.module, &allowed) {
             continue;
         }

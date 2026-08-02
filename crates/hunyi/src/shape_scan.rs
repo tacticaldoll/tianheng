@@ -53,7 +53,8 @@ pub(crate) fn matches_forbidden_principal(
     forbidden.is_empty()
         || exposure.principals.iter().any(|path| {
             resolve_principal(path, uses, module, resolution, file_scope)
-                .is_some_and(|canonical| matches_forbidden(&canonical, forbidden))
+                .iter()
+                .any(|canonical| matches_forbidden(canonical, forbidden))
         })
 }
 

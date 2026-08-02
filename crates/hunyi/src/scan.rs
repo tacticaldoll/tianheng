@@ -6,7 +6,7 @@
 //! `module_resolve` (which does not fit a "nowhere except here" property), reusing only the leaf
 //! primitives and the shared resolver.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use syn::parse::Parser;
@@ -20,8 +20,8 @@ use crate::module_resolve::{ModuleFile, locate_module_file, read_parse, resolve_
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_targets,
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
-    is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path, strip_raw,
-    type_to_string,
+    is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path,
+    resolve_path_all, strip_raw, type_to_string,
 };
 use crate::syn_util::{
     FlatItem, direct_path_value, flatten_transparent_macro_items, flatten_transparent_macros,
@@ -77,8 +77,10 @@ pub(crate) struct CrateScan {
     /// subtree type. The forbidden-marker check consults this to react on `type Bar = Real` while NOT
     /// firing on an alias to a foreign/prelude type (whose marker lands off the governed subtree).
     /// (This is distinct from `aliases`, the exposure closure's resolvable-target map, which does not
-    /// record a bare-local-struct target.)
-    pub(crate) alias_targets: HashMap<String, String>,
+    /// record a bare-local-struct target.) Multi-valued for the identical cfg-blind reason `UseMap`
+    /// and `ReexportMap` are: `type X = Y;` where `Y` itself is a mutually-exclusive `#[cfg]`-gated
+    /// `use ... as Y;` name must keep every landing candidate, not just the first found.
+    pub(crate) alias_targets: AliasMap,
 }
 
 /// Collect crate-root `extern crate X as Y;` renames (`Y → X`) into `out`. Crate-root only: such a
@@ -137,7 +139,7 @@ pub(crate) fn scan_crate(
         trait_defs: HashSet::new(),
         impls: Vec::new(),
         type_defs: Vec::new(),
-        alias_targets: HashMap::new(),
+        alias_targets: AliasMap::new(),
     };
     // Pre-collect crate-root `extern crate X as Y;` renames BEFORE the walk, so the rename map is
     // complete before any alias-target or re-export-closure resolution — every source-order
@@ -526,11 +528,12 @@ fn walk_module(
             //   0. a leading-`::` target — an unambiguous extern (raw set, with the crate-root
             //      rename applied), a HARD short-circuit, so `type X = ::serde::Value;` records the
             //      extern even under a local `mod serde`, and `type X = ::<rename>::Foo;` too;
-            //   1. `resolve_path(Ignore)` — use-map / `crate`·`self`·`super`;
+            //   1. `resolve_path_all(Ignore)` — use-map (every cfg-branch candidate) /
+            //      `crate`·`self`·`super`;
             //   2. `bare_local_alias_target` — a bare single-segment target naming one of THIS
             //      module's own type aliases recorded as `{module}::{name}` (its canonical alias-map
             //      key), tried BEFORE the extern oracle so a local alias shadows a same-named
-            //      dependency (rustc's own resolution); the query-time `canonicalize_through_aliases`
+            //      dependency (rustc's own resolution); the query-time `expand_canonical_paths`
             //      fixpoint then closes a *bare* alias-of-an-alias chain regardless of source order.
             //      Gated to local alias names, so a bare non-alias target (a local struct, a std
             //      prelude type like `String`) is never mis-recorded — no false positive;
@@ -550,32 +553,48 @@ fn walk_module(
                 // lands off the governed subtree. Only a nominal `Type::Path` target has a single
                 // landing type; a tuple/ref/`dyn` target has none and is skipped (never governed here).
                 if let syn::Type::Path(tp) = &*type_item.ty {
-                    if let Some(landing) =
-                        resolve_path(&tp.path, &uses, &module, BareFallback::CurrentModule)
-                    {
+                    let landings =
+                        resolve_path_all(&tp.path, &uses, &module, BareFallback::CurrentModule);
+                    if !landings.is_empty() {
                         let alias =
                             format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
-                        scan.alias_targets.insert(alias, landing);
+                        let entry = scan.alias_targets.entry(alias).or_default();
+                        for landing in landings {
+                            if !entry.contains(&landing) {
+                                entry.push(landing);
+                            }
+                        }
                     }
                 }
                 let mut targets = Vec::new();
                 alias_nominal_targets(&type_item.ty, &mut targets);
                 for target in targets {
                     let alias = format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
-                    let resolved = if target.leading_colon.is_some() {
+                    let resolved_list: Vec<String> = if target.leading_colon.is_some() {
                         extern_verbatim_renamed(target, externs, &scan.extern_renames)
+                            .into_iter()
+                            .collect()
                     } else {
-                        resolve_path(target, &uses, &module, BareFallback::Ignore)
-                            .or_else(|| {
-                                bare_local_alias_target(target, &module, &local_alias_names)
-                            })
-                            .or_else(|| {
-                                extern_verbatim_renamed(target, &externs_type, &scan.extern_renames)
-                            })
+                        let use_candidates =
+                            resolve_path_all(target, &uses, &module, BareFallback::Ignore);
+                        if !use_candidates.is_empty() {
+                            use_candidates
+                        } else {
+                            bare_local_alias_target(target, &module, &local_alias_names)
+                                .or_else(|| {
+                                    extern_verbatim_renamed(
+                                        target,
+                                        &externs_type,
+                                        &scan.extern_renames,
+                                    )
+                                })
+                                .into_iter()
+                                .collect()
+                        }
                     };
-                    if let Some(resolved) = resolved {
+                    for resolved in resolved_list {
                         if resolved != alias {
-                            let entry = scan.aliases.entry(alias).or_default();
+                            let entry = scan.aliases.entry(alias.clone()).or_default();
                             if !entry.contains(&resolved) {
                                 entry.push(resolved);
                             }

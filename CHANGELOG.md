@@ -127,6 +127,20 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   collection machinery verbatim — no new seam kind, since Rust cannot declare both an ordinary item
   and a foreign one under the same name in one module, so there is no identity collision to design
   around. Not breaking — closes a false negative; no baseline identity shape changes.
+- 渾儀's shared `use`-map and re-export closure no longer silently drop one candidate when two
+  mutually-exclusive `#[cfg]` branches (bare `#[cfg]` or `cfg_if!` arms alike) declare `use ... as
+  Name;` (or `pub use ... as Name;`) for the identical name with different targets. Both were
+  single-valued (`HashMap<String, String>`), so the second declaration always overwrote the first —
+  the verdict for a real forbidden-type exposure depended on which mutually-exclusive branch was
+  written last, not on whether either branch's binding was genuinely forbidden. Both maps are now
+  multi-valued (mirroring the crate's existing type-alias map). Every matcher that consumes them now
+  checks every candidate and reacts if any is forbidden, not only signature-coupling's exposure
+  resolution and dyn-trait's/impl-trait's shared operand-scoped principal-trait resolver (discovered
+  to have the identical gap while fixing this): an adversarial review of the fix itself found the
+  same order-dependent silent pass still reachable through forbidden-marker's derive and impl-form
+  leaf matching, its self-type/marker-acquisition landing (through a third, previously single-valued
+  type-alias map), and trait-impl-locality's anchor resolution — each independently reproduced before
+  being closed here too. Not breaking — closes false negatives; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 

@@ -1647,7 +1647,7 @@ mod fact_tests {
         // canonical_self_owner + render_last_segment_args feed semantic owner / seam-owner / trait
         // fields. Renderable forms are public identity; the positional sentinel is pinned only so
         // the shared observation reaction can recognize and reject unsupported syntax.
-        let uses: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let uses: crate::resolve::UseMap = std::collections::HashMap::new();
         let no_params: std::collections::HashSet<String> = std::collections::HashSet::new();
         let owner: syn::Type = syn::parse_str("Repo<crate::Id>").unwrap();
         assert_eq!(
