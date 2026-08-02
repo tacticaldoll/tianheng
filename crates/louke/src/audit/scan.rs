@@ -175,7 +175,7 @@ fn collect_scope_modules(
             }
         }
         if is_mod_keyword(bytes, i) {
-            let mut cursor = skip_ascii_space(bytes, i + 3);
+            let mut cursor = skip_space_and_comments(bytes, i + 3);
             let name_start = cursor;
             if bytes.get(cursor..cursor + 2) == Some(b"r#") {
                 cursor += 2;
@@ -196,36 +196,58 @@ fn collect_scope_modules(
                 raw_name
             };
             let name = std::str::from_utf8(name).map_err(|e| e.to_string())?;
-            cursor = skip_ascii_space(bytes, cursor);
+            cursor = skip_space_and_comments(bytes, cursor);
             match bytes.get(cursor) {
                 Some(b';') => {
                     let attrs = mod_preamble_attrs(bytes, start, i);
-                    // Resolve either the unconditional `#[path = "…"]` target (followed to observe
-                    // its probes) or, absent one, the conventional `<base>/name.rs|name/mod.rs`.
-                    let resolved = match &attrs.path {
-                        // A non-inline `#[path]` resolves from the containing file's OWN directory
-                        // (`file_dir`), not the conventional-child base — rustc's mod-rs-blind rule.
-                        Some(rel) => resolve_path_module(file_dir, rel),
-                        None => resolve_external_module(child_base, name),
-                    }?;
-                    match resolved {
-                        Some(resolved) => modules.push(resolved),
-                        // No file at the target/conventional location. A `#[cfg]`-gated declaration
-                        // (or a cfg-conditional relocation) may legitimately have none in this
-                        // configuration (an off feature / another platform), so tolerate it — it
-                        // compiles no probes here, so skipping it cannot silently cover a seam. A
-                        // non-cfg missing module is a real broken reference: fail loud (exit 2).
-                        // Membership in a transparent macro arm is the second cfg-conditional
-                        // source, treated identically because it expresses one intent: the arm's
-                        // predicate lives in the macro's `if #[cfg(..)]` header rather than on the
-                        // item, and every arm is conditionally compiled by construction (the
-                        // trailing `else` on its predicates' negation). 圭表 settled this rule for
-                        // the same shape and 渾儀 adopted it; a third derivation here would be the
-                        // silent-divergence class the cross-dimension ledger exists to catch.
-                        // An ambiguity (both conventional forms present) stays an error above,
-                        // under every gate — no predicate value makes two files one module.
-                        None if attrs.cfg || in_transparent_arm => {}
-                        None => {
+                    if let Some(rel) = &attrs.path {
+                        // An unconditional `#[path]` is authoritative on every build — the sole
+                        // source, exactly as before. A non-inline `#[path]` resolves from the
+                        // containing file's OWN directory (`file_dir`), not the conventional-child
+                        // base — rustc's mod-rs-blind rule.
+                        match resolve_path_module(file_dir, rel)? {
+                            Some(resolved) => modules.push(resolved),
+                            None if attrs.cfg || in_transparent_arm => {}
+                            None => {
+                                return Err(format!(
+                                    "cannot resolve reachable module `{name}` under {}",
+                                    child_base.display()
+                                ));
+                            }
+                        }
+                    } else {
+                        // Union every source this build could compile: each `cfg_attr`-wrapped
+                        // `#[path]` candidate that exists on disk (resolved the identical way an
+                        // unconditional `#[path]` is, from `file_dir`), AND the conventional file —
+                        // cfg-blind observation cannot know which one a given build actually uses,
+                        // so neither is silently preferred over the other.
+                        let mut has_backing_source = false;
+                        for rel in &attrs.cfg_attr_paths {
+                            if let Some(resolved) = resolve_path_module(file_dir, rel)? {
+                                has_backing_source = true;
+                                modules.push(resolved);
+                            }
+                        }
+                        if let Some(resolved) = resolve_external_module(child_base, name)? {
+                            has_backing_source = true;
+                            modules.push(resolved);
+                        }
+                        // No file at any candidate location. A `#[cfg]`-gated declaration (or a
+                        // cfg_attr-wrapped relocation with an existing target elsewhere) may
+                        // legitimately have none in this configuration (an off feature / another
+                        // platform), so tolerate it — it compiles no probes here, so skipping it
+                        // cannot silently cover a seam. A non-cfg, non-`cfg_attr`-backed missing
+                        // module is a real broken reference: fail loud (exit 2). Membership in a
+                        // transparent macro arm is the second cfg-conditional source, treated
+                        // identically because it expresses one intent: the arm's predicate lives in
+                        // the macro's `if #[cfg(..)]` header rather than on the item, and every arm
+                        // is conditionally compiled by construction (the trailing `else` on its
+                        // predicates' negation). 圭表 settled this rule for the same shape and 渾儀
+                        // adopted it; a third derivation here would be the silent-divergence class
+                        // the cross-dimension ledger exists to catch. An ambiguity (both conventional
+                        // forms present) stays an error above, under every gate — no predicate value
+                        // makes two files one module.
+                        if !(has_backing_source || attrs.cfg || in_transparent_arm) {
                             return Err(format!(
                                 "cannot resolve reachable module `{name}` under {}",
                                 child_base.display()
@@ -245,22 +267,50 @@ fn collect_scope_modules(
                     // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
                     // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
                     // component and read a same-named orphan — a false negative.)
-                    let inline_base = match &attrs.path {
-                        Some(rel) => file_dir.join(rel),
-                        None => child_base.join(name),
-                    };
-                    collect_scope_modules(
-                        bytes,
-                        cursor + 1,
-                        close.saturating_sub(1),
-                        &inline_base,
-                        &inline_base,
-                        modules,
-                        // Arm membership is NOT inherited into an inline `mod`'s body: a bare
-                        // `#[cfg]` on an outer `mod` does not tolerate an absent file for an inner
-                        // one either, in any of the three dimensions.
-                        false,
-                    )?;
+                    //
+                    // An unconditional `#[path]` is the sole authority, exactly as for an external
+                    // mod. A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which predicate a
+                    // given build selects — cfg-blind observation cannot know which, so the body is
+                    // descended once per candidate base that exists as a directory: every `cfg_attr`
+                    // target that resolves, AND the conventional base if IT resolves (the predicate
+                    // could evaluate false on every one, in which case rustc strips the attribute
+                    // entirely and the plain, unremapped base applies). A candidate base that isn't a
+                    // real directory contributes nothing — recursing into it would spuriously
+                    // fail-loud on x's own OTHER, unrelated nested items merely because this one
+                    // platform's directory happens not to exist, when another candidate already backs
+                    // them. If NO candidate resolves at all, fall back to the conventional base anyway
+                    // (the pre-existing, un-remapped behavior) so a nested reference that is genuinely
+                    // broken on every platform still fails loud rather than being silently dropped.
+                    let mut inline_bases: Vec<PathBuf> = Vec::new();
+                    match &attrs.path {
+                        Some(rel) => inline_bases.push(file_dir.join(rel)),
+                        None => {
+                            for rel in &attrs.cfg_attr_paths {
+                                let candidate = file_dir.join(rel);
+                                if candidate.is_dir() {
+                                    inline_bases.push(candidate);
+                                }
+                            }
+                            let conventional = child_base.join(name);
+                            if inline_bases.is_empty() || conventional.is_dir() {
+                                inline_bases.push(conventional);
+                            }
+                        }
+                    }
+                    for inline_base in &inline_bases {
+                        collect_scope_modules(
+                            bytes,
+                            cursor + 1,
+                            close.saturating_sub(1),
+                            inline_base,
+                            inline_base,
+                            modules,
+                            // Arm membership is NOT inherited into an inline `mod`'s body: a bare
+                            // `#[cfg]` on an outer `mod` does not tolerate an absent file for an
+                            // inner one either, in any of the three dimensions.
+                            false,
+                        )?;
+                    }
                     i = close;
                     continue;
                 }
@@ -268,7 +318,29 @@ fn collect_scope_modules(
             }
         }
         if bytes[i] == b'{' {
-            i = balanced_brace_end(bytes, i, end);
+            // Any other brace scope — a fn/const/static body, a bare block expression, a match
+            // arm, and so on — is descended into, not skipped as opaque: Rust permits a `mod`
+            // item statement inside any block scope, and the ONLY legal non-inline form there is
+            // a `#[path = "…"] mod name;` (a bare `mod name;` with no `#[path]` has no established
+            // file-path convention inside a block and does not compile) — but that legal form was
+            // previously invisible, since every brace here was treated as one opaque unit and never
+            // walked. `is_mod_keyword`'s own whole-word match means descending into an ordinary
+            // struct-literal/match-arm/expression body costs nothing: no real `mod` token exists
+            // there to misfire on. A `mod` found this way adds no directory component of its own
+            // (unlike a NAMED inline `mod x { … }`), so the enclosing file's own bases are threaded
+            // through unchanged; arm membership is inherited, since a block nested inside an arm is
+            // exactly as cfg-conditional as the arm itself.
+            let close = balanced_brace_end(bytes, i, end);
+            collect_scope_modules(
+                bytes,
+                i + 1,
+                close.saturating_sub(1),
+                child_base,
+                file_dir,
+                modules,
+                in_transparent_arm,
+            )?;
+            i = close;
             continue;
         }
         i += 1;
@@ -414,6 +486,27 @@ fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
     i
 }
 
+/// Advance past whitespace AND any interleaved comments — used between the `mod` keyword and its
+/// name, and between the name and its terminator (`;`/`{`), where a comment is trivia to rustc
+/// (`pub mod /* relocated */ child;` compiles identically to `pub mod child;`) but a bare
+/// whitespace-only skip stops at the comment's leading `/`. There, the following identifier-run
+/// scan finds no valid identifier at that position, so the whole declaration was never recognized
+/// as a `mod` at all — not a graceful skip, a silent corpus drop: the module and its entire
+/// subtree, and every probe beneath it, vanished from the scan (found on adversarial review; a
+/// comment in this position is legal and unremarkable Rust, not a stated bound).
+fn skip_space_and_comments(bytes: &[u8], mut i: usize) -> usize {
+    loop {
+        i = skip_ascii_space(bytes, i);
+        if i >= bytes.len() {
+            return i;
+        }
+        match skip_literal_or_comment(bytes, i) {
+            Some(next) => i = next,
+            None => return i,
+        }
+    }
+}
+
 /// The **interior** byte ranges of each arm of a transparent macro invocation whose `!` is at `bang`
 /// and whose balanced body ends at `body_end` (as [`foreign_macro_body_end`] reports it, one past the
 /// closing delimiter).
@@ -476,15 +569,24 @@ fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
 struct ModPreambleAttrs {
     /// The target of an **unconditional** `#[path = "..."]` relocation (the direct string form): the
     /// module lives at this author-chosen file, which the walker now *follows* to count its probes
-    /// (closing the relocated-module coverage gap). `None` when there is no such attribute. A
-    /// `cfg_attr`-wrapped `path` reads as `cfg` (below), not here — it is cfg-conditional, so it is
-    /// not followed cfg-blind and stays a stated skip bound.
+    /// (closing the relocated-module coverage gap). `None` when there is no such attribute.
     path: Option<String>,
-    /// A `#[cfg(...)]` / `#[cfg_attr(...)]` gate: the module may legitimately have no file in the
-    /// current configuration (an off feature / another platform), so an absent file is tolerated
-    /// rather than a scan error — the same cfg-tolerance 渾儀 applies, reimplemented louke-locally
-    /// (三儀 ⊥ 三儀). This is not `cfg` evaluation: a resolvable cfg-gated module is still scanned
-    /// and its probes still counted; only an *absent* file for a cfg-gated declaration is tolerated.
+    /// Every `path = "…"` target found inside a `#[cfg_attr(<pred>, …, path = "…")]` wrapper — a
+    /// module may carry more than one, one per platform predicate. `cfg_attr` never removes the
+    /// `mod` item the way a bare `#[cfg]` does, so cfg-blind observation must union EVERY candidate
+    /// (found on adversarial review: earlier code matched only the exact identifier `cfg`, so
+    /// `cfg_attr` — a different identifier — matched neither the `path` arm above nor the bare-`cfg`
+    /// arm below, and this field did not exist at all; a `cfg_attr`-wrapped `#[path]` target was
+    /// therefore never followed, contradicting this very doc's own prior claim that it "reads as
+    /// cfg"). Each candidate is resolved the identical way the unconditional `path` above is
+    /// (relative to the containing file's own directory), not the conventional-child base.
+    cfg_attr_paths: Vec<String>,
+    /// A **bare** `#[cfg(...)]` gate: the module may legitimately have no file in the current
+    /// configuration (an off feature / another platform), so an absent file is tolerated rather than
+    /// a scan error — the same cfg-tolerance 渾儀 applies, reimplemented louke-locally (三儀 ⊥ 三儀).
+    /// This is not `cfg` evaluation: a resolvable cfg-gated module is still scanned and its probes
+    /// still counted; only an *absent* file for a cfg-gated declaration is tolerated. `cfg_attr` does
+    /// NOT set this — see `cfg_attr_paths` above for its own, additive absence tolerance.
     cfg: bool,
 }
 
@@ -495,8 +597,9 @@ struct ModPreambleAttrs {
 /// contains the text (`// fast path`, `#[cfg(feature = "fastpath")]`) MUST NOT be read as a `path`
 /// relocation — a false match would drop a reachable module and every probe under it (a silent
 /// coverage false negative, the worst outcome under FN-first). A `#[cfg_attr(.., path = ..)]`
-/// conditional relocation reads as `cfg` (its meta name is `cfg_attr`, not `path`), so an absent
-/// target is tolerated rather than errored.
+/// conditional relocation's own `path = "…"` target is extracted separately (`cfg_attr_paths`, every
+/// candidate the item carries) and unioned with the conventional file by the caller — never treated
+/// as equivalent to a bare `#[cfg]`'s absence tolerance, since `cfg_attr` never removes the item.
 ///
 /// `scope_start` bounds the search for the preamble's own start: it is the enclosing scope's own
 /// start (a real item/scope boundary, never inside a literal or comment), so scanning **forward**
@@ -555,6 +658,7 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
     }
     let mut attrs = ModPreambleAttrs {
         path: None,
+        cfg_attr_paths: Vec::new(),
         cfg: false,
     };
     let mut i = start;
@@ -587,11 +691,32 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
                     // conditionally applies its wrapped attribute(s); the `mod` item itself always
                     // exists regardless of the predicate (verified against a real `rustc` build:
                     // `#[cfg_attr(unix, allow(dead_code))] mod x;` with no `x.rs` is E0583 on every
-                    // platform). A `cfg_attr`-wrapped `path` is a different, already-handled case
-                    // (the `path` arm above, `has_path_attr`'s broader test in the syn-based
-                    // dimensions) — this bare-`cfg` scope is only for the plain-missing-file
-                    // tolerance, so a `cfg_attr` sighting here must never grant it.
+                    // platform) — this bare-`cfg` scope is only for the plain-missing-file
+                    // tolerance, so a `cfg_attr` sighting must never grant it (its own absence
+                    // tolerance is additive, via `cfg_attr_paths` below, not this flag).
                     b"cfg" => attrs.cfg = true,
+                    // `#[cfg_attr(<pred>, …, path = "…")]`: extract the `path = "…"` value from
+                    // WITHIN this attribute's own argument list (skipping the leading predicate,
+                    // which is never itself an identifier spelled `path`), if one is present. A
+                    // module may carry more than one SEPARATE `cfg_attr`-wrapped `#[path]` (one per
+                    // platform predicate); this arm fires once per occurrence of the outer loop, so
+                    // every one is collected. A doubly-nested `#[cfg_attr(a, cfg_attr(b, path =
+                    // "…"))]` is a stated, undetected bound here (a hand-rolled byte scanner, unlike
+                    // `hunyi`'s `syn`-based recursive walk) — rare enough in practice that chasing
+                    // full nested parity was not worth the added scanner complexity; a resolvable
+                    // `path` one level deep is never a silent claim of coverage either way, since the
+                    // scan still falls back to the conventional file.
+                    b"cfg_attr" => {
+                        let paren_open = skip_preamble_trivia(bytes, name_end, mod_index);
+                        if bytes.get(paren_open) == Some(&b'(') {
+                            let paren_close = paren_group_end(bytes, paren_open, mod_index);
+                            if let Some(rel) =
+                                find_path_meta_value(bytes, paren_open + 1, paren_close, mod_index)
+                            {
+                                attrs.cfg_attr_paths.push(rel);
+                            }
+                        }
+                    }
                     _ => {}
                 }
                 i = attr_group_end(bytes, open, mod_index);
@@ -601,6 +726,70 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
         i += 1;
     }
     attrs
+}
+
+/// Index just past the `)` closing the paren group opened at `open` (which indexes the `(`),
+/// tracking nested `()` and skipping string/char literals and comments so a `)` inside a
+/// `#[cfg_attr(unix, path = "a)b.rs")]` literal does not close the group early. Mirrors
+/// [`attr_group_end`]'s `[]`-tracking for a `cfg_attr`'s own argument list.
+fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = open;
+    while i < limit {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(limit);
+            continue;
+        }
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    limit
+}
+
+/// The value of a `path = "…"` name-value meta somewhere in `[start, paren_close)` (the interior of
+/// a `cfg_attr`'s own argument list, bounded separately by `mod_index` for `read_path_string`'s own
+/// trivia skip) — `None` if no such meta is present. Scans identifier-by-identifier rather than a
+/// raw substring search, so a predicate that merely contains the text (`target_os = "path_os"`,
+/// a doc comment) is never mistaken for the applied `path` meta.
+fn find_path_meta_value(
+    bytes: &[u8],
+    start: usize,
+    paren_close: usize,
+    mod_index: usize,
+) -> Option<String> {
+    let mut i = start;
+    while i < paren_close {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(paren_close);
+            continue;
+        }
+        if is_ident_byte(bytes[i]) && (i == start || !is_ident_byte(bytes[i - 1])) {
+            let name_start = i;
+            let mut name_end = i;
+            while name_end < paren_close && is_ident_byte(bytes[name_end]) {
+                name_end += 1;
+            }
+            if &bytes[name_start..name_end] == b"path" {
+                let eq = skip_preamble_trivia(bytes, name_end, paren_close);
+                if bytes.get(eq) == Some(&b'=') {
+                    return read_path_string(bytes, eq + 1, mod_index);
+                }
+            }
+            i = name_end;
+            continue;
+        }
+        i += 1;
+    }
+    None
 }
 
 /// Advance past whitespace, comments, and string/char literals to the next significant byte

@@ -2274,3 +2274,188 @@ fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
         "an absent unconditional #[path] target inside an arm must be tolerated: {outcome:?}"
     );
 }
+
+/// A comment between the `mod` keyword and its name is legal, unremarkable Rust (trivia to rustc)
+/// — but a bare whitespace-only skip in that position stopped at the comment's leading `/`, so the
+/// identifier scan found nothing there and the whole declaration was never recognized as a `mod` at
+/// all. The module and its entire subtree — every probe beneath it — silently vanished from the
+/// corpus (exit 0 Clean) instead of reacting to the typo'd seam it actually contains.
+#[test]
+fn a_comment_between_mod_and_its_name_does_not_drop_the_module() {
+    let tb = TempBase::new("comment-before-name");
+    let root = tb.source(
+        "lib.rs",
+        "pub mod /* relocated */ child;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "child.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the comment-relocated module must react: {outcome:?}"
+    );
+}
+
+/// The identical shape with the comment AFTER the module's name, before its terminator.
+#[test]
+fn a_comment_between_the_mod_name_and_its_terminator_does_not_drop_the_module() {
+    let tb = TempBase::new("comment-after-name");
+    let root = tb.source(
+        "lib.rs",
+        "pub mod child /* relocated */;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "child.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the comment-relocated module must react: {outcome:?}"
+    );
+}
+
+/// The only legal non-inline module form inside a function/block body is one carrying `#[path]`
+/// (a bare `mod name;` with no established file-path convention there does not compile) — but the
+/// catch-all brace skip treated every non-`mod`, non-arm brace as one opaque unit, so this legal
+/// form was never observed: the module and the typo'd seam it contains silently vanished from the
+/// corpus (exit 0 Clean).
+#[test]
+fn a_path_mod_inside_a_function_body_reacts() {
+    let tb = TempBase::new("block-scoped-path-mod");
+    let root = tb.source(
+        "lib.rs",
+        "pub fn f() { #[path = \"inner.rs\"] mod inner; }\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "inner.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the block-scoped #[path] module must react: {outcome:?}"
+    );
+}
+
+/// The identical shape nested one bare block deeper (`{ { #[path] mod inner; } }`), confirming the
+/// generalized brace descent is not narrowly scoped to a function's own immediate body.
+#[test]
+fn a_path_mod_inside_a_nested_bare_block_reacts() {
+    let tb = TempBase::new("nested-block-scoped-path-mod");
+    let root = tb.source(
+        "lib.rs",
+        "pub fn f() { { #[path = \"inner.rs\"] mod inner; } }\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "inner.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the nested-block #[path] module must react: {outcome:?}"
+    );
+}
+
+/// `mod_preamble_attrs` documented a `cfg_attr(path)` tolerance the code never implemented: the
+/// attribute-matching pass checked for the exact identifier `cfg`, so `cfg_attr` — a different
+/// identifier — matched neither the `path` arm nor the bare-`cfg` arm. A module stacking two
+/// `cfg_attr`-wrapped `#[path]` declarations that together cover every platform (both targets
+/// present, compiling cleanly on every configuration) was reported a hard constitution error
+/// instead of being scanned.
+#[test]
+fn two_cfg_attr_path_declarations_covering_every_platform_are_scanned_not_erred() {
+    let tb = TempBase::new("two-cfg-attr-path");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"u.rs\")]\n#[cfg_attr(not(unix), path = \"w.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "u.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    tb.source(
+        "w.rs",
+        "pub fn r(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "both cfg_attr(path) targets must be scanned (typo'd seam reacts), never a constitution \
+         error on source that compiles on every platform: {outcome:?}"
+    );
+}
+
+/// The identical shape with clean seams in both cfg_attr(path) targets — confirms the fix reports
+/// the boundary satisfied (not merely "not a constitution error").
+#[test]
+fn two_cfg_attr_path_declarations_covering_every_platform_are_clean_when_probes_match() {
+    let tb = TempBase::new("two-cfg-attr-path-clean");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"u.rs\")]\n#[cfg_attr(not(unix), path = \"w.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source("u.rs", "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }");
+    tb.source("w.rs", "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }");
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "source compiling cleanly on every platform, with every probe matching the declared seam, \
+         must be Clean: {outcome:?}"
+    );
+}
+
+/// A cfg_attr(path) target that does NOT exist on disk is skipped, not erred, when either the
+/// conventional file or another cfg_attr candidate backs the module — the union-observation
+/// counterpart of the crate-wide walk's own absence tolerance.
+#[test]
+fn a_missing_cfg_attr_path_target_is_tolerated_when_the_conventional_file_backs_the_module() {
+    let tb = TempBase::new("cfg-attr-path-missing-target-conventional-backs");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(windows, path = \"win.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "plat.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the conventional file must still be read and react, even with an absent sibling \
+         cfg_attr(path) target: {outcome:?}"
+    );
+}
+
+/// A cfg_attr(path) remap on an INLINE `mod x { … }` (not the external `mod x;` form) redirects
+/// where x's own nested items resolve from — the same union rule applied to a base directory
+/// instead of a file existence check, since the inline body itself is always present in source.
+#[test]
+fn a_cfg_attr_path_remap_on_an_inline_module_redirects_its_nested_items() {
+    let tb = TempBase::new("cfg-attr-path-inline-module-redirect");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"unix_dir\")]\npub mod x {\n    pub mod y;\n}\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "unix_dir/y.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the cfg_attr(path)-remapped directory must be followed for x's nested `mod y;`, not the \
+         conventional (nonexistent) `x/y.rs`, and never a constitution error: {outcome:?}"
+    );
+}
