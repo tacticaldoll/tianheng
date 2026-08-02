@@ -6663,3 +6663,124 @@ fn an_unterminated_block_comment_at_end_of_file_with_no_trailing_newline_does_no
     assert_eq!(violations[0].target(), "crate::child");
     assert_eq!(violations[0].finding, "crate::forbidden::Thing");
 }
+
+/// A non-ASCII char literal immediately adjacent to a `'{'` literal (`['«','{']`, no space) must
+/// not leak `{` as a spurious structural brace into the cleaned text — which used to drop every
+/// later top-level `mod` from the reachable set, so a boundary anchored above the affected module
+/// silently passed a real forbidden import (exit 0 Clean on source `rustc` compiles as-is).
+#[test]
+fn a_non_ascii_char_literal_adjacent_to_a_brace_literal_does_not_leak_a_spurious_brace() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-no-space",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{ab}','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// The identical shape, but the boundary is anchored directly at the module the leak used to drop
+/// (`crate::hidden`) rather than above it. Before the fix this failed loud (exit 2, "module
+/// 'crate::hidden' is not found among the reachable modules") instead of silently passing — after
+/// the fix the module is genuinely reachable, so the boundary resolves and reacts normally.
+#[test]
+fn a_boundary_anchored_directly_at_the_previously_dropped_module_resolves() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-anchored-at-dropped",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{ab}','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::hidden")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "crate::hidden must be reachable, not a constitution error: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::hidden");
+}
+
+/// The identical defect in its everyday form — a `match` arm pattern, not an array literal — one
+/// hop from the audit's original trigger shape, exercising the same lexer branch from different
+/// surrounding syntax. The pipe must sit with **no surrounding spaces** (`'é'|'{'`, matching the
+/// audit's exact citation) — a spaced pipe (`'é' | '{'`) inserts extra separator bytes between the
+/// misread closing quote and the next literal's opening quote, which happens not to collide with
+/// this exact defect and would silently test nothing (confirmed while writing this test: the
+/// spaced form passed even with the bug still present).
+#[test]
+fn a_non_ascii_char_literal_adjacent_to_a_brace_literal_in_a_match_arm_does_not_leak() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-match-arm",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\npub fn is_special(c: char) -> bool { match c { '\u{e9}'|'{' => true, _ => false } }\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// Control: the identical array literal but with a space inserted (`['«', '{']`) already worked
+/// correctly before this fix and must keep working — locks in that the fix does not regress the
+/// already-passing spelling.
+#[test]
+fn the_spaced_spelling_of_the_same_array_literal_already_reacts_and_keeps_reacting() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-with-space",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{ab}', '{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
