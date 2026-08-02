@@ -106,6 +106,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   lookup. An unterminated comment is now treated as extending through end-of-file, so nothing is left
   to re-scan. Not a behavior an adopter could have depended on — a crash is none of PROJECT.md's Core
   Contract outcomes (0 clean / 1 violation / 2 constitution error) — so no **BREAKING** marker.
+- 圭表 no longer silently passes a forbidden import when a non-ASCII char literal sits immediately
+  adjacent to a `'{'` char literal (e.g. `['«','{']`, no space) — the false negative the Core
+  Contract forbids outright. The lexer's "simple char literal" check assumed every char literal's
+  payload is exactly one byte, which holds for `'x'` but not a multi-byte UTF-8 scalar (`'«'` is 2
+  bytes, `'未'` is 3); for a non-ASCII literal the check failed and the scalar's raw bytes leaked
+  into the cleaned text as ordinary code. When a second literal followed closely enough, the misread
+  literal's real closing quote, an intervening comma, and the next literal's real opening quote could
+  coincidentally match the old one-byte assumption exactly, swallowing that opening quote too — which
+  left the next literal's own payload (here, `{`) unprotected, leaking it into the cleaned text as a
+  spurious structural brace and throwing off the reachability walker's brace-depth tracking for every
+  `mod` declared after it. The check now measures a char literal's real UTF-8 byte length from its
+  lead byte rather than assuming one. Not breaking — this closes a false negative against
+  `module-boundary`'s already-stated import-detection contract; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 
