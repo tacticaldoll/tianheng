@@ -129,11 +129,21 @@ pub(crate) enum PublicSeam {
         name: String,
     },
     InherentMethod {
+        /// The module the impl **block** is written in — distinct from `owner`, the self type's
+        /// own canonical path. Rust's coherence rules let an inherent `impl` for a type declared
+        /// in one module be written in ANY module of the same crate, so two impl blocks for the
+        /// SAME owner in DIFFERENT modules (a platform-conditional split) must not collapse to
+        /// one seam merely because they share an owner and a method name. Identity-only: `Display`
+        /// ignores it, matching `SemanticFact::AsyncInherentMethod`'s own already-shipped
+        /// precedent of carrying `module` distinct from `owner` without rendering it.
+        module: String,
         owner: String,
         name: String,
     },
     InherentAssoc {
         kind: AssocKind,
+        /// See `InherentMethod::module` — the impl block's own declaring module, not the owner's.
+        module: String,
         owner: String,
         name: String,
     },
@@ -184,14 +194,25 @@ impl PublicSeam {
                 ("seam_module", module),
                 ("seam_name", name),
             ],
-            Self::InherentMethod { owner, name } => vec![
+            Self::InherentMethod {
+                module,
+                owner,
+                name,
+            } => vec![
                 ("seam_kind", "inherent_method"),
+                ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
             ],
-            Self::InherentAssoc { kind, owner, name } => vec![
+            Self::InherentAssoc {
+                kind,
+                module,
+                owner,
+                name,
+            } => vec![
                 ("seam_kind", "inherent_assoc"),
                 ("seam_item_kind", kind.as_str()),
+                ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
             ],
@@ -265,8 +286,10 @@ impl std::fmt::Display for PublicSeam {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::FreeFn { module, name } => write!(f, "fn {module}::{name}"),
-            Self::InherentMethod { owner, name } => write!(f, "fn <{owner}>::{name}"),
-            Self::InherentAssoc { kind, owner, name } => {
+            Self::InherentMethod { owner, name, .. } => write!(f, "fn <{owner}>::{name}"),
+            Self::InherentAssoc {
+                kind, owner, name, ..
+            } => {
                 write!(f, "{} <{owner}>::{name}", kind.as_str())
             }
             Self::TraitMethod {
@@ -801,8 +824,14 @@ pub(crate) fn fn_seam(module: &str, name: &syn::Ident) -> PublicSeam {
     }
 }
 
-pub(crate) fn inherent_method_seam(owner: &str, name: &syn::Ident) -> PublicSeam {
+/// `module` is the impl **block's own** declaring module (always the caller's own scan-loop
+/// `module`, already in scope at every call site) — distinct from `owner`, the self type's
+/// canonical path, which may name a type declared in an entirely different module. Two impl
+/// blocks for the same owner written in different modules must stay distinct seams even when they
+/// declare a same-named public method (see `PublicSeam::InherentMethod`'s own doc comment).
+pub(crate) fn inherent_method_seam(module: &str, owner: &str, name: &syn::Ident) -> PublicSeam {
     PublicSeam::InherentMethod {
+        module: module.to_string(),
         owner: owner.to_string(),
         name: strip_raw(&name.to_string()),
     }
@@ -810,11 +839,19 @@ pub(crate) fn inherent_method_seam(owner: &str, name: &syn::Ident) -> PublicSeam
 
 /// The seam for an inherent `impl` block's public associated `const`/`type` — `{kind} <{owner}>::
 /// {name}`, parallel to [`inherent_method_seam`]'s `fn <{owner}>::{name}`. Owner-qualified so
-/// `impl Foo`/`impl Bar` assoc items of the same name never collide, and `kind`-tagged so a `const`
-/// and a `type` (and a method's `fn`) stay distinct findings under the baseline.
-pub(crate) fn inherent_assoc_seam(kind: AssocKind, owner: &str, name: &syn::Ident) -> PublicSeam {
+/// `impl Foo`/`impl Bar` assoc items of the same name never collide, `kind`-tagged so a `const`
+/// and a `type` (and a method's `fn`) stay distinct findings under the baseline, and — like
+/// [`inherent_method_seam`] — module-qualified so two impl blocks for the same owner in different
+/// modules never collide either.
+pub(crate) fn inherent_assoc_seam(
+    kind: AssocKind,
+    module: &str,
+    owner: &str,
+    name: &syn::Ident,
+) -> PublicSeam {
     PublicSeam::InherentAssoc {
         kind,
+        module: module.to_string(),
         owner: owner.to_string(),
         name: strip_raw(&name.to_string()),
     }
@@ -988,14 +1025,25 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_name", name),
             ],
-            PublicSeam::InherentMethod { owner, name } => vec![
+            PublicSeam::InherentMethod {
+                module,
+                owner,
+                name,
+            } => vec![
                 ("seam_kind", "inherent_method"),
+                ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
             ],
-            PublicSeam::InherentAssoc { kind, owner, name } => vec![
+            PublicSeam::InherentAssoc {
+                kind,
+                module,
+                owner,
+                name,
+            } => vec![
                 ("seam_kind", "inherent_assoc"),
                 ("seam_item_kind", published_assoc_kind(kind)),
+                ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
             ],
@@ -1191,16 +1239,33 @@ mod fact_tests {
                 name: "run".into(),
             },
             PublicSeam::InherentMethod {
+                module: "crate::api".into(),
+                owner: "crate::Api".into(),
+                name: "run".into(),
+            },
+            // Same owner and method name as above, different declaring module — the two-module
+            // false negative this change closes: without the module field these would collide.
+            PublicSeam::InherentMethod {
+                module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
                 name: "run".into(),
             },
             PublicSeam::InherentAssoc {
                 kind: AssocKind::Const,
+                module: "crate::api".into(),
+                owner: "crate::Api".into(),
+                name: "VALUE".into(),
+            },
+            // Same owner, kind, and name as above, different declaring module.
+            PublicSeam::InherentAssoc {
+                kind: AssocKind::Const,
+                module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
                 name: "VALUE".into(),
             },
             PublicSeam::InherentAssoc {
                 kind: AssocKind::Type,
+                module: "crate::api".into(),
                 owner: "crate::Api".into(),
                 name: "Value".into(),
             },

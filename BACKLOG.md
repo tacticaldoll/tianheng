@@ -93,30 +93,6 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   body; the stated bound is also pinned in `crates/louke/src/finding.rs`/`audit.rs`'s own
   doc comments and `openspec/specs/runtime-origin-assertion/spec.md`.
 
-- **`InherentMethod` seam identity omits its declaring module, so two impl sites in
-  different modules collapse to one violation.** Class: DESIGN-BREAKING. Observed
-  pressure: verified real during 0.3.1 sweep cleanup (2026-08-02/03) — a type with
-  inherent-method impl-trait-returning methods declared in two different modules
-  (e.g. platform-split `plat_unix`/`plat_win` inherent impls on one shared type)
-  produces exactly one violation instead of two; the second module's real violation is
-  silently lost, not merely deduped. Observation source: direct reproduction against
-  `hunyi::check_impl_trait` (and structurally the same gap in dyn-trait/signature-coupling's
-  inherent-method seams, sharing the identical shape logic) — described above, not
-  independently re-tested for the dyn-trait/impl-trait siblings, only inspected by code
-  reading. Current bound: `PublicSeam::InherentMethod`
-  is keyed on `{owner, name}` only — correct when distinguishing different self types on
-  the same governed surface, but blind to the same self type's impl blocks written in
-  separate modules (unlike `FreeFn`/`TraitMethod`, which already carry a module field).
-  Risk: a false negative — PROJECT.md's Core Contract forbids this outright — but
-  requires the specific idiom of splitting one type's inherent methods across modules
-  (common in platform-conditional code, not yet observed as an adopter complaint).
-  Promotion trigger: add a declaring-module/location field to `PublicSeam::InherentMethod`
-  (and sibling `InherentAssoc`) and thread it through `inherent_method_seam`/
-  `inherent_assoc_seam` — real design work (deciding whether the module belongs in the
-  seam's identity only or also its rendered label). Version class: DESIGN-BREAKING
-  (changes affected seams' baseline `finding_key` shape). Authority: this entry's own
-  reproduction record (above); no separate archived report is kept.
-
 - **`InherentGenerics` seam identity has no per-block distinguisher, contradicting its
   own doc comment.** Class: DESIGN-BREAKING. Observed pressure: verified real during
   0.3.1 sweep cleanup (2026-08-02/03) — two separate inherent impl blocks on the same
@@ -318,6 +294,9 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   - `guibiao`'s own module-boundary walk now tolerates a module backed only by one or more resolved `cfg_attr(path)` remaps (no plain conventional file, no direct `#[path]`), matching `hunyi`/`louke`'s identical rule for the same shape.
   - Reusable testing harness (`tianheng::testing::GovernanceTest` fluent builder in facade for reaction, coverage, projection freshness with `BLESS=1`, and fixture testing).
   - Self-governance observation depth upgrade (explicit ScanDepth declarations across self_governance.rs boundaries).
+  - `PublicSeam::InherentMethod`/`InherentAssoc` now carry the impl block's own declaring module,
+    closing the two-different-modules false negative verified real during the 0.3.1 sweep
+    (`hunyi-public-seam-module-injection`).
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 ## Version horizons

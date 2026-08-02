@@ -53,7 +53,7 @@ pub(crate) fn collect_item_return_impl_traits(
             for impl_item in &item.items {
                 if let syn::ImplItem::Fn(method) = impl_item {
                     if is_public(&method.vis) {
-                        let seam = inherent_method_seam(&owner, &method.sig.ident);
+                        let seam = inherent_method_seam(module, &owner, &method.sig.ident);
                         out.extend(stamp_seam(impl_traits_in_return(&method.sig), &seam));
                     }
                 }
@@ -429,7 +429,7 @@ pub(crate) fn collect_item_exposures(
                     // shadow it (plus the method's own params) to keep a param use from resolving
                     // through a same-named alias.
                     syn::ImplItem::Fn(method) if is_public(&method.vis) => {
-                        let seam = inherent_method_seam(&owner, &method.sig.ident);
+                        let seam = inherent_method_seam(module, &owner, &method.sig.ident);
                         out.extend(tag_paths(
                             paths_in_signature_scoped(&method.sig, &impl_params),
                             &seam,
@@ -437,7 +437,8 @@ pub(crate) fn collect_item_exposures(
                     }
                     // A public associated `const`'s declared type is public API (`Foo::K`).
                     syn::ImplItem::Const(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam(AssocKind::Const, &owner, &assoc.ident);
+                        let seam =
+                            inherent_assoc_seam(AssocKind::Const, module, &owner, &assoc.ident);
                         out.extend(tag_paths(
                             paths_in_type_scoped(&assoc.ty, &impl_params),
                             &seam,
@@ -445,7 +446,8 @@ pub(crate) fn collect_item_exposures(
                     }
                     // A public associated `type`'s target is public API (`Foo::T`).
                     syn::ImplItem::Type(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam(AssocKind::Type, &owner, &assoc.ident);
+                        let seam =
+                            inherent_assoc_seam(AssocKind::Type, module, &owner, &assoc.ident);
                         out.extend(tag_paths(
                             paths_in_type_scoped(&assoc.ty, &impl_params),
                             &seam,
@@ -973,18 +975,20 @@ pub(crate) fn collect_item_dyn_exposures(
             for impl_item in &item.items {
                 match impl_item {
                     syn::ImplItem::Fn(method) if is_public(&method.vis) => {
-                        let seam = inherent_method_seam(&owner, &method.sig.ident);
+                        let seam = inherent_method_seam(module, &owner, &method.sig.ident);
                         out.extend(stamp_seam(dyns_in_signature(&method.sig), &seam));
                     }
                     // A public associated `const`/`type` declares a public-API type position, so a
                     // `dyn` written there is exposed — the same positions the signature-coupling
                     // collector observes (`collect_item_exposures`); the dyn rule must not lag it.
                     syn::ImplItem::Const(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam(AssocKind::Const, &owner, &assoc.ident);
+                        let seam =
+                            inherent_assoc_seam(AssocKind::Const, module, &owner, &assoc.ident);
                         out.extend(stamp_seam(dyns_in_type(&assoc.ty), &seam));
                     }
                     syn::ImplItem::Type(assoc) if is_public(&assoc.vis) => {
-                        let seam = inherent_assoc_seam(AssocKind::Type, &owner, &assoc.ident);
+                        let seam =
+                            inherent_assoc_seam(AssocKind::Type, module, &owner, &assoc.ident);
                         out.extend(stamp_seam(dyns_in_type(&assoc.ty), &seam));
                     }
                     _ => {}
