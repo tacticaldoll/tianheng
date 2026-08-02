@@ -23,6 +23,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   truth catches up to the reaction. (A `#[cfg_attr]` wrapper's own tolerance is specified by the
   fix below in this same window, so it is stated there instead of restated here.)
 
+### Changed
+- Internal refactor: 渾儀's three call sites that compose transparent-macro flattening with
+  const/fn-body-nested-impl recovery (`scan::flatten_for_walk`,
+  `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
+  now share one crate-private helper, `syn_util::flatten_with_body_nested_impls`, instead of each
+  hand-composing the identical sequence. No public API, wire format, or observable behavior change.
+
 ### Fixed
 - 渾儀 now rejects a forbidden/allowed operand whose `::`-delimited spelling has an empty segment
   (a leading `::`, a trailing `::`, a doubled `::`, or the empty string) as a constitution error,
