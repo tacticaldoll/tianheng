@@ -36,7 +36,7 @@ pub use audit::{audit_probe_coverage, audit_probe_coverage_with_markers};
 
 // Public re-exports — all previously-public items, same paths as before.
 pub use dsl::{OriginEntry, Posture, RuntimeBoundary, RuntimeBoundaryDraft, RuntimeSeamDraft};
-pub use registry::{__react, install, set_sink};
+pub use registry::{__react, dropped_sink_events, install, set_sink};
 pub use tracked::Tracked;
 
 /// The canonical runtime seam-origin rule label — written **once** here and referenced by

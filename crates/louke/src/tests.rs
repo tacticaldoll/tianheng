@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use xuanji::{BoundaryKind, Severity};
 
 use crate::dsl::Posture;
-use crate::registry::{OriginInfo, Registry, Seam, check_crossing};
+use crate::registry::{
+    OriginInfo, Registry, Seam, check_crossing, dropped_sink_events, emit_default,
+};
 use crate::tracked::TidMap;
 use crate::{RuntimeBoundary, runtime_seam_rule_line};
 
@@ -225,6 +227,38 @@ fn runtime_rule_identity_is_set_order_stable_and_policy_sensitive() {
             ("allowed_origin_0", "app::api"),
             ("allowed_origin_1", "app::domain"),
         ]
+    );
+}
+
+#[test]
+fn a_failed_default_sink_write_is_counted_not_silently_lost() {
+    // A writer that always fails, so the counting path can be pinned without touching the real
+    // process stderr (a `#[cfg(unix)]` integration test in `tests/` covers the real OS-level
+    // broken-pipe path end to end).
+    struct AlwaysFails;
+    impl std::io::Write for AlwaysFails {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let _ = buf;
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let reg = registry(&[("seam", &["app::domain"], Severity::Enforce)], &[]);
+    let (violation, _posture) = check_crossing("seam", TypeId::of::<Infra>(), &reg)
+        .unwrap()
+        .unwrap();
+
+    // Delta, not an absolute value: this static is process-global across every test in this
+    // binary, so a prior test's drop (there is none today) must not make this one flaky.
+    let before = dropped_sink_events();
+    emit_default(AlwaysFails, &violation);
+    assert_eq!(
+        dropped_sink_events(),
+        before + 1,
+        "a failed default-sink write must be counted exactly once, never silently discarded"
     );
 }
 
