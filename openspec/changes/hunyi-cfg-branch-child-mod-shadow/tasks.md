@@ -62,19 +62,19 @@
       is still cfg-blind: reproduce `extern crate serde as wc;` + `#[cfg(unix)] mod wc;` +
       `#[cfg(not(unix))] pub use wc::Value;` under `must_not_expose("serde")` returning zero
       findings on the round-1 fix. Confirmed real.
-- [ ] 7.2 `syn_util.rs`: new `reexport_renames_for(renames, child_mods, use_flat)`, the rename-map
+- [x] 7.2 `syn_util.rs`: new `reexport_renames_for(renames, child_mods, use_flat)`, the rename-map
       analogue of `reexport_externs_for`, reusing the identical `provably_mutually_exclusive`
       predicate over `HashMap<String, String>` instead of `HashSet<String>`.
-- [ ] 7.3 `exposure.rs`: a re-export exposure's bare-head fallback and its post-closure
+- [x] 7.3 `exposure.rs`: a re-export exposure's bare-head fallback and its post-closure
       `apply_bare_alias_rename` both switch to a per-item `Cow<HashMap<String, String>>` computed
       via `reexport_renames_for`; a type-position head keeps the old branch-wide `renames_bare`
       unchanged (explicit Non-Goal, matching `externs_type`'s scope). The dangling
       "see the module doc" comment (no module doc actually carried the claim) is rewritten in place.
-- [ ] 7.4 `resolve/mod.rs`'s `collect_reexports`: `renames_bare` becomes per-use-item via
+- [x] 7.4 `resolve/mod.rs`'s `collect_reexports`: `renames_bare` becomes per-use-item via
       `reexport_renames_for`, dropping the old once-per-call `renames_shadowed` computation.
-- [ ] 7.5 Regression tests added for both the direct-head and closure/facade forms of the
+- [x] 7.5 Regression tests added for both the direct-head and closure/facade forms of the
       rename-alias trigger; both fail on the round-1-only code and pass after 7.2-7.4.
-- [ ] 7.6 `cargo test -p hunyi` — full suite green again (449 passed).
+- [x] 7.6 `cargo test -p hunyi` — full suite green again (449 passed).
 
 ## 8. Sync
 

@@ -8328,6 +8328,74 @@ fn a_bare_cfg_negated_sibling_child_module_does_not_shadow_a_facades_extern_reex
 }
 
 #[test]
+fn a_mutually_exclusive_sibling_child_module_does_not_shadow_a_rename_aliased_reexport() {
+    // The crate-root-rename-alias sibling of the round-9 finding above (found by an independent
+    // adversarial review of the fix, not the original audit): `renames_bare` -- the shadow applied
+    // to a bare head that resolves through a crate-root `extern crate X as Y;` alias, per
+    // `extern_verbatim_renamed`'s rename-map-before-externs-set precedence -- was left cfg-blind
+    // even after `mod_decls`/`reexport_externs_for` made the plain extern-name shadow cfg-aware.
+    // `#[cfg(unix)] mod wc;` beside `#[cfg(not(unix))] pub use wc::Value;`, with a crate-root
+    // `extern crate serde as wc;` rename, is never compiled together (verified against real rustc:
+    // api.rs alone compiles cleanly on every platform) -- so the unix arm's own local `mod wc` must
+    // not shadow the not(unix) arm's own genuine `wc::Value` (== `serde::Value`) re-export.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow-rename-alias",
+        &[
+            ("lib.rs", "extern crate serde as wc;\npub mod api;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nmod wc;\n#[cfg(not(unix))]\npub use wc::Value;\n",
+            ),
+            ("api/wc.rs", "pub struct Local;\n"),
+        ],
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::api::Value"],
+        "the not(unix) arm's own genuine rename-aliased re-export must react, regardless of the \
+         unix arm's own local mod wc, since the two are never compiled together: {out:?}"
+    );
+}
+
+#[test]
+fn a_mutually_exclusive_sibling_child_module_does_not_shadow_a_rename_aliased_facade_reexport() {
+    // The crate-wide-closure sibling of the rename-alias fix above: `crate::a`'s mutually-exclusive
+    // `mod wc;` / `pub use wc::Value;` pair is reached only THROUGH a facade
+    // (`crate::domain`'s `pub use crate::a::Value;`), exercising `collect_reexports`'s own
+    // `renames_bare` computation rather than `module_findings`'s direct-head resolution.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow-rename-alias-facade",
+        &[
+            (
+                "lib.rs",
+                "extern crate serde as wc;\npub mod a;\npub mod domain;\n",
+            ),
+            (
+                "a.rs",
+                "#[cfg(unix)]\nmod wc;\n#[cfg(not(unix))]\npub use wc::Value;\n",
+            ),
+            ("a/wc.rs", "pub struct Local;\n"),
+            ("domain.rs", "pub use crate::a::Value;\n"),
+        ],
+        "crate::domain",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::domain::Value"],
+        "the facade must still canonicalize to the not(unix) arm's genuine rename-aliased \
+         re-export, regardless of the unix arm's own local mod wc in the SAME defining module: \
+         {out:?}"
+    );
+}
+
+#[test]
 fn async_subtree_observes_both_arms_of_a_two_inline_sibling_cfg_split_anchor() {
     // Round-8 finding (b): when the async-exposure subtree boundary is anchored DIRECTLY at a
     // module reached through two mutually-exclusive INLINE `#[cfg]` siblings sharing one file,

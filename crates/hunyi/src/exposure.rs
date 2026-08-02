@@ -28,7 +28,7 @@ use crate::resolve::{
 };
 use crate::rules::SIGNATURE_RULE;
 use crate::scan::scan_crate;
-use crate::syn_util::{FlatItem, child_module_decls, reexport_externs_for};
+use crate::syn_util::{FlatItem, child_module_decls, reexport_externs_for, reexport_renames_for};
 
 /// Run the semantic boundaries against the Cargo workspace at `manifest_path`.
 ///
@@ -153,9 +153,15 @@ pub(crate) fn module_findings(
     // `reexport_externs_for`'s cfg-aware use below, the re-export-head analogue of `externs_type`'s
     // whole-branch subtraction), and `renames_bare` (a crate-root `extern crate X as Y;` binds `Y`
     // crate-wide, but a governed submodule that declares its OWN child `mod Y` shadows the alias
-    // there — so a bare head uses the rename map with THIS FILE's own child-module names removed,
-    // cfg-blind — see the module doc for why that stays a stated bound here, unlike `mod_decls`).
-    // The crate-relative (`crate::Y::…`) and leading-`::` forms are NOT shadowable, so they keep the
+    // there — so a bare head uses the rename map with THIS FILE's own child-module names removed).
+    // `renames_bare` here stays the whole-branch, cfg-blind computation and backs only a
+    // **type-position** head, exactly mirroring `externs_type`'s own scope: a re-export exposure's
+    // bare head instead computes its own cfg-aware rename map per item, via `reexport_renames_for`
+    // below (the rename-alias analogue of `reexport_externs_for`) — an unfixed cfg-blind rename
+    // shadow there would not merely under-shadow the re-export, it would drop the resolution
+    // outright, since the shadowed alias spelling is never itself a member of the externs-set
+    // fallback (found by an independent adversarial review of the `mod_decls` fix). The
+    // crate-relative (`crate::Y::…`) and leading-`::` forms are NOT shadowable, so they keep the
     // full `extern_renames` regardless.
     struct FileScope {
         uses: crate::resolve::UseMap,
@@ -226,6 +232,25 @@ pub(crate) fn module_findings(
             } else {
                 Cow::Borrowed(&scope.externs_type)
             };
+            // The crate-root extern-crate-rename shadow gets the identical cfg-aware treatment for
+            // a re-export exposure's own bare head (found by an independent adversarial review of
+            // the fix above): `extern_verbatim_renamed` checks the rename map BEFORE the externs
+            // set, and a rename alias (`wc` from `extern crate serde as wc;`) is never itself a
+            // member of the externs set (only the real crate name `serde` is) — so leaving
+            // `renames_bare` cfg-blind here does not merely under-shadow a re-export through a
+            // rename alias, it drops the resolution outright once the shadowed alias falls through
+            // to an externs-set fallback with no candidate for it at all. A type-position head
+            // keeps the branch-wide, cfg-blind `renames_bare` unchanged (an explicit non-goal,
+            // matching `externs_type`'s own scope).
+            let renames_for_item: Cow<HashMap<String, String>> = if exposure.is_reexport {
+                Cow::Owned(reexport_renames_for(
+                    &extern_renames,
+                    &scope.mod_decls,
+                    origin,
+                ))
+            } else {
+                Cow::Borrowed(&scope.renames_bare)
+            };
             // A leading `::` is an unambiguous extern (edition 2018+): resolve against the RAW
             // extern set (with the crate-root `extern crate … as` rename applied, so a
             // `::<rename>::Type` head still resolves to its real crate), bypassing the `use`-map
@@ -255,15 +280,15 @@ pub(crate) fn module_findings(
                     use_map_candidates
                 } else {
                     bare_local_alias(&exposure.path, module, &aliases)
-                        // The bare-head extern-rename rewrite uses `renames_bare`: a `Y::…` head
-                        // shadowed by this module's own child `mod Y` is not rewritten to the crate
-                        // (rustc resolves it to the local module), while an unshadowed `Y::…` still
-                        // rewrites (no FN).
+                        // The bare-head extern-rename rewrite uses `renames_for_item`: a `Y::…`
+                        // head shadowed by this module's own child `mod Y` is not rewritten to the
+                        // crate (rustc resolves it to the local module), while an unshadowed `Y::…`
+                        // still rewrites (no FN) — cfg-aware for a re-export exposure, as above.
                         .or_else(|| {
                             extern_verbatim_renamed(
                                 &exposure.path,
                                 &type_externs,
-                                &scope.renames_bare,
+                                &renames_for_item,
                             )
                         })
                         .into_iter()
@@ -279,7 +304,7 @@ pub(crate) fn module_findings(
             canonicals
                 .into_iter()
                 .map(|canonical| apply_crate_root_rename(canonical, &extern_renames))
-                .map(|canonical| apply_bare_alias_rename(canonical, &scope.renames_bare))
+                .map(move |canonical| apply_bare_alias_rename(canonical, &renames_for_item))
                 .filter(|canonical| matches_forbidden(canonical, &forbidden))
                 .map(move |canonical| {
                     (

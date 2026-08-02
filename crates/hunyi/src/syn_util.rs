@@ -3,7 +3,7 @@
 //! `use`-tree descriptions the visibility capability reports. Pure `syn` reading; the only
 //! non-`syn` dependency is [`crate::resolve::strip_raw`] for raw-identifier canonicalization.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::resolve::strip_raw;
 
@@ -306,6 +306,34 @@ pub(crate) fn reexport_externs_for(
         .iter()
         .filter(|e| !shadowed.contains(e.as_str()))
         .cloned()
+        .collect()
+}
+
+/// The crate-root `extern crate X as Y;` rename map a specific `pub use` item's own bare head
+/// should resolve against: `renames` with every same-named child `mod` declaration's alias
+/// removed, UNLESS that particular `mod` is [`provably_mutually_exclusive`] with `use_flat` — the
+/// rename-alias analogue of [`reexport_externs_for`]. This matters because
+/// `extern_verbatim_renamed` checks the rename map **before** falling back to the externs set: an
+/// alias like `wc` (from `extern crate serde as wc;`) is never itself a member of the externs set
+/// (only the real crate name `serde` is), so a cfg-blindly-shadowed rename alias does not merely
+/// under-shadow the re-export — it drops the resolution outright, since the externs-set fallback
+/// has no candidate for `wc` at all. `child_mods` pairs each declared child module's name with the
+/// [`FlatItem`] of ITS OWN declaration (from [`child_module_decls`]), exactly as
+/// `reexport_externs_for` does.
+pub(crate) fn reexport_renames_for(
+    renames: &HashMap<String, String>,
+    child_mods: &[(String, FlatItem)],
+    use_flat: &FlatItem,
+) -> HashMap<String, String> {
+    let shadowed: HashSet<&str> = child_mods
+        .iter()
+        .filter(|(_, mod_flat)| !provably_mutually_exclusive(mod_flat, use_flat))
+        .map(|(name, _)| name.as_str())
+        .collect();
+    renames
+        .iter()
+        .filter(|(alias, _)| !shadowed.contains(alias.as_str()))
+        .map(|(a, b)| (a.clone(), b.clone()))
         .collect()
 }
 
