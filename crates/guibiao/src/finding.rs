@@ -98,17 +98,32 @@ pub(crate) enum ModuleFact {
 }
 
 impl ModuleFact {
-    pub(crate) fn into_finding(self) -> Finding {
+    /// `governing_package` is the crate the violated boundary was declared against
+    /// (`boundary.crate_package`) — an identity-bearing field distinct from `CrateFact`'s
+    /// `"package"` above, which names the *observed dependency*, not the declaring crate. Without
+    /// it, two crates declaring the identical boundary against the identical module path produce
+    /// identical identities and silently collapse (see `structured-violation-identity` spec).
+    pub(crate) fn into_finding(self, governing_package: &str) -> Finding {
         match self {
             ModuleFact::ImportedPath(path) => {
-                let key = fact("imported-path", "module-path", [("path", path.as_str())]);
+                let key = fact(
+                    "imported-path",
+                    "module-path",
+                    [
+                        ("governing_package", governing_package),
+                        ("path", path.as_str()),
+                    ],
+                );
                 Finding::new(path, key)
             }
             ModuleFact::ImporterModule(module) => {
                 let key = fact(
                     "importer-module",
                     "module-path",
-                    [("module", module.as_str())],
+                    [
+                        ("governing_package", governing_package),
+                        ("module", module.as_str()),
+                    ],
                 );
                 Finding::new(module, key)
             }
@@ -116,7 +131,10 @@ impl ModuleFact {
                 let key = fact(
                     "external-importer",
                     "module-path",
-                    [("module", module.as_str())],
+                    [
+                        ("governing_package", governing_package),
+                        ("module", module.as_str()),
+                    ],
                 );
                 Finding::new(module, key)
             }
@@ -125,7 +143,11 @@ impl ModuleFact {
                 fact(
                     "inline-path",
                     "path-in-module",
-                    [("module", module.as_str()), ("path", path.as_str())],
+                    [
+                        ("governing_package", governing_package),
+                        ("module", module.as_str()),
+                        ("path", path.as_str()),
+                    ],
                 ),
             ),
             ModuleFact::InlineGlob { path, module } => Finding::new(
@@ -133,7 +155,11 @@ impl ModuleFact {
                 fact(
                     "inline-glob",
                     "path-in-module",
-                    [("module", module.as_str()), ("path", path.as_str())],
+                    [
+                        ("governing_package", governing_package),
+                        ("module", module.as_str()),
+                        ("path", path.as_str()),
+                    ],
                 ),
             ),
         }
@@ -215,7 +241,7 @@ mod tests {
 
     impl IntoFinding for ModuleFact {
         fn into_finding(self) -> Finding {
-            ModuleFact::into_finding(self)
+            ModuleFact::into_finding(self, "app")
         }
     }
 
@@ -275,19 +301,19 @@ mod tests {
         let cases = vec![
             ModuleKeyCase {
                 fact: ModuleFact::ImportedPath("crate::ports".to_string()),
-                fields: vec![("path", "crate::ports")],
+                fields: vec![("governing_package", "app"), ("path", "crate::ports")],
                 family: "imported-path",
                 shape: "module-path",
             },
             ModuleKeyCase {
                 fact: ModuleFact::ImporterModule("crate::api".to_string()),
-                fields: vec![("module", "crate::api")],
+                fields: vec![("governing_package", "app"), ("module", "crate::api")],
                 family: "importer-module",
                 shape: "module-path",
             },
             ModuleKeyCase {
                 fact: ModuleFact::ExternalImporter("crate::ffi".to_string()),
-                fields: vec![("module", "crate::ffi")],
+                fields: vec![("governing_package", "app"), ("module", "crate::ffi")],
                 family: "external-importer",
                 shape: "module-path",
             },
@@ -297,6 +323,7 @@ mod tests {
                     module: "crate::kernel".to_string(),
                 },
                 fields: vec![
+                    ("governing_package", "app"),
                     ("module", "crate::kernel"),
                     ("path", "std::time::SystemTime::now"),
                 ],
@@ -308,7 +335,11 @@ mod tests {
                     path: "std::time::*".to_string(),
                     module: "crate::kernel".to_string(),
                 },
-                fields: vec![("module", "crate::kernel"), ("path", "std::time::*")],
+                fields: vec![
+                    ("governing_package", "app"),
+                    ("module", "crate::kernel"),
+                    ("path", "std::time::*"),
+                ],
                 family: "inline-glob",
                 shape: "path-in-module",
             },
@@ -317,6 +348,22 @@ mod tests {
             assert_module_fact_is_cataloged(&case.fact);
             assert_key(case.fact, case.family, case.shape, &case.fields);
         }
+    }
+
+    #[test]
+    fn distinct_governing_packages_produce_distinct_module_fact_identity() {
+        let alpha = ModuleFact::ImporterModule("crate::app".to_string())
+            .into_finding("alpha")
+            .key()
+            .clone();
+        let beta = ModuleFact::ImporterModule("crate::app".to_string())
+            .into_finding("beta")
+            .key()
+            .clone();
+        assert_ne!(
+            alpha, beta,
+            "two crates declaring the identical module path must not share one fact identity"
+        );
     }
 
     #[test]
@@ -341,11 +388,11 @@ mod tests {
         assert_ne!(normal, feature);
 
         let import = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding()
+            .into_finding("app")
             .key()
             .clone();
         let importer = ModuleFact::ImporterModule("crate::ports".to_string())
-            .into_finding()
+            .into_finding("app")
             .key()
             .clone();
         assert_ne!(import, importer);
@@ -354,16 +401,16 @@ mod tests {
     #[test]
     fn unrelated_construction_order_does_not_change_fact_identity() {
         let before = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding()
+            .into_finding("app")
             .key()
             .clone();
         let _unrelated = ModuleFact::InlinePath {
             path: "std::time::SystemTime::now".to_string(),
             module: "crate::adapter".to_string(),
         }
-        .into_finding();
+        .into_finding("app");
         let after = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding()
+            .into_finding("app")
             .key()
             .clone();
         assert_eq!(before, after);

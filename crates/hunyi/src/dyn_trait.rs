@@ -65,6 +65,7 @@ pub(crate) fn check_dyn_trait_boundary(
             reason: &boundary.reason,
             severity: boundary.severity,
             anchor: boundary.anchor(),
+            crate_package: &boundary.crate_package,
         },
         findings,
     );
@@ -101,10 +102,11 @@ pub(crate) fn dyn_module_findings(
 /// but keeps only the `dyn` nodes whose **principal (non-auto) trait** resolves into the forbidden
 /// operand set (a `dyn` has exactly one non-auto trait, found regardless of whether an auto trait
 /// like `Send` is written before it). Unlike the shape-only path it **needs** the module's
-/// `use`-map and re-export closure — the principal trait is resolved and canonicalized exactly as [`crate::module_findings`] resolves an
-/// exposed type (`resolve_path(BareFallback::Ignore)` → `canonicalize_through_reexports` →
-/// `matches_forbidden`, exact-or-module-prefix), so a re-exported/aliased trait facade matches
-/// its defining path. A principal that does not resolve (a bare name with no `use`, a
+/// `use`-map and re-export closure — the principal trait is resolved and canonicalized exactly as
+/// [`crate::module_findings`] resolves an exposed type (`resolve_principal` →
+/// `expand_canonical_paths` → `matches_forbidden`, exact-or-module-prefix, checking every cfg-blind
+/// candidate), so a re-exported/aliased trait facade matches its defining path. A principal that
+/// does not resolve (a bare name with no `use`, a
 /// macro-generated or glob/cross-crate re-exported trait) is dropped — the stated
 /// resolver-coverage bound, never a silent pass of a *resolvable* operand. The finding stays the
 /// rendered `dyn …` shape (parity with the shape-only rule and its baseline identity).

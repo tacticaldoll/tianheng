@@ -38,7 +38,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 #### Scenario: A cfg-duplicated inline anchor governs every variant
 
 - **WHEN** the anchored module is declared as two `#[cfg(…)] mod x { … }` inline variants (which `syn` parses as two separate modules, evaluating no `cfg`), and only the source-*later* variant exposes a forbidden type
-- **THEN** the system observes the union of all same-named inline variants and reacts on the exposure, never resolving only the source-first variant (a `mod`-resolution divergence from the crate-wide scan is the false-negative class this resolver forbids). This anchor-resolution property is shared by every single-module-anchored semantic capability (visibility, dyn/impl-trait, async-exposure), not only signature-coupling; an **unconditional** `#[path = "…"]` file module is followed to its target, while an inline or `cfg_attr`-wrapped `#[path]` remains a stated (fail-loud) out-of-scope bound.
+- **THEN** the system observes the union of all same-named inline variants and reacts on the exposure, never resolving only the source-first variant (a `mod`-resolution divergence from the crate-wide scan is the false-negative class this resolver forbids). This anchor-resolution property is shared by every single-module-anchored semantic capability (visibility, dyn/impl-trait, async-exposure), not only signature-coupling; an **unconditional** `#[path = "…"]` file module is followed to its target, and a `cfg_attr`-wrapped `#[path]` module is followed too — its conventional file and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound, exactly like the crate-wide walk. Only when NEITHER a conventional file NOR an existing `cfg_attr` target backs a declaration, and it carries no other cfg-conditional gate, is resolution a genuine constitution error.
 
 #### Scenario: A cfg-mixed inline and file-form anchor governs both variants
 
@@ -80,9 +80,24 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 - **WHEN** the anchored module is declared as two mutually-exclusive `#[cfg]` branches, BOTH inline (`#[cfg(a)] mod x { .. }` / `#[cfg(b)] mod x { .. }`, sharing the identical enclosing file), each declaring its own `use <different real path> as Handle;` under the same local alias name, and only the FIRST arm's own bare `Handle` reference genuinely resolves to a forbidden type
 - **THEN** the system reacts on the first arm's own exposure, resolving its bare `Handle` reference through THAT arm's own `use` declaration — never through the second, mutually-exclusive arm's `use Handle` alias merely because both arms are inline and share one file; the same isolation holds for a local child module in one inline arm shadowing the other inline arm's own genuine extern re-export
 
+#### Scenario: A mutually-exclusive SIBLING ITEM's child module does not shadow the item's own extern re-export
+
+- **WHEN** the anchored module resolves to a SINGLE branch/file (no module-path split at all) that declares two mutually-exclusive sibling items directly — a `#[cfg(unix)] mod dep;` beside a `#[cfg(not(unix))] pub use dep::Something;` (real extern crate `dep`), or the identical pair as the two arms of one `cfg_if!` invocation
+- **THEN** the system reacts on the `not(unix)`/else arm's own re-export, resolving `dep` as the real extern crate: the branch-level fix above (two DIFFERENT branches/files never merging their child-module shadows) is a no-op here, since both sibling items share the identical branch and file — the exclusion must instead be computed per re-export ITEM against its own provably-mutually-exclusive siblings, not once over the branch's whole child-module set (`semantic-reexport-exposure` owns the detailed cfg-mutual-exclusion rule this scenario exercises, on both the extern-name and the crate-root rename-alias halves)
+
+#### Scenario: A cfg_attr-wrapped-path anchor resolves through its own target with no resolving sibling at all
+
+- **WHEN** the anchored module `crate::foo` is declared only as `#[cfg_attr(windows, path = "win.rs")] mod foo;` with no conventional `foo.rs` present, and `win.rs` (the `cfg_attr` target) exists and exposes a forbidden type
+- **THEN** the system reads `win.rs` and reacts on the exposure, rather than reporting a constitution error — a `cfg_attr`-wrapped `#[path]` module's own target is now followed even with no sibling declaration to keep the branch count non-empty
+
+#### Scenario: A cfg_attr-wrapped-path sibling reacts through its own file, not absorbed by another sibling's success
+
+- **WHEN** the anchored module `crate::foo` is declared as two mutually-exclusive `#[cfg]` branches — one `#[cfg_attr(<pred>, path = "weird.rs")] mod foo;` and the other a plain `mod foo;` — and only the `cfg_attr` branch's target file exposes a forbidden type
+- **THEN** the system reacts on that exposure — the `cfg_attr` branch's own resolution is never silently dropped merely because the OTHER, mutually-exclusive branch's plain declaration also resolved successfully (found on adversarial review: the prior fail-loud-only-when-completely-unresolvable check never fired once any sibling succeeded, so the `cfg_attr` branch's file vanished with no error and no reaction at all)
+
 ### Requirement: Public-signature observation governs exposure
 
-The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule_key, fact)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
+The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; a `pub fn`'s signature or a `pub static`'s type declared inside an `extern` block (the FFI declaration is a real item in the enclosing module's own namespace, exactly as public as a same-shaped ordinary `fn`/`static`, and Rust cannot declare both under one name in one module, so there is no identity collision in observing it identically); the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule_key, fact)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
 
 #### Scenario: A forbidden type in a public return is a violation
 
@@ -129,6 +144,21 @@ The system SHALL observe the **public** API surface of the governed module ancho
 - **WHEN** the governed module declares `impl Foo { const K: crate::infra::Secret = …; type T = crate::infra::Secret; }` (both private) under `must_not_expose("crate::infra")`
 - **THEN** the system reports no violation, because only `pub` associated items of an inherent `impl` are exposed
 
+#### Scenario: A forbidden type in an extern block's pub fn signature is a violation
+
+- **WHEN** the governed module declares `extern "C" { pub fn handle() -> crate::infra::Secret; }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits a violation naming `crate::infra::Secret`, exactly as it would for a same-shaped ordinary `pub fn`
+
+#### Scenario: A forbidden type in an extern block's pub static is a violation
+
+- **WHEN** the governed module declares `extern "C" { pub static S: crate::infra::Secret; }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits a violation naming `crate::infra::Secret`, exactly as it would for a same-shaped ordinary `pub static`
+
+#### Scenario: A non-public extern block item is not exposed
+
+- **WHEN** the governed module declares `extern "C" { fn handle() -> crate::infra::Secret; static S: crate::infra::Secret; }` (both without `pub`) under `must_not_expose("crate::infra")`
+- **THEN** the system reports no violation, because only `pub` items inside an `extern` block are exposed
+
 ### Requirement: Forbidden-type matching by path and prefix
 
 The forbidden-type set SHALL match an exposed type either by exact resolved path or by module prefix, where prefix containment is `::`-delimited (an exact match OR an `x::` prefix), so a sibling like `crate::infrastructure` is never matched by a `crate::infra` prefix. A boundary MAY forbid more than one path or prefix.
@@ -143,6 +173,44 @@ The forbidden-type set SHALL match an exposed type either by exact resolved path
 - **WHEN** the boundary forbids the prefix `crate::infra` and a public signature exposes `crate::infrastructure::Helper`
 - **THEN** the system reports no violation, because `::`-delimited containment does not treat the sibling as beneath the prefix
 
+### Requirement: A malformed `::`-path forbidden operand is a constitution error
+
+A forbidden operand given to `must_not_expose`/`and_not_expose` SHALL be rejected as a **constitution
+error** (exit 2) when its `::`-delimited spelling has any empty segment — a leading `::`, a trailing
+`::`, a doubled `::`, or the empty string itself. This is a restriction on the **DSL operand string**
+the developer writes, distinct from the "Requirement: Name resolution scope and no false negative"
+section's leading-`::` guidance for the **source path being scanned**: that guidance is about how to
+write `-> ::serde::Value` in the governed module's own code so it resolves as an unambiguous extern
+rather than a local shadow; this requirement is about the separate `must_not_expose("...")` string,
+which the resolver never produces with a leading `::` regardless of how the source is spelled (the
+resolved canonical path of any extern exposure is always the bare form, e.g. `serde::Value`, never
+`::serde::Value`). A forbidden operand shaped with an empty segment can therefore never equal or
+prefix-contain any canonical path this system resolves, so without this requirement the boundary
+would silently and permanently never react to it — the one class of bug this capability's core
+contract forbids everywhere else it can occur. There is no legitimate reason to write a leading `::`
+in this operand: no canonical path this crate ever produces carries one, so the spelling is always
+either inert or broken, never meaningfully different from the bare form.
+
+#### Scenario: A leading-`::` forbidden operand is a constitution error
+
+- **WHEN** a boundary declares `must_not_expose("::serde")` against a module exposing `-> ::serde::Value`, with `serde` a real dependency
+- **THEN** the system reports a constitution error (exit 2) naming the malformed operand, rather than silently reporting the boundary satisfied
+
+#### Scenario: A trailing-`::` forbidden operand is a constitution error
+
+- **WHEN** a boundary declares `must_not_expose("serde::")` against the same module
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: A doubled-`::` forbidden operand is a constitution error
+
+- **WHEN** a boundary declares `must_not_expose("::serde::")` against the same module
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: The bare-string spelling is unaffected
+
+- **WHEN** a boundary declares `must_not_expose("serde")` against the same module
+- **THEN** the system emits a violation naming `serde::Value`, exactly as before this requirement existed
+
 ### Requirement: Name resolution scope and no false negative
 
 The system SHALL resolve a type named in a signature using the **shared 渾儀 resolver** (`hunyi::resolve`), and within the resolved scope there SHALL be no false negative and no false positive: a forbidden type that *is* resolvable MUST react, and a name that resolves to a **local** item MUST NOT be mis-attributed to a same-named dependency. Resolution SHALL agree with rustc name resolution wherever the answer is observable from the local-crate AST:
@@ -150,8 +218,9 @@ The system SHALL resolve a type named in a signature using the **shared 渾儀 r
 - **A leading `::` is an unambiguous extern.** A path written `::serde::Value` resolves to the external crate named by its first segment, bypassing the `use`-map and any local shadow. It SHALL NOT be resolved as a relative path (which would both miss the extern exposure and, via the `use`-map, mis-attribute it to a local path).
 - **A local type-namespace item shadows the extern prelude.** A bare head naming a local `struct`/`enum`/`union`/`trait`/`type`-alias/`mod` in the governed module denotes that local item, and the extern oracle SHALL NOT fire for it.
 - **A bare local-alias chain resolves regardless of collection order.** When a type alias's target is itself a bare local alias whose name shadows a dependency (`type serde = crate::infra::Db; type X = serde;`), the alias-collection ladder SHALL resolve the local alias before the extern oracle (identical to the query ladder), closing the chain to the defining path.
+- **A mutually-exclusive `#[cfg]` collision on a `use`-map name or a `pub use` re-export target does not suppress either candidate.** When two mutually-exclusive `#[cfg]` branches (bare `#[cfg]` or `cfg_if!` arms alike) each declare `use ... as Name;` (or `pub use ... as Name;`) for the identical local name with different targets, the system SHALL treat both targets as candidates and react if resolving through EITHER one exposes a forbidden type — never silently keeping only the declaration that happens to be written last.
 
-A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a type defined only in a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed, so its types are collected and resolvable), a generic type alias, nominal paths nested only inside alias-target forms outside the explicitly supported non-generic compound constructors below, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction.
+A type whose resolution would require capabilities beyond the local AST — a glob import, a macro-generated type, a generic type alias, nominal paths nested only inside alias-target forms outside the explicitly supported non-generic compound constructors below, or full inference — remains OUT OF SCOPE, a stated coverage bound, never a claimed reaction. A type defined only in a module reached through a `cfg_attr`-wrapped `#[path]` remap is NOT out of scope: like the already-followed **unconditional** `#[path = "…"]` form, its types, aliases, and re-exports ARE collected into the crate-wide closure and resolvable — an inline body regardless of the attribute (which has no effect on it), and a file module's conventional file and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound.
 
 #### Scenario: A leading-`::` extern path resolves and reacts through a local shadow
 
@@ -167,6 +236,21 @@ A type whose resolution would require capabilities beyond the local AST — a gl
 
 - **WHEN** the governed module declares `type serde = crate::infra::Db; type X = serde; pub fn f() -> X`, under `must_not_expose("crate::infra")` (in either source order)
 - **THEN** the system resolves the local alias `serde` before the extern oracle, closes the chain to `crate::infra::Db`, and emits a violation
+
+#### Scenario: Two mutually-exclusive cfg-gated use aliases for the same name both react
+
+- **WHEN** the governed module declares `#[cfg(unix)] use crate::infra::Secret as Handle; #[cfg(not(unix))] use crate::safe::Handle; pub fn leak() -> Handle`, under `must_not_expose("crate::infra")`, in either declaration order
+- **THEN** the system emits a violation naming `crate::infra::Secret`, regardless of which `use` line is written first — the verdict never depends on source order
+
+#### Scenario: Two mutually-exclusive cfg-gated re-export targets for the same name both canonicalize correctly
+
+- **WHEN** a facade module declares `#[cfg(unix)] pub use crate::infra::Secret as Handle; #[cfg(not(unix))] pub use crate::safe::Thing as Handle;`, another module exposes `crate::facade::Handle`, and the boundary forbids `crate::infra`, in either declaration order
+- **THEN** the system emits a violation naming `crate::infra::Secret`, regardless of which `pub use` line is written first
+
+#### Scenario: A re-export declared only in a cfg_attr-wrapped-path module is resolved and reacts
+
+- **WHEN** a facade module is reached only via `#[cfg_attr(windows, path = "weird.rs")] pub mod facade;` with no conventional `facade.rs` present, `weird.rs` declares `pub use crate::infra::Secret;`, another module exposes `crate::facade::Secret`, and the boundary forbids `crate::infra`
+- **THEN** the system reads `weird.rs` into the crate-wide re-export closure and emits a violation naming `crate::infra::Secret`, rather than treating the facade module as out of scope and passing the exposure through unresolved
 
 ### Requirement: CI reaction
 
@@ -401,4 +485,33 @@ The system SHALL observe the contents of a **transparent control-flow macro** ar
 
 - **WHEN** a governed module's body is `generate_wrapper! { impl Foo { pub fn hidden() -> crate::forbidden::Thing { … } } }` and a boundary forbids `crate::forbidden::Thing`
 - **THEN** the system reports no exposure — the invocation is not transparent, so its body stays a stated coverage bound; extracting from it would read the `impl` body's braces as an arm and report an item the macro may never emit
+
+### Requirement: An impl nested in a const or fn body is observed
+
+The system SHALL observe an inherent `impl` block that is written as a direct statement of the outermost body of a `const` initializer (a bare `{ … }` block expression) or of a `fn`'s own body — the "const-eval trick" idiom (`const _: () = { impl Foo { … } };`, commonly used for a compile-time trait assertion or a doctest/dogfooding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Foo { … } }`) — exactly as if it were written at the enclosing module's own top level, so its public method signatures and public associated `const`/`type` items are governed like any other inherent-impl public API. Rust binds an `impl` to its self type's coherence set regardless of where the `impl` is lexically written, so wrapping it in a body does not change what it makes real: the instant `Foo` itself is module-level and reachable, `Foo::leak` is real, externally callable public API whether the `impl` sits at the module's top level or inside a body. A walker that stops at a module's own top-level items therefore has a genuine observation gap here — distinct from the correct treatment of every OTHER item kind nested in a body the same way (a `fn`, `struct`, `mod`, `trait`, or another `const`/`static` written directly in a body genuinely IS scoped to that body and unreachable as `crate::…`, the existing "a body-nested module is a stated bound" reasoning, which this requirement does not disturb or extend to any item kind but `impl`). This anchor-and-item property is shared by every single-module-anchored semantic capability that observes an inherent impl's public API (async-exposure, dyn-trait, impl-trait), not only signature-coupling, matching how this spec already states the anchor-resolution property on their behalf. Recovery is bounded to exactly this shape, stated rather than left silent: only an `impl` that is a DIRECT statement of the `const`/`fn`'s own outermost block is recovered — an `impl` nested one level FURTHER inside that body (inside an `if`/`loop`/closure/nested `fn`) is NOT recovered; a `static` initializer is NOT inspected (the const-eval trick is specifically about `const`, which forces compile-time evaluation even when the binding is never read; no audited idiom uses `static` for it); and no item kind OTHER than `impl` is recovered from a body this way.
+
+#### Scenario: A const-wrapped inherent impl's method reacts
+
+- **WHEN** a governed module declares `pub struct Svc; const _: () = { impl Svc { pub fn leak(&self) -> crate::infra::Db { … } } };` under `must_not_expose("crate::infra")`
+- **THEN** the system emits a violation naming `crate::infra::Db exposed by fn <crate::api::Svc>::leak`, rather than reporting zero findings because the impl sits inside a const initializer
+
+#### Scenario: A fn-body-wrapped inherent impl's method reacts
+
+- **WHEN** the identical impl is instead written `fn _also() { impl Svc { pub fn leak(&self) -> crate::infra::Db { … } } }`
+- **THEN** the system emits the identical violation, rather than reporting zero findings because the impl sits inside a fn body
+
+#### Scenario: The same method at top level also reacts (control)
+
+- **WHEN** the identical `impl Svc { pub fn leak… }` is written directly at the module's top level, not wrapped in any body
+- **THEN** the system emits the identical violation — the control establishing that the boundary reacts on this exact fixture shape at all, so a clean result for the wrapped forms would be a false negative rather than a misconfigured fixture
+
+#### Scenario: A plain item nested the same way stays a stated bound
+
+- **WHEN** a governed module declares `const _: () = { pub fn also_hidden() -> crate::infra::Db { … } };` — a plain `pub fn`, not wrapped in an `impl`, directly inside the const's body
+- **THEN** the system reports no exposure — only an `impl` block is recovered from a body this way; a plain item nested the same way is genuinely scoped to that body and unreachable as `crate::…`, exactly like the existing body-nested-module bound, so it stays unobserved rather than a new, unaudited claim
+
+#### Scenario: An impl nested one level further, or static-wrapped, is a stated bound
+
+- **WHEN** the impl is written one level further inside the body (`fn _also() { if true { impl Svc { … } } }`), or the wrapping binding is a `static` rather than a `const`
+- **THEN** the system reports no exposure for that impl — a stated coverage bound rather than a silent claim of cleanliness
 

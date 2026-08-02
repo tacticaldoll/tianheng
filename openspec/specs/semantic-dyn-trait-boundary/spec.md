@@ -7,9 +7,7 @@ not expose trait-object (`dyn`) syntax. It is the type-shape complement of
 exposed *type shape* (a `dyn` node at any depth in the public surface). Internal `dyn` is never a
 violation; leaking dynamic dispatch across the *declared* seam is, so the rule is declarative
 intent (by anchor scoping), not a lint. Shape-only: any exposed `dyn` reacts.
-
 ## Requirements
-
 ### Requirement: Dyn-trait boundary declared in Rust
 
 A dyn-trait boundary SHALL be expressed as Rust code and is part of the single source of
@@ -135,10 +133,12 @@ Within the resolvable public surface there SHALL be no false negative: a `dyn` n
 silently pass an exposed `dyn` it was able to observe. The capability inherits 渾儀's
 **incidental, already-stated** coverage bounds unchanged and SHALL NOT silently assert a
 boundary clean when one applies: a `dyn` introduced by **macro expansion** (the call site
-writes no `dyn` token), a `dyn` reached only through a **glob import** or a
-**`cfg_attr`-wrapped `#[path]` module** (an **unconditional** `#[path = "…"]` module is followed
-and observed), and a `dyn` reached only by expanding a **named `type`
-alias** are out of scope. No *new* essential gap is introduced by this capability.
+writes no `dyn` token), a `dyn` reached only through a **glob import**, and a `dyn` reached only
+by expanding a **named `type` alias** are out of scope. A `dyn` reached only through a module
+declared with a `cfg_attr`-wrapped `#[path]` is NOT out of scope: like an **unconditional**
+`#[path = "…"]` module, it is followed and observed — its conventional file and its `cfg_attr`
+target both read when they exist on disk, cfg-blind union rather than a skip bound, even with no
+sibling declaration for the same name. No *new* essential gap is introduced by this capability.
 
 #### Scenario: A macro-generated dyn is a documented coverage bound
 
@@ -164,6 +164,11 @@ alias** are out of scope. No *new* essential gap is introduced by this capabilit
 
 - **WHEN** two trait objects differ only inside a sub-node that cannot be rendered without macro expansion, token printing, or edit-unstable spans — a complex const-generic *expression* (`dyn Foo<{ N + 1 }>`), a same-named macro with different arguments (`dyn Foo<m!(1)>` vs `dyn Foo<m!(2)>`), a `verbatim` type, or a distinction carried only by a **lifetime** (a reference lifetime or an HRTB `for<'a>` binder, which carry no architectural intent and are not rendered)
 - **THEN** the system does not claim to distinguish them: they share a canonical `subject` field and key at the same seam (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated subject-rendering bound** — the same `(target, rule_key, fact)` granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` fact carries — declared here, never a silent claim of cleanliness
+
+#### Scenario: A dyn reached only through a cfg_attr-wrapped-path module reacts
+
+- **WHEN** the governed anchor's module is declared only as `#[cfg_attr(windows, path = "weird.rs")] mod anchor;` with no conventional file present, and `weird.rs` (the `cfg_attr` target) exposes a public `dyn` node
+- **THEN** the system reads `weird.rs` and reacts on the exposed `dyn`, rather than treating the module as unreachable — the `cfg_attr` target is followed even with no sibling declaration to keep the module resolvable
 
 ### Requirement: Anchor resolution, CI reaction, severity, baseline, and report parity
 
@@ -210,3 +215,18 @@ subject at the same seam, but traversal position SHALL NOT be used to claim inje
 #### Scenario: The same shape at two seams stays distinct
 - **WHEN** one dyn-trait shape is exposed at structurally different public seams
 - **THEN** the seam fields produce distinct identities
+
+### Requirement: An impl nested in a const or fn body is observed
+
+`semantic-signature-coupling` states, on behalf of every single-module-anchored semantic capability that observes an inherent impl's public API, that an `impl` block written as a direct statement of the outermost body of a `const` initializer or a `fn`'s own body (the "const-eval trick" idiom and its fn-body-nested sibling) SHALL be observed exactly as if written at the module's own top level, bounded to one level deep and to `const`/`fn` only (never `static`, never a further-nested `impl`, never any OTHER item kind recovered from a body this way). This capability applies that same property to an exposed `dyn` shape in an inherent impl's public method signature or public associated item.
+
+#### Scenario: A const-wrapped inherent impl's dyn-returning method reacts
+
+- **WHEN** a governed module declares `pub struct Svc; const _: () = { impl Svc { pub fn dynamic(&self) -> Box<dyn crate::Port> { … } } };`
+- **THEN** the system reports `dyn crate::Port exposed by fn <crate::m::Svc>::dynamic`, rather than reporting zero findings because the impl sits inside a const initializer
+
+#### Scenario: A fn-body-wrapped inherent impl's dyn-returning method reacts
+
+- **WHEN** the identical impl is instead written `fn _also() { impl Svc { pub fn dynamic(&self) -> Box<dyn crate::Port> { … } } }`
+- **THEN** the system reports the identical finding, rather than reporting zero findings because the impl sits inside a fn body
+

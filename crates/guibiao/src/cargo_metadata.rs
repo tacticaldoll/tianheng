@@ -83,19 +83,28 @@ pub(crate) fn external_dependencies(package: &Value, kind: DependencyKind) -> Ve
 
 /// Whether `dependency` is the package's OWN self-referential edge — Cargo genuinely permits
 /// (and a doctest/dogfooding pattern genuinely uses) a crate declaring itself as a
-/// `[dev-dependencies]` path dependency on itself (`main = { path = "." }`), which
+/// `[dev-dependencies]` **path** dependency on itself (`main = { path = "." }`), which
 /// `cargo metadata --no-deps` emits verbatim as an ordinary-shaped edge whose `name` equals the
-/// package's own. This is never a CROSS-crate concern — there is no OTHER crate for a governance
-/// rule to react to — so every rule that scans "the target's dependency names/sources" must
-/// exclude it identically; a per-rule copy of this check (the round-11 fix's original shape,
-/// which excluded it only inside `Rule::RestrictWorkspaceDependenciesTo`'s own arm) left the
-/// identical false positive live in every sibling rule reading the same [`dependencies`] /
-/// [`dependencies_with_disallowed_source`] observation (found on a round-12 adversarial review —
-/// see `PROJECT.md`'s Decisions). Filtering here, at the shared observation source, closes every
-/// consuming rule at once.
+/// package's own and whose `source` is null. This is never a CROSS-crate concern — there is no
+/// OTHER crate for a governance rule to react to — so every rule that scans "the target's
+/// dependency names/sources" must exclude it identically; a per-rule copy of this check (the
+/// round-11 fix's original shape, which excluded it only inside
+/// `Rule::RestrictWorkspaceDependenciesTo`'s own arm) left the identical false positive live in
+/// every sibling rule reading the same [`dependencies`] / [`dependencies_with_disallowed_source`]
+/// observation (found on a round-12 adversarial review — see `PROJECT.md`'s Decisions). Filtering
+/// here, at the shared observation source, closes every consuming rule at once.
+///
+/// Matching by `name` alone is NOT enough: Cargo also permits a package to depend on a
+/// *different*, externally-sourced package that merely happens to share its own name (a real
+/// wrapper/fork/self-comparison pattern, e.g. `foo = { git = "…" }` declared by package `foo`),
+/// which `cargo metadata` emits as an ordinary edge with a non-null `source` — ordinary in every
+/// way except its name, and never the self-referential idiom this exemption exists for. The
+/// `source.is_null()` conjunct below narrows the match to exactly the genuine path-dependency
+/// case, so a same-named externally-sourced dependency is governed like any other dependency
+/// rather than silently escaping every forbid/restrict/source rule (the 0.3.1 audit finding).
 fn is_self_dependency(package: &Value, dependency: &Value) -> bool {
     let own_name = package["name"].as_str();
-    own_name.is_some() && dependency["name"].as_str() == own_name
+    own_name.is_some() && dependency["name"].as_str() == own_name && dependency["source"].is_null()
 }
 
 /// Names of the target's dependencies in the selected table, regardless of source —

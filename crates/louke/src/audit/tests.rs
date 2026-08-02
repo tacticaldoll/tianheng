@@ -2274,3 +2274,377 @@ fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
         "an absent unconditional #[path] target inside an arm must be tolerated: {outcome:?}"
     );
 }
+
+/// A comment between the `mod` keyword and its name is legal, unremarkable Rust (trivia to rustc)
+/// — but a bare whitespace-only skip in that position stopped at the comment's leading `/`, so the
+/// identifier scan found nothing there and the whole declaration was never recognized as a `mod` at
+/// all. The module and its entire subtree — every probe beneath it — silently vanished from the
+/// corpus (exit 0 Clean) instead of reacting to the typo'd seam it actually contains.
+#[test]
+fn a_comment_between_mod_and_its_name_does_not_drop_the_module() {
+    let tb = TempBase::new("comment-before-name");
+    let root = tb.source(
+        "lib.rs",
+        "pub mod /* relocated */ child;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "child.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the comment-relocated module must react: {outcome:?}"
+    );
+}
+
+/// The identical shape with the comment AFTER the module's name, before its terminator.
+#[test]
+fn a_comment_between_the_mod_name_and_its_terminator_does_not_drop_the_module() {
+    let tb = TempBase::new("comment-after-name");
+    let root = tb.source(
+        "lib.rs",
+        "pub mod child /* relocated */;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "child.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the comment-relocated module must react: {outcome:?}"
+    );
+}
+
+/// The only legal non-inline module form inside a function/block body is one carrying `#[path]`
+/// (a bare `mod name;` with no established file-path convention there does not compile) — but the
+/// catch-all brace skip treated every non-`mod`, non-arm brace as one opaque unit, so this legal
+/// form was never observed: the module and the typo'd seam it contains silently vanished from the
+/// corpus (exit 0 Clean).
+#[test]
+fn a_path_mod_inside_a_function_body_reacts() {
+    let tb = TempBase::new("block-scoped-path-mod");
+    let root = tb.source(
+        "lib.rs",
+        "pub fn f() { #[path = \"inner.rs\"] mod inner; }\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "inner.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the block-scoped #[path] module must react: {outcome:?}"
+    );
+}
+
+/// The identical shape nested one bare block deeper (`{ { #[path] mod inner; } }`), confirming the
+/// generalized brace descent is not narrowly scoped to a function's own immediate body.
+#[test]
+fn a_path_mod_inside_a_nested_bare_block_reacts() {
+    let tb = TempBase::new("nested-block-scoped-path-mod");
+    let root = tb.source(
+        "lib.rs",
+        "pub fn f() { { #[path = \"inner.rs\"] mod inner; } }\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "inner.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the nested-block #[path] module must react: {outcome:?}"
+    );
+}
+
+/// `mod_preamble_attrs` documented a `cfg_attr(path)` tolerance the code never implemented: the
+/// attribute-matching pass checked for the exact identifier `cfg`, so `cfg_attr` — a different
+/// identifier — matched neither the `path` arm nor the bare-`cfg` arm. A module stacking two
+/// `cfg_attr`-wrapped `#[path]` declarations that together cover every platform (both targets
+/// present, compiling cleanly on every configuration) was reported a hard constitution error
+/// instead of being scanned.
+#[test]
+fn two_cfg_attr_path_declarations_covering_every_platform_are_scanned_not_erred() {
+    let tb = TempBase::new("two-cfg-attr-path");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"u.rs\")]\n#[cfg_attr(not(unix), path = \"w.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "u.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    tb.source(
+        "w.rs",
+        "pub fn r(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "both cfg_attr(path) targets must be scanned (typo'd seam reacts), never a constitution \
+         error on source that compiles on every platform: {outcome:?}"
+    );
+}
+
+/// The identical shape with clean seams in both cfg_attr(path) targets — confirms the fix reports
+/// the boundary satisfied (not merely "not a constitution error").
+#[test]
+fn two_cfg_attr_path_declarations_covering_every_platform_are_clean_when_probes_match() {
+    let tb = TempBase::new("two-cfg-attr-path-clean");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"u.rs\")]\n#[cfg_attr(not(unix), path = \"w.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source("u.rs", "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }");
+    tb.source("w.rs", "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }");
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "source compiling cleanly on every platform, with every probe matching the declared seam, \
+         must be Clean: {outcome:?}"
+    );
+}
+
+/// A cfg_attr(path) target that does NOT exist on disk is skipped, not erred, when either the
+/// conventional file or another cfg_attr candidate backs the module — the union-observation
+/// counterpart of the crate-wide walk's own absence tolerance.
+#[test]
+fn a_missing_cfg_attr_path_target_is_tolerated_when_the_conventional_file_backs_the_module() {
+    let tb = TempBase::new("cfg-attr-path-missing-target-conventional-backs");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(windows, path = \"win.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "plat.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the conventional file must still be read and react, even with an absent sibling \
+         cfg_attr(path) target: {outcome:?}"
+    );
+}
+
+/// A cfg_attr(path) remap on an INLINE `mod x { … }` (not the external `mod x;` form) redirects
+/// where x's own nested items resolve from — the same union rule applied to a base directory
+/// instead of a file existence check, since the inline body itself is always present in source.
+#[test]
+fn a_cfg_attr_path_remap_on_an_inline_module_redirects_its_nested_items() {
+    let tb = TempBase::new("cfg-attr-path-inline-module-redirect");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"unix_dir\")]\npub mod x {\n    pub mod y;\n}\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "unix_dir/y.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the cfg_attr(path)-remapped directory must be followed for x's nested `mod y;`, not the \
+         conventional (nonexistent) `x/y.rs`, and never a constitution error: {outcome:?}"
+    );
+}
+
+/// The un-auditable-probe fact's identity must not embed a raw, checkout-dependent absolute path:
+/// a byte-identical source file scanned from two different absolute locations (the same
+/// relocation a different clone path / CI runner produces) must yield the IDENTICAL violation
+/// identity, or a baseline recorded in one checkout matches nothing in the other.
+#[test]
+fn unauditable_probe_identity_is_stable_across_checkout_locations() {
+    let tb1 = TempBase::new("probefix1");
+    let root1 = tb1.source(
+        "src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let tb2 = TempBase::new("probefix2");
+    let root2 = tb2.source(
+        "src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let outcome1 = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root1]);
+    let outcome2 = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root2]);
+    let Outcome::Violations(report1) = outcome1 else {
+        panic!("expected violations from checkout 1: {outcome1:?}");
+    };
+    let Outcome::Violations(report2) = outcome2 else {
+        panic!("expected violations from checkout 2: {outcome2:?}");
+    };
+    let ids1: Vec<_> = report1.violations.iter().map(|v| v.id()).collect();
+    let ids2: Vec<_> = report2.violations.iter().map(|v| v.id()).collect();
+    assert_eq!(
+        ids1, ids2,
+        "the same source scanned from two different absolute checkout locations must produce \
+         identical violation identities, or a baseline recorded in one never matches the other"
+    );
+    // Non-vacuous: the identity is not merely absent (e.g. both empty) — an unauditable-probe
+    // violation genuinely fired, and its `file` field is relative, never the raw absolute path.
+    let unauditable = report1
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an unauditable-probe violation must have fired");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file, "lib.rs",
+        "a single-root scan must label relative to its own directory"
+    );
+    assert!(
+        !file.starts_with('/'),
+        "the identity's file label must never be a raw absolute path: {file}"
+    );
+}
+
+/// Multiple workspace-member roots (the real `tianheng` caller's shape, one absolute `src_path`
+/// per member from `cargo_metadata`) share their actual checkout root as a common ancestor, so
+/// each one's identity is labeled relative to it — never a raw absolute path, and distinct
+/// members never collide despite sharing a bare `lib.rs` filename.
+#[test]
+fn multi_root_probe_identity_is_relative_to_the_common_ancestor() {
+    let tb = TempBase::new("multi-root-common-ancestor");
+    let root_a = tb.source(
+        "crate-a/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let root_b = tb.source(
+        "crate-b/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_a, root_b]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected violations: {outcome:?}");
+    };
+    let mut files: Vec<&str> = report
+        .violations
+        .iter()
+        .filter(|v| v.rule.contains("string literal"))
+        .filter_map(|v| v.file.as_deref())
+        .collect();
+    files.sort_unstable();
+    assert_eq!(
+        files,
+        vec!["crate-a/src/lib.rs", "crate-b/src/lib.rs"],
+        "each member's identity must be relative to the shared checkout root, distinguishing \
+         same-named files by their own member path"
+    );
+}
+
+/// Stated bound (documented in `finding.rs`/`audit.rs`): an ABSOLUTE `#[path = "/…"]` literal whose
+/// target does NOT happen to lie under the scanning checkout's own anchor directory has no textual
+/// relationship to it (`Path::join` discards the receiver entirely for an absolute joinee), so its
+/// identity falls back to the raw absolute path — never silently dropped (the violation still
+/// fires), just not relabeled. (When the target DOES happen to lie under the anchor, the label is
+/// relative instead, and the identity can still disagree across checkouts — a separate, KNOWN
+/// residual gap pinned by `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`
+/// below, not silently ignored.) An absolute literal is already a non-portable, machine-specific
+/// construct on its own either way.
+#[test]
+fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
+    let tb = TempBase::new("abs-path-literal-bound");
+    let target_dir = tb.path().join("shared_outside");
+    std::fs::create_dir_all(&target_dir).unwrap();
+    let abs_target = target_dir.join("thing.rs");
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        &format!(
+            "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+            abs_target.display().to_string()
+        ),
+    );
+    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected an unauditable-probe violation to fire: {outcome:?}");
+    };
+    let unauditable = report
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an absolute #[path] target's probe must still react, never silently dropped");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file,
+        abs_target.display().to_string(),
+        "an absolute #[path] literal's target has no relationship to any anchor, so its label \
+         stays the raw absolute path — a documented, deliberate bound, not a silent regression"
+    );
+}
+
+/// KNOWN, DEFERRED residual gap (see `BACKLOG.md`'s DESIGN-BREAKING decision index and PR #157's
+/// commit body, which recorded this as an explicit non-goal): when an absolute `#[path]` literal's target
+/// happens to be textually nested under a GIVEN checkout's own anchor, `strip_prefix` succeeds by
+/// pure text match — producing a clean, relative-LOOKING label — even though the literal itself is
+/// fixed text that does not move with the checkout. The identical hardcoded literal scanned from a
+/// DIFFERENT checkout (where it no longer shares the anchor's prefix) falls back to the full
+/// absolute path instead, so the two checkouts still disagree — reproducing the very
+/// checkout-dependent-identity problem this whole fix exists to close, just for this one
+/// deliberately out-of-scope construct. Pinned here (not silently left untested) so a future fix
+/// has a failing case to work against, and so this test itself fails loud if that future fix
+/// changes this behavior without updating the assertion.
+#[test]
+fn a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap() {
+    let tb_a = TempBase::new("nested-abs-checkout-a");
+    let tb_b = TempBase::new("nested-abs-checkout-b");
+    let abs_target = tb_a
+        .path()
+        .join("crates/foo/src/nested_under_anchor/thing.rs");
+    std::fs::create_dir_all(abs_target.parent().unwrap()).unwrap();
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    // The identical hardcoded literal (checkout a's own absolute path) is committed into BOTH
+    // checkouts' source, exactly as a real clone would carry it verbatim.
+    let lib_body = format!(
+        "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+        abs_target.display().to_string()
+    );
+    let root_a = tb_a.source("crates/foo/src/lib.rs", &lib_body);
+    let root_b = tb_b.source("crates/foo/src/lib.rs", &lib_body);
+
+    let Outcome::Violations(report_a) =
+        audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_a])
+    else {
+        panic!("expected a violation from checkout a");
+    };
+    let Outcome::Violations(report_b) =
+        audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_b])
+    else {
+        panic!("expected a violation from checkout b");
+    };
+    let id_a = report_a
+        .violations
+        .iter()
+        .find_map(|v| v.rule.contains("string literal").then(|| v.id()));
+    let id_b = report_b
+        .violations
+        .iter()
+        .find_map(|v| v.rule.contains("string literal").then(|| v.id()));
+    assert_ne!(
+        id_a, id_b,
+        "this pins the KNOWN residual gap: a nested absolute #[path] literal's identity still \
+         differs across checkouts (checkout a's own anchor happens to make it relative; \
+         checkout b's does not) — if this ever starts passing with equal IDs, the gap has been \
+         fixed and this test's assertion (and the design.md/CHANGELOG note describing it as open) \
+         should be updated together"
+    );
+}

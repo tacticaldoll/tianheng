@@ -321,6 +321,20 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
                     i += 1;
                 }
             }
+            if depth > 0 {
+                // Unterminated (Rust itself would reject this as a compile error, but observation
+                // must still react 0/1/2, never panic or corrupt state): the loop above stops
+                // peeking once fewer than two bytes remain, which can leave exactly one trailing
+                // byte unconsumed — and that byte may be the orphaned tail of a multi-byte UTF-8
+                // character whose lead byte(s) were already dropped inside the (still-open)
+                // comment. Left in place, the outer loop would re-scan that lone byte as ordinary
+                // code and push it into `out` on its own, an invalid UTF-8 fragment that
+                // `String::from_utf8_lossy` below then *lengthens* (one byte becomes the 3-byte
+                // U+FFFD), desynchronizing `positions` from the string it maps into and panicking
+                // the next stage's indexing. An unterminated comment logically extends to EOF, so
+                // consume through EOF rather than leaving anything dangling to be re-read as code.
+                i = bytes.len();
+            }
             // Emit a separator so a comment wedged between two tokens does not fuse them: without
             // it, `use/*c*/crate::X;` becomes `usecrate::X;` and the `use` keyword is no longer
             // recognized (its following byte is an identifier byte), silently dropping the import.
@@ -364,9 +378,20 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
                     i += 1;
                 }
                 i += 1;
-            } else if i + 2 < bytes.len() && bytes[i + 2] == b'\'' {
-                // Simple char literal (`'x'`, `'"'`).
-                i += 3;
+            } else if let Some(len) = simple_char_literal_scalar_len(bytes, i) {
+                // Simple char literal (`'x'`, `'"'`, or a non-ASCII scalar like `'«'`/`'未'`):
+                // skip the opening quote, the scalar's full UTF-8 encoding, and the closing
+                // quote. Measuring the scalar's real byte length (rather than assuming exactly
+                // one, as `'x'` alone would suggest) matters: a multi-byte scalar's closing
+                // quote sits further away, and mis-locating it treats the opening quote as a
+                // lone stray quote instead — whereupon the scalar's raw bytes leak into the
+                // cleaned text as ordinary code, and (if two such literals sit adjacent, as in
+                // `['«','{']`) a *later* literal's own closing/opening quote pair can then be
+                // misread as a fake 3-byte char literal, silently swallowing the intervening
+                // comma and the next literal's opening quote — which unprotects that next
+                // literal's payload, leaking a real `{`/`}` byte into the cleaned text as a
+                // spurious structural brace.
+                i += 1 + len + 1;
             } else {
                 // A lifetime or stray quote.
                 out.push(bytes[i]);
@@ -380,6 +405,38 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
         }
     }
     (String::from_utf8_lossy(&out).into_owned(), positions)
+}
+
+/// If a simple (non-escaped) char literal begins at `i` — an opening `'` the caller has already
+/// confirmed, not followed by a backslash — return the byte length of its single scalar value:
+/// 1 for an ASCII character, more for a multi-byte UTF-8 scalar (`'«'` is 2, `'未'` is 3), only
+/// when the byte immediately after that scalar's full encoding is the closing `'`. `None` for a
+/// lifetime (`'a`), a stray quote, or anything malformed — the caller then falls through to
+/// treating the `'` as ordinary text, exactly as it already did for those cases.
+fn simple_char_literal_scalar_len(bytes: &[u8], i: usize) -> Option<usize> {
+    let len = utf8_scalar_len(*bytes.get(i + 1)?)?;
+    if bytes.get(i + 1 + len) == Some(&b'\'') {
+        Some(len)
+    } else {
+        None
+    }
+}
+
+/// The byte length of one UTF-8 scalar value's encoding, read from its lead byte — 1 for ASCII,
+/// 2/3/4 for a valid multi-byte lead byte, `None` for a byte that cannot start a scalar (a bare
+/// continuation byte, or a lead byte Rust's `char` never encodes to, e.g. an overlong or
+/// surrogate-range form). Trusts the lead byte's class rather than validating the full encoding —
+/// this only needs to *locate* the scalar's end to find the literal's closing quote, not confirm
+/// the source is well-formed UTF-8 (a governed file already is, being real Rust source `rustc`
+/// itself would have to accept).
+fn utf8_scalar_len(lead: u8) -> Option<usize> {
+    match lead {
+        0x00..=0x7F => Some(1),
+        0xC2..=0xDF => Some(2),
+        0xE0..=0xEF => Some(3),
+        0xF0..=0xF4 => Some(4),
+        _ => None,
+    }
 }
 
 /// If a raw string literal begins at `i` — `r`, `br`, or `cr` at a token boundary, then any

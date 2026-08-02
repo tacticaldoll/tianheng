@@ -140,6 +140,37 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                 }
                 continue;
             }
+            // Resolve every `cfg_attr(path)` candidate THIS declaration carries before deciding
+            // below whether its plain conventional file is required: `cfg_attr` never removes
+            // the item, but a candidate that physically exists is proof SOME real configuration
+            // compiles this declaration through that remap rather than the conventional file —
+            // the same "might legitimately be absent on this build" signal a bare `#[cfg]` or a
+            // `cfg_if!` arm already carries (`declared.is_cfg_conditional`), just discovered from
+            // the filesystem instead of the source text. Neither candidate existing (every
+            // `cfg_attr(path)` target absent, same as none declared at all) leaves the
+            // conventional-file requirement exactly as strict as it already is — this only adds a
+            // tolerance, never removes the existing one. 渾儀/漏刻 already apply the identical rule
+            // to their own crate-wide walk (三儀 ⊥ 三儀: the same rule, not the same function).
+            let mut resolved_conditional = Vec::new();
+            for &eq_cleaned in &declared.conditional_path_eqs {
+                if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
+                    if let Some(rel) =
+                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
+                    {
+                        let candidate_target = loaded.path_base.join(&rel);
+                        if candidate_target.is_file() {
+                            resolved_conditional.push(ConditionalPathSource {
+                                relative: PathBuf::from(rel),
+                                base: loaded.path_base.clone(),
+                                ancestors: loaded.ancestors.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+            let has_backing_conditional_target = !resolved_conditional.is_empty();
+            child_sources.conditional.extend(resolved_conditional);
+
             if let Some(eq_cleaned) = declared.direct_path_eq {
                 if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
                     if let Some(rel) =
@@ -158,24 +189,9 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                 child_sources.plain.push(PlainSource {
                     base: loaded.child_base.clone(),
                     ancestors: loaded.ancestors.clone(),
-                    is_cfg_conditional: declared.is_cfg_conditional,
+                    is_cfg_conditional: declared.is_cfg_conditional
+                        || has_backing_conditional_target,
                 });
-            }
-            for &eq_cleaned in &declared.conditional_path_eqs {
-                if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
-                    if let Some(rel) =
-                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
-                    {
-                        let candidate_target = loaded.path_base.join(&rel);
-                        if candidate_target.is_file() {
-                            child_sources.conditional.push(ConditionalPathSource {
-                                relative: PathBuf::from(rel),
-                                base: loaded.path_base.clone(),
-                                ancestors: loaded.ancestors.clone(),
-                            });
-                        }
-                    }
-                }
             }
         }
     }

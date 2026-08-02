@@ -4,9 +4,9 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::resolve::{
-    BareFallback, ExternRenameMap, ReexportMap, UseMap, apply_bare_alias_rename,
-    apply_crate_root_rename, canonicalize_through_reexports, extern_verbatim_renamed,
-    renames_shadowed, resolve_path, strip_raw,
+    AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, apply_bare_alias_rename,
+    apply_crate_root_rename, expand_canonical_paths, extern_verbatim_renamed, renames_shadowed,
+    resolve_path_all, strip_raw,
 };
 use crate::scan::scan_crate;
 
@@ -140,23 +140,37 @@ pub(crate) fn file_extern_scope(
 /// rename are rewritten, so every alias spelling reacts alike (the specs' declared "same resolver
 /// ladder … with a crate-root rename applied"). `file_scope` MUST be the branch that OWNS `path`
 /// (the exposure's own file), never a different branch's scope.
+///
+/// Returns **every** candidate canonical path, mirroring `module_findings`' own cfg-blind
+/// resolution: two mutually-exclusive `#[cfg]` branches' conflicting `use ... as Name;` (or
+/// `pub use ... as Name;` re-export target) are never compiled together, so neither candidate may
+/// be silently dropped in favor of the other. The caller checks every candidate against the
+/// forbidden set and reacts if any matches.
 pub(crate) fn resolve_principal(
     path: &syn::Path,
     uses: &UseMap,
     module: &str,
     res: &ExternResolution,
     file_scope: &FileExternScope,
-) -> Option<String> {
-    let resolved = if path.leading_colon.is_some() {
+) -> Vec<String> {
+    let resolved: Vec<String> = if path.leading_colon.is_some() {
         extern_verbatim_renamed(path, &res.externs, &res.extern_renames)
+            .into_iter()
+            .collect()
     } else {
-        resolve_path(path, uses, module, BareFallback::Ignore).or_else(|| {
+        let use_map_candidates = resolve_path_all(path, uses, module, BareFallback::Ignore);
+        if !use_map_candidates.is_empty() {
+            use_map_candidates
+        } else {
             extern_verbatim_renamed(path, &file_scope.externs_type, &file_scope.renames_bare)
-        })
+                .into_iter()
+                .collect()
+        }
     };
-    resolved.map(|canonical| {
-        let canonical = canonicalize_through_reexports(&canonical, &res.reexports);
-        let canonical = apply_crate_root_rename(canonical, &res.extern_renames);
-        apply_bare_alias_rename(canonical, &file_scope.renames_bare)
-    })
+    resolved
+        .into_iter()
+        .flat_map(|canonical| expand_canonical_paths(&canonical, &AliasMap::new(), &res.reexports))
+        .map(|canonical| apply_crate_root_rename(canonical, &res.extern_renames))
+        .map(|canonical| apply_bare_alias_rename(canonical, &file_scope.renames_bare))
+        .collect()
 }

@@ -6,26 +6,26 @@
 //! `module_resolve` (which does not fit a "nowhere except here" property), reusing only the leaf
 //! primitives and the shared resolver.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use syn::parse::Parser;
 use syn::visit::{self, Visit};
 
 use crate::collect::type_param_names;
-use crate::crate_scope::{child_module_names, local_type_namespace_names};
+use crate::crate_scope::local_type_namespace_names;
 use crate::errors::{dual_backed_module_error, missing_module_file_error};
 use crate::finding::UnsafeSiteFact;
 use crate::module_resolve::{ModuleFile, locate_module_file, read_parse, resolve_module_branches};
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_targets,
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
-    is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path, strip_raw,
-    type_to_string,
+    is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path,
+    resolve_path_all, strip_raw, type_to_string,
 };
 use crate::syn_util::{
-    FlatItem, direct_path_value, flatten_transparent_macro_items, flatten_transparent_macros,
-    has_cfg_attr, has_path_attr,
+    FlatItem, body_nested_impls, cfg_attr_path_values, child_module_decls, direct_path_value,
+    flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
 };
 
 /// One impl site observed in the crate: its enclosing module path, the **real file it was read
@@ -77,8 +77,10 @@ pub(crate) struct CrateScan {
     /// subtree type. The forbidden-marker check consults this to react on `type Bar = Real` while NOT
     /// firing on an alias to a foreign/prelude type (whose marker lands off the governed subtree).
     /// (This is distinct from `aliases`, the exposure closure's resolvable-target map, which does not
-    /// record a bare-local-struct target.)
-    pub(crate) alias_targets: HashMap<String, String>,
+    /// record a bare-local-struct target.) Multi-valued for the identical cfg-blind reason `UseMap`
+    /// and `ReexportMap` are: `type X = Y;` where `Y` itself is a mutually-exclusive `#[cfg]`-gated
+    /// `use ... as Y;` name must keep every landing candidate, not just the first found.
+    pub(crate) alias_targets: AliasMap,
 }
 
 /// Collect crate-root `extern crate X as Y;` renames (`Y → X`) into `out`. Crate-root only: such a
@@ -137,7 +139,7 @@ pub(crate) fn scan_crate(
         trait_defs: HashSet::new(),
         impls: Vec::new(),
         type_defs: Vec::new(),
-        alias_targets: HashMap::new(),
+        alias_targets: AliasMap::new(),
     };
     // Pre-collect crate-root `extern crate X as Y;` renames BEFORE the walk, so the rename map is
     // complete before any alias-target or re-export-closure resolution — every source-order
@@ -186,9 +188,20 @@ fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String 
 /// the plain list its own observation reads, and the arm-membership-carrying list
 /// [`resolve_child_modules`] needs for its absence tolerance. Produced together here so no walker
 /// re-derives one from the other — flattening twice would erase the membership the second time.
+///
+/// The plain list additionally carries every [`body_nested_impls`] finds directly inside a
+/// `const`/`fn` among `items` (post-macro-flattening, so one nested inside a `cfg_if!` arm's own
+/// `const`/`fn` is covered too — the two mechanisms compose without special-casing). `flat` is
+/// deliberately NOT extended with them: nothing that consults `FlatItem`'s arm-membership tag
+/// (`resolve_child_modules`, `collect_reexports`) ever matches an `Item::Impl`, so they need no
+/// entry there, and giving one a synthetic arm tag would be an unearned claim about membership
+/// this walk never observed. Attributed to the SAME enclosing module/file/`use`-map as the
+/// `const`/`fn` that lexically holds them — correct, since extraction never crosses a file or
+/// module boundary.
 fn flatten_for_walk(items: &[syn::Item]) -> (Vec<syn::Item>, Vec<FlatItem>) {
     let flat = flatten_transparent_macros(items);
-    let plain = flat.iter().map(|f| f.item.clone()).collect();
+    let mut plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
+    plain.extend(body_nested_impls(&plain));
     (plain, flat)
 }
 
@@ -310,7 +323,8 @@ fn resolve_child_modules(
                     if !file.is_file() {
                         // An unconditional `#[path]` target must exist (rustc errors otherwise), so
                         // an absent one is a genuine broken reference: fail loud (exit 2), never a
-                        // silent skip. A cfg-conditional `#[path]` is the `has_path_attr` skip below.
+                        // silent skip. A `cfg_attr`-wrapped `#[path]` is the union below, not this
+                        // unconditional branch at all (`direct_path_value` never matches it).
                         // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
                         // removes the whole item when `pred` is false (verified against a real
                         // rustc build: `#[cfg(windows)] #[path = "…"] mod x;` compiles cleanly on
@@ -347,12 +361,16 @@ fn resolve_child_modules(
             }
             continue;
         }
-        // A `cfg_attr`-wrapped `#[path]` is cfg-conditional: following it cfg-blind could read a
-        // file rustc does not compile here, so it stays a stated skip bound — and the conventional
-        // file is never governed in its place.
-        if has_path_attr(&module_item.attrs) {
-            continue;
-        }
+        // A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which file compiles, but — unlike a
+        // bare `#[cfg]` — `cfg_attr` never removes the `mod` item itself, so cfg-blind observation
+        // must union every candidate the predicate could select, never skip the module outright.
+        // An INLINE body is unaffected by `#[path]`/`cfg_attr(path)` at all (rustc ignores it for an
+        // inline `mod`; the body always compiles) and is unconditionally descended below, exactly
+        // like the no-attribute case. A FILE module's conventional file and its `cfg_attr` target
+        // are both read when present, as separate sources for the same module name (mirroring the
+        // existing per-platform-pair `seen_files` union above for two plain declarations of the
+        // same name).
+        let cfg_attr_targets = cfg_attr_path_values(&module_item.attrs);
         let sub_dir = child_dir.join(&name);
         match &module_item.content {
             // Inline `mod x { … }`: descend its lexical items (same file). Its own children — both
@@ -373,61 +391,95 @@ fn resolve_child_modules(
             // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`; the child's own
             // `file_dir` is the located file's directory (`<dir>` for `x.rs`, `<dir>/x` for
             // `x/mod.rs`), which is where a `#[path]` inside it resolves from.
-            None => match locate_module_file(child_dir, &name) {
-                ModuleFile::One(file) => {
-                    // A file already on the current descent path (an ANCESTOR, by canonical
-                    // symlink-resolved path) is a genuine module cycle — a symlinked directory or a
-                    // circular `#[path]` looping the `mod` graph back on itself. Stop with a scan
-                    // error (exit 2 "cannot judge") rather than recursing into a stack overflow. Two
-                    // *sibling/cousin* declarations legitimately resolving to one file (e.g.
-                    // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
-                    // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
-                    // misreport them (that would be a false positive on compilable input).
-                    let canon = xingbiao::canonicalize_or_fail(&file)?;
-                    if ancestors.contains(&canon) {
-                        return Err(module_cycle_error(&child_module, crate_package, &file));
-                    }
-                    if !seen_files.insert((name.clone(), canon.clone())) {
-                        continue;
-                    }
-                    let parsed = read_parse(&file)?;
-                    let own_dir = file
-                        .parent()
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| sub_dir.clone());
-                    children.push((
-                        parsed.items,
-                        child_module,
-                        sub_dir,
-                        own_dir,
-                        Some(canon),
-                        file,
-                    ));
-                }
-                // BOTH conventional forms present is unresolvable under every predicate value — no
-                // `#[cfg]` makes two files compile as one module — so unlike an absence it is never
-                // a legitimate configuration, and it reacts regardless of any gate. Erroring out of
-                // the whole walk rather than dropping this one module matches 圭表's own
-                // `resolve_plain_sources`: a crate whose module graph cannot be resolved cannot be
-                // judged, and excluding the module would hide every import beneath it.
-                ModuleFile::Ambiguous { flat, nested } => {
-                    return Err(dual_backed_module_error(
-                        &child_module,
-                        &name,
-                        crate_package,
-                        &flat,
-                        &nested,
-                    ));
-                }
-                // A `#[cfg]`-gated module may legitimately have no source file when the feature is
-                // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
-                // error. A non-cfg missing file is a real scan error: fail loud (exit 2).
-                ModuleFile::Absent => {
-                    if !cfg_conditional {
-                        return Err(missing_module_file_error(&child_module, crate_package));
+            None => {
+                let mut has_backing_source = false;
+                // Every `cfg_attr(path)` target this declaration carries (a module may stack more
+                // than one, each gated by its own predicate for a different platform), whichever
+                // exists — read alongside the conventional file below, never in place of it: cfg-blind
+                // observation cannot know which one this build actually compiles.
+                for rel in &cfg_attr_targets {
+                    let file = file_dir.join(rel);
+                    if file.is_file() {
+                        has_backing_source = true;
+                        let canon = xingbiao::canonicalize_or_fail(&file)?;
+                        if ancestors.contains(&canon) {
+                            return Err(module_cycle_error(&child_module, crate_package, &file));
+                        }
+                        if seen_files.insert((name.clone(), canon.clone())) {
+                            let parsed = read_parse(&file)?;
+                            let own_dir = file
+                                .parent()
+                                .map(Path::to_path_buf)
+                                .unwrap_or_else(|| file_dir.to_path_buf());
+                            children.push((
+                                parsed.items,
+                                child_module.clone(),
+                                own_dir.clone(),
+                                own_dir,
+                                Some(canon),
+                                file,
+                            ));
+                        }
                     }
                 }
-            },
+                match locate_module_file(child_dir, &name) {
+                    ModuleFile::One(file) => {
+                        // A file already on the current descent path (an ANCESTOR, by canonical
+                        // symlink-resolved path) is a genuine module cycle — a symlinked directory or a
+                        // circular `#[path]` looping the `mod` graph back on itself. Stop with a scan
+                        // error (exit 2 "cannot judge") rather than recursing into a stack overflow. Two
+                        // *sibling/cousin* declarations legitimately resolving to one file (e.g.
+                        // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
+                        // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
+                        // misreport them (that would be a false positive on compilable input).
+                        let canon = xingbiao::canonicalize_or_fail(&file)?;
+                        if ancestors.contains(&canon) {
+                            return Err(module_cycle_error(&child_module, crate_package, &file));
+                        }
+                        if seen_files.insert((name.clone(), canon.clone())) {
+                            let parsed = read_parse(&file)?;
+                            let own_dir = file
+                                .parent()
+                                .map(Path::to_path_buf)
+                                .unwrap_or_else(|| sub_dir.clone());
+                            children.push((
+                                parsed.items,
+                                child_module,
+                                sub_dir,
+                                own_dir,
+                                Some(canon),
+                                file,
+                            ));
+                        }
+                    }
+                    // BOTH conventional forms present is unresolvable under every predicate value — no
+                    // `#[cfg]` makes two files compile as one module — so unlike an absence it is never
+                    // a legitimate configuration, and it reacts regardless of any gate. Erroring out of
+                    // the whole walk rather than dropping this one module matches 圭表's own
+                    // `resolve_plain_sources`: a crate whose module graph cannot be resolved cannot be
+                    // judged, and excluding the module would hide every import beneath it.
+                    ModuleFile::Ambiguous { flat, nested } => {
+                        return Err(dual_backed_module_error(
+                            &child_module,
+                            &name,
+                            crate_package,
+                            &flat,
+                            &nested,
+                        ));
+                    }
+                    // A `#[cfg]`-gated module may legitimately have no source file when the feature is
+                    // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
+                    // error. A non-cfg missing conventional file is tolerated too when the `cfg_attr`
+                    // target above already backs this module on some other build; only when NEITHER
+                    // candidate exists, and this declaration is not otherwise cfg-conditional, is the
+                    // module truly unbacked on every configuration — a real scan error (exit 2).
+                    ModuleFile::Absent => {
+                        if !has_backing_source && !cfg_conditional {
+                            return Err(missing_module_file_error(&child_module, crate_package));
+                        }
+                    }
+                }
+            }
         }
     }
     Ok(children)
@@ -458,13 +510,19 @@ fn walk_module(
     // head oracle does: a bare `pub use dep::X;` / `pub use wc::X;` head named by this module's own
     // child `mod dep` / `mod wc` is not recorded as the dependency / renamed crate, so a
     // cross-module facade reaching it through this crate-wide map does not mis-canonicalize (the
-    // facade-closure FP). `collect_reexports` keeps a leading-`::` head on the raw sets.
-    let child_mods = child_module_names(&items);
+    // facade-closure FP). That exclusion is now computed PER re-export item (via `flat`'s own
+    // arm/`#[cfg]` tag, inside `collect_reexports`), not once over this module's whole child-module
+    // set: a `mod` that is provably mutually exclusive with a SPECIFIC `pub use` in `flat` (a
+    // different `cfg_if!` arm, or a syntactic `#[cfg]` negation) must not shadow that item's own
+    // head even though both live in this same file (the round-9 sibling of the direct-head fix —
+    // see `collect_reexports`'s own doc). `collect_reexports` keeps a leading-`::` head on the raw
+    // sets regardless.
+    let child_mod_decls = child_module_decls(&flat);
     collect_reexports(
-        &items,
+        &flat,
         &module,
         externs,
-        &child_mods,
+        &child_mod_decls,
         &scan.extern_renames,
         &mut scan.reexports,
     );
@@ -526,11 +584,12 @@ fn walk_module(
             //   0. a leading-`::` target — an unambiguous extern (raw set, with the crate-root
             //      rename applied), a HARD short-circuit, so `type X = ::serde::Value;` records the
             //      extern even under a local `mod serde`, and `type X = ::<rename>::Foo;` too;
-            //   1. `resolve_path(Ignore)` — use-map / `crate`·`self`·`super`;
+            //   1. `resolve_path_all(Ignore)` — use-map (every cfg-branch candidate) /
+            //      `crate`·`self`·`super`;
             //   2. `bare_local_alias_target` — a bare single-segment target naming one of THIS
             //      module's own type aliases recorded as `{module}::{name}` (its canonical alias-map
             //      key), tried BEFORE the extern oracle so a local alias shadows a same-named
-            //      dependency (rustc's own resolution); the query-time `canonicalize_through_aliases`
+            //      dependency (rustc's own resolution); the query-time `expand_canonical_paths`
             //      fixpoint then closes a *bare* alias-of-an-alias chain regardless of source order.
             //      Gated to local alias names, so a bare non-alias target (a local struct, a std
             //      prelude type like `String`) is never mis-recorded — no false positive;
@@ -550,32 +609,48 @@ fn walk_module(
                 // lands off the governed subtree. Only a nominal `Type::Path` target has a single
                 // landing type; a tuple/ref/`dyn` target has none and is skipped (never governed here).
                 if let syn::Type::Path(tp) = &*type_item.ty {
-                    if let Some(landing) =
-                        resolve_path(&tp.path, &uses, &module, BareFallback::CurrentModule)
-                    {
+                    let landings =
+                        resolve_path_all(&tp.path, &uses, &module, BareFallback::CurrentModule);
+                    if !landings.is_empty() {
                         let alias =
                             format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
-                        scan.alias_targets.insert(alias, landing);
+                        let entry = scan.alias_targets.entry(alias).or_default();
+                        for landing in landings {
+                            if !entry.contains(&landing) {
+                                entry.push(landing);
+                            }
+                        }
                     }
                 }
                 let mut targets = Vec::new();
                 alias_nominal_targets(&type_item.ty, &mut targets);
                 for target in targets {
                     let alias = format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
-                    let resolved = if target.leading_colon.is_some() {
+                    let resolved_list: Vec<String> = if target.leading_colon.is_some() {
                         extern_verbatim_renamed(target, externs, &scan.extern_renames)
+                            .into_iter()
+                            .collect()
                     } else {
-                        resolve_path(target, &uses, &module, BareFallback::Ignore)
-                            .or_else(|| {
-                                bare_local_alias_target(target, &module, &local_alias_names)
-                            })
-                            .or_else(|| {
-                                extern_verbatim_renamed(target, &externs_type, &scan.extern_renames)
-                            })
+                        let use_candidates =
+                            resolve_path_all(target, &uses, &module, BareFallback::Ignore);
+                        if !use_candidates.is_empty() {
+                            use_candidates
+                        } else {
+                            bare_local_alias_target(target, &module, &local_alias_names)
+                                .or_else(|| {
+                                    extern_verbatim_renamed(
+                                        target,
+                                        &externs_type,
+                                        &scan.extern_renames,
+                                    )
+                                })
+                                .into_iter()
+                                .collect()
+                        }
                     };
-                    if let Some(resolved) = resolved {
+                    for resolved in resolved_list {
                         if resolved != alias {
-                            let entry = scan.aliases.entry(alias).or_default();
+                            let entry = scan.aliases.entry(alias.clone()).or_default();
                             if !entry.contains(&resolved) {
                                 entry.push(resolved);
                             }
@@ -642,11 +717,11 @@ fn walk_module(
 ///
 /// Inherits the crate walk's guards, so a subtree reaction never silently under-reacts: an
 /// **unconditional** `#[path]`-remapped module is followed like any other descendant (matching
-/// `resolve_child_modules`'s own policy), a `cfg_attr`-wrapped `#[path]` is the actual stated
-/// coverage bound (skipped, since following it cfg-blind could read a file rustc does not compile
-/// here), a `#[cfg]`-gated fileless module is tolerated, a non-`#[cfg]` missing module file is a
-/// scan error (exit 2), and a symlink module cycle is a scan error (exit 2), never a stack
-/// overflow.
+/// `resolve_child_modules`'s own policy), a `cfg_attr`-wrapped `#[path]` module is observed via the
+/// identical union `resolve_child_modules` applies (an inline body regardless of the attribute, a
+/// file module's conventional file and its `cfg_attr` target both read when they exist on disk),
+/// a `#[cfg]`-gated fileless module is tolerated, a non-`#[cfg]` missing module file is a scan
+/// error (exit 2), and a symlink module cycle is a scan error (exit 2), never a stack overflow.
 ///
 /// When the anchor (or any segment on the path to it) was reached through a mutually-exclusive
 /// `#[cfg]` split, [`resolve_module_branches`] keeps every surviving branch's own items paired

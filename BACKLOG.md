@@ -29,17 +29,187 @@ live item is promoted, it must name: **class**, **observed pressure**, **observa
   requirements live in [`openspec/specs/*`](openspec/specs) and settled rationale in [`PROJECT.md`](PROJECT.md).
   Detailed historical ledgers for 0.1.x – 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
+## Open defect queue
+
+No live queue currently. The `v0.2.3..release/0.3.1` adversarial sweep that populated this section
+is fully closed: every finding reached a terminal state — 11 fixed (each its own `change/*` + PR,
+cited in the affected code's history and `CHANGELOG.md`), 2 verified moot, 2 refuted, 6 promoted to
+live decisions below, and its own prior two-round sweep's 6 refuted / 6 upheld-by-only-one-lens
+findings absorbed into `DECLINED`/`WATCH` below (condensed deliberately rather than kept verbatim,
+to avoid a future reader anchoring on a raw agent-verdict's specific phrasing instead of the settled
+conclusion). The sweep's own working queue file is not retained once fully drained — its substance
+now lives here and in the closing PRs, not in a file kept only because it once existed. A future
+sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
+
 ## Live decision index
 
 ### DESIGN-BREAKING
 
-None currently live — the `0.3.0` identity migration closed the prior candidate.
+- **Owner-label identity collapses across a cfg-collided self-type alias.** Class:
+  DESIGN-BREAKING. Observed pressure: reproduced by the maintainer during round-3
+  adversarial review of `change/hunyi-cfg-branch-use-reexport-merging` (PR #149) —
+  two genuinely independent violations sharing one cfg-collided self-type alias
+  (`#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as X;`,
+  each arm implementing the same governed trait) render the identical single-candidate
+  owner label and collapse to one finding under exact-identity dedup, across
+  trait-impl-locality, forbidden-marker, unsafe-confinement, and signature-coupling at
+  once. Observation source: that review's reproduction, described above. Current bound:
+  `canonical_self_owner`/`canonical_self_owner_without_fallback`
+  (`crates/hunyi/src/resolve/shape.rs`) and `canonical_unsafe_owner`
+  (`crates/hunyi/src/scan.rs`) each render a label from a single resolved candidate,
+  cfg-blind, feeding straight into a dedup key. Risk: a real, enforce-severity
+  violation is silently lost whenever this exact cfg-collision shape occurs — a false
+  negative, the one bug class PROJECT.md's Core Contract forbids outright — but the
+  trigger (a cfg-gated self-type alias reused across cfg-exclusive impls of the same
+  governed trait/type) is narrow and has not yet been observed outside adversarial
+  probing. Promotion trigger: either a redesigned owner identity that stays injective
+  across cfg-ambiguous candidates, or a different anti-collapse key not fed by a
+  single-candidate renderer — real design work, not a mechanical multi-candidate swap
+  (explicitly scoped out of PR #149 as its own follow-up). Version class:
+  DESIGN-BREAKING (an injective owner identity almost certainly changes baseline
+  `finding_key` shape for every affected capability). Authority: `PROJECT.md`'s
+  violation-identity decisions, PR #149's commit body (which names this exact gap and
+  scopes it out as a follow-up).
+
+- **An absolute `#[path]` literal's identity still disagrees across checkouts when its
+  target coincidentally lies under one checkout's own anchor.** Class: DESIGN-BREAKING.
+  Observed pressure: found during round-2 adversarial review of
+  `change/louke-unauditable-probe-relative-identity` (PR #157), which closed the
+  general relative-path case but left this one already-non-portable construct
+  unresolved. Observation source: pinned regression test
+  `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`
+  (`crates/louke/src/audit/tests.rs`). Current bound: `strip_prefix` succeeds by pure
+  textual match wherever an absolute `#[path = "/…"]` literal's target happens to share
+  the anchor's prefix, producing a relative-looking label in that checkout and falling
+  back to the raw absolute path in another — the two checkouts' `unauditable-probe`
+  identities differ. Risk: narrow — an absolute `#[path]` literal is already
+  non-portable and machine-specific by construction; this only affects that one already
+  fragile idiom, not the realistic relative sibling-share case PR #157 fixed. Promotion
+  trigger: threading "was this file reached via an absolute `#[path]` literal" through
+  the whole `resolve_path_module`/`external_module_files`/`collect_scope_modules`/
+  `collect_reachable_probes` pipeline so such a file's label is never relativized at
+  all — a separate, scoped refactor. Version class: DESIGN-BREAKING (changes
+  un-auditable-probe identity shape for this construct). Authority: PR #157's commit
+  body; the stated bound is also pinned in `crates/louke/src/finding.rs`/`audit.rs`'s own
+  doc comments and `openspec/specs/runtime-origin-assertion/spec.md`.
+
+- **`InherentMethod` seam identity omits its declaring module, so two impl sites in
+  different modules collapse to one violation.** Class: DESIGN-BREAKING. Observed
+  pressure: verified real during 0.3.1 sweep cleanup (2026-08-02/03) — a type with
+  inherent-method impl-trait-returning methods declared in two different modules
+  (e.g. platform-split `plat_unix`/`plat_win` inherent impls on one shared type)
+  produces exactly one violation instead of two; the second module's real violation is
+  silently lost, not merely deduped. Observation source: direct reproduction against
+  `hunyi::check_impl_trait` (and structurally the same gap in dyn-trait/signature-coupling's
+  inherent-method seams, sharing the identical shape logic) — described above, not
+  independently re-tested for the dyn-trait/impl-trait siblings, only inspected by code
+  reading. Current bound: `PublicSeam::InherentMethod`
+  is keyed on `{owner, name}` only — correct when distinguishing different self types on
+  the same governed surface, but blind to the same self type's impl blocks written in
+  separate modules (unlike `FreeFn`/`TraitMethod`, which already carry a module field).
+  Risk: a false negative — PROJECT.md's Core Contract forbids this outright — but
+  requires the specific idiom of splitting one type's inherent methods across modules
+  (common in platform-conditional code, not yet observed as an adopter complaint).
+  Promotion trigger: add a declaring-module/location field to `PublicSeam::InherentMethod`
+  (and sibling `InherentAssoc`) and thread it through `inherent_method_seam`/
+  `inherent_assoc_seam` — real design work (deciding whether the module belongs in the
+  seam's identity only or also its rendered label). Version class: DESIGN-BREAKING
+  (changes affected seams' baseline `finding_key` shape). Authority: this entry's own
+  reproduction record (above); no separate archived report is kept.
+
+- **`InherentGenerics` seam identity has no per-block distinguisher, contradicting its
+  own doc comment.** Class: DESIGN-BREAKING. Observed pressure: verified real during
+  0.3.1 sweep cleanup (2026-08-02/03) — two separate inherent impl blocks on the same
+  type, each exposing the same forbidden subject through a different where-clause
+  bound, collapse to one violation. Observation source: direct reproduction against
+  `hunyi::check` (`crates/hunyi/src/collect.rs`'s inherent-generics collector) — described
+  above. Current bound: `PublicSeam::InherentGenerics`
+  is keyed on `{owner}` only, despite its own adjacent doc comment claiming it stays
+  "distinct... from another block's generics" — that claim does not hold; owner-qualification
+  distinguishes different types, not different impl blocks of the same type. Risk: a
+  false negative on a narrow idiom (multiple inherent impl blocks on one type, each with
+  its own where-clause bound exposing a forbidden type) — not yet observed as adopter
+  pressure. Promotion trigger: a real per-block distinguisher (an impl-block ordinal or
+  a stable rendering of the block's own where-clause) added to `PublicSeam::InherentGenerics`
+  — real design work, since a *stable* (not source-position-fragile) distinguisher is
+  itself a design decision. Version class: DESIGN-BREAKING. Authority: this entry's own
+  reproduction record (above).
+
+- **Trait-impl-locality's violation target/rule-key reads the constitution's declared
+  trait spelling instead of the already-resolved canonical anchor.** Class:
+  DESIGN-BREAKING. Observed pressure: verified real during 0.3.1 sweep cleanup
+  (2026-08-02/03) — declaring the identical boundary via two different (but
+  re-export-equivalent) spellings of the same trait produces two `ViolationId`s for the
+  same real-world fact. Observation source: direct reproduction against
+  `hunyi::check_trait_impl_locality` — described above.
+  Current bound: `target`/`rule_key` in `crates/hunyi/src/trait_impl.rs` are built from
+  `canonical_path_str(&boundary.trait_path)` — raw-identifier stripping only, never
+  re-export resolution — even though the same function already computes a
+  re-export-resolved `true_anchors`/`canonical` value for match-decision purposes,
+  unused for identity. Risk: real baseline-stability consequence — renaming a
+  constitution declaration from a re-export spelling to the canonical spelling (a pure
+  refactor, no code behavior change) silently flips every affected violation's identity
+  and defeats the baseline. Promotion trigger: thread the already-computed resolved
+  anchor into `target`/`rule_key` instead of the raw declared string — real design work,
+  since `true_anchors` is a cfg-blind multi-candidate set and picking one deterministic
+  canonical member for identity purposes is itself a design decision. Version class:
+  DESIGN-BREAKING. Authority: this entry's own reproduction record (above).
+
+- **`OriginEntry::new` lets any code in the process self-assert an arbitrary runtime
+  origin, defeating origin-based fail-closed confinement.** Class: DESIGN-BREAKING.
+  Observed pressure: verified real during 0.3.1 sweep cleanup (2026-08-02/03) — a
+  hand-built `OriginEntry::new(TypeId::of::<RogueAdapter>(), "loukehot::good", "RogueAdapter")`
+  passed to `install` alongside genuine `register_origin!` entries produces zero
+  reaction for a seam declared `.only_origins(["loukehot::good"])`, even though
+  `RogueAdapter` never legitimately registered that origin. Observation source: direct
+  reproduction against the real `louke::install`/`assert_boundary!` public API —
+  described above. Current bound: `OriginEntry` is a `pub
+  struct` and `new` a fully `pub fn` taking a caller-supplied `origin: &'static str`
+  with no field-level or capability-level constraint — directly contradicting
+  `openspec/specs/runtime-origin-assertion/spec.md`'s own stated requirement that origin
+  is "observed, not self-asserted... which the type cannot claim falsely without
+  physically registering elsewhere." Risk: HIGH — this defeats the crate's core stated
+  guarantee outright for any code sharing the process, not merely a narrow idiom;
+  unlike the other five entries here, this is a capability gap in the trust boundary
+  itself, not an identity-collision edge case. Verified that the obvious mechanical fix
+  (`pub` → `pub(crate)` on `OriginEntry::new`) breaks the legitimate `register_origin!`
+  macro path too, since `macro_rules!` visibility is checked at the macro's expansion
+  site, not its definition site — a real Rust limitation, not an oversight. Promotion
+  trigger: a `#[track_caller]`/`std::panic::Location`-based redesign of `OriginEntry::new`
+  so the recorded origin is always the true call-site location rather than a
+  caller-supplied string (achievable in pure std, consistent with 漏刻's `serde_json`-light
+  constraint) — real design work, not mechanical, and touches the public DSL surface.
+  Version class: DESIGN-BREAKING. Authority: `openspec/specs/runtime-origin-assertion/spec.md`'s
+  "observed, not self-asserted" requirement, which this gap directly contradicts; this
+  entry's own reproduction record (above) for the rest.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:**
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `qianyi` generator & LSP/editor integration.
+  - A `#[cfg_attr(pred, path=…)]` remap on an **inline** `mod name { … }` (not a file-backed
+    module): the relocated child base is collected in `declarations.rs` but then discarded by
+    `walk.rs`, so the arm's real children may never be scanned. Observed once during the 0.3.1
+    adversarial sweep, upheld by exactly one verification lens and never independently
+    re-tested or refuted — treat as a hypothesis, not a confirmed defect.
+    (`crates/guibiao/src/module_scan/reachability/walk.rs`.) Promotion trigger: reproduce
+    directly against the real entry point before acting; if confirmed, likely mechanical
+    (the collected base already exists, just needs to survive into `walk.rs`'s consumption).
+  - A symlinked source subdirectory may silently disappear from 漏刻's directory-mode audit
+    while 圭表/渾儀 continue to govern the same subtree — `try_visit`'s cycle guard possibly
+    bypassed by a second, weaker guard specific to the audit walker. Observed once during the
+    0.3.1 adversarial sweep, single lens, never independently re-tested.
+    (`crates/louke/src/audit/scan.rs`.) Promotion trigger: reproduce directly (a real symlinked
+    subdirectory containing a probed seam) before acting.
+  - `xingbiao::crate_root_file` may collapse a multi-root package (a manifest declaring more
+    than one crate root, e.g. via `[[bin]]`/`[lib]` combinations) to a single resolved root, so
+    every non-first root of that package would be silently ungoverned by 圭表 and 渾儀. Observed
+    once during the 0.3.1 adversarial sweep, single lens, never independently re-tested — the
+    trigger shape (a real multi-root package in this workspace or an adopter's) was not
+    confirmed to actually arise from `cargo metadata`'s output. (`crates/xingbiao/src/lib.rs`.)
+    Promotion trigger: confirm `cargo metadata` actually emits multiple root files for one
+    package before treating this as more than speculative.
   - Baseline debt ratchet (`--require-baseline-reduction`, only-fix-never-add). This remains in
     tension with “baseline is a generated snapshot, not policy” and “not a governance platform”:
     a bounded opt-in gate may fit, while debt scheduling does not. Promote only after that tension
@@ -58,6 +228,22 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
     compatibility evidence recorded in `CHANGELOG.md`.
 - **ACCEPTED DEBT:**
   - Multi-target conventional-path conflation.
+  - `unsafe_confinement`'s and `trait_impl`'s `allowed_locations` tolerate a malformed `::`-path
+    entry (an empty segment) rather than rejecting it. Observed alongside the
+    `hunyi-forbidden-operand-colon-validation` fix for `must_not_expose`/`must_not_acquire`'s
+    forbidden-operand family: `matches_allowed`/`path_within` has the identical shape of defect, but
+    the failure DIRECTION is the safe one — a malformed allowed entry makes every real site look
+    disallowed, producing spurious violations (fails loud, if noisily) rather than the silent,
+    permanent non-reaction the forbidden-operand fix closes. Current bound: intentionally
+    unvalidated for now, since the existing behavior already errs loud rather than silent. Risk: an
+    adopter with a genuinely malformed `allowed_locations` entry gets confusing false-positive
+    violations instead of a clear constitution error naming the typo. Promotion trigger: a reported
+    or measured case of this confusion, or a bundled pass over every allowed-operand-shaped DSL
+    method once one is warranted on its own terms. Version class: READY-PATCH (same
+    check-time-`Result` mechanism, no signature change). Authority:
+    `crates/hunyi/src/containment.rs`'s `path_within`, and
+    `openspec/changes/hunyi-forbidden-operand-colon-validation/design.md`'s Non-Goals (pruned from
+    `openspec/changes/` on sync; the reasoning is carried here instead).
   - Macro/configuration coverage bounds. Two named residuals after 渾儀 gained `cfg_if!`
     transparency: it covers **item position** only (an invocation inside an `impl`/`trait` body holds
     impl items, needing a parallel flattening across ~10 body walkers — measured, pinned by
@@ -76,6 +262,48 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
     `assert_projection_fresh_with_preamble` already accepts a caller-supplied `&str`. If three
     adopters independently write incorrect preambles containing architectural claims that then
     rot, revisit.
+  - "`.github/CODEOWNERS`'s amendment reaction is unenforced" (0.3.1 sweep). Self-refuted by its
+    own citation: the file's own disclaimer at the cited line already states plainly that
+    designation alone only auto-requests review, and that branch protection must be separately
+    enabled to make it binding — not a hidden gap.
+  - "`ci.yml`'s Release-coherence job is the one Definition-of-Done gate CI runs but branch
+    protection doesn't enforce" (0.3.1 sweep). Observations reproduced accurately, but none
+    constitutes a defect under this project's own contract taxonomy — CI running a check and
+    branch protection gating a merge are different, both-documented mechanisms, not a claimed
+    single guarantee.
+  - "漏刻 never diagnoses a module cycle (a circular `#[path]`/symlinked module directory
+    silently collapses instead of exit 2)" (0.3.1 sweep). Refuted: a test already pins the exact
+    shape, asserting the opposite of the claim — a documented, deliberately-pinned bound, not an
+    undetected divergence.
+  - "The self-law giving `xingbiao` its canonicalization monopoly only reacts to the
+    free-function form; `path.canonicalize()` (the method call) escapes" (0.3.1 sweep). The
+    mechanism reproduces, but it is an explicitly declared, spec'd, and test-pinned observation
+    bound of the observation source itself — not a silent false negative, and not a reason
+    outside the projected perimeter.
+  - "A duplicated field name in a baseline entry's fact is silently last-wins, so the entry
+    suppresses a different violation than the one it records" (0.3.1 sweep,
+    `crates/xuanji/src/identity.rs`). Mechanics reproduced (`Baseline::from_json` on a
+    duplicate-keyed `fact.fields` object does resolve last-wins), but the claim does not survive
+    the contract lens — the shape cannot arise from any real fact construction path in this
+    codebase, only from hand-authored malformed JSON.
+  - "The composed baseline dogfood (`scripts/test_examples.sh`) exercises only the suppression
+    direction, and its in-script justification misstates what the standalone test proves"
+    (0.3.1 sweep). Refuted: a test-coverage complaint dressed as an unhonored claim — every
+    documented claim it cites is in fact honored by the referenced test and README.
+  - "Feature rules never read the target's own `[features]` table, so `serde/derive` declared
+    there passes a rule that forbids every feature of `serde`" (0.3.1 sweep,
+    `crates/guibiao/src/cargo_metadata.rs`). Mechanics accurate, but doubly refuted: the behavior
+    is a stated bound (圭表 governs the *declared* per-target layer; resolved whole-graph
+    feature unification is `cargo-deny`'s lane, per this file's own architecture decision), and
+    separately the specific reproduction's classification didn't hold either.
+  - "A `cfg_attr`-wrapped `#[path]` target is never enqueued, so the relocated file's typo'd /
+    un-auditable probes are silently skipped" (0.3.1 sweep, `crates/louke/src/audit/scan.rs`).
+    Refuted: a stated bound spelled out in three places (spec, public API doc, `CHANGELOG.md`)
+    and pinned by a deliberate test, not introduced by the diff under audit.
+  - "`first_macro_arg_end` truncates an `as`-cast generic, merging two textually distinct
+    un-auditable probes into one finding" (0.3.1 sweep, `crates/louke/src/audit/scan.rs`).
+    Mechanics reproduce at the byte-scanner level, but the trigger is not reachable from
+    compilable adopter input — refuted on the reproduction lens.
 - **BUILT / HISTORY:**
   - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.
   - Non-generic compound type alias target traversal in `hunyi` (tuples, arrays, slices, references, raw pointers).
@@ -87,6 +315,7 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
   - Configurable custom probe macro marker attributes in `louke`.
   - Three-layer agent-law artifact naming (Preamble + Projection + Law Source) and `COOKBOOK.md` recipe with `GovernanceTest` preamble discipline.
   - `cfg_attr(path)` observe-both semantics (union-scan over default and physically existing `cfg_attr(path)` target paths).
+  - `guibiao`'s own module-boundary walk now tolerates a module backed only by one or more resolved `cfg_attr(path)` remaps (no plain conventional file, no direct `#[path]`), matching `hunyi`/`louke`'s identical rule for the same shape.
   - Reusable testing harness (`tianheng::testing::GovernanceTest` fluent builder in facade for reaction, coverage, projection freshness with `BLESS=1`, and fixture testing).
   - Self-governance observation depth upgrade (explicit ScanDepth declarations across self_governance.rs boundaries).
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).

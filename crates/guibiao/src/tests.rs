@@ -541,7 +541,7 @@ fn a_submodule_file_named_lib_rs_is_governed_at_its_own_path() {
     assert_eq!(key.shape(), "module-path");
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
-        vec![("path", "crate::sink")]
+        vec![("governing_package", "x"), ("path", "crate::sink")]
     );
 }
 
@@ -2755,6 +2755,76 @@ fn no_dependency_rule_ever_flags_a_crates_own_self_referential_dependency() {
         .findings(&package, &workspace, DependencyKind::Dev),
         Vec::<String>::new(),
         "ForbidFeaturesOf must not observe the crate's own self-dependency's declared features"
+    );
+}
+
+#[test]
+fn every_crate_rule_still_flags_a_same_named_but_externally_sourced_dependency() {
+    // 0.3.1 adversarial-sweep finding, closed by PR #159 ("圭表 manifest/deps"):
+    // `is_self_dependency` matched by NAME ALONE, so a package `foo` depending on a *different*,
+    // externally-sourced package that merely shares its own name (a real wrapper/fork/
+    // self-comparison pattern — verified against real cargo: `foo = { git = "…" }` reads
+    // `{"name":"foo","source":"git+…"}`, no error) was wrongly swallowed by the identical
+    // self-dependency exemption meant only for the genuine null-source path idiom
+    // (`main = { path = "." }`). Every rule sharing the `dependencies()` /
+    // `dependencies_with_disallowed_source()` observation must react to this edge exactly as it
+    // would to any other same-shaped external dependency, not silently exempt it.
+    let package = serde_json::json!({
+        "name": "foo",
+        "dependencies": [
+            {
+                "name": "foo",
+                "source": "git+https://example.invalid/foo.git",
+                "kind": null,
+                "features": ["x"]
+            },
+        ]
+    });
+    let workspace = vec!["foo".to_string()];
+
+    assert_eq!(
+        Rule::ForbidDependencyOn {
+            crates: vec!["foo".to_string()]
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "ForbidDependencyOn must flag a same-named externally-sourced dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependenciesTo {
+            allowed: Vec::<String>::new()
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "RestrictDependenciesTo([]) must flag a same-named externally-sourced dependency"
+    );
+    assert_eq!(
+        Rule::RestrictDependencySourcesTo {
+            allowed: vec![SourceKind::Registry, SourceKind::Path]
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "RestrictDependencySourcesTo must flag the same-named dependency's disallowed Git source"
+    );
+    assert_eq!(
+        Rule::RestrictWorkspaceDependenciesTo {
+            allowed: Vec::<String>::new()
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo".to_string()],
+        "RestrictWorkspaceDependenciesTo shares the identical dependencies() observation, so it \
+         must flag it too, exactly as it would flag any other external dependency whose name \
+         happens to match a workspace member's name (here, the target's own)"
+    );
+    assert_eq!(
+        Rule::RestrictFeaturesOf {
+            crate_: "foo".to_string(),
+            allowed: vec![]
+        }
+        .findings(&package, &workspace, DependencyKind::Normal),
+        vec!["foo/default".to_string(), "foo/x".to_string()],
+        "RestrictFeaturesOf must observe the same-named externally-sourced dependency's features \
+         (including the implicit default-features request, since uses_default_features is absent)"
     );
 }
 
@@ -6495,4 +6565,354 @@ fn legacy_inline_confinement_defaults_to_subtree_and_preserves_identity() {
         0,
         "Explicit Shallow depth ignores submodule calls"
     );
+}
+
+/// Two-crate reproduction of the audit-sweep finding: identical governed module path + rule
+/// declared against two different workspace members must stay two distinct violations, never
+/// dedup into one and never let one crate's baseline suppress the other's unaccepted violation.
+/// Mirrors the exact shape `crates/tianheng/tests/self_governance.rs` declares on itself
+/// (the identical rule on guibiao/hunyi/louke).
+#[test]
+fn two_crates_with_the_identical_module_boundary_stay_distinct_violations() {
+    let alpha = TempWorkspace::new("identity-scope-alpha");
+    alpha.write("lib.rs", "pub mod app;\npub mod secret;\n");
+    alpha.write("app.rs", "use crate::secret::S;\n");
+    alpha.write("secret.rs", "pub struct S;\n");
+
+    let beta = TempWorkspace::new("identity-scope-beta");
+    beta.write("lib.rs", "pub mod app;\npub mod secret;\n");
+    beta.write("app.rs", "use crate::secret::S;\n");
+    beta.write("secret.rs", "pub struct S;\n");
+
+    fn package_json(ws: &TempWorkspace, name: &str) -> serde_json::Value {
+        let manifest = ws.dir().join("Cargo.toml");
+        serde_json::json!({
+            "name": name,
+            "manifest_path": manifest.to_string_lossy().into_owned(),
+            "dependencies": [],
+        })
+    }
+    let metadata = serde_json::json!({
+        "packages": [package_json(&alpha, "alpha"), package_json(&beta, "beta")]
+    });
+
+    fn boundary_for(package: &str) -> ModuleBoundary {
+        ModuleBoundary::in_crate(package)
+            .module("crate::app")
+            .must_not_import("crate::secret")
+            .because("app must not touch secret")
+    }
+
+    // Both crates violating, evaluated together: must yield two distinct violations, not one.
+    let constitution = Constitution::new("probe")
+        .boundary(boundary_for("alpha"))
+        .boundary(boundary_for("beta"));
+    let outcome = evaluate(&constitution, &metadata);
+    let report = match outcome {
+        Outcome::Violations(report) => report,
+        other => panic!("expected two violations, got {other:?}"),
+    };
+    assert_eq!(
+        report.violations.len(),
+        2,
+        "each crate's violation must survive dedup: {:?}",
+        report.violations
+    );
+    let ids: std::collections::BTreeSet<_> = report.violations.iter().map(Violation::id).collect();
+    assert_eq!(
+        ids.len(),
+        2,
+        "identity must differ by crate, not collapse to one"
+    );
+    let files: std::collections::BTreeSet<_> = report
+        .violations
+        .iter()
+        .map(|v| v.file.clone().expect("each violation carries a file"))
+        .collect();
+    assert_eq!(
+        files.len(),
+        2,
+        "each violation must keep its own crate's file, not share one"
+    );
+
+    // Baseline written against alpha alone must not suppress beta's unaccepted violation.
+    let alpha_only_constitution = Constitution::new("probe").boundary(boundary_for("alpha"));
+    let alpha_only_report = match evaluate(&alpha_only_constitution, &metadata) {
+        Outcome::Violations(report) => report,
+        other => panic!("expected alpha's violation, got {other:?}"),
+    };
+    assert_eq!(alpha_only_report.violations.len(), 1);
+    let baseline = Baseline::of(&alpha_only_report);
+
+    let both_constitution = Constitution::new("probe")
+        .boundary(boundary_for("alpha"))
+        .boundary(boundary_for("beta"));
+    let mut both_report = match evaluate(&both_constitution, &metadata) {
+        Outcome::Violations(report) => report,
+        other => panic!("expected two violations, got {other:?}"),
+    };
+    apply_baseline(&mut both_report, &baseline);
+    let alpha_violation = both_report
+        .violations
+        .iter()
+        .find(|v| v.target() == "crate::app" && baseline.contains(v))
+        .expect("alpha's violation must match the baseline");
+    assert!(alpha_violation.baselined, "alpha's violation was accepted");
+    let unbaselined: Vec<_> = both_report
+        .violations
+        .iter()
+        .filter(|v| !v.baselined)
+        .collect();
+    assert_eq!(
+        unbaselined.len(),
+        1,
+        "beta's violation must react as new, not be suppressed by alpha's baseline: {:?}",
+        both_report.violations
+    );
+}
+
+/// A source file ending in an unterminated block comment (no closing `*/`, no trailing newline)
+/// that swallows a multi-byte UTF-8 character must react 0/1/2 like any other source, never
+/// panic. The trigger's exact shape matters: `strip_comments_and_strings_tracked`'s block-comment
+/// loop stops peeking once fewer than two bytes remain, which — for an unterminated comment — can
+/// leave exactly one trailing byte unconsumed. When that byte is the orphaned tail of a multi-byte
+/// character whose lead byte(s) were already dropped inside the comment, the outer loop used to
+/// re-scan it as ordinary code and push it into `out` alone, an invalid UTF-8 fragment that
+/// `String::from_utf8_lossy` then *lengthened* (1 byte becomes the 3-byte U+FFFD replacement),
+/// desynchronizing the position map from the string it indexes into and panicking the next
+/// stage's `input_positions[i]` lookup.
+#[test]
+fn an_unterminated_block_comment_swallowing_a_multibyte_char_does_not_panic() {
+    let (result, violations) = run_module_check(
+        "unterminated-block-comment-multibyte",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\npub mod child;\n/* \u{672a}\u{5b8c}",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+            ("child.rs", "use crate::forbidden::Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "an unterminated block comment must not abort the scan: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::child");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// The identical defect, triggered on the crate root file directly (governed at `crate` rather
+/// than a submodule) with only a single `pub mod` before the unterminated comment, so the
+/// swallowed trailing byte lands at a different absolute offset — exercising the same code path
+/// from a second, independently-chosen position rather than only the sibling test's exact shape.
+#[test]
+fn an_unterminated_block_comment_at_end_of_file_with_no_trailing_newline_does_not_panic() {
+    let (result, violations) = run_module_check(
+        "unterminated-block-comment-eof",
+        &[
+            ("lib.rs", "pub mod child;\n/*\u{7121}"),
+            ("child.rs", "use crate::forbidden::Thing;\n"),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::child")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "an unterminated block comment must not abort the scan: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::child");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// A non-ASCII char literal immediately adjacent to a `'{'` literal (`['«','{']`, no space) must
+/// not leak `{` as a spurious structural brace into the cleaned text — which used to drop every
+/// later top-level `mod` from the reachable set, so a boundary anchored above the affected module
+/// silently passed a real forbidden import (exit 0 Clean on source `rustc` compiles as-is).
+#[test]
+fn a_non_ascii_char_literal_adjacent_to_a_brace_literal_does_not_leak_a_spurious_brace() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-no-space",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{ab}','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// The identical shape, but the boundary is anchored directly at the module the leak used to drop
+/// (`crate::hidden`) rather than above it. Before the fix this failed loud (exit 2, "module
+/// 'crate::hidden' is not found among the reachable modules") instead of silently passing — after
+/// the fix the module is genuinely reachable, so the boundary resolves and reacts normally.
+#[test]
+fn a_boundary_anchored_directly_at_the_previously_dropped_module_resolves() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-anchored-at-dropped",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{ab}','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::hidden")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "crate::hidden must be reachable, not a constitution error: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "crate::hidden");
+}
+
+/// The identical defect in its everyday form — a `match` arm pattern, not an array literal — one
+/// hop from the audit's original trigger shape, exercising the same lexer branch from different
+/// surrounding syntax. The pipe must sit with **no surrounding spaces** (`'é'|'{'`, matching the
+/// audit's exact citation) — a spaced pipe (`'é' | '{'`) inserts extra separator bytes between the
+/// misread closing quote and the next literal's opening quote, which happens not to collide with
+/// this exact defect and would silently test nothing (confirmed while writing this test: the
+/// spaced form passed even with the bug still present).
+#[test]
+fn a_non_ascii_char_literal_adjacent_to_a_brace_literal_in_a_match_arm_does_not_leak() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-match-arm",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\npub fn is_special(c: char) -> bool { match c { '\u{e9}'|'{' => true, _ => false } }\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// Control: the identical array literal but with a space inserted (`['«', '{']`) already worked
+/// correctly before this fix and must keep working — locks in that the fix does not regress the
+/// already-passing spelling.
+#[test]
+fn the_spaced_spelling_of_the_same_array_literal_already_reacts_and_keeps_reacting() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-with-space",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{ab}', '{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// A 4-byte scalar (an emoji) adjacent to `'{'` — added after an independent apply-stage review
+/// constructed this case and confirmed it fails without the fix, generalizing the defect beyond
+/// the 2/3-byte scalars the other tests exercise.
+#[test]
+fn a_four_byte_scalar_char_literal_adjacent_to_a_brace_literal_does_not_leak() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-four-byte-scalar",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{1f980}','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// Three char literals in a row, `['«','{','{']` — a cascading version of the two-literal defect:
+/// the misread first literal's closing quote can coincidentally swallow *each subsequent* literal's
+/// opening quote in turn (closing-quote, comma, opening-quote matches the old one-byte assumption
+/// every time), so a fix that only demonstrably closes the single-literal case could still leak a
+/// *second*, unmatched brace one hop further. Deliberately two unmatched `{` rather than a `{`/`}`
+/// pair: a leaked *matched* pair nets to zero depth change and was verified, while constructing
+/// this test, to pass even with the bug present — it doesn't actually corrupt the reachability
+/// walker's brace-depth tracking, so it would have been a vacuous regression test. Two unmatched
+/// opens do shift depth permanently, which is what a naive one-hop fix could still miss.
+#[test]
+fn two_unmatched_braces_cascading_from_chained_char_literals_do_not_leak() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-two-unmatched-cascade",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 3] = ['\u{ab}','{','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
 }

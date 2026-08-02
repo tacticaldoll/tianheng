@@ -73,6 +73,18 @@ A probe SHALL reference a seam that was declared and installed; referencing an *
 
 A reaction SHALL build a `xuanji::Violation` of kind **`Runtime`** (the shared measure: `target` = seam, `rule` = the allowlist rule, `finding` = offending origin + concrete type, with a severity) and by default **project it as a structured runtime event** (`Violation::to_json`) to a process-global **sink** the user can install (the system ships a default sink). A hard `panic` SHALL be **opt-in** (per boundary), never the default — a governance tool MUST NOT crash production on a false positive. A `warn`-severity boundary SHALL always be event-only.
 
+The shipped default sink writes to stderr and MUST NOT itself panic if that write fails (a closed
+or broken stderr — EPIPE on a closed pipe after its reader exits, EBADF on a closed fd) — the same
+no-panic invariant the sink protects on its happy path. A failed default-sink write SHALL instead
+increment a process-global, lock-free counter exposed as `dropped_sink_events() -> u64`, rather
+than silently discarding all trace of the loss, so an adopter who relies on the default sink (has
+never called `set_sink`) can detect from outside the process that an event went unobserved. The
+counter increment itself SHALL be infallible — a single atomic add, never a lock, never able to
+itself fail or panic — so closing this observability gap cannot reopen the panic risk it exists to
+avoid. A custom sink's own success or failure is opaque to the system (`set_sink` takes a
+`Fn(&Violation)` returning nothing) and is NOT counted — the counter is scoped to the shipped
+default sink only.
+
 #### Scenario: Default reaction emits an event, does not panic
 
 - **WHEN** a boundary with default posture reacts
@@ -87,6 +99,11 @@ A reaction SHALL build a `xuanji::Violation` of kind **`Runtime`** (the shared m
 
 - **WHEN** the user installs a custom sink and a boundary reacts
 - **THEN** the custom sink receives the `Violation`, not the default sink
+
+#### Scenario: A broken default-sink write is counted, not silently lost
+
+- **WHEN** no custom sink is installed and the default sink's write to stderr fails (a closed or broken stderr)
+- **THEN** the system does not panic, and `dropped_sink_events()` increases by exactly one for that violation
 
 ### Requirement: Production-light, lock-free hot path
 
@@ -292,24 +309,34 @@ constitution error. The walker SHALL remain louke-local, std-only, and audit-fea
 inputs SHALL remain accepted as the legacy recursive corpus for source compatibility.
 
 A `mod name;` whose conventional file (`name.rs` or `name/mod.rs`) cannot be resolved SHALL be a
-constitution error **unless** the declaration carries a `#[cfg(...)]` or `#[cfg_attr(...)]` gate, in
-which case the module may legitimately have no file in the current configuration (an off feature or
-another platform) and SHALL be skipped rather than errored — the same cfg-tolerance the semantic
-dimension applies, reimplemented louke-locally (三儀 ⊥ 三儀). This does not evaluate `cfg`: a
-*resolvable* cfg-gated module is still scanned and its probes still counted; only an *absent* file
-for a cfg-gated declaration is tolerated. A resolution ambiguity (both `name.rs` and `name/mod.rs`
-present) remains a constitution error regardless of any gate. A declaration written inside a
-**transparent control-flow macro arm** (`cfg_if!`) SHALL be reached by this walker and treated as
-**cfg-conditional**: the walker SHALL descend each arm of such an invocation as a transparent scope
-— with the enclosing module bases unchanged, since an arm adds no directory component the way an
-inline `mod` does — so an arm-declared `mod` enters the reachable corpus and its file's probes are
-counted, and an absent conventional file (or absent unconditional `#[path]` target) for it SHALL be
-tolerated exactly as under a bare `#[cfg]`, because the arm's predicate lives in the macro's
-`if #[cfg(..)]` header rather than on the item and every arm is conditionally compiled by
-construction. Arm membership SHALL NOT be inherited into an inline `mod { … }` body descended from
+constitution error **unless** the declaration carries a `#[cfg(...)]` gate (below the `mod` keyword
+and its name, comments permitted anywhere between them, never a reason the declaration goes
+unrecognized), in which case the module may legitimately have no file in the current configuration
+(an off feature or another platform) and SHALL be skipped rather than errored — the same
+cfg-tolerance the semantic dimension applies, reimplemented louke-locally (三儀 ⊥ 三儀). This does not
+evaluate `cfg`: a *resolvable* cfg-gated module is still scanned and its probes still counted; only
+an *absent* file for a cfg-gated declaration is tolerated. A resolution ambiguity (both `name.rs` and
+`name/mod.rs` present) remains a constitution error regardless of any gate. A declaration written
+inside a **transparent control-flow macro arm** (`cfg_if!`) SHALL be reached by this walker and
+treated as **cfg-conditional**: the walker SHALL descend each arm of such an invocation as a
+transparent scope — with the enclosing module bases unchanged, since an arm adds no directory
+component the way an inline `mod` does — so an arm-declared `mod` enters the reachable corpus and
+its file's probes are counted, and an absent conventional file (or absent unconditional `#[path]`
+target) for it SHALL be tolerated exactly as under a bare `#[cfg]`, because the arm's predicate lives
+in the macro's `if #[cfg(..)]` header rather than on the item and every arm is conditionally compiled
+by construction. Arm membership SHALL NOT be inherited into an inline `mod { … }` body descended from
 within an arm, matching the bare-`#[cfg]` case, and SHALL NOT make a resolution ambiguity tolerable.
 Without this, every probe beneath an arm-declared module was invisible — the coverage false negative
 this walker exists to prevent, reached through the module graph rather than the probe scan.
+
+The **only** legal non-inline `mod` form written inside a function or block body is one carrying
+`#[path]` (a bare `mod name;` there has no established file-path convention and does not compile) —
+the walker SHALL descend into **every** block scope (a fn/const/static body, a bare block, a match
+arm, or any other brace-delimited scope), not only the scopes it specifically recognizes, so this
+form is reached wherever Rust permits it. A `mod` found this way adds no directory component of its
+own (unlike a NAMED inline `mod x { … }`), so the enclosing file's own bases carry through unchanged;
+arm membership is inherited into a nested block the same way it already is into a directly
+arm-declared `mod`.
 
 A `mod name;` carrying an **unconditional** `#[path = "..."]` relocation SHALL be recognized
 **structurally** — an outer attribute whose meta name is exactly `path` followed by `=` and a string
@@ -324,10 +351,31 @@ undeclared-seam probe there is caught. A declaration whose preamble merely
 *contains* the text `path` — a `// fast path` comment, a `#[cfg(feature = "fastpath")]` gate — SHALL
 NOT be read as a relocation and SHALL resolve conventionally, so no reachable module is dropped by a
 false substring match (which would silently drop every probe beneath it — a coverage false negative,
-the worst outcome under FN-first). A `cfg_attr`-wrapped `#[path]` is cfg-conditional and SHALL NOT be
-followed — following it cfg-blind could read a file rustc does not compile in this configuration — so
-such a module is not counted (a stated bound); an absent target for it is tolerated like any cfg-gated
-module, while an absent target for an unconditional `#[path]` is a fail-loud constitution error.
+the worst outcome under FN-first). A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which file a
+given build compiles, but `cfg_attr` never removes the `mod` item the way a bare `#[cfg]` does — so
+its own target SHALL be followed too, resolved the identical way an unconditional `#[path]` is (from
+the containing file's own directory): EVERY such target that exists on disk SHALL be read, unioned
+with the conventional file if it too exists — cfg-blind observation cannot know which one a given
+build actually compiles, so neither is silently preferred over the other. A declaration MAY carry
+more than one SEPARATE `cfg_attr`-wrapped `#[path]` attribute (one per platform predicate); every one
+SHALL be extracted and unioned the same way. Absence SHALL be tolerated only when NEITHER any
+`cfg_attr` target NOR the conventional file resolves anywhere, and the declaration carries no other
+cfg-conditional gate (a bare `#[cfg]` or transparent-arm membership) — that combination is a
+genuinely broken reference on every configuration, so it SHALL still fail loud. A doubly-**nested**
+`#[cfg_attr(a, cfg_attr(b, path = "…"))]` is a stated, undetected bound of this hand-rolled scanner
+(unlike `hunyi`'s `syn`-based recursive resolution of the identical shape), never a silent claim of
+coverage.
+
+The identical union SHALL apply to a `cfg_attr`-wrapped `#[path]` on an **inline** `mod name { ... }`
+(a body, not a `;`-terminated declaration), where it governs the **base directory** `name`'s own
+nested items resolve from rather than a file to read (the body itself is already present in source
+regardless of which base applies). Each candidate base -- every `cfg_attr` target and the conventional
+directory -- SHALL be descended only when it exists as a directory; recursing into one that does not
+exist would spuriously fail loud on `name`'s other, unrelated nested items solely because one
+platform's directory happens to be absent, even when another candidate already backs them. If no
+candidate directory exists at all, the conventional base SHALL be descended anyway, so a nested
+reference genuinely broken on every platform still fails loud exactly as it did before this tolerance
+existed.
 
 #### Scenario: Orphan probe cannot cover a seam
 
@@ -379,11 +427,6 @@ module, while an absent target for an unconditional `#[path]` is a fail-loud con
 - **WHEN** a target root declares `mod inline { #[path = "other.rs"] mod inner; }`, `inline/other.rs` holds an undeclared-seam probe, and a same-named `other.rs` decoy sits beside the root
 - **THEN** the audit resolves `inner` to `inline/other.rs` (the enclosing inline-`mod` name accumulated onto the base, as rustc compiles it) and reports the undeclared-seam probe, never reading the `other.rs` decoy and returning Clean at exit 0
 
-#### Scenario: A cfg_attr-wrapped #[path] relocation is not followed
-
-- **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_seam.rs")] mod plat;` with no conventional `plat.rs`, where the relocated file would hold the only probe for a declared seam
-- **THEN** the cfg-conditional relocation is not followed (a stated bound, tolerated as a cfg-gated absence, not a constitution error) and the seam is reported unprobed — never a silent claim that a file rustc may not compile here is covered
-
 #### Scenario: A semicolon inside an earlier attribute's own string does not hide a later #[path]
 
 - **WHEN** a module declares `#[doc = "Handles A; falls back to B."]` immediately followed by an unconditional `#[path = "relocated.rs"] mod inner;`, and `relocated.rs` (not the conventional, absent `inner.rs`) holds a declared seam's probe
@@ -398,6 +441,31 @@ module, while an absent target for an unconditional `#[path]` is a fail-loud con
 
 - **WHEN** a direct caller passes a source directory instead of a target root file
 - **THEN** the audit retains the recursive directory scan and the caller requires no source change
+
+#### Scenario: A comment between mod and its name does not drop the module
+
+- **WHEN** a target root declares `pub mod /* relocated */ child;` (or `pub mod child /* relocated */;`) and `child.rs` holds a declared seam's probe
+- **THEN** the audit recognizes the declaration and counts the probe, rather than silently dropping the module and its whole subtree because the comment fell between the `mod` keyword and its terminator
+
+#### Scenario: A #[path] mod inside a function body reacts
+
+- **WHEN** a target root declares `pub fn f() { #[path = "inner.rs"] mod inner; }` and `inner.rs` holds an undeclared-seam probe
+- **THEN** the audit descends into the function body, recognizes the block-scoped `#[path] mod`, and reports the undeclared-seam probe — the only legal non-inline module form inside a block, previously invisible because every unrecognized brace was treated as one opaque, unwalked unit
+
+#### Scenario: Two cfg_attr-wrapped #[path] declarations covering every platform are scanned, not erred
+
+- **WHEN** a target root declares `#[cfg_attr(unix, path = "u.rs")]` and `#[cfg_attr(not(unix), path = "w.rs")]` on the same `pub mod plat;`, both `u.rs` and `w.rs` present, each holding a probe
+- **THEN** the audit reads both targets and counts their probes as coverage, rather than reporting a constitution error on source that compiles cleanly on every configuration
+
+#### Scenario: A missing cfg_attr target is tolerated when the conventional file backs the module
+
+- **WHEN** a target root declares `#[cfg_attr(windows, path = "win.rs")] pub mod plat;` with `win.rs` absent but the conventional `plat.rs` present, holding a declared seam's probe
+- **THEN** the audit reads the conventional file and counts its probe, tolerating the absent `cfg_attr` target rather than treating its absence alone as a constitution error
+
+#### Scenario: A cfg_attr-wrapped #[path] on an inline module redirects its own nested items
+
+- **WHEN** a target root declares `#[cfg_attr(unix, path = "unix_dir")] pub mod x { pub mod y; }` with `unix_dir/y.rs` present and holding a declared seam's probe, but the conventional `x/y.rs` absent
+- **THEN** the audit descends `y` from the `cfg_attr` target's directory and counts its probe, rather than reporting a constitution error against the absent conventional `x/y.rs`
 
 ### Requirement: An un-auditable probe's identity distinguishes distinct offending expressions
 
@@ -418,6 +486,22 @@ content distinguishes the two occurrences, so they represent the same restated f
 `module-boundary`'s "the same import on multiple lines is one violation" precedent), not two masked
 problems. Neither the enclosing-item qualification nor the expression text SHALL be derived from
 byte offset, line number, or occurrence count.
+
+The `file` component of this identity SHALL be labeled relative to the common ancestor of every
+source root passed to the enclosing `audit_probe_coverage` call, never the raw absolute filesystem
+path the scanner happened to read it from. An absolute path varies by checkout location (a different
+clone path, a different CI runner) even for byte-identical source, so baking it unconditionally into
+the identity would make a recorded baseline match nothing in any other checkout — the accepted
+violation re-fires as new while the recorded entry is simultaneously reported stale. Only when no
+root shares a common ancestor with the observed file SHALL the absolute form be used instead. A file
+reached only through an ABSOLUTE `#[path = "/…"]` literal is a stated, KNOWN residual gap to this
+rule, not yet closed: such a literal's target has no textual relationship to a given checkout's
+anchor unless it happens to lie under it, so its label MAY be the raw absolute path in one checkout
+and a relative-looking one in another for the identical committed literal — the identity can still
+disagree across checkouts for this one construct. The violation SHALL still react rather than being
+silently dropped either way. An absolute-literal `#[path]` is already a non-portable,
+machine-specific construct on its own, unlike the realistic relative sibling-share idiom this rule
+targets, which SHALL remain checkout-independent.
 
 #### Scenario: Same expression in two different free functions stays distinct
 
@@ -448,6 +532,25 @@ byte offset, line number, or occurrence count.
 
 - **WHEN** `assert_boundary!(SEAM_A, obj)` appears in `src/a.rs` and, separately, in `src/b.rs`
 - **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by file
+
+#### Scenario: The same source scanned from two different checkouts yields the identical identity
+
+- **WHEN** a byte-identical file containing a non-literal probe is scanned once from one absolute
+  checkout location and again from a different absolute checkout location (the same relocation a
+  different clone path or CI runner produces)
+- **THEN** `audit_probe_coverage` emits identical un-auditable-probe violation identities in both
+  runs, so a baseline recorded in one checkout remains valid in the other, rather than differing
+  only in the `file` field's absolute prefix
+
+#### Scenario: An absolute #[path] literal's target outside the anchor keeps its absolute label
+
+- **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target does not lie under the scanning checkout's own anchor, and its body contains a non-literal probe
+- **THEN** `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to the anchor
+
+#### Scenario: An absolute #[path] literal nested under the anchor still disagrees across checkouts (known residual gap)
+
+- **WHEN** the identical absolute `#[path = "/…"]` literal is committed into two different checkouts, and its target happens to lie under one checkout's own anchor but not the other's
+- **THEN** `audit_probe_coverage` emits DIFFERENT un-auditable-probe identities across the two checkouts (a relative-looking label in the one whose anchor matches, the raw absolute path in the other) — a known, not-yet-closed gap for this construct, deliberately not silently claimed as fixed
 
 ### Requirement: Un-auditable probe identity includes lexical ownership
 

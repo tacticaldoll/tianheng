@@ -223,6 +223,39 @@ hop and reacts. The subtraction is scoped to each module's own declared children
 walk, so the crate-root-vs-child distinction holds inside the closure exactly as it does for the
 direct head.
 
+This exclusion — at both the direct head and inside the closure, and on **both** halves named above
+— SHALL itself be **cfg-aware**: a same-named child `mod` declaration does NOT shadow a `pub use`
+re-export when the two are **provably mutually exclusive** under `#[cfg]`/`cfg_if!` — i.e. they can
+never both be present in any single compiled configuration, so the local module never actually wins
+name resolution over the extern prelude (nor the extern prelude's rename alias) for that `pub use`'s
+own build. "Provably mutually exclusive" covers exactly two syntactic shapes, proven without a
+general `cfg`-predicate satisfiability engine: (1) the `mod` and the `pub use` are two different
+arms of the IDENTICAL `cfg_if!` invocation (its arms are exclusive by construction — only one
+predicate in the `if`/`else if`/`else` chain is ever true); (2) each carries exactly one bare
+`#[cfg(...)]` attribute and the two predicates are syntactic negations of one another (`#[cfg(P)]`
+on one, `#[cfg(not(P))]` on the other, compared structurally — immune to a whitespace/formatting
+difference, not by source text). When either holds, the `mod`'s name is NOT subtracted from **either**
+the external-crate-name set **or** the crate-root rename map for that specific `pub use`'s own
+resolution, even though both declarations live in the same governed/defining module and the same
+crate-wide-closure pass observes both. The rename-map half is not a cosmetic mirror of the
+extern-name half: `extern_verbatim_renamed` (the resolver both the direct head and the closure use)
+checks the rename map **before** falling back to the extern-name set, and a rename alias (e.g. `wc`
+from `extern crate serde as wc;`) is never itself a member of the extern-name set — only the real
+crate name (`serde`) is. So leaving the rename-map half cfg-blind while fixing only the extern-name
+half would not merely under-shadow a rename-aliased re-export; it would drop its resolution outright,
+since the shadowed alias falls through to an extern-name-set fallback holding no candidate for it at
+all. Anything less syntactically direct than the two proven shapes above — unrelated predicates (e.g.
+`cfg(windows)` beside `cfg(target_os = "macos")`), arms of two *different* `cfg_if!` invocations, or
+more than one bare `#[cfg]` attribute stacked on either the `mod` or the `pub use` — SHALL remain the
+pre-existing cfg-blind default (the `mod` still shadows, on both halves): a stated, conservative
+residual bound, not a guess dressed as an observation. The **unconditional** case this requirement's
+own rustc rationale was written for — a `mod` and a `pub use` with no `#[cfg]` gating at all,
+genuinely compiled together in every build — is unaffected on either half: the shadow still applies
+exactly as before. A bare **type-position** head's own use of the rename map (see the rename
+requirement below) is a SEPARATE, narrower shadow (governed by `semantic-signature-coupling`'s own
+whole-type-namespace exclusion, not this re-export-only cfg-aware carve-out) and stays cfg-blind — an
+explicit, distinct non-goal, not an oversight this carve-out forgot.
+
 The system SHALL additionally apply a **source-level crate-root `extern crate X as Y;` rename**:
 a crate-root `extern crate` item with an `as`-rename binds `Y` crate-wide (the extern prelude),
 so a head `Y` SHALL be mapped to the real crate `X` **before** the external-crate check, resolving
@@ -332,6 +365,46 @@ governed source** (for a renamed dependency, the in-source name); **no DSL chang
 
 - **WHEN** the crate declares `wc = { package = "worklane_core" }` and a module declares `pub use wc::spi::Foo;`, under `must_not_expose("wc::spi")`
 - **THEN** the system reacts, matching the path as written (`wc`, from `.rename`); declaring the operand under the real crate name `worklane_core::spi` would not match — the stated as-written semantics
+
+#### Scenario: A mutually-exclusive bare-#[cfg] sibling module does not shadow the re-export
+
+- **WHEN** the governed module declares `#[cfg(unix)] mod serde;` and `#[cfg(not(unix))] pub use serde::Value;`, where `serde` is a declared dependency (and `src/<module>/serde.rs` exists, backing the `unix`-gated `mod`), under `must_not_expose("serde")`
+- **THEN** the system reacts, emitting `serde::Value exposed by pub use <module>::Value`: the `unix`-gated `mod serde` and the `not(unix)`-gated `pub use` are syntactic negations of one another and so provably never compile together, meaning the `mod` never actually shadows this `pub use`'s own build — unlike the unconditional case (no `#[cfg]` on either), where the identical pair genuinely coexists and the `mod` does shadow it
+
+#### Scenario: A mutually-exclusive cfg_if arm sibling module does not shadow the re-export
+
+- **WHEN** the governed module declares `cfg_if! { if #[cfg(unix)] { mod serde; } else { pub use serde::Value; } }`, `serde` a declared dependency, under `must_not_expose("serde")`
+- **THEN** the system reacts identically to the bare-`#[cfg]` form: the `mod` and the `pub use` are two arms of one `cfg_if!` invocation, provably never compiled together, so the `mod` does not shadow the `pub use`
+
+#### Scenario: A mutually-exclusive sibling module does not shadow a facade's extern re-export through the closure
+
+- **WHEN** `crate::a` declares `#[cfg(unix)] mod serde;` and `#[cfg(not(unix))] pub use serde::Value;` (`serde` a declared dependency), and the governed module `crate::domain` declares `pub use crate::a::Value;`, under `must_not_expose("serde")`
+- **THEN** the system follows the closure to `serde::Value` and reacts: `crate::a`'s own `mod serde` does not suppress `crate::a`'s genuine re-export inside the crate-wide closure either, matching the direct-head behavior for the identical mutually-exclusive pair — the facade does not silently canonicalize to nothing
+
+#### Scenario: An unconditional child module still shadows the re-export
+
+- **WHEN** the governed module declares `mod serde { … }` and `pub use serde::Value;` with **no** `#[cfg]` on either — the unconditional case this requirement's shadow rule was originally written for, both genuinely coexisting in every build — under `must_not_expose("serde")`
+- **THEN** the system does not react: the `mod` and the `pub use` compile together in every build, so the shadow applies exactly as it did before the cfg-mutual-exclusion carve-out — that carve-out narrows the shadow only for a provably-exclusive pair, never the unconditional case
+
+#### Scenario: A mutually-exclusive bare-#[cfg] sibling module does not shadow a rename-aliased re-export
+
+- **WHEN** a crate-root `extern crate serde as wc;` is declared, and the governed module declares `#[cfg(unix)] mod wc;` and `#[cfg(not(unix))] pub use wc::Value;`, under `must_not_expose("serde")`
+- **THEN** the system reacts, emitting `serde::Value exposed by pub use <module>::Value`: the `unix`-gated `mod wc` and the `not(unix)`-gated `pub use` are syntactic negations of one another and so provably never compile together, meaning the `mod` never shadows the rename alias `wc` for this `pub use`'s own build — the rename-map half of the shadow gets the identical carve-out the extern-name half does, not merely a weaker or absent one
+
+#### Scenario: A mutually-exclusive cfg_if arm sibling module does not shadow a rename-aliased re-export
+
+- **WHEN** a crate-root `extern crate serde as wc;` is declared, and the governed module declares `cfg_if! { if #[cfg(unix)] { mod wc; } else { pub use wc::Value; } }`, under `must_not_expose("serde")`
+- **THEN** the system reacts identically to the bare-`#[cfg]` form: the `mod` and the `pub use` are two arms of one `cfg_if!` invocation, provably never compiled together, so the `mod` does not shadow the rename alias `wc`
+
+#### Scenario: A mutually-exclusive sibling module does not shadow a facade's rename-aliased re-export through the closure
+
+- **WHEN** a crate-root `extern crate serde as wc;` is declared, `crate::a` declares `#[cfg(unix)] mod wc;` and `#[cfg(not(unix))] pub use wc::Value;`, and the governed module `crate::domain` declares `pub use crate::a::Value;`, under `must_not_expose("serde")`
+- **THEN** the system follows the closure to `serde::Value` and reacts: `crate::a`'s own `mod wc` does not suppress `crate::a`'s genuine rename-aliased re-export inside the crate-wide closure either, matching the direct-head behavior for the identical mutually-exclusive pair
+
+#### Scenario: An unconditional child module still shadows a rename-aliased re-export
+
+- **WHEN** a crate-root `extern crate serde as wc;` is declared, and the governed module declares `mod wc { … }` and `pub use wc::Value;` with **no** `#[cfg]` on either — both genuinely coexisting in every build — under `must_not_expose("serde")`
+- **THEN** the system does not react: the `mod` and the `pub use` compile together in every build, so the rename-alias shadow applies exactly as it did before the cfg-mutual-exclusion carve-out
 
 ### Requirement: A local facade chain of inline re-exports terminating at an extern type reacts
 

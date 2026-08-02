@@ -73,6 +73,22 @@ pub(crate) fn unsafe_crate_root_allowed_error(crate_package: &str) -> String {
     )
 }
 
+/// A forbidden/allowed operand's `::`-delimited spelling has an empty segment — a leading
+/// `::`, a trailing `::`, a doubled `::`, or the empty string. No canonical path this crate
+/// ever resolves carries one (`extern_verbatim_renamed` builds it purely from `syn::Path`
+/// segments, never consulting `leading_colon`, and rustc's own grammar forbids one in real
+/// source either), so an operand shaped this way could never equal or prefix-contain a real
+/// resolved path — the identical shape of problem `unsafe_empty_allowed_error` and
+/// `unsafe_crate_root_allowed_error` guard against for `unsafe`-confinement's own allowed set.
+pub(crate) fn malformed_path_operand_error(operand: &str) -> String {
+    format!(
+        "a forbidden/allowed operand must be a `::`-delimited path with no empty segment: \
+         '{operand}' has a leading, trailing, or doubled `::` (or is empty) — no resolved path \
+         this system ever produces carries one, so the boundary could never react to it; write it \
+         as a bare path instead (e.g. `serde`, not `::serde` or `serde::`)"
+    )
+}
+
 pub(crate) fn missing_module_file_error(module: &str, crate_package: &str) -> String {
     format!(
         "module '{module}' of crate '{crate_package}' is declared (`mod …;`) but its source file \

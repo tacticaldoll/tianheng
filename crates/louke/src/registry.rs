@@ -1,6 +1,7 @@
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use xuanji::{BoundaryKind, Polarity, Severity, Violation, ViolationId};
 
@@ -199,6 +200,11 @@ pub fn __react(seam: &'static str, type_id: TypeId) {
 #[allow(clippy::type_complexity)]
 static SINK: OnceLock<Box<dyn Fn(&Violation) + Send + Sync>> = OnceLock::new();
 
+/// Count of `Violation` events the shipped default sink has dropped because its write to
+/// stderr failed, with no custom sink installed to receive them instead. See
+/// [`dropped_sink_events`].
+static DROPPED_SINK_EVENTS: AtomicU64 = AtomicU64::new(0);
+
 /// Install the sink that receives runtime `Violation` events (a logger, an audit pipeline).
 /// Set once at startup; the default sink (used if none is installed) prints the violation as
 /// JSON to stderr.
@@ -211,6 +217,26 @@ where
     }
 }
 
+/// How many `Violation` events the shipped default sink has dropped, for the whole process
+/// lifetime, because its write to stderr failed (a closed pipe, a closed fd) while `set_sink`
+/// was never called to receive them instead. Always `0` unless that has actually happened.
+/// A single process-wide count across every seam — it tells an adopter *that* a drop
+/// happened, never *which* boundary's violation was lost; attributing drops per seam would
+/// need its own design, not a bare counter.
+///
+/// The default sink deliberately never panics on a broken pipe — the same
+/// no-panic-on-a-reaction invariant `Event` posture protects on the happy path — so without
+/// this counter a write failure would be silently and permanently unobservable. An adopter who
+/// ships the default sink can poll this into their own health check or diagnostics endpoint to
+/// detect that loss from outside the process. The increment that feeds this counter is a single
+/// lock-free atomic add: it cannot itself fail or panic, so exposing it cannot reopen the panic
+/// risk the silent-drop path exists to avoid. Scoped to the shipped default sink only — a custom
+/// sink's own success or failure is opaque to the system (`set_sink` takes a `Fn(&Violation)`
+/// returning nothing) and is never counted here.
+pub fn dropped_sink_events() -> u64 {
+    DROPPED_SINK_EVENTS.load(Ordering::Relaxed)
+}
+
 pub(crate) fn emit(violation: &Violation) {
     match SINK.get() {
         Some(sink) => sink(violation),
@@ -218,14 +244,24 @@ pub(crate) fn emit(violation: &Violation) {
         // the opt-in panic gate — so it must never itself panic. `eprintln!` panics if the stderr
         // write fails (a closed/broken pipe, `… 2>&1 | consumer` after the consumer exits), which
         // would crash the production process on a reaction — the exact failure the crate's
-        // no-panic-on-false-positive invariant forbids. Write directly and ignore a write error.
-        None => {
-            use std::io::Write;
-            let _ = writeln!(
-                std::io::stderr(),
-                "louke: runtime boundary violated\n{}",
-                xuanji::pretty_json(&violation.to_json())
-            );
-        }
+        // no-panic-on-false-positive invariant forbids. Write directly, and on failure count the
+        // drop (`dropped_sink_events`) rather than silently losing all trace of it — counting can
+        // never itself fail, so this keeps the same no-panic guarantee while making the loss
+        // observable from outside the process.
+        None => emit_default(std::io::stderr(), violation),
+    }
+}
+
+/// The default sink's write, isolated behind a generic writer so the dropped-event counting can
+/// be pinned with a writer that always fails, without touching the real process stderr.
+pub(crate) fn emit_default(mut w: impl std::io::Write, violation: &Violation) {
+    if writeln!(
+        w,
+        "louke: runtime boundary violated\n{}",
+        xuanji::pretty_json(&violation.to_json())
+    )
+    .is_err()
+    {
+        DROPPED_SINK_EVENTS.fetch_add(1, Ordering::Relaxed);
     }
 }

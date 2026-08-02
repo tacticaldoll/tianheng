@@ -19,10 +19,21 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   shipped and been tested since 0.2.3 with no requirement of their own: both forms present is an
   ambiguity constitution error (ahead of the absent-file tolerance, so a `#[cfg]`-gated-off
   declaration still reacts even though the crate compiles), an unconditionally absent file is a
-  constitution error, a bare `#[cfg]` tolerates absence, and a `#[cfg_attr]` wrapper does not. No
-  behavior change — the requirement truth catches up to the reaction.
+  constitution error, and a bare `#[cfg]` tolerates absence. No behavior change — the requirement
+  truth catches up to the reaction. (A `#[cfg_attr]` wrapper's own tolerance is specified by the
+  fix below in this same window, so it is stated there instead of restated here.)
 
 ### Fixed
+- 渾儀 now rejects a forbidden/allowed operand whose `::`-delimited spelling has an empty segment
+  (a leading `::`, a trailing `::`, a doubled `::`, or the empty string) as a constitution error,
+  across `must_not_expose`/`and_not_expose`, `must_not_expose_dyn_of`, `must_not_expose_impl_trait_of`
+  (module- and subtree-scoped alike), and `must_not_acquire`/`and_not_acquire`. `extern_verbatim_renamed`
+  builds a resolved canonical path purely from `syn::Path` segments — it never carries a leading `::`
+  regardless of how the scanned source is spelled — so an operand like `must_not_expose("::serde")`
+  could never equal or prefix-contain a real resolved path and silently, permanently never reacted;
+  `must_not_acquire`'s leaf-identifier matching has the mirror-image gap for a trailing `::`. No
+  existing usage in this repo used the malformed spelling, so this is a strict tightening of an
+  already-inert configuration, not an adopter-visible behavior change for any working boundary.
 - 漏刻's CI probe audit now reads the arms of a `cfg_if!` invocation as real code, in both of its
   passes, completing the family: all three dimensions now share one transparency rule and are pinned
   on one shared fixture (`cfg_if_transparency_conformance.rs`). Skipping such a body like any foreign
@@ -84,6 +95,211 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   圭表 and 漏刻 each already apply). A constitution error never enters a baseline; the repair is to
   delete whichever of the two files is not the module. All four outcomes of the lookup are now pinned
   across all three dimensions in `dual_backed_module_conformance.rs`.
+- **BREAKING**: 圭表's and 渾儀's violation identity now carries the crate a boundary was declared
+  against. Neither dimension's fact construction previously named the declaring crate — only a bare
+  module path — so two workspace members declaring the identical rule against the identical module
+  path collapsed into one `ViolationId`: the composed report silently dropped the second crate's real
+  violation, and a baseline accepted for one crate could suppress the other's never-accepted one (the
+  false negative PROJECT.md's Core Contract forbids outright). Every `ModuleFact` and `SemanticFact`
+  variant now carries a `governing_package` identity field equal to the boundary's declared crate
+  (`unsafe_confinement` excepted — its identity already varies by crate through `target`). **Any
+  existing `--write-baseline` output for a module or semantic boundary is now stale** (identity
+  gained a required field) and must be regenerated; every previously accepted violation reappears as
+  new exactly once. No DSL, builder, or CLI surface change — only the identity `fact` payload gains a
+  field.
+- 圭表's lexical hygiene no longer panics on a governed source file ending in an unterminated block
+  comment that swallows a multi-byte UTF-8 character. The comment-stripping pass could leave exactly
+  one trailing byte unconsumed when a comment never closed before EOF; if that byte was the orphaned
+  tail of a multi-byte character whose lead byte(s) were already dropped inside the comment, it was
+  re-scanned as code and pushed alone into the stripped buffer — an invalid UTF-8 fragment that
+  `String::from_utf8_lossy` then lengthened (one byte becomes the 3-byte U+FFFD replacement),
+  desynchronizing the position map from the string it indexes into and panicking the next stage's
+  lookup. An unterminated comment is now treated as extending through end-of-file, so nothing is left
+  to re-scan. Not a behavior an adopter could have depended on — a crash is none of PROJECT.md's Core
+  Contract outcomes (0 clean / 1 violation / 2 constitution error) — so no **BREAKING** marker.
+- 圭表 no longer silently passes a forbidden import when a non-ASCII char literal sits immediately
+  adjacent to a `'{'` char literal (e.g. `['«','{']`, no space) — the false negative the Core
+  Contract forbids outright. The lexer's "simple char literal" check assumed every char literal's
+  payload is exactly one byte, which holds for `'x'` but not a multi-byte UTF-8 scalar (`'«'` is 2
+  bytes, `'未'` is 3); for a non-ASCII literal the check failed and the scalar's raw bytes leaked
+  into the cleaned text as ordinary code. When a second literal followed closely enough, the misread
+  literal's real closing quote, an intervening comma, and the next literal's real opening quote could
+  coincidentally match the old one-byte assumption exactly, swallowing that opening quote too — which
+  left the next literal's own payload (here, `{`) unprotected, leaking it into the cleaned text as a
+  spurious structural brace and throwing off the reachability walker's brace-depth tracking for every
+  `mod` declared after it. The check now measures a char literal's real UTF-8 byte length from its
+  lead byte rather than assuming one. Not breaking — this closes a false negative against
+  `module-boundary`'s already-stated import-detection contract; no baseline identity shape changes.
+- 渾儀's signature-coupling query now observes a `pub fn`/`pub static` declared inside an `extern`
+  block — the FFI declaration is a real, callable item in the enclosing module's own namespace,
+  exactly as public as a same-shaped ordinary item, but the exposure collector had no
+  `ForeignMod` handling at all, so a forbidden type named only there escaped the query entirely
+  (exit 0 Clean on source with a real, callable public API leak). Reuses the existing seam/path-
+  collection machinery verbatim — no new seam kind, since Rust cannot declare both an ordinary item
+  and a foreign one under the same name in one module, so there is no identity collision to design
+  around. Not breaking — closes a false negative; no baseline identity shape changes.
+- 渾儀's visibility-boundary query (`must_not_declare_pub` / `max_visibility`) now observes a `pub
+  fn`, `pub static`, or `pub type` declared inside an `extern` block — the sibling gap the
+  signature-coupling fix above did not touch, since the two capabilities collect a module's direct
+  items through entirely independent per-item logic (`collect_item_exposures` vs.
+  `item_observation_parts`), sharing only the underlying module-item enumerator. A bare-`pub` foreign
+  item is exactly as visible as a same-shaped ordinary one, but `item_observation_parts` had no
+  `ForeignMod` arm at all, so an `extern` block's declarations were silently absent from the
+  module's observed direct items regardless of their declared visibility (exit 0 Clean on a module
+  whose only bare-`pub` item sat inside an `extern` block). `pub type` (an extern type declaration)
+  is included here though it carried no exposable signature and so was out of the
+  signature-coupling fix's own scope — this capability cares about the declared keyword, not a
+  type-signature leak. Reuses the existing `Fn`/`Static`/`Type` visibility kinds verbatim, no new
+  kind, for the identical no-identity-collision reason as the sibling fix. `item_observation`
+  widens from `Option` to `Vec` (an `extern` block can hold more than one independently-visible
+  foreign item, unlike every other observed item kind), with its one call site updated accordingly.
+  Not breaking — closes a false negative; no baseline identity shape changes.
+- 渾儀's shared `use`-map and re-export closure no longer silently drop one candidate when two
+  mutually-exclusive `#[cfg]` branches (bare `#[cfg]` or `cfg_if!` arms alike) declare `use ... as
+  Name;` (or `pub use ... as Name;`) for the identical name with different targets. Both were
+  single-valued (`HashMap<String, String>`), so the second declaration always overwrote the first —
+  the verdict for a real forbidden-type exposure depended on which mutually-exclusive branch was
+  written last, not on whether either branch's binding was genuinely forbidden. Both maps are now
+  multi-valued (mirroring the crate's existing type-alias map). Every matcher that consumes them now
+  checks every candidate and reacts if any is forbidden, not only signature-coupling's exposure
+  resolution and dyn-trait's/impl-trait's shared operand-scoped principal-trait resolver (discovered
+  to have the identical gap while fixing this): an adversarial review of the fix itself found the
+  same order-dependent silent pass still reachable through forbidden-marker's derive and impl-form
+  leaf matching, its self-type/marker-acquisition landing (through a third, previously single-valued
+  type-alias map), and trait-impl-locality's anchor resolution — each independently reproduced before
+  being closed here too. Not breaking — closes false negatives; no baseline identity shape changes.
+- 渾儀's crate-wide scan no longer drops a module reached only through a `cfg_attr`-wrapped `#[path]`
+  remap. `cfg_attr` never removes the `mod` item the way a bare `#[cfg]` does, so the module is
+  present on every configuration and needs SOME file to back it — treating the attribute as a blanket
+  skip bound dropped the whole subtree, not just the alternate target its predicate might select. Two
+  shapes: an **inline** module's body is unaffected by `#[path]` at all (rustc ignores it there; the
+  body always compiles) and is now always descended; a **file** module's conventional file and its
+  `cfg_attr` target are both read when they exist on disk, unioned rather than either being silently
+  preferred — matching 圭表's own already-fixed union-scan policy for the identical shape. Neither
+  candidate existing, with no other cfg-conditional gate, remains a genuine scan error. Since the
+  crate-wide scan backs signature-coupling's own alias/re-export closure and dyn-trait's/impl-trait's
+  shared operand-scoped principal-trait resolver, not only forbidden-marker, trait-impl-locality, and
+  unsafe-confinement (the two capabilities the discovering findings measured against), and since
+  async-exposure's and impl-trait's own subtree-scope opt-in (`including_submodules()`) shares the
+  identical walker one hop further out (found on adversarial review), all seven were independently
+  reproduced and confirmed fixed by this one change. `module_resolve.rs`'s separate single-module-
+  anchor resolution (signature-coupling's own anchor, visibility, dyn-trait's shape-only module-scoped
+  resolution, and trait-impl-exposure) gets the identical fix: a third adversarial review disproved
+  this change's own earlier claim that the function was "already correct, fails loud" — a mutually-
+  exclusive sibling declaration for the same module name silently absorbed the branch count, so the
+  `cfg_attr` target's own file vanished with exit 0 whenever ANY sibling resolved, and even a LONE
+  such declaration never followed an existing target file at all. Now it does, the same union as the
+  crate-wide walk. A fourth review then found one more gap shared by both walkers: a module stacking
+  more than one SEPARATE `cfg_attr`-wrapped `#[path]` attribute (one per platform predicate — the
+  natural 3+-way per-platform shim) only ever had its first-declared candidate tried; every other
+  platform's target silently never was. Every stacked candidate is now read. Not breaking — closes
+  false negatives; no baseline identity shape changes.
+- 漏刻's CI-face audit scanner no longer drops a module whose declaration carries a comment between
+  the `mod` keyword and its name (or between the name and its terminator) — trivia to rustc, but a
+  bare whitespace-only skip stopped at the comment's leading `/`, so the declaration was never
+  recognized as a `mod` at all: the module and its whole subtree, and every probe beneath it,
+  silently vanished from the corpus. It also now descends into every function/block/match-arm body
+  looking for a nested `mod`, not only the scopes it specifically recognized — the only legal
+  non-inline module form there, `#[path] mod name;`, was previously invisible with no loud signal at
+  all. And `mod_preamble_attrs`'s documented `cfg_attr(path)` tolerance is now actually implemented:
+  the attribute match previously checked for the exact identifier `cfg`, so `cfg_attr` — a different
+  identifier — matched neither the `path` arm nor the `cfg` arm, and a module stacking two
+  `cfg_attr`-wrapped `#[path]` declarations that together cover every platform (both targets present,
+  compiling cleanly everywhere) was reported a hard constitution error instead of being scanned — a
+  false positive on entirely valid code. Every `cfg_attr` target that exists on disk is now read,
+  unioned with the conventional file, matching the crate-wide walk 圭表 and 渾儀 both already apply to
+  the identical shape; the same union now also applies to a `cfg_attr`-wrapped `#[path]` on an
+  *inline* `mod x { … }` (governing the base directory x's own nested items resolve from, descended
+  only when it exists as a directory, falling back to the conventional base when none does) — an
+  adversarial review round found the first cut had wired the union into only the external-`mod x;`
+  consumer. A doubly-nested `cfg_attr(cfg_attr(path))` remains a stated, undetected bound of this
+  hand-rolled scanner. Not breaking — closes false negatives and one false positive, not an identity
+  shape; no baseline identity shape changes.
+- 圭表's own module-boundary reachability walk no longer requires a plain conventional file
+  (`name.rs` / `name/mod.rs`) for a declaration backed only by one or more `cfg_attr(path)`
+  remaps. A resolved `cfg_attr(path)` candidate was already union-scanned for governance, but the
+  separate plain-file requirement ran unconditionally regardless: a module stacking two
+  `cfg_attr`-wrapped `#[path]` attributes that together cover every platform (both targets
+  present, no plain file ever needed) was reported a hard constitution error — "source file could
+  not be located" — instead of being governed, a false positive on entirely valid code, and not
+  specific to "stacked": a single `cfg_attr(path)` target with no plain fallback hit the same
+  error. A resolved candidate is now treated as legitimate grounds for the plain file's own
+  absence, the same "might legitimately be absent on this build" signal a bare `#[cfg]` or a
+  `cfg_if!` arm already carries — matching 渾儀's/漏刻's own `has_backing_source` rule for the
+  identical shape (三儀 ⊥ 三儀: the same rule, not the same function). Two outcomes stay exactly as
+  strict as before: both conventional forms present is still an unconditional ambiguity error
+  regardless of any resolved candidate, and a declaration whose every candidate is absent (no
+  plain file, no resolved `cfg_attr(path)` target, no bare `#[cfg]`) is still a genuine
+  constitution error. Not breaking — closes a false negative; no baseline identity shape changes.
+- `deny.toml`'s `[advisories]` table now sets `yanked = "deny"` explicitly: the field's own unset
+  default is `"warn"`, so `cargo deny check` was printing `warning[yanked]: detected yanked crate`
+  and still exiting 0 (`advisories ok`) — reproduced against a real yanked crate pinned into the
+  lockfile — directly contradicting the section's own stated claim that yanked crates are denied.
+  `scripts/test_examples.sh` now asserts (`cargo tree -p <crate> --depth 0`) that every example's
+  `patch.crates-io` override actually resolved to local source, for every family crate it patches:
+  reproduced against a version-bumped scratch copy of the workspace, Cargo was silently dropping an
+  incompatible patch (`patch ... was not used in the crate graph`) and falling back to the last
+  published crate, so the dogfood gate stayed green while silently testing stale, already-published
+  code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
+  gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
+  present in the current workspace, so this has no effect on the present green build.
+- **BREAKING**: 漏刻's un-auditable-probe identity no longer embeds a raw absolute filesystem path.
+  Reproduced directly: scanning the byte-identical file at two different absolute locations (the
+  same relocation a different clone path or CI runner produces) yielded two DIFFERENT
+  `unauditable-probe` identities, differing only in the `file` field's absolute prefix — a baseline
+  recorded in one checkout matched nothing in another, so the accepted violation re-fired as new
+  while the recorded entry was simultaneously reported stale. `file` is now labeled relative to the
+  common ancestor of every `source_inputs` root passed to one `audit_probe_coverage` call (the real
+  caller's actual checkout root, by construction — every workspace member's root shares it, whatever
+  the invocation's working directory), falling back to the previous absolute form only when no
+  shared ancestor exists at all. No public function signature changed. **Any existing
+  `--write-baseline` output naming an `unauditable-probe` violation is now stale** (its `file` field's
+  value changed shape) and must be regenerated; every previously accepted one reappears as new
+  exactly once. Stated bound: an ABSOLUTE `#[path = "/…"]` literal is a known residual gap, not fully
+  closed by this fix — when its target does not lie under the scanning checkout's own anchor, the
+  label falls back to the raw absolute path (`Path::join` discards its receiver for an absolute
+  joinee); when it happens to lie under the anchor, the label becomes relative-looking instead, so
+  the SAME hardcoded literal can still disagree across two checkouts. An absolute literal is already
+  non-portable on its own; the realistic relative sibling-share idiom this fix targets is
+  unaffected either way.
+- 渾儀's trait-impl-exposure `where`-clause bounded-type seam no longer keys an unrenderable bound
+  (a complex const-generic argument, e.g. `Arr<{ N + 1 }>`) to the bare literal `_`. Reproduced
+  directly: one impl block with two where-clause bounds that both fail to render
+  (`Arr<{ N + 1 }>: AsRef<crate::infra::Secret>` and `Arr<{ N + 2 }>: AsRef<crate::infra::Secret>`)
+  both fell back to `_`, so the two bounds' facts — identical kind, subject, and seam — collapsed
+  to one; the two-bound fixture and either bound alone produced the byte-identical finding, meaning
+  the second bound's violation left no trace a baseline could ever distinguish from the first. The
+  fallback is now an internal positional sentinel (never itself published), caught by the existing
+  fail-loud gate this capability already applies to its structurally identical cases (an
+  unrenderable Self type or trait path), so an impl with this shape now reports a constitution error
+  instead of silently under-counting its violations. A where-clause bound that renders cleanly (the
+  ordinary case) is unaffected.
+- 渾儀 now observes an `impl` block written as a direct statement of a `const` initializer's or a
+  `fn`'s own body — the "const-eval trick" idiom (`const _: () = { impl Foo { … } };`, commonly used
+  for a compile-time trait assertion or a doctest/dogfooding scratch impl) and its fn-body-nested
+  sibling — instead of treating the whole body as opaque. Closes a false negative measured directly
+  on ordinary, compilable source across six capabilities: signature-coupling, async-exposure,
+  dyn-trait, and impl-trait all missed an inherent impl's method the moment its enclosing `impl`
+  moved into such a body, and trait-impl-locality and forbidden-marker's hand-impl form both missed
+  a trait impl the same way — the identical method or impl that reacted at a module's top level
+  produced zero findings once wrapped, even though Rust binds an `impl` to its self type's coherence
+  set regardless of where it is lexically written, so the wrapped impl was always real, externally
+  callable public API. Three bounds are stated rather than left silent: only an `impl` block is
+  recovered (a plain `fn`/`struct`/`mod` nested the same way stays exactly as unobserved as the
+  existing body-nested-module bound already treats it); only an `impl` that is a DIRECT statement of
+  the body's own outermost block is recovered, never one nested a level further (inside an
+  `if`/`loop`/closure/nested `fn`); and only a `const` initializer or a `fn` body is inspected, never
+  a `static` initializer. New violations are ordinary findings and absorbable by baseline.
+- 漏刻's shipped default sink no longer silently discards a failed stderr write. An adopter who
+  never calls `set_sink` — the exact adopter the default sink exists for — lost an enforce-severity
+  `Violation` with zero trace whenever the write failed (a closed pipe after `myapp 2>&1 | consumer`
+  exits, a daemon with closed inherited fds, or plainly `myapp 2>&-`): the process correctly did not
+  crash, but nothing recorded that the reaction had even fired. A failed write is now counted by a
+  new public `louke::dropped_sink_events() -> u64`, a single lock-free atomic add that cannot itself
+  fail or panic, so an adopter can poll it into their own health check or diagnostics endpoint to
+  detect the loss from outside the process. Scope stays narrow: a custom sink's own success or
+  failure is opaque to the system (`set_sink` takes a `Fn(&Violation)` returning nothing) and is
+  never counted. Additive, non-breaking — the only public surface change is the new function.
 
 ## [0.3.0] - 2026-07-26
 

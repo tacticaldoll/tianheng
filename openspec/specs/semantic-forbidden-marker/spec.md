@@ -3,9 +3,7 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's forbidden-marker capability: types **defined in a governed module subtree** must not acquire a forbidden trait — observed as a `#[derive(T)]` on the type or a hand `impl T for X` (anywhere in the crate) whose self-type resolves to a definition under the subtree. It delivers the "this layer is not `T`-able" intent (both idiomatic acquisition forms), the forbidden-marker complement to exposure, impl-locality, and visibility. Matching is by leaf identifier (no false negative across the derive-macro/trait path split); the forbidden-attribute slice stays deferred.
-
 ## Requirements
-
 ### Requirement: Forbidden-marker boundary declared in Rust
 
 A forbidden-marker boundary SHALL be expressed as Rust code and is part of the single source of truth. A `ForbiddenMarkerBoundary` SHALL name a target crate, a governed **module subtree** (a module-path prefix), a forbidden-trait set (one or more trait names/paths), a human-readable reason, and a severity. The system MUST NOT require TOML, YAML, Markdown, or any generated policy file.
@@ -63,9 +61,14 @@ The system SHALL react when a governed type acquires a forbidden trait by **eith
 - **WHEN** a governed type derives or impls only traits not in the forbidden set
 - **THEN** the system reports no violation
 
+#### Scenario: A type-alias landing reached through a mutually-exclusive cfg-gated use alias reacts
+
+- **WHEN** an impl site declares `#[cfg(unix)] use crate::domain::Order as Y; #[cfg(not(unix))] use crate::domain::NotOrder as Y; type X = Y; impl serde::Serialize for X {}`, where `Order` is a subtree-defined type and `NotOrder` is not defined anywhere, under a boundary forbidding `serde::Serialize` on the subtree, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — every landing candidate for `X` is checked against the defined/under-subtree gate, so the genuinely governed candidate (`Order`) is never dropped in favor of the undefined one (`NotOrder`) merely because it was declared first
+
 ### Requirement: Trait matching by leaf identifier
 
-A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). The compared leaf is taken from the path **resolved through the acquisition site's `use`-map**, so a locally renamed trait or derive — `use serde::Serialize as Ser; impl Ser for …` or `#[derive(Ser)]` — resolves to its true leaf `Serialize` and reacts (a local rename is observable, so a missed one would be a false negative); a path that does not resolve locally — a bare/prelude name or a cross-crate path — falls back to its **written** leaf, keeping the match cross-crate-blind (the derive-macro-crate path `serde_derive::Serialize` still matches by the leaf `Serialize`). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug.
+A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). The compared leaf is taken from the path **resolved through the acquisition site's `use`-map**, so a locally renamed trait or derive — `use serde::Serialize as Ser; impl Ser for …` or `#[derive(Ser)]` — resolves to its true leaf `Serialize` and reacts (a local rename is observable, so a missed one would be a false negative); a path that does not resolve locally — a bare/prelude name or a cross-crate path — falls back to its **written** leaf, keeping the match cross-crate-blind (the derive-macro-crate path `serde_derive::Serialize` still matches by the leaf `Serialize`). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug. When the acquisition site's `use`-map resolves the derive/trait name to **more than one** candidate — a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name — every candidate's leaf SHALL be checked and the match SHALL react if any candidate's leaf matches, never silently keeping only the leaf of whichever declaration was written last (observation cannot know which `#[cfg]` branch is live). A forbidden entry whose **leaf itself would be empty** — a trailing `::` (`"serde::"`), a doubled `::`, or the empty string — SHALL be rejected as a constitution error rather than silently compared: leaf-identifier matching is immune to a *leading* `::` (`leaf_of("::serde::Serialize")` is still the real leaf `Serialize`), but not to a *trailing* one, since no real identifier is ever empty and such an entry could therefore never match anything, in the same silent-pass class signature-coupling's own forbidden-operand validation closes for its own (full-path) matching mechanism.
 
 #### Scenario: A derive-macro-crate path still reacts
 
@@ -82,9 +85,24 @@ A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so 
 - **WHEN** `crate::domain::order` declares `use serde::Serialize as Ser; #[derive(Ser)] pub struct Order;` (or a hand impl `impl Ser for crate::domain::Order`) under a boundary forbidding `serde::Serialize` on `crate::domain`
 - **THEN** the system resolves `Ser` through the module's `use`-map to `serde::Serialize` and reacts by the leaf `Serialize` (the finding renders the written spelling, `derive Ser on crate::domain::order::Order`), rather than silently passing the rename
 
+#### Scenario: Two mutually-exclusive cfg-gated use aliases for a derive or trait name both react
+
+- **WHEN** a governed type's module declares `#[cfg(unix)] use bad::Marker as M; #[cfg(not(unix))] use good::NotBad as M;` and derives `#[derive(M)]` (or an impl site declares the identical alias collision and writes `impl M for <the type>`), under a boundary forbidding `bad::Marker`, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — the verdict never depends on source order
+
+#### Scenario: A trailing-`::` forbidden entry is a constitution error
+
+- **WHEN** a boundary declares `must_not_acquire("serde::")` (trailing `::`)
+- **THEN** the system reports a constitution error (exit 2), rather than silently reporting the boundary satisfied — the computed leaf would be empty and could never match a real identifier
+
+#### Scenario: A leading-`::` forbidden entry is rejected for DSL-wide consistency, not because it would mismatch
+
+- **WHEN** a boundary declares `must_not_acquire("::serde::Serialize")` (leading `::`) against a type deriving `#[derive(serde::Serialize)]`
+- **THEN** the system reports a constitution error (exit 2) — leaf-identifier matching alone would tolerate a leading `::` (`leaf_of` still yields `Serialize`), but the operand is rejected anyway, for consistency with every other forbidden/allowed-operand-shaped DSL method in this family, none of which assigns the leading-`::` spelling a meaning distinct from the bare form
+
 ### Requirement: Anchor resolution and observation bounds
 
-If the boundary's target crate is absent from the workspace, the system SHALL treat it as a constitution error (exit 2). An acquisition the syntactic scan cannot observe — a derive/impl produced by a macro, a module reached only through a `cfg_attr`-wrapped `#[path]` remap (an **unconditional** `#[path = "…"]` module IS followed and observed), or a hand-impl whose self-type cannot be resolved to a subtree definition (a glob/external/complex-generic self-type) — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction; `#[cfg]`-gated code is observed as written. A `#[derive(...)]` whose arguments fail to parse SHALL be a scan error (exit 2), never a silent skip. Within the observed scope there SHALL be no false negative.
+If the boundary's target crate is absent from the workspace, the system SHALL treat it as a constitution error (exit 2). An acquisition the syntactic scan cannot observe — a derive/impl produced by a macro, or a hand-impl whose self-type cannot be resolved to a subtree definition (a glob/external/complex-generic self-type) — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction; `#[cfg]`-gated code is observed as written. A module reached only through a `cfg_attr`-wrapped `#[path]` remap IS followed: an inline body regardless of the attribute (which has no effect on an inline module's content), and a file module's conventional file and its `cfg_attr` target both read when they exist on disk, a cfg-blind union rather than a skip bound — matching the already-followed **unconditional** `#[path = "…"]` form. A `#[derive(...)]` whose arguments fail to parse SHALL be a scan error (exit 2), never a silent skip. Within the observed scope there SHALL be no false negative.
 
 #### Scenario: An unresolvable hand-impl self-type is a documented bound
 
@@ -105,6 +123,11 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 
 - **WHEN** a module declares an impl whose self type is a QUALIFIED path dependent on the impl's own generic parameter (`impl<T: HasItem> Marker<T> for <T>::Item {}`) and ALSO declares an unrelated `use <some path> as Item;` naming a real subtree-defined type
 - **THEN** the system does not react — a qualified-path self type is never a placeable nominal path (its own dependent type lives outside the path's segments entirely, so no bare-segment shadow check alone can recognize it), so it is dropped before any resolution is attempted, never resolved through the alias merely because the projection's trailing segment shares the identifier `Item`
+
+#### Scenario: A cfg_attr-wrapped-path module's derive or impl is followed, whichever candidate exists
+
+- **WHEN** a governed module is declared only via `#[cfg_attr(any(), path = "never.rs")] pub mod domain;` with `domain.rs` (the conventional file, present) declaring `#[derive(serde::Serialize)] pub struct Order;` and `never.rs` (the target) absent, under a boundary forbidding `serde::Serialize`
+- **THEN** the system reads `domain.rs` — the file every build actually compiles here — and reacts, never treating the `cfg_attr` attribute as a bound to skip the module outright
 
 ### Requirement: CI reaction, severity, and baseline parity
 
@@ -138,3 +161,23 @@ NOT define identity.
 #### Scenario: Different acquisitions stay distinct
 - **WHEN** two forbidden acquisitions differ by form, marker, module, or owner
 - **THEN** their structured facts differ in that observed role
+
+### Requirement: A hand-impl nested in a const or fn body is observed
+
+The system SHALL observe the hand-`impl T for X` acquisition form when the `impl` is written as a direct statement of the outermost body of a `const` initializer (a bare `{ … }` block expression) or of a `fn`'s own body — the "const-eval trick" idiom and its fn-body-nested sibling, the identical shape `semantic-trait-impl-locality` states this property for, since both capabilities read the crate-wide `impl` collection this requirement's observation is drawn from. Recovery carries the identical bounds: only an `impl` that is a DIRECT statement of the `const`/`fn`'s own outermost block is recovered — one level further in, or a `static` initializer, is NOT — stated rather than left silent.
+
+#### Scenario: A const-wrapped hand-impl reacts
+
+- **WHEN** `crate::wire` declares `const _: () = { impl serde::Serialize for crate::domain::Order {} };` under a boundary forbidding `serde::Serialize` on `crate::domain`, and `Order` is defined under that subtree
+- **THEN** the system emits a violation identifying `impl serde::Serialize for crate::domain::Order in crate::wire`, rather than reporting zero findings because the impl sits inside a const initializer
+
+#### Scenario: A fn-body-wrapped hand-impl reacts
+
+- **WHEN** `crate::wire` declares `fn _also() { impl serde::Serialize for crate::domain::Order {} }` under the identical boundary
+- **THEN** the system emits the identical violation, rather than reporting zero findings because the impl sits inside a fn body
+
+#### Scenario: An impl nested one level further, or static-wrapped, is a stated bound
+
+- **WHEN** the hand-impl is written one level further inside the body (inside an `if`/`loop`/closure/nested `fn`), or the wrapping binding is a `static` rather than a `const`
+- **THEN** the system does not claim to observe it, a stated coverage bound shared with `semantic-trait-impl-locality`'s identical bound on the same underlying observation, rather than a silent claim of cleanliness
+

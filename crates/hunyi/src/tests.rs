@@ -245,7 +245,7 @@ fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
                 name: "f".to_string(),
             },
         }
-        .into_finding();
+        .into_finding("app");
         Violation::new(
             BoundaryKind::Semantic,
             ViolationId::new(
@@ -899,15 +899,15 @@ fn a_type_reached_through_a_reexported_module_facade_reacts() {
 fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
     // Termination guaranteed: a reexport map entry whose alias key is a strict
     // `::`-prefix of its own value — the shape a same-name nested re-export (`pub use self::x::x;`)
-    // yields — made `rewrite_longest_prefix` re-fire on its own monotonically-growing output; the
+    // yields — made the longest-prefix rewrite re-fire on its own monotonically-growing output; the
     // exact-repeat `seen` guard never fires on a never-repeating sequence, so the tool hung / OOMed.
     // The hop cap now bounds the fixpoint regardless of map contents (this exercises the cap
     // directly, bypassing the build-time guard).
-    use crate::resolve::{ReexportMap, canonicalize_through_reexports};
+    use crate::resolve::{AliasMap, ReexportMap, expand_canonical_paths};
     let mut map = ReexportMap::new();
-    map.insert("crate::a".to_string(), "crate::a::b".to_string());
+    map.insert("crate::a".to_string(), vec!["crate::a::b".to_string()]);
     // Before the fix this never returned; the assertion is simply that it TERMINATES.
-    let out = canonicalize_through_reexports("crate::a::foo", &map);
+    let out = expand_canonical_paths("crate::a::foo", &AliasMap::new(), &map);
     assert!(
         !out.is_empty(),
         "canonicalization must terminate on a key⊂value reexport entry: {out:?}"
@@ -917,20 +917,23 @@ fn a_reexport_whose_key_prefixes_its_value_does_not_diverge() {
 #[test]
 fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value() {
     // The sibling of the reexports test above, at `resolve_self_type`'s own resolver: before it
-    // was routed through the shared, hop-capped `canonicalize_through_aliases`, its hand-rolled
-    // outer loop re-ran the (already-capped) inner `canonicalize_through_reexports` call every
-    // iteration, so a key⊂value reexport entry made the outer `landing` grow by a bounded amount
-    // each iteration, never exactly repeating — the outer exact-repeat `seen` guard alone could
-    // not catch that. The assertion is simply that this terminates.
+    // was routed through the shared, hop-capped `expand_canonical_paths`, its hand-rolled outer
+    // loop re-ran an already-capped inner reexport-only fixpoint every iteration, so a key⊂value
+    // reexport entry made the outer `landing` grow by a bounded amount each iteration, never
+    // exactly repeating — the outer exact-repeat `seen` guard alone could not catch that. The
+    // assertion is simply that this terminates.
     use crate::containment::resolve_self_type;
-    use crate::resolve::{ReexportMap, UseMap};
+    use crate::resolve::{AliasMap, ReexportMap, UseMap};
     use std::collections::HashSet;
 
     let self_ty: syn::Type = syn::parse_str("Foo").unwrap();
     let uses = UseMap::new();
-    let aliases = std::collections::HashMap::new();
+    let aliases = AliasMap::new();
     let mut reexports = ReexportMap::new();
-    reexports.insert("crate::a::Foo".to_string(), "crate::a::Foo::b".to_string());
+    reexports.insert(
+        "crate::a::Foo".to_string(),
+        vec!["crate::a::Foo::b".to_string()],
+    );
     let landing = resolve_self_type(
         &self_ty,
         &uses,
@@ -940,7 +943,7 @@ fn resolve_self_type_does_not_diverge_on_a_reexport_whose_key_prefixes_its_value
         &HashSet::new(),
     );
     assert!(
-        landing.is_some(),
+        !landing.is_empty(),
         "canonicalization must terminate on a key⊂value reexport entry: {landing:?}"
     );
 }
@@ -1020,7 +1023,7 @@ fn self_growing_reexport_prefix_loop_terminates_without_hanging() {
 
     // A self-similar re-export entry `crate::a -> crate::a::b` creates a self-growing path chain:
     // crate::a::foo -> crate::a::b::foo -> crate::a::b::b::foo -> ...
-    reexports.insert("crate::a".to_string(), "crate::a::b".to_string());
+    reexports.insert("crate::a".to_string(), vec!["crate::a::b".to_string()]);
 
     let res = expand_canonical_paths("crate::a::foo", &aliases, &reexports);
     assert!(
@@ -1944,6 +1947,100 @@ fn trait_impl_exposure_reacts_at_a_const_generic_param_type() {
 }
 
 #[test]
+fn trait_impl_exposure_unrenderable_where_bound_fails_loud_without_positional_identity() {
+    // Round-2 adversarial-review finding, reproduced and fixed: an unrenderable where-clause
+    // bounded type (a complex const-generic argument the ordinary renderer cannot stringify) must
+    // not fall back to the bare literal `_` — two SUCH bounds in one impl block would then share
+    // that key, and their facts (identical kind, subject, and seam) would collapse to one,
+    // silently losing the second bound's violation. `Arr<{ N + 1 }>` and `Arr<{ N + 2 }>` are
+    // structurally distinct types that both fail to render the same way; both bounds independently
+    // require `AsRef<crate::infra::Secret>`, so before the fix this collapsed to ONE finding
+    // regardless of which or how many such bounds were present (verified: single-bound and
+    // two-bound fixtures produced the byte-identical fact string). The fix must fail loud instead.
+    let error = findings_including_trait_impls(
+        "ti-where-unrenderable",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub struct Thing;\npub struct Arr<const N: usize>;\npub const N: usize = 1;\nimpl crate::Port for Thing where Arr<{ N + 1 }>: AsRef<crate::infra::Secret>, Arr<{ N + 2 }>: AsRef<crate::infra::Secret> {}\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::infra"],
+    )
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    // The sentinel that trips the gate is internal — never itself published as identity.
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn trait_impl_exposure_unrenderable_where_bound_fails_loud_even_alone() {
+    // The single-bound counterpart of the test above: even ONE unrenderable where-clause bound
+    // (no sibling bound to collide with) must fail loud rather than silently publish the bare `_`
+    // key — the fail-loud requirement does not depend on a second bound being present.
+    let error = findings_including_trait_impls(
+        "ti-where-unrenderable-solo",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub struct Thing;\npub struct Arr<const N: usize>;\npub const N: usize = 1;\nimpl crate::Port for Thing where Arr<{ N + 1 }>: AsRef<crate::infra::Secret> {}\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::infra"],
+    )
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn trait_impl_exposure_where_bound_sentinels_never_share_a_bound_ordinal() {
+    // White-box counterpart proving genuine collision-freedom, not merely that the shared
+    // `reject_positional_identity` gate trips (the black-box tests above cannot distinguish a
+    // truly per-bound sentinel from a reused bare-ordinal one, since either trips the SAME gate
+    // with the SAME message). Calls `collect_trait_impl_exposures` directly — before the gate
+    // ever runs — and asserts the two unrenderable bounds' `where`-position keys differ, each
+    // carrying its own `bound_ordinal` composed with the shared item `ordinal`.
+    use crate::collect::collect_trait_impl_exposures;
+    use crate::finding::{PublicSeam, TraitImplPosition};
+    use crate::resolve::UseMap;
+
+    let item: syn::Item = syn::parse_str(
+        "impl crate::Port for Thing where Arr<{ N + 1 }>: AsRef<crate::infra::Secret>, Arr<{ N + 2 }>: AsRef<crate::infra::Secret> {}",
+    )
+    .unwrap();
+    let uses = UseMap::new();
+    let mut out = Vec::new();
+    collect_trait_impl_exposures(&item, "crate::m", &uses, 7, &mut out);
+
+    let where_keys: std::collections::BTreeSet<&str> = out
+        .iter()
+        .filter_map(|exposure| match &exposure.seam {
+            PublicSeam::TraitImpl {
+                position: TraitImplPosition::Where(key),
+                ..
+            } => Some(key.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        where_keys.len(),
+        2,
+        "the two bounds must each key their exposures under their OWN distinct sentinel: {where_keys:?}"
+    );
+    for key in &where_keys {
+        assert!(
+            key.contains("_#"),
+            "an unrenderable bound's key must carry the internal positional sentinel: {key}"
+        );
+    }
+}
+
+#[test]
 fn trait_impl_exposure_reacts_at_a_refined_rpitit_return() {
     // The blocking review finding: a trait declares an opaque return, the impl refines it to a
     // concrete forbidden type at the impl site — must react (else the one forbidden bug).
@@ -2851,6 +2948,59 @@ fn locality_findings(
     })
 }
 
+/// Two mutually-exclusive `#[cfg]`-gated `use ... as T;` aliases for an `impl T for Foo`'s trait
+/// name: the anchor match must react regardless of which alias is declared first. Before the fix,
+/// `resolve_path`'s single-candidate lookup (plus the single-candidate `canonicalize_through_reexports`)
+/// took only one `use`-map entry, so whether the anchored trait was ever seen depended on
+/// declaration order (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn trait_impl_anchor_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = locality_findings(
+        "anchor-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod command;\npub mod other;\npub mod domain;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            ("other.rs", "pub trait Other {}\n"),
+            (
+                "domain.rs",
+                "#[cfg(unix)]\nuse crate::command::Command as T;\n#[cfg(not(unix))]\nuse crate::other::Other as T;\npub struct Foo;\nimpl T for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
+}
+
+/// The identical shape with the anchored trait's alias declared SECOND. Before the fix this
+/// silently passed (`Ok([])`).
+#[test]
+fn trait_impl_anchor_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = locality_findings(
+        "anchor-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod command;\npub mod other;\npub mod domain;\n"),
+            ("command.rs", "pub trait Command {}\n"),
+            ("other.rs", "pub trait Other {}\n"),
+            (
+                "domain.rs",
+                "#[cfg(not(unix))]\nuse crate::other::Other as T;\n#[cfg(unix)]\nuse crate::command::Command as T;\npub struct Foo;\nimpl T for Foo {}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"]
+    );
+}
+
 #[test]
 fn an_impl_outside_the_allowed_location_is_a_finding() {
     let out = locality_findings(
@@ -3283,10 +3433,11 @@ fn an_unconditional_path_remapped_module_is_followed_and_its_impl_reacts() {
 }
 
 #[test]
-fn a_cfg_attr_remapped_module_is_a_documented_bound() {
-    // `#[cfg_attr(<pred>, path = "…")]` is recognized as a remap (== the separate
-    // `#[cfg(<pred>)] #[path = "…"]`), so the module is out of scope — not scanned against a
-    // wrong/absent conventional file, and NOT a spurious exit-2. Mirrors the direct-#[path] bound.
+fn a_cfg_attr_remapped_module_target_is_followed_when_the_conventional_file_is_absent() {
+    // `#[cfg_attr(<pred>, path = "…")]` never removes the `mod` item the way a bare `#[cfg]`
+    // does, so SOME file must back it on every build; with no conventional `domain.rs` present,
+    // the `cfg_attr` target is the only candidate and is followed — closing the false negative
+    // where this module (and any impl inside it) silently vanished from the crate-wide scan.
     let out = locality_findings(
         "cfg-attr-remapped",
         &[
@@ -3304,13 +3455,14 @@ fn a_cfg_attr_remapped_module_is_a_documented_bound() {
         &["crate::commands"],
     )
     .unwrap();
-    assert!(
-        out.is_empty(),
-        "a cfg_attr-remapped module is out of scope, same as a direct #[path]: {out:?}"
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"],
+        "the impl in the cfg_attr-remapped module is followed and reacts: {out:?}"
     );
 
-    // A NESTED cfg_attr remap is recognized too, so hunyi stays
-    // consistent with guibiao (both treat it as the #[path] bound) rather than diverging.
+    // A NESTED cfg_attr remap's target is followed the identical way when the conventional file
+    // is absent.
     let nested = locality_findings(
         "cfg-attr-nested-remapped",
         &[
@@ -3328,9 +3480,10 @@ fn a_cfg_attr_remapped_module_is_a_documented_bound() {
         &["crate::commands"],
     )
     .unwrap();
-    assert!(
-        nested.is_empty(),
-        "a nested cfg_attr remap is out of scope: {nested:?}"
+    assert_eq!(
+        nested,
+        ["crate::domain (impl crate::command::Command for crate::domain::Foo)"],
+        "the impl in the nested-cfg_attr-remapped module is followed and reacts: {nested:?}"
     );
 }
 
@@ -3682,9 +3835,91 @@ fn unsafe_keys(name: &str, source: &str) -> Result<Vec<StructuredFactIdentity>, 
     unsafe_findings(tree.src(), &tree.root(), &["crate::ffi".to_string()], "x").map(|findings| {
         findings
             .into_iter()
-            .map(|(fact, _, _)| fact.into_finding().key().clone())
+            .map(|(fact, _, _)| fact.into_finding("app").key().clone())
             .collect()
     })
+}
+
+/// A `cfg_attr`-wrapped `#[path]` on an INLINE module must never drop the body: `#[path]` has no
+/// effect on an inline `mod` at all (rustc always compiles the body regardless of the wrapped
+/// predicate), so treating the attribute as a skip bound here dropped the whole subtree's
+/// observation — closes the false negative where 圭表 and 漏刻 both reacted on the identical file
+/// and 渾儀 alone stayed silent.
+#[test]
+fn cfg_attr_wrapped_path_on_an_inline_module_is_still_observed() {
+    let out = unsafe_labels(
+        "cfg-attr-inline",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(windows, path = \"x.rs\")]\npub mod inner {\n    pub fn f() { unsafe {} }\n}\n",
+        )],
+        &["crate::nowhere"],
+    )
+    .unwrap();
+    assert_eq!(out, ["unsafe block in crate::inner"]);
+}
+
+/// A `cfg_attr`-wrapped `#[path]` FILE module's `cfg_attr` target is read when it exists and the
+/// conventional file does not — the predicate may genuinely select the target on some build, and
+/// `cfg_attr` never removes the `mod` item the way a bare `#[cfg]` does, so an absent conventional
+/// file here is not itself an error.
+#[test]
+fn cfg_attr_wrapped_path_target_is_read_when_the_conventional_file_is_absent() {
+    let out = unsafe_labels(
+        "cfg-attr-target-only",
+        &[
+            (
+                "lib.rs",
+                "#[cfg_attr(windows, path = \"win.rs\")]\npub mod imp;\n",
+            ),
+            ("win.rs", "pub fn f() { unsafe {} }\n"),
+        ],
+        &["crate::nowhere"],
+    )
+    .unwrap();
+    assert_eq!(out, ["unsafe block in crate::imp"]);
+}
+
+/// Neither the `cfg_attr` target nor the conventional file existing at all, with no other
+/// cfg-conditional gate on the declaration, is a genuine scan error (exit 2) — `cfg_attr` never
+/// removes the `mod` item, so on every configuration SOME file must back it. Never a silent pass.
+#[test]
+fn cfg_attr_wrapped_path_with_neither_candidate_present_fails_loud() {
+    let err = unsafe_labels(
+        "cfg-attr-both-absent",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(windows, path = \"win.rs\")]\npub mod imp;\n",
+        )],
+        &["crate::nowhere"],
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("could not be located"),
+        "neither candidate existing must fail loud, not silently pass: {err}"
+    );
+}
+
+/// A `cfg_attr`-wrapped `#[path]` FILE module's conventional file is read even when the wrapped
+/// predicate is always-false (`any()`) — the module declaration is never removed, so the
+/// conventional file is what every build actually compiles here, and it must not vanish from the
+/// crate-wide scan merely because a `cfg_attr(path)` attribute is present. Closes the false
+/// negative where 圭表 and 漏刻 both reacted on the identical file and 渾儀 alone stayed silent.
+#[test]
+fn cfg_attr_wrapped_path_conventional_file_is_read_when_the_predicate_is_always_false() {
+    let out = unsafe_labels(
+        "cfg-attr-file",
+        &[
+            (
+                "lib.rs",
+                "#[cfg_attr(any(), path = \"never.rs\")]\npub mod imp;\n",
+            ),
+            ("imp.rs", "pub fn f() { unsafe {} }\n"),
+        ],
+        &["crate::nowhere"],
+    )
+    .unwrap();
+    assert_eq!(out, ["unsafe block in crate::imp"]);
 }
 
 #[test]
@@ -4733,6 +4968,44 @@ fn a_forbidden_derive_on_a_subtree_type_reacts_and_a_clean_type_does_not() {
     assert_eq!(out, ["derive serde::Serialize on crate::domain::Order"]);
 }
 
+/// Leaf-identifier matching (`leaf_of`) is immune to a *leading* `::` (the leaf is still the
+/// last segment) but not to a *trailing* one — `leaf_of("serde::")` computes an empty leaf, which
+/// no real identifier can ever equal. Both spellings are rejected as a constitution error: the
+/// trailing case because it could never match anything, and the leading case for consistency with
+/// every other forbidden-operand-shaped DSL method in this family (none of which assigns the
+/// leading-`::` spelling a meaning distinct from the bare form).
+#[test]
+fn must_not_acquire_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod domain;\n"),
+        (
+            "domain.rs",
+            "#[derive(serde::Serialize)]\npub struct Order;\n",
+        ),
+    ];
+    for bad in [
+        "::serde::Serialize",
+        "serde::Serialize::",
+        "::serde::Serialize::",
+    ] {
+        let err = marker_findings("marker-malformed", files, "crate::domain", &[bad]).unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+    // Control: the bare spelling still reacts, so the rejection above is a spelling gate, not a
+    // general leaf-matching regression.
+    let clean = marker_findings(
+        "marker-malformed-control",
+        files,
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(clean, ["derive serde::Serialize on crate::domain::Order"]);
+}
+
 #[test]
 fn a_serde_derive_path_and_cfg_attr_derive_react_by_leaf() {
     let out = marker_findings(
@@ -4780,6 +5053,90 @@ fn a_hand_impl_outside_the_subtree_reacts_via_the_self_type() {
         ["impl serde::Serialize for crate::domain::Order in crate::wire"],
         "a hand impl written outside the subtree, for a subtree type, reacts: {out:?}"
     );
+}
+
+/// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` aliases for a `#[derive(Name)]`'s own
+/// name must both react (cfg-blind): before the fix, `resolve_path`'s single-candidate lookup took
+/// only one `use`-map entry before leaf-matching, so whether the derive's TRUE leaf was seen
+/// depended on which cfg branch's alias happened to be declared first (found on adversarial review
+/// of `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn forbidden_derive_leaf_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = marker_findings(
+        "derive-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "#[cfg(unix)]\nuse bad::Marker as M;\n#[cfg(not(unix))]\nuse good::NotBad as M;\n#[derive(M)]\npub struct Order;\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["derive M on crate::domain::Order"]);
+}
+
+/// The identical shape with the forbidden alias declared SECOND. Before the fix this silently
+/// passed (`Ok([])`): `resolve_path` took only the first `use`-map candidate, and here that
+/// candidate was the non-forbidden one.
+#[test]
+fn forbidden_derive_leaf_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = marker_findings(
+        "derive-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod domain;\n"),
+            (
+                "domain.rs",
+                "#[cfg(not(unix))]\nuse good::NotBad as M;\n#[cfg(unix)]\nuse bad::Marker as M;\n#[derive(M)]\npub struct Order;\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["derive M on crate::domain::Order"]);
+}
+
+/// The identical collision at the impl form's trait-leaf match: `impl M for X` where `M` is a
+/// mutually-exclusive `#[cfg]`-gated `use` alias.
+#[test]
+fn forbidden_impl_trait_leaf_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = marker_findings(
+        "impl-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(unix)]\nuse bad::Marker as M;\n#[cfg(not(unix))]\nuse good::NotBad as M;\nimpl M for crate::domain::Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl M for crate::domain::Order in crate::wire"]);
+}
+
+#[test]
+fn forbidden_impl_trait_leaf_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = marker_findings(
+        "impl-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(not(unix))]\nuse good::NotBad as M;\n#[cfg(unix)]\nuse bad::Marker as M;\nimpl M for crate::domain::Order {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["bad::Marker"],
+    )
+    .unwrap();
+    assert_eq!(out, ["impl M for crate::domain::Order in crate::wire"]);
 }
 
 #[test]
@@ -6006,6 +6363,26 @@ fn impl_trait_subtree_reacts_to_a_submodule_return_the_seam_scope_misses() {
     assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
 }
 
+/// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
+/// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
+/// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
+/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
+/// same shared walker, independently reproduced here before being counted as fixed.
+#[test]
+fn impl_trait_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg_attr(any(), path = \"never.rs\")]\npub mod net;\n",
+        ),
+        ("net.rs", "pub fn make() -> impl crate::Port { todo!() }\n"),
+    ];
+    let subtree = impl_trait_subtree("cfg-attr-path", files, "crate").unwrap();
+    assert_eq!(subtree.len(), 1);
+    assert_eq!(subtree[0].1, "crate::net");
+    assert!(subtree[0].0.contains("impl crate::Port"), "{:?}", subtree);
+}
+
 #[test]
 fn impl_trait_subtree_includes_the_anchor_modules_own_seam_byte_identically() {
     // The anchor module's own returned `impl Trait` is still caught, and its finding string is
@@ -6195,7 +6572,7 @@ fn async_observations(
         facts
             .into_iter()
             .map(|(fact, _)| {
-                let finding = fact.into_finding();
+                let finding = fact.into_finding("app");
                 (finding.key().clone(), finding.text().to_string())
             })
             .collect()
@@ -6251,6 +6628,7 @@ fn async_production_violation_separates_target_rule_and_seam() {
     assert_eq!(
         fact.fields().collect::<Vec<_>>(),
         vec![
+            ("governing_package", "x"),
             ("module", "crate::registry"),
             ("name", "register"),
             ("owner", "crate::registry"),
@@ -6679,6 +7057,29 @@ fn async_subtree_errors_on_a_non_cfg_missing_submodule() {
     // silent pass that would under-react.
     let files = &[("lib.rs", "pub mod gone;\n")];
     assert!(async_subtree("non-cfg-missing", files, "crate").is_err());
+}
+
+/// A cfg_attr(path)-hidden submodule is observed, whichever candidate file exists — the identical
+/// `resolve_child_modules`/`walk_subtree_modules` mechanism fixed by
+/// `hunyi-cfg-attr-path-module-loss` for `scan_crate`'s own consumers. Not named in that change's
+/// own commit message (a documentation gap a round-3 adversarial review found and closed) but the
+/// same shared walker, independently reproduced here before being counted as fixed.
+#[test]
+fn async_subtree_reacts_through_a_cfg_attr_wrapped_path_submodule() {
+    let files = &[
+        (
+            "lib.rs",
+            "#[cfg_attr(any(), path = \"never.rs\")]\npub mod net;\n",
+        ),
+        ("net.rs", "pub async fn connect() {}\n"),
+    ];
+    assert_eq!(
+        async_subtree("cfg-attr-path", files, "crate").unwrap(),
+        [(
+            "async fn crate::net::connect()".to_string(),
+            "crate::net".to_string()
+        )],
+    );
 }
 
 #[test]
@@ -7476,6 +7877,7 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
     assert_eq!(
         key.fields().collect::<Vec<_>>(),
         vec![
+            ("governing_package", "x"),
             ("seam_kind", "free_fn"),
             ("seam_module", "crate::domain"),
             ("seam_name", "leak"),
@@ -7958,6 +8360,174 @@ fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_
 }
 
 #[test]
+fn a_bare_cfg_negated_sibling_child_module_does_not_shadow_the_others_extern_reexport() {
+    // Round-9 finding (audit `crates/hunyi/src/exposure.rs:157`): rounds 6-8 fixed child_mods
+    // being computed once over the UNION of every #[cfg]-*branch*'s items (a branch = a distinct
+    // candidate resolution of the governed MODULE ITSELF, produced by `descend()`'s per-occurrence
+    // splitting). This finding is one level finer: `#[cfg(unix)] mod serde;` and
+    // `#[cfg(not(unix))] pub use serde::Value;` are two SIBLING ITEMS inside the SAME file/branch
+    // (there is no module-path split here at all -- `api` resolves to exactly one branch), so the
+    // existing per-branch grouping is a no-op and `child_module_names` still runs cfg-blind over
+    // both items together. The "unix" mod and the "not(unix)" pub use are never compiled
+    // together -- verified against real rustc, api.rs alone compiles cleanly on every platform --
+    // so the mod must not shadow the use's own genuine extern re-export.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow",
+        &[
+            ("lib.rs", "pub mod api;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nmod serde;\n#[cfg(not(unix))]\npub use serde::Value;\n",
+            ),
+            ("api/serde.rs", "pub struct Local;\n"),
+        ],
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::api::Value"],
+        "the not(unix) arm's own genuine extern re-export must react, regardless of the unix \
+         arm's own local mod serde, since the two are never compiled together: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_if_sibling_child_module_does_not_shadow_the_other_arms_extern_reexport() {
+    // The `cfg_if!` form of the round-9 finding above: `mod serde;` and `pub use serde::Value;`
+    // are declared in two arms of the SAME invocation, flattened into one shared item list by
+    // `flatten_transparent_macro_items` before `module_findings` ever sees them -- so, like the
+    // bare-#[cfg] form, there is no branch split to lean on and `child_module_names` must instead
+    // recognize the two arms as mutually exclusive on its own.
+    let out = findings_with_deps(
+        "cfg-if-sibling-childmod-shadow",
+        &[
+            ("lib.rs", "pub mod api;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! {\n    if #[cfg(unix)] {\n        mod serde;\n    } else {\n        pub use serde::Value;\n    }\n}\n",
+            ),
+            ("api/serde.rs", "pub struct Local;\n"),
+        ],
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::api::Value"],
+        "the else arm's own genuine extern re-export must react, regardless of the if arm's own \
+         local mod serde, since cfg_if arms are never compiled together: {out:?}"
+    );
+}
+
+#[test]
+fn a_bare_cfg_negated_sibling_child_module_does_not_shadow_a_facades_extern_reexport() {
+    // The crate-wide-closure sibling of the two round-9 findings above: `crate::a`'s two
+    // mutually-exclusive sibling items are reached only THROUGH a local facade
+    // (`crate::domain`'s `pub use crate::a::Value;`), not directly by the governed module itself
+    // -- so this exercises `scan.rs`'s `collect_reexports`/`walk_module`, not `module_findings`'s
+    // own direct-head resolution. `collect_reexports` computed its child-module shadow the
+    // identical cfg-blind way `module_findings` used to, so `crate::a`'s own local `mod serde`
+    // (cfg(unix)) must not suppress recording `crate::a::Value -> serde::Value` in the crate-wide
+    // reexport closure just because a mutually-exclusive `cfg(not(unix))` sibling in the SAME
+    // file happens to declare it.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow-facade",
+        &[
+            ("lib.rs", "pub mod a;\npub mod domain;\n"),
+            (
+                "a.rs",
+                "#[cfg(unix)]\nmod serde;\n#[cfg(not(unix))]\npub use serde::Value;\n",
+            ),
+            ("a/serde.rs", "pub struct Local;\n"),
+            ("domain.rs", "pub use crate::a::Value;\n"),
+        ],
+        "crate::domain",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::domain::Value"],
+        "the facade must still canonicalize to the not(unix) arm's genuine extern re-export, \
+         regardless of the unix arm's own local mod serde in the SAME defining module: {out:?}"
+    );
+}
+
+#[test]
+fn a_mutually_exclusive_sibling_child_module_does_not_shadow_a_rename_aliased_reexport() {
+    // The crate-root-rename-alias sibling of the round-9 finding above (found by an independent
+    // adversarial review of the fix, not the original audit): `renames_bare` -- the shadow applied
+    // to a bare head that resolves through a crate-root `extern crate X as Y;` alias, per
+    // `extern_verbatim_renamed`'s rename-map-before-externs-set precedence -- was left cfg-blind
+    // even after `mod_decls`/`reexport_externs_for` made the plain extern-name shadow cfg-aware.
+    // `#[cfg(unix)] mod wc;` beside `#[cfg(not(unix))] pub use wc::Value;`, with a crate-root
+    // `extern crate serde as wc;` rename, is never compiled together (verified against real rustc:
+    // api.rs alone compiles cleanly on every platform) -- so the unix arm's own local `mod wc` must
+    // not shadow the not(unix) arm's own genuine `wc::Value` (== `serde::Value`) re-export.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow-rename-alias",
+        &[
+            ("lib.rs", "extern crate serde as wc;\npub mod api;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nmod wc;\n#[cfg(not(unix))]\npub use wc::Value;\n",
+            ),
+            ("api/wc.rs", "pub struct Local;\n"),
+        ],
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::api::Value"],
+        "the not(unix) arm's own genuine rename-aliased re-export must react, regardless of the \
+         unix arm's own local mod wc, since the two are never compiled together: {out:?}"
+    );
+}
+
+#[test]
+fn a_mutually_exclusive_sibling_child_module_does_not_shadow_a_rename_aliased_facade_reexport() {
+    // The crate-wide-closure sibling of the rename-alias fix above: `crate::a`'s mutually-exclusive
+    // `mod wc;` / `pub use wc::Value;` pair is reached only THROUGH a facade
+    // (`crate::domain`'s `pub use crate::a::Value;`), exercising `collect_reexports`'s own
+    // `renames_bare` computation rather than `module_findings`'s direct-head resolution.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow-rename-alias-facade",
+        &[
+            (
+                "lib.rs",
+                "extern crate serde as wc;\npub mod a;\npub mod domain;\n",
+            ),
+            (
+                "a.rs",
+                "#[cfg(unix)]\nmod wc;\n#[cfg(not(unix))]\npub use wc::Value;\n",
+            ),
+            ("a/wc.rs", "pub struct Local;\n"),
+            ("domain.rs", "pub use crate::a::Value;\n"),
+        ],
+        "crate::domain",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::domain::Value"],
+        "the facade must still canonicalize to the not(unix) arm's genuine rename-aliased \
+         re-export, regardless of the unix arm's own local mod wc in the SAME defining module: \
+         {out:?}"
+    );
+}
+
+#[test]
 fn async_subtree_observes_both_arms_of_a_two_inline_sibling_cfg_split_anchor() {
     // Round-8 finding (b): when the async-exposure subtree boundary is anchored DIRECTLY at a
     // module reached through two mutually-exclusive INLINE `#[cfg]` siblings sharing one file,
@@ -8364,6 +8934,42 @@ fn fn2_leading_colon_is_an_unambiguous_extern_through_a_local_shadow() {
     assert_eq!(out, ["serde::Value exposed by fn crate::domain::f"]);
 }
 
+/// A forbidden operand shaped with an empty `::`-segment (leading, trailing, or doubled `::`)
+/// must be a constitution error — never a silent, permanent non-reaction. `extern_verbatim_renamed`
+/// never produces a leading-`::` canonical path (it iterates `syn::Path` segments and never
+/// consults `leading_colon`), so an operand spelled `"::serde"` could never equal or
+/// prefix-contain the resolved `"serde::Value"` — the exact silent-pass class the adversarial
+/// sweep's finding described, reproduced here directly against `must_not_expose`'s pure heart.
+#[test]
+fn must_not_expose_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod api;\n"),
+        (
+            "api.rs",
+            "pub fn ext() -> ::serde::Value { unimplemented!() }\n",
+        ),
+    ];
+    for bad in ["::serde", "serde::", "::serde::"] {
+        let err = findings_with_deps("fn2-malformed", files, "crate::api", &[bad], &["serde"])
+            .unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+    // Control: the bare spelling this operand should have been written as still reacts, so the
+    // rejection above is a spelling gate, never a general serde-detection regression.
+    let clean = findings_with_deps(
+        "fn2-malformed-control",
+        files,
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(clean, ["serde::Value exposed by fn crate::api::ext"]);
+}
+
 #[test]
 fn fn2_leading_colon_bypasses_the_use_map_no_misattribution() {
     // `use crate::vendor::serde;` maps `serde`, but `::serde` bypasses the use-map: it reacts
@@ -8594,6 +9200,32 @@ fn dyn_operand_inline_sysroot_trait_reacts() {
     );
 }
 
+/// `dyn_operand_module_findings` shares `exposure::module_findings`'s resolver
+/// (`resolve_principal` → `extern_verbatim_renamed`), so it has the identical malformed-operand
+/// silent-pass gap: a forbidden operand with an empty `::`-segment must be a constitution error.
+#[test]
+fn must_not_expose_dyn_of_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod m;\n"),
+        (
+            "m.rs",
+            "pub fn f() -> Box<dyn std::error::Error> { todo!() }\n",
+        ),
+    ];
+    for bad in [
+        "::std::error::Error",
+        "std::error::Error::",
+        "::std::error::Error::",
+    ] {
+        let err =
+            dyn_operand_findings("dyn-malformed", files, "crate::m", &[bad], &[]).unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn dyn_operand_inline_dependency_and_crate_root_rename_react() {
     // An inline fully-qualified dependency trait operand reacts (extern oracle over declared deps).
@@ -8748,6 +9380,61 @@ fn impl_trait_operand_inline_sysroot_trait_reacts() {
         unlisted.is_empty(),
         "unlisted impl-trait operand must pass: {unlisted:?}"
     );
+}
+
+/// `impl_trait_operand_module_findings` shares the identical resolver as `dyn_operand_...` and
+/// `exposure::module_findings` (`resolve_principal` → `extern_verbatim_renamed`), so it has the
+/// same malformed-operand silent-pass gap for its module-scoped path.
+#[test]
+fn must_not_expose_impl_trait_of_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod m;\n"),
+        ("m.rs", "pub fn f() -> impl std::error::Error { todo!() }\n"),
+    ];
+    for bad in [
+        "::std::error::Error",
+        "std::error::Error::",
+        "::std::error::Error::",
+    ] {
+        let err = impl_trait_operand_findings("iop-malformed", files, "crate::m", &[bad], &[])
+            .unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+}
+
+/// The subtree-scoped operand path (`including_submodules()`) canonicalizes its own copy of the
+/// forbidden set independently of the module-scoped path above, so it needs its own regression
+/// coverage rather than relying on the module-scoped test to stand in for it.
+#[test]
+fn must_not_expose_impl_trait_of_subtree_rejects_a_malformed_colon_operand() {
+    let tree = TempSrcTree::new("iop-subtree-malformed");
+    tree.write_all(&[
+        ("lib.rs", "pub mod m;\n"),
+        ("m.rs", "pub fn f() -> impl std::error::Error { todo!() }\n"),
+    ]);
+    for bad in [
+        "::std::error::Error",
+        "std::error::Error::",
+        "::std::error::Error::",
+    ] {
+        let forbidden = vec![bad.to_string()];
+        let err = impl_trait_operand_subtree_findings(
+            tree.src(),
+            &tree.root(),
+            "crate",
+            &forbidden,
+            "x",
+            &[],
+        )
+        .unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
 }
 
 // --- re-export head shadowed by a same-named child module (FP closure) -----
@@ -10150,5 +10837,1158 @@ fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
         out,
         vec!["crate::infra::Secret exposed by fn crate::api::leak"],
         "an absent unconditional #[path] target inside an arm must be tolerated: {out:?}"
+    );
+}
+
+/// Two-crate reproduction of the audit-sweep finding at hunyi's own composed dedup
+/// (`driver::outcome_from`, the analogue of guibiao's `evaluate`) — not just the per-fact catalog
+/// tests. Identical governed module path + rule declared against two different workspace members
+/// must survive as two distinct violations, mirroring the guibiao-side regression in
+/// `crates/guibiao/src/tests.rs`.
+#[test]
+fn two_crates_with_the_identical_async_exposure_boundary_stay_distinct_violations() {
+    fn tree_and_metadata(label: &str, package: &str) -> (TempSrcTree, Value) {
+        let tree = TempSrcTree::new(label);
+        tree.write_all(&[("lib.rs", "pub mod registry;\npub async fn register() {}\n")]);
+        let metadata = serde_json::json!({
+            "packages": [{
+                "name": package,
+                "dependencies": [],
+                "targets": [{ "kind": ["lib"], "src_path": tree.root().to_string_lossy().into_owned() }],
+            }],
+        });
+        (tree, metadata)
+    }
+
+    let (_alpha_tree, alpha_metadata) = tree_and_metadata("async-identity-alpha", "alpha");
+    let (_beta_tree, beta_metadata) = tree_and_metadata("async-identity-beta", "beta");
+    let combined_metadata = serde_json::json!({
+        "packages": [
+            alpha_metadata["packages"][0].clone(),
+            beta_metadata["packages"][0].clone(),
+        ],
+    });
+
+    fn boundary_for(package: &str) -> AsyncExposureBoundary {
+        AsyncExposureBoundary::in_crate(package)
+            .module("crate")
+            .must_not_expose_async_fn()
+            .because("no async seam here")
+    }
+
+    let mut violations = Vec::new();
+    eval_into(
+        &combined_metadata,
+        &[boundary_for("alpha"), boundary_for("beta")],
+        check_async_exposure_boundary,
+        &mut violations,
+    )
+    .expect("both boundaries resolve");
+    let outcome = outcome_from(violations);
+    let report = match outcome {
+        Outcome::Violations(report) => report,
+        other => panic!("expected two violations, got {other:?}"),
+    };
+    assert_eq!(
+        report.violations.len(),
+        2,
+        "each crate's async-exposure violation must survive dedup: {:?}",
+        report.violations
+    );
+    let ids: std::collections::BTreeSet<_> = report.violations.iter().map(Violation::id).collect();
+    assert_eq!(
+        ids.len(),
+        2,
+        "identity must differ by crate, not collapse to one"
+    );
+}
+
+/// A `pub fn` inside an `extern` block is a real item in the module's own namespace — as public as
+/// a same-shaped ordinary `fn` — so a forbidden type named only in its signature must react exactly
+/// like an ordinary function's would, not escape the query because the declaration has no body.
+#[test]
+fn a_forbidden_type_in_an_extern_block_pub_fn_signature_is_observed() {
+    let out = semantic_findings(
+        "extern-block-fn-exposure",
+        &[
+            ("lib.rs", "pub mod infra;\npub mod api;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "extern \"C\" {\n    pub fn handle() -> crate::infra::Secret;\n}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::handle"]
+    );
+}
+
+/// The identical shape for `pub static` inside an `extern` block.
+#[test]
+fn a_forbidden_type_in_an_extern_block_pub_static_is_observed() {
+    let out = semantic_findings(
+        "extern-block-static-exposure",
+        &[
+            ("lib.rs", "pub mod infra;\npub mod api;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "extern \"C\" {\n    pub static S: crate::infra::Secret;\n}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by static crate::api::S"]
+    );
+}
+
+/// A private (no `vis`) `fn`/`static` inside an `extern` block must NOT react — extern-block items
+/// default to the enclosing block's own item visibility exactly like a module-level item does, and
+/// only `pub` ones are on the module's public surface.
+#[test]
+fn a_non_pub_extern_block_item_is_not_observed() {
+    let out = semantic_findings(
+        "extern-block-private-not-observed",
+        &[
+            ("lib.rs", "pub mod infra;\npub mod api;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "extern \"C\" {\n    fn handle() -> crate::infra::Secret;\n    static S: crate::infra::Secret;\n}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out, Vec::<String>::new());
+}
+
+/// A forbidden-marker impl's self type reached through a `type X = Y;` alias whose target `Y` is
+/// itself a mutually-exclusive `#[cfg]`-gated `use` alias: the self-type landing must react
+/// regardless of which cfg branch is declared first. Before the fix, `scan.alias_targets` was a
+/// single-valued `HashMap<String, String>` populated via `resolve_path`'s single-candidate lookup,
+/// so only one landing candidate for `X` was ever recorded (found on adversarial review of
+/// `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn forbidden_marker_self_type_landing_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = marker_findings(
+        "self-type-landing-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(unix)]\nuse crate::domain::Order as Y;\n#[cfg(not(unix))]\nuse crate::domain::NotOrder as Y;\ntype X = Y;\nimpl serde::Serialize for X {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::wire::X in crate::wire"],
+        "the marker-acquisition REACTION now checks every landing candidate (X resolves to the \
+         governed crate::domain::Order under one cfg branch), even though the finding's OWNER \
+         label renders the self type as written (`X`), a separate, deliberate identity concern \
+         from the landing/gating check: {out:?}"
+    );
+}
+
+/// The identical shape with the resolvable (defined) alias target declared SECOND. Before the fix
+/// this silently passed (`Ok([])`): only the first-declared (undefined `NotOrder`) landing was
+/// recorded, which fails the `defined` check, so the genuinely governed self type was never seen.
+#[test]
+fn forbidden_marker_self_type_landing_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = marker_findings(
+        "self-type-landing-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "#[cfg(not(unix))]\nuse crate::domain::NotOrder as Y;\n#[cfg(unix)]\nuse crate::domain::Order as Y;\ntype X = Y;\nimpl serde::Serialize for X {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::wire::X in crate::wire"],
+        "the marker-acquisition REACTION now checks every landing candidate (X resolves to the \
+         governed crate::domain::Order under one cfg branch), even though the finding's OWNER \
+         label renders the self type as written (`X`), a separate, deliberate identity concern \
+         from the landing/gating check: {out:?}"
+    );
+}
+
+/// A forbidden exposure reached through a `type X = Y;` alias whose target `Y` is itself a
+/// mutually-exclusive `#[cfg]`-gated `use` alias: the exposure must react regardless of which cfg
+/// branch is declared first. Before the fix, `scan.aliases` (the exposure-pipeline `AliasMap`) was
+/// populated via `resolve_path`'s single-candidate lookup even though the map itself was already
+/// multi-valued, so only one landing candidate for `X` was ever pushed (found on adversarial
+/// review of `hunyi-cfg-branch-use-reexport-merging`).
+#[test]
+fn type_alias_exposure_reacts_when_the_forbidden_alias_is_declared_first() {
+    let out = semantic_findings(
+        "type-alias-cfg-forbidden-first",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nuse crate::infra::Secret as Y;\n#[cfg(not(unix))]\nuse crate::safe::Handle as Y;\ntype X = Y;\npub fn leak() -> X { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical shape with the forbidden alias declared SECOND. Before the fix this silently
+/// passed (`Ok([])`).
+#[test]
+fn type_alias_exposure_reacts_when_the_forbidden_alias_is_declared_second() {
+    let out = semantic_findings(
+        "type-alias-cfg-forbidden-second",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\nuse crate::safe::Handle as Y;\n#[cfg(unix)]\nuse crate::infra::Secret as Y;\ntype X = Y;\npub fn leak() -> X { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// A cfg_attr(path)-hidden module's own `pub use` re-export must still be folded into the
+/// crate-wide re-export closure `exposure.rs`'s own `scan_crate` call builds — the same
+/// `resolve_child_modules` mechanism fixed by `hunyi-cfg-attr-path-module-loss`. Before the fix,
+/// `facade.rs` never entered the crate-wide scan (only reachable via the `cfg_attr`-wrapped
+/// `#[path]`'s conventional form), so its re-export was missing from `scan.reexports` and
+/// `crate::facade::Secret` never canonicalized to the real, forbidden `crate::infra::Secret`.
+#[test]
+fn signature_coupling_reacts_through_a_cfg_attr_path_hidden_reexport() {
+    let out = semantic_findings(
+        "cfg-attr-exposure-reexport",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n#[cfg_attr(windows, path = \"weird.rs\")]\npub mod facade;\npub mod api;\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("facade.rs", "pub use crate::infra::Secret;\n"),
+            (
+                "api.rs",
+                "pub fn leak() -> crate::facade::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// `module_resolve.rs::descend`'s targeted, single-module-anchored resolution now follows a
+/// `cfg_attr`-wrapped `#[path]` target exactly like `scan::resolve_child_modules`'s crate-wide walk —
+/// found on adversarial review of `hunyi-cfg-attr-path-module-loss`, whose own commit claimed this
+/// function was "already correct, fails loud on this shape," a claim that did not survive scrutiny:
+/// even a LONE such declaration (no resolving sibling at all) previously never followed its target,
+/// no matter whether the file existed. Now it does, closing the same false-negative class this
+/// change already closed for the crate-wide walk, at this second, previously-unfixed entry point.
+#[test]
+fn cfg_attr_wrapped_path_resolves_through_its_own_target_with_no_sibling_at_all() {
+    let out = semantic_findings(
+        "cfg-attr-lone-target-resolves",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\n#[cfg_attr(windows, path = \"win.rs\")]\nmod foo;\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "win.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// A `cfg_attr`-wrapped `#[path]` sibling (a mutually-exclusive `#[cfg]`/`cfg_if!` co-declaration of
+/// the identical module name) must still react through its own file, not be silently absorbed by a
+/// sibling's successful resolution. Before this fix, `has_path_attr`'s `continue` only skipped that
+/// one declaration; when ANY sibling for the same name resolved, the empty-branch check that would
+/// otherwise trigger a fail-loud error never fired, so the `cfg_attr` target's own file — and
+/// everything it exposes — silently vanished with exit 0 instead. Fixed by extending the same union
+/// `scan::resolve_child_modules` already applies: the `cfg_attr` target is read alongside the
+/// sibling's own resolution, not skipped.
+#[test]
+fn cfg_attr_wrapped_path_sibling_reacts_through_its_own_file_not_absorbed_by_a_sibling() {
+    let out = semantic_findings(
+        "cfg-attr-sibling-anchor",
+        &[
+            ("lib.rs", "pub mod infra;\n#[cfg(windows)]\n#[cfg_attr(target_arch = \"x86\", path = \"foo_x86.rs\")]\nmod foo;\n#[cfg(not(windows))]\nmod foo;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("foo.rs", "pub fn safe() {}\n"),
+            (
+                "foo_x86.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// The identical shape via `cfg_if!` arms rather than bare `#[cfg]` siblings.
+#[test]
+fn cfg_attr_wrapped_path_sibling_reacts_through_a_cfg_if_arm() {
+    let out = semantic_findings(
+        "cfg-attr-sibling-anchor-cfg-if",
+        &[
+            (
+                "lib.rs",
+                "pub mod infra;\ncfg_if::cfg_if! {\n    if #[cfg(windows)] {\n        #[cfg_attr(target_arch = \"x86\", path = \"foo_x86.rs\")]\n        mod foo;\n    } else {\n        mod foo;\n    }\n}\n",
+            ),
+            ("infra.rs", "pub struct Secret;\n"),
+            ("foo.rs", "pub fn safe() {}\n"),
+            (
+                "foo_x86.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// A LONE `cfg_attr`-wrapped `#[path]` declaration (no resolving sibling) still fails loud when
+/// neither the conventional file nor the `cfg_attr` target exists — the genuinely fail-loud case
+/// that survives from the original bound, now reached only when `has_backing_source` is false.
+#[test]
+fn cfg_attr_wrapped_path_with_no_sibling_and_no_backing_file_still_fails_loud() {
+    let err = semantic_findings(
+        "cfg-attr-lone-fails-loud",
+        &[(
+            "lib.rs",
+            "#[cfg_attr(windows, path = \"win.rs\")]\nmod foo;\n",
+        )],
+        "crate::foo",
+        &[],
+        false,
+        &[],
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("not found") || err.contains("could not"),
+        "a lone unbacked cfg_attr(path) declaration must still fail loud: {err}"
+    );
+}
+
+/// A module carrying TWO SEPARATE (not nested) `cfg_attr`-wrapped `#[path]` attributes — one per
+/// platform predicate, the natural 3+-way per-platform shim shape — must have EVERY candidate's
+/// target read, not only the first-declared one. Found on a fourth adversarial review of
+/// `hunyi-cfg-attr-path-module-loss`: `cfg_attr_path_value`'s `find_map` silently returned only the
+/// first matching attribute's target, dropping every other stacked candidate — the identical
+/// cfg-blind-union false negative this whole change closes, one level deeper (a module can stack
+/// attributes, not just nest them). Exercises both `descend` (`module_resolve.rs`, this test) and
+/// the crate-wide `resolve_child_modules` (`scan.rs`, shares the identical fixed helper).
+#[test]
+fn stacked_cfg_attr_wrapped_path_attributes_are_all_read_not_only_the_first() {
+    let out = semantic_findings(
+        "stacked-cfg-attr-path",
+        &[
+            ("lib.rs", "pub mod infra;\n#[cfg_attr(windows, path = \"win.rs\")]\n#[cfg_attr(target_os = \"macos\", path = \"mac.rs\")]\nmod foo;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "mac.rs",
+                "pub fn leak() -> crate::infra::Secret { loop {} }\n",
+            ),
+        ],
+        "crate::foo",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::foo::leak"]
+    );
+}
+
+/// Two mutually-exclusive `#[cfg]`-gated `use ... as Name;` declarations for the identical local
+/// name, in the same file, must both react (cfg-blind: observation cannot know which is live).
+/// Before the fix, the second `use` silently overwrote the first in `UseMap` — a single
+/// `HashMap<String, String>` — so the verdict depended on source order rather than on whether
+/// either branch's binding was genuinely forbidden.
+#[test]
+fn mutually_exclusive_cfg_gated_use_aliases_both_react() {
+    let out = semantic_findings(
+        "cfg-use-alias-merge-forbidden-first",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nuse crate::infra::Secret as Handle;\n#[cfg(not(unix))]\nuse crate::safe::Handle;\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical shape with the two `use` declarations in the OPPOSITE order — the forbidden
+/// binding declared second. Before the fix this silently passed (`Ok([])`): `resolve_path` took
+/// only the first `use`-map candidate, and here that candidate was the non-forbidden one.
+#[test]
+fn mutually_exclusive_cfg_gated_use_aliases_react_regardless_of_declaration_order() {
+    let out = semantic_findings(
+        "cfg-use-alias-merge-forbidden-second",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\nuse crate::safe::Handle;\n#[cfg(unix)]\nuse crate::infra::Secret as Handle;\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// The identical `use`-alias collision expressed as a `cfg_if!` macro invocation rather than bare
+/// `#[cfg]` attributes — the audit's cited "identical shape via the 0.3.1 transparency" form, now
+/// that `cfg_if!` arm bodies are read as real code (a separate, already-closed finding).
+#[test]
+fn mutually_exclusive_cfg_if_use_aliases_both_react() {
+    let out = semantic_findings(
+        "cfg-if-use-alias-merge",
+        &[
+            ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+            ("safe.rs", "pub struct Handle;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! { if #[cfg(unix)] { use crate::infra::Secret as Handle; } else { use crate::safe::Handle; } }\npub fn leak() -> Handle { loop {} }\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::leak"]
+    );
+}
+
+/// Two mutually-exclusive `pub use ... as X;` re-export targets for the identical local name, in
+/// the same file, must both canonicalize correctly through the crate-wide `ReexportMap` — a facade
+/// path reached through either branch's binding must resolve to ITS OWN target, not collapse to
+/// whichever branch was declared second. Before the fix, `ReexportMap` was a single
+/// `HashMap<String, String>`.
+#[test]
+fn mutually_exclusive_reexport_targets_both_canonicalize_correctly() {
+    let out = semantic_findings(
+        "reexport-map-merge-forbidden-first",
+        &[
+            (
+                "lib.rs",
+                "pub mod safe;\npub mod infra;\npub mod api;\npub mod facade;\n",
+            ),
+            ("safe.rs", "pub struct Thing;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\npub use crate::infra::Secret as Handle;\n#[cfg(not(unix))]\npub use crate::safe::Thing as Handle;\n",
+            ),
+            ("facade.rs", "pub fn f() -> crate::api::Handle { loop {} }\n"),
+        ],
+        "crate::facade",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::facade::f"]
+    );
+}
+
+/// The identical re-export collision with the two `pub use` declarations in the OPPOSITE order —
+/// the forbidden target declared second.
+#[test]
+fn mutually_exclusive_reexport_targets_react_regardless_of_declaration_order() {
+    let out = semantic_findings(
+        "reexport-map-merge-forbidden-second",
+        &[
+            (
+                "lib.rs",
+                "pub mod safe;\npub mod infra;\npub mod api;\npub mod facade;\n",
+            ),
+            ("safe.rs", "pub struct Thing;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "#[cfg(not(unix))]\npub use crate::safe::Thing as Handle;\n#[cfg(unix)]\npub use crate::infra::Secret as Handle;\n",
+            ),
+            ("facade.rs", "pub fn f() -> crate::api::Handle { loop {} }\n"),
+        ],
+        "crate::facade",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::facade::f"]
+    );
+}
+
+/// The identical `use`-alias collision, this time exercising `resolve_principal`
+/// (`crates/hunyi/src/crate_scope.rs`) — the shared principal-trait resolver dyn-trait and
+/// impl-trait's *operand-scoped* boundaries both use (per `matches_forbidden_principal`'s own doc:
+/// "Both the single-module and subtree operand reactions use this leaf so their resolution
+/// semantics cannot drift"). Discovered while fixing the signature-coupling instance of this bug —
+/// not named in the original audit findings, but the identical mechanism, independently reproduced
+/// here before being fixed, per this project's own reproduce-before-fixing discipline.
+/// A cfg_attr(path)-hidden module's own `pub use` re-export must still be observed and folded into
+/// the crate-wide re-export closure `resolve_principal` (`crate_scope.rs::extern_resolution`)
+/// consumes — the identical `scan_crate` mechanism `dyn_operand_module_findings` and
+/// `impl_trait_operand_module_findings` share with signature-coupling, forbidden-marker, and
+/// trait-impl-locality, all fixed by the same `resolve_child_modules` change
+/// (`hunyi-cfg-attr-path-module-loss`). Independently reproduced here before being folded into
+/// that change's verification, per this project's reproduce-before-fixing discipline.
+#[test]
+fn dyn_trait_operand_resolution_reacts_through_a_cfg_attr_path_hidden_reexport() {
+    let tree = TempSrcTree::new("dyn-trait-cfg-attr-path-reexport");
+    tree.write_all(&[
+        (
+            "lib.rs",
+            "pub mod infra;\n#[cfg_attr(windows, path = \"weird.rs\")]\npub mod facade;\npub mod api;\n",
+        ),
+        ("infra.rs", "pub trait Port {}\n"),
+        ("facade.rs", "pub use crate::infra::Port;\n"),
+        (
+            "api.rs",
+            "pub fn f() -> Box<dyn crate::facade::Port> { loop {} }\n",
+        ),
+    ]);
+    let out = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::DynTrait,
+            subject: "dyn crate::facade::Port".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
+#[test]
+fn dyn_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order() {
+    let tree = TempSrcTree::new("dyn-trait-principal-cfg-use-merge");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\n#[cfg(unix)]\nuse crate::infra::Port as P;\npub fn f() -> Box<dyn P> { loop {} }\n",
+        ),
+    ]);
+    let out = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::DynTrait,
+            subject: "dyn P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
+/// The identical shape at impl-trait's own operand-scoped boundary — same shared
+/// `resolve_principal`/`matches_forbidden_principal` leaf as the dyn-trait test above.
+#[test]
+fn impl_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order() {
+    let tree = TempSrcTree::new("impl-trait-principal-cfg-use-merge");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\n#[cfg(unix)]\nuse crate::infra::Port as P;\npub fn f() -> impl P { loop {} }\n",
+        ),
+    ]);
+    let out = crate::impl_trait::impl_trait_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::ImplTrait,
+            subject: "impl P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
+// --- body-nested impl observation (const-eval trick / fn-body sibling) ----
+//
+// `const _: () = { impl Foo { … } };` is a common "const-eval trick" idiom (forcing a
+// compile-time trait assertion or a doctest/dogfooding scratch impl); `fn _also() { impl Foo {
+// … } }` is its fn-body-nested sibling. Both wrap a real `impl` block — inherent or trait —
+// inside a body that every capability below previously treated as opaque, the same way it
+// correctly treats a body-nested `mod` (see `async_subtree_does_not_observe_a_body_nested_module`
+// above) as unreachable. Unlike a `mod`, an `impl` is not scoped by where it is lexically
+// written — Rust binds it to its self type's own coherence set regardless of nesting — so
+// `Svc::leak`/`Svc::run` below are real, externally callable public API the instant `Svc` itself
+// is module-level, and every capability had a genuine false negative here. See
+// `syn_util::body_nested_impls` for the extraction and its stated one-level/`const`-or-`fn`-only
+// bound; the tests after the reaction cases below pin that bound so it does not silently widen.
+
+#[test]
+fn signature_coupling_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        findings(
+            "body-nested-const-signature",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n    }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        ["crate::infra::Db exposed by fn <crate::api::Svc>::leak"],
+    );
+}
+
+#[test]
+fn signature_coupling_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        findings(
+            "body-nested-fnbody-signature",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n    }\n}\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        ["crate::infra::Db exposed by fn <crate::api::Svc>::leak"],
+    );
+}
+
+#[test]
+fn async_exposure_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        async_mod(
+            "body-nested-const-async",
+            "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub async fn run(&self) {}\n    }\n};\n",
+        )
+        .unwrap(),
+        ["async fn <crate::m::Svc>::run(&self)"],
+    );
+}
+
+#[test]
+fn async_exposure_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        async_mod(
+            "body-nested-fnbody-async",
+            "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub async fn run(&self) {}\n    }\n}\n",
+        )
+        .unwrap(),
+        ["async fn <crate::m::Svc>::run(&self)"],
+    );
+}
+
+#[test]
+fn dyn_trait_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        dyn_mod(
+            "body-nested-const-dyn",
+            "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub fn dynamic(&self) -> Box<dyn crate::Port> { unimplemented!() }\n    }\n};\n",
+        )
+        .unwrap(),
+        ["dyn crate::Port exposed by fn <crate::m::Svc>::dynamic"],
+    );
+}
+
+#[test]
+fn dyn_trait_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        dyn_mod(
+            "body-nested-fnbody-dyn",
+            "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub fn dynamic(&self) -> Box<dyn crate::Port> { unimplemented!() }\n    }\n}\n",
+        )
+        .unwrap(),
+        ["dyn crate::Port exposed by fn <crate::m::Svc>::dynamic"],
+    );
+}
+
+#[test]
+fn impl_trait_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        impl_trait_mod(
+            "body-nested-const-impltrait",
+            "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub fn existential(&self) -> impl crate::Port { unimplemented!() }\n    }\n};\n",
+        )
+        .unwrap(),
+        ["impl crate::Port exposed by fn <crate::m::Svc>::existential"],
+    );
+}
+
+#[test]
+fn impl_trait_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        impl_trait_mod(
+            "body-nested-fnbody-impltrait",
+            "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub fn existential(&self) -> impl crate::Port { unimplemented!() }\n    }\n}\n",
+        )
+        .unwrap(),
+        ["impl crate::Port exposed by fn <crate::m::Svc>::existential"],
+    );
+}
+
+#[test]
+fn trait_impl_locality_reacts_on_a_const_wrapped_trait_impl() {
+    let out = locality_findings(
+        "body-nested-const-locality",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\npub mod commands;\npub mod rogue;\n",
+            ),
+            ("command.rs", "pub trait Command { fn run(&self); }\n"),
+            (
+                "commands.rs",
+                "pub struct Ok1;\nimpl crate::command::Command for Ok1 { fn run(&self) {} }\n",
+            ),
+            (
+                "rogue.rs",
+                "pub struct Rogue;\nconst _: () = {\n    impl crate::command::Command for Rogue {\n        fn run(&self) {}\n    }\n};\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::rogue (impl crate::command::Command for crate::rogue::Rogue)"],
+    );
+}
+
+#[test]
+fn trait_impl_locality_reacts_on_a_fn_body_wrapped_trait_impl() {
+    let out = locality_findings(
+        "body-nested-fnbody-locality",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\npub mod commands;\npub mod rogue;\n",
+            ),
+            ("command.rs", "pub trait Command { fn run(&self); }\n"),
+            (
+                "commands.rs",
+                "pub struct Ok1;\nimpl crate::command::Command for Ok1 { fn run(&self) {} }\n",
+            ),
+            (
+                "rogue.rs",
+                "pub struct Rogue2;\nfn _also() {\n    impl crate::command::Command for Rogue2 {\n        fn run(&self) {}\n    }\n}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::rogue (impl crate::command::Command for crate::rogue::Rogue2)"],
+    );
+}
+
+#[test]
+fn forbidden_marker_reacts_on_a_const_wrapped_hand_impl() {
+    // The impl form shares `scan.impls` with trait-impl-locality, so it closes the identical
+    // gap for `ForbiddenMarkerBoundary`'s hand-impl acquisition form.
+    let out = marker_findings(
+        "body-nested-const-marker",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "const _: () = {\n    impl serde::Serialize for crate::domain::Order {}\n};\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::domain::Order in crate::wire"],
+    );
+}
+
+#[test]
+fn forbidden_marker_reacts_on_a_fn_body_wrapped_hand_impl() {
+    let out = marker_findings(
+        "body-nested-fnbody-marker",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "fn _also() {\n    impl serde::Serialize for crate::domain::Order {}\n}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::domain::Order in crate::wire"],
+    );
+}
+
+// --- body-nested impl observation: the control and the stated scope bounds ---
+
+#[test]
+fn signature_coupling_control_the_identical_unwrapped_impl_also_reacts() {
+    // Control: proves the fixture shape is sound on its own (not a false pass from an unrelated
+    // fixture error) — the identical `leak()` written as an ordinary top-level inherent impl.
+    assert_eq!(
+        findings(
+            "body-nested-control-unwrapped",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nimpl Svc {\n    pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n}\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        ["crate::infra::Db exposed by fn <crate::api::Svc>::leak"],
+    );
+}
+
+#[test]
+fn a_plain_fn_directly_in_a_const_body_stays_a_stated_bound() {
+    // Scope bound: `body_nested_impls` extracts ONLY `impl` blocks. A plain `pub fn` written
+    // directly in a const/fn body (no enclosing `impl`) is genuinely scoped to that body and
+    // unreachable as `crate::…` — exactly like the existing body-nested-`mod` bound — so it must
+    // stay unobserved; recovering it would be a NEW, unaudited claim, not the fix this change
+    // makes.
+    assert_eq!(
+        findings(
+            "body-nested-bound-plain-fn",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "const _: () = {\n    pub fn also_hidden() -> crate::infra::Db { unimplemented!() }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
+
+#[test]
+fn an_impl_nested_one_level_further_stays_a_stated_bound() {
+    // Scope bound: only an `impl` that is a DIRECT statement of the const/fn's own outermost
+    // block is recovered. One level further in (here, inside an `if` block within the fn) is
+    // out of scope — the audited trigger shapes are both exactly one level deep, and recursing
+    // into arbitrary expression trees would invent tolerance for a shape nobody has shown.
+    assert_eq!(
+        findings(
+            "body-nested-bound-two-levels",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nfn _also() {\n    if true {\n        impl Svc {\n            pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n        }\n    }\n}\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
+
+#[test]
+fn a_static_wrapped_impl_stays_a_stated_bound() {
+    // Scope bound: only `const`/`fn` bodies are inspected, not `static`. The const-eval trick is
+    // specifically about `const` (compile-time evaluation even when never read); no audited
+    // idiom uses `static` for it, so widening to `static` would be unaudited tolerance.
+    assert_eq!(
+        findings(
+            "body-nested-bound-static",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nstatic S: () = {\n    impl Svc {\n        pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n    }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
+
+// --- visibility boundary: extern-block foreign items ---------------------
+
+/// The motivating false negative, with more than one `pub` foreign item in the SAME block so the
+/// per-source-item result must carry all of them, not just one — `item_observation` returns a
+/// `Vec` (widened from the prior `Option`) precisely because an `extern` block is one `syn::Item`
+/// holding an arbitrary number of independently-visible foreign items. Also covers `pub type`
+/// (an extern type declaration), which — unlike `pub fn`/`pub static` — carries no exposable
+/// signature and so was out of `semantic-signature-coupling`'s own extern-block fix, but a bare
+/// `pub type` IS a bare-pub declaration this capability must react to. Three non-pub foreign
+/// items sit in the same block as a same-block control: they must not react.
+#[test]
+fn a_pub_fn_pub_static_and_pub_type_inside_an_extern_block_all_react() {
+    let out = vis_findings(
+        "extern-block-multi",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "unsafe extern \"C\" {\n    pub fn open(h: *mut u8) -> u8;\n    pub static K: u8;\n    pub type Opaque;\n    fn hidden() -> u8;\n    static S: u8;\n    type T;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub fn open", "pub static K", "pub type Opaque"],
+        "every pub foreign item in the block reacts, every non-pub one stays clean: {out:?}"
+    );
+}
+
+/// The identical shape in the plain edition-2021 `extern "C" { … }` form (no `unsafe` prefix) —
+/// `syn::Item::ForeignMod` parses both forms identically, so there is no edition-specific gap.
+#[test]
+fn a_pub_fn_and_pub_static_inside_a_plain_extern_block_react() {
+    let out = vis_findings(
+        "extern-block-plain",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "extern \"C\" {\n    pub fn plain(h: *mut u8) -> u8;\n    pub static K2: u8;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub fn plain", "pub static K2"],
+        "the plain 2021-edition extern block form reacts identically: {out:?}"
+    );
+}
+
+/// A block whose foreign items are ALL non-`pub` must stay clean — the default (inherited)
+/// visibility inside an `extern` block is private to the enclosing module, exactly like an
+/// ordinary item, not implicitly public because it names an FFI declaration.
+#[test]
+fn an_extern_block_with_no_pub_foreign_item_is_clean() {
+    let out = vis_findings(
+        "extern-block-none-pub",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "unsafe extern \"C\" {\n    fn hidden() -> u8;\n    static S: u8;\n    type T;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "no bare-pub foreign item in the block: {out:?}"
+    );
+}
+
+/// A restricted-visibility foreign item (`pub(crate)`) is ranked exactly like an ordinary item's
+/// own restricted visibility — the ceiling comparison downstream of `item_observation_parts`
+/// applies uniformly regardless of item source, so a Super ceiling reacts on it exactly as
+/// `super_ceiling_reacts_on_pub_and_pub_crate_only` already pins for ordinary items.
+#[test]
+fn a_restricted_visibility_foreign_item_ranks_like_an_ordinary_one() {
+    let out = vis_findings_at(
+        "extern-block-restricted",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "unsafe extern \"C\" {\n    pub(crate) fn helper() -> u8;\n    pub(super) fn narrower() -> u8;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+        VisibilityCeiling::Super.rank(),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub(crate) fn helper"],
+        "Super ceiling reacts on pub(crate), not pub(super), inside an extern block too: {out:?}"
     );
 }

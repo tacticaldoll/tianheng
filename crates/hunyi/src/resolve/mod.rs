@@ -21,16 +21,23 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::syn_util::{FlatItem, reexport_externs_for, reexport_renames_for};
+
 mod shape;
 pub(crate) use shape::*;
 
-/// Each name a `use` brings into a module's scope mapped to its written full path.
-pub(crate) type UseMap = HashMap<String, String>;
+/// Each name a `use` brings into a module's scope mapped to **every** written full path declared
+/// for that name — almost always exactly one, but two mutually-exclusive `#[cfg]`-gated `use ...
+/// as Name;` declarations in the same file are never compiled together, so both candidate targets
+/// are kept (cfg-blind: observation cannot know which is live) rather than the later declaration
+/// silently overwriting the earlier one. Mirrors [`AliasMap`]'s existing multi-valued shape.
+pub(crate) type UseMap = HashMap<String, Vec<String>>;
 
-/// A `pub use` re-export closure: an alias's canonical path → the canonical path it
-/// re-exports. Following it to a fixpoint canonicalizes a facade path to the item it
-/// denotes.
-pub(crate) type ReexportMap = HashMap<String, String>;
+/// A `pub use` re-export closure: an alias's canonical path → **every** canonical path it
+/// re-exports (mirrors [`UseMap`]'s multi-valued shape for the identical cfg-blind reason: two
+/// mutually-exclusive `pub use ... as X;` targets are both kept). Following it to a fixpoint
+/// canonicalizes a facade path to the item(s) it denotes.
+pub(crate) type ReexportMap = HashMap<String, Vec<String>>;
 
 /// A type-alias closure: a `type X = <path>;` alias's canonical path (`{module}::X`) → the
 /// canonical paths of its nominal targets. Followed together with the re-export closure to a
@@ -65,6 +72,20 @@ pub(crate) fn canonical_path_str(path: &str) -> String {
         .join("::")
 }
 
+/// Whether a `::`-delimited operand string has an empty segment — a leading `::`, a
+/// trailing `::`, a doubled `::`, or the empty string itself (`"".split("::")` yields one
+/// empty segment). A caller comparing a forbidden/allowed operand against a canonical path
+/// this crate resolves MUST reject this before matching: `extern_verbatim_renamed`/
+/// `extern_verbatim_segs` build a resolved canonical path purely from `syn::Path` segments,
+/// never consulting `leading_colon`, so no canonical path this crate ever produces carries an
+/// empty segment (rustc's own grammar forbids one in real source either). An operand shaped
+/// this way can therefore never equal or prefix-contain a real canonical path, nor (past a
+/// trailing `::`) ever equal a real leaf identifier — a silent, permanent non-match rather
+/// than the loud constitution error a caller must raise instead.
+pub(crate) fn has_empty_path_segment(operand: &str) -> bool {
+    operand.split("::").any(str::is_empty)
+}
+
 /// Map each name a `use` brings into the module's scope to its full written path
 /// (`use a::b::C` → `C → a::b::C`; `use a::b::C as D` → `D → a::b::C`; `use a::b` →
 /// `b → a::b`). Glob imports bring no nameable leaf (a stated bound). Only the module's
@@ -77,6 +98,17 @@ pub(crate) fn collect_uses(items: &[syn::Item]) -> UseMap {
         }
     }
     map
+}
+
+/// Add `value` as a candidate for `key`, skipping an exact duplicate (two mutually-exclusive `#[cfg]`
+/// branches declaring the byte-identical `use` produce nothing new to react to). Never overwrites —
+/// the whole point of [`UseMap`]/[`ReexportMap`] being multi-valued is that a later declaration for
+/// the same name never silently discards an earlier one.
+fn push_candidate(map: &mut HashMap<String, Vec<String>>, key: String, value: String) {
+    let candidates = map.entry(key).or_default();
+    if !candidates.contains(&value) {
+        candidates.push(value);
+    }
 }
 
 fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
@@ -100,10 +132,10 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
                 // closure and the direct walk agree. A `self` under no prefix cannot arise from a
                 // legal `use`.
                 if let Some(last) = prefix.rsplit("::").next().filter(|s| !s.is_empty()) {
-                    map.insert(last.to_string(), prefix.clone());
+                    push_candidate(map, last.to_string(), prefix.clone());
                 }
             } else {
-                map.insert(ident.clone(), join(&prefix, &ident));
+                push_candidate(map, ident.clone(), join(&prefix, &ident));
             }
         }
         syn::UseTree::Rename(rename) => {
@@ -114,10 +146,10 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
             } else if ident == "self" {
                 // `use a::b::{self as x}` binds the prefix module itself, renamed.
                 if !prefix.is_empty() {
-                    map.insert(alias, prefix.clone());
+                    push_candidate(map, alias, prefix.clone());
                 }
             } else {
-                map.insert(alias, join(&prefix, &ident));
+                push_candidate(map, alias, join(&prefix, &ident));
             }
         }
         // A glob brings no nameable leaf into the map — a documented out-of-scope bound.
@@ -169,47 +201,72 @@ fn resolve_crate_relative(segs: &[String], module: &str) -> Option<String> {
 /// path, using the module's in-scope `use`s, `crate::`/`self`/`super` relative to
 /// `module`, and — per `bare` — a bare/relative name against the current module. `None`
 /// when not resolvable (a glob/external/primitive name under [`BareFallback::Ignore`]) —
-/// a stated bound, never a silent claim.
+/// a stated bound, never a silent claim. Takes the **first** use-map candidate when the head
+/// resolves to more than one (a mutually-exclusive `#[cfg]` collision) — the identity/anchor
+/// callers of this function (impl-locality, trait-impl anchoring, marker acquisition) have no
+/// audit-verified need for cfg-blind multi-candidate resolution; [`resolve_path_all`] is the
+/// exposure-matching sibling that checks every candidate.
 pub(crate) fn resolve_path(
     path: &syn::Path,
     uses: &UseMap,
     module: &str,
     bare: BareFallback,
 ) -> Option<String> {
+    resolve_path_all(path, uses, module, bare)
+        .into_iter()
+        .next()
+}
+
+/// [`resolve_path`]'s cfg-blind sibling: returns **every** candidate canonical path the head could
+/// resolve to, instead of only the first. Exposure-matching callers (signature-coupling and the
+/// shared existential-exposure pipeline) must check every candidate and react if any is forbidden —
+/// observation cannot know which of two mutually-exclusive `#[cfg]` branches' `use` declarations is
+/// live, so neither may be silently dropped in favor of the other.
+pub(crate) fn resolve_path_all(
+    path: &syn::Path,
+    uses: &UseMap,
+    module: &str,
+    bare: BareFallback,
+) -> Vec<String> {
     let segs: Vec<String> = path
         .segments
         .iter()
         .map(|s| strip_raw(&s.ident.to_string()))
         .collect();
-    let head = segs.first()?;
+    let Some(head) = segs.first() else {
+        return Vec::new();
+    };
 
     if let Some(canonical) = resolve_crate_relative(&segs, module) {
-        return Some(canonical);
+        return vec![canonical];
     }
     match uses.get(head) {
-        Some(full) => {
-            let rest = &segs[1..];
-            let combined = if rest.is_empty() {
-                full.clone()
-            } else {
-                format!("{full}::{}", rest.join("::"))
-            };
-            // The use-target may itself be `crate`/`self`/`super`-relative (e.g.
-            // `use super::x::Y`); canonicalize it against the module so it compares as an
-            // absolute path. A bare-headed target (an external crate, edition 2018+) is
-            // left as written — it cannot match a local anchor/forbidden path anyway.
-            let combined_segs: Vec<String> = combined.split("::").map(strip_raw).collect();
-            Some(resolve_crate_relative(&combined_segs, module).unwrap_or(combined))
-        }
+        Some(candidates) => candidates
+            .iter()
+            .map(|full| {
+                let rest = &segs[1..];
+                let combined = if rest.is_empty() {
+                    full.clone()
+                } else {
+                    format!("{full}::{}", rest.join("::"))
+                };
+                // The use-target may itself be `crate`/`self`/`super`-relative (e.g.
+                // `use super::x::Y`); canonicalize it against the module so it compares as an
+                // absolute path. A bare-headed target (an external crate, edition 2018+) is
+                // left as written — it cannot match a local anchor/forbidden path anyway.
+                let combined_segs: Vec<String> = combined.split("::").map(strip_raw).collect();
+                resolve_crate_relative(&combined_segs, module).unwrap_or(combined)
+            })
+            .collect(),
         None => match bare {
-            BareFallback::Ignore => None,
+            BareFallback::Ignore => Vec::new(),
             // A name needs no `use` in its own module: resolve against `module`.
             BareFallback::CurrentModule => {
-                if module.is_empty() {
-                    Some(format!("crate::{}", segs.join("::")))
+                vec![if module.is_empty() {
+                    format!("crate::{}", segs.join("::"))
                 } else {
-                    Some(format!("{module}::{}", segs.join("::")))
-                }
+                    format!("{module}::{}", segs.join("::"))
+                }]
             }
         },
     }
@@ -326,53 +383,75 @@ pub(crate) fn renames_shadowed(
 /// (rustc resolves `pub use dep::X;` under a child `mod dep` to the local module — E0432 if absent),
 /// so it resolves against the extern set and the crate-root rename map with `child_mods` removed
 /// (`externs − child_mods` / `renames − child_mods`) — closing the facade-closure sibling of the
-/// direct head-shadow FP, since this crate-wide map is followed by every module's query. A
-/// **leading-`::`** head (`pub use ::dep::X;`) is an unambiguous extern that no local module
+/// direct head-shadow FP, since this crate-wide map is followed by every module's query. That
+/// shadow is computed **per re-export item**, via [`reexport_externs_for`] and
+/// [`reexport_renames_for`], rather than once for every item in `items`: a child `mod`
+/// [`provably_mutually_exclusive`](crate::syn_util::provably_mutually_exclusive) with a SPECIFIC
+/// `pub use` (a `#[cfg(unix)] mod dep;` beside this item's own `#[cfg(not(unix))]`, or a different
+/// arm of the same `cfg_if!`) never actually shadows that item's own head, even though both live
+/// in `items` — the identical per-item exclusion `module_findings`'s direct-head resolution
+/// applies, restored here for the crate-wide closure (round-9 finding, `exposure.rs:157`'s
+/// sibling: a facade reaching such a re-export through this closure was suppressed the same
+/// cfg-blind way). The rename-alias half of that shadow (`renames − child_mods`) needs the
+/// identical per-item treatment for the same reason `module_findings` does: a rename alias (e.g.
+/// `wc` from a crate-root `extern crate serde as wc;`) is never itself a member of the externs
+/// set, so a cfg-blindly-shadowed alias does not merely under-shadow a re-export through it — it
+/// drops the resolution outright once the shadowed alias falls through to an externs-set fallback
+/// with no candidate for it at all (found by an independent adversarial review of the fix above).
+/// A **leading-`::`** head (`pub use ::dep::X;`) is an unambiguous extern that no local module
 /// shadows, so it keeps the raw sets: `collect_use_tree` walks `use_item.tree`, which carries no
 /// leading colon, so the flag is read from the `ItemUse` here (mirroring the direct walker's
-/// `push_reexport`, which preserves it for the same escape-hatch reason). This split mirrors
-/// `module_findings`' `externs_reexport` / `renames_bare`; with `child_mods` empty the map is
-/// byte-identical to the raw-set behavior.
+/// `push_reexport`, which preserves it for the same escape-hatch reason). With `child_mods` empty
+/// the map is byte-identical to the raw-set behavior.
 pub(crate) fn collect_reexports(
-    items: &[syn::Item],
+    items: &[FlatItem],
     module: &str,
     externs: &HashSet<String>,
-    child_mods: &HashSet<String>,
+    child_mods: &[(String, FlatItem)],
     renames: &ExternRenameMap,
     out: &mut ReexportMap,
 ) {
-    let externs_bare: HashSet<String> = externs.difference(child_mods).cloned().collect();
-    let renames_bare = renames_shadowed(renames, child_mods);
-    for item in items {
-        if let syn::Item::Use(use_item) = item {
-            if matches!(use_item.vis, syn::Visibility::Inherited) {
-                continue;
-            }
-            let mut local = UseMap::new();
-            collect_use_tree(&use_item.tree, String::new(), &mut local);
-            // A leading `::` on the `use` item marks an unambiguous extern head — unshadowed by any
-            // same-named child `mod`, so it keeps the raw sets; a bare head uses the child-excluded
-            // sets. The flag lives on `ItemUse`, not the `UseTree` `collect_use_tree` walked.
-            let (head_externs, head_renames) = if use_item.leading_colon.is_some() {
-                (externs, renames)
-            } else {
-                (&externs_bare, &renames_bare)
-            };
-            for (name, written) in local {
-                let alias = format!("{module}::{name}");
+    for flat in items {
+        let syn::Item::Use(use_item) = &flat.item else {
+            continue;
+        };
+        if matches!(use_item.vis, syn::Visibility::Inherited) {
+            continue;
+        }
+        let mut local = UseMap::new();
+        collect_use_tree(&use_item.tree, String::new(), &mut local);
+        // A leading `::` on the `use` item marks an unambiguous extern head — unshadowed by any
+        // same-named child `mod`, so it keeps the raw sets; a bare head uses THIS item's own
+        // cfg-aware child-excluded sets (`reexport_externs_for` / `reexport_renames_for`). The
+        // flag lives on `ItemUse`, not the `UseTree` `collect_use_tree` walked.
+        let externs_bare = reexport_externs_for(externs, child_mods, flat);
+        let renames_bare = reexport_renames_for(renames, child_mods, flat);
+        let (head_externs, head_renames) = if use_item.leading_colon.is_some() {
+            (externs, renames)
+        } else {
+            (&externs_bare, &renames_bare)
+        };
+        // `local` maps each name this ONE use item's tree brings in to its single written
+        // target — Rust rejects two same-named leaves within one item (E0252), so `written`
+        // never actually holds more than one candidate here; `collect_use_tree`'s multi-valued
+        // shape only matters once `out` accumulates across items/branches below.
+        for (name, written) in local {
+            let alias = format!("{module}::{name}");
+            for written in &written {
                 if let Some(target) =
-                    canonicalize_use_target(&written, module, head_externs, head_renames)
+                    canonicalize_use_target(written, module, head_externs, head_renames)
                 {
-                    // Skip a self-referential entry (`target == alias`) and — critically — one whose
-                    // alias key is a strict `::`-prefix of its own target (`pub use self::x::x;` →
-                    // `crate::x -> crate::x::x`, a same-name value re-export nested under a same-named
-                    // module). The latter is meaningless for type-path canonicalization (the module
-                    // path `crate::x` still denotes the module; rewriting would fabricate a nonexistent
-                    // `crate::x::x::…`) and, left in the map, makes `rewrite_longest_prefix` re-fire on
-                    // its own monotonically-growing output forever — the exact-repeat `seen` guard
+                    // Skip a self-referential entry (`target == alias`) and — critically — one
+                    // whose alias key is a strict `::`-prefix of its own target (`pub use
+                    // self::x::x;` → `crate::x -> crate::x::x`, a same-name value re-export
+                    // nested under a same-named module). The latter is meaningless for
+                    // type-path canonicalization (the module path `crate::x` still denotes the
+                    // module; rewriting would fabricate a nonexistent `crate::x::x::…`) and,
+                    // left in the map, makes the longest-prefix rewrite re-fire on its own
+                    // monotonically-growing output forever — the exact-repeat `seen` guard
                     // cannot catch a never-repeating sequence.
                     if target != alias && !is_strict_path_prefix(&alias, &target) {
-                        out.insert(alias, target);
+                        push_candidate(out, alias.clone(), target);
                     }
                 }
             }
@@ -403,41 +482,9 @@ fn canonicalize_use_target(
 
 /// Whether `prefix` is a strict `::`-boundary prefix of `path` — `crate::a` of `crate::a::b`, but
 /// not of the unrelated `crate::ab` (segment-boundary aware) nor of itself. Used to refuse a
-/// re-export map entry that would let `rewrite_longest_prefix` re-fire on its own growing output.
+/// re-export map entry that would let the longest-prefix rewrite re-fire on its own growing output.
 fn is_strict_path_prefix(prefix: &str, path: &str) -> bool {
     path.len() > prefix.len() && path.starts_with(prefix) && path[prefix.len()..].starts_with("::")
-}
-
-/// Rewrite the **longest `::`-boundary prefix** of `path` that is a key in `map`, keeping the
-/// remaining tail, or `None` if no prefix matches. A whole-path match is the longest prefix (so
-/// this subsumes an exact-key lookup); a shorter prefix match rewrites a member reached *through* a
-/// re-exported module or aliased prefix — `crate::facade::sub::Foo` via the module re-export
-/// `crate::facade::sub -> crate::real::sub` becomes `crate::real::sub::Foo`, which a whole-key-only
-/// lookup would miss (a silent false negative). The most specific (longest) key wins, so a type
-/// re-export of `…::sub::Foo` still takes precedence over a module re-export of `…::sub`.
-fn rewrite_longest_prefix(
-    path: &str,
-    map: &std::collections::HashMap<String, String>,
-) -> Option<String> {
-    let segments: Vec<&str> = path.split("::").collect();
-    for end in (1..=segments.len()).rev() {
-        let prefix = segments[..end].join("::");
-        if let Some(target) = map.get(&prefix) {
-            if end == segments.len() {
-                return Some(target.clone());
-            }
-            return Some(format!("{target}::{}", segments[end..].join("::")));
-        }
-    }
-    None
-}
-
-/// Follow the re-export closure from `path` to a fixpoint, so a facade path becomes the
-/// canonical path of the item it denotes. Cycle-guarded. The re-export-only special case of
-/// [`canonicalize_through_aliases`] with an empty alias map, so the two share one fixpoint /
-/// hop-cap implementation and cannot drift.
-pub(crate) fn canonicalize_through_reexports(path: &str, reexports: &ReexportMap) -> String {
-    canonicalize_through_aliases(path, &AliasMap::new(), reexports)
 }
 
 fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<String>> {
@@ -496,14 +543,16 @@ pub(crate) fn expand_canonical_paths(
                         }
                     }
                 }
-            } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
-                let child = memo
-                    .get(&next)
-                    .cloned()
-                    .unwrap_or_else(|| vec![next.clone()]);
-                for r in child {
-                    if !results.contains(&r) {
-                        results.push(r);
+            } else if let Some(targets) = rewrite_longest_alias_prefixes(&current, reexports) {
+                for t in &targets {
+                    let child = memo
+                        .get(t.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| vec![t.clone()]);
+                    for r in child {
+                        if !results.contains(&r) {
+                            results.push(r);
+                        }
                     }
                 }
             } else {
@@ -534,53 +583,16 @@ pub(crate) fn expand_canonical_paths(
                     work.push((target, false, depth + 1));
                 }
             }
-        } else if let Some(next) = rewrite_longest_prefix(&current, reexports) {
-            if !memo.contains_key(&next) {
-                work.push((next, false, depth + 1));
+        } else if let Some(targets) = rewrite_longest_alias_prefixes(&current, reexports) {
+            for target in targets.into_iter().rev() {
+                if !memo.contains_key(&target) {
+                    work.push((target, false, depth + 1));
+                }
             }
         }
     }
 
     memo.remove(path).unwrap_or_else(|| vec![path.to_string()])
-}
-
-/// Follow the **alias** and **re-export** closures together from `path` to a single fixpoint path.
-/// Delegates to [`expand_canonical_paths`] and yields the first resolved target path.
-pub(crate) fn canonicalize_through_aliases(
-    path: &str,
-    aliases: &AliasMap,
-    reexports: &ReexportMap,
-) -> String {
-    expand_canonical_paths(path, aliases, reexports)
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| path.to_string())
-}
-
-/// Follow a single-target alias map (`HashMap<String, String>`) and re-export closure to a fixpoint.
-pub(crate) fn canonicalize_through_single_alias_map(
-    path: &str,
-    aliases: &std::collections::HashMap<String, String>,
-    reexports: &ReexportMap,
-) -> String {
-    let mut current = path.to_string();
-    let mut seen = std::collections::HashSet::new();
-    let cap = aliases.len() + reexports.len() + 1;
-    while seen.insert(current.clone()) {
-        if seen.len() > cap {
-            break;
-        }
-        if let Some(next) = rewrite_longest_prefix(&current, aliases) {
-            current = next;
-            continue;
-        }
-        if let Some(next) = rewrite_longest_prefix(&current, reexports) {
-            current = next;
-            continue;
-        }
-        break;
-    }
-    current
 }
 
 /// The alias's targets as **bare nominal paths** — collects all `syn::Path` targets contained in

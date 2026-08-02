@@ -10,8 +10,8 @@ use crate::errors::{
 };
 use crate::resolve::strip_raw;
 use crate::syn_util::{
-    direct_path_value, flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
-    has_path_attr,
+    FlatItem, body_nested_impls, cfg_attr_path_values, direct_path_value,
+    flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
 };
 
 /// The path segments of a module relative to the crate root.
@@ -38,14 +38,52 @@ pub(crate) fn resolve_module_items_with_files(
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
         // Transparent-macro (`cfg_if!`) arms flattened in, so every capability reading a module's
         // items observes what an adopter wrote inside an arm without knowing arms exist.
+        let flat = flatten_transparent_macro_items(branch_items);
+        // Every `impl` a `const`/`fn` among `flat` directly bodies (the const-eval-trick idiom
+        // and its fn-body sibling — see `body_nested_impls`), attributed to this SAME branch/file:
+        // the extraction never crosses a file boundary, so the impl's `use`-map and module
+        // resolution are unchanged from as if it were written at this branch's own top level.
+        let nested_impls = body_nested_impls(&flat);
         items.extend(
-            flatten_transparent_macro_items(branch_items)
-                .into_iter()
+            flat.into_iter()
+                .chain(nested_impls)
                 .map(|item| (item, file.clone(), branch_index)),
         );
     }
     Ok(items)
 }
+
+/// Like [`resolve_module_items_with_files`], but retains each item's [`FlatItem`] tag (its own
+/// `cfg_if!` arm membership) instead of discarding it. A `#[cfg]`/`cfg_if!`-split at the MODULE
+/// level already gets its own branch index above; this is for the finer split that stays WITHIN
+/// one branch's own file — two mutually-exclusive sibling items (a `#[cfg(unix)] mod x;` beside a
+/// `#[cfg(not(unix))] pub use x::Y;`, or the two arms of one `cfg_if!` invocation) that share the
+/// identical branch index and file, but must not be treated as always coexisting when resolving
+/// one against the other (see `exposure.rs`'s cfg-aware re-export child-module shadow).
+pub(crate) fn resolve_module_items_with_cfg_tags(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(FlatItem, PathBuf, usize)>, String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    let mut items = Vec::new();
+    for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
+        let flat = flatten_transparent_macros(branch_items);
+        // See `resolve_module_items_with_files`: the same const/fn-body-nested impls, wrapped
+        // as plain `FlatItem`s (no arm membership — nothing that consults it ever matches an
+        // `Item::Impl`, so a synthetic tag would claim membership this walk never observed).
+        let plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
+        let nested_impls = body_nested_impls(&plain).into_iter().map(FlatItem::plain);
+        items.extend(
+            flat.into_iter()
+                .chain(nested_impls)
+                .map(|flat| (flat, file.clone(), branch_index)),
+        );
+    }
+    Ok(items)
+}
+
 /// Resolves a module path to its primary source file (test-only helper).
 #[cfg(test)]
 pub(crate) fn resolve_module_file(
@@ -251,11 +289,7 @@ fn descend(
                 // since a `#[path]`-loaded file is mod-rs-like, its own children (both
                 // conventional and any further `#[path]`) resolve from ITS OWN directory too — so
                 // `path_base` and the child-continuation directory are the SAME value here (unlike
-                // the plain, non-`#[path]` case below, where they differ for a flat `seg.rs`). An
-                // inline `#[path]` (has a body) or a `cfg_attr`-wrapped `#[path]` is not followed
-                // by this targeted resolver — a narrow **fail-loud** bound (exit 2 "cannot
-                // judge"), never a silent pass; the whole-crate walks follow the unconditional
-                // form.
+                // the plain, non-`#[path]` case below, where they differ for a flat `seg.rs`).
                 if let Some(rel) = direct_path_value(&module_item.attrs) {
                     let file = branch.path_base.join(&rel);
                     if !file.is_file() {
@@ -282,8 +316,29 @@ fn descend(
                     file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
                     continue;
                 }
-                if has_path_attr(&module_item.attrs) {
-                    continue;
+                // A `cfg_attr`-wrapped `#[path]` target is unioned with the conventional file
+                // below, not followed in its place: `cfg_attr` never removes the `mod` item, so
+                // cfg-blind observation cannot know which one a given build actually compiles.
+                // Mirrors `scan::resolve_child_modules`'s identical union (found on adversarial
+                // review: this targeted resolver's own doc once claimed to fail loud on this shape,
+                // but a mutually-exclusive sibling declaration for the same name silently absorbed
+                // the branch count, so the cfg_attr target's own file was dropped with no error at
+                // all whenever ANY sibling resolved — never truly fail-loud in that case).
+                let cfg_attr_targets = cfg_attr_path_values(&module_item.attrs);
+                let mut has_backing_source = false;
+                for rel in &cfg_attr_targets {
+                    let file = branch.path_base.join(rel);
+                    if file.is_file() {
+                        has_backing_source = true;
+                        if xingbiao::try_visit(&mut seen_files, &file)? {
+                            let parsed = read_parse(&file)?;
+                            let next_dir = file
+                                .parent()
+                                .map(Path::to_path_buf)
+                                .unwrap_or_else(|| branch.child_dir.clone());
+                            file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
+                        }
+                    }
                 }
                 // A `#[cfg]`-gated plain module may legitimately have no source file when the
                 // predicate is off (a standard optional-feature pattern) — matching
@@ -291,10 +346,11 @@ fn descend(
                 // this single-module-anchored descent no longer disagrees with its own sibling
                 // walker on the identical shape (the 0.2.2 lesson: the two walkers' missing-file
                 // policies had silently drifted apart). An unconditional missing file stays a real
-                // scan error (exit 2). BOTH conventional forms present is checked FIRST and is never
-                // tolerated: no predicate value makes two files compile as one module, so unlike an
-                // absence it cannot be a legitimate configuration — the same ordering 圭表 and 漏刻
-                // each independently apply to this shape.
+                // scan error (exit 2), UNLESS the `cfg_attr` target above already backs this
+                // declaration on some other build. BOTH conventional forms present is checked
+                // FIRST and is never tolerated: no predicate value makes two files compile as one
+                // module, so unlike an absence it cannot be a legitimate configuration — the same
+                // ordering 圭表 and 漏刻 each independently apply to this shape.
                 let file = match locate_module_file(&branch.child_dir, seg) {
                     ModuleFile::One(file) => file,
                     ModuleFile::Ambiguous { flat, nested } => {
@@ -309,7 +365,7 @@ fn descend(
                         ));
                     }
                     ModuleFile::Absent => {
-                        if cfg_conditional {
+                        if has_backing_source || cfg_conditional {
                             continue;
                         }
                         return Err(missing_module_file_error(module, crate_package));

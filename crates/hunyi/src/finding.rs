@@ -564,12 +564,19 @@ impl std::fmt::Display for SemanticFact {
 }
 
 impl SemanticFact {
-    pub(crate) fn into_finding(self) -> Finding {
+    /// `governing_package` is the crate the violated boundary was declared against
+    /// (`boundary.crate_package`) — without it, two crates declaring the identical boundary
+    /// against the identical module path produce identical identities and silently collapse (see
+    /// `structured-violation-identity` spec). **Not** added to `UnsafeSite`: unsafe-confinement's
+    /// own `target` is already `boundary.crate_package` directly
+    /// (`crates/hunyi/src/unsafe_confinement.rs`), so this fact is already crate-scoped and a
+    /// second copy of the same value here would be a redundant identity field, not a fix.
+    pub(crate) fn into_finding(self, governing_package: &str) -> Finding {
         let text = self.to_string();
-        self.into_finding_with_text(text)
+        self.into_finding_with_text(text, governing_package)
     }
 
-    fn into_finding_with_text(self, text: String) -> Finding {
+    fn into_finding_with_text(self, text: String, governing_package: &str) -> Finding {
         match &self {
             SemanticFact::AsyncFreeFn { module, name, .. } => {
                 return Finding::new(
@@ -578,6 +585,7 @@ impl SemanticFact {
                         "tianheng.fact/hunyi/async-exposure",
                         "async-free-function",
                         [
+                            ("governing_package", governing_package.to_string()),
                             ("module", module.clone()),
                             ("name", name.clone()),
                             ("owner", module.clone()),
@@ -598,6 +606,7 @@ impl SemanticFact {
                         "tianheng.fact/hunyi/async-exposure",
                         "async-trait-method",
                         [
+                            ("governing_package", governing_package.to_string()),
                             ("module", module.clone()),
                             ("name", name.clone()),
                             ("owner", format!("{module}::{trait_name}")),
@@ -618,6 +627,7 @@ impl SemanticFact {
                         "tianheng.fact/hunyi/async-exposure",
                         "async-inherent-method",
                         [
+                            ("governing_package", governing_package.to_string()),
                             ("module", module.clone()),
                             ("name", name.clone()),
                             ("owner", owner.clone()),
@@ -629,6 +639,7 @@ impl SemanticFact {
             _ => {}
         }
         if let SemanticFact::UnsafeSite { module, site } = &self {
+            // Deliberately no `governing_package` field — see the doc comment on `into_finding`.
             return Finding::new(
                 text,
                 StructuredFactIdentity::of(
@@ -638,7 +649,7 @@ impl SemanticFact {
                 ),
             );
         }
-        let (fact_type, shape, fields): (&str, &str, Vec<(&str, &str)>) = match &self {
+        let (fact_type, shape, mut fields): (&str, &str, Vec<(&str, &str)>) = match &self {
             SemanticFact::Exposed {
                 kind,
                 subject,
@@ -694,6 +705,7 @@ impl SemanticFact {
             ),
             SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
         };
+        fields.push(("governing_package", governing_package));
         let key = StructuredFactIdentity::of(fact_type, shape, fields);
         Finding::new(text, key)
     }
@@ -732,7 +744,7 @@ fn reject_positional_identity<'a>(
     facts: impl IntoIterator<Item = &'a SemanticFact>,
 ) -> Result<(), String> {
     for fact in facts {
-        let identity = fact.clone().into_finding();
+        let identity = fact.clone().into_finding("app");
         if identity
             .key()
             .fields()
@@ -1156,7 +1168,7 @@ mod fact_tests {
         ];
         let keys: std::collections::BTreeSet<_> = facts
             .into_iter()
-            .map(|fact| fact.into_finding().key().clone())
+            .map(|fact| fact.into_finding("app").key().clone())
             .collect();
         assert_eq!(keys.len(), 5);
     }
@@ -1164,9 +1176,9 @@ mod fact_tests {
     #[test]
     fn semantic_fact_presentation_is_not_identity() {
         let original = exposure(ExposureKind::Signature, "crate::api", "run")
-            .into_finding_with_text("Port exposed by fn crate::api::run".to_string());
+            .into_finding_with_text("Port exposed by fn crate::api::run".to_string(), "app");
         let polished = exposure(ExposureKind::Signature, "crate::api", "run")
-            .into_finding_with_text("fn crate::api::run exposes Port".to_string());
+            .into_finding_with_text("fn crate::api::run exposes Port".to_string(), "app");
         assert_eq!(original.key(), polished.key());
         assert_ne!(original.text(), polished.text());
     }
@@ -1297,6 +1309,7 @@ mod fact_tests {
             .map(|seam| {
                 let mut expected_fields = published_seam_fields(seam);
                 expected_fields.push(("subject", "Port"));
+                expected_fields.push(("governing_package", "app"));
                 expected_fields.sort_by_key(|(name, _)| *name);
                 let fact = SemanticFact::Exposed {
                     kind: ExposureKind::Signature,
@@ -1304,7 +1317,7 @@ mod fact_tests {
                     seam: seam.clone(),
                 };
                 assert_semantic_fact_is_cataloged(&fact);
-                let finding = fact.into_finding();
+                let finding = fact.into_finding("app");
                 assert_eq!(
                     finding.key().fact_type(),
                     "tianheng.fact/hunyi/signature-exposure"
@@ -1335,6 +1348,7 @@ mod fact_tests {
                 "tianheng.fact/hunyi/trait-impl-site",
                 "misplaced-implementation",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::m"),
                     ("owner", "crate::Api"),
                     ("trait", "crate::Port"),
@@ -1349,6 +1363,7 @@ mod fact_tests {
                 "derive",
                 vec![
                     ("form", "derive"),
+                    ("governing_package", "app"),
                     ("marker", "Marker"),
                     ("owner", "crate::Api"),
                 ],
@@ -1363,6 +1378,7 @@ mod fact_tests {
                 "impl",
                 vec![
                     ("form", "impl"),
+                    ("governing_package", "app"),
                     ("marker", "Marker"),
                     ("module", "crate::m"),
                     ("owner", "crate::Api"),
@@ -1377,6 +1393,7 @@ mod fact_tests {
                 "tianheng.fact/hunyi/visibility-exposure",
                 "declared-item-visibility",
                 vec![
+                    ("governing_package", "app"),
                     ("item_kind", "fn"),
                     ("item_name", "run"),
                     ("visibility", "pub"),
@@ -1385,7 +1402,7 @@ mod fact_tests {
         ];
         for (fact, fact_type, shape, expected_fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            let finding = fact.into_finding("app");
             let fields: Vec<_> = finding.key().fields().collect();
             assert_eq!(finding.key().fact_type(), fact_type, "{}", finding.text());
             assert_eq!(finding.key().shape(), shape, "{}", finding.text());
@@ -1397,7 +1414,7 @@ mod fact_tests {
             site: UnsafeSiteFact::FreeFn { name: "run".into() },
         };
         assert_semantic_fact_is_cataloged(&unsafe_fact);
-        let finding = unsafe_fact.into_finding();
+        let finding = unsafe_fact.into_finding("app");
         assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
         assert_eq!(finding.key().shape(), "unsafe-free-function");
         assert_eq!(
@@ -1416,12 +1433,13 @@ mod fact_tests {
             let expected_type = published_exposure_type(kind);
             let fact = exposure(kind, "crate::api", "run");
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            let finding = fact.into_finding("app");
             assert_eq!(finding.key().fact_type(), expected_type);
             assert_eq!(finding.key().shape(), "public-seam");
             assert_eq!(
                 finding.key().fields().collect::<Vec<_>>(),
                 vec![
+                    ("governing_package", "app"),
                     ("seam_kind", "free_fn"),
                     ("seam_module", "crate::api"),
                     ("seam_name", "run"),
@@ -1524,7 +1542,7 @@ mod fact_tests {
                 site,
             };
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            let finding = fact.into_finding("app");
             assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
             assert_eq!(finding.key().shape(), shape);
             assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
@@ -1542,6 +1560,7 @@ mod fact_tests {
                 },
                 "async-free-function",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::api"),
                     ("name", "register"),
                     ("owner", "crate::api"),
@@ -1557,6 +1576,7 @@ mod fact_tests {
                 },
                 "async-trait-method",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::api"),
                     ("name", "register"),
                     ("owner", "crate::api::Registry"),
@@ -1572,6 +1592,7 @@ mod fact_tests {
                 },
                 "async-inherent-method",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::api"),
                     ("name", "register"),
                     ("owner", "crate::api::Registry"),
@@ -1581,7 +1602,7 @@ mod fact_tests {
         ];
         for (fact, shape, fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            let finding = fact.into_finding("app");
             assert_eq!(
                 finding.key().fact_type(),
                 "tianheng.fact/hunyi/async-exposure"
@@ -1626,7 +1647,7 @@ mod fact_tests {
         // canonical_self_owner + render_last_segment_args feed semantic owner / seam-owner / trait
         // fields. Renderable forms are public identity; the positional sentinel is pinned only so
         // the shared observation reaction can recognize and reject unsupported syntax.
-        let uses: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let uses: crate::resolve::UseMap = std::collections::HashMap::new();
         let no_params: std::collections::HashSet<String> = std::collections::HashSet::new();
         let owner: syn::Type = syn::parse_str("Repo<crate::Id>").unwrap();
         assert_eq!(
