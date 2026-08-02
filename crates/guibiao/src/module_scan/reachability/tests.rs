@@ -378,6 +378,131 @@ fn mixed_direct_and_conditional_path_attrs_union_both_sources_regardless_of_orde
 }
 
 #[test]
+fn stacked_cfg_attr_path_only_targets_are_governed_without_a_plain_file() {
+    // The 0.3.1 audit trigger, reconstructed at the reachability-walk level: a single `pub mod
+    // imp;` decorated with TWO STACKED `#[cfg_attr(.., path = ..)]` attributes, one per platform,
+    // jointly exhaustive (`unix` / `not(unix)`) — every real rustc build compiles cleanly
+    // through exactly one target, and neither a plain `imp.rs` nor `imp/mod.rs` exists (nor is
+    // ever needed). Before this fix `resolve_plain_sources` required one of those conventional
+    // files regardless of the resolved `cfg_attr(path)` candidates, hard-erroring on source that
+    // compiles cleanly on every platform.
+    let tree = TempSrcTree::new("stacked-cfg-attr-path-only");
+    let src = tree.src().to_path_buf();
+    std::fs::write(
+        src.join("lib.rs"),
+        "#[cfg_attr(unix, path = \"unix_imp.rs\")]\n#[cfg_attr(not(unix), path = \"other_imp.rs\")]\npub mod imp;\n",
+    )
+    .expect("write lib.rs");
+    let unix_target = src.join("unix_imp.rs");
+    let other_target = src.join("other_imp.rs");
+    std::fs::write(&unix_target, "use crate::from_unix::Thing;\n").expect("write unix_imp.rs");
+    std::fs::write(&other_target, "use crate::from_other::Thing;\n").expect("write other_imp.rs");
+
+    let files = rust_files(&src).expect("list files");
+    let (reachable, _inline_only, remapped, _remap_shadowed) =
+        reachable_modules(&src, &files, None)
+            .expect("stacked cfg_attr(path)-only must not hard error");
+
+    assert!(reachable.contains("crate::imp"), "{reachable:?}");
+    assert!(
+        remapped
+            .iter()
+            .any(|(file, module)| file == &unix_target && module == "crate::imp"),
+        "{remapped:?}"
+    );
+    assert!(
+        remapped
+            .iter()
+            .any(|(file, module)| file == &other_target && module == "crate::imp"),
+        "{remapped:?}"
+    );
+}
+
+#[test]
+fn single_cfg_attr_path_only_target_is_governed_without_a_plain_file() {
+    // Control: the fix is not specific to "stacked" — a SINGLE cfg_attr(path) target with no
+    // plain fallback must be tolerated identically.
+    let tree = TempSrcTree::new("single-cfg-attr-path-only");
+    let src = tree.src().to_path_buf();
+    std::fs::write(
+        src.join("lib.rs"),
+        "#[cfg_attr(unix, path = \"unix_imp.rs\")]\npub mod imp;\n",
+    )
+    .expect("write lib.rs");
+    let target = src.join("unix_imp.rs");
+    std::fs::write(&target, "use crate::from_unix::Thing;\n").expect("write unix_imp.rs");
+
+    let files = rust_files(&src).expect("list files");
+    let (reachable, _inline_only, remapped, _remap_shadowed) =
+        reachable_modules(&src, &files, None)
+            .expect("single cfg_attr(path)-only must not hard error");
+
+    assert!(reachable.contains("crate::imp"), "{reachable:?}");
+    assert!(
+        remapped
+            .iter()
+            .any(|(file, module)| file == &target && module == "crate::imp"),
+        "{remapped:?}"
+    );
+}
+
+#[test]
+fn a_cfg_attr_path_target_absent_with_no_plain_file_is_still_a_scan_error() {
+    // The fix must not widen tolerance beyond a RESOLVED candidate: when the cfg_attr(path)
+    // target itself does not exist on disk, and no plain conventional file exists either, and
+    // no bare `#[cfg]`/`cfg_if!` arm applies, every candidate is absent — the module is genuinely
+    // unbacked on every configuration, matching hunyi's own `!has_backing_source &&
+    // !cfg_conditional` boundary for the identical shape (crates/hunyi/src/scan.rs).
+    let tree = TempSrcTree::new("cfg-attr-path-absent-no-plain");
+    let src = tree.src().to_path_buf();
+    std::fs::write(
+        src.join("lib.rs"),
+        "#[cfg_attr(windows, path = \"windows_only.rs\")]\npub mod imp;\n",
+    )
+    .expect("write lib.rs");
+    // Deliberately do not create `windows_only.rs`, `imp.rs`, or `imp/mod.rs`.
+
+    let files = rust_files(&src).expect("list files");
+    let result = reachable_modules(&src, &files, None);
+    let err = result.expect_err(
+        "a cfg_attr(path) target absent with no plain conventional file is still a scan error",
+    );
+    assert!(
+        err.contains("crate::imp") && err.contains("could not be located"),
+        "expected the missing-plain-file constitution error, got: {err}"
+    );
+}
+
+#[test]
+fn both_conventional_forms_present_stays_an_ambiguity_alongside_a_resolved_cfg_attr_target() {
+    // The fix must not widen tolerance to override the pre-existing, stricter ambiguity check:
+    // both conventional forms present is unresolvable under every predicate value, so it stays a
+    // constitution error even when a `cfg_attr(path)` candidate on the same declaration also
+    // resolves to a real file.
+    let tree = TempSrcTree::new("dual-form-with-cfg-attr");
+    let src = tree.src().to_path_buf();
+    std::fs::write(
+        src.join("lib.rs"),
+        "#[cfg_attr(unix, path = \"unix_imp.rs\")]\npub mod imp;\n",
+    )
+    .expect("write lib.rs");
+    std::fs::write(src.join("unix_imp.rs"), "use crate::from_unix::Thing;\n")
+        .expect("write unix_imp.rs");
+    std::fs::write(src.join("imp.rs"), "// conventional flat form\n").expect("write imp.rs");
+    std::fs::create_dir_all(src.join("imp")).expect("mkdir imp");
+    std::fs::write(src.join("imp/mod.rs"), "// conventional nested form\n")
+        .expect("write imp/mod.rs");
+
+    let files = rust_files(&src).expect("list files");
+    let result = reachable_modules(&src, &files, None);
+    let err = result.expect_err("both conventional forms present must still be an ambiguity error");
+    assert!(
+        err.contains("resolves to both"),
+        "expected the dual-backed ambiguity constitution error, got: {err}"
+    );
+}
+
+#[test]
 fn a_cfg_attr_without_a_path_meta_is_not_a_remap() {
     // The inverse false negative: a `cfg_attr` that carries NO `path` meta must not be mistaken
     // for a remap, or a normal file module would be dropped from scope and never governed.

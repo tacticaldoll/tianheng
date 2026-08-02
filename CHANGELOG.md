@@ -19,8 +19,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   shipped and been tested since 0.2.3 with no requirement of their own: both forms present is an
   ambiguity constitution error (ahead of the absent-file tolerance, so a `#[cfg]`-gated-off
   declaration still reacts even though the crate compiles), an unconditionally absent file is a
-  constitution error, a bare `#[cfg]` tolerates absence, and a `#[cfg_attr]` wrapper does not. No
-  behavior change — the requirement truth catches up to the reaction.
+  constitution error, and a bare `#[cfg]` tolerates absence. No behavior change — the requirement
+  truth catches up to the reaction. (A `#[cfg_attr]` wrapper's own tolerance is specified by the
+  fix below in this same window, so it is stated there instead of restated here.)
 
 ### Fixed
 - 漏刻's CI probe audit now reads the arms of a `cfg_if!` invocation as real code, in both of its
@@ -188,6 +189,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   consumer. A doubly-nested `cfg_attr(cfg_attr(path))` remains a stated, undetected bound of this
   hand-rolled scanner. Not breaking — closes false negatives and one false positive, not an identity
   shape; no baseline identity shape changes.
+- 圭表's own module-boundary reachability walk no longer requires a plain conventional file
+  (`name.rs` / `name/mod.rs`) for a declaration backed only by one or more `cfg_attr(path)`
+  remaps. A resolved `cfg_attr(path)` candidate was already union-scanned for governance, but the
+  separate plain-file requirement ran unconditionally regardless: a module stacking two
+  `cfg_attr`-wrapped `#[path]` attributes that together cover every platform (both targets
+  present, no plain file ever needed) was reported a hard constitution error — "source file could
+  not be located" — instead of being governed, a false positive on entirely valid code, and not
+  specific to "stacked": a single `cfg_attr(path)` target with no plain fallback hit the same
+  error. A resolved candidate is now treated as legitimate grounds for the plain file's own
+  absence, the same "might legitimately be absent on this build" signal a bare `#[cfg]` or a
+  `cfg_if!` arm already carries — matching 渾儀's/漏刻's own `has_backing_source` rule for the
+  identical shape (三儀 ⊥ 三儀: the same rule, not the same function). Two outcomes stay exactly as
+  strict as before: both conventional forms present is still an unconditional ambiguity error
+  regardless of any resolved candidate, and a declaration whose every candidate is absent (no
+  plain file, no resolved `cfg_attr(path)` target, no bare `#[cfg]`) is still a genuine
+  constitution error. Not breaking — closes a false negative; no baseline identity shape changes.
 - `deny.toml`'s `[advisories]` table now sets `yanked = "deny"` explicitly: the field's own unset
   default is `"warn"`, so `cargo deny check` was printing `warning[yanked]: detected yanked crate`
   and still exiting 0 (`advisories ok`) — reproduced against a real yanked crate pinned into the
