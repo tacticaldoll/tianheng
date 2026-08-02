@@ -75,6 +75,43 @@ An allowed location SHALL match an impl's module location either by exact path o
 - **WHEN** the boundary allows `crate::command` and an `impl Command for Foo` appears in `crate::commandeer`
 - **THEN** the system emits a violation, because `::`-delimited containment does not treat the sibling as beneath the allowed prefix
 
+### Requirement: A malformed `::`-path allowed-location entry is a constitution error
+
+An allowed-location entry given to `only_implemented_in`/`and_in` SHALL be rejected as a
+**constitution error** (exit 2) when its `::`-delimited spelling has any empty segment — a leading
+`::`, a trailing `::`, a doubled `::`, or the empty string itself — checked before any crate
+scanning. This is the identical restriction `semantic-signature-coupling`'s "A malformed `::`-path
+forbidden operand is a constitution error" requirement already places on `must_not_expose`'s
+operand, read at the allowed-location polarity: `matches_allowed`'s `::`-delimited containment
+(equality or a `prefix::`-boundary match) can never equal or prefix-contain a real module location
+against an operand shaped this way, so without this requirement a malformed entry would not
+silently pass the boundary — the containment check already fails loud, since a location outside
+every (non-matching) allowed entry is reported as a violation — but it would silently misreport
+every genuinely-in-place impl as a spurious violation, naming no cause, rather than a clear
+constitution error identifying the actual typo. There is no legitimate reason to write this shape:
+no canonical module path this system ever resolves carries an empty segment, so the spelling is
+always either inert or broken, never meaningfully different from the bare form.
+
+#### Scenario: A leading-`::` allowed-location entry is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("::crate::commands")` and the crate defines `impl Command for Foo` genuinely inside `crate::commands`
+- **THEN** the system reports a constitution error (exit 2) naming the malformed entry, rather than reporting the genuinely-in-place impl as a spurious violation
+
+#### Scenario: A trailing-`::` allowed-location entry is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("crate::commands::")` against the same crate
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: A doubled-`::` allowed-location entry is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("crate::commands::::sub")` against the same crate
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: The bare-string spelling is unaffected
+
+- **WHEN** a boundary declares `only_implemented_in("crate::commands")` against the same crate
+- **THEN** the system reports no violation for the genuinely-in-place impl, exactly as before this requirement existed
+
 ### Requirement: Trait-path resolution scope and no false negative
 
 The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. A module reached only through a `cfg_attr`-wrapped `#[path]` remap is followed too: an inline body regardless of the attribute (which has no effect on an inline module's content), and a file module's conventional file and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait. When a `use`-map name involved in resolution — on either the boundary's own declared anchor (reached through its re-export facade) or an impl site's written trait path — resolves to **more than one** candidate because of a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name, every candidate SHALL be checked, and the anchor match SHALL react if any impl-site candidate canonicalizes to any declared-anchor candidate, never silently keeping only the candidate from whichever declaration was written last (observation cannot know which `#[cfg]` branch is live).
