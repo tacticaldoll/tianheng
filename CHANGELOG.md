@@ -200,6 +200,25 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- **BREAKING**: 漏刻's un-auditable-probe identity no longer embeds a raw absolute filesystem path.
+  Reproduced directly: scanning the byte-identical file at two different absolute locations (the
+  same relocation a different clone path or CI runner produces) yielded two DIFFERENT
+  `unauditable-probe` identities, differing only in the `file` field's absolute prefix — a baseline
+  recorded in one checkout matched nothing in another, so the accepted violation re-fired as new
+  while the recorded entry was simultaneously reported stale. `file` is now labeled relative to the
+  common ancestor of every `source_inputs` root passed to one `audit_probe_coverage` call (the real
+  caller's actual checkout root, by construction — every workspace member's root shares it, whatever
+  the invocation's working directory), falling back to the previous absolute form only when no
+  shared ancestor exists at all. No public function signature changed. **Any existing
+  `--write-baseline` output naming an `unauditable-probe` violation is now stale** (its `file` field's
+  value changed shape) and must be regenerated; every previously accepted one reappears as new
+  exactly once. Stated bound: an ABSOLUTE `#[path = "/…"]` literal is a known residual gap, not fully
+  closed by this fix — when its target does not lie under the scanning checkout's own anchor, the
+  label falls back to the raw absolute path (`Path::join` discards its receiver for an absolute
+  joinee); when it happens to lie under the anchor, the label becomes relative-looking instead, so
+  the SAME hardcoded literal can still disagree across two checkouts. An absolute literal is already
+  non-portable on its own; the realistic relative sibling-share idiom this fix targets is
+  unaffected either way.
 
 ## [0.3.0] - 2026-07-26
 

@@ -15,7 +15,7 @@ use crate::registry::UNDECLARED_SEAM_REPAIR_HINT;
 use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation, ViolationId};
 
 mod scan;
-use scan::{DEFAULT_MARKERS, Probe, collect_probes_with_markers};
+use scan::{DEFAULT_MARKERS, Probe, collect_probes_with_markers, common_ancestor};
 
 #[derive(Clone, Copy)]
 enum AuditRule {
@@ -86,7 +86,16 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
 ///   enforce `Violation` (a typo against the declared seams).
 /// - **un-auditable probe** — a probe macro whose seam argument is not a string literal
 ///   (e.g. a `const`) cannot be traced to a declared seam → an enforce `Violation` naming the
-///   site, never a silent skip (a silent skip would be a false negative).
+///   site, never a silent skip (a silent skip would be a false negative). Its identity's `file`
+///   field is labeled relative to the common ancestor of every `source_inputs` root passed to this
+///   call (the real caller's actual checkout root, by construction) whenever that's possible, so a
+///   recorded baseline stays valid across a different clone location or CI runner. **Known residual
+///   gap, not fully closed:** a file reached only through an ABSOLUTE `#[path = "/…"]` literal whose
+///   target does not lie under the anchor falls back to the raw absolute label — but the SAME
+///   hardcoded literal, when it happens to lie under a given checkout's own anchor, gets a
+///   relative-looking label instead, so the identical literal can still disagree across two
+///   checkouts. An absolute-literal `#[path]` is already non-portable/machine-specific either way;
+///   the realistic relative sibling-share idiom this labeling targets is unaffected.
 ///
 /// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
 /// can no longer hide a seam. The probe scan is build/CI-time only (std-only, comment- and
@@ -130,9 +139,14 @@ pub fn audit_probe_coverage_with_markers(
             ));
         }
     }
+    // Every un-auditable probe's `file` identity field is labeled relative to this anchor (the
+    // common ancestor of every root passed here — the real caller's actual checkout/workspace
+    // root by construction) rather than as a raw absolute path, so the identity — and any baseline
+    // recorded against it — stays checkout-independent. See `scan::labeled`/`common_ancestor`.
+    let anchor = common_ancestor(source_inputs);
     let mut probes = Vec::new();
     for input in source_inputs {
-        if let Err(message) = collect_probes_with_markers(input, markers, &mut probes) {
+        if let Err(message) = collect_probes_with_markers(input, &anchor, markers, &mut probes) {
             return Outcome::ConstitutionError(message);
         }
     }
