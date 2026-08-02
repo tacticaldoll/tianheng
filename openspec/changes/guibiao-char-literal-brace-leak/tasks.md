@@ -25,18 +25,45 @@
       defect-exercising tests failed exactly as predicted (silent pass / wrong constitution error);
       the spaced-spelling control test correctly kept passing (confirming it tests a genuinely
       different, already-working case, not a vacuous duplicate). Restored, confirmed all four green.
+- [x] 2.6 An independent apply-stage review (see section 4.2) suggested two further cases: a 4-byte
+      scalar (emoji) and "3+ chained literals." Added
+      `a_four_byte_scalar_char_literal_adjacent_to_a_brace_literal_does_not_leak` — verified
+      non-vacuous immediately. For the chained case, two constructions were tried and found
+      **vacuous** first: three literals with no separator at all never lands the old check's
+      coincidental match, and `['«','{','}']` (a matched brace pair) leaks two structural characters
+      that net to zero depth change and corrupt nothing — both confirmed to pass identically with
+      and without the fix, so neither was kept. `two_unmatched_braces_cascading_from_chained_char_
+      literals_do_not_leak` (`['«','{','{']`, two unmatched opens) is what actually cascades; verified
+      non-vacuous the same way as the others.
+- [x] 2.7 Full non-vacuous sweep across all 6 final tests: reverted the fix once more, ran the whole
+      set — the 5 defect-exercising tests failed exactly as predicted, the spaced-spelling control
+      correctly still passed. Restored; all 313 guibiao tests green.
 
 ## 3. Documentation
 
 - [x] 3.1 Added a CHANGELOG `[Unreleased] ### Fixed` entry. No **BREAKING** marker — this fixes a
       false negative (a real import silently passing), not an identity shape; no existing baseline
       is invalidated either way.
-- [x] 3.2 No spec-text change — `module-boundary`'s existing import-detection requirement already
-      promises this behavior; this closes an implementation gap against it, not a requirement whose
-      text needs to grow. Archived with `--skip-specs`.
+- [x] 3.2 Spec text **does** need a small amendment — corrected after review found `module-boundary`'s
+      existing requirement enumerates comments and string literals as stripped-before-scanning but
+      never mentions char literals. Added a `specs/module-boundary/spec.md` MODIFIED delta (one
+      sentence amended, one new scenario) rather than leaving the requirement textually silent on a
+      literal category that demonstrably needs the same hygiene. Archived normally (not
+      `--skip-specs`, reversing the original propose-stage plan).
 
 ## 4. Definition of Done
 
-- [ ] 4.1 Run the full local gate list from `AGENTS.md` (build, three clippy passes, fmt, full test
-      suite, both doc passes, `cargo deny check`, release-coherence scripts, `test_examples.sh`).
-- [ ] 4.2 Adversarial apply-stage review: confirm the declared reaction still bites, not a taste call.
+- [x] 4.1 Ran the full local gate list from `AGENTS.md` — all green: `cargo build --workspace
+      --all-targets`; the three clippy passes; `cargo fmt --all --check`;
+      `TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features` (every suite `ok`, 0
+      failed); both `cargo doc` passes; `cargo deny check`
+      (`advisories ok, bans ok, licenses ok, sources ok`); `scripts/test_release_coherence.sh` and
+      `check_release_coherence.sh` (`ok release coherence (development: 0.3.0)`);
+      `scripts/test_examples.sh` (`all examples reacted as declared`).
+- [x] 4.2 Independent apply-stage adversarial review performed (not self-assessment): re-derived the
+      root-cause trace from code, constructed and ran three additional edge-case fixtures (4-byte
+      emoji, invalid lead byte, chained literals) directly via `cargo test`, independently redid the
+      non-vacuous revert-and-confirm, and checked the module-boundary spec and CHANGELOG for
+      accuracy. Found the fix correct and generalizing properly, flagged the spec-text gap (3.2) and
+      an imprecise design.md risk claim (corrected — the "invalid lead byte" fallback is unreachable
+      dead code given the `&str` invariant, not a live risk). PASS verdict.

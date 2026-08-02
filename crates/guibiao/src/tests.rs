@@ -6784,3 +6784,65 @@ fn the_spaced_spelling_of_the_same_array_literal_already_reacts_and_keeps_reacti
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert_eq!(violations[0].finding, "crate::forbidden::Thing");
 }
+
+/// A 4-byte scalar (an emoji) adjacent to `'{'` — added after an independent apply-stage review
+/// constructed this case and confirmed it fails without the fix, generalizing the defect beyond
+/// the 2/3-byte scalars the other tests exercise.
+#[test]
+fn a_four_byte_scalar_char_literal_adjacent_to_a_brace_literal_does_not_leak() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-four-byte-scalar",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 2] = ['\u{1f980}','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}
+
+/// Three char literals in a row, `['«','{','{']` — a cascading version of the two-literal defect:
+/// the misread first literal's closing quote can coincidentally swallow *each subsequent* literal's
+/// opening quote in turn (closing-quote, comma, opening-quote matches the old one-byte assumption
+/// every time), so a fix that only demonstrably closes the single-literal case could still leak a
+/// *second*, unmatched brace one hop further. Deliberately two unmatched `{` rather than a `{`/`}`
+/// pair: a leaked *matched* pair nets to zero depth change and was verified, while constructing
+/// this test, to pass even with the bug present — it doesn't actually corrupt the reachability
+/// walker's brace-depth tracking, so it would have been a vacuous regression test. Two unmatched
+/// opens do shift depth permanently, which is what a naive one-hop fix could still miss.
+#[test]
+fn two_unmatched_braces_cascading_from_chained_char_literals_do_not_leak() {
+    let (result, violations) = run_module_check(
+        "char-literal-brace-leak-two-unmatched-cascade",
+        &[
+            (
+                "lib.rs",
+                "pub mod forbidden;\nconst Q: [char; 3] = ['\u{ab}','{','{'];\npub mod hidden;\n",
+            ),
+            (
+                "hidden.rs",
+                "use crate::forbidden::Thing;\npub fn leak() -> crate::forbidden::Thing { crate::forbidden::Thing }\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::Thing");
+}

@@ -36,10 +36,12 @@ tracking for everything that follows.
 
 ### Modified Capabilities
 
-(none) — this closes a defect against `module-boundary`'s already-stated contract (import detection
-observed from source), not a requirement whose text needs to change. No literal field, exit-code
-outcome, or DSL surface is added; the fix makes existing, already-specified behavior (a real
-forbidden import reacts) hold for a source shape it previously mishandled.
+- `module-boundary`: an independent apply-stage adversarial review found the existing "Module
+  imports observed from source use declarations" requirement enumerates comments and string
+  literals as stripped-before-scanning, but never mentions char literals — a real, if narrow,
+  textual gap this defect exposes. Amends that one sentence to include char literals of any
+  scalar length, and adds a scenario naming the brace-leak shape directly, rather than leaving the
+  requirement silent on a literal category that demonstrably needs the same hygiene.
 
 ## Impact
 

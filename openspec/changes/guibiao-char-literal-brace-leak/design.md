@@ -25,10 +25,19 @@ everything after it.
 **Goals:**
 - A char literal's real byte length (1–4, from its UTF-8 lead byte) is used to locate its closing
   quote, so a multi-byte scalar is recognized and consumed correctly regardless of what follows it.
-- Four independently-verified shapes react correctly: the exact audit trigger (no space), the
+- Six independently-verified shapes react correctly: the exact audit trigger (no space), the
   identical array with a space (already worked — must keep working), a boundary anchored directly
   at the previously-dropped module (used to fail loud instead of silently passing — now resolves),
-  and the "everyday" `match` arm form with no space around `|`.
+  the "everyday" `match` arm form with no space around `|`, a 4-byte scalar (emoji) adjacent to
+  `'{'`, and a three-literal cascade (`['«','{','{']`) leaking two unmatched braces. The last two
+  were added after an independent apply-stage review suggested testing a 4-byte scalar and a
+  "3+ chained literals" shape; while constructing the latter, two constructions were tried and
+  found **vacuous** (passed identically with and without the fix) before landing on one that
+  genuinely reproduces: three literals glued with no separator never lands the old check's
+  coincidental quote-match at all, and `['«','{','}']` (a matched brace pair) leaks two structural
+  characters that net to zero depth change, corrupting nothing. Only an *unmatched* multi-brace
+  leak (`['«','{','{']`) actually shifts depth permanently and fails without the fix — this
+  distinction is recorded here so the same dead end is not re-walked.
 
 **Non-Goals:**
 - Any other lexer defect not reproduced here.
@@ -42,17 +51,24 @@ everything after it.
   processing... only `std`" per its own module doc, and locating a scalar's end only needs its
   length class (1/2/3/4), not full validation; the source is already real Rust `rustc` would accept,
   so a governed file's char literals are never actually malformed UTF-8 in practice.
-- **No spec-text change.** `module-boundary`'s existing "Module imports observed from source use
-  declarations" requirement already promises a real import reacts; this fixes an implementation
-  bug against that already-stated behavior, not a requirement whose text needs to grow (unlike the
-  unterminated-comment panic, which genuinely lacked any stated "never crashes" requirement).
+- **Spec text does need a small amendment, corrected after review.** An independent apply-stage
+  review found `module-boundary`'s existing requirement enumerates comments and string literals as
+  stripped-before-scanning but never mentions char literals — a real textual gap, not merely an
+  implementation bug against fully-stated behavior. Amended (see the `specs/` delta) rather than
+  left silent, since a future reader had no textual signal that char literals need the same
+  hygiene.
 
 ## Risks / Trade-offs
 
 - **[Risk] The fix could itself mis-measure a scalar for some byte value.** → **Mitigation**:
   `utf8_scalar_len` only classifies the lead byte into 1/2/3/4 (or `None` for a byte that cannot
-  start a scalar) — a continuation byte or invalid lead byte correctly yields `None`, falling back
-  to the pre-existing "stray quote" handling exactly as before for anything not a real char literal.
+  start a scalar). In practice this `None` arm is unreachable through this call site — an
+  independent review traced that `strip_comments_and_strings_tracked` only ever receives a
+  guaranteed-valid `&str` (governed files are read via `std::fs::read_to_string`, which errors on
+  invalid UTF-8), and `'` is ASCII, so the byte immediately after it in valid UTF-8 can never be a
+  bare continuation byte or an invalid lead byte. The `None` branch is defensive dead code, not a
+  reachable fallback — described here precisely rather than as an active risk, per that review's
+  correction of an earlier, less accurate framing.
 
 ## Migration Plan
 
