@@ -1947,6 +1947,100 @@ fn trait_impl_exposure_reacts_at_a_const_generic_param_type() {
 }
 
 #[test]
+fn trait_impl_exposure_unrenderable_where_bound_fails_loud_without_positional_identity() {
+    // Round-2 adversarial-review finding, reproduced and fixed: an unrenderable where-clause
+    // bounded type (a complex const-generic argument the ordinary renderer cannot stringify) must
+    // not fall back to the bare literal `_` — two SUCH bounds in one impl block would then share
+    // that key, and their facts (identical kind, subject, and seam) would collapse to one,
+    // silently losing the second bound's violation. `Arr<{ N + 1 }>` and `Arr<{ N + 2 }>` are
+    // structurally distinct types that both fail to render the same way; both bounds independently
+    // require `AsRef<crate::infra::Secret>`, so before the fix this collapsed to ONE finding
+    // regardless of which or how many such bounds were present (verified: single-bound and
+    // two-bound fixtures produced the byte-identical fact string). The fix must fail loud instead.
+    let error = findings_including_trait_impls(
+        "ti-where-unrenderable",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub struct Thing;\npub struct Arr<const N: usize>;\npub const N: usize = 1;\nimpl crate::Port for Thing where Arr<{ N + 1 }>: AsRef<crate::infra::Secret>, Arr<{ N + 2 }>: AsRef<crate::infra::Secret> {}\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::infra"],
+    )
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    // The sentinel that trips the gate is internal — never itself published as identity.
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn trait_impl_exposure_unrenderable_where_bound_fails_loud_even_alone() {
+    // The single-bound counterpart of the test above: even ONE unrenderable where-clause bound
+    // (no sibling bound to collide with) must fail loud rather than silently publish the bare `_`
+    // key — the fail-loud requirement does not depend on a second bound being present.
+    let error = findings_including_trait_impls(
+        "ti-where-unrenderable-solo",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            (
+                "m.rs",
+                "pub struct Thing;\npub struct Arr<const N: usize>;\npub const N: usize = 1;\nimpl crate::Port for Thing where Arr<{ N + 1 }>: AsRef<crate::infra::Secret> {}\n",
+            ),
+        ],
+        "crate::m",
+        &["crate::infra"],
+    )
+    .unwrap_err();
+    assert!(error.contains("stable structural label"), "{error}");
+    assert!(!error.contains("_#"), "{error}");
+}
+
+#[test]
+fn trait_impl_exposure_where_bound_sentinels_never_share_a_bound_ordinal() {
+    // White-box counterpart proving genuine collision-freedom, not merely that the shared
+    // `reject_positional_identity` gate trips (the black-box tests above cannot distinguish a
+    // truly per-bound sentinel from a reused bare-ordinal one, since either trips the SAME gate
+    // with the SAME message). Calls `collect_trait_impl_exposures` directly — before the gate
+    // ever runs — and asserts the two unrenderable bounds' `where`-position keys differ, each
+    // carrying its own `bound_ordinal` composed with the shared item `ordinal`.
+    use crate::collect::collect_trait_impl_exposures;
+    use crate::finding::{PublicSeam, TraitImplPosition};
+    use crate::resolve::UseMap;
+
+    let item: syn::Item = syn::parse_str(
+        "impl crate::Port for Thing where Arr<{ N + 1 }>: AsRef<crate::infra::Secret>, Arr<{ N + 2 }>: AsRef<crate::infra::Secret> {}",
+    )
+    .unwrap();
+    let uses = UseMap::new();
+    let mut out = Vec::new();
+    collect_trait_impl_exposures(&item, "crate::m", &uses, 7, &mut out);
+
+    let where_keys: std::collections::BTreeSet<&str> = out
+        .iter()
+        .filter_map(|exposure| match &exposure.seam {
+            PublicSeam::TraitImpl {
+                position: TraitImplPosition::Where(key),
+                ..
+            } => Some(key.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        where_keys.len(),
+        2,
+        "the two bounds must each key their exposures under their OWN distinct sentinel: {where_keys:?}"
+    );
+    for key in &where_keys {
+        assert!(
+            key.contains("_#"),
+            "an unrenderable bound's key must carry the internal positional sentinel: {key}"
+        );
+    }
+}
+
+#[test]
 fn trait_impl_exposure_reacts_at_a_refined_rpitit_return() {
     // The blocking review finding: a trait declares an opaque return, the impl refines it to a
     // concrete forbidden type at the impl site — must react (else the one forbidden bug).

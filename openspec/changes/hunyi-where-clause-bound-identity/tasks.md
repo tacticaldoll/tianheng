@@ -13,24 +13,29 @@ the two-way decision, so neither needs re-deriving):
 - The generic-parameter loop (`syn::GenericParam::Type`/`Const`) is unaffected: its keys are bare
   idents that never fail to render.
 
-- [ ] Replace the bare `"_"` fallback at `crates/hunyi/src/collect.rs:753` with the
+- [x] Replace the bare `"_"` fallback at `crates/hunyi/src/collect.rs:753` with the
   `_#{ordinal}.{bound_ordinal}` sentinel, threading `bound_ordinal` via
   `where_clause.predicates.iter().enumerate()`. <!-- id: 0 -->
-- [ ] Add a regression test reproducing the exact two-bound trigger (`Arr<{ N + 1 }>` /
+- [x] Add a regression test reproducing the exact two-bound trigger (`Arr<{ N + 1 }>` /
   `Arr<{ N + 2 }>`, each `: AsRef<crate::infra::Secret>`, one impl block) asserting the evaluation
   now fails loud with "cannot identify semantic fact without a stable structural label" and never
   a shared literal fact, mirroring
-  `unrenderable_generic_marker_instantiations_fail_loud_without_positional_identity`. <!-- id: 1 -->
-- [ ] Add a regression test proving the per-bound index is genuinely collision-free within one
-  impl block (not merely detectable), mirroring
-  `impl_trait_subtree_cfg_branches_never_share_an_unrenderable_owner_fallback`'s intent adapted to
-  one impl block's two bounds rather than two cfg branches. <!-- id: 2 -->
-- [ ] Confirm the existing renderable-bound tests
+  `unrenderable_generic_marker_instantiations_fail_loud_without_positional_identity`
+  (`trait_impl_exposure_unrenderable_where_bound_fails_loud_without_positional_identity`), plus the
+  single-bound counterpart proving the fail-loud outcome does not depend on a second bound being
+  present (`trait_impl_exposure_unrenderable_where_bound_fails_loud_even_alone`). <!-- id: 1 -->
+- [x] Add a regression test proving the per-bound index is genuinely collision-free within one
+  impl block (not merely detectable) — a black-box test cannot distinguish this, since
+  `reject_positional_identity` fails loud on EITHER a genuinely unique or a reused sentinel with the
+  identical message, so this calls `collect_trait_impl_exposures` directly and asserts the two
+  bounds' `where`-position keys differ before the gate ever runs
+  (`trait_impl_exposure_where_bound_sentinels_never_share_a_bound_ordinal`). <!-- id: 2 -->
+- [x] Confirm the existing renderable-bound tests
   (`trait_impl_exposure_reacts_at_the_where_position`,
   `trait_impl_exposure_reacts_at_a_where_clause_bounded_type`,
   `trait_impl_exposure_reacts_at_a_const_generic_param_type`) are unaffected — run them explicitly,
   not merely by inclusion in the full suite. <!-- id: 3 -->
-- [ ] Add the adopter-facing `CHANGELOG.md` `[Unreleased]` → `### Fixed` entry, naming the measured
+- [x] Add the adopter-facing `CHANGELOG.md` `[Unreleased]` → `### Fixed` entry, naming the measured
   identity collision, the fail-loud outcome an adopter with this rare shape now sees, and that a
   renderable where-clause bound is unaffected. <!-- id: 4 -->
 - [ ] Run the full Definition of Done from the workspace root and report actual output. <!-- id: 5 -->

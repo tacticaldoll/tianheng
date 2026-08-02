@@ -236,6 +236,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   the SAME hardcoded literal can still disagree across two checkouts. An absolute literal is already
   non-portable on its own; the realistic relative sibling-share idiom this fix targets is
   unaffected either way.
+- 渾儀's trait-impl-exposure `where`-clause bounded-type seam no longer keys an unrenderable bound
+  (a complex const-generic argument, e.g. `Arr<{ N + 1 }>`) to the bare literal `_`. Reproduced
+  directly: one impl block with two where-clause bounds that both fail to render
+  (`Arr<{ N + 1 }>: AsRef<crate::infra::Secret>` and `Arr<{ N + 2 }>: AsRef<crate::infra::Secret>`)
+  both fell back to `_`, so the two bounds' facts — identical kind, subject, and seam — collapsed
+  to one; the two-bound fixture and either bound alone produced the byte-identical finding, meaning
+  the second bound's violation left no trace a baseline could ever distinguish from the first. The
+  fallback is now an internal positional sentinel (never itself published), caught by the existing
+  fail-loud gate this capability already applies to its structurally identical cases (an
+  unrenderable Self type or trait path), so an impl with this shape now reports a constitution error
+  instead of silently under-counting its violations. A where-clause bound that renders cleanly (the
+  ordinary case) is unaffected.
 
 ## [0.3.0] - 2026-07-26
 

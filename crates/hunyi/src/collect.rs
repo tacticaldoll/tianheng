@@ -726,7 +726,9 @@ pub(crate) fn collect_trait_impl_exposures(
     ));
 
     // 3. where — impl generic-param bounds and the `where`-clause, keyed by the bounded type so
-    //    two distinct bounds exposing the same type never collapse under the baseline.
+    //    two distinct bounds exposing the same type never collapse under the baseline — including
+    //    when the bounded type cannot be rendered, where the where-predicate loop below fails
+    //    loud instead of falling back to a key two such bounds could share.
     for param in &item.generics.params {
         match param {
             syn::GenericParam::Type(tp) => {
@@ -748,9 +750,25 @@ pub(crate) fn collect_trait_impl_exposures(
         }
     }
     if let Some(where_clause) = &item.generics.where_clause {
-        for predicate in &where_clause.predicates {
+        for (bound_ordinal, predicate) in where_clause.predicates.iter().enumerate() {
             if let syn::WherePredicate::Type(pt) = predicate {
-                let key = type_to_string(&pt.bounded_ty).unwrap_or_else(|| "_".to_string());
+                // A bounded type that cannot be rendered (a complex const-generic argument, e.g.
+                // `Arr<{ N + 1 }>` — `path_to_string`'s generic-argument rendering is all-or-
+                // nothing, so one unrenderable argument fails the whole path) MUST NOT fall back
+                // to the bare literal `_`: two such bounds in ONE impl block would then share
+                // that key, and their facts — identical kind, subject, AND seam — would collapse
+                // to one, silently losing the second bound's violation (the identity-collision
+                // this position's "never collapse" guarantee forbids). Mirror the sibling
+                // `trait_label` fallback above and `canonical_self_owner`'s own unrenderable case:
+                // an internal positional sentinel, composed of the item's own `ordinal` (unique
+                // per impl block, continuous across the module) and this predicate's own position
+                // within THIS impl block's where-clause (`bound_ordinal`, so two unrenderable
+                // bounds in the SAME impl block never share a sentinel either). The sentinel is
+                // never published: every public observation path routes it through the shared
+                // `reject_positional_identity` gate, so unsupported syntax fails loud instead of
+                // silently colliding.
+                let key = type_to_string(&pt.bounded_ty)
+                    .unwrap_or_else(|| format!("_#{ordinal}.{bound_ordinal}"));
                 let seam = seam(TraitImplPosition::Where(key));
                 // Both sides are impl-site-authored: a forbidden type in the bounded (LHS) type
                 // (`where crate::infra::X: Clone`) leaks as surely as one in the bound (RHS), so
