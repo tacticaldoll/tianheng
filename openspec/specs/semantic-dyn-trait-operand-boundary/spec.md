@@ -46,7 +46,7 @@ negative where only the `use`-aliased spelling reacted. A principal trait that i
 unresolvable** — a bare single-segment name with no `use` (neither a local item nor an extern head),
 a macro-generated trait, or a glob/foreign-module re-export — is dropped, the same stated
 resolver-coverage bound signature-coupling carries, never a silent pass of a *resolvable* operand.
-The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule.
+The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule. A mutually-exclusive `#[cfg]` collision on the `use`-map name the principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last.
 
 #### Scenario: A dyn of a named forbidden trait is flagged
 
@@ -92,6 +92,11 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 
 - **WHEN** the module exposes `dyn crate::ports::Port + Send` and the boundary forbids `["crate::ports::Port"]`
 - **THEN** the system emits a violation on the principal trait `crate::ports::Port` (the sole non-auto trait); the trailing `Send` marker is not the operand, so a boundary forbidding only `["Send"]` flags nothing here — and against a bare `dyn Send`, `Send` does not resolve under `BareFallback::Ignore` and is likewise dropped
+
+#### Scenario: Two mutually-exclusive cfg-gated use aliases for the principal trait's name both react
+
+- **WHEN** the governed module declares `#[cfg(unix)] use crate::infra::Port as P; #[cfg(not(unix))] use crate::safe::SafePort as P;` and exposes `Box<dyn P>`, under an operand boundary forbidding `["crate::infra::Port"]`, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — the verdict never depends on source order
 
 ### Requirement: Empty operand set degenerates to shape-only, never a silent no-op
 
@@ -147,3 +152,4 @@ their relationship or identity.
 #### Scenario: Shape and operand rules do not collide
 - **WHEN** the same seam violates both shape-only and operand-specific laws
 - **THEN** their semantic rule keys keep the violation identities distinct
+

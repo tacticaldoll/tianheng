@@ -3,9 +3,7 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's forbidden-marker capability: types **defined in a governed module subtree** must not acquire a forbidden trait — observed as a `#[derive(T)]` on the type or a hand `impl T for X` (anywhere in the crate) whose self-type resolves to a definition under the subtree. It delivers the "this layer is not `T`-able" intent (both idiomatic acquisition forms), the forbidden-marker complement to exposure, impl-locality, and visibility. Matching is by leaf identifier (no false negative across the derive-macro/trait path split); the forbidden-attribute slice stays deferred.
-
 ## Requirements
-
 ### Requirement: Forbidden-marker boundary declared in Rust
 
 A forbidden-marker boundary SHALL be expressed as Rust code and is part of the single source of truth. A `ForbiddenMarkerBoundary` SHALL name a target crate, a governed **module subtree** (a module-path prefix), a forbidden-trait set (one or more trait names/paths), a human-readable reason, and a severity. The system MUST NOT require TOML, YAML, Markdown, or any generated policy file.
@@ -63,9 +61,14 @@ The system SHALL react when a governed type acquires a forbidden trait by **eith
 - **WHEN** a governed type derives or impls only traits not in the forbidden set
 - **THEN** the system reports no violation
 
+#### Scenario: A type-alias landing reached through a mutually-exclusive cfg-gated use alias reacts
+
+- **WHEN** an impl site declares `#[cfg(unix)] use crate::domain::Order as Y; #[cfg(not(unix))] use crate::domain::NotOrder as Y; type X = Y; impl serde::Serialize for X {}`, where `Order` is a subtree-defined type and `NotOrder` is not defined anywhere, under a boundary forbidding `serde::Serialize` on the subtree, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — every landing candidate for `X` is checked against the defined/under-subtree gate, so the genuinely governed candidate (`Order`) is never dropped in favor of the undefined one (`NotOrder`) merely because it was declared first
+
 ### Requirement: Trait matching by leaf identifier
 
-A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). The compared leaf is taken from the path **resolved through the acquisition site's `use`-map**, so a locally renamed trait or derive — `use serde::Serialize as Ser; impl Ser for …` or `#[derive(Ser)]` — resolves to its true leaf `Serialize` and reacts (a local rename is observable, so a missed one would be a false negative); a path that does not resolve locally — a bare/prelude name or a cross-crate path — falls back to its **written** leaf, keeping the match cross-crate-blind (the derive-macro-crate path `serde_derive::Serialize` still matches by the leaf `Serialize`). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug.
+A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). The compared leaf is taken from the path **resolved through the acquisition site's `use`-map**, so a locally renamed trait or derive — `use serde::Serialize as Ser; impl Ser for …` or `#[derive(Ser)]` — resolves to its true leaf `Serialize` and reacts (a local rename is observable, so a missed one would be a false negative); a path that does not resolve locally — a bare/prelude name or a cross-crate path — falls back to its **written** leaf, keeping the match cross-crate-blind (the derive-macro-crate path `serde_derive::Serialize` still matches by the leaf `Serialize`). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug. When the acquisition site's `use`-map resolves the derive/trait name to **more than one** candidate — a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name — every candidate's leaf SHALL be checked and the match SHALL react if any candidate's leaf matches, never silently keeping only the leaf of whichever declaration was written last (observation cannot know which `#[cfg]` branch is live).
 
 #### Scenario: A derive-macro-crate path still reacts
 
@@ -81,6 +84,11 @@ A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so 
 
 - **WHEN** `crate::domain::order` declares `use serde::Serialize as Ser; #[derive(Ser)] pub struct Order;` (or a hand impl `impl Ser for crate::domain::Order`) under a boundary forbidding `serde::Serialize` on `crate::domain`
 - **THEN** the system resolves `Ser` through the module's `use`-map to `serde::Serialize` and reacts by the leaf `Serialize` (the finding renders the written spelling, `derive Ser on crate::domain::order::Order`), rather than silently passing the rename
+
+#### Scenario: Two mutually-exclusive cfg-gated use aliases for a derive or trait name both react
+
+- **WHEN** a governed type's module declares `#[cfg(unix)] use bad::Marker as M; #[cfg(not(unix))] use good::NotBad as M;` and derives `#[derive(M)]` (or an impl site declares the identical alias collision and writes `impl M for <the type>`), under a boundary forbidding `bad::Marker`, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — the verdict never depends on source order
 
 ### Requirement: Anchor resolution and observation bounds
 
@@ -138,3 +146,4 @@ NOT define identity.
 #### Scenario: Different acquisitions stay distinct
 - **WHEN** two forbidden acquisitions differ by form, marker, module, or owner
 - **THEN** their structured facts differ in that observed role
+

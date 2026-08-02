@@ -62,7 +62,7 @@ extern head), a macro-generated trait, or a glob/foreign-module re-export — is
 resolver-coverage bound, never a silent pass of a *resolvable* operand. Auto-trait and lifetime
 bounds are never operands. The finding is the **seam-qualified** rendered `impl …` shape (`{shape}
 exposed by {seam}`), and the return-position scoping is inherited unchanged (argument-position `impl
-Trait` and `async fn` are not governed).
+Trait` and `async fn` are not governed). A mutually-exclusive `#[cfg]` collision on the `use`-map name a principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last.
 
 #### Scenario: A returned impl Trait of a named forbidden trait is flagged
 
@@ -93,6 +93,11 @@ Trait` and `async fn` are not governed).
 
 - **WHEN** the module returns `impl Frobnicate` where `Frobnicate` has no `use`, is not a declared dependency or sysroot crate, and is not a local trait resolvable in scope, under any operand set
 - **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound, never a silent claim over a resolvable operand
+
+#### Scenario: Two mutually-exclusive cfg-gated use aliases for the principal trait's name both react
+
+- **WHEN** the governed module declares `#[cfg(unix)] use crate::infra::Port as P; #[cfg(not(unix))] use crate::safe::SafePort as P;` and declares `pub fn make() -> impl P`, under an operand boundary forbidding `["crate::infra::Port"]`, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — the verdict never depends on source order
 
 ### Requirement: Empty operand set degenerates to shape-only, never a silent no-op
 
@@ -148,3 +153,4 @@ their relationship or identity.
 #### Scenario: Shape and operand rules do not collide
 - **WHEN** the same seam violates both shape-only and operand-specific laws
 - **THEN** their semantic rule keys keep the violation identities distinct
+
