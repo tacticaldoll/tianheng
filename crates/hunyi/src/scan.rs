@@ -13,7 +13,7 @@ use syn::parse::Parser;
 use syn::visit::{self, Visit};
 
 use crate::collect::type_param_names;
-use crate::crate_scope::{child_module_names, local_type_namespace_names};
+use crate::crate_scope::local_type_namespace_names;
 use crate::errors::{dual_backed_module_error, missing_module_file_error};
 use crate::finding::UnsafeSiteFact;
 use crate::module_resolve::{ModuleFile, locate_module_file, read_parse, resolve_module_branches};
@@ -24,8 +24,8 @@ use crate::resolve::{
     resolve_path_all, strip_raw, type_to_string,
 };
 use crate::syn_util::{
-    FlatItem, cfg_attr_path_values, direct_path_value, flatten_transparent_macro_items,
-    flatten_transparent_macros, has_cfg_attr,
+    FlatItem, cfg_attr_path_values, child_module_decls, direct_path_value,
+    flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
 };
 
 /// One impl site observed in the crate: its enclosing module path, the **real file it was read
@@ -499,13 +499,19 @@ fn walk_module(
     // head oracle does: a bare `pub use dep::X;` / `pub use wc::X;` head named by this module's own
     // child `mod dep` / `mod wc` is not recorded as the dependency / renamed crate, so a
     // cross-module facade reaching it through this crate-wide map does not mis-canonicalize (the
-    // facade-closure FP). `collect_reexports` keeps a leading-`::` head on the raw sets.
-    let child_mods = child_module_names(&items);
+    // facade-closure FP). That exclusion is now computed PER re-export item (via `flat`'s own
+    // arm/`#[cfg]` tag, inside `collect_reexports`), not once over this module's whole child-module
+    // set: a `mod` that is provably mutually exclusive with a SPECIFIC `pub use` in `flat` (a
+    // different `cfg_if!` arm, or a syntactic `#[cfg]` negation) must not shadow that item's own
+    // head even though both live in this same file (the round-9 sibling of the direct-head fix —
+    // see `collect_reexports`'s own doc). `collect_reexports` keeps a leading-`::` head on the raw
+    // sets regardless.
+    let child_mod_decls = child_module_decls(&flat);
     collect_reexports(
-        &items,
+        &flat,
         &module,
         externs,
-        &child_mods,
+        &child_mod_decls,
         &scan.extern_renames,
         &mut scan.reexports,
     );

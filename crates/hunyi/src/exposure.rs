@@ -3,6 +3,7 @@
 //! against the in-scope `use`s, the crate-wide re-export/alias closure, and the extern-crate
 //! oracle before matching the forbidden set.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -19,7 +20,7 @@ use crate::dsl::SemanticBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
 use crate::finding::{ExposureKind, SemanticFact, sort_faceted_facts};
-use crate::module_resolve::resolve_module_items_with_files;
+use crate::module_resolve::resolve_module_items_with_cfg_tags;
 use crate::resolve::{
     BareFallback, apply_bare_alias_rename, apply_crate_root_rename, bare_local_alias,
     canonical_path_str, collect_uses, expand_canonical_paths, extern_verbatim_renamed,
@@ -27,6 +28,7 @@ use crate::resolve::{
 };
 use crate::rules::SIGNATURE_RULE;
 use crate::scan::scan_crate;
+use crate::syn_util::{FlatItem, child_module_decls, reexport_externs_for};
 
 /// Run the semantic boundaries against the Cargo workspace at `manifest_path`.
 ///
@@ -88,7 +90,7 @@ pub(crate) fn module_findings(
     dep_names: &[String],
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
-        resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
+        resolve_module_items_with_cfg_tags(src_dir, root_file, module, crate_package)?;
     // Grouped by BRANCH INDEX, not by file and not one shared computation over the flattened
     // cross-branch union: two mutually-exclusive `#[cfg]` branches are never compiled together, so
     // deriving a shadow set (a `use`-map, a child-module-name set, a rename map) from their UNION
@@ -102,14 +104,26 @@ pub(crate) fn module_findings(
     // net`. Grouping by FILE ALONE is itself insufficient: two mutually-exclusive **inline**
     // `#[cfg]` siblings share one identical enclosing file, so a file-keyed group re-merges them —
     // the identical conflation one hop past item observation, found on a round-8 adversarial
-    // review; see `PROJECT.md`'s Decisions. The branch index `resolve_module_items_with_files`
+    // review; see `PROJECT.md`'s Decisions. The branch index `resolve_module_items_with_cfg_tags`
     // pairs each item with is the finer key that keeps them apart.
-    let mut items_by_branch: HashMap<usize, Vec<syn::Item>> = HashMap::new();
-    for (item, _file, branch) in &items_with_files {
+    //
+    // Branch grouping alone is still not fine enough for `externs_reexport`: two mutually-exclusive
+    // `#[cfg]`/`cfg_if!` SIBLING ITEMS (a `#[cfg(unix)] mod x;` beside a `#[cfg(not(unix))] pub use
+    // x::Y;`, or the two arms of one `cfg_if!`) share the identical branch — there is no
+    // module-path split to lean on, since the governed module itself resolves to exactly one
+    // branch here. `externs_reexport` therefore cannot stay a single per-branch set (round-9
+    // finding, the one item PR #149 explicitly left out of scope: `exposure.rs:157`'s
+    // child-module shadow was still cfg-blind at the item level even after branch grouping closed
+    // the file/branch level). Each branch's own `mod` declarations are kept below as `mod_decls` —
+    // paired with their own [`FlatItem`] tag — so a specific `pub use` exposure's child-module
+    // shadow is computed against ITS OWN cfg-compatible siblings only (via `reexport_externs_for`),
+    // never the branch's whole, cfg-blind child-module-name set.
+    let mut items_by_branch: HashMap<usize, Vec<FlatItem>> = HashMap::new();
+    for (flat, _file, branch) in &items_with_files {
         items_by_branch
             .entry(*branch)
             .or_default()
-            .push(item.clone());
+            .push(flat.clone());
     }
     // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
     // the sysroot crates. A bare head in it denotes an external crate, so an inline extern path
@@ -135,34 +149,36 @@ pub(crate) fn module_findings(
     // `mod serde` denotes `crate::…::serde`, not the dependency `serde` — so type positions use
     // the set with THIS FILE's own child modules excluded; a bare **re-export** head is extern by
     // edition-2018+ grammar even with a same-named local module, so re-exports use the raw set),
-    // `externs_reexport` (the re-export head oracle subtracts THIS FILE's own child-module names —
-    // only modules, since a `pub use` head must be a module/crate), and `renames_bare` (a
-    // crate-root `extern crate X as Y;` binds `Y` crate-wide, but a governed submodule that
-    // declares its OWN child `mod Y` shadows the alias there — so a bare head uses the rename map
-    // with THIS FILE's own child-module names removed). The crate-relative (`crate::Y::…`) and
-    // leading-`::` forms are NOT shadowable, so they keep the full `extern_renames` regardless.
+    // `mod_decls` (this file's own child-**module** declarations, item-level — see
+    // `reexport_externs_for`'s cfg-aware use below, the re-export-head analogue of `externs_type`'s
+    // whole-branch subtraction), and `renames_bare` (a crate-root `extern crate X as Y;` binds `Y`
+    // crate-wide, but a governed submodule that declares its OWN child `mod Y` shadows the alias
+    // there — so a bare head uses the rename map with THIS FILE's own child-module names removed,
+    // cfg-blind — see the module doc for why that stays a stated bound here, unlike `mod_decls`).
+    // The crate-relative (`crate::Y::…`) and leading-`::` forms are NOT shadowable, so they keep the
+    // full `extern_renames` regardless.
     struct FileScope {
         uses: crate::resolve::UseMap,
         externs_type: HashSet<String>,
-        externs_reexport: HashSet<String>,
+        mod_decls: Vec<(String, FlatItem)>,
         renames_bare: crate::resolve::ExternRenameMap,
     }
     let scopes: HashMap<usize, FileScope> = items_by_branch
         .iter()
-        .map(|(branch, file_items)| {
-            let child_mods = child_module_names(file_items);
+        .map(|(branch, flat_items)| {
+            let items: Vec<syn::Item> = flat_items.iter().map(|f| f.item.clone()).collect();
+            let child_mods = child_module_names(&items);
             let externs_type = externs
-                .difference(&local_type_namespace_names(file_items))
+                .difference(&local_type_namespace_names(&items))
                 .cloned()
                 .collect();
-            let externs_reexport = externs.difference(&child_mods).cloned().collect();
             let renames_bare = renames_shadowed(&extern_renames, &child_mods);
             (
                 *branch,
                 FileScope {
-                    uses: collect_uses(file_items),
+                    uses: collect_uses(&items),
                     externs_type,
-                    externs_reexport,
+                    mod_decls: child_module_decls(flat_items),
                     renames_bare,
                 },
             )
@@ -171,25 +187,29 @@ pub(crate) fn module_findings(
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
     let mut exposed = Vec::new();
-    for (ordinal, (item, file, branch)) in items_with_files.iter().enumerate() {
+    for (ordinal, (flat, file, branch)) in items_with_files.iter().enumerate() {
         let uses = &scopes[branch].uses;
         let mut buf = Vec::new();
-        collect_item_exposures(item, module, uses, ordinal, &mut buf);
+        collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf);
         // Opt-in depth: also observe the module's trait `impl` blocks' impl-site-authored
         // positions (`semantic-trait-impl-exposure`). The same resolve → canonicalize → match →
         // `{type} exposed by {seam}` pipeline below applies unchanged; only the seam differs.
         if include_trait_impls {
-            collect_trait_impl_exposures(item, module, uses, ordinal, &mut buf);
+            collect_trait_impl_exposures(&flat.item, module, uses, ordinal, &mut buf);
         }
+        // Each exposure keeps its OWN generating item's `FlatItem` tag alongside it (not just the
+        // file/branch), so a re-export exposure's later child-module-shadow check
+        // (`reexport_externs_for`) can compare its own cfg-gating against a sibling `mod`
+        // declaration's, rather than only the branch it happens to share with that sibling.
         exposed.extend(
             buf.into_iter()
-                .map(|exposure| (exposure, file.clone(), *branch)),
+                .map(|exposure| (exposure, file.clone(), *branch, flat.clone())),
         );
     }
 
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()
-        .flat_map(|(exposure, file, branch)| {
+        .flat_map(|(exposure, file, branch, origin)| {
             let scope = &scopes[branch];
             let uses = &scope.uses;
             // `resolve_path_all` returns no candidates for a bare head (not `crate`-relative, not
@@ -197,11 +217,14 @@ pub(crate) fn module_findings(
             // the inline extern path to itself. Ordering guarantees a local `use … as <dep>`
             // alias (found in the `use`-map) still wins over a dependency of the same name. A
             // re-export head uses the child-module-excluded set (a same-named child `mod` shadows a
-            // bare `pub use` head); a type-position head uses the full type-namespace-excluded set.
-            let type_externs = if exposure.is_reexport {
-                &scope.externs_reexport
+            // bare `pub use` head) — computed against THIS exposure's own `origin` tag, so a
+            // same-named `mod` that is provably mutually exclusive with this exposure's own
+            // cfg-gating (a different `#[cfg]`/`cfg_if!` arm, never compiled alongside it) does not
+            // suppress it; a type-position head uses the full type-namespace-excluded set, unchanged.
+            let type_externs: Cow<HashSet<String>> = if exposure.is_reexport {
+                Cow::Owned(reexport_externs_for(&externs, &scope.mod_decls, origin))
             } else {
-                &scope.externs_type
+                Cow::Borrowed(&scope.externs_type)
             };
             // A leading `::` is an unambiguous extern (edition 2018+): resolve against the RAW
             // extern set (with the crate-root `extern crate … as` rename applied, so a
@@ -239,7 +262,7 @@ pub(crate) fn module_findings(
                         .or_else(|| {
                             extern_verbatim_renamed(
                                 &exposure.path,
-                                type_externs,
+                                &type_externs,
                                 &scope.renames_bare,
                             )
                         })

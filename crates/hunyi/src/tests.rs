@@ -8228,6 +8228,106 @@ fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_shadow_the_
 }
 
 #[test]
+fn a_bare_cfg_negated_sibling_child_module_does_not_shadow_the_others_extern_reexport() {
+    // Round-9 finding (audit `crates/hunyi/src/exposure.rs:157`): rounds 6-8 fixed child_mods
+    // being computed once over the UNION of every #[cfg]-*branch*'s items (a branch = a distinct
+    // candidate resolution of the governed MODULE ITSELF, produced by `descend()`'s per-occurrence
+    // splitting). This finding is one level finer: `#[cfg(unix)] mod serde;` and
+    // `#[cfg(not(unix))] pub use serde::Value;` are two SIBLING ITEMS inside the SAME file/branch
+    // (there is no module-path split here at all -- `api` resolves to exactly one branch), so the
+    // existing per-branch grouping is a no-op and `child_module_names` still runs cfg-blind over
+    // both items together. The "unix" mod and the "not(unix)" pub use are never compiled
+    // together -- verified against real rustc, api.rs alone compiles cleanly on every platform --
+    // so the mod must not shadow the use's own genuine extern re-export.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow",
+        &[
+            ("lib.rs", "pub mod api;\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\nmod serde;\n#[cfg(not(unix))]\npub use serde::Value;\n",
+            ),
+            ("api/serde.rs", "pub struct Local;\n"),
+        ],
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::api::Value"],
+        "the not(unix) arm's own genuine extern re-export must react, regardless of the unix \
+         arm's own local mod serde, since the two are never compiled together: {out:?}"
+    );
+}
+
+#[test]
+fn a_cfg_if_sibling_child_module_does_not_shadow_the_other_arms_extern_reexport() {
+    // The `cfg_if!` form of the round-9 finding above: `mod serde;` and `pub use serde::Value;`
+    // are declared in two arms of the SAME invocation, flattened into one shared item list by
+    // `flatten_transparent_macro_items` before `module_findings` ever sees them -- so, like the
+    // bare-#[cfg] form, there is no branch split to lean on and `child_module_names` must instead
+    // recognize the two arms as mutually exclusive on its own.
+    let out = findings_with_deps(
+        "cfg-if-sibling-childmod-shadow",
+        &[
+            ("lib.rs", "pub mod api;\n"),
+            (
+                "api.rs",
+                "cfg_if::cfg_if! {\n    if #[cfg(unix)] {\n        mod serde;\n    } else {\n        pub use serde::Value;\n    }\n}\n",
+            ),
+            ("api/serde.rs", "pub struct Local;\n"),
+        ],
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::api::Value"],
+        "the else arm's own genuine extern re-export must react, regardless of the if arm's own \
+         local mod serde, since cfg_if arms are never compiled together: {out:?}"
+    );
+}
+
+#[test]
+fn a_bare_cfg_negated_sibling_child_module_does_not_shadow_a_facades_extern_reexport() {
+    // The crate-wide-closure sibling of the two round-9 findings above: `crate::a`'s two
+    // mutually-exclusive sibling items are reached only THROUGH a local facade
+    // (`crate::domain`'s `pub use crate::a::Value;`), not directly by the governed module itself
+    // -- so this exercises `scan.rs`'s `collect_reexports`/`walk_module`, not `module_findings`'s
+    // own direct-head resolution. `collect_reexports` computed its child-module shadow the
+    // identical cfg-blind way `module_findings` used to, so `crate::a`'s own local `mod serde`
+    // (cfg(unix)) must not suppress recording `crate::a::Value -> serde::Value` in the crate-wide
+    // reexport closure just because a mutually-exclusive `cfg(not(unix))` sibling in the SAME
+    // file happens to declare it.
+    let out = findings_with_deps(
+        "cfg-negated-sibling-childmod-shadow-facade",
+        &[
+            ("lib.rs", "pub mod a;\npub mod domain;\n"),
+            (
+                "a.rs",
+                "#[cfg(unix)]\nmod serde;\n#[cfg(not(unix))]\npub use serde::Value;\n",
+            ),
+            ("a/serde.rs", "pub struct Local;\n"),
+            ("domain.rs", "pub use crate::a::Value;\n"),
+        ],
+        "crate::domain",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["serde::Value exposed by pub use crate::domain::Value"],
+        "the facade must still canonicalize to the not(unix) arm's genuine extern re-export, \
+         regardless of the unix arm's own local mod serde in the SAME defining module: {out:?}"
+    );
+}
+
+#[test]
 fn async_subtree_observes_both_arms_of_a_two_inline_sibling_cfg_split_anchor() {
     // Round-8 finding (b): when the async-exposure subtree boundary is anchored DIRECTLY at a
     // module reached through two mutually-exclusive INLINE `#[cfg]` siblings sharing one file,
