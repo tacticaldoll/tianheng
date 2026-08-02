@@ -114,7 +114,11 @@ SHALL descend the anchored module's **whole subtree** — every descendant modul
 and inline `mod x { … }` alike — and SHALL emit a violation for every returned `impl Trait` node at
 or below the anchor, each attributed to its enclosing module. Anchoring at `crate` with the opt-in
 SHALL govern the whole crate. Within the observed subtree there SHALL be no false negative: a
-returned `impl Trait` in any descendant module MUST react.
+returned `impl Trait` in any descendant module MUST react — including when two descendant modules
+each inherent-`impl` the identical self type (a platform-conditional split legal under Rust's
+coherence rules, since an inherent `impl` may be written in any module of the crate) and each
+declares a same-named public RPIT method: the two are distinct impl **sites** and MUST both react,
+never collapsing to one violation merely because they share a self type and a method name.
 
 The violation `target` SHALL remain the boundary's anchored module (not the deeper enclosing
 module), so a finding's identity `(target, rule_key, fact)` is stable whether or not the opt-in is
@@ -151,6 +155,11 @@ as it already does for the default (seam-only) scope.
 
 - **WHEN** a subtree-scoped boundary anchored at `crate` descends `#[cfg_attr(any(), path = "never.rs")] pub mod net;` with `net.rs` (the conventional file, present) declaring `pub fn make() -> impl crate::Port` and `never.rs` (the target) absent
 - **THEN** the system reads `net.rs` — the file every build actually compiles here — and reacts, attributed to `crate::net`, rather than treating the `cfg_attr` attribute as a bound to skip the submodule outright
+
+#### Scenario: Two descendant modules inherent-impling the same owner with the same method name both react
+
+- **WHEN** a subtree-scoped boundary anchored at `crate` descends a type `Conn` declared in `crate::common`, and two sibling submodules `crate::plat_unix` and `crate::plat_win` each write `impl Conn { pub fn open(&self) -> impl crate::Port { … } }`
+- **THEN** the system emits two distinct violations, one attributed to `crate::plat_unix` and one to `crate::plat_win` — the impl block's own declaring module is part of the seam's identity, so the two do not collapse to one violation merely because they share `Conn` as their owner and `open` as their method name
 
 ### Requirement: An impl nested in a const or fn body is observed
 
