@@ -45,9 +45,35 @@ expect() { # expect <got> <want> <label>
     echo "ok  $3 (exit $1)"
 }
 
+# Cargo silently drops an incompatible `patch.crates-io` entry (`patch ... was not used in the
+# crate graph`) and falls back to resolving the crate from crates.io instead — e.g. once a local
+# family version no longer satisfies an example's committed `= "0.3"` requirement. Every assertion
+# below would keep passing against that stale, already-published crate, so the dogfood gate would
+# stay green while silently testing the wrong tree. `cargo tree -p <crate> --depth 0` prints the
+# resolved package's own source in parens for a path/patch dependency (absent for a registry
+# resolution), so its presence is a real signal the patch actually took effect — checked against
+# the SAME "$PATCH" args just built for this example, right before those args are used to run it.
+assert_patched() { # assert_patched <example-label> <crate>...
+    local label="$1"
+    shift
+    local c resolved
+    for c in "$@"; do
+        resolved="$(cargo tree -p "$c" "${PATCH[@]}" --depth 0 2>/dev/null | tail -1)"
+        case "$resolved" in
+            "$c "*" ($WS/crates/$c)") ;;
+            *)
+                echo "::error::$label: $c did not resolve to local source — patch.crates-io was silently unused (fell back to a published release): $resolved"
+                exit 1
+                ;;
+        esac
+    done
+    echo "ok  $label patched every family crate to local source"
+}
+
 # ---------------------------------------------------------------- guibiao-standalone
 cd "$WS/examples/guibiao-standalone"
 mapfile -d '' PATCH < <(patch guibiao xuanji xingbiao)
+assert_patched "guibiao-standalone" guibiao xuanji xingbiao
 quality_gates "guibiao-standalone" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -59,6 +85,7 @@ fulfill_example guibiao-standalone
 # ---------------------------------------------------------------- hunyi-standalone
 cd "$WS/examples/hunyi-standalone"
 mapfile -d '' PATCH < <(patch hunyi xuanji xingbiao)
+assert_patched "hunyi-standalone" hunyi xuanji xingbiao
 quality_gates "hunyi-standalone" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -73,6 +100,7 @@ fulfill_example hunyi-standalone
 # `#![forbid(unsafe_code)]`), so it needs a crate with real, confined `unsafe`.
 cd "$WS/examples/unsafe-confinement"
 mapfile -d '' PATCH < <(patch hunyi xuanji xingbiao)
+assert_patched "unsafe-confinement" hunyi xuanji xingbiao
 quality_gates "unsafe-confinement" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -86,6 +114,7 @@ fulfill_example unsafe-confinement
 # focused teaching examples. Bind stable structured identity, never the human finding sentence.
 cd "$WS/examples/capability-catalog"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+assert_patched "capability-catalog" xuanji xingbiao guibiao hunyi louke tianheng
 quality_gates "capability-catalog" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -118,6 +147,7 @@ fulfill_example capability-catalog
 # ---------------------------------------------------------------- composed
 cd "$WS/examples/composed"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+assert_patched "composed" xuanji xingbiao guibiao hunyi louke tianheng
 quality_gates "composed" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 
@@ -190,6 +220,7 @@ fulfill_example composed
 # async boundary into one declaration; `run` projects both into one exit code.
 cd "$WS/examples/sans-io-pure"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+assert_patched "sans-io-pure" xuanji xingbiao guibiao hunyi louke tianheng
 quality_gates "sans-io-pure" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0

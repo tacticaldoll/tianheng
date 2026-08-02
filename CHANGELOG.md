@@ -188,6 +188,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   consumer. A doubly-nested `cfg_attr(cfg_attr(path))` remains a stated, undetected bound of this
   hand-rolled scanner. Not breaking — closes false negatives and one false positive, not an identity
   shape; no baseline identity shape changes.
+- `deny.toml`'s `[advisories]` table now sets `yanked = "deny"` explicitly: the field's own unset
+  default is `"warn"`, so `cargo deny check` was printing `warning[yanked]: detected yanked crate`
+  and still exiting 0 (`advisories ok`) — reproduced against a real yanked crate pinned into the
+  lockfile — directly contradicting the section's own stated claim that yanked crates are denied.
+  `scripts/test_examples.sh` now asserts (`cargo tree -p <crate> --depth 0`) that every example's
+  `patch.crates-io` override actually resolved to local source, for every family crate it patches:
+  reproduced against a version-bumped scratch copy of the workspace, Cargo was silently dropping an
+  incompatible patch (`patch ... was not used in the crate graph`) and falling back to the last
+  published crate, so the dogfood gate stayed green while silently testing stale, already-published
+  code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
+  gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
+  present in the current workspace, so this has no effect on the present green build.
 
 ## [0.3.0] - 2026-07-26
 
