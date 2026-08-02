@@ -10217,3 +10217,79 @@ fn two_crates_with_the_identical_async_exposure_boundary_stay_distinct_violation
         "identity must differ by crate, not collapse to one"
     );
 }
+
+/// A `pub fn` inside an `extern` block is a real item in the module's own namespace — as public as
+/// a same-shaped ordinary `fn` — so a forbidden type named only in its signature must react exactly
+/// like an ordinary function's would, not escape the query because the declaration has no body.
+#[test]
+fn a_forbidden_type_in_an_extern_block_pub_fn_signature_is_observed() {
+    let out = semantic_findings(
+        "extern-block-fn-exposure",
+        &[
+            ("lib.rs", "pub mod infra;\npub mod api;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "extern \"C\" {\n    pub fn handle() -> crate::infra::Secret;\n}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by fn crate::api::handle"]
+    );
+}
+
+/// The identical shape for `pub static` inside an `extern` block.
+#[test]
+fn a_forbidden_type_in_an_extern_block_pub_static_is_observed() {
+    let out = semantic_findings(
+        "extern-block-static-exposure",
+        &[
+            ("lib.rs", "pub mod infra;\npub mod api;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "extern \"C\" {\n    pub static S: crate::infra::Secret;\n}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        vec!["crate::infra::Secret exposed by static crate::api::S"]
+    );
+}
+
+/// A private (no `vis`) `fn`/`static` inside an `extern` block must NOT react — extern-block items
+/// default to the enclosing block's own item visibility exactly like a module-level item does, and
+/// only `pub` ones are on the module's public surface.
+#[test]
+fn a_non_pub_extern_block_item_is_not_observed() {
+    let out = semantic_findings(
+        "extern-block-private-not-observed",
+        &[
+            ("lib.rs", "pub mod infra;\npub mod api;\n"),
+            ("infra.rs", "pub struct Secret;\n"),
+            (
+                "api.rs",
+                "extern \"C\" {\n    fn handle() -> crate::infra::Secret;\n    static S: crate::infra::Secret;\n}\n",
+            ),
+        ],
+        "crate::api",
+        &["crate::infra"],
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out, Vec::<String>::new());
+}
