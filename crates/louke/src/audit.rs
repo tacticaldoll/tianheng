@@ -100,14 +100,19 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
 /// covering its seam, so a seam whose *only* probe is compiled out of the production binary
 /// would be reported covered. Keep a seam's production probe out of non-production `cfg`s.
 ///
-/// **`#[path]` relocation (followed, with a narrowed bound):** an **unconditional**
+/// **`#[path]` relocation (followed, union rather than pick-one):** an **unconditional**
 /// `#[path = "…"] mod name;` is followed to its author-chosen file and its probes are counted — the
 /// base is the directory a conventional `mod name;` would use, and the loaded file is mod-rs-like,
-/// so its own children resolve from its directory. A **`cfg_attr`-wrapped** `#[path]` is
-/// cfg-conditional and its relocation is **not** followed (following it cfg-blind could read a file
-/// rustc does not compile in this configuration): the *relocated* file's probes are not counted, and
-/// — being cfg-blind — the scan instead resolves the module conventionally, counting the
-/// conventional `name.rs` if one is present.
+/// so its own children resolve from its directory. A **`cfg_attr`-wrapped** `#[path]` (one or more
+/// on the same declaration, each gated by its own platform predicate) is cfg-conditional, so `cfg`
+/// never resolves the module — `cfg_attr` never removes the `mod` item the way a bare `#[cfg]`
+/// does — but its own target is followed too, resolved the identical way an unconditional `#[path]`
+/// is: EVERY candidate that exists on disk is counted, unioned with the conventional `name.rs` if it
+/// too exists, since cfg-blind observation cannot know which one a given build actually compiles.
+/// Absence is tolerated only when NEITHER the conventional file NOR any `cfg_attr` target resolves
+/// anywhere, and the declaration carries no other cfg-conditional gate (a bare `#[cfg]` or
+/// transparent-macro-arm membership) — that combination is a genuinely broken reference on every
+/// configuration, so it fails loud (a constitution error), never a silent pass.
 ///
 /// Compiled only with the non-default `audit` feature (the CI face); see the module note above.
 pub fn audit_probe_coverage_with_markers(

@@ -167,6 +167,23 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   natural 3+-way per-platform shim) only ever had its first-declared candidate tried; every other
   platform's target silently never was. Every stacked candidate is now read. Not breaking — closes
   false negatives; no baseline identity shape changes.
+- 漏刻's CI-face audit scanner no longer drops a module whose declaration carries a comment between
+  the `mod` keyword and its name (or between the name and its terminator) — trivia to rustc, but a
+  bare whitespace-only skip stopped at the comment's leading `/`, so the declaration was never
+  recognized as a `mod` at all: the module and its whole subtree, and every probe beneath it,
+  silently vanished from the corpus. It also now descends into every function/block/match-arm body
+  looking for a nested `mod`, not only the scopes it specifically recognized — the only legal
+  non-inline module form there, `#[path] mod name;`, was previously invisible with no loud signal at
+  all. And `mod_preamble_attrs`'s documented `cfg_attr(path)` tolerance is now actually implemented:
+  the attribute match previously checked for the exact identifier `cfg`, so `cfg_attr` — a different
+  identifier — matched neither the `path` arm nor the `cfg` arm, and a module stacking two
+  `cfg_attr`-wrapped `#[path]` declarations that together cover every platform (both targets present,
+  compiling cleanly everywhere) was reported a hard constitution error instead of being scanned — a
+  false positive on entirely valid code. Every `cfg_attr` target that exists on disk is now read,
+  unioned with the conventional file, matching the crate-wide walk 圭表 and 渾儀 both already apply to
+  the identical shape; a doubly-nested `cfg_attr(cfg_attr(path))` remains a stated, undetected bound
+  of this hand-rolled scanner. Not breaking — closes false negatives and one false positive, not an
+  identity shape; no baseline identity shape changes.
 
 ## [0.3.0] - 2026-07-26
 
