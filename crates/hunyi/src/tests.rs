@@ -11889,3 +11889,106 @@ fn a_static_wrapped_impl_stays_a_stated_bound() {
         Vec::<String>::new(),
     );
 }
+
+// --- visibility boundary: extern-block foreign items ---------------------
+
+/// The motivating false negative, with more than one `pub` foreign item in the SAME block so the
+/// per-source-item result must carry all of them, not just one — `item_observation` returns a
+/// `Vec` (widened from the prior `Option`) precisely because an `extern` block is one `syn::Item`
+/// holding an arbitrary number of independently-visible foreign items. Also covers `pub type`
+/// (an extern type declaration), which — unlike `pub fn`/`pub static` — carries no exposable
+/// signature and so was out of `semantic-signature-coupling`'s own extern-block fix, but a bare
+/// `pub type` IS a bare-pub declaration this capability must react to. Three non-pub foreign
+/// items sit in the same block as a same-block control: they must not react.
+#[test]
+fn a_pub_fn_pub_static_and_pub_type_inside_an_extern_block_all_react() {
+    let out = vis_findings(
+        "extern-block-multi",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "unsafe extern \"C\" {\n    pub fn open(h: *mut u8) -> u8;\n    pub static K: u8;\n    pub type Opaque;\n    fn hidden() -> u8;\n    static S: u8;\n    type T;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub fn open", "pub static K", "pub type Opaque"],
+        "every pub foreign item in the block reacts, every non-pub one stays clean: {out:?}"
+    );
+}
+
+/// The identical shape in the plain edition-2021 `extern "C" { … }` form (no `unsafe` prefix) —
+/// `syn::Item::ForeignMod` parses both forms identically, so there is no edition-specific gap.
+#[test]
+fn a_pub_fn_and_pub_static_inside_a_plain_extern_block_react() {
+    let out = vis_findings(
+        "extern-block-plain",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "extern \"C\" {\n    pub fn plain(h: *mut u8) -> u8;\n    pub static K2: u8;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub fn plain", "pub static K2"],
+        "the plain 2021-edition extern block form reacts identically: {out:?}"
+    );
+}
+
+/// A block whose foreign items are ALL non-`pub` must stay clean — the default (inherited)
+/// visibility inside an `extern` block is private to the enclosing module, exactly like an
+/// ordinary item, not implicitly public because it names an FFI declaration.
+#[test]
+fn an_extern_block_with_no_pub_foreign_item_is_clean() {
+    let out = vis_findings(
+        "extern-block-none-pub",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "unsafe extern \"C\" {\n    fn hidden() -> u8;\n    static S: u8;\n    type T;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "no bare-pub foreign item in the block: {out:?}"
+    );
+}
+
+/// A restricted-visibility foreign item (`pub(crate)`) is ranked exactly like an ordinary item's
+/// own restricted visibility — the ceiling comparison downstream of `item_observation_parts`
+/// applies uniformly regardless of item source, so a Super ceiling reacts on it exactly as
+/// `super_ceiling_reacts_on_pub_and_pub_crate_only` already pins for ordinary items.
+#[test]
+fn a_restricted_visibility_foreign_item_ranks_like_an_ordinary_one() {
+    let out = vis_findings_at(
+        "extern-block-restricted",
+        &[
+            ("lib.rs", "pub mod ffi;\n"),
+            (
+                "ffi.rs",
+                "unsafe extern \"C\" {\n    pub(crate) fn helper() -> u8;\n    pub(super) fn narrower() -> u8;\n}\n",
+            ),
+        ],
+        "crate::ffi",
+        VisibilityCeiling::Super.rank(),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["pub(crate) fn helper"],
+        "Super ceiling reacts on pub(crate), not pub(super), inside an extern block too: {out:?}"
+    );
+}

@@ -73,8 +73,10 @@ pub(crate) fn visibility_findings(
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let mut findings: Vec<(SemanticFact, PathBuf)> = items_with_files
         .iter()
-        .filter_map(|(item, file, _branch)| {
-            item_observation(item, ceiling_rank).map(|obs| (obs, file))
+        .flat_map(|(item, file, _branch)| {
+            item_observation(item, ceiling_rank)
+                .into_iter()
+                .map(move |obs| (obs, file))
         })
         .map(|((visibility, item_kind, item_name), file)| {
             (

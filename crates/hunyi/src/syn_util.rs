@@ -617,7 +617,12 @@ fn vis_prefix(vis: &syn::Visibility) -> String {
 /// `pub fn foo` as before). `pub use` (including a glob) is observed as a raw `Item::Use`;
 /// attribute-derived public surface (`#[macro_export]`, `#[no_mangle]`, `pub macro`) carries no
 /// readable visibility keyword and is out of scope (stated bounds; the deferred attribute
-/// capability's domain).
+/// capability's domain). A `pub fn`/`pub static`/`pub type` declared inside an `extern` block is
+/// observed identically to a same-shaped ordinary item (see [`item_observation_parts`]'s
+/// `Item::ForeignMod` arm) — reusing `VisibleItemKind::Fn`/`Static`/`Type` verbatim, no new kind,
+/// since Rust cannot declare both an ordinary item and a foreign one under the same name in one
+/// module, so there is no identity collision to design around (the identical reasoning
+/// `collect_item_exposures`'s own `ForeignMod` arm already applies for exposure).
 pub(crate) struct VisibleItem<'a> {
     pub(crate) visibility: &'a syn::Visibility,
     pub(crate) kind: VisibleItemKind,
@@ -661,57 +666,61 @@ impl VisibleItemKind {
     }
 }
 
-fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
+/// Direct items carry at most one governed visibility (`item_observation_parts`'s non-`ForeignMod`
+/// arms), but an `extern` block is one `syn::Item` holding an arbitrary number of foreign items,
+/// each with its own independent visibility — so the per-source-item result is a `Vec`, not an
+/// `Option`, even though every arm but `ForeignMod` produces at most one entry.
+fn item_observation_parts(item: &syn::Item) -> Vec<VisibleItem<'_>> {
     let observed = |visibility, kind, name| VisibleItem {
         visibility,
         kind,
         name,
     };
     match item {
-        syn::Item::Fn(i) => Some(observed(
+        syn::Item::Fn(i) => vec![observed(
             &i.vis,
             VisibleItemKind::Fn,
             i.sig.ident.to_string(),
-        )),
-        syn::Item::Struct(i) => Some(observed(
+        )],
+        syn::Item::Struct(i) => vec![observed(
             &i.vis,
             VisibleItemKind::Struct,
             i.ident.to_string(),
-        )),
-        syn::Item::Enum(i) => Some(observed(&i.vis, VisibleItemKind::Enum, i.ident.to_string())),
-        syn::Item::Union(i) => Some(observed(
+        )],
+        syn::Item::Enum(i) => vec![observed(&i.vis, VisibleItemKind::Enum, i.ident.to_string())],
+        syn::Item::Union(i) => vec![observed(
             &i.vis,
             VisibleItemKind::Union,
             i.ident.to_string(),
-        )),
-        syn::Item::Type(i) => Some(observed(&i.vis, VisibleItemKind::Type, i.ident.to_string())),
-        syn::Item::Const(i) => Some(observed(
+        )],
+        syn::Item::Type(i) => vec![observed(&i.vis, VisibleItemKind::Type, i.ident.to_string())],
+        syn::Item::Const(i) => vec![observed(
             &i.vis,
             VisibleItemKind::Const,
             i.ident.to_string(),
-        )),
-        syn::Item::Static(i) => Some(observed(
+        )],
+        syn::Item::Static(i) => vec![observed(
             &i.vis,
             VisibleItemKind::Static,
             i.ident.to_string(),
-        )),
-        syn::Item::Trait(i) => Some(observed(
+        )],
+        syn::Item::Trait(i) => vec![observed(
             &i.vis,
             VisibleItemKind::Trait,
             i.ident.to_string(),
-        )),
-        syn::Item::TraitAlias(i) => Some(observed(
+        )],
+        syn::Item::TraitAlias(i) => vec![observed(
             &i.vis,
             VisibleItemKind::TraitAlias,
             i.ident.to_string(),
-        )),
-        syn::Item::Mod(i) => Some(observed(&i.vis, VisibleItemKind::Mod, i.ident.to_string())),
-        syn::Item::ExternCrate(i) => Some(observed(
+        )],
+        syn::Item::Mod(i) => vec![observed(&i.vis, VisibleItemKind::Mod, i.ident.to_string())],
+        syn::Item::ExternCrate(i) => vec![observed(
             &i.vis,
             VisibleItemKind::ExternCrate,
             i.ident.to_string(),
-        )),
-        syn::Item::Use(i) => Some(observed(
+        )],
+        syn::Item::Use(i) => vec![observed(
             &i.vis,
             VisibleItemKind::Use,
             format!(
@@ -719,27 +728,62 @@ fn item_observation_parts(item: &syn::Item) -> Option<VisibleItem<'_>> {
                 if i.leading_colon.is_some() { "::" } else { "" },
                 use_tree_desc(&i.tree)
             ),
-        )),
-        _ => None,
+        )],
+        // An `extern` block's `pub fn`/`pub static`/`pub type` is a real item in the enclosing
+        // module's own namespace — exactly as visible as a same-shaped ordinary item, and Rust
+        // cannot declare both an ordinary item and a foreign one under the same name in one
+        // module, so there is no identity collision in reusing `Fn`/`Static`/`Type` verbatim (the
+        // identical reasoning `collect_item_exposures`'s own `ForeignMod` arm already applies for
+        // exposure). `ForeignItem::Macro` (a macro invocation, no visibility keyword) and
+        // `ForeignItem::Verbatim` (unparsed tokens `syn` cannot introspect) carry no readable
+        // visibility syntax and stay out of scope, the same nature as this function's existing
+        // attribute-derived/opaque-token bounds.
+        syn::Item::ForeignMod(item) => item
+            .items
+            .iter()
+            .filter_map(|foreign_item| match foreign_item {
+                syn::ForeignItem::Fn(f) => Some(observed(
+                    &f.vis,
+                    VisibleItemKind::Fn,
+                    f.sig.ident.to_string(),
+                )),
+                syn::ForeignItem::Static(s) => Some(observed(
+                    &s.vis,
+                    VisibleItemKind::Static,
+                    s.ident.to_string(),
+                )),
+                syn::ForeignItem::Type(t) => {
+                    Some(observed(&t.vis, VisibleItemKind::Type, t.ident.to_string()))
+                }
+                _ => None,
+            })
+            .collect(),
+        _ => vec![],
     }
 }
 
-/// Describe a direct item whose declared-visibility rank is **strictly above** `ceiling_rank`
-/// (the boundary's ceiling), rendered `{visibility} {kind} {name}`; `None` when the item is at or
-/// below the ceiling or has no governed visibility. Under the Crate ceiling (rank 2) only bare
-/// `pub` (rank 3) reacts and renders `pub {kind} {name}`, byte-identical to the prior rule.
+/// Describe every direct observation of `item` whose declared-visibility rank is **strictly
+/// above** `ceiling_rank` (the boundary's ceiling), each rendered `{visibility} {kind} {name}`.
+/// Empty when the item has no governed visibility or none of its observations exceed the ceiling.
+/// Under the Crate ceiling (rank 2) only bare `pub` (rank 3) reacts and renders `pub {kind}
+/// {name}`, byte-identical to the prior rule for every item kind but `ForeignMod`, which the prior
+/// rule did not observe at all (an `extern` block can hold more than one independently-visible
+/// foreign item, hence a `Vec` rather than the prior `Option`).
 pub(crate) fn item_observation(
     item: &syn::Item,
     ceiling_rank: u8,
-) -> Option<(String, VisibleItemKind, String)> {
-    let observed = item_observation_parts(item)?;
-    (visibility_rank(observed.visibility) > ceiling_rank).then(|| {
-        (
-            vis_prefix(observed.visibility),
-            observed.kind,
-            observed.name,
-        )
-    })
+) -> Vec<(String, VisibleItemKind, String)> {
+    item_observation_parts(item)
+        .into_iter()
+        .filter(|observed| visibility_rank(observed.visibility) > ceiling_rank)
+        .map(|observed| {
+            (
+                vis_prefix(observed.visibility),
+                observed.kind,
+                observed.name,
+            )
+        })
+        .collect()
 }
 
 /// Render a `use` tree to a stable description for a finding (`crate::db::Handle`,
