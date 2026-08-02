@@ -34,41 +34,28 @@ pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
 }
 
 /// Whether any attribute is a BARE `#[cfg(...)]` — the conservative, predicate-blind "might
-/// legitimately be absent on this build" signal a missing conventional file is checked against: a
-/// `#[cfg]`-gated `mod x;` whose file genuinely doesn't exist on this platform/feature set is
-/// expected, not broken, so a walker tolerates it; an **unconditional** `mod x;` with no backing
-/// file is a real, unrecoverable compile error. Shared by both of this crate's module walkers
-/// ([`crate::scan::resolve_child_modules`] and [`crate::module_resolve::descend`]) so they agree
-/// on this policy rather than silently drifting — the 0.2.2 lesson (found once as an unnoticed
-/// divergence between the two).
-///
-/// Deliberately does **not** match `cfg_attr` (verified against a real `rustc` build): unlike a
-/// bare `#[cfg(pred)]`, which removes the whole item when `pred` is false, `#[cfg_attr(pred, …)]`
-/// only conditionally applies its wrapped attribute(s) — the `mod` item itself is never removed,
-/// so a `#[cfg_attr(pred, allow(dead_code))] mod x;` with no `x.rs` is a genuine compile error
-/// (E0583) on every platform, not a legitimate absence. A `cfg_attr` wrapping `path` specifically
-/// is a different, already-handled case ([`cfg_attr_path_value`], consulted separately from this
-/// absence test). 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only
-/// distinction for the same reason (`louke::audit::scan::mod_preamble_attrs`).
+/// legitimately be absent on this build" signal a missing conventional file is checked against.
+/// See `module-boundary`'s "A plain module declaration resolves to exactly one conventional
+/// file" requirement for the full rationale
+/// (why a bare `#[cfg]` tolerates an absent file but `cfg_attr` does not — verified against a
+/// real `rustc` build: `cfg_attr` never removes the `mod` item, so a missing file behind one with
+/// no `path` remap is a genuine E0583 in every configuration). Shared by both of this crate's
+/// module walkers ([`crate::scan::resolve_child_modules`] and [`crate::module_resolve::descend`])
+/// so they agree on this policy rather than silently drifting — the 0.2.2 lesson. A `cfg_attr`
+/// wrapping `path` specifically is a different, already-handled case ([`cfg_attr_path_value`]).
+/// 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only distinction for
+/// the same reason (`louke::audit::scan::mod_preamble_attrs`).
 pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("cfg"))
 }
 
-/// The one macro whose body this dimension reads as ordinary code: `cfg_if!`. Its arms wrap
-/// human-authored items without transforming their identities, so an item written inside an arm is
-/// a real declaration of the enclosing module — which is why 圭表 already observes them
-/// (`guibiao::module_scan::…::is_transparent_macro_name`) and why 渾儀 must too: the same source
-/// otherwise reacts in the static dimension and passes in the semantic one (a measured exposure
-/// false negative, the one bug class the core contract forbids).
-///
-/// Gating on the macro **name** is load-bearing, not conservatism. [`transparent_macro_arms`]
-/// reads every top-level brace group of the body as an arm, and for an arbitrary macro that is
-/// wrong: in `wrap! { impl Foo { pub fn hidden() -> Forbidden { … } } }` the `impl` body's braces
-/// ARE a top-level brace group, so the same walk would recover a `fn hidden` the macro may never
-/// emit verbatim — a false positive (measured; see the change's `design.md`). Restricting the
-/// mechanism to the one macro whose grammar puts items **directly** in braces is what keeps it
-/// sound. Another body-wrapping macro is therefore not observed: a stated bound, shared with 圭表
-/// and written into the spec rather than left implicit.
+/// The one macro whose body this dimension reads as ordinary code: `cfg_if!`. See
+/// `semantic-signature-coupling`'s "Transparent control-flow macro arm contents are observed"
+/// requirement for why gating on the macro **name** is load-bearing rather than conservative
+/// (the `wrap! { impl Foo { … } }` false-positive this restriction avoids) and for the stated
+/// bound on any other body-wrapping macro. Mirrors 圭表's own
+/// `guibiao::module_scan::…::is_transparent_macro_name` so the two dimensions cannot silently
+/// disagree on which source is a real declaration.
 fn is_transparent_macro(item: &syn::ItemMacro) -> bool {
     // `ident.is_none()` excludes a definition (`macro_rules! cfg_if { … }`, whose invocation path
     // is `macro_rules`) from ever being read as an invocation of it. Matched on the LAST segment,
@@ -99,12 +86,11 @@ fn is_transparent_macro(item: &syn::ItemMacro) -> bool {
 /// hard error on source rustc accepts. Arms are independent, so one unparseable arm does not cost
 /// the others their items (an empty `Vec` is pushed for it so later arms keep their own index).
 ///
-/// **Item position only** — a stated bound, measured. Inside an `impl` or `trait` body `syn` gives an
-/// `ImplItem::Macro` / `TraitItem::Macro`, whose arms parse as impl/trait items rather than items and
-/// are reached through a different set of walkers, so such an invocation is not flattened and its
-/// contents stay unobserved (pinned by `a_cfg_if_inside_an_impl_body_is_a_stated_bound`, declared in
-/// the spec, and owned by its own change). A `cfg_if!` in a **function body** never reaches here at
-/// all: `syn` places it as a statement, not an item.
+/// **Item position only** (see the spec requirement above for the full impl/trait-body bound):
+/// inside an `impl`/`trait` body `syn` gives an `ImplItem::Macro`/`TraitItem::Macro` reached
+/// through a different set of walkers, so such an invocation is not flattened here (pinned by
+/// `a_cfg_if_inside_an_impl_body_is_a_stated_bound`). A `cfg_if!` in a **function body** never
+/// reaches here at all: `syn` places it as a statement, not an item.
 fn transparent_macro_arms(mac: &syn::Macro) -> Vec<Vec<syn::Item>> {
     mac.parse_body_with(parse_transparent_arms)
         .unwrap_or_default()
@@ -257,39 +243,12 @@ pub(crate) fn flatten_transparent_macro_items(items: &[syn::Item]) -> Vec<syn::I
 /// Every `impl` block written as a **direct statement of the outermost body** of a `const`
 /// initializer or a `fn` in `items` — the "const-eval trick" idiom
 /// (`const _: () = { impl Foo { … } };`, used for a compile-time trait assertion or a doctest/
-/// dogfoding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Foo { … } }`).
-///
-/// This is the one item kind for which the existing "a body is opaque" posture is unsound rather
-/// than merely incomplete. Every OTHER item kind nested in a body — a `fn`, `struct`, or `mod` —
-/// is genuinely scoped to that body and unreachable as `crate::…` (the dimension's existing
-/// "a body-nested module is a stated bound" case), so leaving it unobserved is correct, not a
-/// gap. An `impl`, in contrast, is not scoped by where it is lexically written: Rust binds it to
-/// its self type's own coherence set regardless of nesting, so `impl Foo { pub fn m(&self) {…} }`
-/// written inside ANY body still makes `Foo::m` real, externally callable public API the instant
-/// `Foo` itself is module-level and reachable. A walker that reads only a module's own
-/// `&[syn::Item]` has a genuine false-negative gap here it does not have for any other nested
-/// item kind — measured: the identical `leak`/`run` methods this dimension already catches at
-/// module top level vanish from every finding the moment the surrounding `impl` is wrapped in
-/// `const _: () = { … };` or a fn body, on ordinary, compilable source.
-///
-/// **Stated bound, one level deep, `const`/`fn` only — mirroring the load-bearing name gate
-/// `flatten_transparent_macros` applies to `cfg_if!`.** Recovered only:
-/// - an `impl` that is a direct top-level statement of a `const`'s initializer, when that
-///   initializer is written as a bare `{ … }` block expression (`syn::Expr::Block`) — the shape
-///   both audited trigger idioms use; a parenthesized or otherwise wrapped block is NOT unwrapped;
-/// - an `impl` that is a direct top-level statement of a `fn`'s own body block.
-///
-/// NOT recovered, by the same discipline that keeps `cfg_if!` transparency from inventing
-/// unaudited tolerance: a `static` initializer (the const-eval trick is specifically about
-/// `const`, which forces compile-time evaluation even if the binding is never read — no audited
-/// idiom uses `static` for it); an `impl` nested one level FURTHER inside that body (inside an
-/// `if`/`loop`/closure/nested `fn`/`match` arm within it); and any other item kind nested the same
-/// way (a `fn`/`struct`/`mod`/`trait`/`const`/`static` written directly in a body stays exactly as
-/// unreachable and unobserved as it already was — recovering those would be a new, unaudited claim
-/// this change does not make). Recursing further, or widening to `static`, would walk arbitrary
-/// expression trees this dimension does not otherwise traverse for a shape no audited trigger
-/// exhibits — the same "measurably unsound to generalize" reasoning `cfg_if!`'s own name gate
-/// rests on, applied here to depth instead of macro identity.
+/// dogfooding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Foo { … } }`). See
+/// `semantic-signature-coupling`'s "An impl nested in a const or fn body is observed" requirement
+/// for the full rationale (why this is the one item kind where "a body is opaque" is unsound
+/// rather than merely incomplete) and its exact recovery bound: one level deep, `const`/`fn`
+/// initializer bodies only (a bare `{ … }` block, not a wrapped one), never a `static` initializer,
+/// never a further-nested `impl`, and never any item kind other than `impl`.
 pub(crate) fn body_nested_impls(items: &[syn::Item]) -> Vec<syn::Item> {
     let mut out = Vec::new();
     for item in items {
@@ -399,15 +358,13 @@ pub(crate) fn reexport_externs_for(
 
 /// The crate-root `extern crate X as Y;` rename map a specific `pub use` item's own bare head
 /// should resolve against: `renames` with every same-named child `mod` declaration's alias
-/// removed, UNLESS that particular `mod` is [`provably_mutually_exclusive`] with `use_flat` — the
-/// rename-alias analogue of [`reexport_externs_for`]. This matters because
-/// `extern_verbatim_renamed` checks the rename map **before** falling back to the externs set: an
-/// alias like `wc` (from `extern crate serde as wc;`) is never itself a member of the externs set
-/// (only the real crate name `serde` is), so a cfg-blindly-shadowed rename alias does not merely
-/// under-shadow the re-export — it drops the resolution outright, since the externs-set fallback
-/// has no candidate for `wc` at all. `child_mods` pairs each declared child module's name with the
-/// [`FlatItem`] of ITS OWN declaration (from [`child_module_decls`]), exactly as
-/// `reexport_externs_for` does.
+/// removed under the same [`provably_mutually_exclusive`] carve-out — the rename-alias analogue
+/// of [`reexport_externs_for`]. See `semantic-reexport-exposure`'s "External-crate re-exports are
+/// observed by default" requirement for why the rename-map half cannot stay cfg-blind while the
+/// extern-name half is fixed (a rename alias like `wc` has no fallback candidate in the externs
+/// set, so a cfg-blindly-shadowed alias drops resolution outright rather than merely
+/// under-shadowing). `child_mods` pairs each declared child module's name with the [`FlatItem`] of
+/// ITS OWN declaration (from [`child_module_decls`]), exactly as `reexport_externs_for` does.
 pub(crate) fn reexport_renames_for(
     renames: &HashMap<String, String>,
     child_mods: &[(String, FlatItem)],
@@ -589,16 +546,10 @@ pub(crate) fn is_public(vis: &syn::Visibility) -> bool {
 
 /// The declared-visibility **rank** of an item, most (3) to least (0) visible:
 /// `pub`=3 · `pub(crate)`=2 · `pub(super)`=1 · private / `pub(self)`=0. A visibility boundary
-/// reacts when an item's rank is strictly above its ceiling.
-///
-/// A `pub(in P)` form is ranked by its path **matched whole and single-segment**: exactly
-/// `crate`→2, `super`→1, `self`→0. **Every other restricted form** — a multi-segment path
-/// (e.g. `pub(in super::super)`, which reaches the grandparent's whole subtree, *broader* than
-/// `pub(super)`), a leading-`::` path, or an unrecognized single segment — falls to the `_`
-/// catch-all and ranks **2 (Crate), a conservative upper bound**: a `pub(in P)` path is always
-/// an ancestor module *within the crate*, so the item is at most crate-visible. This upper bound
-/// never under-reacts (no false negative); it may over-react under a Super/Module ceiling when
-/// the real path is narrow (a stated bound). The catch-all is why we never index `segments[0]`.
+/// reacts when an item's rank is strictly above its ceiling. See `semantic-visibility-boundary`'s
+/// "Bare-pub item observation" requirement for the full `pub(in P)` ranking rule and its
+/// conservative-upper-bound rationale (why an unrecognized or multi-segment path ranks Crate
+/// rather than under-reacting). The catch-all is why we never index `segments[0]`.
 pub(crate) fn visibility_rank(vis: &syn::Visibility) -> u8 {
     match vis {
         syn::Visibility::Public(_) => 3,
@@ -648,14 +599,12 @@ fn vis_prefix(vis: &syn::Visibility) -> String {
 /// `None` for an item with no governed visibility. The description carries **no** visibility
 /// prefix (the caller prepends it, so a bare-`pub` item under the Crate ceiling renders exactly
 /// `pub fn foo` as before). `pub use` (including a glob) is observed as a raw `Item::Use`;
-/// attribute-derived public surface (`#[macro_export]`, `#[no_mangle]`, `pub macro`) carries no
-/// readable visibility keyword and is out of scope (stated bounds; the deferred attribute
-/// capability's domain). A `pub fn`/`pub static`/`pub type` declared inside an `extern` block is
-/// observed identically to a same-shaped ordinary item (see [`item_observation_parts`]'s
-/// `Item::ForeignMod` arm) — reusing `VisibleItemKind::Fn`/`Static`/`Type` verbatim, no new kind,
-/// since Rust cannot declare both an ordinary item and a foreign one under the same name in one
-/// module, so there is no identity collision to design around (the identical reasoning
-/// `collect_item_exposures`'s own `ForeignMod` arm already applies for exposure).
+/// attribute-derived public surface (`#[macro_export]`, `#[no_mangle]`, `pub macro`) is out of
+/// scope (stated bounds). See `semantic-visibility-boundary`'s "Bare-pub item observation"
+/// requirement for why a `pub fn`/`pub static`/`pub type` inside an `extern` block reuses
+/// `VisibleItemKind::Fn`/`Static`/`Type` verbatim rather than a new kind (see
+/// [`item_observation_parts`]'s `Item::ForeignMod` arm) — the identical reasoning
+/// `collect_item_exposures`'s own `ForeignMod` arm applies for exposure.
 pub(crate) struct VisibleItem<'a> {
     pub(crate) visibility: &'a syn::Visibility,
     pub(crate) kind: VisibleItemKind,

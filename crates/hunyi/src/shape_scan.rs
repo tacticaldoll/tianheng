@@ -98,15 +98,13 @@ pub(crate) fn shape_module_findings<E>(
 
 /// The operand-scoped heart shared by the dyn / impl-trait boundaries: like
 /// [`shape_module_findings`] over [`ShapeExposure`], but additionally resolves each exposure's
-/// principal traits and keeps only those any of whose principal resolves into `forbidden` (via
-/// `resolve_principal` → `matches_forbidden`, exact-or-module-prefix, so a re-exported/aliased trait
-/// facade matches its defining path). An **empty** forbidden set keeps every exposure — the
-/// shape-only semantic, never a silent no-op, safe even if a caller routes an empty set here. An
-/// unresolvable principal (a bare std trait, macro/glob re-export) is dropped: the stated
-/// resolver-coverage bound, never a silent pass of a *resolvable* operand. `collect` is the only
-/// per-boundary difference; the finding stays the rendered shape (parity with the shape-only rule).
-/// Each finding pairs with the real file its own item's branch was resolved from, like
-/// [`shape_module_findings`].
+/// principal traits via `resolve_principal` → `matches_forbidden` and keeps only those any of
+/// whose principal resolves into `forbidden`. See each boundary's "Empty operand set degenerates
+/// to shape-only, never a silent no-op" requirement for why an empty `forbidden` set keeps every
+/// exposure rather than acting as an inert no-op, and its "A dyn/returned impl Trait of a
+/// forbidden operand is a violation" requirement for the unresolvable-principal resolver-coverage
+/// bound. `collect` is the only per-boundary difference. Each finding pairs with the real file its
+/// own item's branch was resolved from, like [`shape_module_findings`].
 pub(crate) fn operand_module_findings(
     src_dir: &Path,
     root_file: &Path,

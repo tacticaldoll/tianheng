@@ -100,16 +100,11 @@ pub(crate) fn dyn_module_findings(
 
 /// The pure heart of the **operand-scoped** dyn-trait boundary: like [`dyn_module_findings`]
 /// but keeps only the `dyn` nodes whose **principal (non-auto) trait** resolves into the forbidden
-/// operand set (a `dyn` has exactly one non-auto trait, found regardless of whether an auto trait
-/// like `Send` is written before it). Unlike the shape-only path it **needs** the module's
-/// `use`-map and re-export closure — the principal trait is resolved and canonicalized exactly as
-/// [`crate::module_findings`] resolves an exposed type (`resolve_principal` →
-/// `expand_canonical_paths` → `matches_forbidden`, exact-or-module-prefix, checking every cfg-blind
-/// candidate), so a re-exported/aliased trait facade matches its defining path. A principal that
-/// does not resolve (a bare name with no `use`, a
-/// macro-generated or glob/cross-crate re-exported trait) is dropped — the stated
-/// resolver-coverage bound, never a silent pass of a *resolvable* operand. The finding stays the
-/// rendered `dyn …` shape (parity with the shape-only rule and its baseline identity).
+/// operand set. See `semantic-dyn-trait-operand-boundary`'s "A dyn of a forbidden trait operand is
+/// a violation" requirement for the full principal-trait-matching and resolver-coverage rationale.
+/// Resolved and canonicalized via [`crate::crate_scope::resolve_principal`] →
+/// `expand_canonical_paths` → `matches_forbidden`, exactly as [`crate::module_findings`] resolves
+/// an exposed type.
 pub(crate) fn dyn_operand_module_findings(
     src_dir: &Path,
     root_file: &Path,

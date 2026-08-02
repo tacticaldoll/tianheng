@@ -98,9 +98,9 @@ pub(crate) fn check_async_exposure_boundary(
 /// collector ([`collect_item_async_exposures`], so a seam finding is byte-identical to the
 /// single-module path), applied at every module the subtree walk yields.
 ///
-/// Owner identity is structural and never position-derived. If a public async inherent method's
-/// owner cannot use the ordinary canonical renderer, collection fails loud; cfg branch or subtree
-/// order therefore cannot become public identity.
+/// Owner identity is structural and never position-derived — see `semantic-async-exposure-boundary`'s
+/// "The finding is an owner-qualified item identity" requirement for why an unrenderable owner
+/// fails loud rather than falling back to a cfg-branch or subtree-order ordinal.
 pub(crate) fn async_exposure_subtree_findings(
     src_dir: &Path,
     root_file: &Path,

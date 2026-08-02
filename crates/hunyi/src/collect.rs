@@ -664,15 +664,12 @@ fn paths_in_return_scoped(
 
 /// Collect the type paths exposed by one **trait `impl` block**'s impl-site-authored positions
 /// (`semantic-trait-impl-exposure`, opt-in). Only fires for `impl Trait for Type` (inherent impls
-/// are `collect_item_exposures`'s job). The observed positions — each seam-qualified so two of them
-/// exposing the same forbidden type stay distinct findings (the one forbidden bug) — are:
-/// `trait-arg` (the trait ref's generic arguments, NOT the trait path itself: implementing a
-/// forbidden *trait* is `must_not_acquire`/locality's concern), `self` (the Self type, bare and
-/// nested), `assoc {name}` (associated type/value bindings), `where {bounded-type}` (the impl's own
-/// generics + `where`-clause, keyed by the bounded type so two bounds never collapse), and
-/// `method {name} return` (the written return type only — params/receiver are trait-dictated). The
-/// pushed [`PathExposure`]s flow through the same resolve → canonicalize → match → `{type} exposed
-/// by {seam}` pipeline as signature-coupling, with `BareFallback::Ignore` parity.
+/// are `collect_item_exposures`'s job). See that spec's "Impl-site-authored positions govern
+/// trait-impl exposure" requirement for the full position list (`trait-arg`, `self`, `assoc
+/// {name}`, `where {bounded-type}`, `method {name} return`) and its "Position-qualified seam
+/// identity prevents baseline masking" requirement for why each is seam-qualified. The pushed
+/// [`PathExposure`]s flow through the same resolve → canonicalize → match → `{type} exposed by
+/// {seam}` pipeline as signature-coupling, with `BareFallback::Ignore` parity.
 pub(crate) fn collect_trait_impl_exposures(
     item: &syn::Item,
     module: &str,

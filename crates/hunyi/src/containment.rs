@@ -50,15 +50,13 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 /// re-export/alias denotes the same type, so the marker genuinely lands there).
 ///
 /// `impl_type_params` shadows the impl block's OWN declared generic type-parameter names
-/// (`impl<T> Marker for T {}`'s `T`): a bare self type naming one of them is a parameter use, not a
-/// nominal type, so it must never resolve through a same-named `use … as <param>` alias that
-/// happens to be in scope in that module — the identical shadowing the exposure collectors already
-/// apply (`collect.rs::type_param_names`) for every OTHER impl-site position, but which the
-/// marker-acquisition self-type check lacked (found on a round-9 adversarial review: a blanket
-/// `impl<T> Marker for T {}` in a module with an unrelated `use crate::domain::Innocent as T;`
-/// fabricated a marker-acquisition finding on `Innocent`, which the source never actually impls
-/// the marker for). A stated bound, same treatment as any other non-placeable shape: dropped, never
-/// a silent claim of a resolved landing.
+/// (`impl<T> Marker for T {}`'s `T`), the identical shadowing the exposure collectors already
+/// apply (`collect.rs::type_param_names`) for every OTHER impl-site position — see
+/// `semantic-forbidden-marker`'s "Anchor resolution and observation bounds" requirement (the
+/// blanket-impl/projection/qualified-path shadow scenarios) for the full rationale. Found missing
+/// on a round-9 adversarial review: a blanket `impl<T> Marker for T {}` beside an unrelated `use
+/// crate::domain::Innocent as T;` fabricated a marker-acquisition finding on `Innocent`, which the
+/// source never actually impls the marker for.
 ///
 /// The canonicalization is folded in **here** so a self-type is canonical *by construction*: a
 /// caller cannot resolve a self-type and forget to close the re-export/alias hop (the sibling

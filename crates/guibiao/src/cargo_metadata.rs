@@ -81,27 +81,15 @@ pub(crate) fn external_dependencies(package: &Value, kind: DependencyKind) -> Ve
     found
 }
 
-/// Whether `dependency` is the package's OWN self-referential edge — Cargo genuinely permits
-/// (and a doctest/dogfooding pattern genuinely uses) a crate declaring itself as a
-/// `[dev-dependencies]` **path** dependency on itself (`main = { path = "." }`), which
-/// `cargo metadata --no-deps` emits verbatim as an ordinary-shaped edge whose `name` equals the
-/// package's own and whose `source` is null. This is never a CROSS-crate concern — there is no
-/// OTHER crate for a governance rule to react to — so every rule that scans "the target's
-/// dependency names/sources" must exclude it identically; a per-rule copy of this check (the
-/// round-11 fix's original shape, which excluded it only inside
-/// `Rule::RestrictWorkspaceDependenciesTo`'s own arm) left the identical false positive live in
-/// every sibling rule reading the same [`dependencies`] / [`dependencies_with_disallowed_source`]
-/// observation (found on a round-12 adversarial review — see `PROJECT.md`'s Decisions). Filtering
-/// here, at the shared observation source, closes every consuming rule at once.
-///
-/// Matching by `name` alone is NOT enough: Cargo also permits a package to depend on a
-/// *different*, externally-sourced package that merely happens to share its own name (a real
-/// wrapper/fork/self-comparison pattern, e.g. `foo = { git = "…" }` declared by package `foo`),
-/// which `cargo metadata` emits as an ordinary edge with a non-null `source` — ordinary in every
-/// way except its name, and never the self-referential idiom this exemption exists for. The
-/// `source.is_null()` conjunct below narrows the match to exactly the genuine path-dependency
-/// case, so a same-named externally-sourced dependency is governed like any other dependency
-/// rather than silently escaping every forbid/restrict/source rule (the 0.3.1 audit finding).
+/// Whether `dependency` is the package's OWN self-referential edge — a null-`source` **path**
+/// dependency on itself (e.g. a doctest/dogfooding `[dev-dependencies]` entry like
+/// `main = { path = "." }`). See `crate-dependency-boundary`'s "A crate's own self-referential
+/// PATH dependency is never a violation under any crate rule" requirement for why this is never a
+/// cross-crate concern, and its "same-named but externally-sourced dependency is NOT exempted"
+/// scenario for why `source.is_null()` must gate the name match. Filtering here, at the shared
+/// observation source, is what every consuming rule ([`dependencies`] /
+/// [`dependencies_with_disallowed_source`]) relies on — a per-rule copy left the identical false
+/// positive live in every sibling rule (the round-11→round-12 fix; see `PROJECT.md`'s Decisions).
 fn is_self_dependency(package: &Value, dependency: &Value) -> bool {
     let own_name = package["name"].as_str();
     own_name.is_some() && dependency["name"].as_str() == own_name && dependency["source"].is_null()
@@ -166,23 +154,12 @@ pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
     names
 }
 
-/// Classify a dependency's **declared** source kind from its `cargo metadata`
-/// (`--no-deps`) `source` field. Mirrors [`external_dependencies`]'s convention (a
-/// null source is internal/path) one notch finer:
-///
-/// - **null** source → `Path` (a `path = "…"` / internal dependency)
-/// - source beginning **`git+`** → `Git` (cargo spells a declared git source `git+<url>`)
-/// - any other non-null source → `Registry` (the residual: `registry+`, `sparse+`, and
-///   alternative registries, so a new registry scheme classifies correctly with no code
-///   change — the same robustness `external_dependencies` relies on)
-///
-/// Only `Git` is matched by a positive prefix and only `Path` by null; `Registry` is the
-/// residual. Verified against `cargo metadata --no-deps` on a probe manifest: a
-/// `git = "…"` dependency reads `source = "git+…"` **even with a `version` key and even
-/// when `optional = true`**, and a workspace-**inherited** git dependency
-/// (`{ workspace = true }`) reads `git+…` too (cargo flattens the inherited source into
-/// the member's manifest). A path dependency reads `source = null`. The read is hermetic
-/// — a pure function of the manifests, no lockfile and no network.
+/// Classify a dependency's **declared** source kind from its `cargo metadata` (`--no-deps`)
+/// `source` field: null → `Path`, `git+`-prefixed → `Git`, any other non-null → `Registry` (the
+/// residual, covering `registry+`/`sparse+`/alternative registries — see `crate-source-boundary`'s
+/// "Declared source kind classified from cargo metadata" requirement for the full rule). Verified
+/// against a probe manifest: a `git = "…"` dependency reads `git+…` even with a `version` key,
+/// `optional = true`, or a workspace-inherited (`{ workspace = true }`) source.
 fn classify_source(dependency: &Value) -> SourceKind {
     match dependency["source"].as_str() {
         None => SourceKind::Path,
@@ -192,15 +169,12 @@ fn classify_source(dependency: &Value) -> SourceKind {
 }
 
 /// The **real package names** (not local renames) and declared source kinds of the target's
-/// dependencies in the selected table whose classified [`SourceKind`] is not in `allowed`. The observation
-/// for [`Rule::RestrictDependencySourcesTo`]. Same conventions as [`dependencies`]:
-/// walks every declared dependency of the kind (path/internal included, since `Path` is
-/// a governed source), reports the package name (a renamed dep by its real name), and
-/// includes `optional` deps — a declared source is governed as declared (PROJECT.md), and
-/// an optional git dependency blocks publishing just as a required one does. An empty
-/// `allowed` set flags every dependency of the kind. Never includes the target's own
-/// self-referential edge (see [`is_self_dependency`]) — its declared source (always `Path`,
-/// a null `source`) is otherwise indistinguishable from a genuine internal dependency.
+/// dependencies in the selected table whose classified [`SourceKind`] is not in `allowed` — the
+/// observation for [`Rule::RestrictDependencySourcesTo`]. See `crate-source-boundary`'s "A
+/// dependency outside the allowed source set is a violation" requirement for the governed-surface
+/// and optional-dependency rationale. Never includes the target's own self-referential edge (see
+/// [`is_self_dependency`]) — its declared source (always `Path`, a null `source`) is otherwise
+/// indistinguishable from a genuine internal dependency.
 pub(crate) fn dependencies_with_disallowed_source(
     package: &Value,
     kind: DependencyKind,
@@ -229,28 +203,15 @@ pub(crate) fn dependencies_with_disallowed_source(
     found
 }
 
-/// The **declared feature request** the target authors on a dependency `crate_name` in
-/// the selected table: the union, across every matching edge, of each edge's explicit
-/// `features = [...]` list, ∪ the pseudo-feature `default` when any such edge leaves
-/// default features enabled (`uses_default_features` absent, or `true`). Matches
-/// `crate_name` by **package name** (the `name` field), not a local `rename`/alias, exactly
-/// as [`dependencies`]/[`external_dependencies`] do — a dependency renamed `myc` whose real
-/// package is `real-c` is matched as `real-c`. A crate may appear under more than one edge
-/// of the same kind — a plain `[dependencies]` entry and a `[target.'cfg(…)'.dependencies]`
-/// entry are both `Normal` — so the set is the union across all of them.
-///
-/// Reads only the target package's own declared edges: it never reads `crate_name`'s
-/// package entry (unreadable for an external crate under the `--no-deps` substrate) and
-/// never reads `resolve.nodes[].features` (the resolved/unified set, which feature
-/// unification folds every workspace crate's enables into). The result is therefore the
-/// target's authored request alone — declared, not resolved (PROJECT.md) — and does not
-/// expand through `crate_name`'s own `[features]` table, so a transitively-enabled feature
-/// is not chased. When the target does not declare `crate_name` in the selected kind, the
-/// set is empty. If `crate_name` names the target's OWN package (a `RestrictFeaturesOf`/
-/// `ForbidFeaturesOf` boundary naming its own crate — a possible, if unusual, constitution
-/// shape), the target's self-referential edge (see [`is_self_dependency`]) is never matched
-/// either: a self-dependency's "declared feature request" is not a cross-crate feature-flag
-/// concern this rule exists to govern.
+/// The **declared feature request** the target authors on a dependency `crate_name` in the
+/// selected table — the union across every matching edge of its `features = [...]` list plus the
+/// pseudo-feature `default` when any such edge leaves default features enabled. See
+/// `crate-dependency-boundary`'s "Declared feature-request observation model" requirement for the
+/// full union/pseudo-feature/declared-not-resolved rationale. Matches `crate_name` by package
+/// name, not a local rename, like [`dependencies`]/[`external_dependencies`]. The target's own
+/// self-referential edge (see [`is_self_dependency`]) is never matched either, if `crate_name`
+/// happens to name the target's own package — a self-dependency's feature request is not a
+/// cross-crate concern this rule governs.
 pub(crate) fn declared_features(
     package: &Value,
     crate_name: &str,

@@ -25,15 +25,13 @@ pub(super) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
 
 /// Every `source_inputs` entry is a caller-chosen path — in the real `tianheng` CLI caller, an
 /// absolute `cargo_metadata`-reported `src_path` — so its raw `display()` form varies with the
-/// checkout location and lands directly in `UnauditableProbe`'s identity (see `finding.rs`),
-/// making a recorded baseline stale in any other clone/CI runner. `anchor` (the common ancestor of
-/// every root passed to one `audit_probe_coverage` call — see [`common_ancestor`]) is stripped
-/// from each observed file's label before it becomes that identity's `file` field, so the label is
-/// checkout-independent as long as the file's position *relative to the workspace root* is
-/// unchanged — true for the real caller (every workspace member's root shares the actual
-/// checkout root as their common ancestor) regardless of where the process runs from or how it
-/// was invoked. Falls back to the absolute form (today's behavior) when stripping fails, e.g. an
-/// unrelated standalone path with no shared ancestor — never worse than before this fix existed.
+/// checkout location and lands directly in `UnauditableProbe`'s identity (see `finding.rs`). See
+/// `runtime-origin-assertion`'s "An un-auditable probe's identity distinguishes distinct offending
+/// expressions" requirement's checkout-relocation scenarios for the full rationale. `anchor` (the
+/// common ancestor of every root passed to one `audit_probe_coverage` call — see
+/// [`common_ancestor`]) is stripped from each observed file's label before it becomes that
+/// identity's `file` field. Falls back to the absolute form when stripping fails, e.g. an
+/// unrelated standalone path with no shared ancestor.
 fn labeled(path: &Path, anchor: &Path) -> String {
     path.strip_prefix(anchor)
         .unwrap_or(path)
@@ -1062,20 +1060,13 @@ fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
 }
 
 /// The identifier run ending immediately before `end` (whitespace already stepped over by the
-/// caller) is the one **transparent control-flow macro**, `cfg_if!`. Its arms wrap human-authored
-/// code without transforming identities, so what an adopter writes inside an arm is real, compiled
-/// code — not the macro-generated text the body skip exists to exclude. Skipping it produced errors
-/// in both directions on compilable source: a seam whose only probe lived in an arm was reported
-/// unprobed, while a typo'd seam and an un-auditable probe inside an arm escaped entirely (the
-/// audit's forbidden false negative, and a contradiction of `audit_probe_coverage`'s own
-/// never-a-silent-skip claim).
-///
-/// Gated on the **name**, matching 圭表's `is_transparent_macro_name` and 渾儀's own test — the same
-/// rule in three hand-written copies, never a shared scanner (三儀 ⊥ 三儀), with
-/// `cfg_if_transparency_conformance.rs` as the drift reaction. The gate is load-bearing here rather
-/// than cautious: a byte scanner has no way to tell a transparent macro's arms from an arbitrary
-/// macro's nested blocks, so widening it would read code the macro may never emit. A body-wrapping
-/// macro under any other name therefore stays excluded — a stated bound, shared across the three.
+/// caller) is the one **transparent control-flow macro**, `cfg_if!`. See
+/// `runtime-origin-assertion`'s "CI face — every declared seam is probed" requirement for why
+/// scanning into its arms (rather than skipping them as macro-generated) closes a coverage false
+/// negative, and why the gate is on the macro **name** rather than any body-wrapping macro. Matches
+/// 圭表's `is_transparent_macro_name` and 渾儀's own test — the same rule in three hand-written
+/// copies, never a shared scanner (三儀 ⊥ 三儀), with `cfg_if_transparency_conformance.rs` as the
+/// drift reaction.
 fn is_transparent_macro_name(b: &[u8], end: usize) -> bool {
     preceding_ident_is(b, end, b"cfg_if")
 }
@@ -1930,19 +1921,14 @@ fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 }
 
 /// Decode a plain-string literal's inner bytes (between the quotes, escapes still present) to the
-/// exact `&str` value the Rust compiler produces, so a probe seam matches the compiler-decoded
-/// declared seam (`RuntimeBoundary::seam()`) rather than the raw source bytes — and so a `#[path]`
-/// value (the OTHER caller, below) matches 渾儀's syn-derived `s.value()` on the same input. Returns
-/// `None` on any escape the decoder does not reproduce exactly — a malformed or unrecognized
-/// escape, an out-of-range `\x`, or an invalid `\u{…}`. Backslash-newline line continuation IS
-/// decoded (strips the backslash, the newline, and the continued line's leading whitespace,
-/// contributing nothing — verified against a real `rustc` build): a real, if rare, valid `#[path]`
-/// value shape, matching `syn`'s `LitStr::value()` fidelity (the fix a v0.2.0..v0.2.1 cross-
-/// dimension sweep found missing here and in 圭表's independent copy). No real seam name spans
-/// lines, so this never meaningfully changes the seam-name caller's behavior. The caller routes
-/// `None` to an un-auditable probe (a loud reaction), never a silent mismatch. The escape set is the
-/// `&str` string-literal set only; byte-string-only escapes never reach here (byte strings are
-/// already un-auditable).
+/// exact `&str` value the Rust compiler produces — see `runtime-origin-assertion`'s "CI face —
+/// every declared seam is probed" requirement for the full decoded-value-matching and
+/// un-auditable-on-failure rationale (including backslash-newline line continuation). Also used
+/// for a `#[path]` value (the OTHER caller, below), matching 渾儀's syn-derived `s.value()` on the
+/// same input — the fix a v0.2.0..v0.2.1 cross-dimension sweep found missing here and in 圭表's
+/// independent copy. No real seam name spans lines, so this never meaningfully changes the
+/// seam-name caller's behavior. The escape set is the `&str` string-literal set only;
+/// byte-string-only escapes never reach here (byte strings are already un-auditable).
 fn decode_str_escapes(inner: &[u8]) -> Option<String> {
     // The surrounding source compiled, so it is valid UTF-8; escapes are all ASCII, so iterating
     // by `char` reconstructs any multi-byte content faithfully.
