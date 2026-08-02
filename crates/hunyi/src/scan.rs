@@ -24,7 +24,7 @@ use crate::resolve::{
     resolve_path_all, strip_raw, type_to_string,
 };
 use crate::syn_util::{
-    FlatItem, cfg_attr_path_values, child_module_decls, direct_path_value,
+    FlatItem, body_nested_impls, cfg_attr_path_values, child_module_decls, direct_path_value,
     flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
 };
 
@@ -188,9 +188,20 @@ fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String 
 /// the plain list its own observation reads, and the arm-membership-carrying list
 /// [`resolve_child_modules`] needs for its absence tolerance. Produced together here so no walker
 /// re-derives one from the other — flattening twice would erase the membership the second time.
+///
+/// The plain list additionally carries every [`body_nested_impls`] finds directly inside a
+/// `const`/`fn` among `items` (post-macro-flattening, so one nested inside a `cfg_if!` arm's own
+/// `const`/`fn` is covered too — the two mechanisms compose without special-casing). `flat` is
+/// deliberately NOT extended with them: nothing that consults `FlatItem`'s arm-membership tag
+/// (`resolve_child_modules`, `collect_reexports`) ever matches an `Item::Impl`, so they need no
+/// entry there, and giving one a synthetic arm tag would be an unearned claim about membership
+/// this walk never observed. Attributed to the SAME enclosing module/file/`use`-map as the
+/// `const`/`fn` that lexically holds them — correct, since extraction never crosses a file or
+/// module boundary.
 fn flatten_for_walk(items: &[syn::Item]) -> (Vec<syn::Item>, Vec<FlatItem>) {
     let flat = flatten_transparent_macros(items);
-    let plain = flat.iter().map(|f| f.item.clone()).collect();
+    let mut plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
+    plain.extend(body_nested_impls(&plain));
     (plain, flat)
 }
 

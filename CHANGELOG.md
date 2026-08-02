@@ -248,6 +248,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   unrenderable Self type or trait path), so an impl with this shape now reports a constitution error
   instead of silently under-counting its violations. A where-clause bound that renders cleanly (the
   ordinary case) is unaffected.
+- 渾儀 now observes an `impl` block written as a direct statement of a `const` initializer's or a
+  `fn`'s own body — the "const-eval trick" idiom (`const _: () = { impl Foo { … } };`, commonly used
+  for a compile-time trait assertion or a doctest/dogfooding scratch impl) and its fn-body-nested
+  sibling — instead of treating the whole body as opaque. Closes a false negative measured directly
+  on ordinary, compilable source across six capabilities: signature-coupling, async-exposure,
+  dyn-trait, and impl-trait all missed an inherent impl's method the moment its enclosing `impl`
+  moved into such a body, and trait-impl-locality and forbidden-marker's hand-impl form both missed
+  a trait impl the same way — the identical method or impl that reacted at a module's top level
+  produced zero findings once wrapped, even though Rust binds an `impl` to its self type's coherence
+  set regardless of where it is lexically written, so the wrapped impl was always real, externally
+  callable public API. Three bounds are stated rather than left silent: only an `impl` block is
+  recovered (a plain `fn`/`struct`/`mod` nested the same way stays exactly as unobserved as the
+  existing body-nested-module bound already treats it); only an `impl` that is a DIRECT statement of
+  the body's own outermost block is recovered, never one nested a level further (inside an
+  `if`/`loop`/closure/nested `fn`); and only a `const` initializer or a `fn` body is inspected, never
+  a `static` initializer. New violations are ordinary findings and absorbable by baseline.
 
 ## [0.3.0] - 2026-07-26
 

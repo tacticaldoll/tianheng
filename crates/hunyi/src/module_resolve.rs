@@ -10,8 +10,8 @@ use crate::errors::{
 };
 use crate::resolve::strip_raw;
 use crate::syn_util::{
-    FlatItem, cfg_attr_path_values, direct_path_value, flatten_transparent_macro_items,
-    flatten_transparent_macros, has_cfg_attr,
+    FlatItem, body_nested_impls, cfg_attr_path_values, direct_path_value,
+    flatten_transparent_macro_items, flatten_transparent_macros, has_cfg_attr,
 };
 
 /// The path segments of a module relative to the crate root.
@@ -38,9 +38,15 @@ pub(crate) fn resolve_module_items_with_files(
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
         // Transparent-macro (`cfg_if!`) arms flattened in, so every capability reading a module's
         // items observes what an adopter wrote inside an arm without knowing arms exist.
+        let flat = flatten_transparent_macro_items(branch_items);
+        // Every `impl` a `const`/`fn` among `flat` directly bodies (the const-eval-trick idiom
+        // and its fn-body sibling — see `body_nested_impls`), attributed to this SAME branch/file:
+        // the extraction never crosses a file boundary, so the impl's `use`-map and module
+        // resolution are unchanged from as if it were written at this branch's own top level.
+        let nested_impls = body_nested_impls(&flat);
         items.extend(
-            flatten_transparent_macro_items(branch_items)
-                .into_iter()
+            flat.into_iter()
+                .chain(nested_impls)
                 .map(|item| (item, file.clone(), branch_index)),
         );
     }
@@ -63,9 +69,15 @@ pub(crate) fn resolve_module_items_with_cfg_tags(
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
+        let flat = flatten_transparent_macros(branch_items);
+        // See `resolve_module_items_with_files`: the same const/fn-body-nested impls, wrapped
+        // as plain `FlatItem`s (no arm membership — nothing that consults it ever matches an
+        // `Item::Impl`, so a synthetic tag would claim membership this walk never observed).
+        let plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
+        let nested_impls = body_nested_impls(&plain).into_iter().map(FlatItem::plain);
         items.extend(
-            flatten_transparent_macros(branch_items)
-                .into_iter()
+            flat.into_iter()
+                .chain(nested_impls)
                 .map(|flat| (flat, file.clone(), branch_index)),
         );
     }

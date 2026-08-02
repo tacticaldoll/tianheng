@@ -182,7 +182,7 @@ pub(crate) struct FlatItem {
 }
 
 impl FlatItem {
-    fn plain(item: syn::Item) -> Self {
+    pub(crate) fn plain(item: syn::Item) -> Self {
         Self {
             item,
             in_transparent_arm: false,
@@ -252,6 +252,61 @@ pub(crate) fn flatten_transparent_macro_items(items: &[syn::Item]) -> Vec<syn::I
         .into_iter()
         .map(|flat| flat.item)
         .collect()
+}
+
+/// Every `impl` block written as a **direct statement of the outermost body** of a `const`
+/// initializer or a `fn` in `items` — the "const-eval trick" idiom
+/// (`const _: () = { impl Foo { … } };`, used for a compile-time trait assertion or a doctest/
+/// dogfoding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Foo { … } }`).
+///
+/// This is the one item kind for which the existing "a body is opaque" posture is unsound rather
+/// than merely incomplete. Every OTHER item kind nested in a body — a `fn`, `struct`, or `mod` —
+/// is genuinely scoped to that body and unreachable as `crate::…` (the dimension's existing
+/// "a body-nested module is a stated bound" case), so leaving it unobserved is correct, not a
+/// gap. An `impl`, in contrast, is not scoped by where it is lexically written: Rust binds it to
+/// its self type's own coherence set regardless of nesting, so `impl Foo { pub fn m(&self) {…} }`
+/// written inside ANY body still makes `Foo::m` real, externally callable public API the instant
+/// `Foo` itself is module-level and reachable. A walker that reads only a module's own
+/// `&[syn::Item]` has a genuine false-negative gap here it does not have for any other nested
+/// item kind — measured: the identical `leak`/`run` methods this dimension already catches at
+/// module top level vanish from every finding the moment the surrounding `impl` is wrapped in
+/// `const _: () = { … };` or a fn body, on ordinary, compilable source.
+///
+/// **Stated bound, one level deep, `const`/`fn` only — mirroring the load-bearing name gate
+/// `flatten_transparent_macros` applies to `cfg_if!`.** Recovered only:
+/// - an `impl` that is a direct top-level statement of a `const`'s initializer, when that
+///   initializer is written as a bare `{ … }` block expression (`syn::Expr::Block`) — the shape
+///   both audited trigger idioms use; a parenthesized or otherwise wrapped block is NOT unwrapped;
+/// - an `impl` that is a direct top-level statement of a `fn`'s own body block.
+///
+/// NOT recovered, by the same discipline that keeps `cfg_if!` transparency from inventing
+/// unaudited tolerance: a `static` initializer (the const-eval trick is specifically about
+/// `const`, which forces compile-time evaluation even if the binding is never read — no audited
+/// idiom uses `static` for it); an `impl` nested one level FURTHER inside that body (inside an
+/// `if`/`loop`/closure/nested `fn`/`match` arm within it); and any other item kind nested the same
+/// way (a `fn`/`struct`/`mod`/`trait`/`const`/`static` written directly in a body stays exactly as
+/// unreachable and unobserved as it already was — recovering those would be a new, unaudited claim
+/// this change does not make). Recursing further, or widening to `static`, would walk arbitrary
+/// expression trees this dimension does not otherwise traverse for a shape no audited trigger
+/// exhibits — the same "measurably unsound to generalize" reasoning `cfg_if!`'s own name gate
+/// rests on, applied here to depth instead of macro identity.
+pub(crate) fn body_nested_impls(items: &[syn::Item]) -> Vec<syn::Item> {
+    let mut out = Vec::new();
+    for item in items {
+        let stmts: &[syn::Stmt] = match item {
+            syn::Item::Const(c) => match c.expr.as_ref() {
+                syn::Expr::Block(block) if block.label.is_none() => &block.block.stmts,
+                _ => continue,
+            },
+            syn::Item::Fn(f) => &f.block.stmts,
+            _ => continue,
+        };
+        out.extend(stmts.iter().filter_map(|stmt| match stmt {
+            syn::Stmt::Item(item @ syn::Item::Impl(_)) => Some(item.clone()),
+            _ => None,
+        }));
+    }
+    out
 }
 
 /// The child-**module** declarations among `items`, each paired with the [`FlatItem`] of its OWN
