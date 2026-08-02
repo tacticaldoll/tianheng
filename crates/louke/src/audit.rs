@@ -89,10 +89,13 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
 ///   site, never a silent skip (a silent skip would be a false negative). Its identity's `file`
 ///   field is labeled relative to the common ancestor of every `source_inputs` root passed to this
 ///   call (the real caller's actual checkout root, by construction) whenever that's possible, so a
-///   recorded baseline stays valid across a different clone location or CI runner — except a file
-///   reached only through an ABSOLUTE `#[path = "/…"]` literal, a stated bound: an absolute literal
-///   has no textual relationship to any anchor and is already a non-portable, machine-specific
-///   construct on its own, unlike the realistic relative sibling-share idiom this labeling targets.
+///   recorded baseline stays valid across a different clone location or CI runner. **Known residual
+///   gap, not fully closed:** a file reached only through an ABSOLUTE `#[path = "/…"]` literal whose
+///   target does not lie under the anchor falls back to the raw absolute label — but the SAME
+///   hardcoded literal, when it happens to lie under a given checkout's own anchor, gets a
+///   relative-looking label instead, so the identical literal can still disagree across two
+///   checkouts. An absolute-literal `#[path]` is already non-portable/machine-specific either way;
+///   the realistic relative sibling-share idiom this labeling targets is unaffected.
 ///
 /// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
 /// can no longer hide a seam. The probe scan is build/CI-time only (std-only, comment- and

@@ -31,11 +31,16 @@ pub(crate) enum RuntimeFact {
     // discriminator, never a byte offset or occurrence count. `file` is labeled relative to the
     // common ancestor of every scanned root (see `audit::scan::labeled`/`common_ancestor`) whenever
     // that's possible, rather than the raw absolute path — a checkout-dependent absolute path would
-    // make a recorded baseline stale in any other clone or CI runner. Stated bound: an ABSOLUTE
-    // `#[path = "/…"]` literal has no textual relationship to the anchor at all (`Path::join`
-    // discards the receiver for an absolute joinee), so its label falls back to that absolute form
-    // — an absolute-literal `#[path]` is already a non-portable, machine-specific construct with or
-    // without this identity concern, not the realistic relative sibling-share idiom this fix targets.
+    // make a recorded baseline stale in any other clone or CI runner. KNOWN residual gap, not fully
+    // closed: an ABSOLUTE `#[path = "/…"]` literal whose target does not lie under the anchor has no
+    // textual relationship to it (`Path::join` discards the receiver for an absolute joinee), so its
+    // label falls back to the absolute form — but when the SAME hardcoded literal happens to lie
+    // under a given checkout's own anchor, the label becomes relative-looking instead, so the
+    // identical literal can still disagree across two checkouts (see
+    // `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap` in
+    // `audit::tests`). An absolute-literal `#[path]` is already non-portable/machine-specific either
+    // way; the realistic relative sibling-share idiom this fix targets is unaffected and stays
+    // checkout-independent.
     #[cfg(feature = "audit")]
     UnauditableProbe {
         marker: String,
