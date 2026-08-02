@@ -29,6 +29,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
   now share one crate-private helper, `syn_util::flatten_with_body_nested_impls`, instead of each
   hand-composing the identical sequence. No public API, wire format, or observable behavior change.
+- Internal refactor: 渾儀's four call sites that guard a forbidden-operand list against a malformed
+  `::`-path entry (`exposure.rs`, `forbidden_marker.rs`, `shape_scan.rs`, `impl_trait.rs`) now share
+  one crate-private helper, `resolve::validate_path_operands`, instead of each repeating the
+  identical inline check. No public API, wire format, or observable behavior change at these four
+  sites.
 
 ### Fixed
 - **BREAKING**: `PublicSeam::InherentMethod`/`InherentAssoc` now carry the impl **block's own**
@@ -60,6 +65,15 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `must_not_acquire`'s leaf-identifier matching has the mirror-image gap for a trailing `::`. No
   existing usage in this repo used the malformed spelling, so this is a strict tightening of an
   already-inert configuration, not an adopter-visible behavior change for any working boundary.
+- 渾儀's `only_implemented_in`/`and_in` (`allowed_locations`) and `only_under` (unsafe-confinement's
+  own `allowed_locations`) now reject the identical malformed `::`-path shape as the forbidden-operand
+  fix above, sharing its guard (`resolve::validate_path_operands`). Unlike the forbidden-operand
+  direction, the previous behavior here already failed loud rather than silently passing — a
+  malformed allowed entry never matched any real module location in `matches_allowed`, so a
+  genuinely-in-place impl or `unsafe` site was reported as a spurious violation instead of a
+  named constitution error. No existing usage in this repo used the malformed spelling, so this
+  is a diagnosis improvement on an already-broken configuration, not an adopter-visible behavior
+  change for any working boundary.
 - 漏刻's CI probe audit now reads the arms of a `cfg_if!` invocation as real code, in both of its
   passes, completing the family: all three dimensions now share one transparency rule and are pinned
   on one shared fixture (`cfg_if_transparency_conformance.rs`). Skipping such a body like any foreign

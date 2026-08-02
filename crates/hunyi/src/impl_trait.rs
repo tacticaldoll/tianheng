@@ -17,11 +17,10 @@ use crate::emit::{
     MultiModuleViolationContext, SingleModuleViolationContext, push_multi_module_violations,
     push_single_module_violations,
 };
-use crate::errors::malformed_path_operand_error;
 use crate::file_scope::resolve_crate;
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_attributed_facts};
 use crate::resolve::{
-    ShapeExposure, UseMap, canonical_path_str, collect_uses, has_empty_path_segment,
+    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_path_operands,
 };
 use crate::rules::IMPL_TRAIT_RULE;
 use crate::scan::walk_subtree_modules;
@@ -164,9 +163,7 @@ pub(crate) fn impl_trait_operand_subtree_findings(
     // A forbidden operand with an empty `::`-segment could never match a resolved canonical
     // principal — checked before any resolution work, exactly as the non-subtree operand path
     // (`shape_scan::operand_module_findings`) guards its own forbidden set.
-    if let Some(bad) = forbidden.iter().find(|f| has_empty_path_segment(f)) {
-        return Err(malformed_path_operand_error(bad));
-    }
+    validate_path_operands(forbidden)?;
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
     let filter = ImplTraitSubtreeFilter::Forbidden {
