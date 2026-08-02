@@ -9,6 +9,11 @@ version = 2
 # Deny known-vulnerable and yanked crates (RUSTSEC). No ignores: a real advisory must be
 # fixed or consciously ignored here with a rationale, never silently.
 ignore = []
+# `yanked`'s own default is "warn" (confirmed against a real yanked crate: cargo-deny
+# prints `warning[yanked]` and the run still exits 0), which silently contradicts the
+# claim above — a yanked dependency must fail the `Supply chain (cargo-deny)` CI gate,
+# not merely warn past it.
+yanked = "deny"
 
 [licenses]
 version = 2
