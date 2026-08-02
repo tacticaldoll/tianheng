@@ -25,7 +25,8 @@ Exit codes are the contract: `0` clean / warn-only / fully baselined · `1` enfo
 `2` constitution or scan error. Read a violation's **`reason`** first — it is the repair direction.
 
 > Experimental / pre-1.0. The boundary DSL (the surface these recipes use) is patch-compatible
-> within `0.2.x`; a breaking change must earn a new minor. See [`CHANGELOG.md`](CHANGELOG.md).
+> within each minor line — unbroken from `0.2.0` through `0.3.0` — and a breaking change earns a
+> new minor. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -213,7 +214,7 @@ whose type is not in a plain path (`instant.elapsed()`, `<T as Tr>::now()`), an 
 a macro body, a symbol assembled by a proc-macro, an external-crate re-export, and a path taken as a
 value under the default. (Every "macro body" bound in this file carves out the one **transparent**
 macro, `cfg_if!`: its arms wrap human-authored code without transforming identities, so all three
-dimensions read them as real code — 圭表 since 0.2.3, 渾儀 and 漏刻 in 0.3.1. A body-wrapping macro
+dimensions read them as real code — 圭表 since 0.2.3, 渾儀 and 漏刻 in 0.4.0. A body-wrapping macro
 under any other name stays out of scope.) A glob that could smuggle the surface in (`use std::time::*`, or a module
 that re-exports it, globbed) reacts fail-closed.
 
