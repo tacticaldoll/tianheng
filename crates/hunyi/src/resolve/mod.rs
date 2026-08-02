@@ -72,6 +72,20 @@ pub(crate) fn canonical_path_str(path: &str) -> String {
         .join("::")
 }
 
+/// Whether a `::`-delimited operand string has an empty segment — a leading `::`, a
+/// trailing `::`, a doubled `::`, or the empty string itself (`"".split("::")` yields one
+/// empty segment). A caller comparing a forbidden/allowed operand against a canonical path
+/// this crate resolves MUST reject this before matching: `extern_verbatim_renamed`/
+/// `extern_verbatim_segs` build a resolved canonical path purely from `syn::Path` segments,
+/// never consulting `leading_colon`, so no canonical path this crate ever produces carries an
+/// empty segment (rustc's own grammar forbids one in real source either). An operand shaped
+/// this way can therefore never equal or prefix-contain a real canonical path, nor (past a
+/// trailing `::`) ever equal a real leaf identifier — a silent, permanent non-match rather
+/// than the loud constitution error a caller must raise instead.
+pub(crate) fn has_empty_path_segment(operand: &str) -> bool {
+    operand.split("::").any(str::is_empty)
+}
+
 /// Map each name a `use` brings into the module's scope to its full written path
 /// (`use a::b::C` → `C → a::b::C`; `use a::b::C as D` → `D → a::b::C`; `use a::b` →
 /// `b → a::b`). Glob imports bring no nameable leaf (a stated bound). Only the module's

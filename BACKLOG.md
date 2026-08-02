@@ -67,6 +67,22 @@ None currently live — the `0.3.0` identity migration closed the prior candidat
     compatibility evidence recorded in `CHANGELOG.md`.
 - **ACCEPTED DEBT:**
   - Multi-target conventional-path conflation.
+  - `unsafe_confinement`'s and `trait_impl`'s `allowed_locations` tolerate a malformed `::`-path
+    entry (an empty segment) rather than rejecting it. Observed alongside the
+    `hunyi-forbidden-operand-colon-validation` fix for `must_not_expose`/`must_not_acquire`'s
+    forbidden-operand family: `matches_allowed`/`path_within` has the identical shape of defect, but
+    the failure DIRECTION is the safe one — a malformed allowed entry makes every real site look
+    disallowed, producing spurious violations (fails loud, if noisily) rather than the silent,
+    permanent non-reaction the forbidden-operand fix closes. Current bound: intentionally
+    unvalidated for now, since the existing behavior already errs loud rather than silent. Risk: an
+    adopter with a genuinely malformed `allowed_locations` entry gets confusing false-positive
+    violations instead of a clear constitution error naming the typo. Promotion trigger: a reported
+    or measured case of this confusion, or a bundled pass over every allowed-operand-shaped DSL
+    method once one is warranted on its own terms. Version class: READY-PATCH (same
+    check-time-`Result` mechanism, no signature change). Authority:
+    `crates/hunyi/src/containment.rs`'s `path_within`, and
+    `openspec/changes/hunyi-forbidden-operand-colon-validation/design.md`'s Non-Goals (pruned from
+    `openspec/changes/` on sync; the reasoning is carried here instead).
   - Macro/configuration coverage bounds. Two named residuals after 渾儀 gained `cfg_if!`
     transparency: it covers **item position** only (an invocation inside an `impl`/`trait` body holds
     impl items, needing a parallel flattening across ~10 body walkers — measured, pinned by

@@ -90,7 +90,8 @@ pub(crate) use exposure::module_findings;
 pub(crate) use forbidden_marker::forbidden_marker_findings;
 #[cfg(test)]
 pub(crate) use impl_trait::{
-    impl_trait_module_findings, impl_trait_operand_module_findings, impl_trait_subtree_findings,
+    impl_trait_module_findings, impl_trait_operand_module_findings,
+    impl_trait_operand_subtree_findings, impl_trait_subtree_findings,
 };
 #[cfg(test)]
 pub(crate) use trait_impl::trait_impl_findings;

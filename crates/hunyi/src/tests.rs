@@ -4968,6 +4968,44 @@ fn a_forbidden_derive_on_a_subtree_type_reacts_and_a_clean_type_does_not() {
     assert_eq!(out, ["derive serde::Serialize on crate::domain::Order"]);
 }
 
+/// Leaf-identifier matching (`leaf_of`) is immune to a *leading* `::` (the leaf is still the
+/// last segment) but not to a *trailing* one — `leaf_of("serde::")` computes an empty leaf, which
+/// no real identifier can ever equal. Both spellings are rejected as a constitution error: the
+/// trailing case because it could never match anything, and the leading case for consistency with
+/// every other forbidden-operand-shaped DSL method in this family (none of which assigns the
+/// leading-`::` spelling a meaning distinct from the bare form).
+#[test]
+fn must_not_acquire_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod domain;\n"),
+        (
+            "domain.rs",
+            "#[derive(serde::Serialize)]\npub struct Order;\n",
+        ),
+    ];
+    for bad in [
+        "::serde::Serialize",
+        "serde::Serialize::",
+        "::serde::Serialize::",
+    ] {
+        let err = marker_findings("marker-malformed", files, "crate::domain", &[bad]).unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+    // Control: the bare spelling still reacts, so the rejection above is a spelling gate, not a
+    // general leaf-matching regression.
+    let clean = marker_findings(
+        "marker-malformed-control",
+        files,
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(clean, ["derive serde::Serialize on crate::domain::Order"]);
+}
+
 #[test]
 fn a_serde_derive_path_and_cfg_attr_derive_react_by_leaf() {
     let out = marker_findings(
@@ -8896,6 +8934,42 @@ fn fn2_leading_colon_is_an_unambiguous_extern_through_a_local_shadow() {
     assert_eq!(out, ["serde::Value exposed by fn crate::domain::f"]);
 }
 
+/// A forbidden operand shaped with an empty `::`-segment (leading, trailing, or doubled `::`)
+/// must be a constitution error — never a silent, permanent non-reaction. `extern_verbatim_renamed`
+/// never produces a leading-`::` canonical path (it iterates `syn::Path` segments and never
+/// consults `leading_colon`), so an operand spelled `"::serde"` could never equal or
+/// prefix-contain the resolved `"serde::Value"` — the exact silent-pass class the adversarial
+/// sweep's finding described, reproduced here directly against `must_not_expose`'s pure heart.
+#[test]
+fn must_not_expose_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod api;\n"),
+        (
+            "api.rs",
+            "pub fn ext() -> ::serde::Value { unimplemented!() }\n",
+        ),
+    ];
+    for bad in ["::serde", "serde::", "::serde::"] {
+        let err = findings_with_deps("fn2-malformed", files, "crate::api", &[bad], &["serde"])
+            .unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+    // Control: the bare spelling this operand should have been written as still reacts, so the
+    // rejection above is a spelling gate, never a general serde-detection regression.
+    let clean = findings_with_deps(
+        "fn2-malformed-control",
+        files,
+        "crate::api",
+        &["serde"],
+        &["serde"],
+    )
+    .unwrap();
+    assert_eq!(clean, ["serde::Value exposed by fn crate::api::ext"]);
+}
+
 #[test]
 fn fn2_leading_colon_bypasses_the_use_map_no_misattribution() {
     // `use crate::vendor::serde;` maps `serde`, but `::serde` bypasses the use-map: it reacts
@@ -9126,6 +9200,32 @@ fn dyn_operand_inline_sysroot_trait_reacts() {
     );
 }
 
+/// `dyn_operand_module_findings` shares `exposure::module_findings`'s resolver
+/// (`resolve_principal` → `extern_verbatim_renamed`), so it has the identical malformed-operand
+/// silent-pass gap: a forbidden operand with an empty `::`-segment must be a constitution error.
+#[test]
+fn must_not_expose_dyn_of_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod m;\n"),
+        (
+            "m.rs",
+            "pub fn f() -> Box<dyn std::error::Error> { todo!() }\n",
+        ),
+    ];
+    for bad in [
+        "::std::error::Error",
+        "std::error::Error::",
+        "::std::error::Error::",
+    ] {
+        let err =
+            dyn_operand_findings("dyn-malformed", files, "crate::m", &[bad], &[]).unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+}
+
 #[test]
 fn dyn_operand_inline_dependency_and_crate_root_rename_react() {
     // An inline fully-qualified dependency trait operand reacts (extern oracle over declared deps).
@@ -9280,6 +9380,61 @@ fn impl_trait_operand_inline_sysroot_trait_reacts() {
         unlisted.is_empty(),
         "unlisted impl-trait operand must pass: {unlisted:?}"
     );
+}
+
+/// `impl_trait_operand_module_findings` shares the identical resolver as `dyn_operand_...` and
+/// `exposure::module_findings` (`resolve_principal` → `extern_verbatim_renamed`), so it has the
+/// same malformed-operand silent-pass gap for its module-scoped path.
+#[test]
+fn must_not_expose_impl_trait_of_rejects_a_malformed_colon_operand() {
+    let files: &[(&str, &str)] = &[
+        ("lib.rs", "pub mod m;\n"),
+        ("m.rs", "pub fn f() -> impl std::error::Error { todo!() }\n"),
+    ];
+    for bad in [
+        "::std::error::Error",
+        "std::error::Error::",
+        "::std::error::Error::",
+    ] {
+        let err = impl_trait_operand_findings("iop-malformed", files, "crate::m", &[bad], &[])
+            .unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
+}
+
+/// The subtree-scoped operand path (`including_submodules()`) canonicalizes its own copy of the
+/// forbidden set independently of the module-scoped path above, so it needs its own regression
+/// coverage rather than relying on the module-scoped test to stand in for it.
+#[test]
+fn must_not_expose_impl_trait_of_subtree_rejects_a_malformed_colon_operand() {
+    let tree = TempSrcTree::new("iop-subtree-malformed");
+    tree.write_all(&[
+        ("lib.rs", "pub mod m;\n"),
+        ("m.rs", "pub fn f() -> impl std::error::Error { todo!() }\n"),
+    ]);
+    for bad in [
+        "::std::error::Error",
+        "std::error::Error::",
+        "::std::error::Error::",
+    ] {
+        let forbidden = vec![bad.to_string()];
+        let err = impl_trait_operand_subtree_findings(
+            tree.src(),
+            &tree.root(),
+            "crate",
+            &forbidden,
+            "x",
+            &[],
+        )
+        .unwrap_err();
+        assert!(
+            err.contains(bad),
+            "constitution error must name the malformed operand {bad:?}: {err}"
+        );
+    }
 }
 
 // --- re-export head shadowed by a same-named child module (FP closure) -----
