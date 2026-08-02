@@ -215,7 +215,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   too, not just `use`s, so the out-of-scope rule for macro-generated items is symmetric.
   One macro is carved out of that stripping in **all three** dimensions: `cfg_if!`, whose
   arms wrap human-authored items without transforming their identities, so its contents
-  are real code (圭表 0.2.3, 渾儀 and 漏刻 0.3.1 — each hand-written, 三儀 ⊥ 三儀, with
+  are real code (圭表 0.2.3, 渾儀 and 漏刻 0.4.0 — each hand-written, 三儀 ⊥ 三儀, with
   `cfg_if_transparency_conformance.rs` as the drift reaction). Gating that carve-out on the
   macro **name** is soundness, not caution: an arbitrary macro's nested blocks are not arms,
   and reading them as such invents items the macro may never emit.

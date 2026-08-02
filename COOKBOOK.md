@@ -214,7 +214,7 @@ whose type is not in a plain path (`instant.elapsed()`, `<T as Tr>::now()`), an 
 a macro body, a symbol assembled by a proc-macro, an external-crate re-export, and a path taken as a
 value under the default. (Every "macro body" bound in this file carves out the one **transparent**
 macro, `cfg_if!`: its arms wrap human-authored code without transforming identities, so all three
-dimensions read them as real code — 圭表 since 0.2.3, 渾儀 and 漏刻 in 0.3.1. A body-wrapping macro
+dimensions read them as real code — 圭表 since 0.2.3, 渾儀 and 漏刻 in 0.4.0. A body-wrapping macro
 under any other name stays out of scope.) A glob that could smuggle the surface in (`use std::time::*`, or a module
 that re-exports it, globbed) reacts fail-closed.
 
