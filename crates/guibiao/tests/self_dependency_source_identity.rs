@@ -1,4 +1,4 @@
-//! 0.3.1 audit finding (docs/audit/0.3.1-adversarial-sweep.md, "圭表 manifest/deps"):
+//! 0.3.1 audit finding (docs/history/0.3.1-adversarial-sweep.md, "圭表 manifest/deps"):
 //! `is_self_dependency` matched a dependency edge by NAME ALONE, so a same-named but
 //! EXTERNALLY-sourced dependency (a real wrapper/fork/self-comparison pattern, e.g.
 //! `foo = { git = "…" }` declared by package `foo`) was wrongly swallowed by the exemption meant

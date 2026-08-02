@@ -2760,7 +2760,7 @@ fn no_dependency_rule_ever_flags_a_crates_own_self_referential_dependency() {
 
 #[test]
 fn every_crate_rule_still_flags_a_same_named_but_externally_sourced_dependency() {
-    // 0.3.1 audit finding (docs/audit/0.3.1-adversarial-sweep.md, "圭表 manifest/deps"):
+    // 0.3.1 audit finding (docs/history/0.3.1-adversarial-sweep.md, "圭表 manifest/deps"):
     // `is_self_dependency` matched by NAME ALONE, so a package `foo` depending on a *different*,
     // externally-sourced package that merely shares its own name (a real wrapper/fork/
     // self-comparison pattern — verified against real cargo: `foo = { git = "…" }` reads
