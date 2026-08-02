@@ -11402,3 +11402,335 @@ fn impl_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order(
         }
     );
 }
+
+// --- body-nested impl observation (const-eval trick / fn-body sibling) ----
+//
+// `const _: () = { impl Foo { … } };` is a common "const-eval trick" idiom (forcing a
+// compile-time trait assertion or a doctest/dogfooding scratch impl); `fn _also() { impl Foo {
+// … } }` is its fn-body-nested sibling. Both wrap a real `impl` block — inherent or trait —
+// inside a body that every capability below previously treated as opaque, the same way it
+// correctly treats a body-nested `mod` (see `async_subtree_does_not_observe_a_body_nested_module`
+// above) as unreachable. Unlike a `mod`, an `impl` is not scoped by where it is lexically
+// written — Rust binds it to its self type's own coherence set regardless of nesting — so
+// `Svc::leak`/`Svc::run` below are real, externally callable public API the instant `Svc` itself
+// is module-level, and every capability had a genuine false negative here. See
+// `syn_util::body_nested_impls` for the extraction and its stated one-level/`const`-or-`fn`-only
+// bound; the tests after the reaction cases below pin that bound so it does not silently widen.
+
+#[test]
+fn signature_coupling_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        findings(
+            "body-nested-const-signature",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n    }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        ["crate::infra::Db exposed by fn <crate::api::Svc>::leak"],
+    );
+}
+
+#[test]
+fn signature_coupling_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        findings(
+            "body-nested-fnbody-signature",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n    }\n}\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        ["crate::infra::Db exposed by fn <crate::api::Svc>::leak"],
+    );
+}
+
+#[test]
+fn async_exposure_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        async_mod(
+            "body-nested-const-async",
+            "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub async fn run(&self) {}\n    }\n};\n",
+        )
+        .unwrap(),
+        ["async fn <crate::m::Svc>::run(&self)"],
+    );
+}
+
+#[test]
+fn async_exposure_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        async_mod(
+            "body-nested-fnbody-async",
+            "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub async fn run(&self) {}\n    }\n}\n",
+        )
+        .unwrap(),
+        ["async fn <crate::m::Svc>::run(&self)"],
+    );
+}
+
+#[test]
+fn dyn_trait_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        dyn_mod(
+            "body-nested-const-dyn",
+            "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub fn dynamic(&self) -> Box<dyn crate::Port> { unimplemented!() }\n    }\n};\n",
+        )
+        .unwrap(),
+        ["dyn crate::Port exposed by fn <crate::m::Svc>::dynamic"],
+    );
+}
+
+#[test]
+fn dyn_trait_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        dyn_mod(
+            "body-nested-fnbody-dyn",
+            "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub fn dynamic(&self) -> Box<dyn crate::Port> { unimplemented!() }\n    }\n}\n",
+        )
+        .unwrap(),
+        ["dyn crate::Port exposed by fn <crate::m::Svc>::dynamic"],
+    );
+}
+
+#[test]
+fn impl_trait_reacts_on_a_const_wrapped_inherent_impl() {
+    assert_eq!(
+        impl_trait_mod(
+            "body-nested-const-impltrait",
+            "pub struct Svc;\nconst _: () = {\n    impl Svc {\n        pub fn existential(&self) -> impl crate::Port { unimplemented!() }\n    }\n};\n",
+        )
+        .unwrap(),
+        ["impl crate::Port exposed by fn <crate::m::Svc>::existential"],
+    );
+}
+
+#[test]
+fn impl_trait_reacts_on_a_fn_body_wrapped_inherent_impl() {
+    assert_eq!(
+        impl_trait_mod(
+            "body-nested-fnbody-impltrait",
+            "pub struct Svc;\nfn _also() {\n    impl Svc {\n        pub fn existential(&self) -> impl crate::Port { unimplemented!() }\n    }\n}\n",
+        )
+        .unwrap(),
+        ["impl crate::Port exposed by fn <crate::m::Svc>::existential"],
+    );
+}
+
+#[test]
+fn trait_impl_locality_reacts_on_a_const_wrapped_trait_impl() {
+    let out = locality_findings(
+        "body-nested-const-locality",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\npub mod commands;\npub mod rogue;\n",
+            ),
+            ("command.rs", "pub trait Command { fn run(&self); }\n"),
+            (
+                "commands.rs",
+                "pub struct Ok1;\nimpl crate::command::Command for Ok1 { fn run(&self) {} }\n",
+            ),
+            (
+                "rogue.rs",
+                "pub struct Rogue;\nconst _: () = {\n    impl crate::command::Command for Rogue {\n        fn run(&self) {}\n    }\n};\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::rogue (impl crate::command::Command for crate::rogue::Rogue)"],
+    );
+}
+
+#[test]
+fn trait_impl_locality_reacts_on_a_fn_body_wrapped_trait_impl() {
+    let out = locality_findings(
+        "body-nested-fnbody-locality",
+        &[
+            (
+                "lib.rs",
+                "pub mod command;\npub mod commands;\npub mod rogue;\n",
+            ),
+            ("command.rs", "pub trait Command { fn run(&self); }\n"),
+            (
+                "commands.rs",
+                "pub struct Ok1;\nimpl crate::command::Command for Ok1 { fn run(&self) {} }\n",
+            ),
+            (
+                "rogue.rs",
+                "pub struct Rogue2;\nfn _also() {\n    impl crate::command::Command for Rogue2 {\n        fn run(&self) {}\n    }\n}\n",
+            ),
+        ],
+        "crate::command::Command",
+        &["crate::commands"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::rogue (impl crate::command::Command for crate::rogue::Rogue2)"],
+    );
+}
+
+#[test]
+fn forbidden_marker_reacts_on_a_const_wrapped_hand_impl() {
+    // The impl form shares `scan.impls` with trait-impl-locality, so it closes the identical
+    // gap for `ForbiddenMarkerBoundary`'s hand-impl acquisition form.
+    let out = marker_findings(
+        "body-nested-const-marker",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "const _: () = {\n    impl serde::Serialize for crate::domain::Order {}\n};\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::domain::Order in crate::wire"],
+    );
+}
+
+#[test]
+fn forbidden_marker_reacts_on_a_fn_body_wrapped_hand_impl() {
+    let out = marker_findings(
+        "body-nested-fnbody-marker",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod wire;\n"),
+            ("domain.rs", "pub struct Order;\n"),
+            (
+                "wire.rs",
+                "fn _also() {\n    impl serde::Serialize for crate::domain::Order {}\n}\n",
+            ),
+        ],
+        "crate::domain",
+        &["serde::Serialize"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["impl serde::Serialize for crate::domain::Order in crate::wire"],
+    );
+}
+
+// --- body-nested impl observation: the control and the stated scope bounds ---
+
+#[test]
+fn signature_coupling_control_the_identical_unwrapped_impl_also_reacts() {
+    // Control: proves the fixture shape is sound on its own (not a false pass from an unrelated
+    // fixture error) — the identical `leak()` written as an ordinary top-level inherent impl.
+    assert_eq!(
+        findings(
+            "body-nested-control-unwrapped",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nimpl Svc {\n    pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n}\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        ["crate::infra::Db exposed by fn <crate::api::Svc>::leak"],
+    );
+}
+
+#[test]
+fn a_plain_fn_directly_in_a_const_body_stays_a_stated_bound() {
+    // Scope bound: `body_nested_impls` extracts ONLY `impl` blocks. A plain `pub fn` written
+    // directly in a const/fn body (no enclosing `impl`) is genuinely scoped to that body and
+    // unreachable as `crate::…` — exactly like the existing body-nested-`mod` bound — so it must
+    // stay unobserved; recovering it would be a NEW, unaudited claim, not the fix this change
+    // makes.
+    assert_eq!(
+        findings(
+            "body-nested-bound-plain-fn",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "const _: () = {\n    pub fn also_hidden() -> crate::infra::Db { unimplemented!() }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
+
+#[test]
+fn an_impl_nested_one_level_further_stays_a_stated_bound() {
+    // Scope bound: only an `impl` that is a DIRECT statement of the const/fn's own outermost
+    // block is recovered. One level further in (here, inside an `if` block within the fn) is
+    // out of scope — the audited trigger shapes are both exactly one level deep, and recursing
+    // into arbitrary expression trees would invent tolerance for a shape nobody has shown.
+    assert_eq!(
+        findings(
+            "body-nested-bound-two-levels",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nfn _also() {\n    if true {\n        impl Svc {\n            pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n        }\n    }\n}\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
+
+#[test]
+fn a_static_wrapped_impl_stays_a_stated_bound() {
+    // Scope bound: only `const`/`fn` bodies are inspected, not `static`. The const-eval trick is
+    // specifically about `const` (compile-time evaluation even when never read); no audited
+    // idiom uses `static` for it, so widening to `static` would be unaudited tolerance.
+    assert_eq!(
+        findings(
+            "body-nested-bound-static",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "pub struct Svc;\nstatic S: () = {\n    impl Svc {\n        pub fn leak(&self) -> crate::infra::Db { unimplemented!() }\n    }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
