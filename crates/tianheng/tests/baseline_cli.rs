@@ -156,6 +156,96 @@ fn the_equals_form_still_carries_a_flag_shaped_value() {
 }
 
 #[test]
+fn a_zero_length_baseline_is_recorded_afresh_but_partial_content_is_still_refused() {
+    // A crash mid-create leaves exactly a zero-length file: `create_baseline_file` publishes its
+    // directory entry before its first byte. Refusing to overwrite it protected nothing — zero bytes
+    // hold no owner/tracker annotations — while telling the adopter to "preserve any desired
+    // annotations" that are not there, and requiring a manual file move to recover. So it is
+    // recorded afresh, and said so.
+    //
+    // The second half is what keeps that exception honest: whitespace and truncated JSON might have
+    // held annotations before they were damaged, so they must still be refused and left untouched.
+    // Without this, "empty" could quietly grow to mean "looks empty enough".
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+
+    let empty = temp_baseline("zero-length-recorded");
+    std::fs::write(&empty, "").expect("create a zero-length baseline");
+    let recorded = run_with(&manifest, "--write-baseline", &empty);
+    assert_eq!(
+        recorded.status.code(),
+        Some(0),
+        "a zero-length baseline must be recorded afresh, not refused: {recorded:?}"
+    );
+    let recorded_stderr = String::from_utf8(recorded.stderr).expect("UTF-8 stderr");
+    for guidance in ["was empty", "recording a fresh snapshot"] {
+        assert!(
+            recorded_stderr.contains(guidance),
+            "the recovery must not be silent, missing `{guidance}`: {recorded_stderr}"
+        );
+    }
+    let document: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&empty).expect("read back the baseline"))
+            .expect("the recorded baseline must be valid JSON");
+    assert_eq!(
+        document["format"], "tianheng.baseline/structured-facts",
+        "the fresh snapshot must be a whole semantic baseline: {document:?}"
+    );
+    let _ = std::fs::remove_file(&empty);
+
+    for partial in ["   \n", "{\"format\":"] {
+        let path = temp_baseline("partial-still-refused");
+        std::fs::write(&path, partial).expect("create a partially-written baseline");
+        let refused = run_with(&manifest, "--write-baseline", &path);
+        assert_eq!(
+            refused.status.code(),
+            Some(2),
+            "partial content ({partial:?}) must still be refused: {refused:?}"
+        );
+        let refused_stderr = String::from_utf8(refused.stderr).expect("UTF-8 stderr");
+        assert!(
+            refused_stderr.contains("refusing to overwrite unsupported baseline"),
+            "partial content ({partial:?}) must keep the preserve-and-move guidance: \
+             {refused_stderr}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read back the refused file"),
+            partial,
+            "refused content must remain byte-for-byte unchanged"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
+#[test]
+fn the_gate_does_not_tolerate_a_zero_length_baseline() {
+    // The asymmetry is deliberate and worth pinning, because it reads as an inconsistency without
+    // its reason: the write action may regenerate a snapshot it owns, but the gate consumes a
+    // declaration the adopter wrote, so a baseline it cannot parse must be reported rather than read
+    // as "nothing is accepted" — which would silently discard their accepted-violation record.
+    let Some(manifest) = fixture_manifest("violating") else {
+        return;
+    };
+    let path = temp_baseline("zero-length-gate");
+    std::fs::write(&path, "").expect("create a zero-length baseline");
+
+    let output = run_with(&manifest, "--baseline", &path);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "the gate must reject a zero-length baseline: {output:?}"
+    );
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    assert!(
+        stderr.contains("invalid baseline"),
+        "the gate must name it an invalid baseline: {stderr}"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn an_empty_flag_value_names_the_flag_not_a_missing_file() {
     // An empty value is a flag given no value, and must be reported as that. Both forms exit 2
     // either way, so the exit code cannot guard this — stderr is the whole signal, which is why the

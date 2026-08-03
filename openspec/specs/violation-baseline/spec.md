@@ -113,6 +113,17 @@ format, the action SHALL fail loud and SHALL NOT overwrite it. Its error SHALL t
 preserve desired annotations, move or delete the unsupported file, and invoke the same write action
 again. It SHALL NOT attempt automatic migration or reconstruct identity from presentation.
 
+A **zero-length** target is the single exception, and SHALL be recorded afresh rather than refused.
+The refusal above protects hand-authored owner/tracker annotations, which no rerun can reconstruct;
+zero bytes cannot hold any, so refusing protects nothing while requiring the adopter to move a file
+by hand — and it is precisely the shape an interrupted create leaves, since the create path
+publishes its directory entry before its first byte. The action SHALL report that it found the
+target empty and recorded a fresh snapshot, so the recovery is not silent. The exception SHALL be
+bounded to zero length: whitespace-only or partially-written content might have held annotations
+before it was damaged, and SHALL stay refused. The gate action (`--baseline`) SHALL NOT share this
+tolerance — a declared baseline it cannot parse remains a scan error that exits 2, because gating
+consumes a declaration the adopter wrote rather than a snapshot it may regenerate.
+
 #### Scenario: Write records current violations in the semantic format
 
 - **WHEN** the write action targets a missing path and observation succeeds
@@ -132,6 +143,21 @@ again. It SHALL NOT attempt automatic migration or reconstruct identity from pre
 
 - **WHEN** the target exists as numeric v1/v2, unmarked, unknown-format, malformed, or unreadable data
 - **THEN** the action exits 2 without modifying the file and prints actionable regeneration guidance
+
+#### Scenario: Write records afresh over a zero-length target
+
+- **WHEN** the write action targets an existing file of zero length, as an interrupted create leaves
+- **THEN** it records the current violations, reports that the target was empty and is being recorded afresh, and exits 0 — it does not refuse, because a zero-byte file holds no annotations to preserve
+
+#### Scenario: Write still refuses partially-written content
+
+- **WHEN** the write action targets an existing file holding whitespace or truncated JSON
+- **THEN** it refuses and exits 2 with the preserve-and-move guidance, leaving the file byte-for-byte unchanged, because partial content may have held annotations before it was damaged
+
+#### Scenario: The gate does not tolerate a zero-length baseline
+
+- **WHEN** the gate action is given `--baseline` pointing at a zero-length file
+- **THEN** it reports an invalid baseline and exits 2, rather than reading it as an empty set of accepted violations
 
 #### Scenario: Write refuses on a constitution error
 
