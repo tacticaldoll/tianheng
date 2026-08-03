@@ -99,6 +99,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   sites, and with those satisfied but the fixture entry omitted the check fails naming the shape,
   where the previous version passed), publishing one shape under two labels, and publishing two
   shapes under one label — each failing on its own assertion.
+- Test-only, no production code change: 天衡's two baseline temp-path guards no longer rest on
+  winning a race. Both plant an obstruction (a stale temp file, a symlink to a victim) at the
+  `<target>.tmp-<pid>` path a spawned CLI run will predict — which the parent can only compute after
+  `spawn`, so a loaded runner can let the child open its own temp file first and never reach the
+  collision. Neither guard could tell that had happened from its own assertions: the stale-temp one
+  demanded exit 2 and failed spuriously (observed once in CI), while the symlink one passed
+  **vacuously**, since an untouched victim and a non-symlinked baseline are exactly what an
+  unexercised run leaves behind too. Both now go through one helper that re-races until the run's
+  refusal names the planted path, and fails loud naming the attempt count if it never does — so a
+  verdict is only ever reported by a run that earned it. Verified by injecting the lost race
+  deliberately: the guards still pass through three lost races, and the helper fails with its own
+  "never exercised" message when the plant can never land.
 - Internal refactor: 渾儀's three call sites that compose transparent-macro flattening with
   const/fn-body-nested-impl recovery (`scan::flatten_for_walk`,
   `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
