@@ -487,21 +487,51 @@ content distinguishes the two occurrences, so they represent the same restated f
 problems. Neither the enclosing-item qualification nor the expression text SHALL be derived from
 byte offset, line number, or occurrence count.
 
-The `file` component of this identity SHALL be labeled relative to the common ancestor of every
-source root passed to the enclosing `audit_probe_coverage` call, never the raw absolute filesystem
-path the scanner happened to read it from. An absolute path varies by checkout location (a different
-clone path, a different CI runner) even for byte-identical source, so baking it unconditionally into
-the identity would make a recorded baseline match nothing in any other checkout — the accepted
-violation re-fires as new while the recorded entry is simultaneously reported stale. Only when no
-root shares a common ancestor with the observed file SHALL the absolute form be used instead. A file
-reached only through an ABSOLUTE `#[path = "/…"]` literal is a stated, KNOWN residual gap to this
-rule, not yet closed: such a literal's target has no textual relationship to a given checkout's
-anchor unless it happens to lie under it, so its label MAY be the raw absolute path in one checkout
-and a relative-looking one in another for the identical committed literal — the identity can still
-disagree across checkouts for this one construct. The violation SHALL still react rather than being
-silently dropped either way. An absolute-literal `#[path]` is already a non-portable,
-machine-specific construct on its own, unlike the realistic relative sibling-share idiom this rule
-targets, which SHALL remain checkout-independent.
+The `file` component of this identity SHALL be labeled relative to a **caller-supplied anchor
+directory** — a required parameter of `audit_probe_coverage` — never the raw absolute filesystem path
+the scanner happened to read it from, and never a path the audit derives from the source roots it was
+given. An absolute path varies by checkout location (a different clone path, a different CI runner)
+even for byte-identical source, so baking it unconditionally into the identity would make a recorded
+baseline match nothing in any other checkout — the accepted violation re-fires as new while the
+recorded entry is simultaneously reported stale.
+
+The anchor SHALL NOT be derived from the source-root set, because such a derivation buys
+checkout-independence at the cost of **member-set independence** and thereby reopens the same loss
+through a second door: the longest common prefix of every member under `crates/` is `<root>/crates`,
+labeling a file `a/src/lib.rs`, and adding one member outside that prefix drops the anchor to
+`<root>` and relabels the identical file `crates/a/src/lib.rs`. Every entry recorded against the old
+label then goes stale and re-fires as new at once, on a change that touched none of the observed
+files. An identity SHALL therefore be a function of the observed source and the caller's stable
+anchor only — never of which other roots happened to be scanned alongside it. A caller composing this
+audit over a Cargo workspace SHALL pass the workspace root Cargo itself resolves
+(`xingbiao::workspace_root`), which moves with neither the clone location nor the member set; the
+`tianheng` shell SHALL do so, falling back to the target manifest's own directory only when metadata
+carries no such field.
+
+An observed file that does not lie under the anchor SHALL keep the absolute form, and an empty anchor
+SHALL therefore label every file absolutely. A file reached only through an ABSOLUTE `#[path = "/…"]`
+literal is a stated, KNOWN residual gap to this rule, not yet closed: such a literal's target has no
+textual relationship to a given checkout's anchor unless it happens to lie under it, so its label MAY
+be the raw absolute path in one checkout and a relative-looking one in another for the identical
+committed literal — the identity can still disagree across checkouts for this one construct. The
+violation SHALL still react rather than being silently dropped either way. An absolute-literal
+`#[path]` is already a non-portable, machine-specific construct on its own, unlike the realistic
+relative sibling-share idiom this rule targets, which SHALL remain checkout-independent.
+
+#### Scenario: Two member sets over one checkout label a shared file identically
+
+- **WHEN** the same checkout is audited twice with the same anchor but two different source-root sets
+  — first the members under one shared prefix, then those members plus one outside that prefix (a
+  tool, example, or fixture crate)
+- **THEN** the file both runs observe carries the identical `file` label and therefore the identical
+  identity, so a baseline recorded before the member was added still matches afterwards
+
+#### Scenario: An absolute path literal inside the anchor is labeled relative to it
+
+- **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target lies
+  under the caller's anchor, and its body contains a non-literal probe
+- **THEN** the un-auditable-probe violation's `file` is labeled relative to the anchor like any other
+  observed file, rather than kept absolute
 
 #### Scenario: Same expression in two different free functions stays distinct
 

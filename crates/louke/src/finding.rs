@@ -29,9 +29,11 @@ pub(crate) enum RuntimeFact {
     // `audit::scan`), `marker` the actual configured wrapper matched, and `expr` the offending
     // expression's own trimmed source text; together with `file` these are the identity
     // discriminator, never a byte offset or occurrence count. `file` is labeled relative to the
-    // common ancestor of every scanned root (see `audit::scan::labeled`/`common_ancestor`) whenever
-    // that's possible, rather than the raw absolute path — a checkout-dependent absolute path would
-    // make a recorded baseline stale in any other clone or CI runner. KNOWN residual gap, not fully
+    // caller-supplied anchor — its checkout/workspace root (see `audit::scan::labeled` and
+    // `audit_probe_coverage_with_markers`, which owns why the caller supplies it) — whenever the file
+    // lies under it, rather than the raw absolute path: a checkout-dependent absolute path would make
+    // a recorded baseline stale in any other clone or CI runner, and an anchor derived from the
+    // scanned roots instead would restate every label whenever the member set changed. KNOWN residual gap, not fully
     // closed: an ABSOLUTE `#[path = "/…"]` literal whose target does not lie under the anchor has no
     // textual relationship to it (`Path::join` discards the receiver for an absolute joinee), so its
     // label falls back to the absolute form — but when the SAME hardcoded literal happens to lie

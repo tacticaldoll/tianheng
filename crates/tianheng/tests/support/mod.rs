@@ -84,5 +84,9 @@ pub fn louke_exit(root: &Path, seam: &'static str, reason: &str) -> u8 {
     let boundary = louke::RuntimeBoundary::at(seam)
         .only_origins(["o"])
         .because(reason);
-    louke::audit_probe_coverage(&[boundary], &[root.to_path_buf()]).exit_code()
+    // These conformance fixtures assert exit codes, never `file` labels, so the anchor only needs to
+    // be the fixture's own checkout-equivalent: the directory holding the scanned root, which is
+    // what a real caller's `workspace_root` is relative to its members.
+    let anchor = root.parent().unwrap_or(root);
+    louke::audit_probe_coverage(&[boundary], &[root.to_path_buf()], anchor).exit_code()
 }

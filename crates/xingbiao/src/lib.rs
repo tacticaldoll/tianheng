@@ -78,6 +78,23 @@ pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
     pick["src_path"].as_str().map(PathBuf::from)
 }
 
+/// The workspace root directory Cargo resolved for this metadata read — the directory holding the
+/// workspace manifest, whichever member manifest `--manifest-path` happened to name (Cargo resolves
+/// upward to the same root either way).
+///
+/// Read for its **stability**, not for locating anything: it is the one directory that does not move
+/// when a workspace gains, loses, or relocates a member, which is what makes it the right thing to
+/// label an observed file *relative to* when that label is baseline identity (see 漏刻's
+/// `audit_probe_coverage` anchor). A path derived from the observed member set instead — their
+/// longest common prefix, say — is checkout-independent yet shifts the moment the set does, silently
+/// restating every recorded label.
+///
+/// `None` when the field is absent, which real `cargo metadata` output always carries; a caller
+/// holding synthetic metadata is expected to supply its own anchor rather than receive a guess.
+pub fn workspace_root(metadata: &Value) -> Option<PathBuf> {
+    metadata["workspace_root"].as_str().map(PathBuf::from)
+}
+
 /// Workspace member source-root directories (deduplicated and sorted).
 pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = metadata["packages"]

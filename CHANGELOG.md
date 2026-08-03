@@ -542,18 +542,34 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   same relocation a different clone path or CI runner produces) yielded two DIFFERENT
   `unauditable-probe` identities, differing only in the `file` field's absolute prefix — a baseline
   recorded in one checkout matched nothing in another, so the accepted violation re-fired as new
-  while the recorded entry was simultaneously reported stale. `file` is now labeled relative to the
-  common ancestor of every `source_inputs` root passed to one `audit_probe_coverage` call (the real
-  caller's actual checkout root, by construction — every workspace member's root shares it, whatever
-  the invocation's working directory), falling back to the previous absolute form only when no
-  shared ancestor exists at all. No public function signature changed. **Any existing
-  `--write-baseline` output naming an `unauditable-probe` violation is now stale** (its `file` field's
-  value changed shape) and must be regenerated; every previously accepted one reappears as new
-  exactly once. Stated bound: an ABSOLUTE `#[path = "/…"]` literal is a known residual gap, not fully
-  closed by this fix — when its target does not lie under the scanning checkout's own anchor, the
-  label falls back to the raw absolute path (`Path::join` discards its receiver for an absolute
-  joinee); when it happens to lie under the anchor, the label becomes relative-looking instead, so
-  the SAME hardcoded literal can still disagree across two checkouts. An absolute literal is already
+  while the recorded entry was simultaneously reported stale. `file` is now labeled relative to an
+  **anchor the caller supplies** — `audit_probe_coverage` and `audit_probe_coverage_with_markers` each
+  take one, and the `tianheng` shell passes the workspace root Cargo itself resolves (the new
+  `xingbiao::workspace_root`), the same directory whichever member manifest `--manifest-path` names.
+  A file outside the anchor keeps the absolute form. **Any existing `--write-baseline` output naming
+  an `unauditable-probe` violation is now stale** (its `file` field's value changed shape) and must be
+  regenerated; every previously accepted one reappears as new exactly once.
+  The anchor is a parameter rather than something the audit derives from the roots it is given, and
+  that distinction is the fix rather than a detail of it: this entry's first cut computed the longest
+  common prefix of every `source_inputs` root, which is checkout-independent but not
+  **member-set**-independent, and so reopened the same loss through a second door. Reproduced
+  directly: with every member under `crates/` the derived anchor is `<root>/crates` and a file is
+  labeled `a/src/lib.rs`; adding one member outside that prefix — a tool, an example, a fixture crate
+  — drops the anchor to `<root>` and relabels that identical file `crates/a/src/lib.rs`, so every
+  entry recorded against the old label goes stale and re-fires as new at once, on a change that
+  touched none of the observed files. An identity must be a function of the observed source and a
+  stable anchor only, never of which other roots happened to be scanned alongside it, and only a
+  caller knows a directory that stays put across both — so the derivation is gone rather than kept as
+  a fallback, and `common_ancestor` with it. A single-crate scan's labels therefore name the file's
+  place in the checkout (`src/lib.rs`) rather than its bare filename (`lib.rs`), which is also what
+  keeps two members' same-named `lib.rs` apart.
+  Stated bound: an ABSOLUTE `#[path = "/…"]` literal is a known residual gap, not fully closed by this
+  fix — when its target does not lie under the anchor, the label falls back to the raw absolute path
+  (`Path::join` discards its receiver for an absolute joinee); when it happens to lie under the
+  anchor, the label becomes relative-looking instead, so the SAME hardcoded literal can still
+  disagree across two checkouts. The workspace-root anchor does narrow that gap in one direction,
+  pinned rather than assumed: an absolute literal pointing INSIDE the checkout is now labeled
+  relative to it, where the derived per-file anchor left it absolute. An absolute literal is already
   non-portable on its own; the realistic relative sibling-share idiom this fix targets is
   unaffected either way.
 - 渾儀's trait-impl-exposure `where`-clause bounded-type seam no longer keys an unrenderable bound

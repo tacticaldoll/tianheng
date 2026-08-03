@@ -7,7 +7,7 @@
 //! `#[cfg(feature = "audit")]`.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use xuanji::RuleKey;
 
 use crate::finding::RuntimeFact;
@@ -15,7 +15,7 @@ use crate::registry::UNDECLARED_SEAM_REPAIR_HINT;
 use crate::{BoundaryKind, Outcome, Report, RuntimeBoundary, Severity, Violation, ViolationId};
 
 mod scan;
-use scan::{DEFAULT_MARKERS, Probe, collect_probes_with_markers, common_ancestor};
+use scan::{DEFAULT_MARKERS, Probe, collect_probes_with_markers};
 
 #[derive(Clone, Copy)]
 enum AuditRule {
@@ -64,9 +64,14 @@ use scan::scan_source;
 
 /// **CI face.** Audit probe coverage against the **declared `RuntimeBoundary` objects** using
 /// the default `["assert_boundary"]` probe macro marker list. Delegates to
-/// [`audit_probe_coverage_with_markers`].
-pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathBuf]) -> Outcome {
-    audit_probe_coverage_with_markers(declared, source_inputs, DEFAULT_MARKERS)
+/// [`audit_probe_coverage_with_markers`]; see it for what `anchor` is and why the caller supplies
+/// it rather than this function deriving one.
+pub fn audit_probe_coverage(
+    declared: &[RuntimeBoundary],
+    source_inputs: &[PathBuf],
+    anchor: &Path,
+) -> Outcome {
+    audit_probe_coverage_with_markers(declared, source_inputs, anchor, DEFAULT_MARKERS)
 }
 
 /// **CI face with custom probe markers.** Audit probe coverage against the **declared
@@ -83,9 +88,20 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
 /// source files" requirement for this file-input mode's module-graph walk and `#[path]`/
 /// `cfg_attr`-wrapped-`#[path]` union-scan rules; and its "An un-auditable probe's identity
 /// distinguishes distinct offending expressions" requirement for why the `file` field is labeled
-/// relative to the common ancestor of every `source_inputs` root (including the stated,
-/// not-yet-closed residual gap for an absolute `#[path]` literal that lies under one checkout's
-/// anchor but not another's).
+/// relative to `anchor` (including the stated, not-yet-closed residual gap for an absolute
+/// `#[path]` literal that lies under one checkout's anchor but not another's).
+///
+/// `anchor` is the directory every observed file's `file` identity label is made relative to — the
+/// caller's own checkout/workspace root (`xingbiao::workspace_root`, for the `tianheng` shell). It
+/// is a **parameter rather than something derived here**, and that is load-bearing: a raw absolute
+/// label makes a baseline recorded in one checkout match nothing in another, while an anchor
+/// computed from `source_inputs` themselves — their longest common prefix — trades that for a label
+/// that shifts whenever the input set does. Adding one workspace member outside the current shared
+/// prefix would relabel every other member's findings (`a/src/lib.rs` becoming
+/// `crates/a/src/lib.rs`), so every recorded entry goes stale and re-fires as new at once: the same
+/// loss, from a different cause. Only a caller knows a directory that stays put across both, so
+/// only a caller can supply it. A file outside `anchor` keeps its absolute label (the documented
+/// fallback), and an empty `anchor` therefore means "no anchor: label everything absolutely".
 ///
 /// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
 /// can no longer hide a seam. It does NOT observe the live install registry —
@@ -96,6 +112,7 @@ pub fn audit_probe_coverage(declared: &[RuntimeBoundary], source_inputs: &[PathB
 pub fn audit_probe_coverage_with_markers(
     declared: &[RuntimeBoundary],
     source_inputs: &[PathBuf],
+    anchor: &Path,
     markers: &[&str],
 ) -> Outcome {
     if markers.is_empty() {
@@ -108,14 +125,13 @@ pub fn audit_probe_coverage_with_markers(
             ));
         }
     }
-    // Every un-auditable probe's `file` identity field is labeled relative to this anchor (the
-    // common ancestor of every root passed here — the real caller's actual checkout/workspace
-    // root by construction) rather than as a raw absolute path, so the identity — and any baseline
-    // recorded against it — stays checkout-independent. See `scan::labeled`/`common_ancestor`.
-    let anchor = common_ancestor(source_inputs);
+    // Every un-auditable probe's `file` identity field is labeled relative to the caller's
+    // `anchor` rather than as a raw absolute path, so the identity — and any baseline recorded
+    // against it — stays both checkout-independent and stable across a change to the observed
+    // member set. See `scan::labeled` and this function's own doc for why the anchor is given.
     let mut probes = Vec::new();
     for input in source_inputs {
-        if let Err(message) = collect_probes_with_markers(input, &anchor, markers, &mut probes) {
+        if let Err(message) = collect_probes_with_markers(input, anchor, markers, &mut probes) {
             return Outcome::ConstitutionError(message);
         }
     }
