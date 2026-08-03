@@ -2568,6 +2568,39 @@ fn unauditable_probe_identity_is_stable_across_checkout_locations() {
 /// re-fires as new at once — the exact loss the checkout-relative labeling exists to prevent,
 /// reached by adding an unrelated crate instead of by moving the clone.
 #[test]
+fn an_empty_anchor_strips_nothing_and_leaves_the_label_as_observed() {
+    // The degenerate "no anchor" case, stated in `runtime-origin-assertion` and now pinned rather
+    // than left as prose: `Path::strip_prefix("")` SUCCEEDS and returns the path unchanged, so an
+    // empty anchor relabels nothing — it does not, as a first reading might have it, force some
+    // absolute form of its own. A caller with no stable directory to name therefore gets the
+    // unstripped path it passed, loudly, instead of a silently derived anchor.
+    let tb = TempBase::new("empty-anchor");
+    let root = tb.source(
+        "crates/a/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let outcome = audit_probe_coverage(
+        &[boundary("seam", Severity::Enforce)],
+        std::slice::from_ref(&root),
+        Path::new(""),
+    );
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected violations: {outcome:?}");
+    };
+    let file = report
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .and_then(|v| v.file.as_deref())
+        .expect("an unauditable-probe violation must have fired");
+    assert_eq!(
+        file,
+        root.display().to_string(),
+        "an empty anchor must leave the observed path exactly as it was"
+    );
+}
+
+#[test]
 fn two_member_sets_over_one_checkout_label_a_shared_file_identically() {
     let tb = TempBase::new("member-set-stability");
     let shared = tb.source(

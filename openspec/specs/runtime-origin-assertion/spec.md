@@ -508,8 +508,11 @@ audit over a Cargo workspace SHALL pass the workspace root Cargo itself resolves
 `tianheng` shell SHALL do so, falling back to the target manifest's own directory only when metadata
 carries no such field.
 
-An observed file that does not lie under the anchor SHALL keep the absolute form, and an empty anchor
-SHALL therefore label every file absolutely. A file reached only through an ABSOLUTE `#[path = "/…"]`
+An observed file that does not lie under the anchor SHALL keep the path as observed — the absolute
+one, for the absolute source roots a real caller passes. An **empty** anchor SHALL therefore strip
+nothing and leave every label as observed, rather than being read as a request to relabel: it is the
+degenerate "no anchor" case, and a caller that has no stable directory to name gets the unstripped
+form loudly rather than a silently derived one. A file reached only through an ABSOLUTE `#[path = "/…"]`
 literal is a stated, KNOWN residual gap to this rule, not yet closed: such a literal's target has no
 textual relationship to a given checkout's anchor unless it happens to lie under it, so its label MAY
 be the raw absolute path in one checkout and a relative-looking one in another for the identical
