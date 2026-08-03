@@ -179,6 +179,46 @@ fn root_aware_audit_fails_loud_on_an_unresolvable_reachable_module() {
 }
 
 #[test]
+fn deeply_nested_blocks_are_a_scan_error_not_a_stack_overflow() {
+    // A pathologically nested block chain must not overflow the native stack — a real,
+    // malformed or adversarial source nested this deep must fail loud (a scan error) rather
+    // than crash the process. Measured crash threshold for this exact recursion under a 2MB
+    // test-thread stack: safe at depth 1100, a real SIGABRT stack overflow at depth 1105+; the
+    // depth cap this pins is 300, comfortably clear of both that measured line and this test's
+    // depth.
+    let tb = TempBase::new("scope-depth-cap");
+    let depth = 2000;
+    let nested = format!("fn f() {{{}{}}}", "{".repeat(depth), "}".repeat(depth));
+    let root = tb.source("lib.rs", &nested);
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("depth bound")),
+        "scope nesting past the depth cap must be a scan error, not a stack overflow: {outcome:?}"
+    );
+}
+
+#[test]
+fn moderately_nested_blocks_still_observe_a_real_violation() {
+    // Control: nesting comfortably under the depth cap is unaffected — a real, deeply (but not
+    // pathologically) nested unresolvable module reference must still be observed and fail loud
+    // on its own terms, proving the walk actually reaches this depth rather than being narrowed
+    // by the fix.
+    let tb = TempBase::new("scope-depth-under-cap");
+    let depth = 100;
+    let nested = format!(
+        "fn f() {{{}mod missing;{}}}",
+        "{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let root = tb.source("lib.rs", &nested);
+    let outcome = audit_probe_coverage(&[], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("missing")),
+        "a moderately nested missing module must still be observed: {outcome:?}"
+    );
+}
+
+#[test]
 fn a_cfg_gated_module_with_no_file_is_skipped_not_errored() {
     let tb = TempBase::new("cfg-absent");
     // `#[cfg(feature = "never")] mod optional;` with no `optional.rs` is legal Rust when the

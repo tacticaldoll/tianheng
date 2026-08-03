@@ -190,6 +190,7 @@ fn external_module_files(
         file_dir,
         &mut modules,
         false,
+        0,
     )?;
     Ok(modules)
 }
@@ -299,6 +300,17 @@ fn inline_mod_bases(
     inline_bases
 }
 
+/// A recursion-depth cap for [`collect_scope_modules`]'s native-stack descent into nested
+/// blocks, transparent-macro arms, and inline `mod` bodies — a DoS backstop set far below the
+/// measured crash threshold (safe at depth 1100, a real SIGABRT stack overflow at depth 1105+
+/// under a 2MB test-thread stack), so a pathologically nested source file fails loud (a scan
+/// error) rather than crashing the process. Past the cap, this is a stated observation bound,
+/// never a silent truncation — matching every other depth-bound walker in this workspace
+/// (`hunyi::scan::MAX_MODULE_DEPTH`, `guibiao::use_scan::MAX_USE_NEST_DEPTH`,
+/// `guibiao::symbol_scan::MAX_SYMBOL_NEST_DEPTH`).
+const MAX_SCOPE_NEST_DEPTH: usize = 300;
+
+#[allow(clippy::too_many_arguments)]
 fn collect_scope_modules(
     bytes: &[u8],
     start: usize,
@@ -307,7 +319,15 @@ fn collect_scope_modules(
     file_dir: &Path,
     modules: &mut Vec<(PathBuf, PathBuf)>,
     in_transparent_arm: bool,
+    depth: usize,
 ) -> Result<(), String> {
+    if depth >= MAX_SCOPE_NEST_DEPTH {
+        return Err(format!(
+            "cannot judge {}: scope nesting exceeds the depth bound ({MAX_SCOPE_NEST_DEPTH}) \
+             this scanner supports without risking a native stack overflow",
+            file_dir.display()
+        ));
+    }
     let mut i = start;
     while i < end {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
@@ -341,6 +361,7 @@ fn collect_scope_modules(
                             file_dir,
                             modules,
                             true,
+                            depth + 1,
                         )?;
                     }
                     i = body_end.min(end);
@@ -413,6 +434,7 @@ fn collect_scope_modules(
                             // `#[cfg]` on an outer `mod` does not tolerate an absent file for an
                             // inner one either, in any of the three dimensions.
                             false,
+                            depth + 1,
                         )?;
                     }
                     i = close;
@@ -443,6 +465,7 @@ fn collect_scope_modules(
                 file_dir,
                 modules,
                 in_transparent_arm,
+                depth + 1,
             )?;
             i = close;
             continue;
