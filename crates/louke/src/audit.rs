@@ -100,8 +100,10 @@ pub fn audit_probe_coverage(
 /// prefix would relabel every other member's findings (`a/src/lib.rs` becoming
 /// `crates/a/src/lib.rs`), so every recorded entry goes stale and re-fires as new at once: the same
 /// loss, from a different cause. Only a caller knows a directory that stays put across both, so
-/// only a caller can supply it. A file outside `anchor` keeps its absolute label (the documented
-/// fallback), and an empty `anchor` therefore means "no anchor: label everything absolutely".
+/// only a caller can supply it. A file outside `anchor` keeps its path as observed — the absolute one,
+/// for the absolute roots a real caller passes (the documented fallback). An **empty** `anchor` strips
+/// nothing at all: `Path::strip_prefix("")` succeeds and returns the path unchanged, so this is the
+/// degenerate "no anchor" case, not a request to relabel.
 ///
 /// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
 /// can no longer hide a seam. It does NOT observe the live install registry —
