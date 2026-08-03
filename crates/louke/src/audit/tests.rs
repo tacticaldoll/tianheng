@@ -2567,36 +2567,53 @@ fn unauditable_probe_identity_is_stable_across_checkout_locations() {
 /// the very same file `crates/a/src/lib.rs`. Every recorded baseline entry then goes stale and
 /// re-fires as new at once — the exact loss the checkout-relative labeling exists to prevent,
 /// reached by adding an unrelated crate instead of by moving the clone.
+/// A non-absolute anchor is refused, not silently degraded — the precondition the anchor's whole
+/// purpose depends on.
+///
+/// `strip_prefix` cannot remove a relative prefix from an absolute source path, and succeeds
+/// trivially against `""`, so either anchor leaves every label in its raw absolute form: the
+/// checkout-dependent identity the anchor parameter exists to close, reached through an argument
+/// that looked accepted. Measured before the rule existed, through this same public entry point:
+/// anchors `"."`, `"crates"`, and `""` each returned the full `/tmp/.../crates/a/src/lib.rs`.
+///
+/// The empty case is refused by this one rule rather than blessed as a "no anchor" opt-out (an
+/// earlier revision of this crate documented it that way): its effect is precisely the defect, so
+/// there is no correct caller of it, and a caller with no stable directory to name is better told so.
 #[test]
-fn an_empty_anchor_strips_nothing_and_leaves_the_label_as_observed() {
-    // The degenerate "no anchor" case, stated in `runtime-origin-assertion` and now pinned rather
-    // than left as prose: `Path::strip_prefix("")` SUCCEEDS and returns the path unchanged, so an
-    // empty anchor relabels nothing — it does not, as a first reading might have it, force some
-    // absolute form of its own. A caller with no stable directory to name therefore gets the
-    // unstripped path it passed, loudly, instead of a silently derived anchor.
-    let tb = TempBase::new("empty-anchor");
+fn a_non_absolute_anchor_is_a_constitution_error() {
+    let tb = TempBase::new("non-absolute-anchor");
     let root = tb.source(
         "crates/a/src/lib.rs",
         "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
     );
-    let outcome = audit_probe_coverage(
+    for anchor in ["", ".", "crates", "crates/a/src", "../sibling"] {
+        let outcome = audit_probe_coverage(
+            &[boundary("seam", Severity::Enforce)],
+            std::slice::from_ref(&root),
+            Path::new(anchor),
+        );
+        let Outcome::ConstitutionError(message) = outcome else {
+            panic!("anchor {anchor:?} must be refused, not accepted: {outcome:?}");
+        };
+        assert!(
+            message.contains("is not an absolute path"),
+            "the error must name the precondition it failed: {message}"
+        );
+        assert!(
+            message.contains("workspace_root"),
+            "the error must name the value a caller should pass instead: {message}"
+        );
+    }
+    // The absolute sibling of the same call still works, so the rule rejects the anchor rather than
+    // the invocation shape.
+    let accepted = audit_probe_coverage(
         &[boundary("seam", Severity::Enforce)],
         std::slice::from_ref(&root),
-        Path::new(""),
+        tb.path(),
     );
-    let Outcome::Violations(report) = outcome else {
-        panic!("expected violations: {outcome:?}");
-    };
-    let file = report
-        .violations
-        .iter()
-        .find(|v| v.rule.contains("string literal"))
-        .and_then(|v| v.file.as_deref())
-        .expect("an unauditable-probe violation must have fired");
-    assert_eq!(
-        file,
-        root.display().to_string(),
-        "an empty anchor must leave the observed path exactly as it was"
+    assert!(
+        matches!(accepted, Outcome::Violations(_)),
+        "an absolute anchor must still be accepted: {accepted:?}"
     );
 }
 

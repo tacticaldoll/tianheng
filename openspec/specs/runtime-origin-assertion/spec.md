@@ -508,11 +508,21 @@ audit over a Cargo workspace SHALL pass the workspace root Cargo itself resolves
 `tianheng` shell SHALL do so, falling back to the target manifest's own directory only when metadata
 carries no such field.
 
-An observed file that does not lie under the anchor SHALL keep the path as observed — the absolute
-one, for the absolute source roots a real caller passes. An **empty** anchor SHALL therefore strip
-nothing and leave every label as observed, rather than being read as a request to relabel: it is the
-degenerate "no anchor" case, and a caller that has no stable directory to name gets the unstripped
-form loudly rather than a silently derived one. A file reached only through an ABSOLUTE `#[path = "/…"]`
+The anchor SHALL be an **absolute** path, and a relative or empty one SHALL be a constitution error
+(exit 2) naming the failed precondition and the value to pass instead — never accepted with a
+silently degraded label. Stripping a relative prefix from an absolute source path cannot succeed, and
+stripping an empty one succeeds while removing nothing, so either anchor leaves every label in its raw
+absolute form: the checkout-dependent identity this rule exists to prevent, reached through an
+argument that looked accepted. An empty anchor is therefore refused by the same rule rather than
+treated as a "no anchor" opt-out, because its effect *is* the defect and no caller has a correct use
+for it.
+
+Absoluteness is what the audit itself can verify; being a true ANCESTOR of the observed files is the
+caller's responsibility, and is the reason the anchor is the caller's to supply. An observed file that
+does not lie under the anchor SHALL keep the path as observed, so an absolute anchor unrelated to the
+source roots degrades per file rather than erroring — that per-file fallback is load-bearing for the
+absolute-`#[path]` bound stated next, which is why it cannot itself be an error. A file reached only
+through an ABSOLUTE `#[path = "/…"]`
 literal is a stated, KNOWN residual gap to this rule, not yet closed: such a literal's target has no
 textual relationship to a given checkout's anchor unless it happens to lie under it, so its label MAY
 be the raw absolute path in one checkout and a relative-looking one in another for the identical
@@ -528,6 +538,14 @@ relative sibling-share idiom this rule targets, which SHALL remain checkout-inde
   tool, example, or fixture crate)
 - **THEN** the file both runs observe carries the identical `file` label and therefore the identical
   identity, so a baseline recorded before the member was added still matches afterwards
+
+#### Scenario: A relative or empty anchor is a constitution error
+
+- **WHEN** `audit_probe_coverage` is called with absolute source roots and an anchor that is relative
+  (`.`, `crates`, `../sibling`) or empty
+- **THEN** it reports a constitution error naming the failed precondition and the value to pass
+  instead, and exits 2 — rather than returning findings whose `file` labels silently kept their raw
+  absolute form
 
 #### Scenario: An absolute path literal inside the anchor is labeled relative to it
 
