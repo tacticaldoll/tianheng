@@ -70,6 +70,30 @@ fn is_self_import_only(file_module: &str, governed_module: &str, depth: ScanDept
     depth == ScanDepth::Subtree && path_within(file_module, governed_module)
 }
 
+/// Resolves an import path to the module it actually denotes: itself when the whole path is a
+/// reachable module (a bare module import), otherwise its longest reachable prefix — an item-form
+/// import, whose tail names an item living in that module. `crate::internal::Secret` (an item in
+/// `crate::internal`) resolves to `crate::internal`; `crate::internal::deep::Thing` (an item in
+/// the descendant module `deep`) resolves to `crate::internal::deep` — the two stay
+/// distinguishable, which a lexical-only (string) comparison against `governed_module` cannot do.
+/// Falls back to the full path when no prefix is reachable (a path through a module
+/// `reachable_modules` cannot model, e.g. produced by a non-`cfg_if!` macro) rather than guessing.
+fn resolve_import_module<'a>(
+    import_path: &'a str,
+    reachable: &std::collections::BTreeSet<String>,
+) -> &'a str {
+    let mut candidate = import_path;
+    loop {
+        if reachable.contains(candidate) {
+            return candidate;
+        }
+        match candidate.rsplit_once("::") {
+            Some((prefix, _)) => candidate = prefix,
+            None => return import_path,
+        }
+    }
+}
+
 /// The crate-wide scan state every rule family below reads from — resolved once in
 /// [`check_module_boundary`], then shared read-only across whichever family actually evaluates.
 struct ScanContext<'a> {
@@ -168,8 +192,13 @@ fn check_inbound_rule(
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
         for (importer, import) in imports_with_importers(&text, &file_module, ctx.root_modules)? {
             // A module importing from within the protected subtree is not an inbound edge
-            // (an inline submodule of the protected module resolves to within it here).
-            if within_scan_depth(&importer, governed_module, boundary.depth) {
+            // (an inline submodule of the protected module resolves to within it here). This
+            // exemption is never depth-gated: `m`'s own subtree is not an inbound importer of
+            // `m` regardless of how narrowly `ScanDepth` scopes what counts as reaching `m` —
+            // the same distinction outbound's `RestrictImportsTo` already draws (its own-subtree
+            // check is plain `path_within`, never `within_scan_depth`). Depth narrows what
+            // counts as *reaching the protected module*, not who counts as *inside it*.
+            if path_within(&importer, governed_module) {
                 continue;
             }
             // Forbid-one: only the forbidden importer (or beneath, `::`-delimited) can violate.
@@ -179,9 +208,15 @@ fn check_inbound_rule(
                 }
             }
             // This importer must actually import the protected module (either directly,
-            // via descendant path, or via an ancestor glob wildcard import).
-            let imports_protected = within_scan_depth(&import, governed_module, boundary.depth)
-                || (import.is_glob && path_within(governed_module, &import.path));
+            // via descendant path, or via an ancestor glob wildcard import). The import is
+            // resolved to the module it denotes before the depth-gated comparison: an
+            // item-form import's own path string includes the item leaf, which `within_scan_depth`
+            // must never compare directly (an item in the anchored module and an item in a
+            // descendant module would otherwise be lexically indistinguishable under `Shallow`).
+            let import_module = resolve_import_module(&import.path, ctx.reachable);
+            let imports_protected =
+                within_scan_depth(import_module, governed_module, boundary.depth)
+                    || (import.is_glob && path_within(governed_module, &import.path));
             if !imports_protected {
                 continue;
             }
