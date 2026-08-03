@@ -210,6 +210,24 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   Version class: DESIGN-BREAKING. Authority: `openspec/specs/runtime-origin-assertion/spec.md`'s
   "observed, not self-asserted" requirement, which this gap directly contradicts; this
   entry's own reproduction record (above) for the rest.
+  **Updated in the 0.4.0 window** (the gap itself stays OPEN): the promotion trigger recorded above —
+  a `#[track_caller]`/`std::panic::Location` redesign — **does not work as written**, verified rather
+  than reasoned: `Location` yields a *file path*, while an origin's whole vocabulary is a module path
+  (`register_origin!` captures `module_path!()`, and `only_origins(["app::infra"])` is declared in the
+  same terms). Adopting it would redefine what an origin is and invalidate every existing declaration,
+  which is a different change from the one this entry describes. The two paths that do work, with their
+  measured costs: (a) a **proc-macro**, so no constructor need be public at all — cost: a new crate and
+  a `syn`-class build dependency in a dimension whose prod face is deliberately std-light; (b) derive
+  the origin from the concrete type via `std::any::type_name`, which is unforgeable because a type's own
+  path is not the caller's to choose (measured: a type in `rogue` reports `crate::rogue::Repo` while the
+  registration site's `module_path!()` reported only `crate`) — cost: redefines an origin from "where
+  registered" to "where defined", invalidates every `only_origins` declaration, and rests identity on a
+  format std documents as unspecified. What DID land: the constructor is `#[doc(hidden)]` and renamed
+  `__from_register_origin` so a hand-written call reads as the bypass it is (it cannot be made private —
+  `macro_rules!` visibility is checked at the expansion site, as this entry already recorded); the
+  spec's claim that a type "cannot claim falsely" is corrected to state the process trust boundary; and
+  the residual is pinned by `a_hand_built_origin_entry_is_accepted_a_known_trust_bound`, so it cannot
+  change state in either direction unnoticed.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 

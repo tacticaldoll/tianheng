@@ -271,3 +271,38 @@ fn the_fold_hasher_distinguishes_types() {
     assert_eq!(m.get(&TypeId::of::<Infra>()), Some(&2));
     assert_eq!(m.len(), 2);
 }
+
+/// KNOWN, DEFERRED trust bound, pinned rather than only listed: an origin is **observed** for code
+/// that goes through `register_origin!`, and merely **asserted** by code that does not.
+///
+/// A `macro_rules!` expands at its call site, so the constructor it names must stay reachable from
+/// there — `pub(crate)` would break every legitimate `register_origin!` in an adopter's crate. It is
+/// `#[doc(hidden)]` and named `__from_register_origin` so a hand-written call reads as the bypass it
+/// is, but nothing in std can stop that call. 漏刻's trust boundary is therefore the process: it
+/// catches architectural drift, not an in-process adversary.
+///
+/// This test exists so the gap cannot quietly change state in either direction. If it starts failing,
+/// the bound has been closed — and `runtime-origin-assertion`'s requirement, the constructor's own
+/// doc, and `BACKLOG.md`'s decision entry must be updated together with it.
+///
+/// The second assertion records the evidence a future fix could key on: the type's OWN path disagrees
+/// with the asserted origin, and unlike a call-site string it is not the caller's to choose. Deriving
+/// the origin from it would close this, at the cost of redefining an origin from "where registered" to
+/// "where defined" and resting identity on `type_name`'s deliberately unspecified format — a design
+/// decision, recorded with the proc-macro alternative in the backlog, not taken here.
+#[test]
+fn a_hand_built_origin_entry_is_accepted_a_known_trust_bound() {
+    struct Rogue;
+    let forged =
+        crate::OriginEntry::__from_register_origin(TypeId::of::<Rogue>(), "app::blessed", "Rogue");
+    assert_eq!(
+        forged.origin, "app::blessed",
+        "a hand-built entry's asserted origin is taken as given — the bound this test pins"
+    );
+    let real_path = std::any::type_name::<Rogue>();
+    assert!(
+        !real_path.starts_with("app::blessed"),
+        "and the type's own path contradicts it ({real_path}), which is the evidence a future fix \
+         could use to refuse the assertion"
+    );
+}
