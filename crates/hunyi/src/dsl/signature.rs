@@ -41,11 +41,6 @@ impl SemanticBoundary {
         }
     }
 
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
     /// The governed module path (e.g. `crate::domain`).
     pub fn module(&self) -> &str {
         &self.module
@@ -61,30 +56,14 @@ impl SemanticBoundary {
         &self.reason
     }
 
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-
     /// Whether the boundary also observes trait `impl` blocks (the opt-in
     /// `semantic-trait-impl-exposure` depth). `false` is the v1 signature-coupling surface.
     pub fn including_trait_impls(&self) -> bool {
         self.including_trait_impls
     }
 }
+
+crate::dsl::boundary_common!(SemanticBoundary, SemanticBoundaryDraft);
 
 /// A semantic boundary awaiting its module anchor.
 #[doc(hidden)]
@@ -138,13 +117,6 @@ impl SemanticBoundaryDraft {
     /// than one).
     pub fn and_not_expose(mut self, path: &str) -> Self {
         self.forbidden.push(path.to_string());
-        self
-    }
-
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
         self
     }
 
