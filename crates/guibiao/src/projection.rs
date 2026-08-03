@@ -146,10 +146,10 @@ pub fn constitution_text(constitution: &Constitution) -> String {
                 )
             }
             Boundary::Module(b) => (
-                b.severity,
-                format!("module {} in {}", b.module, b.crate_package),
-                b.rule.text(),
-                b.reason.as_str(),
+                b.severity(),
+                format!("module {} in {}", b.module(), b.crate_package()),
+                b.rule().text(),
+                b.reason(),
             ),
         };
         out.push_str(&format!(
@@ -208,13 +208,13 @@ fn boundary_json(boundary: &Boundary) -> Value {
         Boundary::Module(b) => {
             let mut object = serde_json::json!({
                 "kind": "module",
-                "target": b.module,
-                "crate": b.crate_package,
-                "rule": b.rule.label(),
-                "severity": b.severity.as_str(),
-                "reason": b.reason,
+                "target": b.module(),
+                "crate": b.crate_package(),
+                "rule": b.rule().label(),
+                "severity": b.severity().as_str(),
+                "reason": b.reason(),
             });
-            for (key, value) in b.rule.json_params() {
+            for (key, value) in b.rule().json_params() {
                 object[key] = value;
             }
             if let Some(anchor) = b.anchor() {
