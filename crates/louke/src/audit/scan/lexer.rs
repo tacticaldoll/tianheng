@@ -1,523 +1,5 @@
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-
-/// What the source scan found for a probe occurrence (`assert_boundary!`).
-#[derive(Debug)]
-pub(super) enum Probe {
-    /// A probe whose seam is a string literal (auditable, plain or raw): the seam value.
-    Literal(String),
-    /// A probe whose seam argument is NOT a string literal (a const or expression): the CI
-    /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
-    /// matched marker, source file, an owner-qualified enclosing item (never a bare name — two
-    /// owners may share a method name), and the offending expression's own trimmed source text,
-    /// so distinct non-literal probes in one file are distinct findings (never an absolute byte
-    /// offset; an anonymous lexical scope may carry a parent-local equal-header discriminator —
-    /// see `fn_scopes`/`first_macro_arg_end`).
-    Unauditable {
-        marker: String,
-        file: String,
-        owner: String,
-        expr: String,
-    },
-}
-
-pub(super) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
-
-/// Every `source_inputs` entry is a caller-chosen path — in the real `tianheng` CLI caller, an
-/// absolute `cargo_metadata`-reported `src_path` — so its raw `display()` form varies with the
-/// checkout location and lands directly in `UnauditableProbe`'s identity (see `finding.rs`). See
-/// `runtime-origin-assertion`'s "An un-auditable probe's identity distinguishes distinct offending
-/// expressions" requirement's checkout-relocation scenarios for the full rationale. `anchor` (the
-/// common ancestor of every root passed to one `audit_probe_coverage` call — see
-/// [`common_ancestor`]) is stripped from each observed file's label before it becomes that
-/// identity's `file` field. Falls back to the absolute form when stripping fails, e.g. an
-/// unrelated standalone path with no shared ancestor.
-fn labeled(path: &Path, anchor: &Path) -> String {
-    path.strip_prefix(anchor)
-        .unwrap_or(path)
-        .display()
-        .to_string()
-}
-
-/// The directory every `source_inputs` root's label is made relative to (see [`labeled`]). A file
-/// input's own directory is used (not the file itself, which would strip to an empty label); a
-/// directory input is used as-is. Empty input has no meaningful anchor.
-/// The directory a path's own children resolve relative to for [`common_ancestor`]'s purposes:
-/// `p` itself if it's a directory, else its parent (a file's identity is a source ROOT, so its
-/// own directory is the anchor, never the file itself). Isolates the one I/O touch (`Path::is_file`)
-/// from the otherwise-pure prefix-intersection algorithm below.
-fn anchor_dir_for(p: &Path) -> PathBuf {
-    if p.is_file() {
-        p.parent()
-            .map_or_else(|| p.to_path_buf(), Path::to_path_buf)
-    } else {
-        p.to_path_buf()
-    }
-}
-
-pub(super) fn common_ancestor(paths: &[PathBuf]) -> PathBuf {
-    let mut candidates = paths.iter().map(|p| anchor_dir_for(p));
-    let Some(first) = candidates.next() else {
-        return PathBuf::new();
-    };
-    let mut common: Vec<_> = first.components().collect();
-    for candidate in candidates {
-        let components: Vec<_> = candidate.components().collect();
-        let shared = common
-            .iter()
-            .zip(components.iter())
-            .take_while(|(a, b)| a == b)
-            .count();
-        common.truncate(shared);
-    }
-    common.into_iter().collect()
-}
-
-pub(super) fn collect_probes_with_markers(
-    input: &Path,
-    anchor: &Path,
-    markers: &[&str],
-    probes: &mut Vec<Probe>,
-) -> Result<(), String> {
-    if input.is_file() {
-        return collect_reachable_probes(input, anchor, markers, probes);
-    }
-    let mut visited = HashSet::new();
-    collect_directory_probes(input, anchor, markers, probes, &mut visited)
-}
-
-/// Read `dir`'s entries — I/O only, no scan dispatch — as `(is_dir, path)` pairs sorted so the
-/// downstream traversal order (and thus the violation order in the report) is deterministic
-/// across runs (`read_dir` order is OS/filesystem-dependent and unsorted). `file_type()` does NOT
-/// follow symlinks, so a symlinked directory is reported as a file here — avoiding an infinite
-/// loop on a cyclic symlink (fail safe, not stack-overflow loud).
-fn read_dir_entries_sorted(dir: &Path) -> Result<Vec<(bool, PathBuf)>, String> {
-    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    let mut paths = Vec::new();
-    for entry in read {
-        let entry =
-            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
-        paths.push((file_type.is_dir(), entry.path()));
-    }
-    paths.sort();
-    Ok(paths)
-}
-
-/// Read `file`'s source and scan it for probes, returning the read source text — the one I/O
-/// touch (a full read, unlike the directory-listing metadata [`read_dir_entries_sorted`] reads)
-/// shared by [`collect_directory_probes`] and [`collect_reachable_probes`], each of which decides
-/// whether to reach this leaf action from cheap metadata alone (an extension check, an `is_dir`
-/// flag) before ever calling it. [`collect_reachable_probes`] also needs the source text
-/// afterward (to walk this file's own further module references), so it is returned rather than
-/// discarded.
-fn scan_rust_file(
-    file: &Path,
-    anchor: &Path,
-    markers: &[&str],
-    probes: &mut Vec<Probe>,
-) -> Result<String, String> {
-    let source = std::fs::read_to_string(file)
-        .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
-    scan_source_with_markers(&source, &labeled(file, anchor), markers, probes);
-    Ok(source)
-}
-
-fn collect_directory_probes(
-    dir: &Path,
-    anchor: &Path,
-    markers: &[&str],
-    probes: &mut Vec<Probe>,
-    visited: &mut HashSet<PathBuf>,
-) -> Result<(), String> {
-    if !xingbiao::try_visit(visited, dir)? {
-        return Ok(());
-    }
-    for (is_dir, path) in read_dir_entries_sorted(dir)? {
-        if is_dir {
-            collect_directory_probes(&path, anchor, markers, probes, visited)?;
-        } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
-            && xingbiao::try_visit(visited, &path)?
-        {
-            scan_rust_file(&path, anchor, markers, probes)?;
-        }
-    }
-    Ok(())
-}
-
-fn collect_reachable_probes(
-    root: &Path,
-    anchor: &Path,
-    markers: &[&str],
-    probes: &mut Vec<Probe>,
-) -> Result<(), String> {
-    let root_parent = root
-        .parent()
-        .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
-    let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
-    // Uses canonicalized path visit tracking to prevent cycle loops on symlinks.
-    let mut visited: HashSet<PathBuf> = HashSet::new();
-    while let Some((file, child_base)) = pending.pop() {
-        if !xingbiao::try_visit(&mut visited, &file)? {
-            continue;
-        }
-        let source = scan_rust_file(&file, anchor, markers, probes)?;
-        // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
-        // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
-        // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
-        let file_dir = file.parent().unwrap_or(child_base.as_path());
-        let mut children = external_module_files(&source, &child_base, file_dir)?;
-        children.sort();
-        children.reverse();
-        pending.extend(children);
-    }
-    Ok(())
-}
-
-fn external_module_files(
-    source: &str,
-    child_base: &Path,
-    file_dir: &Path,
-) -> Result<Vec<(PathBuf, PathBuf)>, String> {
-    let mut modules = Vec::new();
-    collect_scope_modules(
-        source.as_bytes(),
-        0,
-        source.len(),
-        child_base,
-        file_dir,
-        &mut modules,
-        false,
-        0,
-    )?;
-    Ok(modules)
-}
-
-/// Resolve an external `mod name;` declaration (found at `mod_index` in `bytes`, within the scope
-/// starting at `scope_start`) into `modules`, or fail loud when genuinely unresolvable on every
-/// configuration. An unconditional `#[path]` is authoritative on every build — the sole source; a
-/// non-inline `#[path]` resolves from the containing file's OWN directory (`file_dir`), not the
-/// conventional-child base — rustc's mod-rs-blind rule. Absent that, every `cfg_attr`-wrapped
-/// `#[path]` candidate that exists on disk (resolved the identical way) AND the conventional file
-/// are unioned — cfg-blind observation cannot know which one a given build actually uses, so
-/// neither is silently preferred over the other. No file at any candidate location is tolerated
-/// when the declaration is `#[cfg]`-gated or arm-conditional (may legitimately compile no probes
-/// here); otherwise it is a real broken reference (exit 2). Pulled out of
-/// [`collect_scope_modules`]'s `mod name;` arm.
-#[allow(clippy::too_many_arguments)]
-fn resolve_external_mod_decl(
-    bytes: &[u8],
-    scope_start: usize,
-    mod_index: usize,
-    name: &str,
-    child_base: &Path,
-    file_dir: &Path,
-    modules: &mut Vec<(PathBuf, PathBuf)>,
-    in_transparent_arm: bool,
-) -> Result<(), String> {
-    let attrs = mod_preamble_attrs(bytes, scope_start, mod_index);
-    if let Some(rel) = &attrs.path {
-        match resolve_path_module(file_dir, rel)? {
-            Some(resolved) => modules.push(resolved),
-            None if absence_is_tolerated(&attrs, in_transparent_arm) => {}
-            None => {
-                return Err(format!(
-                    "cannot resolve reachable module `{name}` under {}",
-                    child_base.display()
-                ));
-            }
-        }
-        return Ok(());
-    }
-    let mut has_backing_source = false;
-    for rel in &attrs.cfg_attr_paths {
-        if let Some(resolved) = resolve_path_module(file_dir, rel)? {
-            has_backing_source = true;
-            modules.push(resolved);
-        }
-    }
-    if let Some(resolved) = resolve_external_module(child_base, name)? {
-        has_backing_source = true;
-        modules.push(resolved);
-    }
-    if !(has_backing_source || absence_is_tolerated(&attrs, in_transparent_arm)) {
-        return Err(format!(
-            "cannot resolve reachable module `{name}` under {}",
-            child_base.display()
-        ));
-    }
-    Ok(())
-}
-
-/// Whether a module declaration may legitimately have no backing source file on this
-/// configuration: its own bare `#[cfg]`, or membership in a transparent macro arm — the arm's
-/// predicate lives in the macro's `if #[cfg(..)]` header rather than on the item, and every arm
-/// is conditionally compiled by construction (the trailing `else` on its predicates' negation).
-/// 圭表 settled this rule for the same shape and 渾儀 adopted it; a third hand-assembled
-/// derivation here would be the silent-divergence class the cross-dimension ledger exists to
-/// catch.
-fn absence_is_tolerated(attrs: &ModPreambleAttrs, in_transparent_arm: bool) -> bool {
-    attrs.cfg || in_transparent_arm
-}
-
-/// The candidate base directories an inline `mod name { … }`'s body should be descended from. An
-/// unconditional `#[path]` is the sole authority, exactly as [`resolve_external_mod_decl`] applies
-/// for an external `mod`. A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which predicate a
-/// given build selects — cfg-blind observation cannot know which, so the body is descended once
-/// per candidate base that exists as a directory: every `cfg_attr` target that resolves, AND the
-/// conventional base if IT resolves (the predicate could evaluate false on every one, in which
-/// case rustc strips the attribute entirely and the plain, unremapped base applies). A candidate
-/// base that isn't a real directory contributes nothing — recursing into it would spuriously
-/// fail-loud on the module's own OTHER, unrelated nested items merely because this one platform's
-/// directory happens not to exist, when another candidate already backs them. If NO candidate
-/// resolves at all, fall back to the conventional base anyway (the pre-existing, un-remapped
-/// behavior) so a nested reference that is genuinely broken on every platform still fails loud
-/// rather than being silently dropped.
-fn inline_mod_bases(
-    attrs: &ModPreambleAttrs,
-    name: &str,
-    child_base: &Path,
-    file_dir: &Path,
-) -> Vec<PathBuf> {
-    let mut inline_bases: Vec<PathBuf> = Vec::new();
-    match &attrs.path {
-        Some(rel) => inline_bases.push(file_dir.join(rel)),
-        None => {
-            for rel in &attrs.cfg_attr_paths {
-                let candidate = file_dir.join(rel);
-                if candidate.is_dir() {
-                    inline_bases.push(candidate);
-                }
-            }
-            let conventional = child_base.join(name);
-            if inline_bases.is_empty() || conventional.is_dir() {
-                inline_bases.push(conventional);
-            }
-        }
-    }
-    inline_bases
-}
-
-/// A recursion-depth cap for [`collect_scope_modules`]'s native-stack descent into nested
-/// blocks, transparent-macro arms, and inline `mod` bodies — a DoS backstop set far below the
-/// measured crash threshold (safe at depth 1100, a real SIGABRT stack overflow at depth 1105+
-/// under a 2MB test-thread stack), so a pathologically nested source file fails loud (a scan
-/// error) rather than crashing the process. Past the cap, this is a stated observation bound,
-/// never a silent truncation — matching every other depth-bound walker in this workspace
-/// (`hunyi::scan::MAX_MODULE_DEPTH`, `guibiao::use_scan::MAX_USE_NEST_DEPTH`,
-/// `guibiao::symbol_scan::MAX_SYMBOL_NEST_DEPTH`).
-const MAX_SCOPE_NEST_DEPTH: usize = 300;
-
-#[allow(clippy::too_many_arguments)]
-fn collect_scope_modules(
-    bytes: &[u8],
-    start: usize,
-    end: usize,
-    child_base: &Path,
-    file_dir: &Path,
-    modules: &mut Vec<(PathBuf, PathBuf)>,
-    in_transparent_arm: bool,
-    depth: usize,
-) -> Result<(), String> {
-    if depth >= MAX_SCOPE_NEST_DEPTH {
-        return Err(format!(
-            "cannot judge {}: scope nesting exceeds the depth bound ({MAX_SCOPE_NEST_DEPTH}) \
-             this scanner supports without risking a native stack overflow",
-            file_dir.display()
-        ));
-    }
-    let mut i = start;
-    while i < end {
-        if let Some(next) = skip_literal_or_comment(bytes, i) {
-            i = next.min(end);
-            continue;
-        }
-        if bytes[i] == b'!' && preceding_token_is_ident(bytes, i) {
-            // The one transparent macro's arms hold real declarations: descend each as its own
-            // scope instead of skipping the body. This must be a POSITIVE descent, not merely a
-            // skipped skip — the walk's own catch-all `{` handling below treats any other brace
-            // block as opaque, so a removed skip alone would still swallow the arm.
-            let mut name_end = i;
-            while name_end > 0 && bytes[name_end - 1].is_ascii_whitespace() {
-                name_end -= 1;
-            }
-            if is_transparent_macro_name(bytes, name_end) {
-                if let Some(body_end) = foreign_macro_body_end(bytes, i) {
-                    for (arm_start, arm_end) in transparent_arm_ranges(bytes, i, body_end) {
-                        // The ENCLOSING bases, unchanged: an arm is not a module and adds no
-                        // directory component the way an inline `mod` does. Accumulating one here
-                        // would resolve an arm-declared `mod net;` under a phantom directory and
-                        // drop every probe beneath it — the coverage false negative this walk
-                        // exists to prevent, one layer down. Everything found inside an arm is
-                        // cfg-conditional: the predicate lives in the macro's `if #[cfg(..)]`
-                        // header, not on the item.
-                        collect_scope_modules(
-                            bytes,
-                            arm_start,
-                            arm_end.min(end),
-                            child_base,
-                            file_dir,
-                            modules,
-                            true,
-                            depth + 1,
-                        )?;
-                    }
-                    i = body_end.min(end);
-                    continue;
-                }
-            }
-            if let Some(next) = foreign_macro_body_end(bytes, i) {
-                i = next.min(end);
-                continue;
-            }
-        }
-        if is_mod_keyword(bytes, i) {
-            let mut cursor = skip_space_and_comments(bytes, i + 3);
-            let name_start = cursor;
-            if bytes.get(cursor..cursor + 2) == Some(b"r#") {
-                cursor += 2;
-            }
-            while cursor < end && is_ident_byte(bytes[cursor]) {
-                cursor += 1;
-            }
-            if cursor == name_start
-                || (cursor == name_start + 2 && &bytes[name_start..cursor] == b"r#")
-            {
-                i += 3;
-                continue;
-            }
-            let raw_name = &bytes[name_start..cursor];
-            let name = if raw_name.starts_with(b"r#") {
-                &raw_name[2..]
-            } else {
-                raw_name
-            };
-            let name = std::str::from_utf8(name).map_err(|e| e.to_string())?;
-            cursor = skip_space_and_comments(bytes, cursor);
-            match bytes.get(cursor) {
-                Some(b';') => {
-                    resolve_external_mod_decl(
-                        bytes,
-                        start,
-                        i,
-                        name,
-                        child_base,
-                        file_dir,
-                        modules,
-                        in_transparent_arm,
-                    )?;
-                    i = cursor + 1;
-                    continue;
-                }
-                Some(b'{') => {
-                    let close = balanced_brace_end(bytes, cursor, end);
-                    let attrs = mod_preamble_attrs(bytes, start, i);
-                    // Descending an inline `mod x { … }`: x's children resolve from `inline_base` —
-                    // `<child_base>/name`, or `<file_dir>/dir` for an inline `#[path = "dir"]` remap.
-                    // rustc accumulates the inline-module name as a directory component, so this base
-                    // governs BOTH x's conventional file-children AND any `#[path]` nested in x's body
-                    // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
-                    // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
-                    // component and read a same-named orphan — a false negative.)
-                    let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir);
-                    for inline_base in &inline_bases {
-                        collect_scope_modules(
-                            bytes,
-                            cursor + 1,
-                            close.saturating_sub(1),
-                            inline_base,
-                            inline_base,
-                            modules,
-                            // Arm membership is NOT inherited into an inline `mod`'s body: a bare
-                            // `#[cfg]` on an outer `mod` does not tolerate an absent file for an
-                            // inner one either, in any of the three dimensions.
-                            false,
-                            depth + 1,
-                        )?;
-                    }
-                    i = close;
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        if bytes[i] == b'{' {
-            // Any other brace scope — a fn/const/static body, a bare block expression, a match
-            // arm, and so on — is descended into, not skipped as opaque: Rust permits a `mod`
-            // item statement inside any block scope, and the ONLY legal non-inline form there is
-            // a `#[path = "…"] mod name;` (a bare `mod name;` with no `#[path]` has no established
-            // file-path convention inside a block and does not compile) — but that legal form was
-            // previously invisible, since every brace here was treated as one opaque unit and never
-            // walked. `is_mod_keyword`'s own whole-word match means descending into an ordinary
-            // struct-literal/match-arm/expression body costs nothing: no real `mod` token exists
-            // there to misfire on. A `mod` found this way adds no directory component of its own
-            // (unlike a NAMED inline `mod x { … }`), so the enclosing file's own bases are threaded
-            // through unchanged; arm membership is inherited, since a block nested inside an arm is
-            // exactly as cfg-conditional as the arm itself.
-            let close = balanced_brace_end(bytes, i, end);
-            collect_scope_modules(
-                bytes,
-                i + 1,
-                close.saturating_sub(1),
-                child_base,
-                file_dir,
-                modules,
-                in_transparent_arm,
-                depth + 1,
-            )?;
-            i = close;
-            continue;
-        }
-        i += 1;
-    }
-    Ok(())
-}
-
-/// Resolve a `mod name;` to its conventional file and the base directory for its own children:
-/// `Ok(Some(..))` for `<base>/name.rs` or `<base>/name/mod.rs`, `Ok(None)` when neither exists (the
-/// caller decides whether an absent file is a legitimate `#[cfg]`-gated skip or a hard error), and
-/// `Err` only for a genuine ambiguity (both files present).
-fn resolve_external_module(base: &Path, name: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
-    let flat = base.join(format!("{name}.rs"));
-    let nested = base.join(name).join("mod.rs");
-    let file = match (flat.is_file(), nested.is_file()) {
-        (true, false) => flat,
-        (false, true) => nested,
-        (true, true) => {
-            return Err(format!(
-                "module `{name}` resolves to both '{}' and '{}'",
-                flat.display(),
-                nested.display()
-            ));
-        }
-        (false, false) => return Ok(None),
-    };
-    let next_base = if file.file_name().and_then(|n| n.to_str()) == Some("mod.rs") {
-        file.parent().unwrap_or(base).to_path_buf()
-    } else {
-        file.parent().unwrap_or(base).join(name)
-    };
-    Ok(Some((file, next_base)))
-}
-
-/// Resolve an unconditional `#[path = "rel"] mod name;` to its author-chosen file and the base
-/// directory for its own children. `rel` is relative to `base` — the containing file's own directory
-/// (`file_dir`), with each enclosing inline-`mod` name already accumulated onto it by the caller;
-/// for a non-mod-rs `name.rs` this differs from the conventional-child directory a plain `mod name;`
-/// uses. A `#[path]`-loaded file is mod-rs-like, so its children resolve from the target file's
-/// **own** directory. `Ok(None)` when the target is absent (the caller tolerates a cfg-conditional
-/// absence and fails loud otherwise) — no ambiguity is possible (the path names one file), unlike the
-/// conventional `name.rs` / `name/mod.rs` pair.
-fn resolve_path_module(base: &Path, rel: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
-    let file = base.join(rel);
-    if !file.is_file() {
-        return Ok(None);
-    }
-    let next_base = file.parent().unwrap_or(base).to_path_buf();
-    Ok(Some((file, next_base)))
-}
+use super::probes::*;
+use std::collections::HashMap;
 
 /// Read the string-literal value of a `#[path = "…"]` starting just past the `=` (`start`), bounded
 /// by `end`. Handles a normal `"…"` (with the standard escapes) and a raw `r"…"` / `r#…"…"#` string
@@ -525,7 +7,7 @@ fn resolve_path_module(base: &Path, rel: &str) -> Result<Option<(PathBuf, PathBu
 /// is not a valid remap) — the caller then treats the module as non-relocated (conventional
 /// resolution or a loud missing-file error, never a silent skip). Bytes accumulate so a UTF-8
 /// filename round-trips.
-fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
+pub(crate) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
     // Advance past whitespace and comments to the value — but NOT over a string literal, which is
     // exactly what we are here to read (`skip_preamble_trivia` would skip the literal as trivia).
     let mut i = start;
@@ -592,13 +74,13 @@ fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
     None
 }
 
-fn is_mod_keyword(bytes: &[u8], i: usize) -> bool {
+pub(crate) fn is_mod_keyword(bytes: &[u8], i: usize) -> bool {
     bytes.get(i..i + 3) == Some(b"mod")
         && (i == 0 || !is_ident_byte(bytes[i - 1]))
         && bytes.get(i + 3).is_none_or(|b| !is_ident_byte(*b))
 }
 
-fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
+pub(crate) fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
     let mut end = bang;
     while end > 0 && bytes[end - 1].is_ascii_whitespace() {
         end -= 1;
@@ -606,7 +88,7 @@ fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
     end > 0 && is_ident_byte(bytes[end - 1])
 }
 
-fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
+pub(crate) fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() && bytes[i].is_ascii_whitespace() {
         i += 1;
     }
@@ -621,7 +103,7 @@ fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
 /// as a `mod` at all — not a graceful skip, a silent corpus drop: the module and its entire
 /// subtree, and every probe beneath it, vanished from the scan (found on adversarial review; a
 /// comment in this position is legal and unremarkable Rust, not a stated bound).
-fn skip_space_and_comments(bytes: &[u8], mut i: usize) -> usize {
+pub(crate) fn skip_space_and_comments(bytes: &[u8], mut i: usize) -> usize {
     loop {
         i = skip_ascii_space(bytes, i);
         if i >= bytes.len() {
@@ -644,7 +126,11 @@ fn skip_space_and_comments(bytes: &[u8], mut i: usize) -> usize {
 /// only way a `{` could hide inside a predicate is within a string literal, which
 /// `skip_literal_or_comment` consumes first. The invocation's own outer delimiter is irrelevant —
 /// `cfg_if!( … )` works the same as `cfg_if! { … }`.
-fn transparent_arm_ranges(b: &[u8], bang: usize, body_end: usize) -> Vec<(usize, usize)> {
+pub(crate) fn transparent_arm_ranges(
+    b: &[u8],
+    bang: usize,
+    body_end: usize,
+) -> Vec<(usize, usize)> {
     let mut arms = Vec::new();
     let open = skip_trivia(b, bang + 1);
     if !matches!(b.get(open), Some(b'{') | Some(b'(') | Some(b'[')) {
@@ -675,7 +161,13 @@ fn transparent_arm_ranges(b: &[u8], bang: usize, body_end: usize) -> Vec<(usize,
 /// so a delimiter-like byte inside one never miscounts. Returns `limit` if the group never closes
 /// within it — a caller-bound scan limit, never a hang. Shared by [`balanced_brace_end`],
 /// [`paren_group_end`], and [`attr_group_end`], which each pick one delimiter pair.
-fn delimiter_group_end(bytes: &[u8], open: usize, limit: usize, open_b: u8, close_b: u8) -> usize {
+pub(crate) fn delimiter_group_end(
+    bytes: &[u8],
+    open: usize,
+    limit: usize,
+    open_b: u8,
+    close_b: u8,
+) -> usize {
     let mut depth = 0usize;
     let mut i = open;
     while i < limit {
@@ -696,16 +188,16 @@ fn delimiter_group_end(bytes: &[u8], open: usize, limit: usize, open_b: u8, clos
     limit
 }
 
-fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+pub(crate) fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
     delimiter_group_end(bytes, open, limit, b'{', b'}')
 }
 
 /// Outer attributes on the `mod name;` at `mod_index` that steer the walker.
-struct ModPreambleAttrs {
+pub(crate) struct ModPreambleAttrs {
     /// The target of an **unconditional** `#[path = "..."]` relocation (the direct string form): the
     /// module lives at this author-chosen file, which the walker now *follows* to count its probes
     /// (closing the relocated-module coverage gap). `None` when there is no such attribute.
-    path: Option<String>,
+    pub(crate) path: Option<String>,
     /// Every `path = "…"` target found inside a `#[cfg_attr(<pred>, …, path = "…")]` wrapper — a
     /// module may carry more than one, one per platform predicate. `cfg_attr` never removes the
     /// `mod` item the way a bare `#[cfg]` does, so cfg-blind observation must union EVERY candidate
@@ -715,14 +207,14 @@ struct ModPreambleAttrs {
     /// therefore never followed, contradicting this very doc's own prior claim that it "reads as
     /// cfg"). Each candidate is resolved the identical way the unconditional `path` above is
     /// (relative to the containing file's own directory), not the conventional-child base.
-    cfg_attr_paths: Vec<String>,
+    pub(crate) cfg_attr_paths: Vec<String>,
     /// A **bare** `#[cfg(...)]` gate: the module may legitimately have no file in the current
     /// configuration (an off feature / another platform), so an absent file is tolerated rather than
     /// a scan error — the same cfg-tolerance 渾儀 applies, reimplemented louke-locally (三儀 ⊥ 三儀).
     /// This is not `cfg` evaluation: a resolvable cfg-gated module is still scanned and its probes
     /// still counted; only an *absent* file for a cfg-gated declaration is tolerated. `cfg_attr` does
     /// NOT set this — see `cfg_attr_paths` above for its own, additive absence tolerance.
-    cfg: bool,
+    pub(super) cfg: bool,
 }
 
 /// Scan a `mod name;`'s preamble (the bytes since the previous item boundary) for the outer
@@ -760,7 +252,11 @@ struct ModPreambleAttrs {
 /// (a preceding sibling item's own block body, or a macro invocation's body) is likewise skipped
 /// as one atomic unit via [`balanced_brace_end`], landing on its own matching `}` — the real
 /// boundary — rather than treating the interior's own bytes as candidates.
-fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> ModPreambleAttrs {
+pub(crate) fn mod_preamble_attrs(
+    bytes: &[u8],
+    scope_start: usize,
+    mod_index: usize,
+) -> ModPreambleAttrs {
     let mut start = scope_start;
     let mut i = scope_start;
     while i < mod_index {
@@ -867,7 +363,7 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
 /// tracking nested `()` and skipping string/char literals and comments so a `)` inside a
 /// `#[cfg_attr(unix, path = "a)b.rs")]` literal does not close the group early. Mirrors
 /// [`attr_group_end`]'s `[]`-tracking for a `cfg_attr`'s own argument list.
-fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
     delimiter_group_end(bytes, open, limit, b'(', b')')
 }
 
@@ -876,7 +372,7 @@ fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
 /// trivia skip) — `None` if no such meta is present. Scans identifier-by-identifier rather than a
 /// raw substring search, so a predicate that merely contains the text (`target_os = "path_os"`,
 /// a doc comment) is never mistaken for the applied `path` meta.
-fn find_path_meta_value(
+pub(crate) fn find_path_meta_value(
     bytes: &[u8],
     start: usize,
     paren_close: usize,
@@ -911,7 +407,7 @@ fn find_path_meta_value(
 /// Advance past whitespace, comments, and string/char literals to the next significant byte
 /// (bounded by `end`). Shared by the attribute walk so a comment or literal inside a preamble
 /// never derails the meta-name match.
-fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
+pub(crate) fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
     while i < end {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
             i = next.min(end);
@@ -929,7 +425,7 @@ fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
 /// Index just past the `]` closing the attribute-bracket group opened at `open` (which indexes the
 /// `[`), tracking nested `[]` and skipping string/char literals and comments so a `]` inside a
 /// `#[path = "a]b.rs"]` literal does not close the group early. Mirrors [`balanced_brace_end`].
-fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+pub(crate) fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
     delimiter_group_end(bytes, open, limit, b'[', b']')
 }
 
@@ -937,7 +433,7 @@ fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
 /// past its outermost `*/`. Rust block comments nest, so depth is tracked; an unterminated comment
 /// runs to EOF. Shared by [`scan_source`] and [`skip_trivia`] so the two cannot drift — the
 /// original non-nested bug existed in *both* precisely because they were independent copies.
-fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
+pub(crate) fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
     let mut depth = 1usize;
     i += 2; // past the opening `/*`
     while i + 1 < b.len() && depth > 0 {
@@ -959,11 +455,11 @@ fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
 /// (auditable) or not (un-auditable). Declarations come from the passed `RuntimeBoundary` objects.
 /// `file` labels an un-auditable probe so the reaction is actionable.
 #[cfg(test)]
-pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
+pub(crate) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
     scan_source_with_markers(source, file, DEFAULT_MARKERS, probes);
 }
 
-pub(super) fn scan_source_with_markers(
+pub(crate) fn scan_source_with_markers(
     source: &str,
     file: &str,
     markers: &[&str],
@@ -1053,7 +549,7 @@ pub(super) fn scan_source_with_markers(
 /// handling can never drift apart (the independent-copy drift `skip_block_comment` warns about).
 /// Raw/byte strings are tested before plain strings (an inner `"` would otherwise desync), and a
 /// lifetime (`'a`) is deliberately NOT a literal (left to be walked as code).
-fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
+pub(crate) fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
     // line comment
     if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
         let mut j = i;
@@ -1102,7 +598,7 @@ fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
 /// The identifier run ending immediately before `end` equals `target`. Used to recognize a
 /// `macro_rules` keyword before its `!` (the only stable form taking a `name` between `!` and the
 /// body delimiter) without a false match on `my_macro_rules` (the maximal run differs).
-fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
+pub(crate) fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
     let mut start = end;
     while start > 0 && is_ident_byte(b[start - 1]) {
         start -= 1;
@@ -1118,7 +614,7 @@ fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
 /// 圭表's `is_transparent_macro_name` and 渾儀's own test — the same rule in three hand-written
 /// copies, never a shared scanner (三儀 ⊥ 三儀), with `cfg_if_transparency_conformance.rs` as the
 /// drift reaction.
-fn is_transparent_macro_name(b: &[u8], end: usize) -> bool {
+pub(crate) fn is_transparent_macro_name(b: &[u8], end: usize) -> bool {
     preceding_ident_is(b, end, b"cfg_if")
 }
 
@@ -1131,7 +627,7 @@ fn is_transparent_macro_name(b: &[u8], end: usize) -> bool {
 /// a probe inside it (a reintroduced false negative). The balanced walk reuses
 /// `skip_literal_or_comment`, so a delimiter inside a string/char/comment never closes early; an
 /// unterminated body at EOF returns `Some(len)`.
-fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
+pub(crate) fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
     let mut i = skip_trivia(b, bang + 1);
     // The name may be separated from `!` by whitespace (`macro_rules ! foo {…}` is valid Rust),
     // exactly as the caller tolerates when deciding this `!` opens a macro. Skip back over that
@@ -1182,7 +678,7 @@ fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
 /// `br"…"`, `br#"…"#`) and return the index past its end, or `None` if `i` is not such a
 /// literal. Rust syntax guarantees `r`/`b` immediately before `"`/`#` is a literal prefix
 /// (no identifier can precede a string), so no token-boundary check is needed.
-fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
+pub(crate) fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
     let mut j = i;
     let byte = j < b.len() && b[j] == b'b';
     if byte {
@@ -1240,7 +736,11 @@ fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
 /// [`match_keyword`] so probe markers and structural keywords share one right-boundary rule.
 /// Tolerating the gap closes a false negative: a probe written `assert_boundary !("seam")` was
 /// silently dropped by a contiguous match.
-fn match_probe_marker<'a>(b: &[u8], i: usize, markers: &[&'a str]) -> Option<(usize, &'a str)> {
+pub(crate) fn match_probe_marker<'a>(
+    b: &[u8],
+    i: usize,
+    markers: &[&'a str],
+) -> Option<(usize, &'a str)> {
     for &marker in markers {
         let name = marker.as_bytes();
         if let Some(after_name) = match_keyword(b, i, name) {
@@ -1258,7 +758,7 @@ fn match_probe_marker<'a>(b: &[u8], i: usize, markers: &[&'a str]) -> Option<(us
 /// and must keep the boundary, so a foreign macro whose name merely *ends* in `assert_boundary` is
 /// not mis-read as our probe. ASCII-only would treat the `Ω` continuation bytes as a boundary and
 /// falsely match (a false coverage / fabricated probed-but-undeclared reaction).
-fn is_ident_byte(byte: u8) -> bool {
+pub(crate) fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
 }
 
@@ -1266,7 +766,7 @@ fn is_ident_byte(byte: u8) -> bool {
 ///
 /// Plain keywords and invalid identifier spellings are rejected; raw identifiers may escape a
 /// keyword except for Rust's non-escapable path/self names.
-pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
+pub(crate) fn is_valid_macro_marker(marker: &str) -> bool {
     if marker.is_empty() {
         return false;
     }
@@ -1309,7 +809,7 @@ pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
 /// (`return !(x)`, `if !(cond) {…}`), not a macro invocation — its operand must not be skipped as a
 /// macro body. `macro_rules` is deliberately absent (it is not a keyword and must reach the
 /// name-skip). A non-ASCII / non-UTF-8 run is never a keyword.
-fn is_rust_keyword(word: &[u8]) -> bool {
+pub(crate) fn is_rust_keyword(word: &[u8]) -> bool {
     let Ok(word) = std::str::from_utf8(word) else {
         return false;
     };
@@ -1373,7 +873,7 @@ fn is_rust_keyword(word: &[u8]) -> bool {
 /// Skip ASCII whitespace and `//` / `/* */` comments, returning the next code index. Mirrors
 /// the comment handling in [`scan_source`] so a comment between the `!` and `(`, or before the
 /// seam argument, does not desync probe capture (which would silently drop a real probe).
-fn skip_trivia(b: &[u8], mut i: usize) -> usize {
+pub(crate) fn skip_trivia(b: &[u8], mut i: usize) -> usize {
     loop {
         while i < b.len() && b[i].is_ascii_whitespace() {
             i += 1;
@@ -1400,7 +900,7 @@ fn skip_trivia(b: &[u8], mut i: usize) -> usize {
 /// the marker is not actually a probe call (no opening delimiter follows). `owner` is the
 /// caller-supplied, already-resolved owner-qualified enclosing item (see `fn_scopes`), threaded
 /// straight into an `Unauditable` probe's identity.
-fn capture_probe(
+pub(crate) fn capture_probe(
     b: &[u8],
     i: usize,
     marker: &str,
@@ -1473,7 +973,7 @@ fn capture_probe(
 /// model `foreign_macro_body_end` uses for a whole macro body — so a nested call or index in the
 /// seam expression (`assert_boundary!(some_fn(a, b), obj)`, `assert_boundary!(TABLE[i], obj)`) is
 /// not mistaken for the argument's own end.
-fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
+pub(crate) fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
     let mut depth = 0usize;
     let mut angle_depth = 0usize;
     let mut last_token_was_double_colon = false;
@@ -1548,7 +1048,7 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
 
 /// Whether `b` consists only of ASCII whitespace, comments, and unary / prefix operator tokens
 /// (`&`, `*`, `!`, `-`, `+`, `mut`, `ref`). Value literals (strings, chars, numbers) return false.
-fn is_unary_prefix_span(b: &[u8]) -> bool {
+pub(crate) fn is_unary_prefix_span(b: &[u8]) -> bool {
     let mut i = 0;
     while i < b.len() {
         let next = skip_trivia(b, i);
@@ -1575,7 +1075,7 @@ fn is_unary_prefix_span(b: &[u8]) -> bool {
 
 /// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
 /// since the captured text is not yet known to be valid UTF-8 at the trim point).
-fn trim_bytes(b: &[u8]) -> &[u8] {
+pub(crate) fn trim_bytes(b: &[u8]) -> &[u8] {
     let start = b
         .iter()
         .position(|c| !c.is_ascii_whitespace())
@@ -1591,7 +1091,7 @@ fn trim_bytes(b: &[u8]) -> &[u8] {
 /// carries the trait path. Qualifies a nested `fn`'s owner (never a bare method name — two owners
 /// may share one), mirroring `hunyi`'s `owner`/`trait_ref` qualification for the identical
 /// same-named-item collision (`semantic-unsafe-confinement`).
-enum ImplOrTraitContext {
+pub(crate) enum ImplOrTraitContext {
     Impl {
         trait_ref: Option<String>,
         self_ty: String,
@@ -1605,7 +1105,7 @@ enum ImplOrTraitContext {
 /// same-named local types) declared in different inline `mod { … }` blocks of the *same* file —
 /// two same-named items in *different files* are already distinguished by the outer `file` field,
 /// so this only needs to cover same-file `mod` nesting, not cross-file module identity.
-fn render_owner(
+pub(crate) fn render_owner(
     module_path: &str,
     enclosing_fn: Option<&str>,
     context_stack: &[(usize, ImplOrTraitContext)],
@@ -1642,7 +1142,7 @@ fn render_owner(
     }
 }
 
-pub(super) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> String {
+pub(crate) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> String {
     let header = String::from_utf8_lossy(trim_bytes(&b[start..brace]));
     let normalized = header.split_whitespace().collect::<Vec<_>>().join(" ");
     if normalized.is_empty() {
@@ -1652,7 +1152,7 @@ pub(super) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> St
     }
 }
 
-fn enclosing_owner(
+pub(crate) fn enclosing_owner(
     named_owner: Option<&str>,
     anonymous_stack: &[(usize, String)],
 ) -> Option<String> {
@@ -1667,7 +1167,7 @@ fn enclosing_owner(
 /// Match a bare keyword identifier at `i` (e.g. `fn`, `impl`, `trait`), requiring a right word
 /// boundary so `implx`/`fnx` is not mistaken for the keyword — mirrors [`match_probe_marker`]'s
 /// own boundary discipline. The caller checks the left boundary.
-fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
+pub(crate) fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
     if i + name.len() > b.len() || &b[i..i + name.len()] != name {
         return None;
     }
@@ -1683,7 +1183,7 @@ fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
 /// start index. Used to split an `impl` header without being fooled by a `for`/`where` nested in a
 /// generic bound (e.g. an HRTB `for<'a>` inside `<…>`). `>` only closes a generic level when not
 /// preceded by `-` (excluding a `->` return-arrow), matching `skip_to_item_body`'s own rule.
-fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
+pub(crate) fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
     let mut depth = 0usize;
     let mut i = 0;
     while i < header.len() {
@@ -1717,7 +1217,7 @@ fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
 /// Stated bound: a const-generic default expression using a shift operator (`<<`/`>>`) before the
 /// item's own body is not specially handled — vanishingly rare in a bare `fn`/`impl`/`trait`
 /// header and not attempted here.
-fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
+pub(crate) fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
     let mut depth = 0usize;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
@@ -1739,7 +1239,7 @@ fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
 
 /// After the `fn`/`trait` keyword (`after_keyword` just past it), parse the item's name and skip
 /// to its opening `{`. Returns `None` for a malformed/nameless item or a body-less declaration.
-fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
+pub(crate) fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
     let name_start = skip_trivia(b, after_keyword);
     let ident_start = if b.get(name_start..name_start + 2) == Some(b"r#") {
         name_start + 2
@@ -1763,7 +1263,10 @@ fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, us
 /// `impl Self` header into `(None, self)`. The split searches for a top-level `for` only before
 /// any top-level `where` (a `where`-clause `for<'a>` HRTB must never be mistaken for the impl's
 /// own `for`). Returns `None` only on malformed/truncated input (an `impl` always has a body).
-fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext, usize)> {
+pub(crate) fn parse_impl_header(
+    b: &[u8],
+    after_impl: usize,
+) -> Option<(ImplOrTraitContext, usize)> {
     let header_start = skip_trivia(b, after_impl);
     let body_start = skip_to_item_body(b, header_start)?;
     let header = &b[header_start..body_start - 1];
@@ -1953,7 +1456,7 @@ impl FnScopeState {
 ///   applied unchanged rather than special-cased for arms, and it names the arm in the violation
 ///   message — which an adopter reading it wants. Pinned by
 ///   `an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner`.
-fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
+pub(crate) fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
     let mut state = FnScopeState::new();
     let mut i = 0;
     while i < b.len() {
@@ -1983,7 +1486,7 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
 /// enclosing range, in case of nested `fn`s), or a stated fallback if `pos` falls inside no known
 /// `fn` body (a probe outside any function — not a realistic `assert_boundary!` call site, but
 /// handled rather than panicking).
-fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
+pub(crate) fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
     scopes
         .iter()
         .filter(|(start, end, _)| *start <= pos && pos < *end)
@@ -1994,7 +1497,7 @@ fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
 
 /// Parse a raw string literal `r"…"` / `r#…"…"#…` starting at `i`, returning `(value, next)`.
 /// `None` if it is not a well-formed raw string.
-fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
+pub(crate) fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
     let mut j = i + 1; // past `r`
     let mut hashes = 0;
     while b.get(j) == Some(&b'#') {
@@ -2032,7 +1535,7 @@ fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 /// independent copy. No real seam name spans lines, so this never meaningfully changes the
 /// seam-name caller's behavior. The escape set is the `&str` string-literal set only;
 /// byte-string-only escapes never reach here (byte strings are already un-auditable).
-fn decode_str_escapes(inner: &[u8]) -> Option<String> {
+pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {
     // The surrounding source compiled, so it is valid UTF-8; escapes are all ASCII, so iterating
     // by `char` reconstructs any multi-byte content faithfully.
     let s = std::str::from_utf8(inner).ok()?;
