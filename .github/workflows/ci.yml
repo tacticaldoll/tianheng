@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: every job below only checks out the repo, builds, tests, and lints it — none
+# pushes a tag, comments on a PR, or writes a package. A single read-only grant covers them all,
+# overriding whatever broader default the repo/org GITHUB_TOKEN scope would otherwise carry.
+permissions:
+  contents: read
+
 jobs:
   release-coherence:
     name: Release coherence
