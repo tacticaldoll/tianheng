@@ -1759,6 +1759,153 @@ fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext,
     Some((ctx, body_start))
 }
 
+/// Mutable scan state threaded through [`fn_scopes`]'s single byte-walk: the open
+/// mod/impl-or-trait/fn/anonymous-block stacks (each paired with the depth it opened at, so a `}`
+/// pops exactly the frames it closes), the sibling-numbering map for anonymous blocks, the running
+/// brace depth / current-header start the walk advances, and the completed `(body_start, body_end,
+/// owner)` triples.
+struct FnScopeState {
+    depth: usize,
+    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
+    // file) contributes nothing here, since its content is scanned separately, as its own file,
+    // where the outer `file` identity field already disambiguates it.
+    mod_stack: Vec<(usize, String)>,
+    context_stack: Vec<(usize, ImplOrTraitContext)>,
+    fn_stack: Vec<(usize, usize, String)>,
+    anonymous_stack: Vec<(usize, String)>,
+    anonymous_siblings: HashMap<(String, String), usize>,
+    // Start of the current code header, advanced only by code delimiters observed by this
+    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
+    // anonymous-scope boundary.
+    anonymous_header_start: usize,
+    out: Vec<(usize, usize, String)>,
+}
+
+impl FnScopeState {
+    fn new() -> Self {
+        Self {
+            depth: 0,
+            mod_stack: Vec::new(),
+            context_stack: Vec::new(),
+            fn_stack: Vec::new(),
+            anonymous_stack: Vec::new(),
+            anonymous_siblings: HashMap::new(),
+            anonymous_header_start: 0,
+            out: Vec::new(),
+        }
+    }
+
+    /// Try each header keyword (`mod`/`impl`/`trait`/`fn`) at `i` in `b`; on a match, push the
+    /// opened scope's frame and return the walk's next position (the body start) — the caller
+    /// `continue`s the outer loop from there without falling through to the brace/`;` handling.
+    /// `None` when no keyword matches at `i`.
+    fn try_dispatch_keyword(&mut self, b: &[u8], i: usize) -> Option<usize> {
+        if let Some(rest) = match_keyword(b, i, b"mod") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                self.mod_stack.push((self.depth, name));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"impl") {
+            if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
+                self.context_stack.push((self.depth, ctx));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"trait") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                self.context_stack
+                    .push((self.depth, ImplOrTraitContext::Trait(name)));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"fn") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                let module_path = self
+                    .mod_stack
+                    .iter()
+                    .map(|(_, name)| name.as_str())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                let enclosing = enclosing_owner(
+                    self.fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+                    &self.anonymous_stack,
+                );
+                let owner = render_owner(
+                    &module_path,
+                    enclosing.as_deref(),
+                    &self.context_stack,
+                    &name,
+                );
+                self.fn_stack.push((self.depth, body_start, owner));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        }
+        None
+    }
+
+    /// Open a new anonymous-block frame at `i`, headed by the code since
+    /// `anonymous_header_start` and numbered against its siblings under the same parent+header.
+    fn open_brace(&mut self, b: &[u8], i: usize) {
+        let header = anonymous_scope_header(b, self.anonymous_header_start, i);
+        let parent = enclosing_owner(
+            self.fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+            &self.anonymous_stack,
+        )
+        .unwrap_or_else(|| "<module scope>".to_string());
+        let sibling = self
+            .anonymous_siblings
+            .entry((parent, header.clone()))
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+        self.anonymous_stack
+            .push((self.depth, format!("block {header}#{sibling}")));
+        self.depth += 1;
+        self.anonymous_header_start = i + 1;
+    }
+
+    /// Close the brace at `i`: pop every stack frame opened at the depth this brace closes,
+    /// recording a completed `(body_start, i, owner)` triple for a closed `fn` scope.
+    fn close_brace(&mut self, i: usize) {
+        self.depth = self.depth.saturating_sub(1);
+        if self
+            .fn_stack
+            .last()
+            .is_some_and(|&(open_depth, _, _)| open_depth == self.depth)
+        {
+            let (_, body_start, owner) = self.fn_stack.pop().expect("checked Some above");
+            self.out.push((body_start, i, owner));
+        }
+        if self
+            .context_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.context_stack.pop();
+        }
+        if self
+            .mod_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.mod_stack.pop();
+        }
+        if self
+            .anonymous_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.anonymous_stack.pop();
+        }
+        self.anonymous_header_start = i + 1;
+    }
+}
+
 /// Every owner-qualified `fn` body in this source file, as `(body_start, body_end, owner)` byte
 /// ranges — `body_start`/`body_end` bound just inside the fn's own `{ … }` (excluding the braces
 /// themselves). Looked up by [`owner_for`] so an un-auditable probe's identity is qualified by a
@@ -1782,21 +1929,8 @@ fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext,
 ///   message — which an adopter reading it wants. Pinned by
 ///   `an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner`.
 fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
-    let mut depth = 0usize;
-    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
-    // file) contributes nothing here, since its content is scanned separately, as its own file,
-    // where the outer `file` identity field already disambiguates it.
-    let mut mod_stack: Vec<(usize, String)> = Vec::new();
-    let mut context_stack: Vec<(usize, ImplOrTraitContext)> = Vec::new();
-    let mut fn_stack: Vec<(usize, usize, String)> = Vec::new();
-    let mut anonymous_stack: Vec<(usize, String)> = Vec::new();
-    let mut anonymous_siblings: HashMap<(String, String), usize> = HashMap::new();
-    let mut out = Vec::new();
+    let mut state = FnScopeState::new();
     let mut i = 0;
-    // Start of the current code header, advanced only by code delimiters observed by this
-    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
-    // anonymous-scope boundary.
-    let mut anonymous_header_start = 0usize;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
             i = next;
@@ -1804,102 +1938,20 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
         }
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
-            if let Some(rest) = match_keyword(b, i, b"mod") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    mod_stack.push((depth, name));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"impl") {
-                if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
-                    context_stack.push((depth, ctx));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"trait") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    context_stack.push((depth, ImplOrTraitContext::Trait(name)));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"fn") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    let module_path = mod_stack
-                        .iter()
-                        .map(|(_, name)| name.as_str())
-                        .collect::<Vec<_>>()
-                        .join("::");
-                    let enclosing = enclosing_owner(
-                        fn_stack.last().map(|(_, _, owner)| owner.as_str()),
-                        &anonymous_stack,
-                    );
-                    let owner =
-                        render_owner(&module_path, enclosing.as_deref(), &context_stack, &name);
-                    fn_stack.push((depth, body_start, owner));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
+            if let Some(next) = state.try_dispatch_keyword(b, i) {
+                i = next;
+                continue;
             }
         }
         match b[i] {
-            b'{' => {
-                let header = anonymous_scope_header(b, anonymous_header_start, i);
-                let parent = enclosing_owner(
-                    fn_stack.last().map(|(_, _, owner)| owner.as_str()),
-                    &anonymous_stack,
-                )
-                .unwrap_or_else(|| "<module scope>".to_string());
-                let sibling = anonymous_siblings
-                    .entry((parent, header.clone()))
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-                anonymous_stack.push((depth, format!("block {header}#{sibling}")));
-                depth += 1;
-                anonymous_header_start = i + 1;
-            }
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if fn_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _, _)| open_depth == depth)
-                {
-                    let (_, body_start, owner) = fn_stack.pop().expect("checked Some above");
-                    out.push((body_start, i, owner));
-                }
-                if context_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    context_stack.pop();
-                }
-                if mod_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    mod_stack.pop();
-                }
-                if anonymous_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    anonymous_stack.pop();
-                }
-                anonymous_header_start = i + 1;
-            }
-            b';' => anonymous_header_start = i + 1,
+            b'{' => state.open_brace(b, i),
+            b'}' => state.close_brace(i),
+            b';' => state.anonymous_header_start = i + 1,
             _ => {}
         }
         i += 1;
     }
-    out
+    state.out
 }
 
 /// Look up the innermost owner-qualified `fn` scope containing byte position `pos` (the smallest
