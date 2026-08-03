@@ -212,6 +212,19 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     in both). Each is its own change with its own spike; `cfg_if_transparency_conformance.rs` states
     in its module doc that it pins two of three dimensions until 漏刻's lands.
   - File-granular un-auditable-probe identity.
+  - **The baseline directory flush has no reacting test, by construction.** `sync_parent_dir` is
+    infallible and best-effort on purpose — a platform or filesystem that cannot flush a directory
+    must not turn an already-landed write into a reported failure — which leaves it with no
+    externally observable behavior for a test to bind. Measured rather than assumed: `cargo mutants`
+    over `runner.rs` reports both of its mutants (`replace sync_parent_dir with ()`, `delete !`) as
+    MISSED, while the mutants for the flag and zero-length rules beside it are caught. Its evidence
+    is the syscall sequence recorded in the PR that added it (`fsync(temp)` → `rename` →
+    `fsync(dir)`), not a gate. Accepted because the alternative — making it fallible, or counting
+    failures the way 漏刻's `dropped_sink_events` does — either reintroduces the regression it exists
+    to avoid or adds an adopter-visible counter for a CLI-side hygiene step nobody can read. Revisit
+    only if a directory-flush regression is ever actually observed. The *strict* half of the
+    guarantee (the file flush) is not in this bound: it is covered by the 18-test `baseline_cli`
+    suite.
 - **DECLINED:**
   - Wall-clock auto-decay / auto-expiration (breaks determinism).
   - Trait method set freezing (API contract, not architectural shape).

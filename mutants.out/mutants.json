@@ -1,0 +1,66 @@
+[
+  {
+    "diff": "--- crates/tianheng/src/runner.rs\n+++ replace require_non_empty -> Result<String, u8> with Ok(String::new())\n@@ -480,22 +480,17 @@\n /// The one rule both flag forms share: a value must not be empty. `--flag=` and `--flag \"\"` are the\n /// same mistake as `--flag` with nothing after it — a flag given no value — so all three are one\n /// usage error (exit 2) rather than an empty string carried onward. An empty path reaches the\n /// filesystem as `\"\"` and answers `NotFound`, which reads as \"cannot read baseline \" against a path\n /// nobody typed: the malformed invocation misreported as a missing file, the same misdirection the\n /// flag-shaped-value rule exists to prevent one shape earlier. Shared by the space and equals forms\n /// so the two cannot diverge on what counts as a value.\n fn require_non_empty(flag: &str, value: String) -> Result<String, u8> {\n-    if value.is_empty() {\n-        return Err(usage(&format!(\n-            \"{flag} requires a value, but was given an empty one\"\n-        )));\n-    }\n-    Ok(value)\n+    Ok(String::new()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so\n /// `check` can default its target like `cargo` does when `--manifest-path` is omitted.\n /// The shell reads the cwd; the walk itself is the pure [`nearest_manifest_from`].\n fn nearest_manifest() -> Option<PathBuf> {\n     nearest_manifest_from(std::env::current_dir().ok()?)\n }\n",
+    "file": "crates/tianheng/src/runner.rs",
+    "function": {
+      "function_name": "require_non_empty",
+      "return_type": "-> Result<String, u8>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 494
+        },
+        "start": {
+          "column": 1,
+          "line": 480
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok(String::new())",
+    "package": "tianheng",
+    "replacement": "Ok(String::new())",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 493
+      },
+      "start": {
+        "column": 5,
+        "line": 488
+      }
+    }
+  },
+  {
+    "diff": "--- crates/tianheng/src/runner.rs\n+++ replace require_non_empty -> Result<String, u8> with Ok(\"xyzzy\".into())\n@@ -480,22 +480,17 @@\n /// The one rule both flag forms share: a value must not be empty. `--flag=` and `--flag \"\"` are the\n /// same mistake as `--flag` with nothing after it — a flag given no value — so all three are one\n /// usage error (exit 2) rather than an empty string carried onward. An empty path reaches the\n /// filesystem as `\"\"` and answers `NotFound`, which reads as \"cannot read baseline \" against a path\n /// nobody typed: the malformed invocation misreported as a missing file, the same misdirection the\n /// flag-shaped-value rule exists to prevent one shape earlier. Shared by the space and equals forms\n /// so the two cannot diverge on what counts as a value.\n fn require_non_empty(flag: &str, value: String) -> Result<String, u8> {\n-    if value.is_empty() {\n-        return Err(usage(&format!(\n-            \"{flag} requires a value, but was given an empty one\"\n-        )));\n-    }\n-    Ok(value)\n+    Ok(\"xyzzy\".into()) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so\n /// `check` can default its target like `cargo` does when `--manifest-path` is omitted.\n /// The shell reads the cwd; the walk itself is the pure [`nearest_manifest_from`].\n fn nearest_manifest() -> Option<PathBuf> {\n     nearest_manifest_from(std::env::current_dir().ok()?)\n }\n",
+    "file": "crates/tianheng/src/runner.rs",
+    "function": {
+      "function_name": "require_non_empty",
+      "return_type": "-> Result<String, u8>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 494
+        },
+        "start": {
+          "column": 1,
+          "line": 480
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok(\"xyzzy\".into())",
+    "package": "tianheng",
+    "replacement": "Ok(\"xyzzy\".into())",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 493
+      },
+      "start": {
+        "column": 5,
+        "line": 488
+      }
+    }
+  }
+]

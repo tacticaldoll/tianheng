@@ -106,6 +106,20 @@ independent reviewer, and verify each finding against the code before acting on 
 redesign a change rather than let it pass diluted (the no-weakening-to-pass rule itself is
 *Self-governance*, below). (`propose` / `apply` here are the OpenSpec phases above.)
 
+**A guard is not a guard until it has been seen to fail.** Every new test that claims to protect a
+change must be run against the code *without* that change, and the observed failure recorded in the
+PR's `## Verification`. A test written from the same understanding as the fix inherits its blind
+spots, so passing afterwards proves nothing on its own; only the negative run distinguishes a guard
+from a restatement.
+
+The trap this exists for is the change whose outcome is unaltered. When a fix improves a
+**diagnostic** while the exit code, return value, or wire output stays identical, a test bound to
+that outcome passes equally before and after — it pins the surrounding contract, not the change.
+Choose the observation level the change actually moved (stderr text, the emitted document, a
+syscall sequence), and where a test genuinely cannot reach it, say so in the PR and state what
+evidence stands in its place instead of leaving the reader to assume a green suite covered it. A
+test kept for the contract rather than the change earns a comment saying which it is.
+
 A vocabulary- or identity-level breaking change additionally requires grepping every touched spec
 and doc for the retired term across its *whole* file, not only the new diff: sync bolting on a
 correctly-worded requirement while the same file's older prose still names the retired shape is
@@ -126,7 +140,8 @@ itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_ke
   intended for the squash commit. Its body uses `## Why`, `## What changed`,
   `## Adversarial review`, `## Verification`, and `## Compatibility`; the last section states the
   public/migration effect and whether manifests or package versions changed. Verification names the
-  commands and external consumers actually checked — never an unqualified "tests pass".
+  commands and external consumers actually checked — never an unqualified "tests pass" — and, for
+  each new guard, the failure observed without the change (see *Adversarial review stance* above).
 - **Curated squash message.** For a development PR into a release branch, set the squash subject
   exactly to the PR title with no auto-appended `(#N)`. Replace GitHub's concatenated commit list
   with a self-contained body distilled from the PR's why, reaction, and compatibility result;
