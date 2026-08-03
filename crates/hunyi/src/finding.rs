@@ -1130,6 +1130,35 @@ mod fact_tests {
         }
     }
 
+    /// Every `PublicSeam` variant's `seam_kind` label, matched exhaustively over the variant shape
+    /// (fields ignored) — a duplicate of the literal `published_seam_fields` embeds per arm above,
+    /// kept only because that function's return type does not prove the "seam_kind" slot is
+    /// `'static`. Exhaustiveness is the forcing function this exists for: a new `PublicSeam`
+    /// variant fails to compile here until an arm is added, which is the cue to also add a
+    /// representative to `seams` in `every_public_seam_shape_is_named_and_identity_injective`
+    /// below — previously nothing tied a new variant to that fixture at all, only to the
+    /// (already-exhaustive) schema matches above.
+    fn seam_kind(seam: &PublicSeam) -> &'static str {
+        match seam {
+            PublicSeam::FreeFn { .. } => "free_fn",
+            PublicSeam::InherentMethod { .. } => "inherent_method",
+            PublicSeam::InherentAssoc { .. } => "inherent_assoc",
+            PublicSeam::TraitMethod { .. } => "trait_method",
+            PublicSeam::Item { .. } => "item",
+            PublicSeam::Member { .. } => "member",
+            PublicSeam::TraitAssoc { .. } => "trait_assoc",
+            PublicSeam::InherentGenerics { .. } => "inherent_generics",
+            PublicSeam::Reexport { .. } => "reexport",
+            PublicSeam::ExternCrate { .. } => "extern_crate",
+            PublicSeam::TraitImpl { .. } => "trait_impl",
+        }
+    }
+
+    /// Kept beside `seam_kind` above and updated together: the number of distinct labels it can
+    /// produce. `every_public_seam_shape_is_named_and_identity_injective` asserts `seams` below
+    /// covers every one of them, not merely as many distinct kinds as it happens to contain.
+    const PUBLIC_SEAM_KIND_COUNT: usize = 11;
+
     fn assert_semantic_fact_is_cataloged(fact: &SemanticFact) {
         match fact {
             SemanticFact::Exposed {
@@ -1247,11 +1276,12 @@ mod fact_tests {
         assert_ne!(original.text(), polished.text());
     }
 
-    /// Hand-maintained: a new `PublicSeam` variant needing its own module-equivalent identity
-    /// field is caught only if whoever adds it also extends this list — nothing structural ties
-    /// variant addition to this check (unlike `UnsafeSiteFact::key_fields`'s external injection,
-    /// which cannot be bypassed per-variant). Acceptable for now, absent a second forcing case;
-    /// stated here so the gap is known, not assumed closed.
+    /// `seam_kind`'s exhaustive match (above) forces this list to gain a representative when
+    /// `PublicSeam` gains a variant — the `assert_eq!` against `PUBLIC_SEAM_KIND_COUNT` below then
+    /// checks that the representative was actually added, not merely that the arm compiled. What
+    /// remains hand-maintained is the *content* of each representative — e.g. picking field values
+    /// that actually distinguish it from its siblings (the two-module `InherentMethod` case this
+    /// test was written for) is still a human judgment call this structure cannot force.
     #[test]
     fn every_public_seam_shape_is_named_and_identity_injective() {
         let seams = vec![
@@ -1390,6 +1420,13 @@ mod fact_tests {
                 position: TraitImplPosition::MethodReturn("run".into()),
             },
         ];
+        let observed_kinds: std::collections::BTreeSet<_> = seams.iter().map(seam_kind).collect();
+        assert_eq!(
+            observed_kinds.len(),
+            PUBLIC_SEAM_KIND_COUNT,
+            "seams must cover every PublicSeam variant by kind, not just as many distinct kinds \
+             as it happens to contain: {observed_kinds:?}"
+        );
         let keys: std::collections::BTreeSet<_> = seams
             .iter()
             .map(|seam| {
