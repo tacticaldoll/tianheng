@@ -524,6 +524,46 @@ pub(super) fn keyword_starts_at(bytes: &[u8], i: usize, keyword: &[u8]) -> bool 
     before_ok && after_ok
 }
 
+/// The outcome of scanning what follows a keyword-confirmed `use` at `bytes[i]`: a real
+/// `use … ;` statement (its trimmed body, and the cursor just past the `;`), a `use<'a, T>`
+/// precise-capturing type bound — not an import — (where to resume ordinary scanning), or an
+/// unterminated statement (the caller scans to EOF).
+pub(super) enum UseStatementScan {
+    Statement { body: String, next: usize },
+    NotAStatement { resume_at: usize },
+    Unterminated,
+}
+
+/// Classify what follows a keyword-confirmed `use` at `bytes[i]` (see [`keyword_starts_at`]).
+/// Shared by `use_statements` (symbol_scan.rs, flat glob detection) and `use_trees_with_modules`
+/// (use_scan.rs's inline-module-aware walk) — the one place both interpret "what is a `use`
+/// statement's body" identically; each still owns its own surrounding loop, since their
+/// module/brace tracking around this scan genuinely differs.
+pub(super) fn scan_use_statement(bytes: &[u8], source: &str, i: usize) -> UseStatementScan {
+    let start = i + 3;
+    // A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use` token
+    // inside a type bound: it is followed by `<`, whereas a `use` *statement* is always followed
+    // by a path (ident / `{` / `*` / `::` / `crate`/`self`/`super`). So a `<` here means this is
+    // a bound, not an import — the caller resumes scanning from `start` (letting the `<…>` be
+    // walked as ordinary bytes) rather than scanning to the next `;`, which would swallow the
+    // following real `use` (a false negative). A comment between `use` and `<` is already
+    // removed by the upstream comment/string strip.
+    let mut p = start;
+    while p < bytes.len() && bytes[p].is_ascii_whitespace() {
+        p += 1;
+    }
+    if bytes.get(p) == Some(&b'<') {
+        return UseStatementScan::NotAStatement { resume_at: start };
+    }
+    match source[start..].find(';') {
+        Some(rel) => UseStatementScan::Statement {
+            body: source[start..start + rel].trim().to_string(),
+            next: start + rel + 1,
+        },
+        None => UseStatementScan::Unterminated,
+    }
+}
+
 /// Whether the word beginning at `pos` is a raw identifier (`r#word`) — i.e. immediately preceded by
 /// `r#` with a word boundary before the `r`. The single home of the `r#`-prefix test shared by the
 /// keyword boundary check ([`keyword_starts_at`]) and the macro-name check ([`preceding_macro_name`]),

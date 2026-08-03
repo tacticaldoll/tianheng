@@ -445,26 +445,24 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
 /// The raw `use …` statement bodies (the text between `use` and `;`), from declaration-cleaned
 /// source. A lightweight cousin of the `use`-scan's walk, sufficient for glob detection.
 fn use_statements(source: &str) -> Vec<String> {
+    use super::lexer::UseStatementScan;
     let bytes = source.as_bytes();
     let mut trees = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         if super::lexer::keyword_starts_at(bytes, i, b"use") {
-            let start = i + 3;
-            let mut p = start;
-            while p < bytes.len() && bytes[p].is_ascii_whitespace() {
-                p += 1;
+            match super::lexer::scan_use_statement(bytes, source, i) {
+                UseStatementScan::Statement { body, next } => {
+                    trees.push(body);
+                    i = next;
+                    continue;
+                }
+                UseStatementScan::NotAStatement { resume_at } => {
+                    i = resume_at;
+                    continue;
+                }
+                UseStatementScan::Unterminated => break,
             }
-            if bytes.get(p) == Some(&b'<') {
-                i = start; // a `use<…>` precise-capturing bound, not an import
-                continue;
-            }
-            if let Some(rel) = source[start..].find(';') {
-                trees.push(source[start..start + rel].trim().to_string());
-                i = start + rel + 1;
-                continue;
-            }
-            break;
         }
         i += 1;
     }
