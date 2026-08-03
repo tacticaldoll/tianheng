@@ -380,6 +380,33 @@ path as written in the governed source.
 Every signature-coupling fact SHALL separately encode the forbidden subject and the public seam
 roles that make the exposure distinct. Semantic member positions such as tuple-field indices MAY be
 identity-bearing observations; scan order, item ordinal, and renderer fallback position SHALL NOT.
+
+An identity role that resolves a written path SHALL be derived from **all** the candidates that path
+can denote, never from an arbitrarily chosen one. Resolution is cfg-blind by design, so two
+mutually-exclusive `#[cfg]` branches may bind one alias to different targets and both bindings are
+live candidates. Where such a role admits more than one distinct candidate, the system SHALL react
+with a constitution error (exit 2) naming the ambiguity, and SHALL NOT reduce it to a single label:
+two independent sites sharing the alias would otherwise render the identical role, collapse to one
+violation under exact-identity dedup, and let a baseline accepting the first suppress the second's
+never-accepted violation — the false negative the core contract forbids outright. Neither candidate
+may be preferred (only one compiles, and which one is a `cfg` evaluation this dimension does not
+perform), and the candidate set is identical for both sites so it cannot separate them either;
+"cannot judge" is therefore the only remaining honest outcome. The diagnostic SHALL name the
+ambiguity as the cause and SHALL NOT publish the internal sentinel that carries it.
+
+#### Scenario: A cfg-collided self-type alias is a constitution error, not one collapsed violation
+
+- **WHEN** two mutually-exclusive `#[cfg]`-gated `use` declarations bind one alias to different types
+  and each branch implements the same governed trait for that alias
+- **THEN** the system reports a constitution error naming the `#[cfg]` collision and exits 2, rather
+  than rendering both sites onto one owner label and reporting a single violation
+
+#### Scenario: A single aliased self type still resolves
+
+- **WHEN** exactly one `use` declaration binds the alias a governed impl's self type names
+- **THEN** the owner resolves to that target and the violation reacts normally — the ambiguity rule
+  applies to a genuine collision, never to the presence of an alias
+
 An inherent method or associated `const`/`type` seam SHALL additionally encode the **module the impl
 block itself is written in**, distinct from the self type's own canonical owner path: Rust's
 coherence rules let an inherent `impl` for one type be written in any module of the same crate, so

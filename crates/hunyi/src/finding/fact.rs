@@ -465,14 +465,29 @@ fn reject_positional_identity<'a>(
 ) -> Result<(), String> {
     for fact in facts {
         let identity = fact.clone().into_finding("app");
-        if identity
+        // Name the field that failed and WHICH renderer gave up, so the adopter learns what to
+        // change. The sentinel value itself is never echoed: it encodes traversal position for the
+        // unsupported-syntax case, and publishing that is exactly what this gate exists to prevent
+        // (pinned by `!error.contains("_#")` in every fail-loud test). So the cause is named in
+        // words instead, keyed off the sentinel's own shape.
+        if let Some((field, value)) = identity
             .key()
             .fields()
-            .any(|(_, value)| value.contains("_#"))
+            .find(|(_, value)| value.contains("_#"))
         {
-            return Err(
-                "cannot identify semantic fact without a stable structural label".to_string(),
-            );
+            let cause = if value.contains(crate::resolve::AMBIGUOUS_ALIAS_SENTINEL) {
+                "two mutually-exclusive `#[cfg]` branches bind its head to different targets, so no \
+                 single label can name it injectively — resolve the collision, or govern each \
+                 branch's type by its own path"
+            } else {
+                "its syntax has no supported rendering, and scan position must not become identity"
+            };
+            // The original sentence is kept verbatim as the prefix: several fail-loud tests pin it as
+            // the meaning of this reaction, and adding information should not invalidate a contract
+            // they assert correctly. The cause is appended, not substituted.
+            return Err(format!(
+                "cannot identify semantic fact without a stable structural label: '{field}' — {cause}"
+            ));
         }
     }
     Ok(())
