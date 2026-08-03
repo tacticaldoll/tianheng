@@ -53,6 +53,29 @@ pub(crate) fn unknown_trait_error(trait_path: &str, crate_package: &str) -> Stri
     )
 }
 
+/// A trait-impl-locality boundary whose declared anchor reaches more than one distinct local trait
+/// definition through the crate's own `pub use` closure — two mutually-exclusive `#[cfg]` branches
+/// re-exporting different traits under one facade name.
+///
+/// The anchor becomes the violation's `target` and its rule key, so it must denote exactly one trait:
+/// picking one of two would make identity arbitrary, and the declaration itself is what is ambiguous.
+/// The adopter can say which they mean by naming the defining path instead of the facade.
+pub(crate) fn ambiguous_trait_anchor_error(
+    trait_path: &str,
+    crate_package: &str,
+    anchors: &[String],
+) -> String {
+    format!(
+        "a trait-impl-locality boundary must anchor to exactly one trait, but '{trait_path}' in \
+         crate '{crate_package}' reaches {} distinct trait definitions through this crate's own \
+         re-exports ({}) — two mutually-exclusive `#[cfg]` branches re-export different traits \
+         under that name, so the anchor cannot identify one. Declare the defining path instead of \
+         the facade",
+        anchors.len(),
+        anchors.join(", ")
+    )
+}
+
 /// An unsafe-confinement boundary with an empty allowed set — "no `unsafe` anywhere" is
 /// `#![forbid(unsafe_code)]`'s stronger, compile-time job, not this confinement rule's.
 pub(crate) fn unsafe_empty_allowed_error(crate_package: &str) -> String {

@@ -327,6 +327,28 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `AsyncInherentMethod`'s own already-shipped precedent). No DSL, builder, or CLI surface change —
   only the identity `fact` payload gains a field, the identical shape this same `[Unreleased]`
   window's own `governing_package` fix already took (below).
+- **BREAKING**: 渾儀's trait-impl-locality violation identity now uses the **resolved** trait anchor
+  for both its `target` and its rule key, instead of the constitution's declared spelling. Matching
+  already resolved both sides — the declared anchor through the crate's own `pub use` closure, and each
+  impl site's trait path — so only identity kept the raw declaration, and renaming a boundary from a
+  facade spelling to the trait's defining path (a pure refactor: no code change, the same impls still
+  misplaced) gave every affected violation a new `ViolationId`. Each accepted violation re-fired as new
+  while its recorded entry reported stale — the baseline-defeating churn this window has closed twice
+  elsewhere, here reached by editing a declaration rather than by moving a checkout. Two equivalent
+  spellings now converge on one identity. The multi-candidate question that made this design work is
+  answered by refusing rather than picking: a declared anchor whose re-export closure reaches more than
+  one distinct local trait DEFINITION (two mutually-exclusive `#[cfg]` branches re-exporting different
+  traits under one facade) is a constitution error naming both candidates and pointing at the defining
+  path, because the ambiguity is in the declaration and choosing one would make the governed target
+  arbitrary. `allowed_locations` deliberately stays inside the rule key — it is what keeps two
+  boundaries governing the same trait with different allowed sets from collapsing onto one identity for
+  one misplaced impl — and the in-code comment that claimed the opposite ("not part of the violation's
+  identity — so editing the allowed set does not turn a still-misplaced impl into a new violation") is
+  corrected: `ViolationId` compares `rule_key` in full, so editing the allowed set does re-fire
+  still-misplaced impls as new. Loud churn, never masking, and now stated rather than denied.
+  **Any existing `--write-baseline` output for a trait-impl-locality boundary declared through a
+  re-export spelling is stale** and must be regenerated; a boundary that already named the defining
+  path is unaffected. `semantic-trait-impl-locality` gains all three rules with two scenarios.
 - **BREAKING**: 渾儀 now refuses to name an owner whose self-type head two mutually-exclusive
   `#[cfg]` branches bind to different targets, instead of rendering both sites onto whichever
   candidate came first. `#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as
@@ -724,7 +746,10 @@ an adopter reads the work in one place instead of assembling it from five `**BRE
   `owner`/`tracker` annotations forward only where an entry's identity still **matches** (the merge is
   keyed on identity), and each of these identities changed shape, so annotations cannot cross
   automatically: preserve them externally, rewrite the baseline, then restore them onto the newly
-  observed facts. Every previously accepted violation reappears as new exactly once.
+  observed facts. Every previously accepted violation reappears as new exactly once. A sixth case
+  affects only some adopters: a trait-impl-locality boundary declared through a **facade `pub use`
+  spelling** now identifies by the trait's resolved defining path, so its entries move too — a boundary
+  that already named the defining path is untouched.
 - **Expect new entries, not only relabeled ones, for an inbound rule at `ScanDepth::Shallow`.** That
   depth now reacts to an item-form import it silently passed before, so its regenerated baseline can
   legitimately be larger than a relabeling would explain.
