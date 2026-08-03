@@ -563,10 +563,28 @@ fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
 /// merged in — fully intact rather than truncated. `create_baseline_file` above has no pre-existing
 /// content to protect (a crash there simply leaves no file, and the adopter reruns the command), so
 /// only this, the overwrite path, needs the guarantee.
+///
+/// The swap targets the file's symlink-resolved real path and carries over its existing
+/// permissions: `rename` unconditionally replaces whatever sits at its destination, so renaming
+/// onto `path` directly would silently replace a symlinked baseline with a plain file (orphaning
+/// whatever the symlink pointed at) and reset the mode to the temp file's process-umask default,
+/// silently widening permissions an adopter deliberately narrowed — both measured regressions
+/// against this function's own "leaves the previous baseline fully intact" claim. The temp path is
+/// built from the resolved target, not the original `path`, so it always shares the target's
+/// directory (and therefore its filesystem, keeping the rename atomic) even when `path` is a
+/// symlink elsewhere. A write or permissions failure best-effort cleans up the temp file rather
+/// than leaving it stranded.
 fn write_baseline_atomically(path: &str, document: &str) -> std::io::Result<()> {
-    let tmp_path = format!("{path}.tmp-{}", std::process::id());
-    std::fs::write(&tmp_path, document)?;
-    std::fs::rename(&tmp_path, path)
+    let target = std::fs::canonicalize(path)?;
+    let permissions = std::fs::metadata(&target)?.permissions();
+    let tmp_path = format!("{}.tmp-{}", target.display(), std::process::id());
+    let write_result = std::fs::write(&tmp_path, document)
+        .and_then(|()| std::fs::set_permissions(&tmp_path, permissions))
+        .and_then(|()| std::fs::rename(&tmp_path, &target));
+    if write_result.is_err() {
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+    write_result
 }
 
 /// Gate against a baseline: suppress recorded violations, fail only on new ones,
