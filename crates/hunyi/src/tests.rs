@@ -3364,6 +3364,19 @@ fn trait_impl_rejects_a_malformed_colon_allowed_location() {
             "constitution error must name the malformed allowed entry {bad:?}: {err}"
         );
     }
+    // The empty string itself is also a malformed allowed entry — see must_not_expose's
+    // identical note; this shares the same `validate_path_operands` guard.
+    let empty_err = locality_findings(
+        "malformed-allowed-empty",
+        files,
+        "crate::api::Command",
+        &[""],
+    )
+    .unwrap_err();
+    assert!(
+        empty_err.contains("is empty"),
+        "constitution error must flag the empty allowed entry: {empty_err}"
+    );
     // Control: the well-formed spelling for the identical, genuinely-in-place impl still passes
     // clean — the rejection above is a spelling gate, never a locality regression.
     let clean = locality_findings(
@@ -4129,6 +4142,13 @@ fn unsafe_confinement_rejects_a_malformed_colon_allowed_location() {
             "constitution error must name the malformed allowed entry {bad:?}: {err}"
         );
     }
+    // The empty string itself is also a malformed allowed entry — see must_not_expose's
+    // identical note; this shares the same `validate_path_operands` guard.
+    let empty_err = unsafe_labels("malformed-allowed-empty", files, &[""]).unwrap_err();
+    assert!(
+        empty_err.contains("is empty"),
+        "constitution error must flag the empty allowed entry: {empty_err}"
+    );
     // Control: the well-formed spelling for the identical, genuinely-confined site still passes
     // clean — the rejection above is a spelling gate, never a confinement regression.
     let clean = unsafe_labels("malformed-allowed-control", files, &["crate::ffi"]).unwrap();
@@ -5062,6 +5082,13 @@ fn must_not_acquire_rejects_a_malformed_colon_operand() {
             "constitution error must name the malformed operand {bad:?}: {err}"
         );
     }
+    // The empty string itself is also a malformed operand — see must_not_expose's identical note.
+    let empty_err =
+        marker_findings("marker-malformed-empty", files, "crate::domain", &[""]).unwrap_err();
+    assert!(
+        empty_err.contains("is empty"),
+        "constitution error must flag the empty operand: {empty_err}"
+    );
     // Control: the bare spelling still reacts, so the rejection above is a spelling gate, not a
     // general leaf-matching regression.
     let clean = marker_findings(
@@ -9059,6 +9086,21 @@ fn must_not_expose_rejects_a_malformed_colon_operand() {
             "constitution error must name the malformed operand {bad:?}: {err}"
         );
     }
+    // The empty string is also a malformed operand (`has_empty_path_segment` treats
+    // `"".split("::")` as one empty segment) — the shared validator's own doc names this
+    // case, but no call site had ever exercised the literal empty string until now.
+    let empty_err = findings_with_deps(
+        "fn2-malformed-empty",
+        files,
+        "crate::api",
+        &[""],
+        &["serde"],
+    )
+    .unwrap_err();
+    assert!(
+        empty_err.contains("is empty"),
+        "constitution error must flag the empty operand: {empty_err}"
+    );
     // Control: the bare spelling this operand should have been written as still reacts, so the
     // rejection above is a spelling gate, never a general serde-detection regression.
     let clean = findings_with_deps(
@@ -9326,6 +9368,13 @@ fn must_not_expose_dyn_of_rejects_a_malformed_colon_operand() {
             "constitution error must name the malformed operand {bad:?}: {err}"
         );
     }
+    // The empty string itself is also a malformed operand — see must_not_expose's identical note.
+    let empty_err =
+        dyn_operand_findings("dyn-malformed-empty", files, "crate::m", &[""], &[]).unwrap_err();
+    assert!(
+        empty_err.contains("is empty"),
+        "constitution error must flag the empty operand: {empty_err}"
+    );
 }
 
 #[test]
@@ -9505,6 +9554,14 @@ fn must_not_expose_impl_trait_of_rejects_a_malformed_colon_operand() {
             "constitution error must name the malformed operand {bad:?}: {err}"
         );
     }
+    // The empty string itself is also a malformed operand — see must_not_expose's identical note.
+    let empty_err =
+        impl_trait_operand_findings("iop-malformed-empty", files, "crate::m", &[""], &[])
+            .unwrap_err();
+    assert!(
+        empty_err.contains("is empty"),
+        "constitution error must flag the empty operand: {empty_err}"
+    );
 }
 
 /// The subtree-scoped operand path (`including_submodules()`) canonicalizes its own copy of the
@@ -9537,6 +9594,20 @@ fn must_not_expose_impl_trait_of_subtree_rejects_a_malformed_colon_operand() {
             "constitution error must name the malformed operand {bad:?}: {err}"
         );
     }
+    // The empty string itself is also a malformed operand — see must_not_expose's identical note.
+    let empty_err = impl_trait_operand_subtree_findings(
+        tree.src(),
+        &tree.root(),
+        "crate",
+        &[String::new()],
+        "x",
+        &[],
+    )
+    .unwrap_err();
+    assert!(
+        empty_err.contains("is empty"),
+        "constitution error must flag the empty operand: {empty_err}"
+    );
 }
 
 // --- re-export head shadowed by a same-named child module (FP closure) -----
@@ -11635,6 +11706,82 @@ fn impl_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order(
         (
             "api.rs",
             "#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\n#[cfg(unix)]\nuse crate::infra::Port as P;\npub fn f() -> impl P { loop {} }\n",
+        ),
+    ]);
+    let out = crate::impl_trait::impl_trait_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::ImplTrait,
+            subject: "impl P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
+/// The reverse cfg declaration order of `dyn_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order`
+/// above: `#[cfg(unix)]` written first, `#[cfg(not(unix))]` second. Both orderings must resolve
+/// the alias identically — a merge that silently favored "whichever `use` was declared first"
+/// would pass the original test and still be wrong.
+#[test]
+fn dyn_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order_reversed() {
+    let tree = TempSrcTree::new("dyn-trait-principal-cfg-use-merge-reversed");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(unix)]\nuse crate::infra::Port as P;\n#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\npub fn f() -> Box<dyn P> { loop {} }\n",
+        ),
+    ]);
+    let out = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::api",
+        &["crate::infra::Port".to_string()],
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert_eq!(
+        out[0].0,
+        crate::finding::SemanticFact::Exposed {
+            kind: crate::finding::ExposureKind::DynTrait,
+            subject: "dyn P".to_string(),
+            seam: crate::finding::PublicSeam::FreeFn {
+                module: "crate::api".to_string(),
+                name: "f".to_string(),
+            },
+        }
+    );
+}
+
+/// The reverse cfg declaration order of `impl_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order`
+/// above — see the dyn-trait twin's doc comment for why both orders must be pinned separately.
+#[test]
+fn impl_trait_operand_resolution_reacts_regardless_of_cfg_gated_use_alias_order_reversed() {
+    let tree = TempSrcTree::new("impl-trait-principal-cfg-use-merge-reversed");
+    tree.write_all(&[
+        ("lib.rs", "pub mod safe;\npub mod infra;\npub mod api;\n"),
+        ("safe.rs", "pub trait SafePort {}\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "api.rs",
+            "#[cfg(unix)]\nuse crate::infra::Port as P;\n#[cfg(not(unix))]\nuse crate::safe::SafePort as P;\npub fn f() -> impl P { loop {} }\n",
         ),
     ]);
     let out = crate::impl_trait::impl_trait_operand_module_findings(
