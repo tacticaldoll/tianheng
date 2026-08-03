@@ -1,4 +1,9 @@
 /target/
+# cargo-mutants writes its run directory here (and rotates the previous one to
+# `mutants.out.old`). Tool output, never repository content — the useful part of a run is the
+# conclusion recorded in a PR or in BACKLOG.md, not the artifacts.
+/mutants.out/
+/mutants.out.old/
 # Each example is its own workspace; its build artifacts and resolved lockfile are local only. The
 # examples commit the adopter's caret dependency form, like the in-repo fixtures, and carry no lock:
 # a committed one would pin the family to whatever was published when it was generated, so an
