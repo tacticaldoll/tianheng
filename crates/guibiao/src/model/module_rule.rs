@@ -47,6 +47,16 @@ impl ModuleBoundary {
     pub fn rule(&self) -> &ModuleRule {
         &self.rule
     }
+
+    /// The human-readable reason recorded with the boundary (the repair hint).
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// The governed module path (e.g. `"crate::kernel"`).
+    pub fn module(&self) -> &str {
+        &self.module
+    }
 }
 
 /// What a module boundary forbids.
