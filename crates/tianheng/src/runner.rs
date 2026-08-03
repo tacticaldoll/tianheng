@@ -523,7 +523,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     };
     let document = baseline.to_json();
     let write_result = if create_new {
-        create_baseline_file(path, &document).map_err(BaselineWriteError::Io)
+        create_baseline_file(path, &document)
     } else {
         write_baseline_atomically(path, &document)
     };
@@ -544,6 +544,15 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
             );
             EXIT_CANNOT_JUDGE
         }
+        Err(BaselineWriteError::DanglingSymlink { target }) => {
+            eprintln!(
+                "Tianheng: refusing to write baseline {path}: it is a symlink to {}, which does \
+                 not exist. Recreate the target or remove the dangling link, then rerun the \
+                 command.",
+                target.display()
+            );
+            EXIT_CANNOT_JUDGE
+        }
         Err(BaselineWriteError::Io(err))
             if create_new && err.kind() == std::io::ErrorKind::AlreadyExists =>
         {
@@ -560,23 +569,47 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     }
 }
 
-fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
-    OpenOptions::new()
+/// `create_new`'s `O_EXCL` fails on any existing directory entry, including a dangling symlink —
+/// a baseline path whose symlink target does not exist reads as `NotFound` one line up (so this,
+/// the create-new path, runs), then hits `AlreadyExists` here, indistinguishable from a genuine
+/// concurrent creation without checking `symlink_metadata` explicitly. That distinction matters:
+/// a dangling symlink is a permanent state, not a race — "rerun the command" (the concurrent-
+/// creation arm's own remedy) would fail identically forever, so this earns its own diagnosis.
+fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteError> {
+    let write_result = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(path)
-        .and_then(|mut file| file.write_all(document.as_bytes()))
+        .and_then(|mut file| file.write_all(document.as_bytes()));
+    let Err(err) = write_result else {
+        return Ok(());
+    };
+    if err.kind() == std::io::ErrorKind::AlreadyExists {
+        if let Ok(metadata) = std::fs::symlink_metadata(path) {
+            if metadata.file_type().is_symlink() {
+                let target = std::fs::read_link(path)?;
+                return Err(BaselineWriteError::DanglingSymlink { target });
+            }
+        }
+    }
+    Err(err.into())
 }
 
-/// Why [`write_baseline_atomically`] failed. A bare `io::Error` cannot distinguish a stale temp
-/// file left over from an interrupted run (a real, reachable case — a killed process, or a pid
-/// reused across a fresh container) from any other IO failure, and reporting it against the
-/// baseline path (which legitimately already exists — that is the point of an overwrite) rather
-/// than the actual colliding temp path leaves the adopter nothing to act on.
+/// Why [`write_baseline_atomically`] or [`create_baseline_file`] failed. A bare `io::Error` cannot
+/// distinguish a stale temp file left over from an interrupted run (a real, reachable case — a
+/// killed process, or a pid reused across a fresh container), or a dangling symlink (a baseline
+/// path whose target was deleted), from any other IO failure — and reporting either against the
+/// baseline path with a generic message leaves the adopter nothing to act on.
+#[derive(Debug)]
 enum BaselineWriteError {
     /// The temp file's `create_new` open hit something already at that path. Carries the temp
     /// path itself so the caller can name the file that is actually blocking the write.
     TempPathCollision(PathBuf),
+    /// The baseline path is a symlink whose target does not exist. Carries the target so the
+    /// caller can say what it (no longer) points at.
+    DanglingSymlink {
+        target: PathBuf,
+    },
     Io(std::io::Error),
 }
 
