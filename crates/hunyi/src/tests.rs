@@ -5667,6 +5667,98 @@ fn a_symlinked_module_cycle_is_a_scan_error_not_a_stack_overflow() {
     );
 }
 
+/// Unlike the symlinked-cycle case above, this tree is genuinely acyclic — pure inline `mod`
+/// nesting, no repeated canonical file — so `ancestors` alone never catches it (an inline child
+/// never opens a new file and so never grows `ancestors`). Only a native recursion-depth counter
+/// bounds it. Past `MAX_MODULE_DEPTH` levels the walk must fail loud (a scan error naming the
+/// depth bound), never silently recurse into a native stack overflow. 60 levels of nesting is
+/// comfortably past `MAX_MODULE_DEPTH` (32, so the check fires with margin to spare) and
+/// comfortably short of both `syn::parse_file`'s own debug-build recursion limit AND this
+/// walker's own measured 2MB-test-thread crash line (~80-90 levels, unrelated to the fix — see
+/// `MAX_MODULE_DEPTH`'s own doc) — this exercises the depth check itself, not a crash in either
+/// direction. Driven through `forbidden_marker_findings` (`scan_crate` / `walk_module`), matching
+/// the symlink test's own vehicle.
+#[test]
+fn a_deeply_nested_acyclic_module_tree_is_a_scan_error_not_a_stack_overflow() {
+    let depth = 60;
+    let source = format!(
+        "{}pub struct Leaf;{}\n",
+        "pub mod a{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let tree = TempSrcTree::new("deep-acyclic-walk-module");
+    tree.write("lib.rs", &source);
+    let result = forbidden_marker_findings(tree.src(), &tree.root(), "crate", &[], "x");
+    let err = result.expect_err(
+        "a deeply nested but acyclic module tree must be a scan error, not a hang/overflow",
+    );
+    assert!(
+        err.contains("depth bound"),
+        "the error must name the depth bound it could not judge past: {err}"
+    );
+}
+
+/// Same property as above, for `walk_subtree_modules` (`collect_subtree`) — the subtree-scoped
+/// walker `impl_trait_subtree` drives.
+#[test]
+fn a_deeply_nested_acyclic_subtree_walk_is_a_scan_error_not_a_stack_overflow() {
+    let depth = 60;
+    let source = format!(
+        "{}pub struct Leaf;{}\n",
+        "pub mod a{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let files = &[("lib.rs", source.as_str())];
+    let err = impl_trait_subtree("deep-acyclic-subtree", files, "crate")
+        .expect_err("a deeply nested but acyclic subtree walk must be a scan error, not a hang");
+    assert!(
+        err.contains("depth bound"),
+        "the error must name the depth bound it could not judge past: {err}"
+    );
+}
+
+/// Same property as above, for `scan_unsafe_sites` (`walk_unsafe`).
+#[test]
+fn a_deeply_nested_acyclic_unsafe_walk_is_a_scan_error_not_a_stack_overflow() {
+    let depth = 60;
+    let source = format!(
+        "{}pub struct Leaf;{}\n",
+        "pub mod a{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let err = unsafe_labels(
+        "deep-acyclic-unsafe",
+        &[("lib.rs", &source)],
+        &["crate::ffi"],
+    )
+    .expect_err("a deeply nested but acyclic unsafe walk must be a scan error, not a hang");
+    assert!(
+        err.contains("depth bound"),
+        "the error must name the depth bound it could not judge past: {err}"
+    );
+}
+
+/// Control: nesting well under the depth bound (32) is unaffected — the fix must not narrow
+/// ordinary observation. A forbidden marker 20 levels deep still reacts.
+#[test]
+fn a_moderately_nested_module_tree_still_observes_a_real_violation() {
+    let depth = 20;
+    let source = format!(
+        "{}#[derive(serde::Serialize)]\npub struct Order;{}\n",
+        "pub mod a{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let out = marker_findings(
+        "moderate-depth",
+        &[("lib.rs", &source)],
+        "crate",
+        &["serde::Serialize"],
+    )
+    .expect("nesting well under the depth bound must still be judged, not error");
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert!(out[0].contains("Order"), "{out:?}");
+}
+
 #[test]
 fn two_same_named_types_in_different_submodules_stay_distinct() {
     // The review's baseline-collapse blocker: the finding must use the canonical path so
