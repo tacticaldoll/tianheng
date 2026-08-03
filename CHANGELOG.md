@@ -119,9 +119,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   path — a symlink included — letting anything pre-planted there redirect the write onto an
   arbitrary file; `create_new` refuses outright instead. Its path is built from the resolved
   target's raw bytes rather than through lossy display formatting, so a target reached through a
-  non-UTF-8-named directory component no longer fails the overwrite outright. The create-new path
-  (writing a baseline where none existed) is unaffected: it has no pre-existing content to protect,
-  and already fails loud rather than clobbering if the file appears concurrently.
+  non-UTF-8-named directory component no longer fails the overwrite outright. A stale temp file
+  left behind by an interrupted prior run (a killed process, or a pid reused across a fresh
+  container) is a real, reachable case `create_new` also reports — now with its own specific
+  message naming the actual colliding temp path and explaining why it is there, rather than a bare
+  `cannot write baseline <path>: File exists` that names nothing the adopter can act on. The
+  create-new path (writing a baseline where none existed) is unaffected: it has no pre-existing
+  content to protect, and already fails loud rather than clobbering if the file appears
+  concurrently.
 - Bounded native recursion depth across four recursive walkers in three crates, closing the same
   false-negative-adjacent bug class in every observation dimension — a pathologically (but
   genuinely acyclic) nested module tree, `use` tree, or block/macro-arm structure could overflow
