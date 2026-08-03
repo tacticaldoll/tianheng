@@ -51,7 +51,7 @@ pub use guibiao::Constitution as GnomonConstitution;
 // `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
 pub use hunyi::{
     AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
-    SemanticBoundaries, SemanticBoundary, TraitImplBoundary, UnsafeBoundary, VisibilityBoundary,
+    SemanticBoundaries, SignatureBoundary, TraitImplBoundary, UnsafeBoundary, VisibilityBoundary,
     VisibilityCeiling, check as check_semantic,
 };
 // The seven granular per-capability `check_*` entries are hunyi's own public API (a direct caller
@@ -87,8 +87,8 @@ pub use hunyi::{
     AsyncExposureBoundaryDraft, AsyncExposureCrateDraft, AsyncExposureModuleDraft,
     DynTraitBoundaryDraft, DynTraitCrateDraft, DynTraitModuleDraft, ForbiddenMarkerBoundaryDraft,
     ForbiddenMarkerCrateDraft, ForbiddenMarkerModuleDraft, ImplTraitBoundaryDraft,
-    ImplTraitCrateDraft, ImplTraitModuleDraft, SemanticBoundaryDraft, SemanticCrateDraft,
-    SemanticModuleDraft, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
+    ImplTraitCrateDraft, ImplTraitModuleDraft, SignatureBoundaryDraft, SignatureCrateDraft,
+    SignatureModuleDraft, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
     UnsafeBoundaryDraft, UnsafeCrateDraft, VisibilityBoundaryDraft, VisibilityCrateDraft,
     VisibilityModuleDraft,
 };
@@ -141,7 +141,7 @@ impl Constitution {
     }
 
     /// Add a 渾儀 signature-coupling boundary (a module's API must not expose a forbidden type).
-    pub fn signature_boundary(mut self, boundary: SemanticBoundary) -> Self {
+    pub fn signature_boundary(mut self, boundary: SignatureBoundary) -> Self {
         self.semantic.signature.push(boundary);
         self
     }
@@ -250,8 +250,9 @@ pub mod prelude {
         AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
         CrateBoundary, DependencyKind, DynTraitBoundary, Finding, ForbiddenMarkerBoundary,
         GovernanceTest, ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome,
-        Polarity, Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, SemanticBoundary,
-        Severity, SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
-        ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
+        Polarity, Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, Severity,
+        SignatureBoundary, SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary,
+        Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution,
+        run,
     };
 }

@@ -24,6 +24,17 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   fix below in this same window, so it is stated there instead of restated here.)
 
 ### Changed
+- **BREAKING**: renamed 渾儀's `SemanticBoundary` (the signature-coupling DSL's boundary type,
+  `dsl/signature.rs`) to `SignatureBoundary`, along with its draft chain
+  (`SemanticCrateDraft`/`SemanticModuleDraft`/`SemanticBoundaryDraft` →
+  `SignatureCrateDraft`/`SignatureModuleDraft`/`SignatureBoundaryDraft`). `SemanticBoundary` read as
+  if it were the DSL's umbrella type, unlike its 7 siblings (`AsyncExposureBoundary`,
+  `DynTraitBoundary`, `ForbiddenMarkerBoundary`, `ImplTraitBoundary`, `TraitImplBoundary`,
+  `UnsafeBoundary`, `VisibilityBoundary`), which all name their own capability. No behavior, rule
+  string, JSON wire, or CLI change — only the Rust type names an adopter's `Constitution`
+  construction code references. `SemanticBoundaries` (the per-dimension aggregate struct
+  `hunyi::SemanticBoundaries` holding one `Vec` per capability) and every `semantic_*` dimension
+  label are unrelated and unchanged.
 - Internal refactor: 渾儀's three call sites that compose transparent-macro flattening with
   const/fn-body-nested-impl recovery (`scan::flatten_for_walk`,
   `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
@@ -34,6 +45,17 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   one crate-private helper, `resolve::validate_path_operands`, instead of each repeating the
   identical inline check. No public API, wire format, or observable behavior change at these four
   sites.
+- Internal refactor, no public API/wire/behavior change: a large structural-clarity and
+  deduplication pass across 圭表, 渾儀, 漏刻, 星表, and 璇璣 — splitting oversized functions
+  (`module_check::check_module_boundary`, `module_scan/lexer.rs`'s comment/string skipper,
+  `module_resolve::descend`, `scan::resolve_child_modules`/`walk_module`,
+  `exposure::module_findings`, `forbidden_marker_findings`, `finding::into_finding_with_text`,
+  `audit/scan.rs`'s `collect_scope_modules`/`fn_scopes`, `audit::audit_probe_coverage_with_markers`,
+  `runner::dispatch`) and factoring repeated shapes into shared helpers (a `boundary_common!` macro
+  for the 8 rule-DSL files' identical accessors, a shared `ViolationContext`/`push_violation`, a
+  `CapabilitySet` trait replacing 3 independent per-capability enumerations, `delimiter_group_end`
+  for 3 near-identical balanced-delimiter scanners, `Violation::is_active_enforce`, and several
+  smaller extractions). No test count changed in any crate.
 
 ### Fixed
 - **BREAKING**: `PublicSeam::InherentMethod`/`InherentAssoc` now carry the impl **block's own**

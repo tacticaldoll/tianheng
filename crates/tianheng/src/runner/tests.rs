@@ -141,7 +141,7 @@ fn composed_check_preserves_static_error_precedence() {
                 .because("the static target must resolve first"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("xuanji")
+            SignatureBoundary::in_crate("xuanji")
                 .module("crate::no_such_semantic_module")
                 .must_not_expose("crate::Hidden")
                 .because("the later semantic target is also invalid"),
@@ -155,7 +155,7 @@ fn composed_check_preserves_static_error_precedence() {
 
 #[test]
 fn semantic_text_lists_each_boundary() {
-    let boundary = SemanticBoundary::in_crate("app")
+    let boundary = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types");
@@ -166,7 +166,7 @@ fn semantic_text_lists_each_boundary() {
 
 #[test]
 fn including_trait_impls_projects_into_text_json_and_markdown() {
-    let boundary = SemanticBoundary::in_crate("app")
+    let boundary = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .including_trait_impls()
@@ -190,7 +190,7 @@ fn including_trait_impls_projects_into_text_json_and_markdown() {
 
 #[test]
 fn a_bare_boundary_omits_the_opt_in_from_every_projection() {
-    let boundary = SemanticBoundary::in_crate("app")
+    let boundary = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types");
@@ -205,7 +205,7 @@ fn a_bare_boundary_omits_the_opt_in_from_every_projection() {
 
 #[test]
 fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
-    let anchored = SemanticBoundary::in_crate("app")
+    let anchored = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types")
@@ -228,7 +228,7 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
         "text projection must surface the anchor line, like json and markdown"
     );
 
-    let bare = SemanticBoundary::in_crate("app")
+    let bare = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types");
@@ -979,7 +979,7 @@ fn list_document_covers_every_populated_dimension() {
                 .because("core stays light"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("app")
+            SignatureBoundary::in_crate("app")
                 .module("crate::domain")
                 .must_not_expose("crate::infra")
                 .because("no infra leak"),
@@ -1044,7 +1044,7 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
                 .because("the core stays dependency-light"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("app")
+            SignatureBoundary::in_crate("app")
                 .module("crate::domain")
                 .must_not_expose("crate::infra")
                 .because("the domain API must not leak infra"),
@@ -1148,7 +1148,7 @@ fn full_constitution() -> Constitution {
                 .because("core stays light"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("app")
+            SignatureBoundary::in_crate("app")
                 .module("crate::domain")
                 .must_not_expose("crate::infra")
                 .because("no infra leak"),

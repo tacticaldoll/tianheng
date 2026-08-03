@@ -5,7 +5,7 @@
 //! import-governance — a type imported for internal use is fine, but a type named in a `pub`
 //! signature or alias chain is observed.
 //!
-//! Declare a [`SemanticBoundary`] in Rust, [`check`] it against a Cargo workspace, and get
+//! Declare a [`SignatureBoundary`] in Rust, [`check`] it against a Cargo workspace, and get
 //! an [`Outcome`]. The heavy `syn` parser is quarantined to this crate, keeping the functional
 //! core dependency-light (`self_governance.rs`).
 //!
@@ -118,7 +118,7 @@ use crate::visibility::check_visibility_boundary;
 #[derive(Debug, Clone, Default)]
 pub struct SemanticBoundaries {
     /// Exposure boundaries (`semantic-signature-coupling`).
-    pub signature: Vec<SemanticBoundary>,
+    pub signature: Vec<SignatureBoundary>,
     /// Impl-locality boundaries (`semantic-trait-impl-locality`).
     pub trait_impl: Vec<TraitImplBoundary>,
     /// Visibility boundaries (`semantic-visibility-boundary`).
@@ -183,7 +183,7 @@ impl SemanticBoundaries {
         vec![
             Box::new(Capability {
                 boundaries: &self.signature,
-                crate_package: SemanticBoundary::crate_package,
+                crate_package: SignatureBoundary::crate_package,
                 check: check_boundary,
             }),
             Box::new(Capability {

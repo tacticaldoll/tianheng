@@ -16,7 +16,7 @@ use crate::crate_scope::{
     child_module_names, dependency_names, external_crate_set, local_type_namespace_names,
 };
 use crate::driver::run_boundaries;
-use crate::dsl::SemanticBoundary;
+use crate::dsl::SignatureBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
 use crate::file_scope::resolve_crate;
 use crate::finding::{ExposureKind, PathExposure, SemanticFact, sort_faceted_facts};
@@ -38,13 +38,13 @@ use crate::syn_util::{FlatItem, child_module_decls, reexport_externs_for, reexpo
 /// the AST, compare each exposed type against the forbidden set, and return the outcome. An
 /// unresolvable crate or module (or an unreadable/unparseable source) is a constitution
 /// error (exit 2), never a silent pass.
-pub fn check(boundaries: &[SemanticBoundary], manifest_path: &Path) -> Outcome {
+pub fn check(boundaries: &[SignatureBoundary], manifest_path: &Path) -> Outcome {
     run_boundaries(boundaries, manifest_path, check_boundary)
 }
 
 pub(crate) fn check_boundary(
     metadata: &Value,
-    boundary: &SemanticBoundary,
+    boundary: &SignatureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     let (package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;

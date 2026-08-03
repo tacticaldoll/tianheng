@@ -14,11 +14,11 @@ default (see `semantic-reexport-exposure`).
 ## Requirements
 ### Requirement: Semantic boundary declared in Rust
 
-A semantic boundary SHALL be expressed as Rust code and is part of the single source of truth. Because the dependency architecture forbids a dimension from depending on another dimension's engine, each dimension owns its own declaration DSL and the static and semantic declarations are **composed at the gate** rather than held in one unified `Constitution` object (a unified object would have to live below both engines and drag the declaration DSL into the dimension-agnostic reaction model). A `SemanticBoundary` SHALL name a governed anchor — **a module path within a target crate** — a forbidden-type set, a human-readable reason, and a severity. A *type*-path anchor is out of scope for this capability and reserved for a separate future capability (a type's exposed surface needs its own specification). The system MUST NOT require TOML, YAML, Markdown, or any generated policy file to declare or run a semantic boundary.
+A semantic boundary SHALL be expressed as Rust code and is part of the single source of truth. Because the dependency architecture forbids a dimension from depending on another dimension's engine, each dimension owns its own declaration DSL and the static and semantic declarations are **composed at the gate** rather than held in one unified `Constitution` object (a unified object would have to live below both engines and drag the declaration DSL into the dimension-agnostic reaction model). A `SignatureBoundary` SHALL name a governed anchor — **a module path within a target crate** — a forbidden-type set, a human-readable reason, and a severity. A *type*-path anchor is out of scope for this capability and reserved for a separate future capability (a type's exposed surface needs its own specification). The system MUST NOT require TOML, YAML, Markdown, or any generated policy file to declare or run a semantic boundary.
 
 #### Scenario: Semantic boundary declared in Rust
 
-- **WHEN** a developer writes `SemanticBoundary::in_crate("app").module("crate::domain").must_not_expose("crate::infra").because("the domain API must not leak infrastructure types")`
+- **WHEN** a developer writes `SignatureBoundary::in_crate("app").module("crate::domain").must_not_expose("crate::infra").because("the domain API must not leak infrastructure types")`
 - **THEN** a semantic boundary is held, anchored to `crate::domain` in crate `app`, forbidding exposure of `crate::infra`, with a non-empty reason and a default `enforce` severity, ready to be composed with the static boundaries at the gate
 
 ### Requirement: Anchor resolution

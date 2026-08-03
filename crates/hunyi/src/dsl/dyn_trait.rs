@@ -3,7 +3,7 @@
 use xuanji::{RuleKey, Severity};
 
 /// A dyn-trait boundary: a module's public API must not **expose** trait-object (`dyn`)
-/// syntax. The type-shape complement of [`SemanticBoundary`] (signature-coupling): where
+/// syntax. The type-shape complement of [`SignatureBoundary`] (signature-coupling): where
 /// that forbids an exposed *named type*, this forbids an exposed *type shape* — a `dyn`
 /// node at any depth in the governed public surface. Internal `dyn` is never a violation —
 /// this governs exposure across the declared seam, not internal dynamic dispatch, so it is
@@ -16,7 +16,7 @@ use xuanji::{RuleKey, Severity};
 /// - [`must_not_expose_dyn_of`](DynTraitModuleDraft::must_not_expose_dyn_of) — **operand-scoped**:
 ///   only a `dyn` whose principal trait resolves into the named `forbidden_operands` set reacts.
 ///
-/// [`SemanticBoundary`]: crate::SemanticBoundary
+/// [`SignatureBoundary`]: crate::SignatureBoundary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynTraitBoundary {
     pub(crate) crate_package: String,

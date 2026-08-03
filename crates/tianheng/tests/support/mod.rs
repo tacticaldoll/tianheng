@@ -71,7 +71,7 @@ pub fn guibiao_exit(package: &str, manifest: &Path, module: &str, reason: &str) 
 /// 渾儀's exit code for a `must_not_expose("crate::forbidden::Thing")` boundary on `module` — the
 /// semantic-dimension twin of [`guibiao_exit`] above.
 pub fn hunyi_exit(package: &str, manifest: &Path, module: &str, reason: &str) -> u8 {
-    let boundary = hunyi::SemanticBoundary::in_crate(package)
+    let boundary = hunyi::SignatureBoundary::in_crate(package)
         .module(module)
         .must_not_expose("crate::forbidden::Thing")
         .because(reason);

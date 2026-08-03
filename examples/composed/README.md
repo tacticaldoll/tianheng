@@ -19,7 +19,7 @@ louke    = "0.3"   # the runtime dimension's prod face — you wire it into your
 Constitution::new("composed_app")
     .boundary(ModuleBoundary::in_crate("composed_app")           // 圭表 (static)
         .module("crate::domain").must_not_import("crate::infra").because(…))
-    .signature_boundary(SemanticBoundary::in_crate("composed_app") // 渾儀 (semantic)
+    .signature_boundary(SignatureBoundary::in_crate("composed_app") // 渾儀 (semantic)
         .module("crate::api").must_not_expose("crate::infra::DbPool").because(…))
     .runtime(RuntimeBoundary::at("adapter-seam")                 // 漏刻 (runtime)
         .only_origins(["composed_app::adapters::blessed"]).because(…))

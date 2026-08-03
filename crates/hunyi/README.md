@@ -60,12 +60,12 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
 
 ```rust
 use hunyi::{
-    SemanticBoundary, TraitImplBoundary, VisibilityBoundary, ForbiddenMarkerBoundary,
+    SignatureBoundary, TraitImplBoundary, VisibilityBoundary, ForbiddenMarkerBoundary,
     DynTraitBoundary, ImplTraitBoundary, AsyncExposureBoundary,
 };
 
 // exposure: my-app's public API must not leak crate::infra::DbPool
-let expose = SemanticBoundary::in_crate("my-app")
+let expose = SignatureBoundary::in_crate("my-app")
     .module("crate::api")
     .must_not_expose("crate::infra::DbPool")
     .because("the API must not leak the database pool");
