@@ -56,7 +56,7 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   once. Observation source: that review's reproduction, described above. Current bound:
   `canonical_self_owner`/`canonical_self_owner_without_fallback`
   (`crates/hunyi/src/resolve/shape.rs`) and `canonical_unsafe_owner`
-  (`crates/hunyi/src/scan.rs`) each render a label from a single resolved candidate,
+  (`crates/hunyi/src/scan/unsafe_sites.rs`) each render a label from a single resolved candidate,
   cfg-blind, feeding straight into a dedup key. Risk: a real, enforce-severity
   violation is silently lost whenever this exact cfg-collision shape occurs — a false
   negative, the one bug class PROJECT.md's Core Contract forbids outright — but the
@@ -93,23 +93,30 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   body; the stated bound is also pinned in `crates/louke/src/finding.rs`/`audit.rs`'s own
   doc comments and `openspec/specs/runtime-origin-assertion/spec.md`.
 
-- **`InherentGenerics` seam identity has no per-block distinguisher, contradicting its
-  own doc comment.** Class: DESIGN-BREAKING. Observed pressure: verified real during
+- **`InherentGenerics` seam identity has no per-block distinguisher WITHIN one module.**
+  Class: DESIGN-BREAKING. Observed pressure: verified real during
   0.3.1 sweep cleanup (2026-08-02/03) — two separate inherent impl blocks on the same
   type, each exposing the same forbidden subject through a different where-clause
   bound, collapse to one violation. Observation source: direct reproduction against
-  `hunyi::check` (`crates/hunyi/src/collect.rs`'s inherent-generics collector) — described
-  above. Current bound: `PublicSeam::InherentGenerics`
-  is keyed on `{owner}` only, despite its own adjacent doc comment claiming it stays
-  "distinct... from another block's generics" — that claim does not hold; owner-qualification
-  distinguishes different types, not different impl blocks of the same type. Risk: a
-  false negative on a narrow idiom (multiple inherent impl blocks on one type, each with
-  its own where-clause bound exposing a forbidden type) — not yet observed as adopter
-  pressure. Promotion trigger: a real per-block distinguisher (an impl-block ordinal or
-  a stable rendering of the block's own where-clause) added to `PublicSeam::InherentGenerics`
-  — real design work, since a *stable* (not source-position-fragile) distinguisher is
-  itself a design decision. Version class: DESIGN-BREAKING. Authority: this entry's own
-  reproduction record (above).
+  `hunyi::check` (`crates/hunyi/src/collect/exposure.rs`'s inherent-generics collector) —
+  described above. Current bound: `PublicSeam::InherentGenerics` is keyed on
+  `{module, owner}`. The **cross-module** half of this entry is CLOSED — the module role was
+  added in the 0.4.0 window, after an independent review re-derived it, and the adjacent doc
+  comment that wrongly claimed owner-qualification alone kept the seam "distinct... from
+  another block's generics" was corrected in the same change. What remains is strictly
+  narrower: two impl blocks for the same owner **in the same module** still resolve to one
+  seam, since owner-plus-module distinguishes where an impl is written, not which block it is.
+  Risk: a false negative on a narrow idiom (two inherent impl blocks on one type in one
+  module, each with its own where-clause bound exposing a forbidden type) — not yet observed
+  as adopter pressure, and one step narrower than when this entry was written. Promotion
+  trigger: a real per-block distinguisher added to `PublicSeam::InherentGenerics` — real
+  design work, and constrained rather than open: `semantic-signature-coupling` forbids
+  identity from resting on "scan order, item ordinal, and renderer fallback position", so an
+  impl-block ordinal is NOT available as the distinguisher and a stable structural key (a
+  rendering of the block's own generics, say) has to be designed and its collision behavior
+  argued. Version class: DESIGN-BREAKING. Authority: this entry's own reproduction record
+  (above); `openspec/specs/semantic-signature-coupling/spec.md`'s ordinal prohibition for the
+  constraint on the trigger.
 
 - **Trait-impl-locality's violation target/rule-key reads the constitution's declared
   trait spelling instead of the already-resolved canonical anchor.** Class:
@@ -176,7 +183,7 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     while 圭表/渾儀 continue to govern the same subtree — `try_visit`'s cycle guard possibly
     bypassed by a second, weaker guard specific to the audit walker. Observed once during the
     0.3.1 adversarial sweep, single lens, never independently re-tested.
-    (`crates/louke/src/audit/scan.rs`.) Promotion trigger: reproduce directly (a real symlinked
+    (`crates/louke/src/audit/scan/probes.rs`.) Promotion trigger: reproduce directly (a real symlinked
     subdirectory containing a probed seam) before acting.
   - `xingbiao::crate_root_file` may collapse a multi-root package (a manifest declaring more
     than one crate root, e.g. via `[[bin]]`/`[lib]` combinations) to a single resolved root, so
@@ -204,13 +211,14 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     compatibility evidence recorded in `CHANGELOG.md`.
 - **ACCEPTED DEBT:**
   - Multi-target conventional-path conflation.
-  - Macro/configuration coverage bounds. Two named residuals after 渾儀 gained `cfg_if!`
-    transparency: it covers **item position** only (an invocation inside an `impl`/`trait` body holds
-    impl items, needing a parallel flattening across ~10 body walkers — measured, pinned by
-    `a_cfg_if_inside_an_impl_body_is_a_stated_bound`), and 漏刻 has no transparency at all yet (its
-    byte scanner reads macro bodies in two independent passes and would need 圭表's brace-kind model
-    in both). Each is its own change with its own spike; `cfg_if_transparency_conformance.rs` states
-    in its module doc that it pins two of three dimensions until 漏刻's lands.
+  - Macro/configuration coverage bounds. **One** named residual now that all three dimensions read
+    `cfg_if!` arms: transparency covers **item position** only — an invocation inside an
+    `impl`/`trait` body holds impl items, needing a parallel flattening across ~10 body walkers
+    (measured, pinned by `a_cfg_if_inside_an_impl_body_is_a_stated_bound`). 漏刻's own lack of
+    transparency, listed here as the second residual, is CLOSED: its byte scanner reads arm contents
+    as real code in both passes, and `cfg_if_transparency_conformance.rs` now pins all three
+    dimensions on the one fixture rather than two of three — its module doc already says so, and this
+    entry was the site left behind.
   - File-granular un-auditable-probe identity.
   - **The baseline directory flush has no reacting test, by construction.** `sync_parent_dir` is
     infallible and best-effort on purpose — a platform or filesystem that cannot flush a directory
@@ -270,11 +278,11 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     feature unification is `cargo-deny`'s lane, per this file's own architecture decision), and
     separately the specific reproduction's classification didn't hold either.
   - "A `cfg_attr`-wrapped `#[path]` target is never enqueued, so the relocated file's typo'd /
-    un-auditable probes are silently skipped" (0.3.1 sweep, `crates/louke/src/audit/scan.rs`).
+    un-auditable probes are silently skipped" (0.3.1 sweep, `crates/louke/src/audit/scan/probes.rs`).
     Refuted: a stated bound spelled out in three places (spec, public API doc, `CHANGELOG.md`)
     and pinned by a deliberate test, not introduced by the diff under audit.
   - "`first_macro_arg_end` truncates an `as`-cast generic, merging two textually distinct
-    un-auditable probes into one finding" (0.3.1 sweep, `crates/louke/src/audit/scan.rs`).
+    un-auditable probes into one finding" (0.3.1 sweep, `crates/louke/src/audit/scan/lexer.rs`).
     Mechanics reproduce at the byte-scanner level, but the trigger is not reachable from
     compilable adopter input — refuted on the reproduction lens.
 - **BUILT / HISTORY:**
