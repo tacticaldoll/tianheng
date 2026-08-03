@@ -654,6 +654,30 @@ fn fixture(name: &str) -> String {
         .into_owned()
 }
 
+/// [`fixture`], but `None` when that fixture is absent — e.g. inside a published `.crate` tarball,
+/// which ships no fixture packages at all (`cargo package` omits any nested directory carrying its
+/// own `Cargo.toml`, and every fixture is its own workspace).
+///
+/// Only a test that asserts a **successful** run needs this: a usage error is decided during parsing,
+/// before any manifest is read, so those assertions hold with or without the fixture and use
+/// [`fixture`] directly. CI sets `TIANHENG_WORKSPACE_TESTS=1` to turn an absence into a LOUD failure
+/// there rather than a silent skip of the gate, exactly as [`workspace_manifest`] does.
+fn fixture_manifest(name: &str) -> Option<String> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+        .join("Cargo.toml");
+    if path.exists() {
+        return Some(path.to_string_lossy().into_owned());
+    }
+    assert!(
+        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+        "the {name} fixture is expected but absent while TIANHENG_WORKSPACE_TESTS is set — a \
+         successful-run gate must not silently skip in CI"
+    );
+    None
+}
+
 /// The Tianheng workspace manifest, two levels up. `None` when it is absent — e.g. inside a
 /// published `.crate` tarball, which has no workspace root — so the workspace-dependent
 /// dispatch tests below SKIP rather than fail when the crate is tested standalone. In the
@@ -1930,14 +1954,18 @@ fn write_baseline_rejects_a_flag_that_cannot_apply_to_it() {
 #[test]
 fn write_baseline_still_accepts_the_flags_that_do_apply() {
     // The other direction, so the rule above cannot quietly grow into "write-baseline rejects
-    // everything": the action's own flags still work, and a plain write still exits 0.
+    // everything": the action's own flags still work, and a plain write still exits 0. This one
+    // asserts a SUCCESSFUL run, so it needs the fixture to exist (see `fixture_manifest`).
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
     let out = TempPath::named("applicable-flag-baseline");
     assert_eq!(
         run_args(&[
             "tianheng",
             "check",
             "--manifest-path",
-            &fixture("clean"),
+            &manifest,
             "--write-baseline",
             &out.path().to_string_lossy(),
         ]),
@@ -2000,13 +2028,18 @@ fn a_value_taking_flag_given_more_than_once_is_a_usage_error() {
         );
     }
     // A repeated BOOLEAN is not this mistake and stays accepted: the second occurrence asks for
-    // exactly what the first already set, so nothing the invocation supplied is dropped.
+    // exactly what the first already set, so nothing the invocation supplied is dropped. This is the
+    // one assertion here that needs a successful run, hence a real fixture (see `fixture_manifest`);
+    // every assertion above is decided during parsing, before any manifest is read.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
     assert_eq!(
         run_args(&[
             "tianheng",
             "check",
             "--manifest-path",
-            &fixture("clean"),
+            &manifest,
             "--warn-uncovered",
             "--warn-uncovered",
         ]),
