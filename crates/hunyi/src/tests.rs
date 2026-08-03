@@ -6554,6 +6554,153 @@ fn impl_trait_subtree_two_platform_modules_impling_the_same_owner_stay_distinct(
     }
 }
 
+/// The same BACKLOG false negative the impl-trait test above pins, for signature-coupling:
+/// neither signature-coupling nor dyn-trait has a subtree scanner that can observe two modules
+/// in one evaluation (impl-trait is the one capability that does), so this proves the identical
+/// property the other way — two independent module-scoped evaluations, one per platform module,
+/// must produce distinct STRUCTURED IDENTITY (the `SemanticFact`, which feeds
+/// `StructuredFactIdentity` via `PublicSeam::key_fields`'s `seam_module`) even though `Display`
+/// deliberately renders the same text for both (see `PublicSeam::InherentMethod`'s own doc
+/// comment: "Identity-only: `Display` ignores it"). An earlier draft of this test compared the
+/// rendered strings instead of the fact identity and failed — not because production is broken,
+/// but because the rendered message is intentionally module-blind while the baseline identity is
+/// not; comparing `SemanticFact` values (as production's own dedup does) is the correct check.
+#[test]
+fn signature_coupling_two_platform_modules_impling_the_same_owner_stay_distinct() {
+    let tree = TempSrcTree::new("sig-two-platform-modules");
+    tree.write_all(&[
+        (
+            "lib.rs",
+            "pub mod common;\npub mod infra;\npub mod plat_unix;\npub mod plat_win;\n",
+        ),
+        ("common.rs", "pub struct Conn;\n"),
+        ("infra.rs", "pub struct Secret;\n"),
+        (
+            "plat_unix.rs",
+            "use crate::common::Conn;\nimpl Conn { pub fn describe(&self) -> crate::infra::Secret { todo!() } }\n",
+        ),
+        (
+            "plat_win.rs",
+            "use crate::common::Conn;\nimpl Conn { pub fn describe(&self) -> crate::infra::Secret { todo!() } }\n",
+        ),
+    ]);
+    let forbidden = vec!["crate::infra::Secret".to_string()];
+    let unix = crate::exposure::module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::plat_unix",
+        &forbidden,
+        "x",
+        false,
+        &[],
+    )
+    .unwrap();
+    let win = crate::exposure::module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::plat_win",
+        &forbidden,
+        "x",
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(unix.len(), 1, "{unix:?}");
+    assert_eq!(win.len(), 1, "{win:?}");
+    // Same rendered text (Display is module-blind by design)...
+    assert_eq!(unix[0].0.to_string(), win[0].0.to_string());
+    // ...but distinct structured identity, which is what baseline dedup actually keys on.
+    assert_ne!(
+        unix[0].0, win[0].0,
+        "two impl blocks for the same owner in different modules must not collapse to one \
+         structured fact: {unix:?} vs {win:?}"
+    );
+}
+
+/// Same property as above, for dyn-trait's operand-scoped resolver.
+#[test]
+fn dyn_trait_two_platform_modules_impling_the_same_owner_stay_distinct() {
+    let tree = TempSrcTree::new("dyn-two-platform-modules");
+    tree.write_all(&[
+        (
+            "lib.rs",
+            "pub mod common;\npub mod infra;\npub mod plat_unix;\npub mod plat_win;\n",
+        ),
+        ("common.rs", "pub struct Conn;\n"),
+        ("infra.rs", "pub trait Port {}\n"),
+        (
+            "plat_unix.rs",
+            "use crate::common::Conn;\nimpl Conn { pub fn make(&self) -> Box<dyn crate::infra::Port> { todo!() } }\n",
+        ),
+        (
+            "plat_win.rs",
+            "use crate::common::Conn;\nimpl Conn { pub fn make(&self) -> Box<dyn crate::infra::Port> { todo!() } }\n",
+        ),
+    ]);
+    let forbidden = vec!["crate::infra::Port".to_string()];
+    let unix = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::plat_unix",
+        &forbidden,
+        "x",
+        &[],
+    )
+    .unwrap();
+    let win = crate::dyn_trait::dyn_operand_module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::plat_win",
+        &forbidden,
+        "x",
+        &[],
+    )
+    .unwrap();
+    assert_eq!(unix.len(), 1, "{unix:?}");
+    assert_eq!(win.len(), 1, "{win:?}");
+    assert_eq!(unix[0].0.to_string(), win[0].0.to_string());
+    assert_ne!(
+        unix[0].0, win[0].0,
+        "two impl blocks for the same owner in different modules must not collapse to one \
+         structured fact: {unix:?} vs {win:?}"
+    );
+}
+
+/// Same property as the two tests above, for the `InherentAssoc` seam kind itself (assoc
+/// `const`/`type`), which — unlike `InherentMethod` — had no two-module regression test at all
+/// before this, in any capability. Mirrors `dyn_in_an_inherent_impl_public_assoc_const_reacts`'s
+/// fixture shape, split across two platform modules for the same owner.
+#[test]
+fn dyn_inherent_assoc_const_two_platform_modules_impling_the_same_owner_stay_distinct() {
+    let tree = TempSrcTree::new("assoc-two-platform-modules");
+    tree.write_all(&[
+        ("lib.rs", "pub mod common;\npub mod plat_unix;\npub mod plat_win;\n"),
+        ("common.rs", "pub struct Config;\n"),
+        (
+            "plat_unix.rs",
+            "use crate::common::Config;\nimpl Config { pub const DEFAULT: &dyn crate::Port = todo!(); }\n",
+        ),
+        (
+            "plat_win.rs",
+            "use crate::common::Config;\nimpl Config { pub const DEFAULT: &dyn crate::Port = todo!(); }\n",
+        ),
+    ]);
+    let unix =
+        crate::dyn_trait::dyn_module_findings(tree.src(), &tree.root(), "crate::plat_unix", "x")
+            .unwrap();
+    let win =
+        crate::dyn_trait::dyn_module_findings(tree.src(), &tree.root(), "crate::plat_win", "x")
+            .unwrap();
+    assert_eq!(unix.len(), 1, "{unix:?}");
+    assert_eq!(win.len(), 1, "{win:?}");
+    assert_eq!(unix[0].0.to_string(), win[0].0.to_string());
+    assert_ne!(
+        unix[0].0, win[0].0,
+        "two impl blocks for the same owner in different modules must not collapse to one \
+         structured fact: {unix:?} vs {win:?}"
+    );
+}
+
 #[test]
 fn impl_trait_subtree_tolerates_a_cfg_gated_fileless_submodule() {
     let files = &[
