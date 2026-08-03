@@ -411,10 +411,14 @@ pub(crate) fn collect_item_exposures(
             // public contract for the inherent API (`impl<T: crate::infra::Secret> Foo<T> { … }`),
             // observed like a struct/enum/type def's generics (paths_in_generics_scoped) and the
             // trait-impl collector's where-walk. Owner-qualified so it stays distinct from the
-            // block's methods / assoc items and from another block's generics.
+            // block's methods / assoc items, and module-qualified — like the sibling method /
+            // assoc seams below — so two blocks for the SAME owner written in two different
+            // modules stay distinct too: an owner names what the impl is for, never where it is
+            // written, and inherent impls carry no coherence exclusion to lean on.
             out.extend(tag_paths(
                 paths_in_generics_scoped(&item.generics, &impl_params),
                 &PublicSeam::InherentGenerics {
+                    module: module.to_string(),
                     owner: owner.clone(),
                 },
             ));
@@ -472,7 +476,10 @@ pub(crate) fn collect_item_exposures(
         syn::Item::ExternCrate(item) if is_public(&item.vis) && item.ident != "self" => {
             let name = strip_raw(&item.ident.to_string());
             out.push(PathExposure {
-                seam: PublicSeam::ExternCrate { name },
+                seam: PublicSeam::ExternCrate {
+                    module: module.to_string(),
+                    name,
+                },
                 path: syn::Path::from(item.ident.clone()),
                 is_reexport: true,
             });

@@ -178,9 +178,12 @@ pub(crate) fn collect_item_dyn_exposures(
             // (`impl<T: AsRef<Box<dyn crate::Port>>> Foo<T>`) is exposed on the inherent API — the
             // sibling path collector observes this position (via paths_in_generics_scoped), so the dyn rule
             // must not lag it. Parallel to the struct/enum/trait arms, which already walk generics.
+            // Module-qualified for the same reason the sibling method seam below is: two inherent
+            // impl blocks for one owner may be written in two different modules.
             out.extend(stamp_seam(
                 dyns_in_generics(&item.generics),
                 &PublicSeam::InherentGenerics {
+                    module: module.to_string(),
                     owner: owner.clone(),
                 },
             ));

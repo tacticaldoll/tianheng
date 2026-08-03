@@ -283,6 +283,32 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `AsyncInherentMethod`'s own already-shipped precedent). No DSL, builder, or CLI surface change —
   only the identity `fact` payload gains a field, the identical shape this same `[Unreleased]`
   window's own `governing_package` fix already took (below).
+- **BREAKING**: `PublicSeam::InherentGenerics` and `PublicSeam::ExternCrate` now carry their
+  declaring module too — the two seam shapes the fix above left behind, found by re-reviewing that
+  fix's own reasoning against every shape in the vocabulary rather than only the ones it touched.
+  They were the only two of the eleven that carried no module at all, and both are reachable by two
+  distinct source sites with identical identity: an impl block's own generics seam
+  (`impl<T: crate::infra::Secret> Conn<T>` written once in `plat_unix` and once in `plat_win`) is
+  distinguished by nothing but its owner, since — unlike a method or an associated item — it has no
+  item name to fall back on, and `pub extern crate <dep>;` is legal in more than one module of one
+  crate, where the republished crate's name was the whole identity. Either shape collapsed two real
+  violations into one, so a baseline accepting the first silently suppressed the second's
+  never-accepted violation: the false negative PROJECT.md's Core Contract forbids outright. Like the
+  fix above, this closes a structural gap rather than a second live report — signature-coupling and
+  dyn-trait, the two capabilities that build these seams, still observe one module per evaluation —
+  and it is closed now for the same reason: the exclusion that makes it unreachable is an accident of
+  today's walkers, not a property of the identity. A trait `impl` seam deliberately stays
+  module-free, and that is now stated as the coherence argument it is rather than left silent: its
+  trait reference and owner both carry their rendered generic arguments, and Rust rejects two impls of
+  the same trait — same arguments — for one self type anywhere in a crate, so two coexisting blocks
+  already differ in one of those roles. **Any existing `--write-baseline` output for an
+  `inherent_generics`- or `extern_crate`-seam finding is now stale** (each fact gained a required
+  field) and must be regenerated; every previously accepted violation reappears as new exactly once.
+  Rendered finding text is unchanged in both cases (identity-only, the same precedent), and no DSL,
+  builder, or CLI surface changes. The seam-coverage fixture now carries a colliding pair for each
+  shape, so the existing injectivity assertion — not a new hand-maintained rule — is what fails if
+  either module role is dropped again, and each of the three construction sites has its own live
+  two-module reaction test, since the fixture alone would let a site pass a module-blind constant.
 - 渾儀 now rejects a forbidden/allowed operand whose `::`-delimited spelling has an empty segment
   (a leading `::`, a trailing `::`, a doubled `::`, or the empty string) as a constitution error,
   across `must_not_expose`/`and_not_expose`, `must_not_expose_dyn_of`, `must_not_expose_impl_trait_of`

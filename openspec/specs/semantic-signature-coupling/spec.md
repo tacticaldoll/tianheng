@@ -389,6 +389,32 @@ one seam. This module role is on behalf of every capability that builds an inher
 seam through the shared `PublicSeam` vocabulary (dyn-trait, impl-trait), not signature-coupling
 alone, matching how this spec already states shared anchor-resolution properties on their behalf.
 
+The same module role SHALL be encoded by an **impl block's own generics** seam (the block's
+generic-parameter bounds and `where`-clause) and by a **`pub extern crate`** re-export seam, for the
+identical reason and with no per-item name to fall back on: an impl block's generics seam is
+distinguished by nothing but its owner and that module, and one crate may republish the same external
+crate root from more than one module. A trait `impl` seam SHALL NOT require the module role, and that
+exclusion is a coherence argument rather than an omission: its trait reference and owner both carry
+their rendered generic arguments, and Rust rejects two impls of the same trait — same arguments — for
+the same self type anywhere in one crate, wherever they are written, so two coexisting blocks already
+differ in one of those two roles. **Every** seam role that is not forced distinct by the language
+SHALL therefore carry its declaring module; a seam whose whole identity is a crate-wide name is not
+an identity.
+
+#### Scenario: Two impl blocks in different modules for the same owner stay distinct generics seams
+
+- **WHEN** two sibling modules each write `impl<T: crate::infra::Secret> Conn<T> { … }` for a `Conn`
+  declared in a third module, so the two blocks' own generics carry the identical forbidden bound
+- **THEN** the two impl sites produce two distinct seams, qualified by each impl block's own
+  declaring module, so accepting one does not mask the other — the generics-position sibling of the
+  inherent-method guarantee above, in the one seam that has no item name to distinguish it
+
+#### Scenario: Two modules republishing one external crate stay distinct
+
+- **WHEN** two modules of one crate each declare `pub extern crate <dep>;` for the same dependency
+- **THEN** the two re-exports produce two distinct seams, qualified by the declaring module, rather
+  than collapsing onto the republished crate's name
+
 #### Scenario: Two exposed seams stay distinct
 - **WHEN** the same forbidden subject appears at two public seams
 - **THEN** their structured seam roles differ and accepting one does not mask the other

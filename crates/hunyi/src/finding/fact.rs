@@ -784,17 +784,21 @@ mod fact_tests {
                 ("seam_trait", trait_name),
                 ("seam_name", name),
             ],
-            PublicSeam::InherentGenerics { owner } => {
-                vec![("seam_kind", "inherent_generics"), ("seam_owner", owner)]
-            }
+            PublicSeam::InherentGenerics { module, owner } => vec![
+                ("seam_kind", "inherent_generics"),
+                ("seam_module", module),
+                ("seam_owner", owner),
+            ],
             PublicSeam::Reexport { module, exported } => vec![
                 ("seam_kind", "reexport"),
                 ("seam_module", module),
                 ("seam_name", exported),
             ],
-            PublicSeam::ExternCrate { name } => {
-                vec![("seam_kind", "extern_crate"), ("seam_name", name)]
-            }
+            PublicSeam::ExternCrate { module, name } => vec![
+                ("seam_kind", "extern_crate"),
+                ("seam_module", module),
+                ("seam_name", name),
+            ],
             PublicSeam::TraitImpl {
                 trait_ref,
                 owner,
@@ -1123,6 +1127,15 @@ mod fact_tests {
                 name: "Value".into(),
             },
             PublicSeam::InherentGenerics {
+                module: "crate::api".into(),
+                owner: "crate::Api".into(),
+            },
+            // Same owner, different declaring module — the sibling of the two-module
+            // `InherentMethod` case above, for an impl block's OWN generics. Rust permits two
+            // inherent impl blocks for one self type in two modules, and nothing but the module
+            // distinguishes their generics seams.
+            PublicSeam::InherentGenerics {
+                module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
             },
             PublicSeam::Reexport {
@@ -1130,6 +1143,13 @@ mod fact_tests {
                 exported: "Port".into(),
             },
             PublicSeam::ExternCrate {
+                module: "crate::api".into(),
+                name: "port".into(),
+            },
+            // Same republished crate, different declaring module: `pub extern crate port;` is
+            // legal in each of two modules, so the crate name alone is not an identity.
+            PublicSeam::ExternCrate {
+                module: "crate::other_api".into(),
                 name: "port".into(),
             },
             PublicSeam::TraitImpl {
