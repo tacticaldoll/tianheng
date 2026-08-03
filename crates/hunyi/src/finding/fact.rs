@@ -811,34 +811,86 @@ mod fact_tests {
         }
     }
 
-    /// Every `PublicSeam` variant's `seam_kind` label, matched exhaustively over the variant shape
-    /// (fields ignored) — a duplicate of the literal `published_seam_fields` embeds per arm above,
-    /// kept only because that function's return type does not prove the "seam_kind" slot is
-    /// `'static`. Exhaustiveness is the forcing function this exists for: a new `PublicSeam`
-    /// variant fails to compile here until an arm is added, which is the cue to also add a
-    /// representative to `seams` in `every_public_seam_shape_is_named_and_identity_injective`
-    /// below — previously nothing tied a new variant to that fixture at all, only to the
-    /// (already-exhaustive) schema matches above.
-    fn seam_kind(seam: &PublicSeam) -> &'static str {
+    /// The closed set of `PublicSeam` shapes, as its own type rather than a bare string label. Two
+    /// properties come from that: a typo cannot invent a phantom shape the way a free-form label
+    /// could, and the shape set becomes something the coverage check can compare *as a set* instead
+    /// of as a number.
+    ///
+    /// `ALL` sits directly beneath the variants so the two are read and edited together. It replaces
+    /// a `PUBLIC_SEAM_KIND_COUNT: usize = 11` that lived beside this mapping while the fixture it
+    /// described lived a hundred lines below: the compiler forced a new `PublicSeam` variant to gain
+    /// a `seam_kind` arm, but nothing forced the integer, so adding a variant and its arm while
+    /// forgetting both the count and the fixture representative left the check green with the new
+    /// shape uncovered.
+    ///
+    /// One link stays human, and is worth naming rather than implying the loop is closed: a new
+    /// `SeamKind` variant must be listed in `ALL` on the lines below it. Stable Rust cannot
+    /// enumerate an enum's variants, so some single list is unavoidable; this is it. It is strictly
+    /// narrower than the integer it replaces — the omission is now adjacent to the variant rather
+    /// than distant from the fixture, listing a kind whose representative is missing fails loudly
+    /// and names the kind, and a wrong shape-to-kind mapping is caught independently by the
+    /// published-schema cross-check in the test below.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    enum SeamKind {
+        FreeFn,
+        InherentMethod,
+        InherentAssoc,
+        TraitMethod,
+        Item,
+        Member,
+        TraitAssoc,
+        InherentGenerics,
+        Reexport,
+        ExternCrate,
+        TraitImpl,
+    }
+
+    impl SeamKind {
+        const ALL: &'static [SeamKind] = &[
+            SeamKind::FreeFn,
+            SeamKind::InherentMethod,
+            SeamKind::InherentAssoc,
+            SeamKind::TraitMethod,
+            SeamKind::Item,
+            SeamKind::Member,
+            SeamKind::TraitAssoc,
+            SeamKind::InherentGenerics,
+            SeamKind::Reexport,
+            SeamKind::ExternCrate,
+            SeamKind::TraitImpl,
+        ];
+    }
+
+    /// Which shape a seam is, matched exhaustively over the variant (fields ignored). A new
+    /// `PublicSeam` variant fails to compile here until it is mapped, which is the cue to add both
+    /// the `SeamKind` variant, if it needs one, and a representative to the fixture below.
+    fn seam_kind(seam: &PublicSeam) -> SeamKind {
         match seam {
-            PublicSeam::FreeFn { .. } => "free_fn",
-            PublicSeam::InherentMethod { .. } => "inherent_method",
-            PublicSeam::InherentAssoc { .. } => "inherent_assoc",
-            PublicSeam::TraitMethod { .. } => "trait_method",
-            PublicSeam::Item { .. } => "item",
-            PublicSeam::Member { .. } => "member",
-            PublicSeam::TraitAssoc { .. } => "trait_assoc",
-            PublicSeam::InherentGenerics { .. } => "inherent_generics",
-            PublicSeam::Reexport { .. } => "reexport",
-            PublicSeam::ExternCrate { .. } => "extern_crate",
-            PublicSeam::TraitImpl { .. } => "trait_impl",
+            PublicSeam::FreeFn { .. } => SeamKind::FreeFn,
+            PublicSeam::InherentMethod { .. } => SeamKind::InherentMethod,
+            PublicSeam::InherentAssoc { .. } => SeamKind::InherentAssoc,
+            PublicSeam::TraitMethod { .. } => SeamKind::TraitMethod,
+            PublicSeam::Item { .. } => SeamKind::Item,
+            PublicSeam::Member { .. } => SeamKind::Member,
+            PublicSeam::TraitAssoc { .. } => SeamKind::TraitAssoc,
+            PublicSeam::InherentGenerics { .. } => SeamKind::InherentGenerics,
+            PublicSeam::Reexport { .. } => SeamKind::Reexport,
+            PublicSeam::ExternCrate { .. } => SeamKind::ExternCrate,
+            PublicSeam::TraitImpl { .. } => SeamKind::TraitImpl,
         }
     }
 
-    /// Kept beside `seam_kind` above and updated together: the number of distinct labels it can
-    /// produce. `every_public_seam_shape_is_named_and_identity_injective` asserts `seams` below
-    /// covers every one of them, not merely as many distinct kinds as it happens to contain.
-    const PUBLIC_SEAM_KIND_COUNT: usize = 11;
+    /// The `seam_kind` label the **published** fact carries for this seam, read back out of
+    /// `published_seam_fields` rather than restated here. That function is production schema truth
+    /// and already exhaustive over `PublicSeam`, so using it as the oracle means the test holds no
+    /// second copy of the label set to drift from it.
+    fn published_seam_kind(seam: &PublicSeam) -> &str {
+        published_seam_fields(seam)
+            .into_iter()
+            .find(|(name, _)| *name == "seam_kind")
+            .map(|(_, value)| value)
+            .expect("every published seam schema carries a seam_kind field")
+    }
 
     fn assert_semantic_fact_is_cataloged(fact: &SemanticFact) {
         match fact {
@@ -958,11 +1010,15 @@ mod fact_tests {
     }
 
     /// `seam_kind`'s exhaustive match (above) forces this list to gain a representative when
-    /// `PublicSeam` gains a variant — the `assert_eq!` against `PUBLIC_SEAM_KIND_COUNT` below then
-    /// checks that the representative was actually added, not merely that the arm compiled. What
-    /// remains hand-maintained is the *content* of each representative — e.g. picking field values
+    /// `PublicSeam` gains a variant, and the checks below prove the representative actually arrived
+    /// rather than only that the arm compiled: the observed shape set must *equal* `SeamKind::ALL`,
+    /// and the shape-to-published-label mapping must be a bijection, so a new variant folded into an
+    /// existing shape cannot read as already covered.
+    ///
+    /// What remains hand-maintained is the *content* of each representative — picking field values
     /// that actually distinguish it from its siblings (the two-module `InherentMethod` case this
-    /// test was written for) is still a human judgment call this structure cannot force.
+    /// test was written for) is a human judgment call no structure can force — and the `SeamKind::ALL`
+    /// listing itself, for the reason stated on that constant.
     #[test]
     fn every_public_seam_shape_is_named_and_identity_injective() {
         let seams = vec![
@@ -1101,12 +1157,39 @@ mod fact_tests {
                 position: TraitImplPosition::MethodReturn("run".into()),
             },
         ];
-        let observed_kinds: std::collections::BTreeSet<_> = seams.iter().map(seam_kind).collect();
+        // `ALL` must not list a shape twice: a duplicate would collapse in the set comparison
+        // below and quietly shrink the coverage the check believes it is demanding.
+        let listed: std::collections::BTreeSet<_> = SeamKind::ALL.iter().copied().collect();
         assert_eq!(
-            observed_kinds.len(),
-            PUBLIC_SEAM_KIND_COUNT,
-            "seams must cover every PublicSeam variant by kind, not just as many distinct kinds \
-             as it happens to contain: {observed_kinds:?}"
+            listed.len(),
+            SeamKind::ALL.len(),
+            "SeamKind::ALL lists a shape more than once: {:?}",
+            SeamKind::ALL
+        );
+
+        // Set equality, not a count: the failure names the shape that is missing a representative
+        // (or the one present but unlisted), instead of only reporting that two numbers differ.
+        let observed: std::collections::BTreeSet<_> = seams.iter().map(seam_kind).collect();
+        assert_eq!(
+            observed, listed,
+            "the fixture must carry a representative of every PublicSeam shape, and no shape \
+             outside SeamKind::ALL"
+        );
+
+        // The test's shape mapping and the published schema's own `seam_kind` label must agree
+        // one-for-one. Counting the distinct (shape, published label) pairs proves the mapping is a
+        // bijection in one assertion: a shape rendered under two labels, or two shapes sharing one
+        // label, both push this count above the shape count. Without it, a new variant mapped to an
+        // existing `SeamKind` would read as already-covered while publishing its own label.
+        let paired: std::collections::BTreeSet<_> = seams
+            .iter()
+            .map(|seam| (seam_kind(seam), published_seam_kind(seam)))
+            .collect();
+        assert_eq!(
+            paired.len(),
+            listed.len(),
+            "each PublicSeam shape must map to exactly one published seam_kind label, and each \
+             label to exactly one shape: {paired:?}"
         );
         let keys: std::collections::BTreeSet<_> = seams
             .iter()

@@ -51,6 +51,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `seam_kind`'s own exhaustive match now fails to compile on a new variant too, and the fixture's
   distinct-kind count is asserted against it directly. Coverage was already complete (all 11 kinds
   present); only the enforcement was hand-maintained.
+- Test-only follow-up, no production code change: that same coverage check no longer rests on a
+  hand-maintained integer. `PUBLIC_SEAM_KIND_COUNT: usize = 11` sat beside the `seam_kind` mapping
+  while the fixture it described sat a hundred lines below, and the compiler forced only the match
+  arm — so adding a `PublicSeam` variant and its arm while forgetting both the integer and the
+  fixture representative left the check green with the new shape uncovered, the same
+  hand-maintained-enforcement gap the entry above set out to close, one link further along.
+  `seam_kind` now returns a closed `SeamKind` enum whose shapes are compared **as a set** against
+  `SeamKind::ALL`, so a missing representative fails by name rather than by two integers differing,
+  and the shape-to-published-label mapping is asserted to be a bijection against
+  `published_seam_fields` — production schema truth — so a new variant folded into an existing shape
+  cannot read as already covered. Verified by adding a twelfth variant: the compiler demands arms at
+  four sites, and with those satisfied but the fixture entry omitted the check now fails naming the
+  shape, where the previous version passed.
 - Internal refactor: 渾儀's three call sites that compose transparent-macro flattening with
   const/fn-body-nested-impl recovery (`scan::flatten_for_walk`,
   `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
