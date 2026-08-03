@@ -156,6 +156,40 @@ fn the_equals_form_still_carries_a_flag_shaped_value() {
 }
 
 #[test]
+fn an_empty_flag_value_names_the_flag_not_a_missing_file() {
+    // An empty value is a flag given no value, and must be reported as that. Both forms exit 2
+    // either way, so the exit code cannot guard this — stderr is the whole signal, which is why the
+    // guard lives here rather than beside the parse tests. Before the rule, `--baseline=` carried
+    // `""` onward and answered `cannot read baseline ` — a malformed invocation misreported as a
+    // missing file, against a path nobody typed, with a dangling space where the path would be.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+
+    for arg in ["--baseline=", "--write-baseline="] {
+        let output = command_for(&manifest)
+            .arg(arg)
+            .output()
+            .expect("run tianheng CLI");
+        assert_eq!(output.status.code(), Some(2), "{arg}: {output:?}");
+        let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+        let flag = arg.trim_end_matches('=');
+        assert!(
+            stderr.contains(&format!(
+                "{flag} requires a value, but was given an empty one"
+            )),
+            "{arg} must be reported as a flag given no value: {stderr}"
+        );
+        assert!(
+            !stderr.contains("cannot read baseline")
+                && !stderr.contains("cannot write baseline")
+                && !stderr.contains("No such file"),
+            "{arg} must be rejected during parsing, never reported as a missing file: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
     // The overwrite path (an already-existing, supported baseline) writes durably: the merged
     // document lands at a sibling temp path first, then an atomic rename swaps it into place.

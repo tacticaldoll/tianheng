@@ -29,7 +29,9 @@ a check.
 
 ### Requirement: A value-taking flag requires its own value
 
-Every value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `--format`) SHALL be given a value in its own right. A flag whose value token is absent SHALL be a usage error that exits 2. A flag whose next argument is itself a `--`-prefixed token SHALL likewise be a usage error that exits 2, because the value is missing and the following flag would otherwise be consumed in its place: the runner MUST NOT silently drop a flag the invocation supplied, and MUST NOT proceed to observe a workspace or write a file under a path the invocation never named. The usage error SHALL name the token found, so the diagnostic points at the malformed invocation rather than at a downstream unreadable path or unknown format. The rejection SHALL happen during argument parsing, before any workspace observation. The `--flag=<value>` form SHALL remain accepted for a value that legitimately begins with `--`, since it carries its value in the same token and can consume no following flag.
+Every value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `--format`) SHALL be given a value in its own right. A flag whose value token is absent SHALL be a usage error that exits 2. A flag whose next argument is itself a `--`-prefixed token SHALL likewise be a usage error that exits 2, because the value is missing and the following flag would otherwise be consumed in its place: the runner MUST NOT silently drop a flag the invocation supplied, and MUST NOT proceed to observe a workspace or write a file under a path the invocation never named. An **empty** value SHALL be a usage error that exits 2 in both forms — `--flag=` and `--flag ""` are the same mistake as `--flag` with nothing after it — and MUST NOT be carried onward, where an empty path answers `NotFound` at the filesystem and reports a malformed invocation as a missing file against a path the invocation never named.
+
+The usage error SHALL name the flag and, where one was found, the offending token, so the diagnostic points at the malformed invocation rather than at a downstream unreadable path or unknown format. The rejection SHALL happen during argument parsing, before any workspace observation. The `--flag=<value>` form SHALL remain accepted for a value that legitimately begins with `--`, since it carries its value in the same token and can consume no following flag; only the empty-value rule is shared by both forms.
 
 #### Scenario: A flag with no value at all is a usage error
 
@@ -40,6 +42,16 @@ Every value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `-
 
 - **WHEN** the runner is invoked as `tianheng check --write-baseline --warn-uncovered` (a value-taking flag immediately followed by another flag)
 - **THEN** the runner prints usage guidance naming the flag it found, exits 2, and writes no baseline file — it does not consume `--warn-uncovered` as the baseline path, and does not exit 0 having silently dropped it
+
+#### Scenario: A flag given an empty value is a usage error in either form
+
+- **WHEN** the runner is invoked as `tianheng check --baseline=` or `tianheng check --baseline ""`
+- **THEN** the runner reports that the flag was given an empty value and exits 2 — it does not carry the empty string onward and report it as an unreadable file
+
+#### Scenario: The equals form still carries a value beginning with two dashes
+
+- **WHEN** the runner is invoked as `tianheng check --baseline=--weird`
+- **THEN** `--weird` is used as the baseline path, reaching the baseline reader rather than being rejected as a missing value
 
 ### Requirement: Process exit code mirrors the reaction outcome
 
