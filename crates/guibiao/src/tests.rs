@@ -6566,6 +6566,99 @@ fn shallow_inbound_rules_protect_only_the_exact_module() {
 }
 
 #[test]
+fn shallow_inbound_rules_react_to_an_item_import_of_the_anchored_module() {
+    // An item-form import (`use crate::protected::Secret;`, an item declared directly in the
+    // anchored module) must still react under Shallow — unlike an import of a descendant
+    // module's item (already covered by `shallow_inbound_rules_protect_only_the_exact_module`),
+    // this import's target module IS the anchored module itself, so narrowing to Shallow must
+    // not exempt it. A lexical string comparison of the full import path against the anchored
+    // module conflates the two cases; this regression pins the anchored one distinctly.
+    let files = &[
+        ("lib.rs", "pub mod protected;\npub mod client;\n"),
+        ("protected.rs", "pub struct Secret;\n"),
+        ("client.rs", "use crate::protected::Secret;\n"),
+    ];
+
+    let shallow_forbid = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_not_be_imported_by("crate::client")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("an item import of the anchored module still reacts under Shallow");
+    let (forbid_result, forbid_violations) =
+        run_module_check("shallow-inbound-item-forbid", files, shallow_forbid);
+    assert!(forbid_result.is_ok(), "{forbid_result:?}");
+    assert_eq!(
+        forbid_violations.len(),
+        1,
+        "an item-form import of the anchored module must react even under Shallow: {forbid_violations:?}"
+    );
+
+    let shallow_allow = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("an item import of the anchored module still reacts under Shallow");
+    let (allow_result, allow_violations) =
+        run_module_check("shallow-inbound-item-allow", files, shallow_allow);
+    assert!(allow_result.is_ok(), "{allow_result:?}");
+    assert_eq!(
+        allow_violations.len(),
+        1,
+        "an item-form import by an importer outside the allowlist must react even under Shallow: {allow_violations:?}"
+    );
+}
+
+#[test]
+fn shallow_inbound_rules_never_flag_the_protected_modules_own_descendant_as_an_importer() {
+    // The self-import exemption ("a file within the protected module's own subtree is never an
+    // inbound importer") is unconditional in the spec, not depth-gated — narrowing to Shallow
+    // scopes what counts as *reaching* the protected module, never who counts as *inside* it.
+    // A descendant submodule of the protected module importing an item declared directly in the
+    // protected module itself must stay exempt even under Shallow, exactly as it already is under
+    // Subtree — otherwise fixing the target-match precision (the item-import false negative)
+    // would introduce a false positive here instead.
+    let files = &[
+        ("lib.rs", "pub mod protected;\n"),
+        ("protected.rs", "pub mod detail;\npub struct Secret;\n"),
+        ("protected/detail.rs", "use crate::protected::Secret;\n"),
+    ];
+
+    let shallow_allow = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("the protected module's own descendant is never an inbound importer");
+    let (allow_result, allow_violations) = run_module_check(
+        "shallow-inbound-self-descendant-allow",
+        files,
+        shallow_allow,
+    );
+    assert!(allow_result.is_ok(), "{allow_result:?}");
+    assert!(
+        allow_violations.is_empty(),
+        "a descendant of the protected module importing the protected module's own item must \
+         never be flagged, even under Shallow: {allow_violations:?}"
+    );
+
+    let shallow_forbid = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_not_be_imported_by("crate::protected::detail")
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("the protected module's own descendant is never an inbound importer");
+    let (forbid_result, forbid_violations) = run_module_check(
+        "shallow-inbound-self-descendant-forbid",
+        files,
+        shallow_forbid,
+    );
+    assert!(forbid_result.is_ok(), "{forbid_result:?}");
+    assert!(
+        forbid_violations.is_empty(),
+        "a descendant of the protected module is never an inbound importer, even when it is also \
+         (degenerately) named as the forbidden importer: {forbid_violations:?}"
+    );
+}
+
+#[test]
 fn shallow_external_confinement_permits_only_the_exact_module() {
     let files = &[
         ("lib.rs", "pub mod secret;\n"),

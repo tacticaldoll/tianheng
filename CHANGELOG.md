@@ -75,6 +75,26 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change.
 
 ### Fixed
+- **BREAKING**: 圭表's inbound module-boundary rules (`must_not_be_imported_by`,
+  `must_only_be_imported_by`) now react to an item-form import (`use m::Item;`) of the anchored
+  module under `ScanDepth::Shallow`, not only a bare import of the module itself. The Shallow
+  target match compared the import's full path string — including any item leaf — directly against
+  the anchored module, so `within_scan_depth("crate::internal::Secret", "crate::internal",
+  Shallow)` demanded exact string equality and silently failed: a real, released-since-0.3.0 false
+  negative in exactly the boundary PROJECT.md's core contract forbids reacting silently in. The
+  same import in bare-module form (`use crate::internal;`), and the identical item-form import
+  under `ScanDepth::Subtree`, both already reacted correctly — only the Shallow + item-import cell
+  was silent. Fixed by resolving the import path to the module it actually denotes (itself, or its
+  longest reachable-module prefix) before the depth comparison, using the same reachable-module
+  set `ScanContext` already carries — so an item declared directly in the anchored module reacts,
+  while an item in a descendant module correctly does not. Closing that target-match precision also
+  surfaced a latent, adjacent false positive: the importer-side self-import exemption (a file
+  within the protected module's own subtree is never an inbound importer) was itself gated to
+  `Subtree` only. Fixed alongside it, so the self-import exemption now holds identically at both
+  depths, matching `module-boundary`'s own unconditional wording — narrowing to `Shallow` scopes
+  what counts as *reaching* the protected module, never who counts as *inside* it. Any existing
+  `--write-baseline` output for an inbound rule declared at `ScanDepth::Shallow` may need
+  regeneration: an import that previously passed silently may now correctly react.
 - Bounded native recursion depth across four recursive walkers in three crates, closing the same
   false-negative-adjacent bug class in every observation dimension — a pathologically (but
   genuinely acyclic) nested module tree, `use` tree, or block/macro-arm structure could overflow

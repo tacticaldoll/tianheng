@@ -115,7 +115,16 @@ Every Guibiao generic `ModuleBoundaryDraft` rule that exposes `.depth(ScanDepth)
 depth in its observation and matching. `Shallow` SHALL restrict the governed or permitted module
 scope to the exact anchored seam; legacy `Subtree` SHALL retain `::`-delimited descendant matching.
 No rule family MAY retain the selected depth only in projection, identity, or misconfiguration
-checking while evaluating with a hard-coded subtree.
+checking while evaluating with a hard-coded subtree. An inbound rule's target match SHALL be
+resolved to the module an import path actually denotes (itself when the path names a module
+directly, otherwise its longest reachable-module prefix) before the depth comparison, so an
+item-form import (`use m::Item;`) reaches `m` exactly as a bare import of `m` itself does; depth
+then distinguishes that from an import of only a descendant module's item, never by comparing the
+raw import path string (which would conflate an item in `m` with an item in a descendant of `m`).
+An inbound rule's importer-side self-import exemption — a file within the protected module's own
+subtree is never an inbound importer — is orthogonal to this target match and SHALL NOT be
+depth-gated: it holds identically at `Shallow` and `Subtree`, because depth narrows what counts as
+*reaching* the protected module, never who counts as *inside* it.
 
 #### Scenario: Outbound rules honor Shallow
 
@@ -126,7 +135,14 @@ checking while evaluating with a hard-coded subtree.
 
 - **WHEN** `must_not_be_imported_by` or `must_only_be_imported_by` protects a module with `Shallow`
 - **THEN** an external importer of only a descendant module does not violate the exact-seam
-  boundary, while importing the anchored module still reacts
+  boundary, while importing the anchored module still reacts — including an item-form import of an
+  item declared directly in the anchored module, not only a bare import of the module itself
+
+#### Scenario: Inbound self-import exemption ignores depth
+
+- **WHEN** a module within the protected module's own subtree imports an item declared directly in
+  the protected module, under `Shallow`
+- **THEN** the importer is exempt as a self-import, exactly as it would be under `Subtree`
 
 #### Scenario: External confinement honors Shallow
 
