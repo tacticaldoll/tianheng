@@ -24,54 +24,21 @@ pub(crate) enum Probe {
 
 pub(crate) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
 
-/// Every `source_inputs` entry is a caller-chosen path — in the real `tianheng` CLI caller, an
-/// absolute `cargo_metadata`-reported `src_path` — so its raw `display()` form varies with the
-/// checkout location and lands directly in `UnauditableProbe`'s identity (see `finding.rs`). See
-/// `runtime-origin-assertion`'s "An un-auditable probe's identity distinguishes distinct offending
-/// expressions" requirement's checkout-relocation scenarios for the full rationale. `anchor` (the
-/// common ancestor of every root passed to one `audit_probe_coverage` call — see
-/// [`common_ancestor`]) is stripped from each observed file's label before it becomes that
-/// identity's `file` field. Falls back to the absolute form when stripping fails, e.g. an
-/// unrelated standalone path with no shared ancestor.
+/// One observed file's `file` identity label: its path relative to the caller-supplied `anchor`
+/// (the checkout/workspace root — see `audit_probe_coverage_with_markers`, which owns the whole
+/// rationale for the anchor being given rather than derived), falling back to the absolute form
+/// when the file does not lie under it.
+///
+/// A raw `display()` form would vary with the checkout location and land directly in
+/// `UnauditableProbe`'s identity (see `finding.rs`), so a baseline recorded in one clone would
+/// match nothing in another. See `runtime-origin-assertion`'s "An un-auditable probe's identity
+/// distinguishes distinct offending expressions" requirement for the checkout-relocation and
+/// member-set scenarios, and for the stated residual gap an absolute `#[path]` literal keeps.
 pub(crate) fn labeled(path: &Path, anchor: &Path) -> String {
     path.strip_prefix(anchor)
         .unwrap_or(path)
         .display()
         .to_string()
-}
-
-/// The directory every `source_inputs` root's label is made relative to (see [`labeled`]). A file
-/// input's own directory is used (not the file itself, which would strip to an empty label); a
-/// directory input is used as-is. Empty input has no meaningful anchor.
-/// The directory a path's own children resolve relative to for [`common_ancestor`]'s purposes:
-/// `p` itself if it's a directory, else its parent (a file's identity is a source ROOT, so its
-/// own directory is the anchor, never the file itself). Isolates the one I/O touch (`Path::is_file`)
-/// from the otherwise-pure prefix-intersection algorithm below.
-pub(crate) fn anchor_dir_for(p: &Path) -> PathBuf {
-    if p.is_file() {
-        p.parent()
-            .map_or_else(|| p.to_path_buf(), Path::to_path_buf)
-    } else {
-        p.to_path_buf()
-    }
-}
-
-pub(crate) fn common_ancestor(paths: &[PathBuf]) -> PathBuf {
-    let mut candidates = paths.iter().map(|p| anchor_dir_for(p));
-    let Some(first) = candidates.next() else {
-        return PathBuf::new();
-    };
-    let mut common: Vec<_> = first.components().collect();
-    for candidate in candidates {
-        let components: Vec<_> = candidate.components().collect();
-        let shared = common
-            .iter()
-            .zip(components.iter())
-            .take_while(|(a, b)| a == b)
-            .count();
-        common.truncate(shared);
-    }
-    common.into_iter().collect()
 }
 
 pub(crate) fn collect_probes_with_markers(

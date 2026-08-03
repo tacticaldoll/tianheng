@@ -43,7 +43,10 @@ fn louke_sees_a_real_probe(root: &Path) -> bool {
     let boundary = RuntimeBoundary::at("conformance-seam")
         .only_origins(["o"])
         .because("conformance: a real probe must satisfy this declared seam");
-    audit_probe_coverage(&[boundary], &[root.to_path_buf()]).exit_code() == 0
+    // Exit-code-only assertion, so the anchor just needs to contain the scanned root the way a real
+    // caller's workspace root contains its members.
+    let anchor = root.parent().unwrap_or(root);
+    audit_probe_coverage(&[boundary], &[root.to_path_buf()], anchor).exit_code() == 0
 }
 
 fn assert_both_agree(name: &str, body: &str, expect_real: bool) {

@@ -890,7 +890,10 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
     let boundary = RuntimeBoundary::at("a-seam-no-probe-covers")
         .only_origins(["app::domain"])
         .because("wiring check");
-    let outcome = crate::audit_probe_coverage(&[boundary], &src_dirs);
+    // The real shell's own anchor: this workspace's root, the directory holding the manifest the
+    // member src roots were resolved from.
+    let anchor = manifest.parent().unwrap_or(&manifest).to_path_buf();
+    let outcome = crate::audit_probe_coverage(&[boundary], &src_dirs, &anchor);
     match outcome {
         Outcome::Violations(report) => assert!(
             report

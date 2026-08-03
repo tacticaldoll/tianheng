@@ -31,7 +31,7 @@ use guibiao::{
     constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
 use louke::audit_probe_coverage;
-use xingbiao::{cargo_metadata, member_root_files};
+use xingbiao::{cargo_metadata, member_root_files, workspace_root};
 
 use crate::Constitution;
 
@@ -140,9 +140,21 @@ fn evaluate_constitution(
         match cargo_metadata(manifest_path) {
             Ok(metadata) => {
                 let roots = member_root_files(&metadata);
+                // The audit labels every observed file relative to this anchor, and that label is
+                // baseline identity, so the anchor must be the one directory that moves neither
+                // with the checkout location nor with the workspace's own member set: Cargo's
+                // resolved `workspace_root`. It is the same directory whichever member manifest
+                // `--manifest-path` named. Only if metadata carries no such field does this fall
+                // back to the given manifest's own directory — a real `cargo metadata` read always
+                // carries it, so the fallback exists for a synthetic one rather than as a guess.
+                let anchor = workspace_root(&metadata).unwrap_or_else(|| {
+                    manifest_path
+                        .parent()
+                        .map_or_else(PathBuf::new, Path::to_path_buf)
+                });
                 outcome = merge_outcomes(
                     outcome,
-                    audit_probe_coverage(constitution.runtime_boundaries(), &roots),
+                    audit_probe_coverage(constitution.runtime_boundaries(), &roots, &anchor),
                 );
             }
             Err(message) => {

@@ -90,6 +90,28 @@ impl TempBase {
     fn symlink(&self, target: impl AsRef<Path>, link_rel: &str) {
         std::os::unix::fs::symlink(target, self.0.join(link_rel)).expect("create symlink");
     }
+
+    /// [`audit_probe_coverage`] with THIS base as the label anchor — the shape every real caller
+    /// has, a checkout root sitting above every source root it scans (`xingbiao::workspace_root`
+    /// for the `tianheng` shell). Since the anchor is now a caller's argument rather than something
+    /// the audit derives, this is where the tests state theirs once instead of at each call.
+    ///
+    /// A test that is *about* the anchor calls [`audit_probe_coverage`] directly with the anchor it
+    /// means — `two_member_sets_over_one_checkout_label_a_shared_file_identically` varies the input
+    /// set against a fixed anchor, and the absolute-`#[path]` bound tests need a file outside it.
+    fn audit(&self, declared: &[RuntimeBoundary], roots: &[PathBuf]) -> Outcome {
+        audit_probe_coverage(declared, roots, self.path())
+    }
+
+    /// [`TempBase::audit`] with a custom probe-marker list.
+    fn audit_with_markers(
+        &self,
+        declared: &[RuntimeBoundary],
+        roots: &[PathBuf],
+        markers: &[&str],
+    ) -> Outcome {
+        audit_probe_coverage_with_markers(declared, roots, self.path(), markers)
+    }
 }
 
 impl Drop for TempBase {
@@ -127,7 +149,7 @@ fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
         "fn dead() { assert_boundary!(\"inline-shadow\", o); }",
     );
 
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[
             boundary("adapter", Severity::Enforce),
             boundary("deep", Severity::Enforce),
@@ -160,7 +182,7 @@ fn a_cfg_attr_gated_missing_module_still_fails_loud_not_tolerated() {
         "lib.rs",
         "#[cfg_attr(unix, allow(dead_code))]\nmod gated;\nfn f() { assert_boundary!(\"a\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("a", Severity::Enforce)], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("gated")),
         "a cfg_attr-decorated (not cfg-gated) missing module must still fail loud: {outcome:?}"
@@ -171,7 +193,7 @@ fn a_cfg_attr_gated_missing_module_still_fails_loud_not_tolerated() {
 fn root_aware_audit_fails_loud_on_an_unresolvable_reachable_module() {
     let tb = TempBase::new("root-missing");
     let root = tb.source("lib.rs", "mod missing;");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("missing")),
         "a declared source module cannot disappear silently: {outcome:?}"
@@ -190,7 +212,7 @@ fn deeply_nested_blocks_are_a_scan_error_not_a_stack_overflow() {
     let depth = 2000;
     let nested = format!("fn f() {{{}{}}}", "{".repeat(depth), "}".repeat(depth));
     let root = tb.source("lib.rs", &nested);
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("depth bound")),
         "scope nesting past the depth cap must be a scan error, not a stack overflow: {outcome:?}"
@@ -211,7 +233,7 @@ fn moderately_nested_blocks_still_observe_a_real_violation() {
         "}".repeat(depth)
     );
     let root = tb.source("lib.rs", &nested);
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("missing")),
         "a moderately nested missing module must still be observed: {outcome:?}"
@@ -235,7 +257,7 @@ fn a_cfg_gated_module_with_no_file_is_skipped_not_errored() {
         "present.rs",
         "fn live() { assert_boundary!(\"present\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("present", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("present", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -248,7 +270,7 @@ fn root_aware_audit_fails_loud_on_non_utf8_reachable_source() {
     let tb = TempBase::new("root-unreadable");
     let root = tb.source("lib.rs", "mod broken;");
     std::fs::write(tb.path().join("broken.rs"), [0xff, 0xfe]).unwrap();
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("broken.rs")),
         "a selected source that cannot be decoded must fail loud: {outcome:?}"
@@ -262,7 +284,7 @@ fn root_aware_audit_does_not_follow_a_mod_token_inside_a_macro_body() {
         "lib.rs",
         "macro_rules! generated { () => { mod phantom; } } fn live() {}",
     );
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(outcome, Outcome::Clean, "macro tokens are not live modules");
 }
 
@@ -281,7 +303,7 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
         "adapter.rs",
         "fn live() { assert_boundary!(\"adapter\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("adapter", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("adapter", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -304,7 +326,7 @@ fn an_unconditional_path_attribute_is_followed_to_its_target() {
         "generated/a]b.rs",
         "fn inner() { assert_boundary!(\"relocated-seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -334,7 +356,7 @@ fn a_semicolon_inside_an_earlier_doc_attributes_string_does_not_hide_a_later_pat
         "relocated.rs",
         "fn f() { assert_boundary!(\"relocated-seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -366,7 +388,7 @@ fn a_brace_delimited_attribute_argument_does_not_hide_an_earlier_path_attribute(
         "relocated.rs",
         "fn f() { assert_boundary!(\"relocated-seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -390,7 +412,7 @@ fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
     tb.source("foo/bar.rs", "fn decoy() {}");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -414,7 +436,7 @@ fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir() {
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
     tb.source("other.rs", "fn decoy() {}");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -437,7 +459,7 @@ fn a_hex_escape_in_a_path_literal_decodes_to_the_same_file_syn_reads() {
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
     tb.source("name.rs", "fn decoy() {}");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -455,7 +477,7 @@ fn an_absent_unconditional_path_target_is_a_constitution_error() {
         "lib.rs",
         "#[path = \"missing.rs\"]\nmod relocated;\nfn live() {}",
     );
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         2,
@@ -480,7 +502,7 @@ fn a_cfg_attr_path_relocation_with_no_resolution_anywhere_fails_loud() {
         "lib.rs",
         "#[cfg_attr(unix, path = \"unix_seam.rs\")]\nmod plat;\nfn live() {}",
     );
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("plat")),
         "cfg_attr-wrapped #[path] with no resolution anywhere must fail loud: {outcome:?}"
@@ -492,7 +514,8 @@ fn directory_input_retains_the_recursive_compatibility_corpus() {
     let tb = TempBase::new("dir-compat");
     let dir = tb.dir("legacy", "fn f() { assert_boundary!(\"legacy\", o); }");
     assert_eq!(
-        audit_probe_coverage(&[boundary("legacy", Severity::Enforce)], &[dir]).exit_code(),
+        tb.audit(&[boundary("legacy", Severity::Enforce)], &[dir])
+            .exit_code(),
         0
     );
 }
@@ -907,7 +930,7 @@ fn audit_matches_an_escaped_seam_against_its_escaped_probe() {
     // `assert_boundary!("a\n", o)` — the scanner now decodes the probe to the same value.
     let tb = TempBase::new("audit-esc");
     let dir = tb.dir("esc", "fn f() { assert_boundary!(\"a\\n\", o); }");
-    let outcome = audit_probe_coverage(&[boundary("a\n", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("a\n", Severity::Enforce)], &[dir]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -923,7 +946,7 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
     // catches it. Expect BOTH directions: declared-unprobed and probed-undeclared.
     let tb = TempBase::new("audit-esc2");
     let dir = tb.dir("esc2", "fn f() { assert_boundary!(\"a\\n\", o); }");
-    let outcome = audit_probe_coverage(&[boundary("a\\n", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("a\\n", Severity::Enforce)], &[dir]);
     match outcome {
         Outcome::Violations(report) => {
             assert!(
@@ -1068,7 +1091,7 @@ fn a_declared_seam_probed_only_inside_a_macro_body_reacts_unprobed() {
         "m",
         "macro_rules! g { () => { assert_boundary!(\"seam\", o); }; }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[dir]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -1138,7 +1161,7 @@ fn audit_reacts_to_a_duplicate_declared_seam() {
     // so the ONLY finding is the duplicate, not a declared-unprobed gap.
     let tb = TempBase::new("audit-dup");
     let dir = tb.dir("m", "fn f() { assert_boundary!(\"twice\", o); }");
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[
             boundary("twice", Severity::Enforce),
             boundary("twice", Severity::Enforce),
@@ -1182,27 +1205,29 @@ fn audit_probe_coverage_reacts_both_directions() {
     // declared + probed match → clean (exit 0)
     let clean = tb.dir("clean", "fn f() { assert_boundary!(\"s\", o); }");
     assert_eq!(
-        audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[clean]).exit_code(),
+        tb.audit(&[boundary("s", Severity::Enforce)], &[clean])
+            .exit_code(),
         0
     );
 
     // declared but unprobed (enforce) → react (exit 1)
     let unprobed = tb.dir("unprobed", "fn f() {}");
     assert_eq!(
-        audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[unprobed]).exit_code(),
+        tb.audit(&[boundary("orphan", Severity::Enforce)], &[unprobed])
+            .exit_code(),
         1
     );
 
     // probed but undeclared (a typo) → react at CI, not a prod panic (exit 1)
     let typo = tb.dir("typo", "fn f() { assert_boundary!(\"ghost\", o); }");
-    assert_eq!(audit_probe_coverage(&[], &[typo]).exit_code(), 1);
+    assert_eq!(tb.audit(&[], &[typo]).exit_code(), 1);
 }
 
 #[test]
 fn audit_production_violation_separates_target_rule_and_fact_roles() {
     let tb = TempBase::new("audit-structured-identity");
     let dir = tb.dir("unprobed", "fn f() {}");
-    let outcome = audit_probe_coverage(&[boundary("checkout", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("checkout", Severity::Enforce)], &[dir]);
     let report = match outcome {
         Outcome::Violations(report) => report,
         other => panic!("expected an unprobed-seam violation, got {other:?}"),
@@ -1227,7 +1252,7 @@ fn a_warn_severity_unprobed_seam_is_advisory_not_a_failure() {
     let tb = TempBase::new("audit-warn");
     let dir = tb.dir("warn", "fn f() {}");
     // A warn boundary with no probe reacts (a Violation) but does not by itself fail CI.
-    let outcome = audit_probe_coverage(&[boundary("soft", Severity::Warn)], &[dir]);
+    let outcome = tb.audit(&[boundary("soft", Severity::Warn)], &[dir]);
     assert_eq!(outcome.exit_code(), 0, "warn-only is advisory: {outcome:?}");
     assert!(
         matches!(outcome, Outcome::Violations(_)),
@@ -1241,7 +1266,7 @@ fn coverage_spans_the_workspace_corpus() {
     // Declared once; its only probe lives in a *different* member dir.
     let decl_only = tb.dir("crate_a", "fn f() {}");
     let probe_only = tb.dir("crate_b", "fn g() { assert_boundary!(\"shared\", o); }");
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[boundary("shared", Severity::Enforce)],
         &[decl_only, probe_only],
     );
@@ -1260,7 +1285,7 @@ fn an_unauditable_probe_reacts() {
         "const SEAM: &str = \"s\"; fn f() { assert_boundary!(SEAM, o); }",
     );
     // Even though a boundary "s" is declared, the probe is non-literal → un-auditable → react.
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -1314,7 +1339,7 @@ fn two_distinct_expressions_in_the_same_function_react_separately() {
         "fn compute_seam() -> &'static str { \"s\" } \
          fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(compute_seam(), o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1331,7 +1356,7 @@ fn same_expression_in_two_different_free_functions_reacts_separately() {
         "two",
         "fn a() { assert_boundary!(SEAM_A, o); } fn b() { assert_boundary!(SEAM_A, o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1353,7 +1378,7 @@ fn raw_identifier_function_names_keep_probe_owners_distinct() {
         "fn r#type() { assert_boundary!(SEAM_A, o); } \
          fn r#async() { assert_boundary!(SEAM_A, o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1385,7 +1410,7 @@ fn same_named_nested_functions_in_different_outer_functions_react_separately() {
         "fn outer_a() { fn inner() { assert_boundary!(SEAM_A, o); } } \
          fn outer_b() { fn inner() { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1405,7 +1430,7 @@ fn same_named_nested_functions_in_equal_closures_react_separately_and_stably() {
          (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
          }",
     );
-    let before = audit_probe_coverage(
+    let before = tb.audit(
         &[boundary("s", Severity::Enforce)],
         std::slice::from_ref(&dir),
     );
@@ -1430,7 +1455,7 @@ fn same_named_nested_functions_in_equal_closures_react_separately_and_stably() {
          }",
     )
     .unwrap();
-    let after = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let after = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let after_facts: std::collections::BTreeSet<_> = unauditable_violations(&after)
         .iter()
         .map(|violation| violation.fact().clone())
@@ -1449,7 +1474,7 @@ fn same_named_local_impl_methods_in_different_outer_functions_react_separately()
         "fn outer_a() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } } \
          fn outer_b() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1470,7 +1495,7 @@ fn nested_function_identity_survives_unrelated_item_insertion() {
         "same",
         "fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
     );
-    let before_fact = unauditable_violations(&audit_probe_coverage(
+    let before_fact = unauditable_violations(&tb.audit(
         &[boundary("s", Severity::Enforce)],
         std::slice::from_ref(&dir),
     ))[0]
@@ -1481,12 +1506,10 @@ fn nested_function_identity_survives_unrelated_item_insertion() {
         "fn unrelated() {} fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
     )
     .expect("rewrite fixture with unrelated item");
-    let after_fact = unauditable_violations(&audit_probe_coverage(
-        &[boundary("s", Severity::Enforce)],
-        &[dir],
-    ))[0]
-        .fact()
-        .clone();
+    let after_fact = unauditable_violations(&tb.audit(&[boundary("s", Severity::Enforce)], &[dir]))
+        [0]
+    .fact()
+    .clone();
     assert_eq!(before_fact, after_fact);
 }
 
@@ -1501,7 +1524,7 @@ fn same_named_method_in_two_different_impls_reacts_separately() {
          impl A { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
          impl B { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1527,7 +1550,7 @@ fn same_named_free_fn_in_two_different_inline_mods_reacts_separately() {
         "mod a { pub fn probe() { assert_boundary!(SEAM_A, o); } } \
          mod b { pub fn probe() { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1550,7 +1573,7 @@ fn same_named_method_in_two_different_trait_impls_reacts_separately() {
          impl Foo for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
          impl Bar for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1567,7 +1590,7 @@ fn identical_expression_repeated_in_the_same_function_collapses_to_one_violation
         "dup",
         "fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(SEAM_A, o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1581,7 +1604,7 @@ fn same_expression_in_two_files_reacts_separately() {
     let tb = TempBase::new("audit-unaud-two-files");
     let dir_a = tb.dir("file-a", "fn f() { assert_boundary!(SEAM_A, o); }");
     let dir_b = tb.dir("file-b", "fn f() { assert_boundary!(SEAM_A, o); }");
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir_a, dir_b]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir_a, dir_b]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1597,7 +1620,7 @@ fn a_seam_level_runtime_violation_has_no_file() {
     // is a faithful `None` — distinct from the un-auditable case, which does have a file.
     let tb = TempBase::new("audit-seamnull");
     let dir = tb.dir("unprobed", "fn f() {}");
-    let outcome = audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("orphan", Severity::Enforce)], &[dir]);
     let violations = match &outcome {
         Outcome::Violations(report) => &report.violations,
         other => panic!("expected violations, got {other:?}"),
@@ -1621,7 +1644,7 @@ fn finder_repro_nonmodrs_path_base() {
     // An orphan at louke's wrong join path (src/app/relocated.rs)
     tb.source("app/relocated.rs", "fn inner() {}\n");
     // Only the REAL target is compiled and has the probe -> must be caught.
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -1642,7 +1665,7 @@ fn finder_repro_fn_orphan() {
     // An orphan at louke's wrong join path (src/app/relocated.rs): louke scans THIS instead. No probe.
     tb.source("app/relocated.rs", "fn inner() {}\n");
     // No declared boundaries: an assert on "undeclared-seam" in the REAL target must be caught.
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(outcome.exit_code(), 1, "Should catch undeclared seam");
 }
 
@@ -1664,7 +1687,7 @@ fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
         "mod loop_mod;\nfn f() { assert_boundary!(\"a\", o); }\n",
     );
     tb.symlink(tb.path(), "loop_mod");
-    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("a", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -1678,7 +1701,7 @@ fn directory_audit_does_not_hang_on_a_symlinked_directory_cycle() {
     let tb = TempBase::new("dir-symlink-cycle");
     let _src = tb.source("main.rs", "fn f() { assert_boundary!(\"a\", o); }\n");
     tb.symlink(tb.path(), "loop_dir");
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[boundary("a", Severity::Enforce)],
         &[tb.path().to_path_buf()],
     );
@@ -1696,7 +1719,7 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
         "main.rs",
         "fn f() { my_custom_seam!(\"custom-seam\", obj); }\n",
     );
-    let outcome = audit_probe_coverage_with_markers(
+    let outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[root],
         &["assert_boundary", "my_custom_seam"],
@@ -1712,7 +1735,7 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
 fn custom_marker_messages_name_the_configuration_and_actual_matched_marker() {
     let tb = TempBase::new("custom-marker-wording");
     let missing = tb.source("missing.rs", "fn f() {}\n");
-    let missing_outcome = audit_probe_coverage_with_markers(
+    let missing_outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[missing],
         &["my_custom_seam"],
@@ -1732,7 +1755,7 @@ fn custom_marker_messages_name_the_configuration_and_actual_matched_marker() {
     );
 
     let unauditable = tb.source("unauditable.rs", "fn f() { my_custom_seam!(SEAM, obj); }\n");
-    let unauditable_outcome = audit_probe_coverage_with_markers(
+    let unauditable_outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[unauditable],
         &["my_custom_seam"],
@@ -1777,7 +1800,7 @@ fn outer() {
 }
 "#,
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1810,7 +1833,7 @@ fn unregistered_custom_marker_is_ignored_by_audit() {
         "main.rs",
         "fn f() { unknown_seam!(\"custom-seam\", obj); }\n",
     );
-    let outcome = audit_probe_coverage_with_markers(
+    let outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[root],
         &["assert_boundary", "my_custom_seam"],
@@ -1825,8 +1848,7 @@ fn unregistered_custom_marker_is_ignored_by_audit() {
 fn empty_marker_list_is_constitution_error() {
     let tb = TempBase::new("empty-marker-list");
     let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
-    let outcome =
-        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &[]);
+    let outcome = tb.audit_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &[]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(_)),
         "empty markers list must be a constitution error: {outcome:?}"
@@ -1837,8 +1859,7 @@ fn empty_marker_list_is_constitution_error() {
 fn blank_marker_string_is_constitution_error() {
     let tb = TempBase::new("blank-marker");
     let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
-    let outcome =
-        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &["  "]);
+    let outcome = tb.audit_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &["  "]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(_)),
         "blank marker string must be a constitution error: {outcome:?}"
@@ -1853,7 +1874,7 @@ fn invalid_marker_string_is_constitution_error() {
         "if", "match", "123foo", "foo::bar", "foo-bar", "_", "r#self", "r#super", "r#crate", "r#_",
         "💥", "a💥", "café",
     ] {
-        let outcome = audit_probe_coverage_with_markers(
+        let outcome = tb.audit_with_markers(
             &[boundary("seam", Severity::Enforce)],
             std::slice::from_ref(&root),
             &[invalid],
@@ -1976,7 +1997,7 @@ fn a_seam_probed_only_inside_a_cfg_if_arm_is_covered() {
         "lib.rs",
         "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seam\", o); } } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -1990,7 +2011,7 @@ fn a_seam_probed_nowhere_is_still_reported_unprobed() {
     // never reacts at all rather than because the arm's probe was found.
     let tb = TempBase::new("arm-control");
     let root = tb.source("lib.rs", "pub fn f() {}");
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2008,7 +2029,7 @@ fn a_typod_seam_inside_a_cfg_if_arm_reacts() {
         "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seaam\", o); } } }\n\
          pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2029,7 +2050,7 @@ fn an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner() {
         "const S: &str = \"seam\";\n\
          cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(S, o); } } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     let text = format!("{outcome:?}");
     assert!(
         text.contains("non-literal seam `S`"),
@@ -2054,7 +2075,7 @@ fn a_module_declared_inside_a_cfg_if_arm_covers_a_seam() {
         "net.rs",
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -2079,7 +2100,7 @@ fn a_module_declared_after_a_cfg_if_body_is_still_reached() {
         "second.rs",
         "pub fn b(o: u8) { assert_boundary!(\"two\", o); }",
     );
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[
             boundary("one", Severity::Enforce),
             boundary("two", Severity::Enforce),
@@ -2106,7 +2127,7 @@ fn an_arm_declared_module_with_no_file_is_tolerated() {
         "unix_impl.rs",
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -2120,7 +2141,7 @@ fn the_same_fileless_declaration_outside_an_arm_still_fails_loud() {
     // reference (exit 2), so the tolerance above is a decision about arms, not a blanket softening.
     let tb = TempBase::new("arm-absent-control");
     let root = tb.source("lib.rs", "pub mod windows_impl;");
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         2,
@@ -2138,7 +2159,7 @@ fn arm_membership_is_not_inherited_into_an_inline_module_body() {
         "lib.rs",
         "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod outer { pub mod missing; } } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         2,
@@ -2158,7 +2179,7 @@ fn an_arm_declared_dual_backed_module_is_still_a_constitution_error() {
     );
     tb.source("child.rs", "pub fn a() {}");
     tb.source("child/mod.rs", "pub fn b() {}");
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         2,
@@ -2176,7 +2197,7 @@ fn a_clean_cfg_if_arm_stays_clean() {
         "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f() -> u8 { 0 } } }\n\
          pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -2205,7 +2226,7 @@ fn a_spaced_transparent_invocation_is_transparent_in_both_passes() {
         "net.rs",
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -2244,7 +2265,7 @@ fn a_module_declared_inside_a_nested_cfg_if_arm_is_reached() {
         "deep.rs",
         "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -2268,7 +2289,7 @@ fn twin_arms_declaring_one_module_do_not_double_report_its_probe() {
         "const S: &str = \"seam\";\npub fn f(o: u8) { assert_boundary!(S, o); }\n\
          pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     let count = match &outcome {
         Outcome::Violations(report) => report.violations.len(),
         other => panic!("expected violations, got {other:?}"),
@@ -2290,7 +2311,7 @@ fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
         "cfg_if::cfg_if! { if #[cfg(windows)] { #[path = \"windows_impl.rs\"] pub mod imp; } }\n\
          pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -2314,7 +2335,7 @@ fn a_comment_between_mod_and_its_name_does_not_drop_the_module() {
         "child.rs",
         "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2334,7 +2355,7 @@ fn a_comment_between_the_mod_name_and_its_terminator_does_not_drop_the_module() 
         "child.rs",
         "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2358,7 +2379,7 @@ fn a_path_mod_inside_a_function_body_reacts() {
         "inner.rs",
         "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2379,7 +2400,7 @@ fn a_path_mod_inside_a_nested_bare_block_reacts() {
         "inner.rs",
         "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2408,7 +2429,7 @@ fn two_cfg_attr_path_declarations_covering_every_platform_are_scanned_not_erred(
         "w.rs",
         "pub fn r(o: u8) { assert_boundary!(\"seaam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2428,7 +2449,7 @@ fn two_cfg_attr_path_declarations_covering_every_platform_are_clean_when_probes_
     );
     tb.source("u.rs", "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }");
     tb.source("w.rs", "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }");
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -2451,7 +2472,7 @@ fn a_missing_cfg_attr_path_target_is_tolerated_when_the_conventional_file_backs_
         "plat.rs",
         "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2474,7 +2495,7 @@ fn a_cfg_attr_path_remap_on_an_inline_module_redirects_its_nested_items() {
         "unix_dir/y.rs",
         "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -2499,8 +2520,11 @@ fn unauditable_probe_identity_is_stable_across_checkout_locations() {
         "src/lib.rs",
         "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
     );
-    let outcome1 = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root1]);
-    let outcome2 = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root2]);
+    // Each checkout anchors on its OWN base — exactly what a real caller does, since
+    // `workspace_root` is that checkout's own directory. The two absolute prefixes differ; the
+    // labels, and therefore the identities, must not.
+    let outcome1 = tb1.audit(&[boundary("seam", Severity::Enforce)], &[root1]);
+    let outcome2 = tb2.audit(&[boundary("seam", Severity::Enforce)], &[root2]);
     let Outcome::Violations(report1) = outcome1 else {
         panic!("expected violations from checkout 1: {outcome1:?}");
     };
@@ -2523,8 +2547,9 @@ fn unauditable_probe_identity_is_stable_across_checkout_locations() {
         .expect("an unauditable-probe violation must have fired");
     let file = unauditable.file.as_deref().expect("file field must be set");
     assert_eq!(
-        file, "lib.rs",
-        "a single-root scan must label relative to its own directory"
+        file, "src/lib.rs",
+        "a scanned file is labeled by its place within the checkout root, not by its own directory \
+         — which is what keeps two members' same-named `lib.rs` apart"
     );
     assert!(
         !file.starts_with('/'),
@@ -2532,12 +2557,68 @@ fn unauditable_probe_identity_is_stable_across_checkout_locations() {
     );
 }
 
-/// Multiple workspace-member roots (the real `tianheng` caller's shape, one absolute `src_path`
-/// per member from `cargo_metadata`) share their actual checkout root as a common ancestor, so
-/// each one's identity is labeled relative to it — never a raw absolute path, and distinct
-/// members never collide despite sharing a bare `lib.rs` filename.
+/// The second half of identity stability, and the reason the anchor is the caller's argument rather
+/// than something derived from `source_inputs`: one checkout, one anchor, but two different member
+/// SETS must label a file they share identically.
+///
+/// A derived longest-common-prefix anchor cannot do this. With every member under `crates/` the
+/// derived anchor is `<root>/crates`, labeling a file `a/src/lib.rs`; adding one member outside that
+/// prefix (`tools/c`, or an example, or a fixture crate) drops the anchor to `<root>` and relabels
+/// the very same file `crates/a/src/lib.rs`. Every recorded baseline entry then goes stale and
+/// re-fires as new at once — the exact loss the checkout-relative labeling exists to prevent,
+/// reached by adding an unrelated crate instead of by moving the clone.
 #[test]
-fn multi_root_probe_identity_is_relative_to_the_common_ancestor() {
+fn two_member_sets_over_one_checkout_label_a_shared_file_identically() {
+    let tb = TempBase::new("member-set-stability");
+    let shared = tb.source(
+        "crates/a/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let sibling = tb.source(
+        "crates/b/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    // The added member sits outside the `crates/` prefix the first two share — the shape that moves
+    // a derived anchor. The anchor itself (the checkout root) is identical in both calls, as it is
+    // for a real caller reading `workspace_root` before and after the member is added.
+    let outsider = tb.source(
+        "tools/c/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let label_of = |roots: &[PathBuf]| -> Vec<String> {
+        let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], roots);
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected violations: {outcome:?}");
+        };
+        report
+            .violations
+            .iter()
+            .filter(|v| v.rule.contains("string literal"))
+            .filter_map(|v| v.file.clone())
+            .filter(|file| file.starts_with("crates/a/"))
+            .collect()
+    };
+    let before = label_of(&[shared.clone(), sibling.clone()]);
+    let after = label_of(&[shared, sibling, outsider]);
+    assert_eq!(
+        before,
+        vec!["crates/a/src/lib.rs".to_string()],
+        "the label must name the file's place in the checkout, whatever else is being scanned"
+    );
+    assert_eq!(
+        before, after,
+        "adding a workspace member outside the other members' shared prefix must not relabel their \
+         findings — every baseline entry recorded against the old label would otherwise go stale \
+         and re-fire as new"
+    );
+}
+
+/// Multiple workspace-member roots (the real `tianheng` caller's shape, one absolute `src_path`
+/// per member from `cargo_metadata`) are each labeled relative to the checkout root the caller
+/// anchors on — never a raw absolute path, and distinct members never collide despite sharing a
+/// bare `lib.rs` filename.
+#[test]
+fn multi_root_probe_identity_is_relative_to_the_checkout_anchor() {
     let tb = TempBase::new("multi-root-common-ancestor");
     let root_a = tb.source(
         "crate-a/src/lib.rs",
@@ -2547,7 +2628,7 @@ fn multi_root_probe_identity_is_relative_to_the_common_ancestor() {
         "crate-b/src/lib.rs",
         "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_a, root_b]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root_a, root_b]);
     let Outcome::Violations(report) = outcome else {
         panic!("expected violations: {outcome:?}");
     };
@@ -2578,7 +2659,13 @@ fn multi_root_probe_identity_is_relative_to_the_common_ancestor() {
 #[test]
 fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
     let tb = TempBase::new("abs-path-literal-bound");
-    let target_dir = tb.path().join("shared_outside");
+    // The target must sit OUTSIDE the anchor for the fallback to be what is under test, so it goes
+    // in a separate base rather than a sibling directory inside this one. With the anchor now the
+    // caller's checkout root (not the scanned file's own directory), a target *inside* the checkout
+    // gets a relative label instead — pinned by the sibling test below, which is a real narrowing
+    // of this bound rather than a change of it.
+    let outside = TempBase::new("abs-path-literal-outside");
+    let target_dir = outside.path().join("shared_outside");
     std::fs::create_dir_all(&target_dir).unwrap();
     let abs_target = target_dir.join("thing.rs");
     std::fs::write(
@@ -2593,7 +2680,7 @@ fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
             abs_target.display().to_string()
         ),
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
     let Outcome::Violations(report) = outcome else {
         panic!("expected an unauditable-probe violation to fire: {outcome:?}");
     };
@@ -2606,8 +2693,48 @@ fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
     assert_eq!(
         file,
         abs_target.display().to_string(),
-        "an absolute #[path] literal's target has no relationship to any anchor, so its label \
-         stays the raw absolute path — a documented, deliberate bound, not a silent regression"
+        "an absolute #[path] literal's target outside the anchor has no relationship to it, so its \
+         label stays the raw absolute path — a documented, deliberate bound, not a silent regression"
+    );
+}
+
+/// The narrowing the explicit anchor brings to the bound above: an absolute `#[path]` literal whose
+/// target lies INSIDE the caller's checkout root is now labeled relative to it, so that identity is
+/// checkout-independent like every other. Under the previous derived anchor (the scanned file's own
+/// directory) a sibling-tree target like this fell outside it and kept the absolute label; the
+/// workspace root contains it, so it no longer does. Only a target genuinely outside the checkout
+/// keeps the absolute fallback, and only the cross-checkout case of THIS shape stays open (the
+/// residual gap pinned below).
+#[test]
+fn an_absolute_path_literal_inside_the_anchor_is_labeled_relative_to_it() {
+    let tb = TempBase::new("abs-path-literal-inside");
+    let abs_target = tb.path().join("crates/shared/src/thing.rs");
+    std::fs::create_dir_all(abs_target.parent().unwrap()).unwrap();
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        &format!(
+            "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+            abs_target.display().to_string()
+        ),
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected an unauditable-probe violation to fire: {outcome:?}");
+    };
+    let unauditable = report
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an absolute #[path] target's probe must still react, never silently dropped");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file, "crates/shared/src/thing.rs",
+        "a target under the checkout root is labeled relative to it, not left absolute"
     );
 }
 
@@ -2644,13 +2771,15 @@ fn a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_resid
     let root_a = tb_a.source("crates/foo/src/lib.rs", &lib_body);
     let root_b = tb_b.source("crates/foo/src/lib.rs", &lib_body);
 
+    // Each checkout anchors on its own root, as a real caller does. The literal names checkout a's
+    // path, so it lies under a's anchor and outside b's — which is the whole gap.
     let Outcome::Violations(report_a) =
-        audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_a])
+        tb_a.audit(&[boundary("seam", Severity::Enforce)], &[root_a])
     else {
         panic!("expected a violation from checkout a");
     };
     let Outcome::Violations(report_b) =
-        audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[root_b])
+        tb_b.audit(&[boundary("seam", Severity::Enforce)], &[root_b])
     else {
         panic!("expected a violation from checkout b");
     };
