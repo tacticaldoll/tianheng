@@ -14,7 +14,7 @@ use crate::resolve::{
     ImplTraitCollector, PathCollector, ShapeExposure, UseMap, canonical_self_owner,
     canonical_self_owner_without_fallback, stamp_seam, strip_raw,
 };
-use crate::syn_util::is_public;
+use crate::syn_util::{GenericsPosition, impl_generics_positions, is_public};
 
 /// Collect the returned-`impl Trait` [`ShapeExposure`]s in the **return type** of a public item's
 /// functions/methods only (the existential positions). Never visits argument positions (APIT is
@@ -415,13 +415,27 @@ pub(crate) fn collect_item_exposures(
             // assoc seams below — so two blocks for the SAME owner written in two different
             // modules stay distinct too: an owner names what the impl is for, never where it is
             // written, and inherent impls carry no coherence exclusion to lean on.
-            out.extend(tag_paths(
-                paths_in_generics_scoped(&item.generics, &impl_params),
-                &PublicSeam::InherentGenerics {
+            // Walked per POSITION rather than over the whole `Generics` node, so each exposure is
+            // keyed by the bounded thing it sits on: two impl blocks for one owner in one module,
+            // each bounding a different parameter to the same forbidden type, are two distinct sites
+            // and must not collapse onto one seam. The positions and their keys come from the shared
+            // `impl_generics_positions`, which trait-impl-exposure's own `where` walk also uses.
+            for (bound, positions) in impl_generics_positions(&item.generics, ordinal) {
+                let seam = PublicSeam::InherentGenerics {
                     module: module.to_string(),
                     owner: owner.clone(),
-                },
-            ));
+                    bound,
+                };
+                for position in positions {
+                    let paths = match position {
+                        GenericsPosition::Bounds(bounds) => {
+                            paths_in_bounds_scoped(bounds, &impl_params)
+                        }
+                        GenericsPosition::Type(ty) => paths_in_type_scoped(ty, &impl_params),
+                    };
+                    out.extend(tag_paths(paths, &seam));
+                }
+            }
             for impl_item in &item.items {
                 match impl_item {
                     // A public method's signature. The impl's own `<T>` is in scope inside it, so

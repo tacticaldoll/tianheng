@@ -799,10 +799,15 @@ mod fact_tests {
                 ("seam_trait", trait_name),
                 ("seam_name", name),
             ],
-            PublicSeam::InherentGenerics { module, owner } => vec![
+            PublicSeam::InherentGenerics {
+                module,
+                owner,
+                bound,
+            } => vec![
                 ("seam_kind", "inherent_generics"),
                 ("seam_module", module),
                 ("seam_owner", owner),
+                ("seam_bound", bound),
             ],
             PublicSeam::Reexport { module, exported } => vec![
                 ("seam_kind", "reexport"),
@@ -1144,6 +1149,7 @@ mod fact_tests {
             PublicSeam::InherentGenerics {
                 module: "crate::api".into(),
                 owner: "crate::Api".into(),
+                bound: "T".into(),
             },
             // Same owner, different declaring module — the sibling of the two-module
             // `InherentMethod` case above, for an impl block's OWN generics. Rust permits two
@@ -1152,6 +1158,15 @@ mod fact_tests {
             PublicSeam::InherentGenerics {
                 module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
+                bound: "T".into(),
+            },
+            // Same owner AND same module, different bounded parameter — the case module-plus-owner
+            // cannot separate, and the one this seam's own `bound` role exists for: two impl blocks
+            // in one module, each bounding a different parameter to the same forbidden type.
+            PublicSeam::InherentGenerics {
+                module: "crate::api".into(),
+                owner: "crate::Api".into(),
+                bound: "U".into(),
             },
             PublicSeam::Reexport {
                 module: "crate::api".into(),

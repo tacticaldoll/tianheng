@@ -638,12 +638,60 @@ pub(super) fn dyn_inherent_assoc_const_two_platform_modules_impling_the_same_own
     );
 }
 
-/// Same property again, for the `InherentGenerics` seam — the impl block's OWN generic bounds and
-/// `where`-clause. This seam is the one that had no module in its identity at all: unlike a method
-/// or an associated item, it carries no per-item name to fall back on, so `owner` was its whole
-/// distinguishing content and two blocks for the same owner collapsed outright. Rust permits the
-/// two blocks (coherence constrains trait impls, never inherent ones), so this is the identical
-/// two-module false negative, one seam kind further along.
+/// The `InherentGenerics` seam's own per-position role, closing what module-plus-owner cannot.
+#[test]
+pub(super) fn two_impl_blocks_in_one_module_stay_distinct_by_their_bound() {
+    // The recorded reproduction this seam's `bound` role closes: two separate inherent impl blocks on
+    // the same type, in the SAME module, each exposing the same forbidden subject through a DIFFERENT
+    // bound. Module-plus-owner cannot separate them — module says where a block is written, owner says
+    // what it is for, neither says which block — so both facts were identical and collapsed to one
+    // violation, letting a baseline accepting the first suppress the second's never-accepted one.
+    //
+    // The discriminator is the bounded thing's own name, keyed exactly like the sibling trait-impl
+    // `where` position. It is deliberately NOT the block's index:
+    // `semantic-signature-coupling` forbids identity resting on scan order or item ordinal, so a
+    // positional key would trade one defect for a rule violation.
+    let tree = TempSrcTree::new("sig-two-blocks-one-module");
+    tree.write_all(&[
+        ("lib.rs", "pub mod common;\npub mod infra;\npub mod plat;\n"),
+        ("common.rs", "pub struct Conn<T, U>(pub T, pub U);\n"),
+        ("infra.rs", "pub trait Secret {}\n"),
+        (
+            "plat.rs",
+            "use crate::common::Conn;\n\
+             impl<T: crate::infra::Secret, U> Conn<T, U> { pub fn open(&self) {} }\n\
+             impl<T, U: crate::infra::Secret> Conn<T, U> { pub fn close(&self) {} }\n",
+        ),
+    ]);
+    let forbidden = vec!["crate::infra::Secret".to_string()];
+    let findings = crate::exposure::module_findings(
+        tree.src(),
+        &tree.root(),
+        "crate::plat",
+        &forbidden,
+        "x",
+        false,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        findings.len(),
+        2,
+        "two blocks bounding different parameters to the same forbidden type are two distinct \
+         violations, not one: {findings:?}"
+    );
+    let facts: std::collections::BTreeSet<_> = findings.iter().map(|(fact, _)| fact).collect();
+    assert_eq!(
+        facts.len(),
+        2,
+        "and their structured facts must differ, which is what a baseline keys on: {findings:?}"
+    );
+}
+
+/// The same seam's other axis: two blocks for one owner in DIFFERENT modules. This seam had no module
+/// in its identity at all — unlike a method or an associated item it carries no per-item name to fall
+/// back on, so `owner` was its whole distinguishing content and two blocks for one owner collapsed
+/// outright. Rust permits the two blocks (coherence constrains trait impls, never inherent ones).
 #[test]
 pub(super) fn signature_coupling_two_platform_modules_impl_generics_stay_distinct() {
     let tree = TempSrcTree::new("sig-two-platform-generics");

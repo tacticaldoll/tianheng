@@ -327,6 +327,31 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `AsyncInherentMethod`'s own already-shipped precedent). No DSL, builder, or CLI surface change —
   only the identity `fact` payload gains a field, the identical shape this same `[Unreleased]`
   window's own `governing_package` fix already took (below).
+- **BREAKING**: `PublicSeam::InherentGenerics` now also carries the **bounded thing** each exposure
+  sits on — a generic parameter's own name, or a where-predicate's rendered bounded type. Module and
+  owner were not enough for this one seam: module says where an impl block is written and owner says
+  what it is for, and neither says which block, so two inherent impl blocks on one type in ONE module —
+  `impl<T: Secret, U> Conn<T, U>` beside `impl<T, U: Secret> Conn<T, U>`, each exposing the same
+  forbidden subject through a different bound — produced identical facts and collapsed to one violation,
+  letting a baseline accepting the first suppress the second's never-accepted one. Unlike a method or an
+  associated item, this seam has no per-item name to fall back on, which is why it needed a role of its
+  own. The role is not invented: it is keyed exactly like a trait `impl`'s existing `where` position,
+  and both now come from one shared walk over an impl block's generics positions, so the two
+  vocabularies cannot drift and the third collector (dyn-trait) gets the same keys for free. An
+  impl-block **ordinal** was explicitly not used — `semantic-signature-coupling` forbids identity
+  resting on scan order or item ordinal, so a positional key would have traded one defect for a rule
+  violation. Walking positions instead of the whole generics node loses nothing, which rests on a
+  language rule checked against a real `rustc` rather than assumed: an `impl`'s generic parameters
+  cannot carry defaults, so a parameter contributes only its bounds (or, for a const parameter, its
+  type), and lifetime positions name no type. Two blocks whose bounds are textually identical still
+  resolve to one seam — a limit rather than a gap, since nothing structural distinguishes them and two
+  blocks bounding the same parameter to the same forbidden type state one fact twice, the same reason
+  one import on two lines is one violation; stated in the seam's own doc. **Rendered finding text
+  changes** for this seam, deliberately: `impl <Owner> (generics)` becomes
+  `impl <Owner> (generics: T)`, because two distinct violations that render identically make a report
+  unreadable even when identity is correct. **Any existing `--write-baseline` output for an
+  `inherent_generics`-seam finding is stale** (the fact gained a required field) and must be
+  regenerated. `semantic-signature-coupling` gains the rule, its stated limit, and a scenario.
 - **BREAKING**: 渾儀's trait-impl-locality violation identity now uses the **resolved** trait anchor
   for both its `target` and its rule key, instead of the constitution's declared spelling. Matching
   already resolved both sides — the declared anchor through the crate's own `pub use` closure, and each

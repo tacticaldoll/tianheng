@@ -800,3 +800,69 @@ fn use_tree_desc(tree: &syn::UseTree) -> String {
         }
     }
 }
+
+/// One impl-site-authored generics position, as the syntax a caller should collect from.
+///
+/// The caller decides *what* to collect (exposed type paths, `dyn` shapes, returned `impl Trait`s);
+/// this only says where the observable positions are and how to key them, so the three collectors
+/// that walk an impl block's generics cannot drift on either question.
+pub(crate) enum GenericsPosition<'a> {
+    /// A generic parameter's own bounds (`impl<T: crate::infra::Secret>`) or a where-predicate's
+    /// right-hand bounds.
+    Bounds(&'a syn::punctuated::Punctuated<syn::TypeParamBound, syn::Token![+]>),
+    /// A const parameter's type annotation (`impl<const N: crate::infra::X>`) or a where-predicate's
+    /// bounded left-hand type (`where crate::infra::X: Clone` leaks as surely as the bound side).
+    Type(&'a syn::Type),
+}
+
+/// Every impl-site-authored position in an impl block's generics, each paired with the key that
+/// distinguishes it from its siblings **within that same block**.
+///
+/// The key is the bounded thing's own name — a parameter's identifier, or a where-predicate's
+/// rendered bounded type — never the position's index, because `semantic-signature-coupling` forbids
+/// identity resting on scan order or item ordinal. A bounded type that cannot be rendered falls back
+/// to an internal positional sentinel built from the enclosing item's `ordinal` and the predicate's
+/// own index, which is never published: it exists only to keep two unrenderable bounds in one block
+/// from sharing a key, and the shared `reject_positional_identity` gate turns it into a loud refusal.
+///
+/// Completeness rests on a language rule, verified against a real `rustc` rather than assumed: an
+/// `impl` block's generic parameters cannot carry defaults ("defaults for generic parameters are not
+/// allowed here"), so a parameter contributes only its bounds — or, for a const parameter, its type
+/// annotation. Lifetime parameters and lifetime where-predicates name no type, so they contribute
+/// nothing. That is why walking positions loses nothing against walking the whole `Generics` node,
+/// which is what a caller keying by position replaces.
+pub(crate) fn impl_generics_positions(
+    generics: &syn::Generics,
+    ordinal: usize,
+) -> Vec<(String, Vec<GenericsPosition<'_>>)> {
+    let mut positions: Vec<(String, Vec<GenericsPosition<'_>>)> = Vec::new();
+    for param in &generics.params {
+        match param {
+            syn::GenericParam::Type(tp) => positions.push((
+                strip_raw(&tp.ident.to_string()),
+                vec![GenericsPosition::Bounds(&tp.bounds)],
+            )),
+            syn::GenericParam::Const(cp) => positions.push((
+                strip_raw(&cp.ident.to_string()),
+                vec![GenericsPosition::Type(&cp.ty)],
+            )),
+            syn::GenericParam::Lifetime(_) => {}
+        }
+    }
+    if let Some(where_clause) = &generics.where_clause {
+        for (bound_ordinal, predicate) in where_clause.predicates.iter().enumerate() {
+            if let syn::WherePredicate::Type(pt) = predicate {
+                let key = crate::resolve::type_to_string(&pt.bounded_ty)
+                    .unwrap_or_else(|| format!("_#{ordinal}.{bound_ordinal}"));
+                positions.push((
+                    key,
+                    vec![
+                        GenericsPosition::Type(&pt.bounded_ty),
+                        GenericsPosition::Bounds(&pt.bounds),
+                    ],
+                ));
+            }
+        }
+    }
+    positions
+}

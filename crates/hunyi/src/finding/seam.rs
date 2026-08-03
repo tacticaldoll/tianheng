@@ -173,15 +173,23 @@ pub(crate) enum PublicSeam {
         /// in their own generics. Without the module the two collapse to one fact, so a baseline
         /// accepting the first would suppress the second's never-accepted violation.
         ///
-        /// **Stated residual bound**, since this seam is the one with no item name to fall back on:
-        /// two impl blocks for the same owner in the SAME module still resolve to one seam. Module
-        /// plus owner distinguishes where an impl is written and what it is for, never which block
-        /// it is. Closing that needs a per-block structural key, and the shape of one is a design
-        /// decision rather than an omission: `semantic-signature-coupling` forbids identity resting
-        /// on scan order or item ordinal, so the obvious block index is unavailable. Tracked as a
-        /// DESIGN-BREAKING entry in `BACKLOG.md`'s live decision index, not left implicit here.
         module: String,
         owner: String,
+        /// The bounded thing this exposure sits on — a generic parameter's own name, or a
+        /// where-predicate's rendered bounded type. The per-position role that separates two impl
+        /// blocks for one owner in ONE module, which module-plus-owner cannot: module says where a
+        /// block is written and owner says what it is for, neither says which block. Keyed exactly
+        /// like `TraitImplPosition::Where`'s own subject, from the shared
+        /// `syn_util::impl_generics_positions`, so the two vocabularies cannot drift.
+        ///
+        /// **Stated residual bound**: two blocks for one owner in one module whose bounds are
+        /// *textually identical* still resolve to one seam. That is a limit of the language, not a
+        /// gap left open — nothing else structural distinguishes them (their contents have their own
+        /// seams, and `semantic-signature-coupling` forbids identity resting on scan order or item
+        /// ordinal, so the block index is unavailable). Two blocks bounding the same parameter to the
+        /// same forbidden type state one architectural fact twice, which is the same reason
+        /// `module-boundary` treats one import on two lines as one violation.
+        bound: String,
     },
     Reexport {
         module: String,
@@ -279,10 +287,15 @@ impl PublicSeam {
                 ("seam_trait", trait_name),
                 ("seam_name", name),
             ],
-            Self::InherentGenerics { module, owner } => vec![
+            Self::InherentGenerics {
+                module,
+                owner,
+                bound,
+            } => vec![
                 ("seam_kind", "inherent_generics"),
                 ("seam_module", module),
                 ("seam_owner", owner),
+                ("seam_bound", bound),
             ],
             Self::Reexport { module, exported } => vec![
                 ("seam_kind", "reexport"),
@@ -342,7 +355,9 @@ impl std::fmt::Display for PublicSeam {
             // `module` is identity-only on both of these, exactly as it is on `InherentMethod` /
             // `InherentAssoc`: the rendered sentence is unchanged by qualifying the identity, and
             // two same-text violations stay separable by the `file` each one carries.
-            Self::InherentGenerics { owner, .. } => write!(f, "impl <{owner}> (generics)"),
+            Self::InherentGenerics { owner, bound, .. } => {
+                write!(f, "impl <{owner}> (generics: {bound})")
+            }
             Self::Reexport { module, exported } => write!(f, "pub use {module}::{exported}"),
             Self::ExternCrate { name, .. } => write!(f, "pub extern crate {name}"),
             Self::TraitImpl {

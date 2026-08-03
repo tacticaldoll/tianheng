@@ -1,6 +1,7 @@
 use super::exposure::*;
 use crate::finding::*;
 use crate::resolve::*;
+use crate::syn_util::{GenericsPosition, impl_generics_positions};
 /// Collect the type paths exposed by one **trait `impl` block**'s impl-site-authored positions
 /// (`semantic-trait-impl-exposure`, opt-in). Only fires for `impl Trait for Type` (inherent impls
 /// are `collect_item_exposures`'s job). See that spec's "Impl-site-authored positions govern
@@ -64,62 +65,19 @@ pub(crate) fn collect_trait_impl_exposures(
     ));
 
     // 3. where — impl generic-param bounds and the `where`-clause, keyed by the bounded type so
-    //    two distinct bounds exposing the same type never collapse under the baseline — including
-    //    when the bounded type cannot be rendered, where the where-predicate loop below fails
-    //    loud instead of falling back to a key two such bounds could share.
-    for param in &item.generics.params {
-        match param {
-            syn::GenericParam::Type(tp) => {
-                let key = strip_raw(&tp.ident.to_string());
-                let seam = seam(TraitImplPosition::Where(key));
-                out.extend(tag_paths(
-                    paths_in_bounds_scoped(&tp.bounds, &params),
-                    &seam,
-                ));
-            }
-            // A const-param's *type* annotation (`impl<const N: crate::infra::X>`) is impl-site-
-            // authored, so this walk observes it too.
-            syn::GenericParam::Const(cp) => {
-                let key = strip_raw(&cp.ident.to_string());
-                let seam = seam(TraitImplPosition::Where(key));
-                out.extend(tag_paths(paths_in_type_scoped(&cp.ty, &params), &seam));
-            }
-            syn::GenericParam::Lifetime(_) => {}
-        }
-    }
-    if let Some(where_clause) = &item.generics.where_clause {
-        for (bound_ordinal, predicate) in where_clause.predicates.iter().enumerate() {
-            if let syn::WherePredicate::Type(pt) = predicate {
-                // A bounded type that cannot be rendered (a complex const-generic argument, e.g.
-                // `Arr<{ N + 1 }>` — `path_to_string`'s generic-argument rendering is all-or-
-                // nothing, so one unrenderable argument fails the whole path) MUST NOT fall back
-                // to the bare literal `_`: two such bounds in ONE impl block would then share
-                // that key, and their facts — identical kind, subject, AND seam — would collapse
-                // to one, silently losing the second bound's violation (the identity-collision
-                // this position's "never collapse" guarantee forbids). Mirror the sibling
-                // `trait_label` fallback above and `canonical_self_owner`'s own unrenderable case:
-                // an internal positional sentinel, composed of the item's own `ordinal` (unique
-                // per impl block, continuous across the module) and this predicate's own position
-                // within THIS impl block's where-clause (`bound_ordinal`, so two unrenderable
-                // bounds in the SAME impl block never share a sentinel either). The sentinel is
-                // never published: every public observation path routes it through the shared
-                // `reject_positional_identity` gate, so unsupported syntax fails loud instead of
-                // silently colliding.
-                let key = type_to_string(&pt.bounded_ty)
-                    .unwrap_or_else(|| format!("_#{ordinal}.{bound_ordinal}"));
-                let seam = seam(TraitImplPosition::Where(key));
-                // Both sides are impl-site-authored: a forbidden type in the bounded (LHS) type
-                // (`where crate::infra::X: Clone`) leaks as surely as one in the bound (RHS), so
-                // the walk observes both.
-                out.extend(tag_paths(
-                    paths_in_type_scoped(&pt.bounded_ty, &params),
-                    &seam,
-                ));
-                out.extend(tag_paths(
-                    paths_in_bounds_scoped(&pt.bounds, &params),
-                    &seam,
-                ));
-            }
+    //    two distinct bounds exposing the same type never collapse under the baseline. The positions
+    //    and their keys come from the shared `impl_generics_positions`, which the inherent-impl
+    //    generics seams also use: three collectors keying one syntax shape must not each carry their
+    //    own copy of where the positions are or how they are named. An unrenderable bounded type's
+    //    positional sentinel lives there too, so it cannot drift between them either.
+    for (key, positions) in impl_generics_positions(&item.generics, ordinal) {
+        let seam = seam(TraitImplPosition::Where(key));
+        for position in positions {
+            let paths = match position {
+                GenericsPosition::Bounds(bounds) => paths_in_bounds_scoped(bounds, &params),
+                GenericsPosition::Type(ty) => paths_in_type_scoped(ty, &params),
+            };
+            out.extend(tag_paths(paths, &seam));
         }
     }
 
