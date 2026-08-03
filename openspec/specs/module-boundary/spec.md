@@ -641,3 +641,25 @@ part of the comment rather than re-scanned as code.
   regardless of what precedes it
 - **THEN** the system reacts 0/1/2 instead of panicking, and every module declared before the
   comment remains observable
+
+### Requirement: A pathologically nested use tree is a scan error, never a silent drop
+
+The system SHALL react 0/1/2 on a `use` declaration whose brace-group nesting depth is bounded by
+a measured stack-safety cap, and past that cap SHALL fail loud (a constitution error, exit 2)
+rather than silently dropping the sub-tree from observation. A real, compilable `use` nested past
+the cap would otherwise vanish entirely from the imported-path set with no report —
+`Outcome::Clean` when a real violation exists, the false negative the core contract forbids.
+Nesting comfortably under the cap SHALL be observed exactly as a shallower tree would be.
+
+#### Scenario: A use tree nested past the depth cap is a scan error
+
+- **WHEN** a crate declares a `use` tree whose brace-group nesting exceeds the depth cap this
+  scanner supports
+- **THEN** the system reports a constitution error (exit 2) naming the depth bound it could not
+  judge past, rather than silently omitting the tree's imports from observation
+
+#### Scenario: A use tree nested just under the depth cap is still observed
+
+- **WHEN** a crate declares a `use` tree nested well under the depth cap
+- **THEN** the system judges it normally, observing every imported path exactly as a shallower
+  tree would be

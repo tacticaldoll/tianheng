@@ -613,3 +613,25 @@ The `audit_probe_coverage` scanner SHALL support custom probe macro marker names
 
 - **WHEN** `audit_probe_coverage_with_markers` is called with an empty marker list or a marker string that is empty or blank
 - **THEN** the action fails loud with `Outcome::ConstitutionError`, never silently flooding violations or matching empty strings
+
+### Requirement: Deeply nested source structure is a scan error, never a stack overflow
+
+The system SHALL react 0/1/2 when discovering a file's own child module declarations for the
+file-input reachable-module walk, even when the source's lexical structure — nested blocks, a
+transparent macro's (`cfg_if!`) arms, or inline `mod` bodies — nests past a measured
+stack-safety depth cap, rather than overflowing the native stack (an uncontrolled process abort).
+Nesting comfortably under the cap SHALL be observed exactly as a shallower structure would be.
+
+#### Scenario: Pathologically nested blocks are a scan error, not a crash
+
+- **WHEN** a governed source file's own lexical structure (nested blocks, a transparent macro's
+  arms, or inline `mod` bodies) nests past the depth cap this scanner supports
+- **THEN** the system reports a constitution error (exit 2) naming the depth bound it could not
+  judge past, rather than crashing the process
+
+#### Scenario: Moderately nested blocks still observe a real violation
+
+- **WHEN** a governed source file nests a genuinely unresolvable `mod` declaration inside blocks
+  well under the depth cap
+- **THEN** the system still reports the missing-module constitution error, proving the walk
+  reaches that depth rather than being narrowed by the cap

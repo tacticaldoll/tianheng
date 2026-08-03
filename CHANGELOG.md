@@ -56,8 +56,45 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `CapabilitySet` trait replacing 3 independent per-capability enumerations, `delimiter_group_end`
   for 3 near-identical balanced-delimiter scanners, `Violation::is_active_enforce`, and several
   smaller extractions). No test count changed in any crate.
+- Internal refactor: 圭表's `cargo_metadata.rs::matching_dependency_edges` now delegates to
+  `governed_dependencies(package, kind, true)` plus its own name filter, instead of hand-repeating
+  the identical `kind_matches`/`!is_self_dependency` conjunction `governed_dependencies` already
+  encapsulates. No public API, wire format, or observable behavior change.
+- Internal refactor: 渾儀's `resolve_direct_path_child`/`resolve_conventional_child`
+  (`module_resolve.rs`) now share `load_child_file` for the canonicalize → descent-path
+  cycle-check → crate-wide dedup-guard → `read_parse` sequence 3 near-identical call sites
+  repeated; each caller keeps its own distinct child-directory/tuple-assembly logic, which
+  genuinely differs per call site. No public API, wire format, or observable behavior change.
+- Internal refactor: 漏刻's `audit/scan.rs::collect_directory_probes` now reads and scans a source
+  file through a new `scan_rust_file` helper instead of an inline `read_to_string` call in its
+  recursive dispatch loop — the same I/O-isolation shape `read_dir_entries_sorted` already applies
+  to directory listing, one level deeper. `scan_rust_file` also dedupes an identical read+scan
+  sequence in `collect_reachable_probes` (the file-input mode's reachable-module walker), which
+  needs the read source text back afterward to walk the file's own further module references, so
+  the helper returns it rather than discarding it. No public API, wire format, or observable
+  behavior change.
 
 ### Fixed
+- Bounded native recursion depth across four recursive walkers in three crates, closing the same
+  false-negative-adjacent bug class in every observation dimension — a pathologically (but
+  genuinely acyclic) nested module tree, `use` tree, or block/macro-arm structure could overflow
+  the native stack (an uncontrolled process abort) instead of the contract's own exit-2 "cannot
+  judge". Three of the four (圭表's two, 渾儀's) had an existing cap that silently returned an
+  empty/partial result past it instead of erroring — `Outcome::Clean` when a real violation
+  exists, the exact false negative PROJECT.md's core contract names as the one forbidden bug; the
+  fourth (漏刻's) had no cap at all. Each bound was *measured* against a real crash, never guessed:
+  an initial 512 guess for 渾儀's walkers crashed a real test process. The settled bounds: 32
+  (渾儀's `walk_module`/`collect_subtree`/`walk_unsafe`, clear of a measured 80–90-level crash line,
+  and independently clear of `syn::parse_file`'s own ~300–350-level parser-recursion crash line on
+  the same fixture shape); 128 (圭表's `use_scan::expand_use_tree_depth`); 64 (圭表's
+  `symbol_scan.rs`'s `glob_bases` and `expand_use_leaves`'s inner `go`, feeding the glob-hazard
+  pass and alias resolution for `ConfineInlineSymbolPath` — the identical silent-truncation shape
+  `use_scan` was fixed for, never carried over to this sibling scanner until now); and 300 (漏刻's
+  `audit/scan.rs::collect_scope_modules`, which recurses through transparent-macro arms, inline
+  `mod` bodies, and arbitrary blocks — measured safe at depth 1100 and a reproducible SIGABRT at
+  depth 1105+ under a 2MB test-thread stack). Each fix added tests proving both directions:
+  nesting comfortably under the bound is still fully observed, and nesting past it is a scan
+  error, never a crash or a silent pass.
 - **BREAKING**: `PublicSeam::InherentMethod`/`InherentAssoc` now carry the impl **block's own**
   declaring module, distinct from the self type's canonical `owner` path. `owner` names what the
   impl is *for*, not where it is *written* — Rust's coherence rules let an inherent `impl` for one
