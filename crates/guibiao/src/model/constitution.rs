@@ -58,7 +58,7 @@ impl Constitution {
 
 /// Which dependency table a crate rule observes. Defaults to `Normal`. Mirrors
 /// cargo's fixed set (normal / dev / build), so it is intentionally not
-/// `#[non_exhaustive]` — unlike [`Rule`], this enum will not grow.
+/// `#[non_exhaustive]` — unlike [`Rule`](crate::Rule), this enum will not grow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DependencyKind {
     /// The normal `[dependencies]` table. The default.
@@ -97,7 +97,7 @@ impl DependencyKind {
 }
 
 /// A dependency's **declared** source kind, classified from `cargo metadata`'s
-/// `source` field. The vocabulary of the [`Rule::RestrictDependencySourcesTo`]
+/// `source` field. The vocabulary of the [`Rule::RestrictDependencySourcesTo`](crate::Rule::RestrictDependencySourcesTo)
 /// allowlist. Like [`DependencyKind`], it mirrors a fixed cargo distinction (a
 /// declared source is a registry, a git, or a path), so it is intentionally not
 /// `#[non_exhaustive]`: it will not grow.

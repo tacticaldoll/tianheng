@@ -408,7 +408,7 @@ impl ModuleTargetDraft {
     /// own subtree nor within an allowlist entry (each matched "or beneath") is a
     /// violation. An empty allowlist permits only the module's own subtree. Governs
     /// new internal modules by default, the module-level mirror of the crate-level
-    /// [`restrict_dependencies_to`](CrateBoundaryBuilder::restrict_dependencies_to).
+    /// [`restrict_dependencies_to`](crate::CrateBoundaryBuilder::restrict_dependencies_to).
     pub fn restrict_imports_to<I, S>(self, allowed: I) -> ModuleBoundaryDraft
     where
         I: IntoIterator<Item = S>,
