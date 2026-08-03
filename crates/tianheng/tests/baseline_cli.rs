@@ -190,6 +190,20 @@ fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o300))
         .expect("make the directory writable but not readable");
 
+    // Prove the precondition before trusting the result. Root bypasses the read bit, so under it the
+    // directory just made unreadable can still be opened and flushed and this test would pass
+    // without exercising the tolerance path at all — a vacuous gate. Mirror `fixture_manifest`
+    // above: skip when the precondition cannot hold, but never skip silently in CI, whose runner is
+    // an ordinary user for whom it always does.
+    if std::fs::File::open(&dir).is_ok() {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "a mode-0300 directory is still readable by this process (running as root?), so the \
+             unflushable-directory path is not exercised — this must not be skipped in CI"
+        );
+        return;
+    }
+
     let create_in_unreadable = run_with(&manifest, "--write-baseline", &created);
     assert_eq!(
         create_in_unreadable.status.code(),
