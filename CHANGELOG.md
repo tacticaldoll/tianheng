@@ -605,7 +605,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   **anchor the caller supplies** — `audit_probe_coverage` and `audit_probe_coverage_with_markers` each
   take one, and the `tianheng` shell passes the workspace root Cargo itself resolves (the new
   `xingbiao::workspace_root`), the same directory whichever member manifest `--manifest-path` names.
-  A file outside the anchor keeps the absolute form. **Any existing `--write-baseline` output naming
+  The anchor MUST be absolute: a relative or empty one is a constitution error (exit 2) naming the
+  failed precondition and the value to pass instead, never accepted with a silently degraded label.
+  Stripping a relative prefix from an absolute source path cannot succeed, and stripping an empty one
+  succeeds while removing nothing, so either would leave every label in its raw absolute form —
+  measured through the public entry point, anchors `"."`, `"crates"`, and `""` each returned the full
+  absolute path. That is the checkout-dependent identity this whole change closes, reached through an
+  argument that merely *looked* accepted, so it reacts rather than degrades. (An earlier revision of
+  this entry documented the empty anchor as a deliberate "no anchor" opt-out; its effect is precisely
+  the defect, so it is refused by the same rule instead.) Absoluteness is what the audit can check;
+  being a true ancestor of the observed roots stays the caller's responsibility, and a file outside an
+  absolute anchor still keeps its path as observed — the per-file fallback the absolute-`#[path]` bound
+  below depends on. **Any existing `--write-baseline` output naming
   an `unauditable-probe` violation is now stale** (its `file` field's value changed shape) and must be
   regenerated; every previously accepted one reappears as new exactly once.
   The anchor is a parameter rather than something the audit derives from the roots it is given, and
@@ -688,7 +699,10 @@ an adopter reads the work in one place instead of assembling it from five `**BRE
   legitimately be larger than a relabeling would explain.
 - **If you call 漏刻's audit directly**, pass the new anchor argument to `audit_probe_coverage` /
   `audit_probe_coverage_with_markers`: the workspace root, via the new
-  `xingbiao::workspace_root(&metadata)` for a Cargo workspace.
+  `xingbiao::workspace_root(&metadata)` for a Cargo workspace. It must be **absolute** — a relative or
+  empty anchor is refused with a constitution error (exit 2) rather than silently producing
+  checkout-dependent labels, so a caller that passed a path built relative to the working directory
+  needs to make it absolute rather than adjust to a new label shape.
 - **If your constitution names 渾儀's signature-coupling builder types**, rename `SemanticBoundary` and
   its draft chain to `SignatureBoundary` (`SignatureCrateDraft` / `SignatureModuleDraft` /
   `SignatureBoundaryDraft`). No rule string, wire, or CLI name changes with it.

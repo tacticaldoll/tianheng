@@ -100,10 +100,17 @@ pub fn audit_probe_coverage(
 /// prefix would relabel every other member's findings (`a/src/lib.rs` becoming
 /// `crates/a/src/lib.rs`), so every recorded entry goes stale and re-fires as new at once: the same
 /// loss, from a different cause. Only a caller knows a directory that stays put across both, so
-/// only a caller can supply it. A file outside `anchor` keeps its path as observed — the absolute one,
-/// for the absolute roots a real caller passes (the documented fallback). An **empty** `anchor` strips
-/// nothing at all: `Path::strip_prefix("")` succeeds and returns the path unchanged, so this is the
-/// degenerate "no anchor" case, not a request to relabel.
+/// only a caller can supply it. `anchor` MUST be absolute, and a relative or empty one is a
+/// constitution error (exit 2) rather than a silently degraded label: `strip_prefix` cannot remove a
+/// relative prefix from an absolute source path (and succeeds trivially against `""`), so either
+/// would leave every label in its raw absolute form — checkout-dependent identity again, from an
+/// argument that looked accepted.
+///
+/// Being absolute is what this function can check; being an actual ANCESTOR of the observed files is
+/// the caller's own responsibility, and is why the parameter exists. A file that does not lie under
+/// `anchor` keeps its path as observed — the documented fallback the absolute-`#[path]` bound below
+/// depends on — so an absolute anchor that is simply unrelated to the roots degrades per file rather
+/// than erroring. `xingbiao::workspace_root` is an ancestor of every member root by construction.
 ///
 /// Declarations come from the passed objects, so an unconventionally spelled `RuntimeBoundary::at`
 /// can no longer hide a seam. It does NOT observe the live install registry —
@@ -131,6 +138,24 @@ pub fn audit_probe_coverage_with_markers(
     // `anchor` rather than as a raw absolute path, so the identity — and any baseline recorded
     // against it — stays both checkout-independent and stable across a change to the observed
     // member set. See `scan::labeled` and this function's own doc for why the anchor is given.
+    //
+    // A non-absolute anchor cannot do that job and so is refused rather than accepted: stripping
+    // it from an absolute source path fails, the label silently keeps its absolute form, and the
+    // identity is checkout-dependent again — the exact defect the anchor exists to close, reached
+    // by an argument that looked accepted. `Path::strip_prefix` succeeds against `""` too, which is
+    // why an empty anchor is refused by the same rule rather than blessed as a "no anchor" opt-out:
+    // it produces the same silently checkout-dependent identity, and this crate does not offer an
+    // argument whose effect is to reintroduce the bug. A caller with no stable directory to name
+    // has no correct value to pass here, so it hears that (exit 2) instead of a plausible label.
+    if !anchor.is_absolute() {
+        return Outcome::ConstitutionError(format!(
+            "probe-label anchor '{}' is not an absolute path. Every observed file's identity is \
+             labeled relative to it, and a relative anchor can never prefix an absolute source \
+             path, so every label would silently stay checkout-dependent. Pass the checkout root — \
+             `xingbiao::workspace_root(&metadata)` for a Cargo workspace",
+            anchor.display()
+        ));
+    }
     let mut probes = Vec::new();
     for input in source_inputs {
         if let Err(message) = collect_probes_with_markers(input, anchor, markers, &mut probes) {

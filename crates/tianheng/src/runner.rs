@@ -147,11 +147,7 @@ fn evaluate_constitution(
                 // `--manifest-path` named. Only if metadata carries no such field does this fall
                 // back to the given manifest's own directory — a real `cargo metadata` read always
                 // carries it, so the fallback exists for a synthetic one rather than as a guess.
-                let anchor = workspace_root(&metadata).unwrap_or_else(|| {
-                    manifest_path
-                        .parent()
-                        .map_or_else(PathBuf::new, Path::to_path_buf)
-                });
+                let anchor = probe_label_anchor(&metadata, manifest_path);
                 outcome = merge_outcomes(
                     outcome,
                     audit_probe_coverage(constitution.runtime_boundaries(), &roots, &anchor),
@@ -170,6 +166,27 @@ fn evaluate_constitution(
     }
 
     (outcome, observed_coverage)
+}
+
+/// The directory 漏刻's audit labels every observed file's identity relative to: Cargo's own resolved
+/// `workspace_root`, the one directory that moves neither with the checkout location nor with the
+/// workspace's member set, and the same directory whichever member manifest `--manifest-path` named.
+///
+/// The fallback exists only for synthetic metadata (a unit test's hand-built `Value`); a real
+/// `cargo metadata` read always carries the field. It is put through [`std::path::absolute`] rather
+/// than used as-is because the audit **requires** an absolute anchor and refuses anything else: a
+/// relative anchor could never prefix an absolute source path, so it would silently leave every
+/// label checkout-dependent. `absolute` prepends the working directory to a relative path, refuses
+/// only an empty one (hence the `current_dir` last resort, for a bare `Cargo.toml` whose parent is
+/// empty), and leaves an already-absolute path untouched — no canonicalization, so the
+/// cargo-reported root is never rewritten.
+fn probe_label_anchor(metadata: &serde_json::Value, manifest_path: &Path) -> PathBuf {
+    if let Some(root) = workspace_root(metadata) {
+        return root;
+    }
+    let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
+    std::path::absolute(manifest_dir)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
 }
 
 /// The command-line flags `dispatch` parses, before command-specific dispatch reacts to them.
