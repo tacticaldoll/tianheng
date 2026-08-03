@@ -18,15 +18,9 @@
 //!
 //! Exit codes are the claim; error wordings stay `errors_conformance.rs`'s concern.
 
-use std::path::Path;
-
-use guibiao::{Constitution as GnomonConstitution, ModuleBoundary};
-use hunyi::SemanticBoundary;
-use louke::{RuntimeBoundary, audit_probe_coverage};
-
 #[path = "support/mod.rs"]
 mod support;
-use support::TempFixture;
+use support::{TempFixture, guibiao_exit, hunyi_exit, louke_exit};
 
 const REASON: &str = "conformance: a cfg_if arm's contents are real code in every dimension";
 
@@ -96,34 +90,6 @@ const ARM_DECLARED_LIB: &str = "pub mod forbidden;\n\
                                 }\n\
                                 }\n";
 
-fn guibiao_exit(package: &str, manifest: &Path) -> u8 {
-    let constitution = GnomonConstitution::new(package).boundary(
-        ModuleBoundary::in_crate(package)
-            .module("crate::child")
-            .must_not_import("crate::forbidden")
-            .because(REASON),
-    );
-    guibiao::check(&constitution, manifest).exit_code()
-}
-
-fn hunyi_exit(package: &str, manifest: &Path) -> u8 {
-    let boundary = SemanticBoundary::in_crate(package)
-        .module("crate::child")
-        .must_not_expose("crate::forbidden::Thing")
-        .because(REASON);
-    hunyi::check(&[boundary], manifest).exit_code()
-}
-
-/// 漏刻 audits the same tree from its crate root. Its two directions both bear on transparency: the
-/// declared seam must be seen as covered wherever its probe is written, and a probe naming the
-/// mis-typed seam must react — which requires reading the arm it sits in.
-fn louke_exit(root: &Path) -> u8 {
-    let boundary = RuntimeBoundary::at(SEAM)
-        .only_origins(["o"])
-        .because(REASON);
-    audit_probe_coverage(&[boundary], &[root.to_path_buf()]).exit_code()
-}
-
 /// The measured false negatives, now closed: one file, one `cfg_if!` arm, all three dimensions'
 /// forbidden constructs inside it. Before their respective changes 圭表 returned 1 while 渾儀 returned
 /// 0, and 漏刻 returned 0 — each of the latter two an escape on the identical input.
@@ -133,17 +99,17 @@ fn all_three_dimensions_react_to_violations_inside_a_cfg_if_arm() {
     let fixture = fixture(package, PLAIN_LIB_PROBED, ARM_VIOLATIONS);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         1,
         "圭表: a forbidden `use` inside a cfg_if arm must react"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         1,
         "渾儀: a forbidden exposure inside a cfg_if arm must react, not pass as an opaque macro"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         1,
         "漏刻: a probe naming an undeclared seam inside a cfg_if arm must react, not escape with the body"
     );
@@ -157,17 +123,17 @@ fn all_three_dimensions_react_to_the_same_violations_at_top_level() {
     let fixture = fixture(package, PLAIN_LIB_PROBED, TOP_LEVEL_VIOLATIONS);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         1,
         "圭表: the control forbidden `use` must react"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         1,
         "渾儀: the control forbidden exposure must react"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         1,
         "漏刻: the control undeclared-seam probe must react"
     );
@@ -183,17 +149,17 @@ fn all_three_dimensions_leave_a_clean_cfg_if_arm_clean() {
     let fixture = fixture(package, PLAIN_LIB, ARM_CLEAN);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         0,
         "圭表: a clean cfg_if arm must not react"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         0,
         "渾儀: a clean cfg_if arm must not react"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         0,
         "漏刻: a probe inside a cfg_if arm must count as real coverage"
     );
@@ -208,17 +174,17 @@ fn all_three_dimensions_reach_a_module_declared_only_inside_a_cfg_if_arm() {
     let fixture = fixture(package, ARM_DECLARED_LIB, TOP_LEVEL_VIOLATIONS);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         1,
         "圭表: an arm-declared module's forbidden `use` must react"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         1,
         "渾儀: an arm-declared module must resolve as an anchor and its exposure must react"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         1,
         "漏刻: an arm-declared module's undeclared-seam probe must react"
     );
