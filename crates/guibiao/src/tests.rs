@@ -5922,6 +5922,83 @@ fn inline_reacts_on_a_two_hop_use_realias() {
 }
 
 #[test]
+fn inline_glob_nested_past_the_depth_cap_is_a_scan_error_not_a_silent_drop() {
+    // A pathologically brace-nested grouped glob must not silently vanish from the glob-hazard
+    // observation past `glob_bases`'s depth cap — a real, compilable glob nested that deep would
+    // otherwise pass unobserved with no report, the false negative PROJECT.md's core contract
+    // forbids. Past the cap, this must be a scan error, never a silent truncation (mirrors
+    // `use_scan.rs`'s identical fix for the same shape of walker).
+    let depth = 200;
+    let source = format!(
+        "use std::{{{}time::*{}}};",
+        "a::{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let (result, _violations) = run_module_check(
+        "inline-glob-depth-cap",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", &source)],
+        confine_core_clock(),
+    );
+    let err = result.expect_err(
+        "a grouped glob nested past the depth cap must be a scan error, not a silent drop",
+    );
+    assert!(
+        err.contains("brace levels"),
+        "the error must name the depth bound it could not judge past: {err}"
+    );
+}
+
+#[test]
+fn inline_alias_chain_nested_past_the_depth_cap_is_a_scan_error_not_a_silent_drop() {
+    // The identical false-negative shape as the glob test above, for `expand_use_leaves`'s inner
+    // `go`: a pathologically nested grouped `use` introducing an alias must not silently drop the
+    // alias from the use-map past the depth cap — an inline call through that alias would
+    // otherwise pass unresolved (never even reaching the confinement check).
+    let depth = 200;
+    let source = format!(
+        "use std::{{{}time::SystemTime as Clock{}}};\nfn f() {{ let _ = Clock::now(); }}\n",
+        "a::{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let (result, _violations) = run_module_check(
+        "inline-alias-depth-cap",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", &source)],
+        confine_core_clock(),
+    );
+    let err = result
+        .expect_err("an alias nested past the depth cap must be a scan error, not a silent drop");
+    assert!(
+        err.contains("brace levels"),
+        "the error must name the depth bound it could not judge past: {err}"
+    );
+}
+
+#[test]
+fn inline_grouped_glob_nested_moderately_is_still_observed() {
+    // Control: nesting comfortably under the depth cap is unaffected — the fix must not narrow
+    // ordinary observation of a real, deeply (but not pathologically) nested grouped glob.
+    // Braces-only nesting (no extra path segment per layer), so the glob still resolves to
+    // exactly `std::time::*` regardless of depth — the pathological tests above only need SOME
+    // resolvable-or-not path, but this control must still name the real confined prefix.
+    let depth = 40;
+    let source = format!(
+        "use std::{}time::*{};",
+        "{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let (result, violations) = run_module_check(
+        "inline-glob-under-cap",
+        &[("lib.rs", "pub mod core;\n"), ("core.rs", &source)],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.iter().any(|v| v.finding.contains("glob")),
+        "a moderately nested grouped glob of the prefix still reacts: {violations:?}"
+    );
+}
+
+#[test]
 fn inline_reacts_through_a_mid_path_turbofish() {
     // `Clock::<Utc>::now()` — the mid-path turbofish must not break the path, and the
     // terminal `now` call must still react (via the resolved `std::time::SystemTime::now`).

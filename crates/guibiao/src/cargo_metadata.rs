@@ -237,15 +237,8 @@ fn matching_dependency_edges<'a>(
     crate_name: &str,
     kind: DependencyKind,
 ) -> impl Iterator<Item = &'a Value> {
-    package["dependencies"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(move |dependency| {
-            kind_matches(dependency, kind)
-                && !is_self_dependency(package, dependency)
-                && dependency["name"].as_str() == Some(crate_name)
-        })
+    governed_dependencies(package, kind, true)
+        .filter(move |dependency| dependency["name"].as_str() == Some(crate_name))
 }
 
 /// The declared feature request for one dependency edge: its explicit `features = [...]` list

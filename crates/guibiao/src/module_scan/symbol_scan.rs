@@ -89,8 +89,8 @@ pub(crate) fn inline_symbol_findings(
         // The per-file `use`-map (alias-carrying): head identifier → target path. A `type`-alias
         // or `pub use` target is resolved through it, so `use std::time::SystemTime; type Clock =
         // SystemTime;` chases correctly.
-        let use_map = collect_use_map(&decl_text, module, root_modules);
-        collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx);
+        let use_map = collect_use_map(&decl_text, module, root_modules)?;
+        collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx)?;
         if external {
             module_paths.insert(module.clone());
             collect_item_definition_names(module, &decl_text, &mut item_defs);
@@ -132,7 +132,7 @@ pub(crate) fn inline_symbol_findings(
 
         // (i) Glob-hazard: a glob import that can bring a prefix-resolving name into scope reacts
         // fail-closed. Read from decl_text (a glob is a `use`, not a call).
-        for glob_path in glob_import_paths(&decl_text) {
+        for glob_path in glob_import_paths(&decl_text)? {
             if let Some(resolved) = resolve_head(
                 &glob_path,
                 module,
@@ -392,15 +392,24 @@ fn is_call_application(bytes: &[u8], end: usize) -> bool {
     bytes.get(j) == Some(&b'(')
 }
 
+/// A brace-nesting depth cap for this file's two hand-rolled `use`-tree walkers ([`glob_bases`],
+/// [`expand_use_leaves`]'s inner `go`), so a pathologically nested `use` cannot overflow the
+/// stack — a DoS backstop set far beyond any real or lint-clean source. Past the cap, fail loud
+/// (a scan error) rather than silently dropping the sub-tree: a real, compilable `use` nested
+/// past this depth would otherwise vanish from observation with no report — the false negative
+/// PROJECT.md's core contract forbids. Mirrors `use_scan::MAX_USE_NEST_DEPTH`'s identical
+/// rationale for the same shape of walker.
+const MAX_SYMBOL_NEST_DEPTH: usize = 64;
+
 /// Every glob import path in already-declaration-cleaned source: a `use <path>::*;` (bare) or a
 /// grouped `use <path>::{ … * … };` (the `*` among the group members). Returns the module-path
 /// `<path>` (without the trailing `::*`), for each glob.
-fn glob_import_paths(source: &str) -> Vec<String> {
+fn glob_import_paths(source: &str) -> Result<Vec<String>, String> {
     let mut paths = Vec::new();
     for tree in use_statements(source) {
-        glob_bases(&tree, &mut paths, 0);
+        glob_bases(&tree, &mut paths, 0)?;
     }
-    paths
+    Ok(paths)
 }
 
 /// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
@@ -408,9 +417,11 @@ fn glob_import_paths(source: &str) -> Vec<String> {
 /// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
 /// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
 /// `}`-before-`{` cannot panic.
-fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
-    if depth > 64 {
-        return;
+fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) -> Result<(), String> {
+    if depth > MAX_SYMBOL_NEST_DEPTH {
+        return Err(format!(
+            "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
+        ));
     }
     let tree = tree.trim();
     match tree.find('{') {
@@ -427,7 +438,7 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
                         out.push(base.to_string());
                     }
                 } else {
-                    glob_bases(&format!("{prefix}{part}"), out, depth + 1);
+                    glob_bases(&format!("{prefix}{part}"), out, depth + 1)?;
                 }
             }
         }
@@ -440,6 +451,7 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
             }
         }
     }
+    Ok(())
 }
 
 /// The raw `use …` statement bodies (the text between `use` and `;`), from declaration-cleaned
@@ -478,24 +490,26 @@ fn collect_use_map(
     source: &str,
     current_module: &str,
     root_modules: &[String],
-) -> HashMap<String, String> {
+) -> Result<HashMap<String, String>, String> {
     let mut map = HashMap::new();
     for tree in use_statements(source) {
-        for (alias, path) in expand_use_leaves(&tree) {
+        for (alias, path) in expand_use_leaves(&tree)? {
             if let Some(canonical) = resolve_written_path(&path, current_module, root_modules) {
                 map.insert(alias, canonical);
             }
         }
     }
-    map
+    Ok(map)
 }
 
 /// Expand a use tree into `(introduced-head-identifier, written-path)` leaves. `a::{b, c as d}` →
 /// `(b, a::b)`, `(d, a::c)`. A `self`/glob leaf introduces no simple head and is skipped.
-fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
-    fn go(tree: &str, out: &mut Vec<(String, String)>, depth: usize) {
-        if depth > 64 {
-            return;
+fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, String> {
+    fn go(tree: &str, out: &mut Vec<(String, String)>, depth: usize) -> Result<(), String> {
+        if depth > MAX_SYMBOL_NEST_DEPTH {
+            return Err(format!(
+                "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
+            ));
         }
         let tree = tree.trim();
         match tree.find('{') {
@@ -516,12 +530,12 @@ fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
                     if part.is_empty() || part == "*" || head == "self" {
                         continue;
                     }
-                    go(&format!("{prefix}{part}"), out, depth + 1);
+                    go(&format!("{prefix}{part}"), out, depth + 1)?;
                 }
             }
             None => {
                 if tree.ends_with("::*") || tree.is_empty() {
-                    return;
+                    return Ok(());
                 }
                 let (path, alias) = match tree.split_once(" as ") {
                     Some((p, a)) => (p.trim().to_string(), a.trim().to_string()),
@@ -536,10 +550,11 @@ fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
                 }
             }
         }
+        Ok(())
     }
     let mut out = Vec::new();
-    go(tree, &mut out, 0);
-    out
+    go(tree, &mut out, 0)?;
+    Ok(out)
 }
 
 /// Collect the `type`-alias and `pub use` re-export definitions of a file into the crate-wide
@@ -552,7 +567,7 @@ fn collect_defs(
     root_modules: &[String],
     use_map: &HashMap<String, String>,
     ctx: &mut ResolveCtx,
-) {
+) -> Result<(), String> {
     // `type Name = Target;`
     for (name, target) in type_aliases(source) {
         if let Some(canonical) = resolve_target(&target, module, use_map, root_modules) {
@@ -567,18 +582,19 @@ fn collect_defs(
     // by the recursive glob-hazard test.
     for tree in pub_use_statements(source) {
         let mut globs = Vec::new();
-        glob_bases(&tree, &mut globs, 0);
+        glob_bases(&tree, &mut globs, 0)?;
         for base in globs {
             if let Some(canonical) = resolve_written_path(&base, module, root_modules) {
                 ctx.glob_reexports.push((module.to_string(), canonical));
             }
         }
-        for (alias, path) in expand_use_leaves(&tree) {
+        for (alias, path) in expand_use_leaves(&tree)? {
             if let Some(canonical) = resolve_written_path(&path, module, root_modules) {
                 ctx.defs.insert(format!("{module}::{alias}"), canonical);
             }
         }
     }
+    Ok(())
 }
 
 /// Collect the **true-module-qualified** names of every reachable module's own item definitions —
