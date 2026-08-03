@@ -42,14 +42,21 @@ fn labeled(path: &Path, anchor: &Path) -> String {
 /// The directory every `source_inputs` root's label is made relative to (see [`labeled`]). A file
 /// input's own directory is used (not the file itself, which would strip to an empty label); a
 /// directory input is used as-is. Empty input has no meaningful anchor.
+/// The directory a path's own children resolve relative to for [`common_ancestor`]'s purposes:
+/// `p` itself if it's a directory, else its parent (a file's identity is a source ROOT, so its
+/// own directory is the anchor, never the file itself). Isolates the one I/O touch (`Path::is_file`)
+/// from the otherwise-pure prefix-intersection algorithm below.
+fn anchor_dir_for(p: &Path) -> PathBuf {
+    if p.is_file() {
+        p.parent()
+            .map_or_else(|| p.to_path_buf(), Path::to_path_buf)
+    } else {
+        p.to_path_buf()
+    }
+}
+
 pub(super) fn common_ancestor(paths: &[PathBuf]) -> PathBuf {
-    let mut candidates = paths.iter().map(|p| {
-        if p.is_file() {
-            p.parent().map_or_else(|| p.clone(), Path::to_path_buf)
-        } else {
-            p.clone()
-        }
-    });
+    let mut candidates = paths.iter().map(|p| anchor_dir_for(p));
     let Some(first) = candidates.next() else {
         return PathBuf::new();
     };
@@ -79,6 +86,26 @@ pub(super) fn collect_probes_with_markers(
     collect_directory_probes(input, anchor, markers, probes, &mut visited)
 }
 
+/// Read `dir`'s entries — I/O only, no scan dispatch — as `(is_dir, path)` pairs sorted so the
+/// downstream traversal order (and thus the violation order in the report) is deterministic
+/// across runs (`read_dir` order is OS/filesystem-dependent and unsorted). `file_type()` does NOT
+/// follow symlinks, so a symlinked directory is reported as a file here — avoiding an infinite
+/// loop on a cyclic symlink (fail safe, not stack-overflow loud).
+fn read_dir_entries_sorted(dir: &Path) -> Result<Vec<(bool, PathBuf)>, String> {
+    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    let mut paths = Vec::new();
+    for entry in read {
+        let entry =
+            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
+        paths.push((file_type.is_dir(), entry.path()));
+    }
+    paths.sort();
+    Ok(paths)
+}
+
 fn collect_directory_probes(
     dir: &Path,
     anchor: &Path,
@@ -89,22 +116,7 @@ fn collect_directory_probes(
     if !xingbiao::try_visit(visited, dir)? {
         return Ok(());
     }
-    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    // Sort entries so the scan order — and thus the violation order in the report — is
-    // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
-    let mut paths = Vec::new();
-    for entry in read {
-        let entry =
-            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
-        // file_type() does NOT follow symlinks, so a symlinked directory does not recurse —
-        // avoiding an infinite loop on a cyclic symlink (fail safe, not stack-overflow loud).
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
-        paths.push((file_type.is_dir(), entry.path()));
-    }
-    paths.sort();
-    for (is_dir, path) in paths {
+    for (is_dir, path) in read_dir_entries_sorted(dir)? {
         if is_dir {
             collect_directory_probes(&path, anchor, markers, probes, visited)?;
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
@@ -165,6 +177,111 @@ fn external_module_files(
         false,
     )?;
     Ok(modules)
+}
+
+/// Resolve an external `mod name;` declaration (found at `mod_index` in `bytes`, within the scope
+/// starting at `scope_start`) into `modules`, or fail loud when genuinely unresolvable on every
+/// configuration. An unconditional `#[path]` is authoritative on every build — the sole source; a
+/// non-inline `#[path]` resolves from the containing file's OWN directory (`file_dir`), not the
+/// conventional-child base — rustc's mod-rs-blind rule. Absent that, every `cfg_attr`-wrapped
+/// `#[path]` candidate that exists on disk (resolved the identical way) AND the conventional file
+/// are unioned — cfg-blind observation cannot know which one a given build actually uses, so
+/// neither is silently preferred over the other. No file at any candidate location is tolerated
+/// when the declaration is `#[cfg]`-gated or arm-conditional (may legitimately compile no probes
+/// here); otherwise it is a real broken reference (exit 2). Pulled out of
+/// [`collect_scope_modules`]'s `mod name;` arm.
+#[allow(clippy::too_many_arguments)]
+fn resolve_external_mod_decl(
+    bytes: &[u8],
+    scope_start: usize,
+    mod_index: usize,
+    name: &str,
+    child_base: &Path,
+    file_dir: &Path,
+    modules: &mut Vec<(PathBuf, PathBuf)>,
+    in_transparent_arm: bool,
+) -> Result<(), String> {
+    let attrs = mod_preamble_attrs(bytes, scope_start, mod_index);
+    if let Some(rel) = &attrs.path {
+        match resolve_path_module(file_dir, rel)? {
+            Some(resolved) => modules.push(resolved),
+            None if absence_is_tolerated(&attrs, in_transparent_arm) => {}
+            None => {
+                return Err(format!(
+                    "cannot resolve reachable module `{name}` under {}",
+                    child_base.display()
+                ));
+            }
+        }
+        return Ok(());
+    }
+    let mut has_backing_source = false;
+    for rel in &attrs.cfg_attr_paths {
+        if let Some(resolved) = resolve_path_module(file_dir, rel)? {
+            has_backing_source = true;
+            modules.push(resolved);
+        }
+    }
+    if let Some(resolved) = resolve_external_module(child_base, name)? {
+        has_backing_source = true;
+        modules.push(resolved);
+    }
+    if !(has_backing_source || absence_is_tolerated(&attrs, in_transparent_arm)) {
+        return Err(format!(
+            "cannot resolve reachable module `{name}` under {}",
+            child_base.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Whether a module declaration may legitimately have no backing source file on this
+/// configuration: its own bare `#[cfg]`, or membership in a transparent macro arm — the arm's
+/// predicate lives in the macro's `if #[cfg(..)]` header rather than on the item, and every arm
+/// is conditionally compiled by construction (the trailing `else` on its predicates' negation).
+/// 圭表 settled this rule for the same shape and 渾儀 adopted it; a third hand-assembled
+/// derivation here would be the silent-divergence class the cross-dimension ledger exists to
+/// catch.
+fn absence_is_tolerated(attrs: &ModPreambleAttrs, in_transparent_arm: bool) -> bool {
+    attrs.cfg || in_transparent_arm
+}
+
+/// The candidate base directories an inline `mod name { … }`'s body should be descended from. An
+/// unconditional `#[path]` is the sole authority, exactly as [`resolve_external_mod_decl`] applies
+/// for an external `mod`. A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which predicate a
+/// given build selects — cfg-blind observation cannot know which, so the body is descended once
+/// per candidate base that exists as a directory: every `cfg_attr` target that resolves, AND the
+/// conventional base if IT resolves (the predicate could evaluate false on every one, in which
+/// case rustc strips the attribute entirely and the plain, unremapped base applies). A candidate
+/// base that isn't a real directory contributes nothing — recursing into it would spuriously
+/// fail-loud on the module's own OTHER, unrelated nested items merely because this one platform's
+/// directory happens not to exist, when another candidate already backs them. If NO candidate
+/// resolves at all, fall back to the conventional base anyway (the pre-existing, un-remapped
+/// behavior) so a nested reference that is genuinely broken on every platform still fails loud
+/// rather than being silently dropped.
+fn inline_mod_bases(
+    attrs: &ModPreambleAttrs,
+    name: &str,
+    child_base: &Path,
+    file_dir: &Path,
+) -> Vec<PathBuf> {
+    let mut inline_bases: Vec<PathBuf> = Vec::new();
+    match &attrs.path {
+        Some(rel) => inline_bases.push(file_dir.join(rel)),
+        None => {
+            for rel in &attrs.cfg_attr_paths {
+                let candidate = file_dir.join(rel);
+                if candidate.is_dir() {
+                    inline_bases.push(candidate);
+                }
+            }
+            let conventional = child_base.join(name);
+            if inline_bases.is_empty() || conventional.is_dir() {
+                inline_bases.push(conventional);
+            }
+        }
+    }
+    inline_bases
 }
 
 fn collect_scope_modules(
@@ -245,61 +362,16 @@ fn collect_scope_modules(
             cursor = skip_space_and_comments(bytes, cursor);
             match bytes.get(cursor) {
                 Some(b';') => {
-                    let attrs = mod_preamble_attrs(bytes, start, i);
-                    if let Some(rel) = &attrs.path {
-                        // An unconditional `#[path]` is authoritative on every build — the sole
-                        // source, exactly as before. A non-inline `#[path]` resolves from the
-                        // containing file's OWN directory (`file_dir`), not the conventional-child
-                        // base — rustc's mod-rs-blind rule.
-                        match resolve_path_module(file_dir, rel)? {
-                            Some(resolved) => modules.push(resolved),
-                            None if attrs.cfg || in_transparent_arm => {}
-                            None => {
-                                return Err(format!(
-                                    "cannot resolve reachable module `{name}` under {}",
-                                    child_base.display()
-                                ));
-                            }
-                        }
-                    } else {
-                        // Union every source this build could compile: each `cfg_attr`-wrapped
-                        // `#[path]` candidate that exists on disk (resolved the identical way an
-                        // unconditional `#[path]` is, from `file_dir`), AND the conventional file —
-                        // cfg-blind observation cannot know which one a given build actually uses,
-                        // so neither is silently preferred over the other.
-                        let mut has_backing_source = false;
-                        for rel in &attrs.cfg_attr_paths {
-                            if let Some(resolved) = resolve_path_module(file_dir, rel)? {
-                                has_backing_source = true;
-                                modules.push(resolved);
-                            }
-                        }
-                        if let Some(resolved) = resolve_external_module(child_base, name)? {
-                            has_backing_source = true;
-                            modules.push(resolved);
-                        }
-                        // No file at any candidate location. A `#[cfg]`-gated declaration (or a
-                        // cfg_attr-wrapped relocation with an existing target elsewhere) may
-                        // legitimately have none in this configuration (an off feature / another
-                        // platform), so tolerate it — it compiles no probes here, so skipping it
-                        // cannot silently cover a seam. A non-cfg, non-`cfg_attr`-backed missing
-                        // module is a real broken reference: fail loud (exit 2). Membership in a
-                        // transparent macro arm is the second cfg-conditional source, treated
-                        // identically because it expresses one intent: the arm's predicate lives in
-                        // the macro's `if #[cfg(..)]` header rather than on the item, and every arm
-                        // is conditionally compiled by construction (the trailing `else` on its
-                        // predicates' negation). 圭表 settled this rule for the same shape and 渾儀
-                        // adopted it; a third derivation here would be the silent-divergence class
-                        // the cross-dimension ledger exists to catch. An ambiguity (both conventional
-                        // forms present) stays an error above, under every gate — no predicate value
-                        // makes two files one module.
-                        if !(has_backing_source || attrs.cfg || in_transparent_arm) {
-                            return Err(format!(
-                                "cannot resolve reachable module `{name}` under {}",
-                                child_base.display()
-                            ));
-                        }
-                    }
+                    resolve_external_mod_decl(
+                        bytes,
+                        start,
+                        i,
+                        name,
+                        child_base,
+                        file_dir,
+                        modules,
+                        in_transparent_arm,
+                    )?;
                     i = cursor + 1;
                     continue;
                 }
@@ -313,36 +385,7 @@ fn collect_scope_modules(
                     // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
                     // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
                     // component and read a same-named orphan — a false negative.)
-                    //
-                    // An unconditional `#[path]` is the sole authority, exactly as for an external
-                    // mod. A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which predicate a
-                    // given build selects — cfg-blind observation cannot know which, so the body is
-                    // descended once per candidate base that exists as a directory: every `cfg_attr`
-                    // target that resolves, AND the conventional base if IT resolves (the predicate
-                    // could evaluate false on every one, in which case rustc strips the attribute
-                    // entirely and the plain, unremapped base applies). A candidate base that isn't a
-                    // real directory contributes nothing — recursing into it would spuriously
-                    // fail-loud on x's own OTHER, unrelated nested items merely because this one
-                    // platform's directory happens not to exist, when another candidate already backs
-                    // them. If NO candidate resolves at all, fall back to the conventional base anyway
-                    // (the pre-existing, un-remapped behavior) so a nested reference that is genuinely
-                    // broken on every platform still fails loud rather than being silently dropped.
-                    let mut inline_bases: Vec<PathBuf> = Vec::new();
-                    match &attrs.path {
-                        Some(rel) => inline_bases.push(file_dir.join(rel)),
-                        None => {
-                            for rel in &attrs.cfg_attr_paths {
-                                let candidate = file_dir.join(rel);
-                                if candidate.is_dir() {
-                                    inline_bases.push(candidate);
-                                }
-                            }
-                            let conventional = child_base.join(name);
-                            if inline_bases.is_empty() || conventional.is_dir() {
-                                inline_bases.push(conventional);
-                            }
-                        }
-                    }
+                    let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir);
                     for inline_base in &inline_bases {
                         collect_scope_modules(
                             bytes,
@@ -588,7 +631,13 @@ fn transparent_arm_ranges(b: &[u8], bang: usize, body_end: usize) -> Vec<(usize,
     arms
 }
 
-fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+/// Find the index just past the matching closer for a delimiter group opened at `open`
+/// (`(`/`)`, `[`/`]`, `{`/`}`), scanning `[open, limit)` with nesting depth tracked so an inner
+/// delimiter of the SAME kind does not prematurely close the group; literals/comments are skipped
+/// so a delimiter-like byte inside one never miscounts. Returns `limit` if the group never closes
+/// within it — a caller-bound scan limit, never a hang. Shared by [`balanced_brace_end`],
+/// [`paren_group_end`], and [`attr_group_end`], which each pick one delimiter pair.
+fn delimiter_group_end(bytes: &[u8], open: usize, limit: usize, open_b: u8, close_b: u8) -> usize {
     let mut depth = 0usize;
     let mut i = open;
     while i < limit {
@@ -596,19 +645,21 @@ fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
             i = next.min(limit);
             continue;
         }
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
+        if bytes[i] == open_b {
+            depth += 1;
+        } else if bytes[i] == close_b {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return i + 1;
             }
-            _ => {}
         }
         i += 1;
     }
     limit
+}
+
+fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    delimiter_group_end(bytes, open, limit, b'{', b'}')
 }
 
 /// Outer attributes on the `mod name;` at `mod_index` that steer the walker.
@@ -779,26 +830,7 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
 /// `#[cfg_attr(unix, path = "a)b.rs")]` literal does not close the group early. Mirrors
 /// [`attr_group_end`]'s `[]`-tracking for a `cfg_attr`'s own argument list.
 fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
-    let mut depth = 0usize;
-    let mut i = open;
-    while i < limit {
-        if let Some(next) = skip_literal_or_comment(bytes, i) {
-            i = next.min(limit);
-            continue;
-        }
-        match bytes[i] {
-            b'(' => depth += 1,
-            b')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    limit
+    delimiter_group_end(bytes, open, limit, b'(', b')')
 }
 
 /// The value of a `path = "…"` name-value meta somewhere in `[start, paren_close)` (the interior of
@@ -860,26 +892,7 @@ fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
 /// `[`), tracking nested `[]` and skipping string/char literals and comments so a `]` inside a
 /// `#[path = "a]b.rs"]` literal does not close the group early. Mirrors [`balanced_brace_end`].
 fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
-    let mut depth = 0usize;
-    let mut i = open;
-    while i < limit {
-        if let Some(next) = skip_literal_or_comment(bytes, i) {
-            i = next.min(limit);
-            continue;
-        }
-        match bytes[i] {
-            b'[' => depth += 1,
-            b']' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    limit
+    delimiter_group_end(bytes, open, limit, b'[', b']')
 }
 
 /// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just
@@ -1733,6 +1746,153 @@ fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext,
     Some((ctx, body_start))
 }
 
+/// Mutable scan state threaded through [`fn_scopes`]'s single byte-walk: the open
+/// mod/impl-or-trait/fn/anonymous-block stacks (each paired with the depth it opened at, so a `}`
+/// pops exactly the frames it closes), the sibling-numbering map for anonymous blocks, the running
+/// brace depth / current-header start the walk advances, and the completed `(body_start, body_end,
+/// owner)` triples.
+struct FnScopeState {
+    depth: usize,
+    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
+    // file) contributes nothing here, since its content is scanned separately, as its own file,
+    // where the outer `file` identity field already disambiguates it.
+    mod_stack: Vec<(usize, String)>,
+    context_stack: Vec<(usize, ImplOrTraitContext)>,
+    fn_stack: Vec<(usize, usize, String)>,
+    anonymous_stack: Vec<(usize, String)>,
+    anonymous_siblings: HashMap<(String, String), usize>,
+    // Start of the current code header, advanced only by code delimiters observed by this
+    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
+    // anonymous-scope boundary.
+    anonymous_header_start: usize,
+    out: Vec<(usize, usize, String)>,
+}
+
+impl FnScopeState {
+    fn new() -> Self {
+        Self {
+            depth: 0,
+            mod_stack: Vec::new(),
+            context_stack: Vec::new(),
+            fn_stack: Vec::new(),
+            anonymous_stack: Vec::new(),
+            anonymous_siblings: HashMap::new(),
+            anonymous_header_start: 0,
+            out: Vec::new(),
+        }
+    }
+
+    /// Try each header keyword (`mod`/`impl`/`trait`/`fn`) at `i` in `b`; on a match, push the
+    /// opened scope's frame and return the walk's next position (the body start) — the caller
+    /// `continue`s the outer loop from there without falling through to the brace/`;` handling.
+    /// `None` when no keyword matches at `i`.
+    fn try_dispatch_keyword(&mut self, b: &[u8], i: usize) -> Option<usize> {
+        if let Some(rest) = match_keyword(b, i, b"mod") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                self.mod_stack.push((self.depth, name));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"impl") {
+            if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
+                self.context_stack.push((self.depth, ctx));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"trait") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                self.context_stack
+                    .push((self.depth, ImplOrTraitContext::Trait(name)));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"fn") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                let module_path = self
+                    .mod_stack
+                    .iter()
+                    .map(|(_, name)| name.as_str())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                let enclosing = enclosing_owner(
+                    self.fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+                    &self.anonymous_stack,
+                );
+                let owner = render_owner(
+                    &module_path,
+                    enclosing.as_deref(),
+                    &self.context_stack,
+                    &name,
+                );
+                self.fn_stack.push((self.depth, body_start, owner));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        }
+        None
+    }
+
+    /// Open a new anonymous-block frame at `i`, headed by the code since
+    /// `anonymous_header_start` and numbered against its siblings under the same parent+header.
+    fn open_brace(&mut self, b: &[u8], i: usize) {
+        let header = anonymous_scope_header(b, self.anonymous_header_start, i);
+        let parent = enclosing_owner(
+            self.fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+            &self.anonymous_stack,
+        )
+        .unwrap_or_else(|| "<module scope>".to_string());
+        let sibling = self
+            .anonymous_siblings
+            .entry((parent, header.clone()))
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+        self.anonymous_stack
+            .push((self.depth, format!("block {header}#{sibling}")));
+        self.depth += 1;
+        self.anonymous_header_start = i + 1;
+    }
+
+    /// Close the brace at `i`: pop every stack frame opened at the depth this brace closes,
+    /// recording a completed `(body_start, i, owner)` triple for a closed `fn` scope.
+    fn close_brace(&mut self, i: usize) {
+        self.depth = self.depth.saturating_sub(1);
+        if self
+            .fn_stack
+            .last()
+            .is_some_and(|&(open_depth, _, _)| open_depth == self.depth)
+        {
+            let (_, body_start, owner) = self.fn_stack.pop().expect("checked Some above");
+            self.out.push((body_start, i, owner));
+        }
+        if self
+            .context_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.context_stack.pop();
+        }
+        if self
+            .mod_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.mod_stack.pop();
+        }
+        if self
+            .anonymous_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.anonymous_stack.pop();
+        }
+        self.anonymous_header_start = i + 1;
+    }
+}
+
 /// Every owner-qualified `fn` body in this source file, as `(body_start, body_end, owner)` byte
 /// ranges — `body_start`/`body_end` bound just inside the fn's own `{ … }` (excluding the braces
 /// themselves). Looked up by [`owner_for`] so an un-auditable probe's identity is qualified by a
@@ -1756,21 +1916,8 @@ fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext,
 ///   message — which an adopter reading it wants. Pinned by
 ///   `an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner`.
 fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
-    let mut depth = 0usize;
-    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
-    // file) contributes nothing here, since its content is scanned separately, as its own file,
-    // where the outer `file` identity field already disambiguates it.
-    let mut mod_stack: Vec<(usize, String)> = Vec::new();
-    let mut context_stack: Vec<(usize, ImplOrTraitContext)> = Vec::new();
-    let mut fn_stack: Vec<(usize, usize, String)> = Vec::new();
-    let mut anonymous_stack: Vec<(usize, String)> = Vec::new();
-    let mut anonymous_siblings: HashMap<(String, String), usize> = HashMap::new();
-    let mut out = Vec::new();
+    let mut state = FnScopeState::new();
     let mut i = 0;
-    // Start of the current code header, advanced only by code delimiters observed by this
-    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
-    // anonymous-scope boundary.
-    let mut anonymous_header_start = 0usize;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
             i = next;
@@ -1778,102 +1925,20 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
         }
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
-            if let Some(rest) = match_keyword(b, i, b"mod") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    mod_stack.push((depth, name));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"impl") {
-                if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
-                    context_stack.push((depth, ctx));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"trait") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    context_stack.push((depth, ImplOrTraitContext::Trait(name)));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"fn") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    let module_path = mod_stack
-                        .iter()
-                        .map(|(_, name)| name.as_str())
-                        .collect::<Vec<_>>()
-                        .join("::");
-                    let enclosing = enclosing_owner(
-                        fn_stack.last().map(|(_, _, owner)| owner.as_str()),
-                        &anonymous_stack,
-                    );
-                    let owner =
-                        render_owner(&module_path, enclosing.as_deref(), &context_stack, &name);
-                    fn_stack.push((depth, body_start, owner));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
+            if let Some(next) = state.try_dispatch_keyword(b, i) {
+                i = next;
+                continue;
             }
         }
         match b[i] {
-            b'{' => {
-                let header = anonymous_scope_header(b, anonymous_header_start, i);
-                let parent = enclosing_owner(
-                    fn_stack.last().map(|(_, _, owner)| owner.as_str()),
-                    &anonymous_stack,
-                )
-                .unwrap_or_else(|| "<module scope>".to_string());
-                let sibling = anonymous_siblings
-                    .entry((parent, header.clone()))
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-                anonymous_stack.push((depth, format!("block {header}#{sibling}")));
-                depth += 1;
-                anonymous_header_start = i + 1;
-            }
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if fn_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _, _)| open_depth == depth)
-                {
-                    let (_, body_start, owner) = fn_stack.pop().expect("checked Some above");
-                    out.push((body_start, i, owner));
-                }
-                if context_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    context_stack.pop();
-                }
-                if mod_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    mod_stack.pop();
-                }
-                if anonymous_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    anonymous_stack.pop();
-                }
-                anonymous_header_start = i + 1;
-            }
-            b';' => anonymous_header_start = i + 1,
+            b'{' => state.open_brace(b, i),
+            b'}' => state.close_brace(i),
+            b';' => state.anonymous_header_start = i + 1,
             _ => {}
         }
         i += 1;
     }
-    out
+    state.out
 }
 
 /// Look up the innermost owner-qualified `fn` scope containing byte position `pos` (the smallest

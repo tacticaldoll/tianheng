@@ -1255,6 +1255,17 @@ fn unauditable_violations(outcome: &Outcome) -> Vec<&crate::Violation> {
     }
 }
 
+/// Assert that `violations` carries exactly `expected` DISTINCT `fact()` identities — the
+/// count-and-collect shape repeated across the identity-distinctness regression tests below (two
+/// textually/lexically distinct probes must never collapse to fewer findings than expected).
+/// `message` explains WHY these must stay distinct; the violations themselves are appended for a
+/// failing assertion's own debugging.
+fn assert_distinct_fact_count(violations: &[&crate::Violation], expected: usize, message: &str) {
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(facts.len(), expected, "{message}: {violations:?}");
+}
+
 #[test]
 fn two_distinct_expressions_in_the_same_function_react_separately() {
     let tb = TempBase::new("audit-unaud-two-exprs");
@@ -1270,13 +1281,7 @@ fn two_distinct_expressions_in_the_same_function_react_separately() {
         2,
         "two textually distinct non-literal expressions must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
-        2,
-        "their identities must be distinct: {violations:?}"
-    );
+    assert_distinct_fact_count(&violations, 2, "their identities must be distinct");
 }
 
 #[test]
@@ -1293,12 +1298,10 @@ fn same_expression_in_two_different_free_functions_reacts_separately() {
         2,
         "the same expression in two different functions must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "distinguished by enclosing function, not collapsed: {violations:?}"
+        "distinguished by enclosing function, not collapsed",
     );
 }
 
@@ -1349,9 +1352,7 @@ fn same_named_nested_functions_in_different_outer_functions_react_separately() {
         2,
         "same-named nested functions in distinct outer functions must not collapse: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(facts.len(), 2, "lexical owner chains must differ");
+    assert_distinct_fact_count(&violations, 2, "lexical owner chains must differ");
 }
 
 #[test]
@@ -1415,12 +1416,10 @@ fn same_named_local_impl_methods_in_different_outer_functions_react_separately()
         2,
         "same-named local impl methods in distinct outer functions must not collapse: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "outer lexical owners must qualify local impls"
+        "outer lexical owners must qualify local impls",
     );
 }
 
@@ -1469,12 +1468,10 @@ fn same_named_method_in_two_different_impls_reacts_separately() {
         2,
         "same-named method on two different owners must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "distinguished by owner, not collapsed under a bare method name: {violations:?}"
+        "distinguished by owner, not collapsed under a bare method name",
     );
 }
 
@@ -1497,12 +1494,10 @@ fn same_named_free_fn_in_two_different_inline_mods_reacts_separately() {
         2,
         "same-named free fn in two different inline mods must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "distinguished by module path, not collapsed under a bare fn name: {violations:?}"
+        "distinguished by module path, not collapsed under a bare fn name",
     );
 }
 
@@ -1522,13 +1517,7 @@ fn same_named_method_in_two_different_trait_impls_reacts_separately() {
         2,
         "same-named method on the same Self type via two different traits must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
-        2,
-        "distinguished by trait, not collapsed: {violations:?}"
-    );
+    assert_distinct_fact_count(&violations, 2, "distinguished by trait, not collapsed");
 }
 
 #[test]
@@ -1559,13 +1548,7 @@ fn same_expression_in_two_files_reacts_separately() {
         2,
         "the same expression in two different files must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
-        2,
-        "distinguished by file, not collapsed: {violations:?}"
-    );
+    assert_distinct_fact_count(&violations, 2, "distinguished by file, not collapsed");
 }
 
 #[test]

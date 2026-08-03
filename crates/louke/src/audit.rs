@@ -128,10 +128,39 @@ pub fn audit_probe_coverage_with_markers(
         .collect();
     let declared_set: HashSet<&str> = declared.iter().map(RuntimeBoundary::seam).collect();
     let mut violations = Vec::new();
+    violations.extend(duplicate_seam_violations(declared));
+    violations.extend(unprobed_seam_violations(declared, &probed_set));
+    violations.extend(undeclared_probe_violations(&probes, &declared_set));
+    violations.extend(unauditable_probe_violations(&probes));
+    if violations.is_empty() {
+        Outcome::Clean
+    } else {
+        Outcome::Violations(Report::new(violations))
+    }
+}
 
-    // Duplicate declared seam: the prod `install` fails loud on it (a duplicate would silently
-    // shadow the earlier boundary); catch it at CI too — one enforce violation per duplicated
-    // seam — so the misconfiguration surfaces before it reaches a running binary.
+/// Push `violation()` into `violations` the first time `key` is inserted into `seen` — the
+/// react-once-per-key guard shared by [`unprobed_seam_violations`] and
+/// [`undeclared_probe_violations`]. [`duplicate_seam_violations`] is deliberately NOT built on
+/// this: duplicate-seam detection needs TWO sets with different roles (a first-seen tracker
+/// gating the reaction, a reported-once tracker deduping it) — a genuinely different shape this
+/// single-set guard would flatten incorrectly if forced onto it.
+fn react_once<T: Eq + std::hash::Hash>(
+    seen: &mut HashSet<T>,
+    key: T,
+    violations: &mut Vec<Violation>,
+    violation: impl FnOnce() -> Violation,
+) {
+    if seen.insert(key) {
+        violations.push(violation());
+    }
+}
+
+/// Duplicate declared seam: the prod `install` fails loud on it (a duplicate would silently
+/// shadow the earlier boundary); catch it at CI too — one enforce violation per duplicated
+/// seam — so the misconfiguration surfaces before it reaches a running binary.
+fn duplicate_seam_violations(declared: &[RuntimeBoundary]) -> Vec<Violation> {
+    let mut violations = Vec::new();
     let mut seen_decl = HashSet::new();
     let mut dup_reported = HashSet::new();
     for boundary in declared {
@@ -153,14 +182,21 @@ pub fn audit_probe_coverage_with_markers(
             );
         }
     }
+    violations
+}
 
-    // Declared but never probed: the boundary is never enforced at runtime. Reacts at the
-    // declaring boundary's severity (a warn boundary is advisory, not a CI failure).
+/// Declared but never probed: the boundary is never enforced at runtime. Reacts at the
+/// declaring boundary's severity (a warn boundary is advisory, not a CI failure).
+fn unprobed_seam_violations(
+    declared: &[RuntimeBoundary],
+    probed_set: &HashSet<&str>,
+) -> Vec<Violation> {
+    let mut violations = Vec::new();
     let mut seen = HashSet::new();
     for boundary in declared {
         let seam = boundary.seam();
-        if !probed_set.contains(seam) && seen.insert(seam) {
-            violations.push(
+        if !probed_set.contains(seam) {
+            react_once(&mut seen, seam, &mut violations, || {
                 audit_violation(
                     seam,
                     "every declared runtime seam must be probed",
@@ -171,35 +207,48 @@ pub fn audit_probe_coverage_with_markers(
                     "a RuntimeBoundary with no probe is never enforced at runtime".to_string(),
                     boundary.severity(),
                 )
-                .with_anchor(boundary.anchor().map(String::from)),
-            );
+                .with_anchor(boundary.anchor().map(String::from))
+            });
         }
     }
-    // Probed but never declared: the probe references an undeclared seam, which panics at
-    // runtime — catch the typo at CI instead of crashing production.
+    violations
+}
+
+/// Probed but never declared: the probe references an undeclared seam, which panics at
+/// runtime — catch the typo at CI instead of crashing production.
+fn undeclared_probe_violations(probes: &[Probe], declared_set: &HashSet<&str>) -> Vec<Violation> {
+    let mut violations = Vec::new();
     let mut seen_probe = HashSet::new();
-    for probe in &probes {
+    for probe in probes {
         if let Probe::Literal(seam) = probe {
-            if !declared_set.contains(seam.as_str()) && seen_probe.insert(seam.as_str()) {
-                violations.push(audit_violation(
-                    seam,
-                    "every probe must reference a declared seam",
-                    AuditRule::ProbeDeclaredSeam.key(),
-                    RuntimeFact::UndeclaredProbe { seam: seam.clone() },
-                    format!("an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"),
-                    Severity::Enforce,
-                ));
+            if !declared_set.contains(seam.as_str()) {
+                react_once(&mut seen_probe, seam.as_str(), &mut violations, || {
+                    audit_violation(
+                        seam,
+                        "every probe must reference a declared seam",
+                        AuditRule::ProbeDeclaredSeam.key(),
+                        RuntimeFact::UndeclaredProbe { seam: seam.clone() },
+                        format!(
+                            "an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"
+                        ),
+                        Severity::Enforce,
+                    )
+                });
             }
         }
     }
-    // Un-auditable probes: a non-literal seam argument cannot be traced to a declared seam.
-    // React rather than silently skip (a silent skip is a false negative). One reaction per
-    // (marker, file, owner-qualified enclosing item, expression text) — deduped, sorted — so two
-    // textually distinct non-literal probes in the same file are distinct findings and
-    // baselining one cannot mask another; two byte-identical occurrences in the same file and
-    // the same marker and enclosing item still collapse to one (a stated bound: at that
-    // granularity no further source content distinguishes them, mirroring `module-boundary`'s
-    // "same import on multiple lines is one violation").
+    violations
+}
+
+/// Un-auditable probes: a non-literal seam argument cannot be traced to a declared seam.
+/// React rather than silently skip (a silent skip is a false negative). One reaction per
+/// (marker, file, owner-qualified enclosing item, expression text) — deduped, sorted — so two
+/// textually distinct non-literal probes in the same file are distinct findings and
+/// baselining one cannot mask another; two byte-identical occurrences in the same file and
+/// the same marker and enclosing item still collapse to one (a stated bound: at that
+/// granularity no further source content distinguishes them, mirroring `module-boundary`'s
+/// "same import on multiple lines is one violation").
+fn unauditable_probe_violations(probes: &[Probe]) -> Vec<Violation> {
     let mut unauditable: Vec<(&str, &str, &str, &str)> = probes
         .iter()
         .filter_map(|p| match p {
@@ -219,13 +268,14 @@ pub fn audit_probe_coverage_with_markers(
         .collect();
     unauditable.sort_unstable();
     unauditable.dedup();
-    for (marker, file, owner, expr) in unauditable {
-        // The offending source file, owner, and expression are in hand here (the probe scan
-        // captured them). Project the file into the `file` field as well as the finding text: it
-        // is a genuine observation, so reporting `null` would be a dishonest null. This is the
-        // one runtime violation with a source location — the seam-level ones above name a seam,
-        // not a file.
-        violations.push(
+    unauditable
+        .into_iter()
+        .map(|(marker, file, owner, expr)| {
+            // The offending source file, owner, and expression are in hand here (the probe scan
+            // captured them). Project the file into the `file` field as well as the finding text:
+            // it is a genuine observation, so reporting `null` would be a dishonest null. This is
+            // the one runtime violation with a source location — the seam-level ones above name a
+            // seam, not a file.
             audit_violation(
                 "<un-auditable probe>",
                 "a configured probe marker's seam must be a string literal to be auditable",
@@ -239,14 +289,9 @@ pub fn audit_probe_coverage_with_markers(
                 "spell the seam as a string literal so probe coverage can be verified".to_string(),
                 Severity::Enforce,
             )
-            .with_file(Some(file.to_string())),
-        );
-    }
-    if violations.is_empty() {
-        Outcome::Clean
-    } else {
-        Outcome::Violations(Report::new(violations))
-    }
+            .with_file(Some(file.to_string()))
+        })
+        .collect()
 }
 
 #[cfg(test)]
