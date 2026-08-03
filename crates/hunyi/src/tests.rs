@@ -12286,6 +12286,57 @@ fn a_static_wrapped_impl_stays_a_stated_bound() {
     );
 }
 
+#[test]
+fn a_struct_directly_in_a_const_body_stays_a_stated_bound() {
+    // Scope bound: `body_nested_impls` extracts ONLY `impl` blocks. A struct DEFINITION written
+    // directly in a const/fn body has no enclosing `impl` to recover and is genuinely scoped to
+    // that body -- exactly like the plain-fn bound above -- so it must stay unobserved;
+    // recovering it would be a NEW, unaudited claim, not the fix this change makes.
+    assert_eq!(
+        findings(
+            "body-nested-bound-struct",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "const _: () = {\n    pub struct AlsoHidden { pub field: crate::infra::Db }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
+
+#[test]
+fn a_mod_directly_in_a_const_body_stays_a_stated_bound() {
+    // Scope bound: `body_nested_impls` extracts ONLY `impl` blocks. A `mod` declared directly in
+    // a const/fn body is unreachable as `crate::...` for the same reason a body-nested struct is
+    // (no enclosing `impl` to recover) -- this recovery's own bound, distinct from
+    // `async_subtree_does_not_observe_a_body_nested_module`'s unrelated async-subtree coverage,
+    // which was the only pre-existing test to even incidentally touch a body-nested `mod`.
+    assert_eq!(
+        findings(
+            "body-nested-bound-mod",
+            &[
+                ("lib.rs", "pub mod infra;\npub mod api;\n"),
+                ("infra.rs", "pub struct Db;\n"),
+                (
+                    "api.rs",
+                    "const _: () = {\n    pub mod inner {\n        pub struct AlsoHidden { pub field: crate::infra::Db }\n    }\n};\n",
+                ),
+            ],
+            "crate::api",
+            &["crate::infra"],
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+    );
+}
+
 // --- visibility boundary: extern-block foreign items ---------------------
 
 /// The motivating false negative, with more than one `pub` foreign item in the SAME block so the
