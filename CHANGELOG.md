@@ -147,7 +147,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   longer claims a crash there "simply leaves no file": it publishes its directory entry before its
   first byte, so a crash mid-create can leave an empty file that the next run refuses to overwrite
   (exit 2, remedy named) — stated instead of overclaimed. `violation-baseline` gains the requirement
-  and its two scenarios.
+  and its two scenarios, and the tolerance is pinned by a test that first proves its own
+  precondition — a directory that is genuinely unreadable to the running process — so it reports a
+  vacuous run instead of passing through one.
 - A value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `--format`) whose next
   argument is itself a `--`-prefixed flag is now a usage error that exits 2 and names the token
   found, instead of consuming that flag as its value. The absent-value case already failed loud; the
