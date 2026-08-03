@@ -2049,7 +2049,12 @@ fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
     let err = super::create_baseline_file(path.to_str().unwrap(), "replacement")
         .expect_err("create-new write must refuse an existing path");
 
-    assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+    match err {
+        super::BaselineWriteError::Io(io_err) => {
+            assert_eq!(io_err.kind(), std::io::ErrorKind::AlreadyExists);
+        }
+        other => panic!("a regular file collision must report a plain IO error: {other:?}"),
+    }
     assert_eq!(
         std::fs::read_to_string(path).unwrap(),
         "appeared concurrently"

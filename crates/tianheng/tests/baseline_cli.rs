@@ -347,6 +347,47 @@ fn a_stale_leftover_temp_file_is_reported_by_its_own_name_not_the_baseline_path(
 
 #[test]
 #[cfg(unix)]
+fn a_dangling_symlink_baseline_path_is_reported_by_its_own_cause_not_a_race() {
+    // A baseline path that is a symlink to a deleted target reads as NotFound (the create-new
+    // path runs), then create_new's O_EXCL fails with AlreadyExists — indistinguishable from a
+    // genuine concurrent creation without checking symlink_metadata explicitly. Unlike a real
+    // race, this is a permanent state: "rerun the command" (the concurrent-creation arm's own
+    // remedy) can never succeed here, so it must not be reported as if something appeared
+    // concurrently.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let target = temp_baseline("dangling-symlink-target");
+    let link = temp_baseline("dangling-symlink-link");
+    let _ = std::fs::remove_file(&target);
+    let _ = std::fs::remove_file(&link);
+    std::os::unix::fs::symlink(&target, &link).expect("create a dangling symlink");
+
+    let output = run_with(&manifest, "--write-baseline", &link);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    assert!(
+        stderr.contains(target.to_str().unwrap()),
+        "the message must name what the dangling symlink (no longer) points at: {stderr}"
+    );
+    assert!(
+        !stderr.contains("appeared while the new snapshot was being prepared"),
+        "a dangling symlink is a permanent state, not a concurrent-creation race, and must not be \
+         reported as one — \"rerun the command\" would fail identically forever: {stderr}"
+    );
+    assert!(
+        link.symlink_metadata()
+            .expect("read the link's own metadata")
+            .file_type()
+            .is_symlink(),
+        "the dangling link itself must be left untouched"
+    );
+
+    let _ = std::fs::remove_file(&link);
+}
+
+#[test]
+#[cfg(unix)]
 fn rewriting_through_a_symlink_into_a_non_utf8_named_directory_still_succeeds() {
     // The temp path is built by appending to the resolved target's raw OsString, never through
     // `Path::display()` (which lossily replaces non-UTF-8 bytes for human-readable formatting) — a

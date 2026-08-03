@@ -123,10 +123,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   left behind by an interrupted prior run (a killed process, or a pid reused across a fresh
   container) is a real, reachable case `create_new` also reports — now with its own specific
   message naming the actual colliding temp path and explaining why it is there, rather than a bare
-  `cannot write baseline <path>: File exists` that names nothing the adopter can act on. The
-  create-new path (writing a baseline where none existed) is unaffected: it has no pre-existing
-  content to protect, and already fails loud rather than clobbering if the file appears
-  concurrently.
+  `cannot write baseline <path>: File exists` that names nothing the adopter can act on. A baseline
+  path that is a symlink to a deleted target is reported by its own cause too, not misattributed to
+  the sibling "it appeared while the new snapshot was being prepared" race message: `O_EXCL` fails
+  on a dangling symlink exactly as it does on a genuine concurrent creation, but the two are not the
+  same state — a dangling symlink is permanent, so "rerun the command" (that message's own remedy)
+  could never have succeeded. The create-new path (writing a baseline where none existed) is
+  otherwise unaffected: it has no pre-existing content to protect, and already fails loud rather
+  than clobbering if the file appears concurrently.
 - Bounded native recursion depth across four recursive walkers in three crates, closing the same
   false-negative-adjacent bug class in every observation dimension — a pathologically (but
   genuinely acyclic) nested module tree, `use` tree, or block/macro-arm structure could overflow
