@@ -205,7 +205,7 @@ fn resolve_external_mod_decl(
     if let Some(rel) = &attrs.path {
         match resolve_path_module(file_dir, rel)? {
             Some(resolved) => modules.push(resolved),
-            None if attrs.cfg || in_transparent_arm => {}
+            None if absence_is_tolerated(&attrs, in_transparent_arm) => {}
             None => {
                 return Err(format!(
                     "cannot resolve reachable module `{name}` under {}",
@@ -226,19 +226,24 @@ fn resolve_external_mod_decl(
         has_backing_source = true;
         modules.push(resolved);
     }
-    // Membership in a transparent macro arm is the second cfg-conditional source, treated
-    // identically because it expresses one intent: the arm's predicate lives in the macro's
-    // `if #[cfg(..)]` header rather than on the item, and every arm is conditionally compiled by
-    // construction (the trailing `else` on its predicates' negation). 圭表 settled this rule for
-    // the same shape and 渾儀 adopted it; a third derivation here would be the silent-divergence
-    // class the cross-dimension ledger exists to catch.
-    if !(has_backing_source || attrs.cfg || in_transparent_arm) {
+    if !(has_backing_source || absence_is_tolerated(&attrs, in_transparent_arm)) {
         return Err(format!(
             "cannot resolve reachable module `{name}` under {}",
             child_base.display()
         ));
     }
     Ok(())
+}
+
+/// Whether a module declaration may legitimately have no backing source file on this
+/// configuration: its own bare `#[cfg]`, or membership in a transparent macro arm — the arm's
+/// predicate lives in the macro's `if #[cfg(..)]` header rather than on the item, and every arm
+/// is conditionally compiled by construction (the trailing `else` on its predicates' negation).
+/// 圭表 settled this rule for the same shape and 渾儀 adopted it; a third hand-assembled
+/// derivation here would be the silent-divergence class the cross-dimension ledger exists to
+/// catch.
+fn absence_is_tolerated(attrs: &ModPreambleAttrs, in_transparent_arm: bool) -> bool {
+    attrs.cfg || in_transparent_arm
 }
 
 /// The candidate base directories an inline `mod name { … }`'s body should be descended from. An
