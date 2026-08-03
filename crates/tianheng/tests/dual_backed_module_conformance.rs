@@ -19,15 +19,9 @@
 //! bare name; a trailing rule clause present in one and absent in the other), so there is no twin to
 //! be. Wording agreement stays `errors_conformance.rs`'s concern.
 
-use std::path::Path;
-
-use guibiao::{Constitution as GnomonConstitution, ModuleBoundary};
-use hunyi::SemanticBoundary;
-use louke::{RuntimeBoundary, audit_probe_coverage};
-
 #[path = "support/mod.rs"]
 mod support;
-use support::TempFixture;
+use support::{TempFixture, guibiao_exit, hunyi_exit, louke_exit};
 
 const REASON: &str = "conformance: a plain `mod` resolves to exactly one file in every dimension";
 
@@ -59,31 +53,6 @@ fn fixture(name: &str, flat: Option<&str>, nested: Option<&str>) -> TempFixture 
     fixture
 }
 
-fn guibiao_exit(package: &str, manifest: &Path) -> u8 {
-    let constitution = GnomonConstitution::new(package).boundary(
-        ModuleBoundary::in_crate(package)
-            .module("crate::child")
-            .must_not_import("crate::forbidden")
-            .because(REASON),
-    );
-    guibiao::check(&constitution, manifest).exit_code()
-}
-
-fn hunyi_exit(package: &str, manifest: &Path) -> u8 {
-    let boundary = SemanticBoundary::in_crate(package)
-        .module("crate::child")
-        .must_not_expose("crate::forbidden::Thing")
-        .because(REASON);
-    hunyi::check(&[boundary], manifest).exit_code()
-}
-
-fn louke_exit(root: &Path) -> u8 {
-    let boundary = RuntimeBoundary::at("conformance-seam")
-        .only_origins(["o"])
-        .because(REASON);
-    audit_probe_coverage(&[boundary], &[root.to_path_buf()]).exit_code()
-}
-
 /// Both conventional forms at once: every dimension must refuse to judge (exit 2), never resolve to
 /// one of the two and scan it as though the other were absent.
 #[test]
@@ -92,17 +61,17 @@ fn all_three_dimensions_agree_a_dual_backed_module_is_a_scan_error() {
     let fixture = fixture(package, Some(CLEAN_CHILD), Some(LEAKY_CHILD));
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         2,
         "圭表: a dual-backed module must be a constitution error (cannot judge)"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         2,
         "渾儀: a dual-backed module must be a constitution error, never a first-form pick"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), "conformance-seam", REASON),
         2,
         "漏刻: a dual-backed module must be a constitution error (cannot judge)"
     );
@@ -116,17 +85,17 @@ fn all_three_dimensions_agree_an_unconditionally_absent_module_is_a_scan_error()
     let fixture = fixture(package, None, None);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         2,
         "圭表: an unconditionally absent module file must be a constitution error"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         2,
         "渾儀: an unconditionally absent module file must be a constitution error"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), "conformance-seam", REASON),
         2,
         "漏刻: an unconditionally absent module file must be a constitution error"
     );
@@ -140,17 +109,17 @@ fn all_three_dimensions_agree_a_flat_only_module_resolves_clean() {
     let fixture = fixture(package, Some(CLEAN_CHILD), None);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         0,
         "圭表: a `child.rs`-only module resolves and is clean"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         0,
         "渾儀: a `child.rs`-only module resolves and is clean"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), "conformance-seam", REASON),
         0,
         "漏刻: a `child.rs`-only module resolves and its declared seam is probed"
     );
@@ -164,17 +133,17 @@ fn all_three_dimensions_agree_a_nested_only_module_resolves_clean() {
     let fixture = fixture(package, None, Some(CLEAN_CHILD));
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::child", REASON),
         0,
         "圭表: a `child/mod.rs`-only module resolves and is clean"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::child", REASON),
         0,
         "渾儀: a `child/mod.rs`-only module resolves and is clean"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), "conformance-seam", REASON),
         0,
         "漏刻: a `child/mod.rs`-only module resolves and its declared seam is probed"
     );

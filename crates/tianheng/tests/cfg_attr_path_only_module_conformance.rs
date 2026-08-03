@@ -25,15 +25,9 @@
 //!
 //! Exit codes are the claim; error wordings stay `errors_conformance.rs`'s concern.
 
-use std::path::Path;
-
-use guibiao::{Constitution as GnomonConstitution, ModuleBoundary};
-use hunyi::SemanticBoundary;
-use louke::{RuntimeBoundary, audit_probe_coverage};
-
 #[path = "support/mod.rs"]
 mod support;
-use support::TempFixture;
+use support::{TempFixture, guibiao_exit, hunyi_exit, louke_exit};
 
 const REASON: &str =
     "conformance: a cfg_attr(path)-only module is governed exactly like a file-backed one";
@@ -81,31 +75,6 @@ fn fixture(name: &str, lib_body: &str, files: &[(&str, &str)]) -> TempFixture {
     fixture
 }
 
-fn guibiao_exit(package: &str, manifest: &Path) -> u8 {
-    let constitution = GnomonConstitution::new(package).boundary(
-        ModuleBoundary::in_crate(package)
-            .module("crate::imp")
-            .must_not_import("crate::forbidden")
-            .because(REASON),
-    );
-    guibiao::check(&constitution, manifest).exit_code()
-}
-
-fn hunyi_exit(package: &str, manifest: &Path) -> u8 {
-    let boundary = SemanticBoundary::in_crate(package)
-        .module("crate::imp")
-        .must_not_expose("crate::forbidden::Thing")
-        .because(REASON);
-    hunyi::check(&[boundary], manifest).exit_code()
-}
-
-fn louke_exit(root: &Path) -> u8 {
-    let boundary = RuntimeBoundary::at(SEAM)
-        .only_origins(["o"])
-        .because(REASON);
-    audit_probe_coverage(&[boundary], &[root.to_path_buf()]).exit_code()
-}
-
 /// The audited PR #164 trigger reconstructed verbatim: TWO stacked, jointly-exhaustive
 /// `#[cfg_attr(.., path = ..)]` remaps on one `pub mod imp;`, both targets present on disk, no
 /// plain `imp.rs`/`imp/mod.rs`. All three dimensions must read the violating target and react, not
@@ -126,17 +95,17 @@ fn all_three_dimensions_govern_a_stacked_cfg_attr_path_only_module() {
     );
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
         1,
         "圭表: a stacked cfg_attr(path)-only module's forbidden `use` must react"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
         1,
         "渾儀: a stacked cfg_attr(path)-only module's forbidden exposure must react"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         1,
         "漏刻: a stacked cfg_attr(path)-only module's undeclared-seam probe must react"
     );
@@ -153,17 +122,17 @@ fn all_three_dimensions_govern_a_single_cfg_attr_path_only_module() {
     let fixture = fixture(package, &lib, &[("imp_unix.rs", IMP_VIOLATIONS)]);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
         1,
         "圭表: a single cfg_attr(path)-only module's forbidden `use` must react"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
         1,
         "渾儀: a single cfg_attr(path)-only module's forbidden exposure must react"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         1,
         "漏刻: a single cfg_attr(path)-only module's undeclared-seam probe must react"
     );
@@ -179,17 +148,17 @@ fn all_three_dimensions_leave_a_clean_cfg_attr_path_only_module_clean() {
     let fixture = fixture(package, &lib, &[("imp_unix.rs", IMP_CLEAN)]);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
         0,
         "圭表: a clean cfg_attr(path)-only module must not react"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
         0,
         "渾儀: a clean cfg_attr(path)-only module must not react"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         0,
         "漏刻: a probe inside a cfg_attr(path)-only module must count as real coverage"
     );
@@ -209,17 +178,17 @@ fn all_three_dimensions_agree_every_candidate_absent_stays_a_scan_error() {
     let fixture = fixture(package, &lib, &[]);
 
     assert_eq!(
-        guibiao_exit(package, fixture.manifest()),
+        guibiao_exit(package, fixture.manifest(), "crate::imp", REASON),
         2,
         "圭表: every candidate absent must stay a constitution error"
     );
     assert_eq!(
-        hunyi_exit(package, fixture.manifest()),
+        hunyi_exit(package, fixture.manifest(), "crate::imp", REASON),
         2,
         "渾儀: every candidate absent must stay a constitution error"
     );
     assert_eq!(
-        louke_exit(fixture.lib()),
+        louke_exit(fixture.lib(), SEAM, REASON),
         2,
         "漏刻: every candidate absent must stay a constitution error"
     );

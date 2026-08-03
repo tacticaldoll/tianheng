@@ -54,3 +54,35 @@ impl Drop for TempFixture {
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
+
+/// 圭表's exit code for a `must_not_import("crate::forbidden")` boundary on `module` — the shared
+/// shape every `*_conformance.rs` suite checks 圭表 against, differing only in which module is
+/// anchored and which reason each suite states for its own fixture.
+pub fn guibiao_exit(package: &str, manifest: &Path, module: &str, reason: &str) -> u8 {
+    let constitution = guibiao::Constitution::new(package).boundary(
+        guibiao::ModuleBoundary::in_crate(package)
+            .module(module)
+            .must_not_import("crate::forbidden")
+            .because(reason),
+    );
+    guibiao::check(&constitution, manifest).exit_code()
+}
+
+/// 渾儀's exit code for a `must_not_expose("crate::forbidden::Thing")` boundary on `module` — the
+/// semantic-dimension twin of [`guibiao_exit`] above.
+pub fn hunyi_exit(package: &str, manifest: &Path, module: &str, reason: &str) -> u8 {
+    let boundary = hunyi::SemanticBoundary::in_crate(package)
+        .module(module)
+        .must_not_expose("crate::forbidden::Thing")
+        .because(reason);
+    hunyi::check(&[boundary], manifest).exit_code()
+}
+
+/// 漏刻's exit code for an `only_origins(["o"])` boundary at `seam`, audited over `root` — the
+/// runtime-dimension twin of [`guibiao_exit`]/[`hunyi_exit`] above.
+pub fn louke_exit(root: &Path, seam: &'static str, reason: &str) -> u8 {
+    let boundary = louke::RuntimeBoundary::at(seam)
+        .only_origins(["o"])
+        .because(reason);
+    louke::audit_probe_coverage(&[boundary], &[root.to_path_buf()]).exit_code()
+}
