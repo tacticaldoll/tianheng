@@ -670,6 +670,33 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   failure is opaque to the system (`set_sink` takes a `Fn(&Violation)` returning nothing) and is
   never counted. Additive, non-breaking — the only public surface change is the new function.
 
+### Migration
+
+Every step below is already stated by the entry it comes from; this section only collects them, so
+an adopter reads the work in one place instead of assembling it from five `**BREAKING**` entries.
+
+- **Regenerate any recorded baseline.** Violation identity gained a required field in five places
+  this window: `governing_package` on every 圭表 and 渾儀 module/semantic fact, the declaring module on
+  inherent method/associated-item seams, the declaring module on impl-generics and extern-crate seams,
+  and the checkout-relative `file` label on every 漏刻 un-auditable probe. `--write-baseline` carries
+  `owner`/`tracker` annotations forward only where an entry's identity still **matches** (the merge is
+  keyed on identity), and each of these identities changed shape, so annotations cannot cross
+  automatically: preserve them externally, rewrite the baseline, then restore them onto the newly
+  observed facts. Every previously accepted violation reappears as new exactly once.
+- **Expect new entries, not only relabeled ones, for an inbound rule at `ScanDepth::Shallow`.** That
+  depth now reacts to an item-form import it silently passed before, so its regenerated baseline can
+  legitimately be larger than a relabeling would explain.
+- **If you call 漏刻's audit directly**, pass the new anchor argument to `audit_probe_coverage` /
+  `audit_probe_coverage_with_markers`: the workspace root, via the new
+  `xingbiao::workspace_root(&metadata)` for a Cargo workspace.
+- **If your constitution names 渾儀's signature-coupling builder types**, rename `SemanticBoundary` and
+  its draft chain to `SignatureBoundary` (`SignatureCrateDraft` / `SignatureModuleDraft` /
+  `SignatureBoundaryDraft`). No rule string, wire, or CLI name changes with it.
+- **If a CI invocation combines `--write-baseline` with `--warn-uncovered` or `--format`, drop the
+  inapplicable flag**, and likewise keep only one occurrence of a value-taking flag passed twice. Both
+  were previously accepted and silently ignored; both are now usage errors (exit 2), so an invocation
+  that appeared to work will now fail loud until the dropped flag is removed.
+
 ## [0.3.0] - 2026-07-26
 
 ### Documentation
