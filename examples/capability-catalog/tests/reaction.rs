@@ -134,6 +134,29 @@ fn a_const_eval_trick_wrapped_impl_reacts_by_name() {
     );
 }
 
+/// The `cfg-if = "1"` dependency (`marked.rs`'s cfg_if-wrapped marker-acquisition fixture) adds a
+/// SECOND finding under the crate's `restrict_dependency_sources_to` boundary, sharing the
+/// identical `(kind, rule, fact_type, shape, reason)` 5-tuple as the catalog's own pre-existing
+/// `tianheng` dependency finding asserted above — the composite identity check there cannot tell
+/// the two apart, so a future change that quietly stopped flagging `cfg-if` specifically would
+/// still satisfy it via the `tianheng` finding alone. Assert `cfg-if` is named by finding text.
+#[test]
+fn the_cfg_if_dependency_produces_its_own_dependency_source_finding() {
+    let outcome = check_constitution(&constitution(), &manifest());
+    let Outcome::Violations(report) = outcome else {
+        panic!("catalog must return structured violations")
+    };
+    let findings: Vec<&str> = report
+        .violations
+        .iter()
+        .map(|v| v.finding.as_str())
+        .collect();
+    assert!(
+        findings.contains(&"cfg-if"),
+        "the cfg-if dependency must produce its own named dependency-source finding: {findings:#?}"
+    );
+}
+
 /// The other closed 0.3.1 shape: a malformed forbidden/allowed operand (here a leading `::`) must
 /// fail loud as a constitution error (exit 2) instead of silently matching nothing. This declares
 /// its own tiny, isolated constitution — deliberately NOT the shared dense one above, since a
