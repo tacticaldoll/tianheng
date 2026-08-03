@@ -70,6 +70,32 @@ pub struct CrateTarget {
     pub package: String,
 }
 
+impl CrateTarget {
+    /// Create a new crate target for the given package name.
+    pub fn new(package: impl Into<String>) -> Self {
+        Self {
+            package: package.into(),
+        }
+    }
+
+    /// Access the crate's package name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.package
+    }
+}
+
+impl AsRef<str> for CrateTarget {
+    fn as_ref(&self) -> &str {
+        &self.package
+    }
+}
+
+impl std::fmt::Display for CrateTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.package)
+    }
+}
+
 /// What a crate boundary forbids. Each variant is a reaction with an observation
 /// source in `cargo metadata`; no variant is named for a reaction that does not
 /// exist.
