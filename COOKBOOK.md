@@ -256,7 +256,7 @@ the definition site of an associated/nested `fn` named like the crate, may false
 
 ```rust
 .signature_boundary(
-    SemanticBoundary::in_crate("my-app")
+    SignatureBoundary::in_crate("my-app")
         .module("crate::api")
         .must_not_expose("crate::infra::DbPool")
         .because("the public API must not leak the internal database pool"),

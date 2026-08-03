@@ -6,11 +6,11 @@ use xuanji::{RuleKey, Severity};
 /// implemented **only** inside the declared allowed module location(s). An
 /// `impl <Trait> for <Type>` block outside them is a violation. Declared in Rust (the
 /// single source of truth) and composed with the other dimensions at the gate. This
-/// governs *impl locality* — the complement of exposure ([`SemanticBoundary`]) and of the
+/// governs *impl locality* — the complement of exposure ([`SignatureBoundary`]) and of the
 /// static import boundary. It governs only the target crate's own impl sites; it makes no
 /// claim about downstream crates (that would be external trait sealing, an essential gap).
 ///
-/// [`SemanticBoundary`]: crate::SemanticBoundary
+/// [`SignatureBoundary`]: crate::SignatureBoundary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraitImplBoundary {
     pub(crate) crate_package: String,

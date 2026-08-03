@@ -17,7 +17,7 @@ pub fn static_only() -> Constitution {
 /// Stage 2 — + 渾儀: the public API must not expose the internal pool type.
 pub fn plus_semantic() -> Constitution {
     static_only().signature_boundary(
-        SemanticBoundary::in_crate("composed_app")
+        SignatureBoundary::in_crate("composed_app")
             .module("crate::api")
             .must_not_expose("crate::infra::DbPool")
             .because("the public API must not leak the internal database pool"),

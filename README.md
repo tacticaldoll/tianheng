@@ -36,7 +36,7 @@ target, rule, and forward-looking reason.
 |---|---|---|---|
 | the domain depends inward, never on infrastructure | `ModuleBoundary::must_not_import` | a written internal `use` edge | not a runtime call graph or macro-generated import |
 | only the facade may reach an internal module | `ModuleBoundary::must_only_be_imported_by` | an importer outside the closed allowlist | file/module imports, not reflective access |
-| a public seam must not leak an implementation type | `SemanticBoundary::must_not_expose` | the forbidden type in an observed public type position | not a function-body call site |
+| a public seam must not leak an implementation type | `SignatureBoundary::must_not_expose` | the forbidden type in an observed public type position | not a function-body call site |
 | an external crate belongs only under an adapter/FFI subtree | `ModuleBoundary::confine_external_crate` | its written `use` outside that subtree | not dynamic loading or resolved supply-chain provenance |
 | a core subtree stays synchronous and clock-free | `Constitution::sans_io_pure` | inline clock reads and exposed `async fn`s | only the explicit prefixes/verbs you provide; nothing baked in |
 | only registered adapter origins cross a runtime seam | `RuntimeBoundary::only_origins` | a live concrete type crossing the probed seam | not general effect or I/O reachability |
@@ -96,7 +96,7 @@ fn constitution() -> Constitution {
                 .because("the kernel must not depend on a projection"),
         )
         // 渾儀 (semantic): folded in via typed adders (none in this minimal example)
-        // .signature_boundary(SemanticBoundary::in_crate("my-app")…)
+        // .signature_boundary(SignatureBoundary::in_crate("my-app")…)
         // 漏刻 (runtime): a declared seam, audited for probe coverage at CI
         // .runtime(RuntimeBoundary::at("domain-entry").only_origins(["my_app::domain"]).because(…))
 }

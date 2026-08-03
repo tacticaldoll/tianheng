@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use api_hygiene::governance::constitution;
 use hunyi::{
-    check, check_visibility, Outcome, SemanticBoundary, VisibilityBoundary, VisibilityCeiling,
+    check, check_visibility, Outcome, SignatureBoundary, VisibilityBoundary, VisibilityCeiling,
 };
 
 fn manifest() -> PathBuf {
@@ -28,7 +28,7 @@ fn the_api_leak_reacts_with_exit_1() {
 /// dimension reacts to real exposure, not to the mere existence of the type.
 #[test]
 fn a_type_that_is_not_exposed_does_not_react() {
-    let boundary = vec![SemanticBoundary::in_crate("api_hygiene")
+    let boundary = vec![SignatureBoundary::in_crate("api_hygiene")
         .module("crate::api")
         .must_not_expose("crate::infra::Secret")
         .because("a type never exposed must not react")];

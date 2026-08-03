@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn workspace_coverage_counts_semantic_targets_but_not_runtime_seams() {
         let temp = TempHarness::new("coverage");
-        let semantic = crate::SemanticBoundary::in_crate("fixture")
+        let semantic = crate::SignatureBoundary::in_crate("fixture")
             .module("crate")
             .must_not_expose("crate::infra")
             .because("the fixture API owns its vocabulary");

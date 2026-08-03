@@ -13,8 +13,8 @@ choice, so this is additive depth on the patch line, not a false-negative closur
 ### Requirement: Opt-in modifier deepens signature-coupling to trait impls
 
 Trait-impl exposure SHALL be declared as an **opt-in modifier on the existing signature-coupling
-`SemanticBoundary`**, not as a new boundary type. A boundary written
-`SemanticBoundary::in_crate(c).module(m).must_not_expose(p).including_trait_impls().because(r)`
+`SignatureBoundary`**, not as a new boundary type. A boundary written
+`SignatureBoundary::in_crate(c).module(m).must_not_expose(p).including_trait_impls().because(r)`
 SHALL forbid the same type set `p` at the same module anchor `m`, deepening the observed surface to
 include the anchored module's trait `impl` blocks. A boundary WITHOUT `.including_trait_impls()`
 SHALL keep the v1 signature-coupling semantics (trait impls out of scope). The system MUST NOT
@@ -22,7 +22,7 @@ require TOML, YAML, Markdown, or any generated policy file to declare or run thi
 
 #### Scenario: The opt-in modifier deepens the same boundary
 
-- **WHEN** a developer writes `SemanticBoundary::in_crate("app").module("crate::domain").must_not_expose("crate::infra").including_trait_impls().because("domain must not leak infra even through impl-site contracts")`
+- **WHEN** a developer writes `SignatureBoundary::in_crate("app").module("crate::domain").must_not_expose("crate::infra").including_trait_impls().because("domain must not leak infra even through impl-site contracts")`
 - **THEN** a semantic boundary is held, anchored to `crate::domain` in crate `app`, forbidding exposure of `crate::infra` across both the signature-coupling surface AND the module's trait `impl` blocks, with a non-empty reason and a default `enforce` severity
 
 #### Scenario: Without the opt-in, trait impls stay out of scope

@@ -16,7 +16,7 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<Constitution>();
     assert_public_type::<CrateBoundary>();
     assert_public_type::<ModuleBoundary>();
-    assert_public_type::<SemanticBoundary>();
+    assert_public_type::<SignatureBoundary>();
     assert_public_type::<TraitImplBoundary>();
     assert_public_type::<VisibilityBoundary>();
     assert_public_type::<ForbiddenMarkerBoundary>();
@@ -105,7 +105,7 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         _ => unreachable!(),
     }
 
-    let signature_boundary = SemanticBoundary::in_crate("consumer-core")
+    let signature_boundary = SignatureBoundary::in_crate("consumer-core")
         .module("crate::api")
         .must_not_expose("crate::adapter::Client")
         .because("the public API owns its vocabulary");

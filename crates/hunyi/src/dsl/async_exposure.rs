@@ -124,10 +124,10 @@ impl AsyncExposureBoundaryDraft {
     /// Descend the anchored module's **whole subtree**: a public `async fn` in any descendant
     /// module reacts, not only one at the anchored module's own seam. Off by default (the boundary
     /// governs the declared seam alone); with it, anchoring at `crate` governs the whole crate —
-    /// the sans-I/O-purity shape. Mirrors [`SemanticBoundary`]'s `including_trait_impls` opt-in:
+    /// the sans-I/O-purity shape. Mirrors [`SignatureBoundary`]'s `including_trait_impls` opt-in:
     /// projected only when set, so a bare boundary stays byte-identical.
     ///
-    /// [`SemanticBoundary`]: crate::SemanticBoundary
+    /// [`SignatureBoundary`]: crate::SignatureBoundary
     pub fn including_submodules(self) -> Self {
         self.depth(ScanDepth::Subtree)
     }

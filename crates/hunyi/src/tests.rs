@@ -3739,7 +3739,7 @@ fn every_hunyi_rule_family_has_exact_semantic_identity() {
         assert_eq!(rule.fields().collect::<Vec<_>>(), expected_fields);
     }
 
-    let signature = SemanticBoundary::in_crate("x")
+    let signature = SignatureBoundary::in_crate("x")
         .module("crate::api")
         .must_not_expose("r#crate::infra")
         .and_not_expose("crate::storage")
@@ -3833,12 +3833,12 @@ fn every_hunyi_rule_family_has_exact_semantic_identity() {
 
 #[test]
 fn hunyi_rule_identity_is_set_order_stable_and_parameter_sensitive() {
-    let left = SemanticBoundary::in_crate("x")
+    let left = SignatureBoundary::in_crate("x")
         .module("crate::api")
         .must_not_expose("crate::infra")
         .and_not_expose("crate::storage")
         .because("first wording");
-    let reordered = SemanticBoundary::in_crate("other")
+    let reordered = SignatureBoundary::in_crate("other")
         .module("crate::elsewhere")
         .must_not_expose("crate::storage")
         .and_not_expose("crate::infra")
@@ -3846,13 +3846,13 @@ fn hunyi_rule_identity_is_set_order_stable_and_parameter_sensitive() {
         .warn()
         .because("different wording")
         .with_anchor("GOV-1");
-    let expanded = SemanticBoundary::in_crate("x")
+    let expanded = SignatureBoundary::in_crate("x")
         .module("crate::api")
         .must_not_expose("crate::infra")
         .and_not_expose("crate::storage")
         .and_not_expose("crate::transport")
         .because("first wording");
-    let deeper = SemanticBoundary::in_crate("x")
+    let deeper = SignatureBoundary::in_crate("x")
         .module("crate::api")
         .must_not_expose("crate::infra")
         .and_not_expose("crate::storage")
@@ -8220,7 +8220,7 @@ fn semantic_violation_carries_the_governed_module_file_not_the_types_file() {
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("domain must not expose infra");
@@ -8275,7 +8275,7 @@ fn the_semantic_file_is_not_part_of_the_baseline_identity() {
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("r");
@@ -8307,7 +8307,7 @@ fn cfg_duplicated_inline_modules_are_all_governed() {
             ("infra.rs", "pub struct Db;\n"),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::platform")
         .must_not_expose("crate::infra")
         .because("platform must not expose infra in any cfg variant");
@@ -8347,7 +8347,7 @@ fn cfg_mixed_inline_and_file_form_siblings_are_both_governed() {
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::platform")
         .must_not_expose("crate::infra")
         .because("platform must not expose infra in any cfg variant, inline or file-form");
@@ -8385,7 +8385,7 @@ fn a_semantic_boundary_anchored_at_an_inline_module_with_an_unconditional_path_r
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::thread::local_data")
         .must_not_expose("crate::infra")
         .because("an inline module's own #[path] must not make its children unresolvable");
@@ -8429,7 +8429,7 @@ fn a_further_segment_beneath_a_flat_file_form_cfg_sibling_resolves_from_its_own_
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::plat::target")
         .must_not_expose("crate::infra")
         .because(
@@ -8470,7 +8470,7 @@ fn a_plain_child_of_a_path_remapped_module_resolves_from_the_remaps_own_director
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::net::inner")
         .must_not_expose("crate::infra")
         .because("net::inner must not expose infra even though net is #[path]-remapped");
@@ -8511,7 +8511,7 @@ fn cfg_mixed_plain_and_path_remapped_file_form_siblings_are_both_governed() {
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::platform")
         .must_not_expose("crate::infra")
         .because("platform must not expose infra in either the plain or #[path]-remapped arm");
@@ -8552,7 +8552,7 @@ fn a_cfg_mixed_single_module_violation_names_the_offending_sibling_not_the_first
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::platform")
         .must_not_expose("crate::infra")
         .because("the reported file must name the sibling that actually exposes infra");
@@ -8602,7 +8602,7 @@ fn a_cfg_split_module_does_not_let_one_arms_use_alias_shadow_the_others() {
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::platform")
         .must_not_expose("crate::infra")
         .because("the unix arm's own Handle alias must resolve to infra, not the windows arm's");
@@ -9133,7 +9133,7 @@ fn a_facade_chain_reexport_reports_the_governed_module_file_not_the_facades() {
             ("domain.rs", "pub use crate::facade::Db;\n"),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("domain must not re-export infra");
@@ -9231,7 +9231,7 @@ fn path_remapped_semantic_module_is_governed_at_its_target_not_the_orphan() {
             ),
         ],
     );
-    let boundary = SemanticBoundary::in_crate("x")
+    let boundary = SignatureBoundary::in_crate("x")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("an unconditional #[path] module is governed at its target file");

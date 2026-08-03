@@ -2,7 +2,7 @@ use guibiao::constitution_json;
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, ScanDepth, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary,
+    SIGNATURE_RULE, ScanDepth, SignatureBoundary, TRAIT_IMPL_RULE, TraitImplBoundary,
     UNSAFE_CONFINEMENT_RULE, UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary};
@@ -61,7 +61,7 @@ fn semantic_module_json(
 }
 /// The JSON projection of one semantic boundary, mirroring a static boundary's shape (`kind`,
 /// `target`, `crate`, `rule`, `severity`, `reason`) plus the `forbidden` set.
-pub(in crate::runner) fn semantic_boundary_json(boundary: &SemanticBoundary) -> Value {
+pub(in crate::runner) fn semantic_boundary_json(boundary: &SignatureBoundary) -> Value {
     let mut object = semantic_module_json(
         boundary.module(),
         boundary.crate_package(),

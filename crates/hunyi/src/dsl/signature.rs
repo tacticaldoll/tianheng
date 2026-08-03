@@ -1,4 +1,4 @@
-//! Signature-coupling declaration DSL — [`SemanticBoundary`] and its draft chain.
+//! Signature-coupling declaration DSL — [`SignatureBoundary`] and its draft chain.
 
 use xuanji::{RuleKey, Severity};
 
@@ -7,7 +7,7 @@ use xuanji::{RuleKey, Severity};
 /// the static constitution at the gate. Each dimension owns its own declaration DSL and
 /// expresses findings in the shared 璇璣 model; the shell merges them into one reaction.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SemanticBoundary {
+pub struct SignatureBoundary {
     pub(crate) crate_package: String,
     pub(crate) module: String,
     pub(crate) forbidden: Vec<String>,
@@ -19,7 +19,7 @@ pub struct SemanticBoundary {
     pub(crate) including_trait_impls: bool,
 }
 
-impl SemanticBoundary {
+impl SignatureBoundary {
     /// Stable semantic identity for this signature-coupling rule.
     pub fn rule_key(&self) -> RuleKey {
         RuleKey::of(
@@ -35,8 +35,8 @@ impl SemanticBoundary {
     }
 
     /// Begin a semantic boundary in the crate named `package`.
-    pub fn in_crate(package: &str) -> SemanticCrateDraft {
-        SemanticCrateDraft {
+    pub fn in_crate(package: &str) -> SignatureCrateDraft {
+        SignatureCrateDraft {
             crate_package: package.to_string(),
         }
     }
@@ -63,18 +63,18 @@ impl SemanticBoundary {
     }
 }
 
-crate::dsl::boundary_common!(SemanticBoundary, SemanticBoundaryDraft);
+crate::dsl::boundary_common!(SignatureBoundary, SignatureBoundaryDraft);
 
 /// A semantic boundary awaiting its module anchor.
 #[doc(hidden)]
-pub struct SemanticCrateDraft {
+pub struct SignatureCrateDraft {
     crate_package: String,
 }
 
-impl SemanticCrateDraft {
+impl SignatureCrateDraft {
     /// Anchor the boundary to a module path within the crate (e.g. `crate::domain`).
-    pub fn module(self, module: &str) -> SemanticModuleDraft {
-        SemanticModuleDraft {
+    pub fn module(self, module: &str) -> SignatureModuleDraft {
+        SignatureModuleDraft {
             crate_package: self.crate_package,
             module: module.to_string(),
         }
@@ -83,16 +83,16 @@ impl SemanticCrateDraft {
 
 /// A module-anchored boundary awaiting the forbidden set.
 #[doc(hidden)]
-pub struct SemanticModuleDraft {
+pub struct SignatureModuleDraft {
     crate_package: String,
     module: String,
 }
 
-impl SemanticModuleDraft {
+impl SignatureModuleDraft {
     /// Forbid the module's public API from exposing the given type path or module prefix
     /// (`::`-delimited containment, so `crate::infra` also forbids `crate::infra::db::Pool`).
-    pub fn must_not_expose(self, path: &str) -> SemanticBoundaryDraft {
-        SemanticBoundaryDraft {
+    pub fn must_not_expose(self, path: &str) -> SignatureBoundaryDraft {
+        SignatureBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
             forbidden: vec![path.to_string()],
@@ -104,7 +104,7 @@ impl SemanticModuleDraft {
 
 /// A boundary awaiting severity (optional) and its reason.
 #[doc(hidden)]
-pub struct SemanticBoundaryDraft {
+pub struct SignatureBoundaryDraft {
     crate_package: String,
     module: String,
     forbidden: Vec<String>,
@@ -112,7 +112,7 @@ pub struct SemanticBoundaryDraft {
     including_trait_impls: bool,
 }
 
-impl SemanticBoundaryDraft {
+impl SignatureBoundaryDraft {
     /// Also forbid exposing another type path / module prefix (a boundary MAY forbid more
     /// than one).
     pub fn and_not_expose(mut self, path: &str) -> Self {
@@ -133,8 +133,8 @@ impl SemanticBoundaryDraft {
     }
 
     /// Finish the boundary with its human-readable reason (the repair hint).
-    pub fn because(self, reason: &str) -> SemanticBoundary {
-        SemanticBoundary {
+    pub fn because(self, reason: &str) -> SignatureBoundary {
+        SignatureBoundary {
             crate_package: self.crate_package,
             module: self.module,
             forbidden: self.forbidden,
