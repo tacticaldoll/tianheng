@@ -506,6 +506,20 @@ fn rewrite_longest_alias_prefixes(path: &str, map: &AliasMap) -> Option<Vec<Stri
     None
 }
 
+/// The one-step rewrite targets for `current`: `aliases`' targets if it has a matching prefix,
+/// else `reexports`', else `None` (no rewrite — `current` is already canonical, or resolves
+/// through neither map). Shared by both DFS phases in [`expand_canonical_paths`] below (the
+/// push-children pre-visit and the union-results post-visit), so they cannot silently disagree on
+/// which map wins when a path could rewrite through either.
+fn rewrite_targets(
+    current: &str,
+    aliases: &AliasMap,
+    reexports: &ReexportMap,
+) -> Option<Vec<String>> {
+    rewrite_longest_alias_prefixes(current, aliases)
+        .or_else(|| rewrite_longest_alias_prefixes(current, reexports))
+}
+
 pub(crate) fn expand_canonical_paths(
     path: &str,
     aliases: &AliasMap,
@@ -534,19 +548,7 @@ pub(crate) fn expand_canonical_paths(
                 continue;
             }
             let mut results = Vec::new();
-            if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
-                for t in &targets {
-                    let child = memo
-                        .get(t.as_str())
-                        .cloned()
-                        .unwrap_or_else(|| vec![t.clone()]);
-                    for r in child {
-                        if !results.contains(&r) {
-                            results.push(r);
-                        }
-                    }
-                }
-            } else if let Some(targets) = rewrite_longest_alias_prefixes(&current, reexports) {
+            if let Some(targets) = rewrite_targets(&current, aliases, reexports) {
                 for t in &targets {
                     let child = memo
                         .get(t.as_str())
@@ -580,13 +582,7 @@ pub(crate) fn expand_canonical_paths(
         work.push((current.clone(), true, depth));
 
         // Push unresolved children (reversed so the first target is processed first).
-        if let Some(targets) = rewrite_longest_alias_prefixes(&current, aliases) {
-            for target in targets.into_iter().rev() {
-                if !memo.contains_key(&target) {
-                    work.push((target, false, depth + 1));
-                }
-            }
-        } else if let Some(targets) = rewrite_longest_alias_prefixes(&current, reexports) {
+        if let Some(targets) = rewrite_targets(&current, aliases, reexports) {
             for target in targets.into_iter().rev() {
                 if !memo.contains_key(&target) {
                     work.push((target, false, depth + 1));
