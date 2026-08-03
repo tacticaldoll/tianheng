@@ -166,6 +166,13 @@ pub(crate) enum PublicSeam {
         name: String,
     },
     InherentGenerics {
+        /// See `InherentMethod::module` — the impl block's own declaring module. Carried for the
+        /// identical reason and by the identical coherence argument: an owner alone does NOT make
+        /// this seam distinct, because Rust permits two inherent `impl` blocks for the SAME self
+        /// type in two different modules, and two such blocks can carry the same forbidden bound
+        /// in their own generics. Without the module the two collapse to one fact, so a baseline
+        /// accepting the first would suppress the second's never-accepted violation.
+        module: String,
         owner: String,
     },
     Reexport {
@@ -173,8 +180,20 @@ pub(crate) enum PublicSeam {
         exported: String,
     },
     ExternCrate {
+        /// The module the `pub extern crate` item is written in. A crate may republish the same
+        /// external crate root from more than one module (`pub extern crate serde;` is legal in
+        /// each), so the crate name alone does not make the seam distinct — the same
+        /// per-declaration-site identity every other module-scoped seam here carries.
+        module: String,
         name: String,
     },
+    /// A trait `impl` block's own impl-site position. Deliberately NOT module-qualified, and that
+    /// is a coherence argument rather than an omission: `trait_ref` and `owner` both carry their
+    /// rendered generic arguments (`canonical_path_str` / `canonical_self_owner`), and Rust's
+    /// coherence rules reject two impl blocks of the same trait — same arguments — for the same
+    /// self type anywhere in one crate (E0119), wherever they are written. Two blocks that DO
+    /// coexist therefore differ in `trait_ref` or `owner` already. `InherentGenerics` above needs
+    /// the module precisely because inherent impls carry no such exclusion.
     TraitImpl {
         trait_ref: String,
         owner: String,
@@ -252,15 +271,21 @@ impl PublicSeam {
                 ("seam_trait", trait_name),
                 ("seam_name", name),
             ],
-            Self::InherentGenerics { owner } => {
-                vec![("seam_kind", "inherent_generics"), ("seam_owner", owner)]
-            }
+            Self::InherentGenerics { module, owner } => vec![
+                ("seam_kind", "inherent_generics"),
+                ("seam_module", module),
+                ("seam_owner", owner),
+            ],
             Self::Reexport { module, exported } => vec![
                 ("seam_kind", "reexport"),
                 ("seam_module", module),
                 ("seam_name", exported),
             ],
-            Self::ExternCrate { name } => vec![("seam_kind", "extern_crate"), ("seam_name", name)],
+            Self::ExternCrate { module, name } => vec![
+                ("seam_kind", "extern_crate"),
+                ("seam_module", module),
+                ("seam_name", name),
+            ],
             Self::TraitImpl {
                 trait_ref,
                 owner,
@@ -306,9 +331,12 @@ impl std::fmt::Display for PublicSeam {
                 trait_name,
                 name,
             } => write!(f, "{} trait {module}::{trait_name}::{name}", kind.as_str()),
-            Self::InherentGenerics { owner } => write!(f, "impl <{owner}> (generics)"),
+            // `module` is identity-only on both of these, exactly as it is on `InherentMethod` /
+            // `InherentAssoc`: the rendered sentence is unchanged by qualifying the identity, and
+            // two same-text violations stay separable by the `file` each one carries.
+            Self::InherentGenerics { owner, .. } => write!(f, "impl <{owner}> (generics)"),
             Self::Reexport { module, exported } => write!(f, "pub use {module}::{exported}"),
-            Self::ExternCrate { name } => write!(f, "pub extern crate {name}"),
+            Self::ExternCrate { name, .. } => write!(f, "pub extern crate {name}"),
             Self::TraitImpl {
                 trait_ref,
                 owner,

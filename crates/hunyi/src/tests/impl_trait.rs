@@ -638,6 +638,133 @@ pub(super) fn dyn_inherent_assoc_const_two_platform_modules_impling_the_same_own
     );
 }
 
+/// Same property again, for the `InherentGenerics` seam — the impl block's OWN generic bounds and
+/// `where`-clause. This seam is the one that had no module in its identity at all: unlike a method
+/// or an associated item, it carries no per-item name to fall back on, so `owner` was its whole
+/// distinguishing content and two blocks for the same owner collapsed outright. Rust permits the
+/// two blocks (coherence constrains trait impls, never inherent ones), so this is the identical
+/// two-module false negative, one seam kind further along.
+#[test]
+pub(super) fn signature_coupling_two_platform_modules_impl_generics_stay_distinct() {
+    let tree = TempSrcTree::new("sig-two-platform-generics");
+    tree.write_all(&[
+        (
+            "lib.rs",
+            "pub mod common;\npub mod infra;\npub mod plat_unix;\npub mod plat_win;\n",
+        ),
+        ("common.rs", "pub struct Conn<T>(pub T);\n"),
+        ("infra.rs", "pub trait Secret {}\n"),
+        (
+            "plat_unix.rs",
+            "use crate::common::Conn;\nimpl<T: crate::infra::Secret> Conn<T> { pub fn open(&self) {} }\n",
+        ),
+        (
+            "plat_win.rs",
+            "use crate::common::Conn;\nimpl<T: crate::infra::Secret> Conn<T> { pub fn open(&self) {} }\n",
+        ),
+    ]);
+    let forbidden = vec!["crate::infra::Secret".to_string()];
+    let findings_at = |module: &str| {
+        crate::exposure::module_findings(
+            tree.src(),
+            &tree.root(),
+            module,
+            &forbidden,
+            "x",
+            false,
+            &[],
+        )
+        .unwrap()
+    };
+    let unix = findings_at("crate::plat_unix");
+    let win = findings_at("crate::plat_win");
+    assert_eq!(unix.len(), 1, "{unix:?}");
+    assert_eq!(win.len(), 1, "{win:?}");
+    // Same rendered text (Display is module-blind here too, matching `InherentMethod`)...
+    assert_eq!(unix[0].0.to_string(), win[0].0.to_string());
+    // ...but distinct structured identity, which is what a baseline keys on.
+    assert_ne!(
+        unix[0].0, win[0].0,
+        "two impl blocks for the same owner in different modules must not collapse their own \
+         generics seams into one structured fact: {unix:?} vs {win:?}"
+    );
+}
+
+/// The `InherentGenerics` property again for dyn-trait, which builds that seam through its own
+/// second construction site (`collect_item_dyn_exposures`) — a guard on signature-coupling alone
+/// would leave that site free to pass a module-blind constant.
+#[test]
+pub(super) fn dyn_two_platform_modules_impl_generics_stay_distinct() {
+    let tree = TempSrcTree::new("dyn-two-platform-generics");
+    tree.write_all(&[
+        (
+            "lib.rs",
+            "pub mod common;\npub mod plat_unix;\npub mod plat_win;\n",
+        ),
+        ("common.rs", "pub struct Conn<T>(pub T);\n"),
+        (
+            "plat_unix.rs",
+            "use crate::common::Conn;\nimpl<T: AsRef<Box<dyn crate::Port>>> Conn<T> { pub fn open(&self) {} }\n",
+        ),
+        (
+            "plat_win.rs",
+            "use crate::common::Conn;\nimpl<T: AsRef<Box<dyn crate::Port>>> Conn<T> { pub fn open(&self) {} }\n",
+        ),
+    ]);
+    let unix =
+        crate::dyn_trait::dyn_module_findings(tree.src(), &tree.root(), "crate::plat_unix", "x")
+            .unwrap();
+    let win =
+        crate::dyn_trait::dyn_module_findings(tree.src(), &tree.root(), "crate::plat_win", "x")
+            .unwrap();
+    assert_eq!(unix.len(), 1, "{unix:?}");
+    assert_eq!(win.len(), 1, "{win:?}");
+    assert_eq!(unix[0].0.to_string(), win[0].0.to_string());
+    assert_ne!(
+        unix[0].0, win[0].0,
+        "two impl blocks for the same owner in different modules must not collapse their own \
+         generics seams into one structured fact: {unix:?} vs {win:?}"
+    );
+}
+
+/// The same property for the `ExternCrate` seam: `pub extern crate <dep>;` republishes one external
+/// crate root, and a crate may write it in more than one module. The crate name alone was the whole
+/// identity, so two such re-exports collapsed — the sibling shape of the generics case above, in the
+/// one other seam that carried no module.
+#[test]
+pub(super) fn two_modules_republishing_one_extern_crate_stay_distinct() {
+    let tree = TempSrcTree::new("sig-two-module-extern-crate");
+    tree.write_all(&[
+        ("lib.rs", "pub mod alpha;\npub mod beta;\n"),
+        ("alpha.rs", "pub extern crate worklane_core;\n"),
+        ("beta.rs", "pub extern crate worklane_core;\n"),
+    ]);
+    let forbidden = vec!["worklane_core".to_string()];
+    let deps = vec!["worklane_core".to_string()];
+    let findings_at = |module: &str| {
+        crate::exposure::module_findings(
+            tree.src(),
+            &tree.root(),
+            module,
+            &forbidden,
+            "x",
+            false,
+            &deps,
+        )
+        .unwrap()
+    };
+    let alpha = findings_at("crate::alpha");
+    let beta = findings_at("crate::beta");
+    assert_eq!(alpha.len(), 1, "{alpha:?}");
+    assert_eq!(beta.len(), 1, "{beta:?}");
+    assert_eq!(alpha[0].0.to_string(), beta[0].0.to_string());
+    assert_ne!(
+        alpha[0].0, beta[0].0,
+        "two modules republishing the same extern crate must not collapse to one structured \
+         fact: {alpha:?} vs {beta:?}"
+    );
+}
+
 #[test]
 pub(super) fn impl_trait_subtree_tolerates_a_cfg_gated_fileless_submodule() {
     let files = &[
