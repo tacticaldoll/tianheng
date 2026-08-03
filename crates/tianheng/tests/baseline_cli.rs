@@ -38,6 +38,73 @@ fn run_with(manifest: &Path, flag: &str, baseline: &Path) -> Output {
         .expect("run tianheng CLI")
 }
 
+/// How many times [`write_baseline_colliding_with`] re-races before giving up. The parent normally
+/// wins on the first attempt — the child has a whole `cargo metadata` read and scan to perform
+/// before it opens its temp file — so this is headroom for a loaded runner, not an expected cost.
+const TEMP_PLANT_ATTEMPTS: usize = 20;
+
+/// Overwrite `baseline` through the CLI while `plant` puts something at the temp path that run will
+/// predict, returning the output of the run whose temp-file open **actually collided** with it,
+/// along with that temp path.
+///
+/// The plant unavoidably races the child: the temp name embeds the writing process's pid, so the
+/// parent can only compute `<target>.tmp-<pid>` after `spawn`, and a loaded runner can let the child
+/// open its own temp file first. A run where the plant lands too late does not exercise the
+/// collision at all — and neither guard below can tell the difference from its own assertions. The
+/// stale-temp guard fails spuriously (it demands exit 2 and sees a clean exit 0 — observed once in
+/// CI, which is what prompted this helper), while the symlink guard passes VACUOUSLY: an untouched
+/// victim and a non-symlinked baseline are exactly what an unexercised run also leaves behind, so it
+/// would report a verdict it never earned. That is the failure mode `AGENTS.md` names — a guard is
+/// not a guard until it has been seen to fail, and a guard that cannot tell whether it ran is worse
+/// than none.
+///
+/// So the race is retried until the child reports the collision at the planted path, and if it never
+/// does, this fails loud saying so. Either way no assertion below rests on a coin flip.
+fn write_baseline_colliding_with(
+    manifest: &Path,
+    baseline: &Path,
+    mut plant: impl FnMut(&str),
+) -> (Output, String) {
+    for attempt in 1..=TEMP_PLANT_ATTEMPTS {
+        // The overwrite path needs an existing baseline; a previous attempt whose plant landed late
+        // will have rewritten it, which is equally fine.
+        if !baseline.exists() {
+            let seed = run_with(manifest, "--write-baseline", baseline);
+            assert_eq!(seed.status.code(), Some(0), "{seed:?}");
+        }
+        let real_baseline = std::fs::canonicalize(baseline).expect("canonicalize baseline");
+        let child = command_for(manifest)
+            .args([
+                "--write-baseline",
+                baseline.to_str().expect("UTF-8 baseline path"),
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn tianheng CLI");
+        let predicted_tmp = format!("{}.tmp-{}", real_baseline.display(), child.id());
+        plant(&predicted_tmp);
+        let output = child.wait_with_output().expect("wait for tianheng CLI");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // The one signal that the planted path was really the path the write tried to open: the
+        // refusal names it. `create_new`'s `O_EXCL` fails on any existing entry, a symlink included,
+        // so this holds for every obstruction a caller plants.
+        if output.status.code() == Some(2) && stderr.contains(&predicted_tmp) {
+            return (output, predicted_tmp);
+        }
+        // The plant landed too late (or not at all): remove it so the next attempt starts clean —
+        // `remove_file` unlinks a symlink itself, never its target.
+        let _ = std::fs::remove_file(&predicted_tmp);
+        assert!(
+            attempt < TEMP_PLANT_ATTEMPTS,
+            "the temp-path plant never landed before the child opened its own temp file in \
+             {TEMP_PLANT_ATTEMPTS} attempts, so the collision path was never exercised — this \
+             guard must not report a verdict it did not earn (last run: {output:?})"
+        );
+    }
+    unreachable!("the loop either returns an exercised run or fails loud on its last attempt")
+}
+
 fn wrong_typed_baseline() -> &'static str {
     r#"{"format":"tianheng.baseline/structured-facts","violations":[{
         "target":"example-core","rule":"deny external dependencies","finding":"serde",
@@ -580,17 +647,13 @@ fn a_symlink_planted_at_the_predicted_temp_path_is_refused_not_followed() {
         .expect("narrow the victim's permissions");
     let victim_before = std::fs::read_to_string(&victim).expect("read victim before");
 
-    let real_baseline = std::fs::canonicalize(&baseline).expect("canonicalize baseline");
-    let child = command_for(&manifest)
-        .args([
-            "--write-baseline",
-            baseline.to_str().expect("UTF-8 baseline path"),
-        ])
-        .spawn()
-        .expect("spawn tianheng CLI");
-    let predicted_tmp = format!("{}.tmp-{}", real_baseline.display(), child.id());
-    let _ = std::os::unix::fs::symlink(&victim, &predicted_tmp);
-    let output = child.wait_with_output().expect("wait for tianheng CLI");
+    // The plant races the child, and an unexercised run leaves an untouched victim too — which is
+    // exactly what this test asserts, so it would pass vacuously. `write_baseline_colliding_with`
+    // returns only a run that really tried to open the planted path, and fails loud otherwise.
+    let (output, predicted_tmp) =
+        write_baseline_colliding_with(&manifest, &baseline, |predicted| {
+            let _ = std::os::unix::fs::symlink(&victim, predicted);
+        });
     let _ = std::fs::remove_file(&predicted_tmp);
 
     let victim_after = std::fs::read_to_string(&victim).expect("read victim after");
@@ -635,22 +698,13 @@ fn a_stale_leftover_temp_file_is_reported_by_its_own_name_not_the_baseline_path(
     let baseline = temp_baseline("stale-temp-collision-baseline");
     let _ = std::fs::remove_file(&baseline);
 
-    let first = run_with(&manifest, "--write-baseline", &baseline);
-    assert_eq!(first.status.code(), Some(0), "{first:?}");
-
-    let real_baseline = std::fs::canonicalize(&baseline).expect("canonicalize baseline");
-    let child = command_for(&manifest)
-        .args([
-            "--write-baseline",
-            baseline.to_str().expect("UTF-8 baseline path"),
-        ])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .expect("spawn tianheng CLI");
-    let predicted_tmp = format!("{}.tmp-{}", real_baseline.display(), child.id());
-    let _ = std::fs::write(&predicted_tmp, "leftover from an interrupted run");
-    let output = child.wait_with_output().expect("wait for tianheng CLI");
+    // The plant races the child; a run where it lands late writes the baseline cleanly and exits 0,
+    // which used to fail this test spuriously (observed in CI) rather than telling anyone the
+    // collision was never reached. `write_baseline_colliding_with` re-races until it is.
+    let (output, predicted_tmp) =
+        write_baseline_colliding_with(&manifest, &baseline, |predicted| {
+            let _ = std::fs::write(predicted, "leftover from an interrupted run");
+        });
 
     assert_eq!(output.status.code(), Some(2), "{output:?}");
     let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
