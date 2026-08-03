@@ -95,6 +95,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   what counts as *reaching* the protected module, never who counts as *inside* it. Any existing
   `--write-baseline` output for an inbound rule declared at `ScanDepth::Shallow` may need
   regeneration: an import that previously passed silently may now correctly react.
+- 天衡's `--write-baseline` now overwrites an existing, supported baseline durably: the merged
+  document is written to a sibling temp path first, then an atomic `rename` swaps it into place,
+  instead of a bare truncating write. A crash, interrupt, or full disk mid-write previously left the
+  baseline truncated — destroying exactly the owner/tracker annotations the metadata-preserving
+  merge exists to carry forward, contradicting the function's own stated intent. The create-new path
+  (writing a baseline where none existed) is unaffected: it has no pre-existing content to protect,
+  and already fails loud rather than clobbering if the file appears concurrently.
 - Bounded native recursion depth across four recursive walkers in three crates, closing the same
   false-negative-adjacent bug class in every observation dimension — a pathologically (but
   genuinely acyclic) nested module tree, `use` tree, or block/macro-arm structure could overflow

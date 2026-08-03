@@ -525,7 +525,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     let write_result = if create_new {
         create_baseline_file(path, &document)
     } else {
-        std::fs::write(path, document)
+        write_baseline_atomically(path, &document)
     };
     match write_result {
         Ok(()) => {
@@ -555,6 +555,18 @@ fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
         .create_new(true)
         .open(path)
         .and_then(|mut file| file.write_all(document.as_bytes()))
+}
+
+/// Overwrites an existing baseline durably: the merged document lands at a sibling temp path
+/// first, then an atomic `rename` swaps it into place. A crash, interrupt, or full disk mid-write
+/// leaves the previous baseline — and the owner/tracker annotations `Baseline::of_preserving` just
+/// merged in — fully intact rather than truncated. `create_baseline_file` above has no pre-existing
+/// content to protect (a crash there simply leaves no file, and the adopter reruns the command), so
+/// only this, the overwrite path, needs the guarantee.
+fn write_baseline_atomically(path: &str, document: &str) -> std::io::Result<()> {
+    let tmp_path = format!("{path}.tmp-{}", std::process::id());
+    std::fs::write(&tmp_path, document)?;
+    std::fs::rename(&tmp_path, path)
 }
 
 /// Gate against a baseline: suppress recorded violations, fail only on new ones,

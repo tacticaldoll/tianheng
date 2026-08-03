@@ -102,6 +102,56 @@ fn baseline_rewrite_refuses_wrong_typed_metadata_and_preserves_the_file() {
 }
 
 #[test]
+fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
+    // The overwrite path (an already-existing, supported baseline) writes durably: the merged
+    // document lands at a sibling temp path first, then an atomic rename swaps it into place.
+    // Exercise that path twice — the first `--write-baseline` creates the file, the second
+    // overwrites the now-existing, supported baseline — and confirm the temp sibling never
+    // lingers once the command exits, whichever branch (create or overwrite) actually ran.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let path = temp_baseline("overwrite-no-stray-temp");
+    let _ = std::fs::remove_file(&path);
+
+    let first = run_with(&manifest, "--write-baseline", &path);
+    assert_eq!(first.status.code(), Some(0), "{first:?}");
+    assert!(path.exists(), "the first write must create the baseline");
+
+    let second = run_with(&manifest, "--write-baseline", &path);
+    assert_eq!(
+        second.status.code(),
+        Some(0),
+        "rewriting an already-valid baseline must still succeed: {second:?}"
+    );
+
+    let rewritten = std::fs::read_to_string(&path).expect("read back the rewritten baseline");
+    let rewritten_doc: serde_json::Value =
+        serde_json::from_str(&rewritten).expect("the rewritten baseline must be valid JSON");
+    assert_eq!(
+        rewritten_doc["format"], "tianheng.baseline/structured-facts",
+        "the atomic-rename write must land the document whole, not truncated: {rewritten_doc:?}"
+    );
+
+    let sibling_temp_files: Vec<_> = std::fs::read_dir(path.parent().unwrap())
+        .expect("read baseline's parent dir")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name())
+        .filter(|name| {
+            name.to_string_lossy()
+                .starts_with(path.file_name().unwrap().to_string_lossy().as_ref())
+                && name.to_string_lossy().contains(".tmp-")
+        })
+        .collect();
+    assert!(
+        sibling_temp_files.is_empty(),
+        "no temp sibling should remain after a durable baseline write: {sibling_temp_files:?}"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn disallow_stale_without_baseline_is_a_usage_error() {
     let Some(manifest) = fixture_manifest("clean") else {
         return;
