@@ -267,7 +267,7 @@ pub(crate) fn impl_trait_module_findings(
 /// the forbidden operand set. See `semantic-impl-trait-operand-boundary`'s "A returned impl Trait
 /// of a forbidden operand is a violation" requirement for the full multi-trait-bound and
 /// resolver-coverage rationale, and its "Empty operand set degenerates to shape-only" requirement
-/// for the empty-set behavior. The exact pipeline [`dyn_operand_module_findings`] uses
+/// for the empty-set behavior. The exact pipeline `dyn_trait::dyn_operand_module_findings` uses
 /// (`resolve_principal` → `expand_canonical_paths` → `matches_forbidden`).
 pub(crate) fn impl_trait_operand_module_findings(
     src_dir: &Path,

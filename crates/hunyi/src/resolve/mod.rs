@@ -364,7 +364,7 @@ pub(crate) fn apply_bare_alias_rename(canonical: String, renames: &ExternRenameM
 /// so a bare head must not be rewritten to the crate under such a module. The crate-relative
 /// (`crate::Y::…`) and leading-`::` forms are not shadowable and keep the full map. With `child_mods`
 /// empty this is byte-identical to `renames`. One source for the three sites that must not drift:
-/// [`module_findings`](crate::module_findings)' bare-head rewrite, [`collect_reexports`]' facade
+/// `exposure::module_findings`' bare-head rewrite, [`collect_reexports`]' facade
 /// closure, and the operand principal resolver.
 pub(crate) fn renames_shadowed(
     renames: &ExternRenameMap,

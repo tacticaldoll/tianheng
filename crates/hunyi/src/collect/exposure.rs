@@ -221,7 +221,7 @@ pub(crate) fn paths_in_generics_scoped(
 /// Collect a struct-like member list's (a `struct`'s or `union`'s named fields, or one enum
 /// variant's fields) governed-field exposures, tagging each with its per-field member seam — the
 /// field-iteration shape shared by the struct/union/enum-variant arms of both
-/// [`collect_item_exposures`] and [`collect_item_dyn_exposures`]. `is_governed` decides which
+/// [`collect_item_exposures`] and `collect_item_dyn_exposures`. `is_governed` decides which
 /// fields react: struct/union fields carry their own visibility, so callers pass
 /// `is_public(&field.vis)`; an enum variant's fields are as public as the enum itself regardless
 /// of `field.vis` (always `Inherited` there — never independently `pub`), so that caller passes
@@ -602,7 +602,7 @@ pub(crate) fn seg_name(ident: &syn::Ident) -> String {
 
 /// Push a re-export exposure. The `syn::Path` is built **directly from the segment idents** (never
 /// re-parsed from a string), so a raw-identifier segment (`pub use crate::r#type::X;`) is preserved
-/// and matches correctly — `resolve_path`/`matches_forbidden` normalize raw idents downstream. The
+/// and matches correctly — `resolve_path_all`/`matches_forbidden` normalize raw idents downstream. The
 /// seam is `pub use {module}::{exported}`. An empty segment list is skipped (a `self` under no
 /// prefix cannot arise from a legal re-export).
 pub(crate) fn push_reexport(

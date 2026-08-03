@@ -160,7 +160,7 @@ impl<'ast> Visit<'ast> for DynCollector {
 /// (`Send`/`Sync`/`Unpin`/`UnwindSafe`/`RefUnwindSafe`); a user-defined `auto trait` (unstable) or a
 /// local trait shadowing one of those names is out of scope. Each path is returned as written; the
 /// caller resolves and canonicalizes it exactly as an exposed type path (segment idents only;
-/// generic/parenthesized args on `Iterator<…>` / `Fn(…)` are ignored by [`resolve_path`]). A `dyn`
+/// generic/parenthesized args on `Iterator<…>` / `Fn(…)` are ignored by [`resolve_path_all`]). A `dyn`
 /// and an `impl Trait` share this — their `bounds` are the same `Punctuated<TypeParamBound>`.
 fn principal_trait_paths(
     bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,

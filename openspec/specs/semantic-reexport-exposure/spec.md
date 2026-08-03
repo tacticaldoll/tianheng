@@ -25,7 +25,7 @@ default** (no opt-in): a public re-export is the most direct public-API exposure
 public-surface item, not an optional depth — so it is part of signature-coupling's default surface.
 Reaction reuses signature-coupling's forbidden-type matching (exact resolved path OR `::`-delimited
 module prefix), the shared `hunyi::resolve` resolver with the same `BareFallback::Ignore` policy, and
-`canonicalize_through_reexports`, and folds into the same exit-code (0/1/2), `Baseline`, and severity
+`expand_canonical_paths`, and folds into the same exit-code (0/1/2), `Baseline`, and severity
 (`enforce` default / `warn`) contract. The used path SHALL be resolved and canonicalized before
 matching, so a re-export reached through a local `pub use` **facade chain** resolves to its defining
 path.
@@ -207,7 +207,7 @@ A leading `::` (`pub use ::dep::X;`) bypasses the shadow entirely and resolves t
 
 This same per-module child-module exclusion SHALL be applied **both** to the direct re-export head
 resolution **and** inside the crate-wide re-export **closure** (`collect_reexports`, whose map
-`canonicalize_through_reexports` / `canonicalize_through_aliases` follow), keyed by each collected
+`expand_canonical_paths` follows through both maps), keyed by each collected
 re-export's own **defining** module, and applied to **both** the external-crate set
 (`externs − child_module_names`) **and** the crate-root rename map (`renames − child_module_names`),
 exactly as the direct head does. A `pub use dep::X;` (extern-set variant) or `pub use wc::X;`
@@ -287,7 +287,7 @@ A bare head in this set resolves to its **verbatim** path; a bare head not in it
 existing non-resolving behavior. The determination SHALL be applied in the bare-fallback branch
 **after** `use`-map and `crate`/`self`/`super` resolution, so a local `use … as <depname>`
 alias still wins. Matching reuses the exact-or-`::`-prefix comparison,
-`canonicalize_through_reexports`, and the same exit-code / `Baseline` / severity /
+`expand_canonical_paths`, and the same exit-code / `Baseline` / severity /
 seam-qualification contract. The forbidden operand is the extern path **as written in the
 governed source** (for a renamed dependency, the in-source name); **no DSL change**.
 

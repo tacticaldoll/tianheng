@@ -103,7 +103,7 @@ pub(crate) fn dyn_module_findings(
 /// operand set. See `semantic-dyn-trait-operand-boundary`'s "A dyn of a forbidden trait operand is
 /// a violation" requirement for the full principal-trait-matching and resolver-coverage rationale.
 /// Resolved and canonicalized via [`crate::crate_scope::resolve_principal`] →
-/// `expand_canonical_paths` → `matches_forbidden`, exactly as [`crate::module_findings`] resolves
+/// `expand_canonical_paths` → `matches_forbidden`, exactly as `exposure::module_findings` resolves
 /// an exposed type.
 pub(crate) fn dyn_operand_module_findings(
     src_dir: &Path,
