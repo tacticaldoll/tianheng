@@ -178,6 +178,213 @@ struct Branch {
 // `current_file`'s parent at file scope and diverges from it only after descending an inline block —
 // which is exactly the case `current_file.parent()` alone got wrong (a false negative when a
 // `#[path]` relocated inside an inline block was resolved from the enclosing file's dir).
+/// Every same-named **inline** `mod x { … }` for `seg` in `branch` produces its OWN branch, not
+/// merged into a shared one: a `#[cfg(..)] mod x {..}` / `#[cfg(..)] mod x {..}` pair parses as
+/// two separate inline items (syn does not evaluate `cfg`), and while both are OBSERVED (matching
+/// the crate-wide scan's observe-all, cfg-blind policy — `scan::resolve_child_modules`), merging
+/// their items into one shared items list also merges everything a downstream caller derives from
+/// those items — a `use`-map, a child-module-name shadow set — even though the two arms are never
+/// simultaneously open in any real build. That conflation is the identical false-negative class
+/// this whole resolver exists to prevent, just one hop past item observation itself (found on a
+/// round-8 adversarial review; see `PROJECT.md`'s Decisions): merging genuinely produces every
+/// item, but a caller resolving one arm's own bare reference through the OTHER arm's
+/// `use`/child-module declaration silently misresolves it. Keeping every inline occurrence as its
+/// own independent branch — exactly like [`push_file_form_branches`] already does — means
+/// `resolve_module_items_with_files`' per-branch pairing keeps each arm's items (and, once the
+/// caller groups by branch rather than file, each arm's resolution context) distinct even though
+/// both arms share the identical enclosing `current_file`. Inline items live in the enclosing
+/// file, so `current_file` is unchanged; file-children live under `<child_dir>/x/` by default —
+/// UNLESS an unconditional `#[path = "…"]` precedes this inline header, which relocates that base
+/// (rustc's rule for an inline module too; it is NOT a no-op merely because the header has a body
+/// — verified against a real build), resolved per-occurrence so two inline arms can each carry
+/// their own relocation (or lack thereof) without one overwriting the other. A `cfg_attr`-wrapped
+/// `path` is not followed (the same cfg-conditional bound [`push_file_form_branches`] applies), so
+/// it does not relocate.
+fn push_inline_mod_branches(
+    branch: &Branch,
+    flat_items: &[FlatItem],
+    seg: &str,
+    next_branches: &mut Vec<Branch>,
+) {
+    for flat in flat_items {
+        if let syn::Item::Mod(module_item) = &flat.item {
+            if strip_raw(&module_item.ident.to_string()) != *seg {
+                continue;
+            }
+            let Some((_, inner)) = &module_item.content else {
+                continue; // a file-form declaration of this name; handled by push_file_form_branches
+            };
+            let relocated_base =
+                direct_path_value(&module_item.attrs).map(|rel| branch.path_base.join(rel));
+            let inline_dir = relocated_base.unwrap_or_else(|| branch.child_dir.join(seg));
+            next_branches.push(Branch {
+                items: inner.clone(),
+                current_file: branch.current_file.clone(),
+                child_dir: inline_dir.clone(),
+                path_base: inline_dir,
+            });
+        }
+    }
+}
+
+/// Resolve EVERY file-form `mod seg;` declaration for `branch` — ALWAYS attempted, not only when
+/// no inline variant was found by [`push_inline_mod_branches`], and never stopping at the first
+/// match: a mutually-exclusive `#[cfg]` per-platform shim can legitimately pair an inline variant
+/// with a file-form variant, or pair a PLAIN `mod seg;` with an unconditional `#[path]`-remapped
+/// `mod seg;` of the same name — two declarations that, once `#[path]` is followed, need not name
+/// the same file at all. Matching `resolve_child_modules`'s own crate-wide policy (which never
+/// breaks after one match either), every non-inline declaration for this segment produces its own
+/// branch; picking only the first was a real false negative (a forbidden item declared only in
+/// the sibling that lost the race passed unobserved, nondeterministically depending on source
+/// order). Deduped by the resolved file's CANONICAL path: two mutually-exclusive `#[cfg]` arms
+/// that both plainly declare `mod seg;` (no `#[path]`, so both are found via the identical
+/// `locate_module_file` lookup) are the same real file compiled twice by neither build — pushing a
+/// branch per occurrence would duplicate that file's items in the merged result, inflating one
+/// real violation into two apparently-distinct findings with no way for exact-string finding dedup
+/// to collapse them back (their internal unsupported-syntax sentinels can differ before the public
+/// observation path rejects them).
+fn push_file_form_branches(
+    branch: &Branch,
+    flat_items: &[FlatItem],
+    seg: &str,
+    module: &str,
+    crate_package: &str,
+    next_branches: &mut Vec<Branch>,
+) -> Result<(), String> {
+    let mut file_forms: Vec<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf)> = Vec::new();
+    let mut seen_files: HashSet<PathBuf> = HashSet::new();
+    for flat in flat_items {
+        if let syn::Item::Mod(module_item) = &flat.item {
+            if module_item.content.is_some() {
+                continue; // an inline body for this name is already collected by push_inline_mod_branches
+            }
+            if strip_raw(&module_item.ident.to_string()) != *seg {
+                continue;
+            }
+            // Whether this declaration may legitimately have no source file on this build:
+            // its own bare `#[cfg]`, or membership in a transparent macro arm (every
+            // `cfg_if!` arm is gated by a predicate in the macro header, the trailing `else`
+            // by the negation of the rest). Computed once so the two absence sites below
+            // cannot drift apart on it — the divergence class this walker's shared policy
+            // with `scan::resolve_child_modules` exists to prevent.
+            let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
+            // Follow an **unconditional** `#[path = "…"]` file module. rustc resolves a
+            // non-inline `#[path]` relative to `path_base` — the containing file's own
+            // directory, with each enclosing inline-`mod` name accumulated onto it — NOT
+            // `child_dir` (the conventional-child base `<dir>/seg/` for a non-mod-rs file),
+            // the false-negative the whole-crate walk shares. Load `<path_base>/<rel>`, and
+            // since a `#[path]`-loaded file is mod-rs-like, its own children (both
+            // conventional and any further `#[path]`) resolve from ITS OWN directory too — so
+            // `path_base` and the child-continuation directory are the SAME value here (unlike
+            // the plain, non-`#[path]` case below, where they differ for a flat `seg.rs`).
+            if let Some(rel) = direct_path_value(&module_item.attrs) {
+                let file = branch.path_base.join(&rel);
+                if !file.is_file() {
+                    // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
+                    // (e.g. `#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) removes
+                    // the whole item, `#[path]` included, when `pred` is false — rustc never
+                    // attempts to resolve the target on such a build (verified against a real
+                    // build: this compiles cleanly with the target entirely absent). Tolerate
+                    // exactly like the plain-missing-file case below; an unconditional item
+                    // with no accompanying `#[cfg]` still fails loud.
+                    if cfg_conditional {
+                        continue;
+                    }
+                    return Err(missing_module_file_error(module, crate_package));
+                }
+                if !xingbiao::try_visit(&mut seen_files, &file)? {
+                    continue;
+                }
+                let parsed = read_parse(&file)?;
+                let next_dir = file
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| branch.child_dir.clone());
+                file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
+                continue;
+            }
+            // A `cfg_attr`-wrapped `#[path]` target is unioned with the conventional file
+            // below, not followed in its place: `cfg_attr` never removes the `mod` item, so
+            // cfg-blind observation cannot know which one a given build actually compiles.
+            // Mirrors `scan::resolve_child_modules`'s identical union (found on adversarial
+            // review: this targeted resolver's own doc once claimed to fail loud on this shape,
+            // but a mutually-exclusive sibling declaration for the same name silently absorbed
+            // the branch count, so the cfg_attr target's own file was dropped with no error at
+            // all whenever ANY sibling resolved — never truly fail-loud in that case).
+            let cfg_attr_targets = cfg_attr_path_values(&module_item.attrs);
+            let mut has_backing_source = false;
+            for rel in &cfg_attr_targets {
+                let file = branch.path_base.join(rel);
+                if file.is_file() {
+                    has_backing_source = true;
+                    if xingbiao::try_visit(&mut seen_files, &file)? {
+                        let parsed = read_parse(&file)?;
+                        let next_dir = file
+                            .parent()
+                            .map(Path::to_path_buf)
+                            .unwrap_or_else(|| branch.child_dir.clone());
+                        file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
+                    }
+                }
+            }
+            // A `#[cfg]`-gated plain module may legitimately have no source file when the
+            // predicate is off (a standard optional-feature pattern) — matching
+            // `scan::resolve_child_modules`'s identical tolerance for the crate-wide walk, so
+            // this single-module-anchored descent no longer disagrees with its own sibling
+            // walker on the identical shape (the 0.2.2 lesson: the two walkers' missing-file
+            // policies had silently drifted apart). An unconditional missing file stays a real
+            // scan error (exit 2), UNLESS the `cfg_attr` target above already backs this
+            // declaration on some other build. BOTH conventional forms present is checked
+            // FIRST and is never tolerated: no predicate value makes two files compile as one
+            // module, so unlike an absence it cannot be a legitimate configuration — the same
+            // ordering 圭表 and 漏刻 each independently apply to this shape.
+            let file = match locate_module_file(&branch.child_dir, seg) {
+                ModuleFile::One(file) => file,
+                ModuleFile::Ambiguous { flat, nested } => {
+                    // `seg`, not `module`: the ambiguous declaration may be an ANCESTOR of the
+                    // anchor being resolved, and the two paths below are that ancestor's.
+                    return Err(dual_backed_module_error(
+                        module,
+                        seg,
+                        crate_package,
+                        &flat,
+                        &nested,
+                    ));
+                }
+                ModuleFile::Absent => {
+                    if has_backing_source || cfg_conditional {
+                        continue;
+                    }
+                    return Err(missing_module_file_error(module, crate_package));
+                }
+            };
+            if !xingbiao::try_visit(&mut seen_files, &file)? {
+                continue;
+            }
+            let parsed = read_parse(&file)?;
+            // The loaded file's own directory is the base for a `#[path]` written at its top
+            // level (`<dir>` for `seg.rs`, `<dir>/seg` for `seg/mod.rs`); its CONVENTIONAL
+            // children (a further plain `mod y;`) always live under `<child_dir>/seg`
+            // regardless — the two conventions only diverge for `#[path]`-resolution
+            // purposes, never for where a plain child nests.
+            let own_dir = file
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| branch.child_dir.join(seg));
+            file_forms.push((parsed.items, file, own_dir, branch.child_dir.join(seg)));
+        }
+    }
+    for (file_items, file, path_base, child_dir) in file_forms {
+        next_branches.push(Branch {
+            items: file_items,
+            current_file: file,
+            child_dir,
+            path_base,
+        });
+    }
+    Ok(())
+}
+
 fn descend(
     branches: Vec<Branch>,
     segments: &[String],
@@ -195,197 +402,15 @@ fn descend(
         // shape. Each flattened item carries whether it came from an arm, which the absence
         // tolerance below consults exactly like a bare `#[cfg]` on the declaration itself.
         let flat_items = flatten_transparent_macros(&branch.items);
-        // Every same-named **inline** `mod x { … }` for this segment produces its OWN branch, not
-        // merged into a shared one: a `#[cfg(..)] mod x {..}` / `#[cfg(..)] mod x {..}` pair parses
-        // as two separate inline items (syn does not evaluate `cfg`), and while both are
-        // OBSERVED (matching the crate-wide scan's observe-all, cfg-blind policy —
-        // `scan::resolve_child_modules`), merging their items into one shared items list also
-        // merges everything a downstream caller derives from those items — a `use`-map, a
-        // child-module-name shadow set — even though the two arms are never simultaneously open in
-        // any real build. That conflation is the identical false-negative class this whole
-        // resolver exists to prevent, just one hop past item observation itself (found on a
-        // round-8 adversarial review; see `PROJECT.md`'s Decisions): merging genuinely produces
-        // every item, but a caller resolving one arm's own bare reference through the OTHER arm's
-        // `use`/child-module declaration silently misresolves it. Keeping every inline occurrence
-        // as its own independent branch — exactly like the file-form loop below already does —
-        // means `resolve_module_items_with_files`' per-branch pairing keeps each arm's items
-        // (and, once the caller groups by branch rather than file, each arm's resolution context)
-        // distinct even though both arms share the identical enclosing `current_file`. Inline
-        // items live in the enclosing file, so `current_file` is unchanged; file-children live
-        // under `<child_dir>/x/` by default — UNLESS an unconditional `#[path = "…"]` precedes
-        // this inline header, which relocates that base (rustc's rule for an inline module too;
-        // it is NOT a no-op merely because the header has a body — verified against a real
-        // build), resolved per-occurrence so two inline arms can each carry their own relocation
-        // (or lack thereof) without one overwriting the other. A `cfg_attr`-wrapped `path` is not
-        // followed (the same cfg-conditional bound as the file-form case below), so it does not
-        // relocate.
-        for flat in &flat_items {
-            if let syn::Item::Mod(module_item) = &flat.item {
-                if strip_raw(&module_item.ident.to_string()) != *seg {
-                    continue;
-                }
-                let Some((_, inner)) = &module_item.content else {
-                    continue; // a file-form declaration of this name; handled below
-                };
-                let relocated_base =
-                    direct_path_value(&module_item.attrs).map(|rel| branch.path_base.join(rel));
-                let inline_dir = relocated_base.unwrap_or_else(|| branch.child_dir.join(seg));
-                next_branches.push(Branch {
-                    items: inner.clone(),
-                    current_file: branch.current_file.clone(),
-                    child_dir: inline_dir.clone(),
-                    path_base: inline_dir,
-                });
-            }
-        }
-        // Resolve EVERY file-form `mod seg;` too — ALWAYS attempted, not only when no inline
-        // variant was found above, and never stopping at the first match: a mutually-exclusive
-        // `#[cfg]` per-platform shim can legitimately pair an inline variant with a file-form
-        // variant, or pair a PLAIN `mod seg;` with an unconditional `#[path]`-remapped `mod seg;`
-        // of the same name — two declarations that, once `#[path]` is followed, need not name the
-        // same file at all. Matching `resolve_child_modules`'s own crate-wide policy (which never
-        // breaks after one match either), every non-inline declaration for this segment produces
-        // its own branch; picking only the first was a real false negative (a forbidden item
-        // declared only in the sibling that lost the race passed unobserved, nondeterministically
-        // depending on source order).
-        let mut file_forms: Vec<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf)> = Vec::new();
-        // Deduped by the resolved file's CANONICAL path: two mutually-exclusive `#[cfg]` arms
-        // that both plainly declare `mod seg;` (no `#[path]`, so both are found via the identical
-        // `locate_module_file` lookup) are the same real file compiled twice by neither build —
-        // pushing a branch per occurrence would duplicate that file's items in the merged result,
-        // inflating one real violation into two apparently-distinct findings with no way for
-        // exact-string finding dedup to collapse them back (their internal unsupported-syntax
-        // sentinels can differ before the public observation path rejects them).
-        let mut seen_files: HashSet<PathBuf> = HashSet::new();
-        for flat in &flat_items {
-            if let syn::Item::Mod(module_item) = &flat.item {
-                if module_item.content.is_some() {
-                    continue; // an inline body for this name is already collected above
-                }
-                if strip_raw(&module_item.ident.to_string()) != *seg {
-                    continue;
-                }
-                // Whether this declaration may legitimately have no source file on this build:
-                // its own bare `#[cfg]`, or membership in a transparent macro arm (every
-                // `cfg_if!` arm is gated by a predicate in the macro header, the trailing `else`
-                // by the negation of the rest). Computed once so the two absence sites below
-                // cannot drift apart on it — the divergence class this walker's shared policy
-                // with `scan::resolve_child_modules` exists to prevent.
-                let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
-                // Follow an **unconditional** `#[path = "…"]` file module. rustc resolves a
-                // non-inline `#[path]` relative to `path_base` — the containing file's own
-                // directory, with each enclosing inline-`mod` name accumulated onto it — NOT
-                // `child_dir` (the conventional-child base `<dir>/seg/` for a non-mod-rs file),
-                // the false-negative the whole-crate walk shares. Load `<path_base>/<rel>`, and
-                // since a `#[path]`-loaded file is mod-rs-like, its own children (both
-                // conventional and any further `#[path]`) resolve from ITS OWN directory too — so
-                // `path_base` and the child-continuation directory are the SAME value here (unlike
-                // the plain, non-`#[path]` case below, where they differ for a flat `seg.rs`).
-                if let Some(rel) = direct_path_value(&module_item.attrs) {
-                    let file = branch.path_base.join(&rel);
-                    if !file.is_file() {
-                        // A BARE `#[cfg(pred)]` co-occurring with this unconditional `#[path]`
-                        // (e.g. `#[cfg(windows)] #[path = "windows_impl.rs"] mod imp;`) removes
-                        // the whole item, `#[path]` included, when `pred` is false — rustc never
-                        // attempts to resolve the target on such a build (verified against a real
-                        // build: this compiles cleanly with the target entirely absent). Tolerate
-                        // exactly like the plain-missing-file case below; an unconditional item
-                        // with no accompanying `#[cfg]` still fails loud.
-                        if cfg_conditional {
-                            continue;
-                        }
-                        return Err(missing_module_file_error(module, crate_package));
-                    }
-                    if !xingbiao::try_visit(&mut seen_files, &file)? {
-                        continue;
-                    }
-                    let parsed = read_parse(&file)?;
-                    let next_dir = file
-                        .parent()
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| branch.child_dir.clone());
-                    file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
-                    continue;
-                }
-                // A `cfg_attr`-wrapped `#[path]` target is unioned with the conventional file
-                // below, not followed in its place: `cfg_attr` never removes the `mod` item, so
-                // cfg-blind observation cannot know which one a given build actually compiles.
-                // Mirrors `scan::resolve_child_modules`'s identical union (found on adversarial
-                // review: this targeted resolver's own doc once claimed to fail loud on this shape,
-                // but a mutually-exclusive sibling declaration for the same name silently absorbed
-                // the branch count, so the cfg_attr target's own file was dropped with no error at
-                // all whenever ANY sibling resolved — never truly fail-loud in that case).
-                let cfg_attr_targets = cfg_attr_path_values(&module_item.attrs);
-                let mut has_backing_source = false;
-                for rel in &cfg_attr_targets {
-                    let file = branch.path_base.join(rel);
-                    if file.is_file() {
-                        has_backing_source = true;
-                        if xingbiao::try_visit(&mut seen_files, &file)? {
-                            let parsed = read_parse(&file)?;
-                            let next_dir = file
-                                .parent()
-                                .map(Path::to_path_buf)
-                                .unwrap_or_else(|| branch.child_dir.clone());
-                            file_forms.push((parsed.items, file, next_dir.clone(), next_dir));
-                        }
-                    }
-                }
-                // A `#[cfg]`-gated plain module may legitimately have no source file when the
-                // predicate is off (a standard optional-feature pattern) — matching
-                // `scan::resolve_child_modules`'s identical tolerance for the crate-wide walk, so
-                // this single-module-anchored descent no longer disagrees with its own sibling
-                // walker on the identical shape (the 0.2.2 lesson: the two walkers' missing-file
-                // policies had silently drifted apart). An unconditional missing file stays a real
-                // scan error (exit 2), UNLESS the `cfg_attr` target above already backs this
-                // declaration on some other build. BOTH conventional forms present is checked
-                // FIRST and is never tolerated: no predicate value makes two files compile as one
-                // module, so unlike an absence it cannot be a legitimate configuration — the same
-                // ordering 圭表 and 漏刻 each independently apply to this shape.
-                let file = match locate_module_file(&branch.child_dir, seg) {
-                    ModuleFile::One(file) => file,
-                    ModuleFile::Ambiguous { flat, nested } => {
-                        // `seg`, not `module`: the ambiguous declaration may be an ANCESTOR of the
-                        // anchor being resolved, and the two paths below are that ancestor's.
-                        return Err(dual_backed_module_error(
-                            module,
-                            seg,
-                            crate_package,
-                            &flat,
-                            &nested,
-                        ));
-                    }
-                    ModuleFile::Absent => {
-                        if has_backing_source || cfg_conditional {
-                            continue;
-                        }
-                        return Err(missing_module_file_error(module, crate_package));
-                    }
-                };
-                if !xingbiao::try_visit(&mut seen_files, &file)? {
-                    continue;
-                }
-                let parsed = read_parse(&file)?;
-                // The loaded file's own directory is the base for a `#[path]` written at its top
-                // level (`<dir>` for `seg.rs`, `<dir>/seg` for `seg/mod.rs`); its CONVENTIONAL
-                // children (a further plain `mod y;`) always live under `<child_dir>/seg`
-                // regardless — the two conventions only diverge for `#[path]`-resolution
-                // purposes, never for where a plain child nests.
-                let own_dir = file
-                    .parent()
-                    .map(Path::to_path_buf)
-                    .unwrap_or_else(|| branch.child_dir.join(seg));
-                file_forms.push((parsed.items, file, own_dir, branch.child_dir.join(seg)));
-            }
-        }
-        for (file_items, file, path_base, child_dir) in file_forms {
-            next_branches.push(Branch {
-                items: file_items,
-                current_file: file,
-                child_dir,
-                path_base,
-            });
-        }
+        push_inline_mod_branches(branch, &flat_items, seg, &mut next_branches);
+        push_file_form_branches(
+            branch,
+            &flat_items,
+            seg,
+            module,
+            crate_package,
+            &mut next_branches,
+        )?;
     }
     if next_branches.is_empty() {
         return Err(unknown_module_error(module, crate_package));

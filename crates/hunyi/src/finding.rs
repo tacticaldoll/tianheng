@@ -601,76 +601,15 @@ impl SemanticFact {
 
     fn into_finding_with_text(self, text: String, governing_package: &str) -> Finding {
         match &self {
-            SemanticFact::AsyncFreeFn { module, name, .. } => {
-                return Finding::new(
-                    text,
-                    StructuredFactIdentity::of(
-                        "tianheng.fact/hunyi/async-exposure",
-                        "async-free-function",
-                        [
-                            ("governing_package", governing_package.to_string()),
-                            ("module", module.clone()),
-                            ("name", name.clone()),
-                            ("owner", module.clone()),
-                            ("owner_kind", "module".to_string()),
-                        ],
-                    ),
-                );
+            SemanticFact::AsyncFreeFn { .. }
+            | SemanticFact::AsyncTraitMethod { .. }
+            | SemanticFact::AsyncInherentMethod { .. } => {
+                return async_finding(&self, text, governing_package);
             }
-            SemanticFact::AsyncTraitMethod {
-                module,
-                trait_name,
-                name,
-                ..
-            } => {
-                return Finding::new(
-                    text,
-                    StructuredFactIdentity::of(
-                        "tianheng.fact/hunyi/async-exposure",
-                        "async-trait-method",
-                        [
-                            ("governing_package", governing_package.to_string()),
-                            ("module", module.clone()),
-                            ("name", name.clone()),
-                            ("owner", format!("{module}::{trait_name}")),
-                            ("owner_kind", "trait".to_string()),
-                        ],
-                    ),
-                );
-            }
-            SemanticFact::AsyncInherentMethod {
-                module,
-                owner,
-                name,
-                ..
-            } => {
-                return Finding::new(
-                    text,
-                    StructuredFactIdentity::of(
-                        "tianheng.fact/hunyi/async-exposure",
-                        "async-inherent-method",
-                        [
-                            ("governing_package", governing_package.to_string()),
-                            ("module", module.clone()),
-                            ("name", name.clone()),
-                            ("owner", owner.clone()),
-                            ("owner_kind", "inherent".to_string()),
-                        ],
-                    ),
-                );
+            SemanticFact::UnsafeSite { module, site } => {
+                return unsafe_site_finding(module, site, text);
             }
             _ => {}
-        }
-        if let SemanticFact::UnsafeSite { module, site } = &self {
-            // Deliberately no `governing_package` field — see the doc comment on `into_finding`.
-            return Finding::new(
-                text,
-                StructuredFactIdentity::of(
-                    "tianheng.fact/hunyi/unsafe-site",
-                    site.shape(),
-                    site.key_fields(module),
-                ),
-            );
         }
         let (fact_type, shape, mut fields): (&str, &str, Vec<(&str, &str)>) = match &self {
             SemanticFact::Exposed {
@@ -710,9 +649,6 @@ impl SemanticFact {
                     ("owner", owner),
                 ],
             ),
-            SemanticFact::AsyncFreeFn { .. } => unreachable!("handled above"),
-            SemanticFact::AsyncTraitMethod { .. } => unreachable!("handled above"),
-            SemanticFact::AsyncInherentMethod { .. } => unreachable!("handled above"),
             SemanticFact::Visibility {
                 visibility,
                 item_kind,
@@ -726,12 +662,92 @@ impl SemanticFact {
                     ("visibility", visibility),
                 ],
             ),
-            SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
+            SemanticFact::AsyncFreeFn { .. }
+            | SemanticFact::AsyncTraitMethod { .. }
+            | SemanticFact::AsyncInherentMethod { .. }
+            | SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
         };
         fields.push(("governing_package", governing_package));
         let key = StructuredFactIdentity::of(fact_type, shape, fields);
         Finding::new(text, key)
     }
+}
+
+/// The three async-exposure variants' own structured identity — pulled out of
+/// `into_finding_with_text`'s dispatch since each carries a distinct `owner`/`owner_kind`
+/// derivation (module-as-owner, `module::trait_name`, or the seam's own `owner` field) that the
+/// shared `(fact_type, shape, fields)` match below cannot express uniformly.
+fn async_finding(fact: &SemanticFact, text: String, governing_package: &str) -> Finding {
+    match fact {
+        SemanticFact::AsyncFreeFn { module, name, .. } => Finding::new(
+            text,
+            StructuredFactIdentity::of(
+                "tianheng.fact/hunyi/async-exposure",
+                "async-free-function",
+                [
+                    ("governing_package", governing_package.to_string()),
+                    ("module", module.clone()),
+                    ("name", name.clone()),
+                    ("owner", module.clone()),
+                    ("owner_kind", "module".to_string()),
+                ],
+            ),
+        ),
+        SemanticFact::AsyncTraitMethod {
+            module,
+            trait_name,
+            name,
+            ..
+        } => Finding::new(
+            text,
+            StructuredFactIdentity::of(
+                "tianheng.fact/hunyi/async-exposure",
+                "async-trait-method",
+                [
+                    ("governing_package", governing_package.to_string()),
+                    ("module", module.clone()),
+                    ("name", name.clone()),
+                    ("owner", format!("{module}::{trait_name}")),
+                    ("owner_kind", "trait".to_string()),
+                ],
+            ),
+        ),
+        SemanticFact::AsyncInherentMethod {
+            module,
+            owner,
+            name,
+            ..
+        } => Finding::new(
+            text,
+            StructuredFactIdentity::of(
+                "tianheng.fact/hunyi/async-exposure",
+                "async-inherent-method",
+                [
+                    ("governing_package", governing_package.to_string()),
+                    ("module", module.clone()),
+                    ("name", name.clone()),
+                    ("owner", owner.clone()),
+                    ("owner_kind", "inherent".to_string()),
+                ],
+            ),
+        ),
+        _ => unreachable!("async_finding is called only for the three async variants"),
+    }
+}
+
+/// The unsafe-site variant's own structured identity — deliberately no `governing_package` field
+/// (see the doc comment on `into_finding`), the one variant whose identity omits it, which is why
+/// this stays split out of the shared `(fact_type, shape, fields)` dispatch below rather than
+/// folded in as a fourth field push.
+fn unsafe_site_finding(module: &str, site: &UnsafeSiteFact, text: String) -> Finding {
+    Finding::new(
+        text,
+        StructuredFactIdentity::of(
+            "tianheng.fact/hunyi/unsafe-site",
+            site.shape(),
+            site.key_fields(module),
+        ),
+    )
 }
 
 /// Single-module counterpart: each fact rides beside the real file its own item was resolved from
