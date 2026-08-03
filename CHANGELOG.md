@@ -13,6 +13,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- Derived the branch role from the Conventional Commit type instead of an enumerated prefix list.
+  `AGENTS.md` listed `refactor/` and `docs/` but not `fix/` or `test/`, both long-established, and
+  declared a `polish/X.Y.Z/<slug>` role no release has ever used — the contributor rule most likely
+  to be read first was the one least matching practice. Outside `change/` and `release/`, a branch is
+  now `<type>/<scope>-<slug>` for the type its work lands as, so branch role and squash subject cannot
+  disagree and the rule cannot rot the way a blessed-prefix list did. Pre-release polish takes the
+  type its own work lands as; the unused release-staging role is gone.
 - Ignored `.github/skills/`, openspec's per-clone generated skills directory, alongside its
   already-ignored `.github/prompts/` sibling.
 - Specified 圭表's plain-`mod` conventional-file resolution outcomes in `module-boundary`, which had

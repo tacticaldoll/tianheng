@@ -148,11 +148,17 @@ never land on `main` individually — they collapse through two squash stages on
 way up: a change branch is squash-merged into `release/X.Y.Z`, and that release branch is
 squash-merged into `main`.
 
-Branch names encode role and intent: `change/<openspec-name>` exactly matches an OpenSpec change
-directory; `release/X.Y.Z` is the first squash target; `polish/X.Y.Z/<slug>` carries pre-release
-polish; and `refactor/<scope>-<slug>` / `docs/<scope>-<slug>` carry work outside OpenSpec. Slugs are
-lowercase kebab-case, describe the outcome without an issue number, and never use a placeholder such
-as `spike` after intent is known. `main` takes no direct work — it is release-only.
+Branch names encode role and intent. Two roles are fixed: `change/<openspec-name>` exactly matches
+an OpenSpec change directory, and `release/X.Y.Z` is the first squash target. All other work uses
+`<type>/<scope>-<slug>`, where `<type>` is the *Conventional Commit type the work will land as* (the
+same set *Commits & PRs* above admits — `fix`, `test`, `refactor`, `docs`, `feat`, `ci`, and so on),
+so a branch's role and its squash subject cannot disagree. Deriving the role from the commit type is
+deliberate: an enumerated list of blessed prefixes drifts from what the repository does, and a
+governance rule that has drifted is read as license rather than law. Pre-release polish therefore
+takes the type its own work lands as; there is no separate release-staging role, because a branch's
+role is what it does, not when it happens. Slugs are lowercase kebab-case, describe the outcome
+without an issue number, and never use a placeholder such as `spike` after intent is known. `main`
+takes no direct work — it is release-only.
 
 Both squashes are performed by a GitHub pull request's "Squash and merge", not a local merge. The
 release-branch-to-`main` squash is the sole message exception: its subject is `release: X.Y.Z` and
