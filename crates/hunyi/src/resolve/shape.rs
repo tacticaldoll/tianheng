@@ -394,6 +394,39 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
 /// that sentinel through `reject_positional_identity`, so unsupported syntax fails loud instead of
 /// publishing traversal position. The sentinel exists only to carry renderer failure to that
 /// shared reaction without silently collapsing two sites.
+/// Resolve a path self-type's owner base and its rendered generic-argument suffix — the shared
+/// branch [`canonical_self_owner`] and [`canonical_self_owner_without_fallback`] each build on
+/// before diverging on how they treat an unrenderable generic argument (a positional ordinal
+/// sentinel vs. `None`). `None` when the self type is not a resolvable path at all: a self type
+/// naming the impl's own generic type parameter (`impl<T> Trait for T {}` / `for T::Assoc {}`) is
+/// a parameter use, never a nominal type — it must not resolve through a same-named alias/type in
+/// scope, exactly like `containment.rs::resolve_self_type`'s identical shadow
+/// (`is_shadowed_param_path`). This label previously carried NO such shadow at all,
+/// unconditionally resolving any bare self type via `resolve_path` — not merely a cosmetic
+/// mislabel: this owner is part of `SemanticFact::MisplacedImpl`'s finding IDENTITY in
+/// `trait_impl.rs`, so two impls that happen to canonicalize to the same owner string dedup
+/// together, and a param resolved through an unrelated alias to the SAME target a genuine direct
+/// impl also names collapses two distinct trait-impl-locality violations into one reported
+/// finding — a real false negative, not just a wrong display string (found on a round-10
+/// adversarial review; see `PROJECT.md`'s Decisions). Returning `None` here (falling through to
+/// each caller's own plain-render/positional-marker path, skipping resolution entirely) gives the
+/// parameter its own stable, alias-independent label instead.
+fn resolved_path_owner_parts(
+    self_ty: &syn::Type,
+    uses: &UseMap,
+    module: &str,
+    impl_type_params: &std::collections::HashSet<String>,
+) -> Option<(String, Option<String>)> {
+    let syn::Type::Path(tp) = self_ty else {
+        return None;
+    };
+    if tp.qself.is_some() || is_shadowed_param_path(&tp.path, impl_type_params) {
+        return None;
+    }
+    let base = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?;
+    Some((base, render_last_segment_args(&tp.path)))
+}
+
 pub(crate) fn canonical_self_owner(
     self_ty: &syn::Type,
     uses: &UseMap,
@@ -401,30 +434,13 @@ pub(crate) fn canonical_self_owner(
     ordinal: usize,
     impl_type_params: &std::collections::HashSet<String>,
 ) -> String {
-    if let syn::Type::Path(tp) = self_ty {
-        // A self type naming the impl's own generic type parameter (`impl<T> Trait for T {}` /
-        // `for T::Assoc {}`) is a parameter use, never a nominal type — it must not resolve through
-        // a same-named alias/type in scope, exactly like `containment.rs::resolve_self_type`'s
-        // identical shadow (`is_shadowed_param_path`). This label previously carried NO such
-        // shadow at all, unconditionally resolving any bare self type via `resolve_path` — not
-        // merely a cosmetic mislabel: this owner is part of `SemanticFact::MisplacedImpl`'s finding
-        // IDENTITY in `trait_impl.rs`, so two impls that happen to canonicalize to the same owner
-        // string dedup together, and a param resolved through an unrelated alias to the SAME
-        // target a genuine direct impl also names collapses two distinct trait-impl-locality
-        // violations into one reported finding — a real false negative, not just a wrong display
-        // string (found on a round-10 adversarial review; see `PROJECT.md`'s Decisions). Falling
-        // through to the plain-render/positional-marker path below (skipping resolution entirely)
-        // gives the parameter its own stable, alias-independent label instead.
-        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
-            if let Some(base) = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule) {
-                return match render_last_segment_args(&tp.path) {
-                    Some(args) => format!("{base}{args}"),
-                    // Base resolved but a generic arg is unrenderable: preserve the readable base
-                    // beside the internal sentinel that the observation path rejects.
-                    None => format!("{base}<_#{ordinal}>"),
-                };
-            }
-        }
+    if let Some((base, args)) = resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
+        return match args {
+            Some(args) => format!("{base}{args}"),
+            // Base resolved but a generic arg is unrenderable: preserve the readable base
+            // beside the internal sentinel that the observation path rejects.
+            None => format!("{base}<_#{ordinal}>"),
+        };
     }
     // A non-path self type: render it if possible, else return the rejected internal sentinel.
     type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}"))
@@ -440,12 +456,8 @@ pub(crate) fn canonical_self_owner_without_fallback(
     module: &str,
     impl_type_params: &std::collections::HashSet<String>,
 ) -> Option<String> {
-    if let syn::Type::Path(tp) = self_ty {
-        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
-            if let Some(base) = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule) {
-                return Some(format!("{base}{}", render_last_segment_args(&tp.path)?));
-            }
-        }
+    if let Some((base, args)) = resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
+        return Some(format!("{base}{}", args?));
     }
     type_to_string(self_ty)
 }
