@@ -568,21 +568,51 @@ fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
 /// permissions: `rename` unconditionally replaces whatever sits at its destination, so renaming
 /// onto `path` directly would silently replace a symlinked baseline with a plain file (orphaning
 /// whatever the symlink pointed at) and reset the mode to the temp file's process-umask default,
-/// silently widening permissions an adopter deliberately narrowed — both measured regressions
-/// against this function's own "leaves the previous baseline fully intact" claim. The temp path is
-/// built from the resolved target, not the original `path`, so it always shares the target's
-/// directory (and therefore its filesystem, keeping the rename atomic) even when `path` is a
-/// symlink elsewhere. A write or permissions failure best-effort cleans up the temp file rather
-/// than leaving it stranded.
+/// silently widening permissions an adopter deliberately narrowed.
+///
+/// The temp file is opened with `create_new` (`O_EXCL`), never a plain create-or-truncate: a
+/// predictable `<target>.tmp-<pid>` name that instead followed whatever already sat there would
+/// let anything pre-planted at that path — a symlink included — receive the write and the
+/// permission change that follows it, corrupting a file this process never intended to touch.
+/// Measured directly: a symlink planted at the predicted temp path, right after the process was
+/// launched, redirected the write and left the baseline's own path as a dangling symlink to the
+/// victim. `create_new` refuses outright if anything already exists there, closing that off
+/// entirely. Its mode is set to match the original file's at creation (`unix` only — permission
+/// bits are not a portable concept), instead of created at the process umask default and narrowed
+/// afterward — also measured: with a 0600 baseline, the temp file was briefly 0664 before the
+/// follow-up `set_permissions` narrowed it. The temp path is built by appending to the resolved
+/// target's raw `OsString`, never through `Path::display()` (which lossily replaces non-UTF-8
+/// bytes for human-readable formatting) — a resolved path is not guaranteed valid UTF-8, and a
+/// lossy round-trip through a new string can point at a directory that does not exist, failing an
+/// otherwise-valid overwrite outright. An error after the temp file was actually created is
+/// best-effort cleaned up; `AlreadyExists` from `create_new` itself means this process created
+/// nothing, so nothing here is deleted — mirroring how `write_baseline`'s own `create_new` case
+/// already treats an unexpected `AlreadyExists` as a loud refusal, not something to clear away.
 fn write_baseline_atomically(path: &str, document: &str) -> std::io::Result<()> {
     let target = std::fs::canonicalize(path)?;
     let permissions = std::fs::metadata(&target)?.permissions();
-    let tmp_path = format!("{}.tmp-{}", target.display(), std::process::id());
-    let write_result = std::fs::write(&tmp_path, document)
+    let mut tmp_path = target.clone().into_os_string();
+    tmp_path.push(format!(".tmp-{}", std::process::id()));
+
+    let mut open_options = OpenOptions::new();
+    open_options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::fs::PermissionsExt;
+        open_options.mode(permissions.mode() & 0o777);
+    }
+
+    let write_result = open_options
+        .open(&tmp_path)
+        .and_then(|mut file| file.write_all(document.as_bytes()))
         .and_then(|()| std::fs::set_permissions(&tmp_path, permissions))
         .and_then(|()| std::fs::rename(&tmp_path, &target));
-    if write_result.is_err() {
-        let _ = std::fs::remove_file(&tmp_path);
+
+    if let Err(err) = &write_result {
+        if err.kind() != std::io::ErrorKind::AlreadyExists {
+            let _ = std::fs::remove_file(&tmp_path);
+        }
     }
     write_result
 }
