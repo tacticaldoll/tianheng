@@ -1,88 +1,24 @@
-//! The crate-wide scan — one fresh whole-crate traversal from the root, descending every
-//! file-based and inline module, that collects the `pub use` re-export closure, the resolvable
-//! type-alias map, crate-root `extern crate … as` renames, the locally-defined trait paths,
-//! every trait-impl site, and every type definition (with its `#[derive]`s). The reaction hearts
-//! read the resulting [`CrateScan`]; this is distinct from the single-path descent in
-//! `module_resolve` (which does not fit a "nowhere except here" property), reusing only the leaf
-//! primitives and the shared resolver.
+//! Item traversal and crate-wide scan logic.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use syn::parse::Parser;
-use syn::visit::{self, Visit};
 
+use super::types::*;
 use crate::collect::type_param_names;
 use crate::crate_scope::local_type_namespace_names;
 use crate::errors::{dual_backed_module_error, missing_module_file_error};
-use crate::finding::UnsafeSiteFact;
 use crate::module_resolve::{ModuleFile, locate_module_file, read_parse, resolve_module_branches};
 use crate::resolve::{
     AliasMap, BareFallback, ExternRenameMap, ReexportMap, UseMap, alias_nominal_targets,
     bare_single_segment_ident, collect_reexports, collect_uses, extern_verbatim_renamed,
-    is_shadowed_param_path, path_to_string, render_last_segment_args, resolve_path,
-    resolve_path_all, strip_raw, type_to_string,
+    resolve_path_all, strip_raw,
 };
 use crate::syn_util::{
     FlatItem, cfg_attr_path_values, child_module_decls, direct_path_value,
     flatten_transparent_macro_items, flatten_with_body_nested_impls, has_cfg_attr,
 };
-
-/// One impl site observed in the crate: its enclosing module path, the **real file it was read
-/// from** (its own branch's file — never re-resolved afterward from the module string, which
-/// misattributes a finding whenever two `#[cfg]`-split branches share one module path), the
-/// written trait path, the implemented-for type, that module's `use`-map (for resolution), and the
-/// impl block's own declared generic **type-parameter names** (`impl<T> Marker for T {}`'s `T`) —
-/// needed so a bare self type that is actually the impl's own parameter is never resolved through a
-/// same-named `use … as <param>` alias in scope in that module (a fabricated marker-acquisition
-/// finding for a type the impl never names at all; the sibling exposure collectors already shadow
-/// impl-generic-param names for this exact reason, see `collect.rs::type_param_names`).
-pub(crate) struct ImplSite {
-    pub(crate) module: String,
-    pub(crate) file: PathBuf,
-    pub(crate) trait_path: syn::Path,
-    pub(crate) self_ty: syn::Type,
-    pub(crate) uses: UseMap,
-    pub(crate) type_params: HashSet<String>,
-}
-
-/// One type definition observed in the crate: its canonical path (`module::Name`), the module
-/// it is defined in and the real file it was read from (for a forbidden-`derive` finding's source
-/// file — its own branch's file, same provenance guarantee as [`ImplSite::file`]), the paths in
-/// its `#[derive(...)]`/`#[cfg_attr(_, derive(...))]`, and that module's `use`-map (so a renamed
-/// derive macro, `use serde::Serialize as Ser; #[derive(Ser)]`, resolves to its true leaf).
-pub(crate) struct TypeDef {
-    pub(crate) canonical: String,
-    pub(crate) module: String,
-    pub(crate) file: PathBuf,
-    pub(crate) derives: Vec<syn::Path>,
-    pub(crate) uses: UseMap,
-}
-
-/// One crate-wide scan: the `pub use` re-export closure, the set of locally-defined trait
-/// paths (for anchor verification), every trait-impl site, and every type definition.
-pub(crate) struct CrateScan {
-    pub(crate) reexports: ReexportMap,
-    pub(crate) aliases: AliasMap,
-    pub(crate) extern_renames: ExternRenameMap,
-    pub(crate) trait_defs: HashSet<String>,
-    pub(crate) impls: Vec<ImplSite>,
-    pub(crate) type_defs: Vec<TypeDef>,
-    /// For each non-generic `type X = <path>;` whose target is a nominal path, the alias's canonical
-    /// key (`{module}::X`) mapped to the **landing type** its target resolves to under the same
-    /// bare-head `CurrentModule` fallback the impl-self check uses (`type Bar = Real` in `crate::dom`
-    /// → `crate::dom::Real`; `type Baz = Vec<u8>` / `= String` → `crate::dom::Vec` / `crate::dom::String`,
-    /// neither crate-defined). A `type` alias defines no new type — coherence sees through it — so a
-    /// marker impl'd on `Bar` governs a subtree type IFF this landing type is itself a crate-defined
-    /// subtree type. The forbidden-marker check consults this to react on `type Bar = Real` while NOT
-    /// firing on an alias to a foreign/prelude type (whose marker lands off the governed subtree).
-    /// (This is distinct from `aliases`, the exposure closure's resolvable-target map, which does not
-    /// record a bare-local-struct target.) Multi-valued for the identical cfg-blind reason `UseMap`
-    /// and `ReexportMap` are: `type X = Y;` where `Y` itself is a mutually-exclusive `#[cfg]`-gated
-    /// `use ... as Y;` name must keep every landing candidate, not just the first found.
-    pub(crate) alias_targets: AliasMap,
-}
-
 /// Collect crate-root `extern crate X as Y;` renames (`Y → X`) into `out`. Crate-root only: such a
 /// rename binds `Y` crate-wide via the extern prelude, whereas a module-scoped `extern crate … as`
 /// binds only locally (collecting it crate-wide would false-positive on a same-named head elsewhere
@@ -206,7 +142,11 @@ const MAX_MODULE_DEPTH: usize = 32;
 /// Shared by all three walkers ([`walk_module`], [`collect_subtree`], [`walk_unsafe`]) so the
 /// bound and its wording cannot silently diverge between them (the twin-drift bug class
 /// `resolve_child_modules`'s own doc comment names for its guards).
-fn check_module_depth(depth: usize, module: &str, crate_package: &str) -> Result<(), String> {
+pub(super) fn check_module_depth(
+    depth: usize,
+    module: &str,
+    crate_package: &str,
+) -> Result<(), String> {
     if depth >= MAX_MODULE_DEPTH {
         return Err(format!(
             "cannot judge module '{module}' in package '{crate_package}': module nesting exceeds \
@@ -222,7 +162,7 @@ fn check_module_depth(depth: usize, module: &str, crate_package: &str) -> Result
 /// carrying list [`resolve_child_modules`] needs for its absence tolerance — from ONE flattening
 /// pass. See [`flatten_with_body_nested_impls`] for why `flat` (the second element) is returned
 /// untouched rather than itself extended with the recovered impls.
-fn flatten_for_walk(items: &[syn::Item]) -> (Vec<syn::Item>, Vec<FlatItem>) {
+pub(super) fn flatten_for_walk(items: &[syn::Item]) -> (Vec<syn::Item>, Vec<FlatItem>) {
     let (flat, nested_impls) = flatten_with_body_nested_impls(items);
     let mut plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
     plain.extend(nested_impls);
@@ -528,7 +468,7 @@ fn resolve_conventional_child(
 
 // `child_dir` and `file_dir` are distinct module-resolution bases (see the two helpers above), not
 // bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
-fn resolve_child_modules(
+pub(super) fn resolve_child_modules(
     items: &[FlatItem],
     module: &str,
     child_dir: &Path,
@@ -1068,334 +1008,3 @@ fn extract_derives_from_cfg_metas(
 }
 
 // --- Unsafe-site scan (`semantic-unsafe-confinement`) -------------------------
-
-/// One `unsafe` site observed in the crate: its enclosing (file) module, the real file it was
-/// read from (its own branch's file — the same provenance guarantee as [`ImplSite::file`]), and a
-/// stable label (`unsafe block`, `unsafe fn decode`, `unsafe impl Send`, `unsafe trait Zeroable`,
-/// `unsafe extern block`). The label is module-qualified at the finding layer for injectivity.
-pub(crate) struct UnsafeSite {
-    pub(crate) module: String,
-    pub(crate) file: PathBuf,
-    pub(crate) site: UnsafeSiteFact,
-}
-
-/// A `syn::visit::Visit` collector recording every executable-`unsafe` **code site** within the
-/// items it is fed: `unsafe fn` (free / inherent / trait-decl / trait-impl method), `unsafe impl`,
-/// `unsafe trait`, `unsafe extern` block, and `unsafe {}` expression block (deep in bodies). It is
-/// fed a module's items **minus top-level `mod`s** (the walk owns their descent); `visit_item_mod`
-/// is left at its **default (recursing)** so a `mod` declared *inside a fn/block body* — which the
-/// top-level walk never reaches — is still observed, attributed to the enclosing file module.
-struct UnsafeSiteCollector<'a> {
-    sites: Vec<UnsafeSiteFact>,
-    error: Option<String>,
-    module: &'a str,
-    uses: &'a UseMap,
-    local_types: &'a HashSet<String>,
-    // The enclosing `impl`'s self-type / `trait`'s name during the recursion, so an `unsafe fn`
-    // method is owner-qualified (`unsafe fn Foo::m`) — else two same-named `unsafe fn`s on
-    // different owners in one module collapse to one finding and a baseline of the first masks the
-    // second (a false negative), the same injectivity `unsafe impl` already guards.
-    current_owner: Option<String>,
-    current_trait: Option<String>,
-    // The trait of the enclosing *trait `impl`* (`None` for an inherent impl), so a trait-impl
-    // `unsafe fn` is qualified by `<trait for self>` — else `impl Foo { unsafe fn m }` and
-    // `impl A for Foo { unsafe fn m }` (same self type), or `impl A for Foo` and `impl B for Foo`
-    // (same self type, different trait), collapse to one `unsafe fn Foo::m` and a baseline of one
-    // masks the other (a false negative). Self-type alone only separates *different* self types.
-    current_impl_trait: Option<String>,
-    current_impl_is_trait: bool,
-}
-
-impl<'a> UnsafeSiteCollector<'a> {
-    fn new(module: &'a str, uses: &'a UseMap, local_types: &'a HashSet<String>) -> Self {
-        Self {
-            sites: Vec::new(),
-            error: None,
-            module,
-            uses,
-            local_types,
-            current_owner: None,
-            current_trait: None,
-            current_impl_trait: None,
-            current_impl_is_trait: false,
-        }
-    }
-
-    fn unsupported(&mut self, role: &str) {
-        if self.error.is_none() {
-            self.error = Some(format!(
-                "cannot identify unsafe {role} in {} without a positional fallback",
-                self.module
-            ));
-        }
-    }
-}
-
-fn canonical_unsafe_owner(
-    self_ty: &syn::Type,
-    uses: &UseMap,
-    local_types: &HashSet<String>,
-    module: &str,
-    impl_type_params: &HashSet<String>,
-) -> Option<String> {
-    if let syn::Type::Path(tp) = self_ty {
-        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
-            let head = tp
-                .path
-                .segments
-                .first()
-                .map(|segment| strip_raw(&segment.ident.to_string()));
-            let should_resolve = tp.path.leading_colon.is_some()
-                || matches!(head.as_deref(), Some("crate" | "self" | "super"))
-                || head
-                    .as_ref()
-                    .is_some_and(|head| uses.contains_key(head) || local_types.contains(head));
-            if should_resolve {
-                let base = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?;
-                return Some(format!("{base}{}", render_last_segment_args(&tp.path)?));
-            }
-        }
-    }
-    type_to_string(self_ty)
-}
-
-impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
-    fn visit_expr_unsafe(&mut self, node: &'ast syn::ExprUnsafe) {
-        self.sites.push(UnsafeSiteFact::Block);
-        visit::visit_expr_unsafe(self, node);
-    }
-
-    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        if node.sig.unsafety.is_some() {
-            self.sites.push(UnsafeSiteFact::FreeFn {
-                name: strip_raw(&node.sig.ident.to_string()),
-            });
-        }
-        visit::visit_item_fn(self, node);
-    }
-
-    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
-        if node.sig.unsafety.is_some() {
-            let name = strip_raw(&node.sig.ident.to_string());
-            // Qualify by the enclosing impl (set in `visit_item_impl`): a *trait* impl by
-            // `<trait for self>`, an inherent impl by its self type alone. Self-type alone only
-            // separates *different* self types, so a trait-impl method and an inherent (or
-            // other-trait) method with the same name on the *same* self type would otherwise
-            // collapse to one finding and a baseline of one mask the other (a false negative).
-            match (
-                self.current_impl_is_trait,
-                &self.current_impl_trait,
-                &self.current_owner,
-            ) {
-                (true, Some(trait_ref), Some(owner)) => {
-                    self.sites.push(UnsafeSiteFact::TraitImplMethod {
-                        trait_ref: trait_ref.clone(),
-                        owner: owner.clone(),
-                        name,
-                    });
-                }
-                (false, _, Some(owner)) => self.sites.push(UnsafeSiteFact::InherentMethod {
-                    owner: owner.clone(),
-                    name,
-                }),
-                _ => self.unsupported("method owner"),
-            }
-        }
-        visit::visit_impl_item_fn(self, node);
-    }
-
-    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
-        if node.sig.unsafety.is_some() {
-            let name = strip_raw(&node.sig.ident.to_string());
-            // Qualify by the declaring trait (set in `visit_item_trait`), so two traits each
-            // declaring `unsafe fn m` in one module do not collapse to one finding.
-            match &self.current_trait {
-                Some(owner) => self.sites.push(UnsafeSiteFact::TraitMethod {
-                    owner: owner.clone(),
-                    name,
-                }),
-                None => self.unsupported("trait-method owner"),
-            }
-        }
-        visit::visit_trait_item_fn(self, node);
-    }
-
-    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
-        // Owner-qualify by the implemented-for type so `unsafe impl Send for Foo` and
-        // `unsafe impl Send for Bar` in one module stay distinct findings — else a baseline of
-        // the first silently masks the second (a false negative). Lexical (`type_to_string`, no
-        // resolution — this is the light walk), mirroring the trait-path rendering above. If the
-        // self type cannot be rendered, an observed unsafe site fails loud rather than publishing
-        // traversal position as identity. The same owner also qualifies inner unsafe methods.
-        let params = type_param_names(&node.generics);
-        let owner = canonical_unsafe_owner(
-            &node.self_ty,
-            self.uses,
-            self.local_types,
-            self.module,
-            &params,
-        );
-        // The implemented trait (if any), rendered once — reused for the `unsafe impl` label and to
-        // qualify the impl's inner `unsafe fn` methods as `<trait for self>` (injectivity above).
-        let impl_trait = node
-            .trait_
-            .as_ref()
-            .and_then(|(_, path, _)| path_to_string(path));
-        if node.unsafety.is_some() {
-            match (&impl_trait, &owner, node.trait_.is_some()) {
-                (Some(trait_ref), Some(owner), true) => {
-                    self.sites.push(UnsafeSiteFact::TraitImpl {
-                        trait_ref: trait_ref.clone(),
-                        owner: owner.clone(),
-                    });
-                }
-                (None, Some(owner), false) => self.sites.push(UnsafeSiteFact::InherentImpl {
-                    owner: owner.clone(),
-                }),
-                (None, _, true) => self.unsupported("impl trait"),
-                (_, None, _) => self.unsupported("impl self type"),
-                _ => unreachable!("trait presence and rendered trait stay aligned"),
-            }
-        }
-        let prev_owner = std::mem::replace(&mut self.current_owner, owner);
-        let prev_trait = self.current_impl_trait.take();
-        let prev_is_trait = self.current_impl_is_trait;
-        self.current_impl_is_trait = node.trait_.is_some();
-        self.current_impl_trait = impl_trait;
-        visit::visit_item_impl(self, node);
-        self.current_owner = prev_owner;
-        self.current_impl_trait = prev_trait;
-        self.current_impl_is_trait = prev_is_trait;
-    }
-
-    fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
-        let name = strip_raw(&node.ident.to_string());
-        if node.unsafety.is_some() {
-            self.sites
-                .push(UnsafeSiteFact::Trait { name: name.clone() });
-        }
-        let prev = self
-            .current_trait
-            .replace(format!("{}::{name}", self.module));
-        visit::visit_item_trait(self, node);
-        self.current_trait = prev;
-    }
-
-    fn visit_item_foreign_mod(&mut self, node: &'ast syn::ItemForeignMod) {
-        if node.unsafety.is_some() {
-            self.sites.push(UnsafeSiteFact::ExternBlock);
-        }
-        visit::visit_item_foreign_mod(self, node);
-    }
-}
-
-/// Walk the whole crate from its root and collect every `unsafe` site with its enclosing module.
-/// Mirrors [`scan_crate`]'s descent (file + inline modules, ancestor-path cycle guard → exit 2, an
-/// unconditional `#[path]` followed / a `cfg_attr`-wrapped one skipped as a stated bound, a
-/// non-`#[cfg]` missing module file → exit 2, a cfg-gated missing file tolerated). A separate,
-/// lighter walk than `scan_crate` (no re-export/alias/type-def resolution).
-pub(crate) fn scan_unsafe_sites(
-    src_dir: &Path,
-    root_file: &Path,
-    crate_package: &str,
-) -> Result<Vec<UnsafeSite>, String> {
-    let root = read_parse(root_file)?;
-    let mut sites = Vec::new();
-    let mut ancestors: HashSet<PathBuf> = HashSet::new();
-    ancestors.insert(xingbiao::canonicalize_or_fail(root_file)?);
-    walk_unsafe(
-        root.items,
-        "crate".to_string(),
-        src_dir.to_path_buf(),
-        // The crate root is mod-rs-like: its own directory is the `#[path]` base too.
-        src_dir.to_path_buf(),
-        root_file.to_path_buf(),
-        crate_package,
-        &ancestors,
-        0,
-        &mut sites,
-    )?;
-    Ok(sites)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn walk_unsafe(
-    items: Vec<syn::Item>,
-    module: String,
-    child_dir: PathBuf,
-    file_dir: PathBuf,
-    current_file: PathBuf,
-    crate_package: &str,
-    ancestors: &HashSet<PathBuf>,
-    depth: usize,
-    sites: &mut Vec<UnsafeSite>,
-) -> Result<(), String> {
-    check_module_depth(depth, &module, crate_package)?;
-    // Feed the collector this module's items minus top-level `mod`s (walk-owned); body-nested
-    // `mod`s stay in and are caught by the collector's default `visit_item_mod` recursion. Arms
-    // flattened first, so an `unsafe` site written inside a `cfg_if!` arm is confined like any
-    // other — the collector visits items, and an unflattened `Item::Macro` is an opaque token
-    // stream it cannot see into.
-    let (items, flat) = flatten_for_walk(&items);
-    let uses = collect_uses(&items);
-    let local_types = local_type_namespace_names(&items);
-    let mut collector = UnsafeSiteCollector::new(&module, &uses, &local_types);
-    for item in &items {
-        if matches!(item, syn::Item::Mod(_)) {
-            continue;
-        }
-        collector.visit_item(item);
-    }
-    if let Some(error) = collector.error {
-        return Err(error);
-    }
-    for site in collector.sites {
-        sites.push(UnsafeSite {
-            module: module.clone(),
-            file: current_file.clone(),
-            site,
-        });
-    }
-
-    for (child_items, child_module, sub_dir, sub_file_dir, opened, child_file) in
-        resolve_child_modules(
-            &flat,
-            &module,
-            &child_dir,
-            &file_dir,
-            &current_file,
-            crate_package,
-            ancestors,
-        )?
-    {
-        match opened {
-            Some(canon) => {
-                let mut child_ancestors = ancestors.clone();
-                child_ancestors.insert(canon);
-                walk_unsafe(
-                    child_items,
-                    child_module,
-                    sub_dir,
-                    sub_file_dir,
-                    child_file,
-                    crate_package,
-                    &child_ancestors,
-                    depth + 1,
-                    sites,
-                )?;
-            }
-            None => walk_unsafe(
-                child_items,
-                child_module,
-                sub_dir,
-                sub_file_dir,
-                child_file,
-                crate_package,
-                ancestors,
-                depth + 1,
-                sites,
-            )?,
-        }
-    }
-    Ok(())
-}
