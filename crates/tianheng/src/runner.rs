@@ -24,10 +24,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::{
-    fs::{File, OpenOptions},
-    io::Write,
-};
+use std::{fs::OpenOptions, io::Write};
 
 use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
@@ -588,32 +585,41 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     }
 }
 
-/// fsync the directory that holds `path`, so a directory entry a just-completed create or rename
-/// added is itself durable. An fsync on a *file* persists its contents; it does not persist the
-/// name through which anything reaches them, which lives in the parent directory's own data. Both
-/// baseline write paths call this after the step that publishes the entry, so a write this process
-/// already reported as succeeded is not undone by a crash moments later.
+/// Best-effort flush of the directory that holds `path`, so a directory entry a just-completed
+/// create or rename added is itself durable. An fsync on a *file* persists its contents; it does
+/// not persist the name through which anything reaches them, which lives in the parent directory's
+/// own data. Both baseline write paths call this after the step that publishes the entry.
 ///
-/// Unix only. `File::open` on a directory is not portable — Windows requires
-/// `FILE_FLAG_BACKUP_SEMANTICS`, which `std` does not expose through `OpenOptions` — so the
-/// directory half of the guarantee is stated as unix-only rather than silently assumed everywhere.
-/// The file half (`sync_all` on the written file) is portable and applies on every platform.
+/// Deliberately infallible, and this is the boundary between the two halves of the durability
+/// guarantee. Flushing the written *file* is strict — it is what prevents the empty-baseline loss,
+/// and fsync on a regular file just written is universally supported, so propagating its error
+/// costs nothing. Flushing the *directory* only strengthens a write that has already landed, and
+/// the ways it can be impossible are capability limits rather than storage faults: some FUSE and
+/// network mounts answer `EINVAL`/`ENOSYS` to fsync on a directory handle, and a directory that is
+/// writable but not readable (mode `0300`) cannot be opened for it at all. Turning any of those
+/// into "cannot write baseline" would report failure for a baseline that is sitting correctly on
+/// disk, and would regress adopters for whom this path worked before the flush existed. So a
+/// runtime inability to flush a directory is treated exactly as the compile-time one is below: as
+/// this platform not offering the operation, not as the write having failed.
+///
+/// Unix only for the compile-time half: `File::open` on a directory is not portable — Windows
+/// requires `FILE_FLAG_BACKUP_SEMANTICS`, which `std` does not expose through `OpenOptions`. The
+/// `File` import is scoped to the block for that reason, so it is not an unused import off unix.
 /// A path with no parent component (a bare relative filename) resolves to the working directory,
 /// which is where such a write actually lands.
-fn sync_parent_dir(path: &Path) -> std::io::Result<()> {
+fn sync_parent_dir(path: &Path) {
     #[cfg(unix)]
     {
+        use std::fs::File;
+
         let parent = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        File::open(parent)?.sync_all()
+        let _ = File::open(parent).and_then(|dir| dir.sync_all());
     }
     #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(())
-    }
+    let _ = path;
 }
 
 /// `create_new`'s `O_EXCL` fails on any existing directory entry, including a dangling symlink —
@@ -623,8 +629,9 @@ fn sync_parent_dir(path: &Path) -> std::io::Result<()> {
 /// a dangling symlink is a permanent state, not a race — "rerun the command" (the concurrent-
 /// creation arm's own remedy) would fail identically forever, so this earns its own diagnosis.
 ///
-/// The written bytes are fsynced before this reports success, and the new directory entry after it,
-/// so a baseline this process said it wrote survives a crash. Unlike the overwrite path, this one
+/// The written bytes are fsynced before this reports success, and the new directory entry is flushed
+/// best-effort after it ([`sync_parent_dir`]), so a baseline this process said it wrote survives a
+/// crash. Unlike the overwrite path, this one
 /// writes in place rather than through a temp file, so it protects a *reported success* and nothing
 /// more: there is no previous content to preserve, and a crash **mid-write** can leave a
 /// zero-length or partial file — `create_new` publishes the entry before any byte is written, and
@@ -641,9 +648,9 @@ fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteE
         .and_then(|mut file| {
             file.write_all(document.as_bytes())
                 .and_then(|()| file.sync_all())
-        })
-        .and_then(|()| sync_parent_dir(Path::new(path)));
+        });
     let Err(err) = write_result else {
+        sync_parent_dir(Path::new(path));
         return Ok(());
     };
     if err.kind() == std::io::ErrorKind::AlreadyExists {
@@ -697,9 +704,11 @@ impl From<std::io::Error> for BaselineWriteError {
 /// happens to paper over this for the replace-via-rename pattern via its `auto_da_alloc`
 /// heuristic, but that is one filesystem's courtesy, disabled by `noauto_da_alloc` and absent
 /// elsewhere; this crate ships to adopters on filesystems it does not choose, so the guarantee
-/// is made explicitly rather than borrowed. The directory fsync after the rename covers the
-/// other half — that the swapped-in *name* survives — and is unix-only for the portability
-/// reason [`sync_parent_dir`] states.
+/// is made explicitly rather than borrowed. The directory flush after the rename covers the
+/// other half — that the swapped-in *name* survives — and is best-effort and unix-only, for the
+/// reasons [`sync_parent_dir`] states: it strengthens a write that has already landed, so a
+/// platform or filesystem that cannot flush a directory must not turn that write into a
+/// reported failure.
 ///
 /// The swap targets the file's symlink-resolved real path and carries over its existing
 /// permissions: `rename` unconditionally replaces whatever sits at its destination, so renaming
@@ -760,12 +769,12 @@ fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineW
         .write_all(document.as_bytes())
         .and_then(|()| std::fs::set_permissions(&tmp_path, permissions))
         .and_then(|()| file.sync_all())
-        .and_then(|()| std::fs::rename(&tmp_path, &target))
-        .and_then(|()| sync_parent_dir(&target));
+        .and_then(|()| std::fs::rename(&tmp_path, &target));
     if let Err(err) = write_result {
         let _ = std::fs::remove_file(&tmp_path);
         return Err(err.into());
     }
+    sync_parent_dir(&target);
     Ok(())
 }
 

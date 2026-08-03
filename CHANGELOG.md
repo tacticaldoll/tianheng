@@ -127,12 +127,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   never the temp file's still-dirty data pages — so a crash shortly after a successful rename could
   leave the baseline path present and **empty**, losing both the previous document and the
   owner/tracker annotations just merged into it, which no rerun can reconstruct. The overwrite path
-  now fsyncs the staged temp file before the rename (and the containing directory after it), and the
-  create path fsyncs its file and directory before reporting the write. ext4's `auto_da_alloc`
-  heuristic happens to mask this for the replace-via-rename pattern, but it is disabled by
-  `noauto_da_alloc` and absent on other filesystems, and this crate ships to adopters on filesystems
-  it does not choose. The directory flush is unix-only (`std` exposes no portable way to open a
-  directory handle on Windows); the file flush is portable. `create_baseline_file`'s own doc no
+  now fsyncs the staged temp file before the rename, and the create path fsyncs its file before
+  reporting the write. ext4's `auto_da_alloc` heuristic happens to mask this for the
+  replace-via-rename pattern, but it is disabled by `noauto_da_alloc` and absent on other
+  filesystems, and this crate ships to adopters on filesystems it does not choose. Each path
+  additionally *attempts* to flush the containing directory, so the published name survives a crash
+  too — but that attempt is best-effort and never fails the write: it strengthens a write that has
+  already landed, and it can be unavailable for capability reasons rather than storage faults (a
+  directory that is writable but not readable answers `EACCES` to the open; some FUSE and network
+  mounts answer `EINVAL`/`ENOSYS` to the fsync), where reporting "cannot write baseline" for a
+  baseline sitting correctly on disk would be the worse outcome. The strict guarantee is therefore
+  the file flush; the directory flush is unix-only besides (`std` exposes no portable way to open a
+  directory handle on Windows). `create_baseline_file`'s own doc no
   longer claims a crash there "simply leaves no file": it publishes its directory entry before its
   first byte, so a crash mid-create can leave an empty file that the next run refuses to overwrite
   (exit 2, remedy named) — stated instead of overclaimed. `violation-baseline` gains the requirement

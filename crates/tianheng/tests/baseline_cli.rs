@@ -153,6 +153,73 @@ fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
 
 #[test]
 #[cfg(unix)]
+fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
+    // Both write paths flush the containing directory so a reported success is not undone by a
+    // later crash. That flush needs a readable directory handle, which a directory can legally
+    // refuse: mode 0300 is writable and traversable but not readable, so `File::open` on it answers
+    // EACCES — and some FUSE and network mounts answer EINVAL/ENOSYS to the fsync itself. The flush
+    // only strengthens a write that has already landed, so none of those may turn it into a
+    // failure: reporting "cannot write baseline" for a baseline sitting correctly on disk would be
+    // the worse outcome, and would regress adopters for whom this path worked before the flush
+    // existed. Both branches are covered — create (no file yet) and overwrite (file present).
+    use std::os::unix::fs::PermissionsExt;
+
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("tianheng-unflushable-dir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create the test directory");
+
+    // Restore a readable mode before any assertion can unwind, so a failure cannot leave an
+    // unreadable directory behind in the temp dir.
+    struct Restore(PathBuf);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o700));
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _restore = Restore(dir.clone());
+
+    let created = dir.join("created.json");
+    let overwritten = dir.join("overwritten.json");
+    let first = run_with(&manifest, "--write-baseline", &overwritten);
+    assert_eq!(first.status.code(), Some(0), "{first:?}");
+
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o300))
+        .expect("make the directory writable but not readable");
+
+    let create_in_unreadable = run_with(&manifest, "--write-baseline", &created);
+    assert_eq!(
+        create_in_unreadable.status.code(),
+        Some(0),
+        "creating a baseline must succeed even where the directory cannot be flushed: \
+         {create_in_unreadable:?}"
+    );
+    let overwrite_in_unreadable = run_with(&manifest, "--write-baseline", &overwritten);
+    assert_eq!(
+        overwrite_in_unreadable.status.code(),
+        Some(0),
+        "overwriting a baseline must succeed even where the directory cannot be flushed: \
+         {overwrite_in_unreadable:?}"
+    );
+
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+        .expect("restore a readable mode to read the results back");
+    for path in [&created, &overwritten] {
+        let document: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).expect("read the baseline"))
+                .expect("the baseline must be valid JSON");
+        assert_eq!(
+            document["format"], "tianheng.baseline/structured-facts",
+            "the write must land the document whole: {document:?}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn rewriting_an_existing_baseline_preserves_its_permissions() {
     // rename replaces whatever sits at its destination unconditionally, so a naive temp-then-
     // rename write would silently reset the baseline's mode to the temp file's process-umask
