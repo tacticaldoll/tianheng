@@ -261,4 +261,3 @@ The system SHALL observe a trait `impl` block that is written as a direct statem
 
 - **WHEN** a disallowed module declares `static S: () = { impl Command for Foo { fn run(&self) {} } };`
 - **THEN** the system does not claim to observe it — only a `const` initializer or a `fn` body is inspected, never a `static` initializer, a stated coverage bound rather than a silent claim of cleanliness
-

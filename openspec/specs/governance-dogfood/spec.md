@@ -197,4 +197,3 @@ The repository unit and integration test suites SHALL include lock assertions ve
 
 - **WHEN** the test harness evaluates a module boundary against source containing `use crate::a::b::{super::forbidden::X};`
 - **THEN** the harness detects `crate::a::forbidden` and reports the expected violation
-

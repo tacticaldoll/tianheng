@@ -174,4 +174,3 @@ as it already does for the default (seam-only) scope.
 
 - **WHEN** the identical impl is instead written `fn _also() { impl Svc { pub fn existential(&self) -> impl crate::Port { … } } }`
 - **THEN** the system reports the identical finding, rather than reporting zero findings because the impl sits inside a fn body
-

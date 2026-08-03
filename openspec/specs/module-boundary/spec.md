@@ -641,4 +641,3 @@ part of the comment rather than re-scanned as code.
   regardless of what precedes it
 - **THEN** the system reacts 0/1/2 instead of panicking, and every module declared before the
   comment remains observable
-

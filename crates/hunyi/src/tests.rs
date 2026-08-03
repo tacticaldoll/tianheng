@@ -10162,11 +10162,11 @@ fn cfg_if_if_else_arms_both_expose_forbidden_types() {
             (
                 "api.rs",
                 "cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub fn unix_leak() -> crate::infra::Secret { loop {} }\n\
-                 	 } else {\n\
-                 	     pub fn fallback_leak() -> crate::infra::Secret { loop {} }\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub fn unix_leak() -> crate::infra::Secret { loop {} }\n\
+                      } else {\n\
+                          pub fn fallback_leak() -> crate::infra::Secret { loop {} }\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10195,9 +10195,9 @@ fn cfg_if_if_only_arm_exposes_a_forbidden_type() {
             (
                 "api.rs",
                 "cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub fn leak() -> crate::infra::Secret { loop {} }\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10223,13 +10223,13 @@ fn cfg_if_else_if_chain_exposes_every_arm() {
             (
                 "api.rs",
                 "cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub fn a_leak() -> crate::infra::Secret { loop {} }\n\
-                 	 } else if #[cfg(windows)] {\n\
-                 	     pub fn b_leak() -> crate::infra::Secret { loop {} }\n\
-                 	 } else {\n\
-                 	     pub fn c_leak() -> crate::infra::Secret { loop {} }\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub fn a_leak() -> crate::infra::Secret { loop {} }\n\
+                      } else if #[cfg(windows)] {\n\
+                          pub fn b_leak() -> crate::infra::Secret { loop {} }\n\
+                      } else {\n\
+                          pub fn c_leak() -> crate::infra::Secret { loop {} }\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10259,13 +10259,13 @@ fn nested_cfg_if_inside_an_arm_exposes_a_forbidden_type() {
             (
                 "api.rs",
                 "cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     cfg_if::cfg_if! {\n\
-                 	         if #[cfg(target_pointer_width = \"64\")] {\n\
-                 	             pub fn inner_leak() -> crate::infra::Secret { loop {} }\n\
-                 	         }\n\
-                 	     }\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          cfg_if::cfg_if! {\n\
+                              if #[cfg(target_pointer_width = \"64\")] {\n\
+                                  pub fn inner_leak() -> crate::infra::Secret { loop {} }\n\
+                              }\n\
+                          }\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10293,9 +10293,9 @@ fn a_cfg_if_arm_declared_file_module_is_walked() {
                 "lib.rs",
                 "pub mod infra;\n\
                  cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub mod api;\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub mod api;\n\
+                      }\n\
                  }\n",
             ),
             (
@@ -10325,11 +10325,11 @@ fn a_cfg_if_arm_declared_inline_module_is_walked() {
                 "lib.rs",
                 "pub mod infra;\n\
                  cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub mod api {\n\
-                 	         pub fn leak() -> crate::infra::Secret { loop {} }\n\
-                 	     }\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub mod api {\n\
+                              pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                          }\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10355,9 +10355,9 @@ fn a_paren_delimited_cfg_if_invocation_is_transparent() {
             (
                 "api.rs",
                 "cfg_if::cfg_if!(\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub fn leak() -> crate::infra::Secret { loop {} }\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                      }\n\
                  );\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10384,11 +10384,11 @@ fn a_cfg_if_inside_an_inline_module_is_transparent() {
             (
                 "api.rs",
                 "pub mod inner {\n\
-                 	 cfg_if::cfg_if! {\n\
-                 	     if #[cfg(unix)] {\n\
-                 	         pub fn leak() -> crate::infra::Secret { loop {} }\n\
-                 	     }\n\
-                 	 }\n\
+                      cfg_if::cfg_if! {\n\
+                          if #[cfg(unix)] {\n\
+                              pub fn leak() -> crate::infra::Secret { loop {} }\n\
+                          }\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10418,9 +10418,9 @@ fn a_cfg_if_arm_body_that_does_not_parse_as_items_is_not_a_scan_error() {
                 "api.rs",
                 "pub fn control_leak() -> crate::infra::Secret { loop {} }\n\
                  cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     let _not_an_item = 1;\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          let _not_an_item = 1;\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10450,9 +10450,9 @@ fn an_arbitrary_macro_body_is_not_read_as_transparent_arms() {
             (
                 "api.rs",
                 "generate_wrapper! {\n\
-                 	 impl Foo {\n\
-                 	     pub fn hidden() -> crate::infra::Secret { loop {} }\n\
-                 	 }\n\
+                      impl Foo {\n\
+                          pub fn hidden() -> crate::infra::Secret { loop {} }\n\
+                      }\n\
                  }\n",
             ),
             ("infra.rs", "pub struct Secret;\n"),
@@ -10480,7 +10480,7 @@ fn the_same_exposure_written_as_an_item_reacts() {
                 "api.rs",
                 "pub struct Foo;\n\
                  impl Foo {\n\
-                 	 pub fn hidden() -> crate::infra::Secret { loop {} }\n\
+                      pub fn hidden() -> crate::infra::Secret { loop {} }\n\
                  }\n\
                  pub fn hidden() -> crate::infra::Secret { loop {} }\n",
             ),
@@ -10513,9 +10513,9 @@ fn a_cfg_if_arm_declared_module_with_no_source_file_is_tolerated() {
                 "lib.rs",
                 "pub mod api;\npub mod infra;\n\
                  cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub mod unix_only;\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub mod unix_only;\n\
+                      }\n\
                  }\n",
             ),
             (
@@ -10574,9 +10574,9 @@ fn a_cfg_if_arm_declared_dual_backed_module_is_still_a_scan_error() {
                 "lib.rs",
                 "pub mod api;\npub mod infra;\n\
                  cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub mod dual;\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub mod dual;\n\
+                      }\n\
                  }\n",
             ),
             (
@@ -10610,9 +10610,9 @@ fn an_unsafe_site_inside_a_cfg_if_arm_is_confined() {
             (
                 "net.rs",
                 "cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     pub unsafe fn decode() {}\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          pub unsafe fn decode() {}\n\
+                      }\n\
                  }\n",
             ),
         ],
@@ -10640,9 +10640,9 @@ fn a_trait_impl_inside_a_cfg_if_arm_is_located() {
                 "use crate::command::Command;\n\
                  pub struct Foo;\n\
                  cfg_if::cfg_if! {\n\
-                 	 if #[cfg(unix)] {\n\
-                 	     impl Command for Foo {}\n\
-                 	 }\n\
+                      if #[cfg(unix)] {\n\
+                          impl Command for Foo {}\n\
+                      }\n\
                  }\n",
             ),
         ],

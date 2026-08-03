@@ -235,4 +235,3 @@ sites.
 
 - **WHEN** two distinct unsafe sites contain syntax outside the ordinary renderer
 - **THEN** they remain structurally distinct or scanning fails loud, never sharing an ordinal fallback
-

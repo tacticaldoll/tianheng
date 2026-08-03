@@ -163,4 +163,3 @@ their relationship or identity.
 #### Scenario: Shape and operand rules do not collide
 - **WHEN** the same seam violates both shape-only and operand-specific laws
 - **THEN** their semantic rule keys keep the violation identities distinct
-

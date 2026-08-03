@@ -229,4 +229,3 @@ subject at the same seam, but traversal position SHALL NOT be used to claim inje
 
 - **WHEN** the identical impl is instead written `fn _also() { impl Svc { pub fn dynamic(&self) -> Box<dyn crate::Port> { … } } }`
 - **THEN** the system reports the identical finding, rather than reporting zero findings because the impl sits inside a fn body
-

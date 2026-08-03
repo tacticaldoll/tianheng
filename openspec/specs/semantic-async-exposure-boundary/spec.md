@@ -220,4 +220,3 @@ text/JSON/markdown projection with its own boundary section. The implementation 
 
 - **WHEN** the identical impl is instead written `fn _also() { impl Svc { pub async fn run(&self) {} } }`
 - **THEN** the system reports the identical finding, rather than reporting zero findings because the impl sits inside a fn body
-

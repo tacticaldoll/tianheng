@@ -238,4 +238,3 @@ structurally distinct roles could both produce.
   placeholder; scanning fails loud (a constitution error) rather than silently reporting only one of
   the two bounds' violations, and a renderable where-clause bounded type is unaffected by this
   fail-loud path
-

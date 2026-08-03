@@ -189,4 +189,3 @@ identity.
 #### Scenario: Same-named items on different owners stay distinct
 - **WHEN** two violating public items share a name but differ by module or owner
 - **THEN** their structured facts remain distinct
-
