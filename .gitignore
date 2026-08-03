@@ -1,6 +1,10 @@
 /target/
-# Each example is its own workspace; its build artifacts and resolved lockfile are local only
-# (the examples commit the adopter's `= "0.1"` form, like the in-repo fixtures, and carry no lock).
+# Each example is its own workspace; its build artifacts and resolved lockfile are local only. The
+# examples commit the adopter's caret dependency form, like the in-repo fixtures, and carry no lock:
+# a committed one would pin the family to whatever was published when it was generated, so an
+# example run without the examples gate's local-source patch would demonstrate a release other than
+# the tree it was cloned from. The version is deliberately not named here — it lives in each
+# example's own manifest, and naming it twice is how this comment went stale once already.
 /examples/*/target/
 /examples/*/Cargo.lock
 /.agent/
