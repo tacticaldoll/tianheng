@@ -167,6 +167,106 @@ fn external_module_files(
     Ok(modules)
 }
 
+/// Resolve an external `mod name;` declaration (found at `mod_index` in `bytes`, within the scope
+/// starting at `scope_start`) into `modules`, or fail loud when genuinely unresolvable on every
+/// configuration. An unconditional `#[path]` is authoritative on every build — the sole source; a
+/// non-inline `#[path]` resolves from the containing file's OWN directory (`file_dir`), not the
+/// conventional-child base — rustc's mod-rs-blind rule. Absent that, every `cfg_attr`-wrapped
+/// `#[path]` candidate that exists on disk (resolved the identical way) AND the conventional file
+/// are unioned — cfg-blind observation cannot know which one a given build actually uses, so
+/// neither is silently preferred over the other. No file at any candidate location is tolerated
+/// when the declaration is `#[cfg]`-gated or arm-conditional (may legitimately compile no probes
+/// here); otherwise it is a real broken reference (exit 2). Pulled out of
+/// [`collect_scope_modules`]'s `mod name;` arm.
+#[allow(clippy::too_many_arguments)]
+fn resolve_external_mod_decl(
+    bytes: &[u8],
+    scope_start: usize,
+    mod_index: usize,
+    name: &str,
+    child_base: &Path,
+    file_dir: &Path,
+    modules: &mut Vec<(PathBuf, PathBuf)>,
+    in_transparent_arm: bool,
+) -> Result<(), String> {
+    let attrs = mod_preamble_attrs(bytes, scope_start, mod_index);
+    if let Some(rel) = &attrs.path {
+        match resolve_path_module(file_dir, rel)? {
+            Some(resolved) => modules.push(resolved),
+            None if attrs.cfg || in_transparent_arm => {}
+            None => {
+                return Err(format!(
+                    "cannot resolve reachable module `{name}` under {}",
+                    child_base.display()
+                ));
+            }
+        }
+        return Ok(());
+    }
+    let mut has_backing_source = false;
+    for rel in &attrs.cfg_attr_paths {
+        if let Some(resolved) = resolve_path_module(file_dir, rel)? {
+            has_backing_source = true;
+            modules.push(resolved);
+        }
+    }
+    if let Some(resolved) = resolve_external_module(child_base, name)? {
+        has_backing_source = true;
+        modules.push(resolved);
+    }
+    // Membership in a transparent macro arm is the second cfg-conditional source, treated
+    // identically because it expresses one intent: the arm's predicate lives in the macro's
+    // `if #[cfg(..)]` header rather than on the item, and every arm is conditionally compiled by
+    // construction (the trailing `else` on its predicates' negation). 圭表 settled this rule for
+    // the same shape and 渾儀 adopted it; a third derivation here would be the silent-divergence
+    // class the cross-dimension ledger exists to catch.
+    if !(has_backing_source || attrs.cfg || in_transparent_arm) {
+        return Err(format!(
+            "cannot resolve reachable module `{name}` under {}",
+            child_base.display()
+        ));
+    }
+    Ok(())
+}
+
+/// The candidate base directories an inline `mod name { … }`'s body should be descended from. An
+/// unconditional `#[path]` is the sole authority, exactly as [`resolve_external_mod_decl`] applies
+/// for an external `mod`. A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which predicate a
+/// given build selects — cfg-blind observation cannot know which, so the body is descended once
+/// per candidate base that exists as a directory: every `cfg_attr` target that resolves, AND the
+/// conventional base if IT resolves (the predicate could evaluate false on every one, in which
+/// case rustc strips the attribute entirely and the plain, unremapped base applies). A candidate
+/// base that isn't a real directory contributes nothing — recursing into it would spuriously
+/// fail-loud on the module's own OTHER, unrelated nested items merely because this one platform's
+/// directory happens not to exist, when another candidate already backs them. If NO candidate
+/// resolves at all, fall back to the conventional base anyway (the pre-existing, un-remapped
+/// behavior) so a nested reference that is genuinely broken on every platform still fails loud
+/// rather than being silently dropped.
+fn inline_mod_bases(
+    attrs: &ModPreambleAttrs,
+    name: &str,
+    child_base: &Path,
+    file_dir: &Path,
+) -> Vec<PathBuf> {
+    let mut inline_bases: Vec<PathBuf> = Vec::new();
+    match &attrs.path {
+        Some(rel) => inline_bases.push(file_dir.join(rel)),
+        None => {
+            for rel in &attrs.cfg_attr_paths {
+                let candidate = file_dir.join(rel);
+                if candidate.is_dir() {
+                    inline_bases.push(candidate);
+                }
+            }
+            let conventional = child_base.join(name);
+            if inline_bases.is_empty() || conventional.is_dir() {
+                inline_bases.push(conventional);
+            }
+        }
+    }
+    inline_bases
+}
+
 fn collect_scope_modules(
     bytes: &[u8],
     start: usize,
@@ -245,61 +345,16 @@ fn collect_scope_modules(
             cursor = skip_space_and_comments(bytes, cursor);
             match bytes.get(cursor) {
                 Some(b';') => {
-                    let attrs = mod_preamble_attrs(bytes, start, i);
-                    if let Some(rel) = &attrs.path {
-                        // An unconditional `#[path]` is authoritative on every build — the sole
-                        // source, exactly as before. A non-inline `#[path]` resolves from the
-                        // containing file's OWN directory (`file_dir`), not the conventional-child
-                        // base — rustc's mod-rs-blind rule.
-                        match resolve_path_module(file_dir, rel)? {
-                            Some(resolved) => modules.push(resolved),
-                            None if attrs.cfg || in_transparent_arm => {}
-                            None => {
-                                return Err(format!(
-                                    "cannot resolve reachable module `{name}` under {}",
-                                    child_base.display()
-                                ));
-                            }
-                        }
-                    } else {
-                        // Union every source this build could compile: each `cfg_attr`-wrapped
-                        // `#[path]` candidate that exists on disk (resolved the identical way an
-                        // unconditional `#[path]` is, from `file_dir`), AND the conventional file —
-                        // cfg-blind observation cannot know which one a given build actually uses,
-                        // so neither is silently preferred over the other.
-                        let mut has_backing_source = false;
-                        for rel in &attrs.cfg_attr_paths {
-                            if let Some(resolved) = resolve_path_module(file_dir, rel)? {
-                                has_backing_source = true;
-                                modules.push(resolved);
-                            }
-                        }
-                        if let Some(resolved) = resolve_external_module(child_base, name)? {
-                            has_backing_source = true;
-                            modules.push(resolved);
-                        }
-                        // No file at any candidate location. A `#[cfg]`-gated declaration (or a
-                        // cfg_attr-wrapped relocation with an existing target elsewhere) may
-                        // legitimately have none in this configuration (an off feature / another
-                        // platform), so tolerate it — it compiles no probes here, so skipping it
-                        // cannot silently cover a seam. A non-cfg, non-`cfg_attr`-backed missing
-                        // module is a real broken reference: fail loud (exit 2). Membership in a
-                        // transparent macro arm is the second cfg-conditional source, treated
-                        // identically because it expresses one intent: the arm's predicate lives in
-                        // the macro's `if #[cfg(..)]` header rather than on the item, and every arm
-                        // is conditionally compiled by construction (the trailing `else` on its
-                        // predicates' negation). 圭表 settled this rule for the same shape and 渾儀
-                        // adopted it; a third derivation here would be the silent-divergence class
-                        // the cross-dimension ledger exists to catch. An ambiguity (both conventional
-                        // forms present) stays an error above, under every gate — no predicate value
-                        // makes two files one module.
-                        if !(has_backing_source || attrs.cfg || in_transparent_arm) {
-                            return Err(format!(
-                                "cannot resolve reachable module `{name}` under {}",
-                                child_base.display()
-                            ));
-                        }
-                    }
+                    resolve_external_mod_decl(
+                        bytes,
+                        start,
+                        i,
+                        name,
+                        child_base,
+                        file_dir,
+                        modules,
+                        in_transparent_arm,
+                    )?;
                     i = cursor + 1;
                     continue;
                 }
@@ -313,36 +368,7 @@ fn collect_scope_modules(
                     // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
                     // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
                     // component and read a same-named orphan — a false negative.)
-                    //
-                    // An unconditional `#[path]` is the sole authority, exactly as for an external
-                    // mod. A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which predicate a
-                    // given build selects — cfg-blind observation cannot know which, so the body is
-                    // descended once per candidate base that exists as a directory: every `cfg_attr`
-                    // target that resolves, AND the conventional base if IT resolves (the predicate
-                    // could evaluate false on every one, in which case rustc strips the attribute
-                    // entirely and the plain, unremapped base applies). A candidate base that isn't a
-                    // real directory contributes nothing — recursing into it would spuriously
-                    // fail-loud on x's own OTHER, unrelated nested items merely because this one
-                    // platform's directory happens not to exist, when another candidate already backs
-                    // them. If NO candidate resolves at all, fall back to the conventional base anyway
-                    // (the pre-existing, un-remapped behavior) so a nested reference that is genuinely
-                    // broken on every platform still fails loud rather than being silently dropped.
-                    let mut inline_bases: Vec<PathBuf> = Vec::new();
-                    match &attrs.path {
-                        Some(rel) => inline_bases.push(file_dir.join(rel)),
-                        None => {
-                            for rel in &attrs.cfg_attr_paths {
-                                let candidate = file_dir.join(rel);
-                                if candidate.is_dir() {
-                                    inline_bases.push(candidate);
-                                }
-                            }
-                            let conventional = child_base.join(name);
-                            if inline_bases.is_empty() || conventional.is_dir() {
-                                inline_bases.push(conventional);
-                            }
-                        }
-                    }
+                    let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir);
                     for inline_base in &inline_bases {
                         collect_scope_modules(
                             bytes,
