@@ -59,18 +59,22 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
         .find(|candidate| candidate["name"].as_str() == Some(package))
 }
 
+/// Whether a `cargo metadata` target's `kind` array contains `wanted` — the one-target shape
+/// check shared by [`crate_root_file`] (picking one library/bin target) and
+/// [`member_root_files`] (filtering every library/bin target across the workspace).
+fn target_has_kind(target: &Value, wanted: &str) -> bool {
+    target["kind"]
+        .as_array()
+        .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
+}
+
 /// Resolve a crate's root source file from `cargo metadata` (library target else `bin` target).
 pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
     let targets = package["targets"].as_array()?;
-    let has_kind = |target: &Value, wanted: &str| {
-        target["kind"]
-            .as_array()
-            .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
-    };
     let pick = targets
         .iter()
-        .find(|t| LIBRARY_KINDS.iter().any(|k| has_kind(t, k)))
-        .or_else(|| targets.iter().find(|t| has_kind(t, "bin")))?;
+        .find(|t| LIBRARY_KINDS.iter().any(|k| target_has_kind(t, k)))
+        .or_else(|| targets.iter().find(|t| target_has_kind(t, "bin")))?;
     pick["src_path"].as_str().map(PathBuf::from)
 }
 
@@ -104,12 +108,8 @@ pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
                         .into_iter()
                         .flatten()
                         .filter(|target| {
-                            target["kind"].as_array().is_some_and(|kinds| {
-                                kinds.iter().any(|kind| {
-                                    kind.as_str()
-                                        .is_some_and(|k| LIBRARY_KINDS.contains(&k) || k == "bin")
-                                })
-                            })
+                            LIBRARY_KINDS.iter().any(|k| target_has_kind(target, k))
+                                || target_has_kind(target, "bin")
                         })
                         .filter_map(|target| target["src_path"].as_str().map(PathBuf::from))
                 })
