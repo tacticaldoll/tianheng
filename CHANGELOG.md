@@ -143,11 +143,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   mounts answer `EINVAL`/`ENOSYS` to the fsync), where reporting "cannot write baseline" for a
   baseline sitting correctly on disk would be the worse outcome. The strict guarantee is therefore
   the file flush; the directory flush is unix-only besides (`std` exposes no portable way to open a
-  directory handle on Windows). `create_baseline_file`'s own doc no
-  longer claims a crash there "simply leaves no file": it publishes its directory entry before its
-  first byte, so a crash mid-create can leave an empty file that the next run refuses to overwrite
-  (exit 2, remedy named) — stated instead of overclaimed. `violation-baseline` gains the requirement
-  and its two scenarios, and the tolerance is pinned by a test that first proves its own
+  directory handle on Windows). `create_baseline_file`'s own doc no longer claims a crash there
+  "simply leaves no file": it publishes its directory entry before its first byte, so a crash
+  mid-create can leave an empty file that the next run refuses to overwrite (exit 2, remedy named) —
+  stated instead of overclaimed. `violation-baseline` gains the requirement and its three scenarios,
+  and the tolerance is pinned by a test that first proves its own
   precondition — a directory that is genuinely unreadable to the running process — so it reports a
   vacuous run instead of passing through one.
 - A value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `--format`) whose next
