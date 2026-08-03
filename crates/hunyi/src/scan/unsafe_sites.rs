@@ -79,7 +79,19 @@ fn canonical_unsafe_owner(
                     .as_ref()
                     .is_some_and(|head| uses.contains_key(head) || local_types.contains(head));
             if should_resolve {
-                let base = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?;
+                // The distinct-candidate count decides, not the first candidate: two
+                // mutually-exclusive `#[cfg]` branches can bind one alias to different types, and
+                // this owner is a dedup key, so collapsing them onto an arbitrarily-chosen candidate
+                // would merge two independent `unsafe` sites into one violation (see
+                // `resolve::shape`'s own ambiguity outcome for the full argument). `None` here reaches
+                // `unsupported`, the loud path this collector already has for an unnameable owner.
+                let mut candidates =
+                    resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
+                candidates.sort();
+                candidates.dedup();
+                let [base] = candidates.as_slice() else {
+                    return None;
+                };
                 return Some(format!("{base}{}", render_last_segment_args(&tp.path)?));
             }
         }

@@ -211,31 +211,22 @@ fn resolve_crate_relative(segs: &[String], module: &str) -> Option<String> {
     }
 }
 
-/// Resolve a path as written (in a signature or an `impl` header) to a canonical crate
-/// path, using the module's in-scope `use`s, `crate::`/`self`/`super` relative to
-/// `module`, and — per `bare` — a bare/relative name against the current module. `None`
-/// when not resolvable (a glob/external/primitive name under [`BareFallback::Ignore`]) —
-/// a stated bound, never a silent claim. Takes the **first** use-map candidate when the head
-/// resolves to more than one (a mutually-exclusive `#[cfg]` collision) — the identity/anchor
-/// callers of this function (impl-locality, trait-impl anchoring, marker acquisition) have no
-/// audit-verified need for cfg-blind multi-candidate resolution; [`resolve_path_all`] is the
-/// exposure-matching sibling that checks every candidate.
-pub(crate) fn resolve_path(
-    path: &syn::Path,
-    uses: &UseMap,
-    module: &str,
-    bare: BareFallback,
-) -> Option<String> {
-    resolve_path_all(path, uses, module, bare)
-        .into_iter()
-        .next()
-}
-
-/// [`resolve_path`]'s cfg-blind sibling: returns **every** candidate canonical path the head could
-/// resolve to, instead of only the first. Exposure-matching callers (signature-coupling and the
-/// shared existential-exposure pipeline) must check every candidate and react if any is forbidden —
-/// observation cannot know which of two mutually-exclusive `#[cfg]` branches' `use` declarations is
-/// live, so neither may be silently dropped in favor of the other.
+/// Resolve a path as written (in a signature or an `impl` header) to **every** canonical crate path
+/// its head could denote, using the module's in-scope `use`s, `crate::`/`self`/`super` relative to
+/// `module`, and — per `bare` — a bare/relative name against the current module. Empty when not
+/// resolvable (a glob/external/primitive name under [`BareFallback::Ignore`]) — a stated bound, never
+/// a silent claim.
+///
+/// Multi-candidate by construction, and deliberately the ONLY resolver: observation cannot know which
+/// of two mutually-exclusive `#[cfg]` branches' `use` declarations is live, so neither may be dropped
+/// in favor of the other. A `resolve_path` sibling returning just the first candidate used to sit
+/// beside this one for identity/anchor callers, on the reasoning that they had "no audit-verified need
+/// for cfg-blind multi-candidate resolution". That reasoning was wrong, and its removal is the
+/// structural half of the fix: taking the first candidate is invisible in a MATCHING decision (the
+/// exposure pipeline checks them all anyway) but silently fatal in an IDENTITY component, where two
+/// independent sites sharing a cfg-collided alias render one owner label and collapse into a single
+/// violation. Callers that need one value must now decide what to do about `len() > 1` rather than
+/// receive an arbitrary pick — see `resolve::shape`'s `AmbiguousOwnerAlias`.
 pub(crate) fn resolve_path_all(
     path: &syn::Path,
     uses: &UseMap,
@@ -292,7 +283,7 @@ pub(crate) fn resolve_path_all(
 /// for "is this bare head extern?": it is applied only *after* `use`-map and
 /// `crate`/`self`/`super` resolution have declined (so a local `use … as <dep>` alias still
 /// wins), and only by the exposure resolve and the re-export closure — never by
-/// [`resolve_path`]'s other callers. An `externs` that is empty (the non-exposure callers)
+/// [`resolve_path_all`]'s other callers. An `externs` that is empty (the non-exposure callers)
 /// makes it inert, so the closure behaves exactly as before.
 pub(crate) fn extern_verbatim_segs(segs: &[String], externs: &HashSet<String>) -> Option<String> {
     let head = segs.first()?;

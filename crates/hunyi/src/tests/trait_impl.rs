@@ -689,6 +689,82 @@ pub(super) fn two_impls_in_one_module_are_distinct_findings_by_self_type() {
     );
 }
 
+/// A cfg-collided self-type alias cannot be named injectively, so observation refuses instead of
+/// collapsing two independent sites onto one owner label.
+///
+/// `#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as X;` with an `impl
+/// Marker for X` in each branch is two genuinely different types acquiring the governed trait.
+/// Resolution is cfg-blind by design, so both bindings are live candidates and neither may be
+/// preferred; the owner renderer used to take whichever came first, giving both sites the SAME owner.
+/// Owner is a dedup key, so they collapsed to one violation and a baseline accepting the first
+/// suppressed the second — the false negative the Core Contract forbids outright.
+///
+/// The candidate SET is identical for both sites, so it cannot separate them either: what is left is
+/// to refuse to name it. Exit 2 "cannot judge" over a silent collapse is the Core Contract's own
+/// ordering, and the same reaction an unrenderable self type already gets.
+#[test]
+pub(super) fn a_cfg_collided_self_type_alias_fails_loud_instead_of_collapsing_two_owners() {
+    let error = locality_findings(
+        "cfg-collided-owner-alias",
+        &[
+            (
+                "lib.rs",
+                "pub mod marker;\npub mod a;\npub mod b;\npub mod domain;\n",
+            ),
+            ("marker.rs", "pub trait Marker {}\n"),
+            ("a.rs", "pub struct Foo;\n"),
+            ("b.rs", "pub struct Bar;\n"),
+            (
+                "domain.rs",
+                "#[cfg(unix)]\nuse crate::a::Foo as X;\n#[cfg(not(unix))]\nuse crate::b::Bar as X;\n\
+                 impl crate::marker::Marker for X {}\n",
+            ),
+        ],
+        "crate::marker::Marker",
+        &["crate::marker"],
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("without a stable structural label"),
+        "the ambiguity must reach the shared fail-loud identity gate: {error}"
+    );
+    assert!(
+        error.contains("mutually-exclusive"),
+        "the diagnostic must name the cfg collision as the cause, not just the failure: {error}"
+    );
+    assert!(
+        !error.contains("_#"),
+        "the internal sentinel must never surface to an adopter: {error}"
+    );
+}
+
+/// The control for the guard above: ONE alias binding, the ordinary case, still resolves and reacts
+/// normally. Without this, "refuse when ambiguous" could quietly become "refuse whenever an alias is
+/// involved" and the suite would not notice.
+#[test]
+pub(super) fn a_single_aliased_self_type_still_resolves_to_its_owner() {
+    let out = locality_findings(
+        "single-alias-owner",
+        &[
+            ("lib.rs", "pub mod marker;\npub mod a;\npub mod domain;\n"),
+            ("marker.rs", "pub trait Marker {}\n"),
+            ("a.rs", "pub struct Foo;\n"),
+            (
+                "domain.rs",
+                "use crate::a::Foo as X;\nimpl crate::marker::Marker for X {}\n",
+            ),
+        ],
+        "crate::marker::Marker",
+        &["crate::marker"],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        ["crate::domain (impl crate::marker::Marker for crate::a::Foo)"],
+        "a single alias candidate must still render its resolved owner"
+    );
+}
+
 #[test]
 pub(super) fn const_generic_expr_self_types_fail_loud_without_positional_identity() {
     // The ordinary owner renderer cannot distinguish these complex const expressions. Publishing

@@ -327,6 +327,31 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `AsyncInherentMethod`'s own already-shipped precedent). No DSL, builder, or CLI surface change —
   only the identity `fact` payload gains a field, the identical shape this same `[Unreleased]`
   window's own `governing_package` fix already took (below).
+- **BREAKING**: 渾儀 now refuses to name an owner whose self-type head two mutually-exclusive
+  `#[cfg]` branches bind to different targets, instead of rendering both sites onto whichever
+  candidate came first. `#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as
+  X;` with an `impl` for `X` in each branch is two genuinely different types; resolution is cfg-blind
+  by design, so both bindings are live candidates and the owner renderer took the first — giving the
+  two sites the identical owner. Owner is a dedup key, so they collapsed into one violation and a
+  baseline accepting the first suppressed the second's never-accepted one: the false negative
+  PROJECT.md's Core Contract forbids outright, across trait-impl-locality, forbidden-marker,
+  unsafe-confinement, and signature-coupling at once. Neither candidate can be preferred (only one
+  compiles, and which one is a `cfg` evaluation this dimension deliberately does not perform), and the
+  candidate SET is identical for both sites so it cannot separate them either — so the reaction is to
+  refuse: the ambiguity reaches the same fail-loud identity gate an unrenderable self type already
+  hits, a constitution error (exit 2) whose diagnostic names the `#[cfg]` collision as the cause
+  without publishing the internal sentinel that carries it. "Cannot judge" over a silent collapse is
+  the Core Contract's own ordering. The structural half: the single-candidate `resolve_path` that fed
+  every such label was **deleted** rather than bypassed, leaving `resolve_path_all` the only resolver,
+  so a caller needing one value must now decide what to do about more than one instead of receiving an
+  arbitrary pick — the defect class is unrepresentable rather than fixed at three call sites. Its own
+  doc had claimed those identity callers "have no audit-verified need for cfg-blind multi-candidate
+  resolution"; that claim was the bug, stated. A single alias binding — the ordinary case — resolves
+  exactly as before, pinned by its own control test. **Any existing `--write-baseline` output is
+  unaffected** (no identity shape changed; what changes is that an ambiguous one is now refused rather
+  than recorded under an arbitrary label). `semantic-signature-coupling` gains the requirement and its
+  two scenarios, and the shared gate's diagnostic now names which role failed and why, keeping its
+  previous sentence verbatim as the prefix so the fail-loud tests that pin it stay meaningful.
 - **BREAKING**: `PublicSeam::InherentGenerics` and `PublicSeam::ExternCrate` now carry their
   declaring module too — the two seam shapes the fix above left behind, found by re-reviewing that
   fix's own reasoning against every shape in the vocabulary rather than only the ones it touched.

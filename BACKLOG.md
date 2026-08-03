@@ -45,6 +45,18 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
 
 ### DESIGN-BREAKING
 
+- ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
+  0.4.0 window, after an independent review re-derived it. Closed by refusing to name the ambiguity
+  rather than by inventing an encoding for it: an owner role whose head admits more than one distinct
+  candidate now reaches the shared fail-loud identity gate (a constitution error, exit 2, naming the
+  `#[cfg]` collision), because neither candidate may be preferred and the candidate SET is identical
+  for both colliding sites, so nothing available separates them. "Cannot judge" over a silent collapse
+  is the Core Contract's own ordering. The single-candidate `resolve_path` that fed every such label
+  was **deleted**, not merely bypassed — `resolve_path_all` is now the only resolver, so a caller
+  needing one value must decide what to do about `len() > 1` instead of receiving an arbitrary pick,
+  and the defect class is unrepresentable rather than fixed at three sites. `semantic-signature-coupling`
+  gains the requirement and two scenarios. The original entry is kept below for its reproduction record.
+
 - **Owner-label identity collapses across a cfg-collided self-type alias.** Class:
   DESIGN-BREAKING. Observed pressure: reproduced by the maintainer during round-3
   adversarial review of `change/hunyi-cfg-branch-use-reexport-merging` (PR #149) —

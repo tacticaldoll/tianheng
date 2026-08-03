@@ -3,13 +3,13 @@
 //! turn a `syn` type/path node into a **stable finding string** (never `quote`/`syn`'s
 //! `printing` feature, which would breach 渾儀's dependency allowlist). It sits atop the
 //! name-resolution layer (its parent [`mod@super`]): it renders and collects shapes, then leans on
-//! [`resolve_path`]/[`strip_raw`] to canonicalize the paths it observes.
+//! [`resolve_path_all`]/[`strip_raw`] to canonicalize the paths it observes.
 
 use syn::visit::Visit;
 
 use crate::finding::PublicSeam;
 
-use super::{BareFallback, UseMap, resolve_path, strip_raw};
+use super::{BareFallback, UseMap, resolve_path_all, strip_raw};
 
 /// A Visitor collecting every type path and trait-bound path within a syntax node, so a
 /// forbidden type nested in a generic argument (`Vec<crate::infra::Pool>`) or named in a
@@ -92,7 +92,7 @@ impl<'ast> Visit<'ast> for PathCollector {
 /// One observed shape node — a `dyn Trait` or a returned `impl Trait` — as its rendered shape
 /// (the stable finding string) plus its **non-auto trait** paths as written (for operand-scoped
 /// matching). Shape-only governance reads `shape`; operand-scoped governance resolves each entry of
-/// `principals` (via [`resolve_path`], which reads the path's segment idents and ignores any
+/// `principals` (via [`resolve_path_all`], which reads the path's segment idents and ignores any
 /// generic/parenthesized args) against the forbidden set, matching if **any** resolves into it. A
 /// `dyn` object has exactly one non-auto trait; a returned `impl Trait` may name several
 /// (`impl Foo + Bar`), so this is a list. Shared by the `dyn` and `impl Trait` collectors.
@@ -411,20 +411,60 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
 /// adversarial review; see `PROJECT.md`'s Decisions). Returning `None` here (falling through to
 /// each caller's own plain-render/positional-marker path, skipping resolution entirely) gives the
 /// parameter its own stable, alias-independent label instead.
+/// The self type's head binds to more than one canonical target, so no single owner label can name
+/// it injectively.
+///
+/// Two mutually-exclusive `#[cfg]` branches may bind one alias to different types
+/// (`#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as X;`). Observation is
+/// cfg-blind by design, so both bindings are live candidates, and an `impl X` in each branch is two
+/// genuinely independent sites. Rendering either from a single arbitrarily-chosen candidate gives the
+/// two the SAME owner, and owner is a dedup key — so the two collapse into one violation and a
+/// baseline accepting the first suppresses the second's never-accepted one: the false negative the
+/// Core Contract forbids outright.
+///
+/// Neither candidate can be preferred (only one compiles, and which one is a `cfg` evaluation this
+/// crate deliberately does not perform), and the candidate SET is identical for both sites, so it
+/// cannot separate them either. What remains is to refuse to name it: this outcome carries that
+/// refusal to the callers, which turn it into the same fail-loud reaction an unrenderable self type
+/// already gets. "Cannot judge" (exit 2) over a silent collapse is the Core Contract's own ordering.
+struct AmbiguousOwnerAlias;
+
+/// The internal sentinel an unnameable-because-ambiguous owner renders to. Carries the `_#` prefix
+/// every renderer-failure sentinel uses, so the shared `reject_positional_identity` gate refuses it
+/// like any other, plus its own cause so that gate can say WHICH failure it is without echoing the
+/// sentinel (which it must not — the position-bearing sentinels would leak scan order).
+///
+/// One constant rather than a literal at each end: the producer here and the gate's cause-matching in
+/// `finding::fact` would otherwise be two spellings of one protocol, free to drift apart silently.
+pub(crate) const AMBIGUOUS_ALIAS_SENTINEL: &str = "_#cfg-ambiguous-self-type-alias";
+
 fn resolved_path_owner_parts(
     self_ty: &syn::Type,
     uses: &UseMap,
     module: &str,
     impl_type_params: &std::collections::HashSet<String>,
-) -> Option<(String, Option<String>)> {
+) -> Result<Option<(String, Option<String>)>, AmbiguousOwnerAlias> {
     let syn::Type::Path(tp) = self_ty else {
-        return None;
+        return Ok(None);
     };
     if tp.qself.is_some() || is_shadowed_param_path(&tp.path, impl_type_params) {
-        return None;
+        return Ok(None);
     }
-    let base = resolve_path(&tp.path, uses, module, BareFallback::CurrentModule)?;
-    Some((base, render_last_segment_args(&tp.path)))
+    // `resolve_path` is `resolve_path_all(..).next()` — it silently takes the first of however many
+    // candidates the head binds to. For a MATCHING decision that is a safe over-approximation the
+    // exposure pipeline already handles by checking every candidate; for an IDENTITY component it is
+    // the collapse above, so the distinct-candidate count is checked here rather than discarded.
+    let mut candidates = resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
+    candidates.sort();
+    candidates.dedup();
+    match candidates.len() {
+        0 => Ok(None),
+        1 => Ok(Some((
+            candidates.remove(0),
+            render_last_segment_args(&tp.path),
+        ))),
+        _ => Err(AmbiguousOwnerAlias),
+    }
 }
 
 pub(crate) fn canonical_self_owner(
@@ -434,32 +474,40 @@ pub(crate) fn canonical_self_owner(
     ordinal: usize,
     impl_type_params: &std::collections::HashSet<String>,
 ) -> String {
-    if let Some((base, args)) = resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
-        return match args {
+    match resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
+        Ok(Some((base, args))) => match args {
             Some(args) => format!("{base}{args}"),
             // Base resolved but a generic arg is unrenderable: preserve the readable base
             // beside the internal sentinel that the observation path rejects.
             None => format!("{base}<_#{ordinal}>"),
-        };
+        },
+        // A cfg-collided alias (see `AmbiguousOwnerAlias`): carry the refusal through the same `_#`
+        // sentinel the renderer failures use, so the shared `reject_positional_identity` gate turns
+        // it into a constitution error instead of letting two sites share one owner. The sentinel
+        // names its own cause rather than a traversal position, so the gate's message is actionable.
+        Err(AmbiguousOwnerAlias) => AMBIGUOUS_ALIAS_SENTINEL.to_string(),
+        // A non-path self type: render it if possible, else return the rejected internal sentinel.
+        Ok(None) => type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}")),
     }
-    // A non-path self type: render it if possible, else return the rejected internal sentinel.
-    type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}"))
 }
 
 /// Canonicalize an impl self type without inventing traversal-position identity.
 ///
 /// An unsupported self type returns `None`; a caller observing a seam that needs the owner can
-/// then fail loud instead of publishing `_#ordinal`.
+/// then fail loud instead of publishing `_#ordinal`. A cfg-collided alias (see
+/// [`AmbiguousOwnerAlias`]) returns `None` for the same reason — there is no injective label to
+/// publish, and this caller's own loud path is the right reaction.
 pub(crate) fn canonical_self_owner_without_fallback(
     self_ty: &syn::Type,
     uses: &UseMap,
     module: &str,
     impl_type_params: &std::collections::HashSet<String>,
 ) -> Option<String> {
-    if let Some((base, args)) = resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
-        return Some(format!("{base}{}", args?));
+    match resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
+        Ok(Some((base, args))) => Some(format!("{base}{}", args?)),
+        Err(AmbiguousOwnerAlias) => None,
+        Ok(None) => type_to_string(self_ty),
     }
-    type_to_string(self_ty)
 }
 
 /// Canonicalize a path's **last** segment's angle-bracketed generic arguments (`<u8, T>`), `""` when

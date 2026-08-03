@@ -217,18 +217,19 @@ pub(crate) fn collect_item_dyn_exposures(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resolve::{BareFallback, resolve_path};
+    use crate::resolve::{BareFallback, resolve_path_all};
 
     // Resolve every exposure path a public item produces, via the same segment-ident resolver the
     // query uses (`BareFallback::Ignore`), so a test can assert whether a forbidden `crate::…` type
-    // is observed by the collector.
+    // is observed by the collector. Every candidate is kept, exactly as the query's own matching
+    // does — these fixtures declare no aliases, so each path yields at most one.
     fn resolved(item_src: &str, module: &str) -> Vec<String> {
         let item: syn::Item = syn::parse_str(item_src).unwrap();
         let uses = UseMap::new();
         let mut out = Vec::new();
         collect_item_exposures(&item, module, &uses, 0, &mut out);
         out.iter()
-            .filter_map(|e| resolve_path(&e.path, &uses, module, BareFallback::Ignore))
+            .flat_map(|e| resolve_path_all(&e.path, &uses, module, BareFallback::Ignore))
             .collect()
     }
 
