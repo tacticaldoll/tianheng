@@ -48,7 +48,10 @@ jobs:
           cargo clippy -p louke -- -D warnings
           # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
           # feature-gated item (it would break docs.rs, which builds default features).
-          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+          # --document-private-items because nearly every item in these crates is crate-private, and
+          # without it a broken intra-doc link in that majority is invisible: 17 had accumulated,
+          # every one pointing at something a module split had moved or renamed.
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
           # --all-features turns ON louke/audit so the gated probe-coverage scanner tests
           # actually RUN — a plain `--workspace` would cfg them out and silently skip them.
           # TIANHENG_WORKSPACE_TESTS=1 makes the workspace-dependent dogfood/dispatch tests
@@ -56,7 +59,7 @@ jobs:
           TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
           cargo clippy --all-targets --all-features -- -D warnings
           cargo fmt --all --check
-          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
 
   msrv:
     name: MSRV (rust-version)

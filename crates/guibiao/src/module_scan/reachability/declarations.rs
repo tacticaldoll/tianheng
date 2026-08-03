@@ -12,7 +12,7 @@ use super::super::path_vocab::{canonical_segment, is_mod_declaration_keyword};
 /// declarations nested inside it. `direct_path_eq` is the cleaned-text position of the `=` in an
 /// **unconditional** `#[path = "…"]` preceding a FILE declaration — cleaning has already dropped
 /// the quoted value itself, so a caller resolves it by mapping this position back to the
-/// original source (see [`super::lexer::clean_with_positions`]) and reading from there.
+/// original source (see [`super::super::lexer::clean_with_positions`]) and reading from there.
 pub(super) struct DeclaredModule {
     pub(super) name: String,
     pub(super) is_inline: bool,

@@ -951,7 +951,7 @@ pub(super) fn a_non_pub_extern_block_item_is_not_observed() {
 /// A forbidden-marker impl's self type reached through a `type X = Y;` alias whose target `Y` is
 /// itself a mutually-exclusive `#[cfg]`-gated `use` alias: the self-type landing must react
 /// regardless of which cfg branch is declared first. Before the fix, `scan.alias_targets` was a
-/// single-valued `HashMap<String, String>` populated via `resolve_path`'s single-candidate lookup,
+/// single-valued `HashMap<String, String>` populated via the resolver's then-single-candidate lookup,
 /// so only one landing candidate for `X` was ever recorded (found on adversarial review of
 /// `hunyi-cfg-branch-use-reexport-merging`).
 #[test]
@@ -1014,7 +1014,7 @@ pub(super) fn forbidden_marker_self_type_landing_reacts_when_the_forbidden_alias
 /// A forbidden exposure reached through a `type X = Y;` alias whose target `Y` is itself a
 /// mutually-exclusive `#[cfg]`-gated `use` alias: the exposure must react regardless of which cfg
 /// branch is declared first. Before the fix, `scan.aliases` (the exposure-pipeline `AliasMap`) was
-/// populated via `resolve_path`'s single-candidate lookup even though the map itself was already
+/// populated via the resolver's then-single-candidate lookup even though the map itself was already
 /// multi-valued, so only one landing candidate for `X` was ever pushed (found on adversarial
 /// review of `hunyi-cfg-branch-use-reexport-merging`).
 #[test]
@@ -1286,7 +1286,7 @@ pub(super) fn mutually_exclusive_cfg_gated_use_aliases_both_react() {
 }
 
 /// The identical shape with the two `use` declarations in the OPPOSITE order — the forbidden
-/// binding declared second. Before the fix this silently passed (`Ok([])`): `resolve_path` took
+/// binding declared second. Before the fix this silently passed (`Ok([])`): the resolver took
 /// only the first `use`-map candidate, and here that candidate was the non-forbidden one.
 #[test]
 pub(super) fn mutually_exclusive_cfg_gated_use_aliases_react_regardless_of_declaration_order() {

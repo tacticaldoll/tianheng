@@ -38,9 +38,11 @@ pub(super) fn locality_anchor(
 
 /// Two mutually-exclusive `#[cfg]`-gated `use ... as T;` aliases for an `impl T for Foo`'s trait
 /// name: the anchor match must react regardless of which alias is declared first. Before the fix,
-/// `resolve_path`'s single-candidate lookup (plus the single-candidate `canonicalize_through_reexports`)
-/// took only one `use`-map entry, so whether the anchored trait was ever seen depended on
-/// declaration order (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`).
+/// the resolver's then-single-candidate lookup (and its then-single-candidate re-export closure) took
+/// only one `use`-map entry, so whether the anchored trait was ever seen depended on declaration order
+/// (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`). Both are multi-candidate
+/// now — `resolve_path_all` is the only resolver, the single-candidate sibling having since been
+/// deleted outright.
 #[test]
 pub(super) fn trait_impl_anchor_reacts_when_the_forbidden_alias_is_declared_first() {
     let out = locality_findings(
@@ -116,7 +118,7 @@ pub(super) fn two_misplaced_impls_do_not_dedup_collapse_when_a_blanket_impls_par
  {
     // Round-10 finding: `canonical_self_owner` never received round 9's impl_type_params shadow at
     // all -- unlike resolve_self_type (containment.rs), it unconditionally resolved any bare self
-    // type via resolve_path. This is not merely a cosmetic label: the `owner` it renders is part of
+    // type via the resolver. This is not merely a cosmetic label: the `owner` it renders is part of
     // `SemanticFact::MisplacedImpl`'s finding IDENTITY, deduplicated by exact equality. A module
     // declaring `use Foo as T;` alongside BOTH a blanket `impl<T> Command for T {}` (T is the
     // impl's own generic parameter) AND a genuine direct `impl Command for Foo {}` had the blanket

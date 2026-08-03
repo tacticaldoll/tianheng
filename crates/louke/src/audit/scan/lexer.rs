@@ -431,7 +431,8 @@ pub(crate) fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
 
 /// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just
 /// past its outermost `*/`. Rust block comments nest, so depth is tracked; an unterminated comment
-/// runs to EOF. Shared by [`scan_source`] and [`skip_trivia`] so the two cannot drift — the
+/// runs to EOF. Shared by [`scan_source_with_markers`] (and its `#[cfg(test)]` `scan_source`
+/// wrapper) and [`skip_trivia`] so the two cannot drift — the
 /// original non-nested bug existed in *both* precisely because they were independent copies.
 pub(crate) fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
     let mut depth = 1usize;
@@ -871,7 +872,7 @@ pub(crate) fn is_rust_keyword(word: &[u8]) -> bool {
 }
 
 /// Skip ASCII whitespace and `//` / `/* */` comments, returning the next code index. Mirrors
-/// the comment handling in [`scan_source`] so a comment between the `!` and `(`, or before the
+/// the comment handling in [`scan_source_with_markers`] so a comment between the `!` and `(`, or before the
 /// seam argument, does not desync probe capture (which would silently drop a real probe).
 pub(crate) fn skip_trivia(b: &[u8], mut i: usize) -> usize {
     loop {

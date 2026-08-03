@@ -139,7 +139,7 @@ fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String 
 /// comfortably exceeding any real crate's module nesting depth.
 const MAX_MODULE_DEPTH: usize = 32;
 
-/// Shared by all three walkers ([`walk_module`], [`collect_subtree`], [`walk_unsafe`]) so the
+/// Shared by all three walkers ([`walk_module`], [`collect_subtree`], `unsafe_sites::walk_unsafe`) so the
 /// bound and its wording cannot silently diverge between them (the twin-drift bug class
 /// `resolve_child_modules`'s own doc comment names for its guards).
 pub(super) fn check_module_depth(
@@ -172,7 +172,7 @@ pub(super) fn flatten_for_walk(items: &[syn::Item]) -> (Vec<syn::Item>, Vec<Flat
 /// Resolve a module's direct child `mod` declarations to the `(items, module path, child dir)` each
 /// subtree walk recurses into — the single copy of the descent skeleton and its false-negative-
 /// critical guards, shared by [`walk_module`], [`collect_subtree`] (`walk_subtree_modules`), and
-/// [`walk_unsafe`] (`scan_unsafe_sites`) so a fix to one guard cannot silently diverge across the
+/// `unsafe_sites::walk_unsafe` (`scan_unsafe_sites`) so a fix to one guard cannot silently diverge across the
 /// three (the twin-drift bug class). Owns: the `#[path]` policy (an **unconditional** `#[path = "…"]`
 /// is followed to its author-chosen file/body; a `cfg_attr`-wrapped `#[path]` stays a cfg-conditional
 /// skip bound), the inline-vs-file dispatch, the symlink module-cycle guard (a re-reached canonical
