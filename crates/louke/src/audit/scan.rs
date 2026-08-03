@@ -626,7 +626,13 @@ fn transparent_arm_ranges(b: &[u8], bang: usize, body_end: usize) -> Vec<(usize,
     arms
 }
 
-fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+/// Find the index just past the matching closer for a delimiter group opened at `open`
+/// (`(`/`)`, `[`/`]`, `{`/`}`), scanning `[open, limit)` with nesting depth tracked so an inner
+/// delimiter of the SAME kind does not prematurely close the group; literals/comments are skipped
+/// so a delimiter-like byte inside one never miscounts. Returns `limit` if the group never closes
+/// within it — a caller-bound scan limit, never a hang. Shared by [`balanced_brace_end`],
+/// [`paren_group_end`], and [`attr_group_end`], which each pick one delimiter pair.
+fn delimiter_group_end(bytes: &[u8], open: usize, limit: usize, open_b: u8, close_b: u8) -> usize {
     let mut depth = 0usize;
     let mut i = open;
     while i < limit {
@@ -634,19 +640,21 @@ fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
             i = next.min(limit);
             continue;
         }
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
+        if bytes[i] == open_b {
+            depth += 1;
+        } else if bytes[i] == close_b {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return i + 1;
             }
-            _ => {}
         }
         i += 1;
     }
     limit
+}
+
+fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    delimiter_group_end(bytes, open, limit, b'{', b'}')
 }
 
 /// Outer attributes on the `mod name;` at `mod_index` that steer the walker.
@@ -817,26 +825,7 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
 /// `#[cfg_attr(unix, path = "a)b.rs")]` literal does not close the group early. Mirrors
 /// [`attr_group_end`]'s `[]`-tracking for a `cfg_attr`'s own argument list.
 fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
-    let mut depth = 0usize;
-    let mut i = open;
-    while i < limit {
-        if let Some(next) = skip_literal_or_comment(bytes, i) {
-            i = next.min(limit);
-            continue;
-        }
-        match bytes[i] {
-            b'(' => depth += 1,
-            b')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    limit
+    delimiter_group_end(bytes, open, limit, b'(', b')')
 }
 
 /// The value of a `path = "…"` name-value meta somewhere in `[start, paren_close)` (the interior of
@@ -898,26 +887,7 @@ fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
 /// `[`), tracking nested `[]` and skipping string/char literals and comments so a `]` inside a
 /// `#[path = "a]b.rs"]` literal does not close the group early. Mirrors [`balanced_brace_end`].
 fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
-    let mut depth = 0usize;
-    let mut i = open;
-    while i < limit {
-        if let Some(next) = skip_literal_or_comment(bytes, i) {
-            i = next.min(limit);
-            continue;
-        }
-        match bytes[i] {
-            b'[' => depth += 1,
-            b']' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    limit
+    delimiter_group_end(bytes, open, limit, b'[', b']')
 }
 
 /// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just
