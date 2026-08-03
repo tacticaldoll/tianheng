@@ -146,32 +146,17 @@ fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, Strin
     let mut i = 0;
     while i < bytes.len() {
         if keyword_starts_at(bytes, i, b"use") {
-            let start = i + 3;
-            // A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use`
-            // token inside a type bound: it is followed by `<`, whereas a `use` *statement* is
-            // always followed by a path (ident / `{` / `*` / `::` / `crate`/`self`/`super`).
-            // So a `<` here means this is a bound, not an import — skip past the `use` token and
-            // continue (letting the `<…>` be walked as ordinary bytes) rather than scanning to the
-            // next `;`, which would swallow the following real `use` (a false negative). A comment
-            // between `use` and `<` is already removed by the upstream comment/string strip.
-            let mut p = start;
-            while p < bytes.len() && bytes[p].is_ascii_whitespace() {
-                p += 1;
-            }
-            if bytes.get(p) == Some(&b'<') {
-                i = start;
-                continue;
-            }
-            match source[start..].find(';') {
-                Some(rel) => {
-                    trees.push((
-                        effective_module(base_module, &mod_stack),
-                        source[start..start + rel].trim().to_string(),
-                    ));
-                    i = start + rel + 1;
+            match super::lexer::scan_use_statement(bytes, source, i) {
+                super::lexer::UseStatementScan::Statement { body, next } => {
+                    trees.push((effective_module(base_module, &mod_stack), body));
+                    i = next;
                     continue;
                 }
-                None => break,
+                super::lexer::UseStatementScan::NotAStatement { resume_at } => {
+                    i = resume_at;
+                    continue;
+                }
+                super::lexer::UseStatementScan::Unterminated => break,
             }
         }
         if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {

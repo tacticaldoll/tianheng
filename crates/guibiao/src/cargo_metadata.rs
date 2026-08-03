@@ -45,6 +45,30 @@ fn kind_matches(dependency: &Value, kind: DependencyKind) -> bool {
     )
 }
 
+/// Every dependency-table edge of the target's declared `kind`, optionally excluding the
+/// target's own self-referential edge (see [`is_self_dependency`]) — the shared filter every
+/// consuming rule ([`external_dependencies`] / [`dependencies`] /
+/// [`dependencies_with_disallowed_source`]) needs, so kind-matching and self-dependency
+/// exclusion cannot silently diverge across them (the round-11→round-12 fix
+/// [`is_self_dependency`]'s own doc names). [`external_dependencies`] passes
+/// `exclude_self: false`: its own `!source.is_null()` filter already excludes a self-dependency
+/// (always a null-source `path` edge), so an extra explicit exclusion there would be redundant,
+/// not a divergence.
+fn governed_dependencies(
+    package: &Value,
+    kind: DependencyKind,
+    exclude_self: bool,
+) -> impl Iterator<Item = &Value> {
+    package["dependencies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(move |dependency| {
+            kind_matches(dependency, kind)
+                && !(exclude_self && is_self_dependency(package, dependency))
+        })
+}
+
 /// Names of the target's dependencies in the selected table that resolve to a registry
 /// or git source. Path/internal dependencies, and dependencies in other tables, are
 /// excluded.
@@ -54,28 +78,18 @@ fn kind_matches(dependency: &Value, kind: DependencyKind) -> bool {
 /// `optional` deps are included — a declared dependency is governed as declared
 /// (PROJECT.md).
 pub(crate) fn external_dependencies(package: &Value, kind: DependencyKind) -> Vec<String> {
-    let mut found = Vec::new();
-    if let Some(dependencies) = package["dependencies"].as_array() {
-        for dependency in dependencies {
-            if !kind_matches(dependency, kind) {
-                continue;
-            }
-            // A path/internal dependency has a null `source`; any non-null source is
-            // external. Match on presence, not on a fixed `registry+`/`git+` prefix
-            // list, so a dependency from an alternative (e.g. `sparse+`) registry
-            // cannot slip through unclassified and silently pass the boundary.
-            let external = !dependency["source"].is_null();
-            if external {
-                // A dependency always carries a string `name` in cargo's metadata schema;
-                // a present-but-non-string `name` (unexpected shape) is skipped rather
-                // than failed. This relies on the schema guarantee — if it could be
-                // violated, the loud path would be a scan error, not a silent skip.
-                if let Some(name) = dependency["name"].as_str() {
-                    found.push(name.to_string());
-                }
-            }
-        }
-    }
+    let mut found: Vec<String> = governed_dependencies(package, kind, false)
+        // A path/internal dependency has a null `source`; any non-null source is
+        // external. Match on presence, not on a fixed `registry+`/`git+` prefix
+        // list, so a dependency from an alternative (e.g. `sparse+`) registry
+        // cannot slip through unclassified and silently pass the boundary.
+        .filter(|dependency| !dependency["source"].is_null())
+        // A dependency always carries a string `name` in cargo's metadata schema;
+        // a present-but-non-string `name` (unexpected shape) is skipped rather
+        // than failed. This relies on the schema guarantee — if it could be
+        // violated, the loud path would be a scan error, not a silent skip.
+        .filter_map(|dependency| dependency["name"].as_str().map(str::to_string))
+        .collect();
     found.sort();
     found.dedup();
     found
@@ -102,17 +116,9 @@ fn is_self_dependency(package: &Value, dependency: &Value) -> bool {
 /// local renames), and platform-specific / `optional` deps are included (PROJECT.md).
 /// Never includes the target's own self-referential edge (see [`is_self_dependency`]).
 pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String> {
-    let mut found = Vec::new();
-    if let Some(deps) = package["dependencies"].as_array() {
-        for dependency in deps {
-            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
-                continue;
-            }
-            if let Some(name) = dependency["name"].as_str() {
-                found.push(name.to_string());
-            }
-        }
-    }
+    let mut found: Vec<String> = governed_dependencies(package, kind, true)
+        .filter_map(|dependency| dependency["name"].as_str().map(str::to_string))
+        .collect();
     found.sort();
     found.dedup();
     found
@@ -180,20 +186,17 @@ pub(crate) fn dependencies_with_disallowed_source(
     kind: DependencyKind,
     allowed: &[SourceKind],
 ) -> Vec<(String, SourceKind)> {
-    let mut found = Vec::new();
-    if let Some(deps) = package["dependencies"].as_array() {
-        for dependency in deps {
-            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
-                continue;
-            }
+    let mut found: Vec<(String, SourceKind)> = governed_dependencies(package, kind, true)
+        .filter_map(|dependency| {
             let source = classify_source(dependency);
-            if !allowed.contains(&source) {
-                if let Some(name) = dependency["name"].as_str() {
-                    found.push((name.to_string(), source));
-                }
+            if allowed.contains(&source) {
+                return None;
             }
-        }
-    }
+            dependency["name"]
+                .as_str()
+                .map(|name| (name.to_string(), source))
+        })
+        .collect();
     found.sort_by(|(left_name, left_source), (right_name, right_source)| {
         left_name
             .cmp(right_name)
