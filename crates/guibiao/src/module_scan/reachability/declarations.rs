@@ -128,6 +128,20 @@ impl TopLevelTracker {
 /// from a candidate unbounded by `range.start`, which stays correct here: the nearest preceding
 /// `;`/`{`/`}` it finds is either an earlier sibling's terminator within the range or the range's
 /// own enclosing `{`, never a byte outside the declaration it is checking.
+/// The direct/conditional `#[path]` remap pair for the `mod` declaration at `mod_index`, or
+/// `(None, [])` when there is none — the shared shape both the inline (`{`) and file (`;`) forms
+/// below extract identically from [`path_attr_before_item`], so a fix to one cannot silently
+/// diverge from the other.
+fn path_attr_pair(bytes: &[u8], mod_index: usize) -> (Option<usize>, Vec<usize>) {
+    match path_attr_before_item(bytes, mod_index) {
+        PathAttrKind::Remaps {
+            direct,
+            conditional,
+        } => (direct, conditional),
+        PathAttrKind::None | PathAttrKind::Excluded => (None, Vec::new()),
+    }
+}
+
 pub(super) fn declared_modules_in(
     cleaned: &str,
     range: std::ops::Range<usize>,
@@ -183,16 +197,7 @@ pub(super) fn declared_modules_in(
                             // value is captured here (`direct_path_eq`) for exactly that reason;
                             // a `cfg_attr`-wrapped one stays the same stated, cfg-conditional skip
                             // bound as the file-form case (never followed cfg-blind).
-                            let (direct_path_eq, conditional_path_eqs) =
-                                match path_attr_before_item(bytes, i) {
-                                    PathAttrKind::Remaps {
-                                        direct,
-                                        conditional,
-                                    } => (direct, conditional),
-                                    PathAttrKind::None | PathAttrKind::Excluded => {
-                                        (None, Vec::new())
-                                    }
-                                };
+                            let (direct_path_eq, conditional_path_eqs) = path_attr_pair(bytes, i);
                             let close = balanced_group_end(bytes, k).unwrap_or(bytes.len());
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
@@ -212,16 +217,7 @@ pub(super) fn declared_modules_in(
                             // of one per-platform shim get opposite verdicts on the same tree.
                             let is_cfg_conditional = has_bare_cfg_attr_before_item(bytes, i)
                                 || top_level.in_transparent_macro();
-                            let (direct_path_eq, conditional_path_eqs) =
-                                match path_attr_before_item(bytes, i) {
-                                    PathAttrKind::Remaps {
-                                        direct,
-                                        conditional,
-                                    } => (direct, conditional),
-                                    PathAttrKind::None | PathAttrKind::Excluded => {
-                                        (None, Vec::new())
-                                    }
-                                };
+                            let (direct_path_eq, conditional_path_eqs) = path_attr_pair(bytes, i);
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
                                 is_inline: false,

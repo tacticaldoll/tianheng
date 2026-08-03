@@ -437,6 +437,50 @@ fn resolve_conditional_paths(
     Ok(())
 }
 
+/// Index `files` by their path-derived module path — used ONLY to discover the crate root's own
+/// file(s) below (`by_module.get("crate")`), the one place a module has no declaring source of
+/// its own to probe a directory from. Every OTHER module's plain children are resolved by a live
+/// per-source directory probe (`resolve_plain_sources`), not this index: a structural,
+/// module-path-keyed lookup cannot tell which of a module's several sources (e.g.
+/// mutually-exclusive `#[cfg]` arms) actually declared a given child, and — since a file can
+/// physically coincide with a module's naive structural path even when that module was reached
+/// through an unrelated `#[path]` remap — it can also phantom-match a stray, uncompiled file.
+fn index_files_by_module<'a>(
+    files: &'a [PathBuf],
+    src_dir: &Path,
+    root_relative: Option<&Path>,
+) -> std::collections::BTreeMap<String, Vec<&'a PathBuf>> {
+    let mut by_module: std::collections::BTreeMap<String, Vec<&PathBuf>> = Default::default();
+    for file in files {
+        if let Ok(relative) = file.strip_prefix(src_dir) {
+            by_module
+                .entry(module_path_of(relative, root_relative))
+                .or_default()
+                .push(file);
+        }
+    }
+    by_module
+}
+
+/// The crate root's own initial scan sources, from its indexed file(s) — the one module with no
+/// declaring source of its own to probe a directory from (every other module's file discovery
+/// goes through a live per-source directory probe instead; see [`index_files_by_module`]'s doc).
+fn root_scan_sources(root_files: &[&PathBuf], src_dir: &Path) -> Result<Vec<ScanSource>, String> {
+    let mut root_ancestors = HashSet::new();
+    for f in root_files {
+        root_ancestors.insert(xingbiao::canonicalize_or_fail(f)?);
+    }
+    Ok(root_files
+        .iter()
+        .map(|f| ScanSource::File {
+            file: (*f).clone(),
+            path_base: src_dir.to_path_buf(),
+            child_base: src_dir.to_path_buf(),
+            ancestors: root_ancestors.clone(),
+        })
+        .collect())
+}
+
 /// Resolves the set of module paths reachable from the crate root via `mod` declarations.
 /// Returns `(reachable, inline_only, remapped, remap_shadowed)`.
 /// Unreachable orphan files are excluded; unreadable reachable files return a scan error.
@@ -454,23 +498,7 @@ pub(crate) fn reachable_modules(
     ),
     String,
 > {
-    // Index files by their path-derived module path — used ONLY to discover the crate root's own
-    // file(s) below (`by_module.get("crate")`), the one place a module has no declaring source of
-    // its own to probe a directory from. Every OTHER module's plain children are resolved by a
-    // live per-source directory probe (`resolve_plain_sources`), not this index: a
-    // structural, module-path-keyed lookup cannot tell which of a module's several sources (e.g.
-    // mutually-exclusive `#[cfg]` arms) actually declared a given child, and — since a file can
-    // physically coincide with a module's naive structural path even when that module was reached
-    // through an unrelated `#[path]` remap — it can also phantom-match a stray, uncompiled file.
-    let mut by_module: std::collections::BTreeMap<String, Vec<&PathBuf>> = Default::default();
-    for file in files {
-        if let Ok(relative) = file.strip_prefix(src_dir) {
-            by_module
-                .entry(module_path_of(relative, root_relative))
-                .or_default()
-                .push(file);
-        }
-    }
+    let by_module = index_files_by_module(files, src_dir, root_relative);
     // Indexed by literal path to check walk presence without symlink canonicalization aliasing.
     let files_literal: HashSet<&PathBuf> = files.iter().collect();
 
@@ -484,22 +512,9 @@ pub(crate) fn reachable_modules(
     // this is tracked separately from mere membership in `remapped`.
     reachable.insert("crate".to_string());
     if let Some(root_files) = by_module.get("crate") {
-        let mut root_ancestors = HashSet::new();
-        for f in root_files {
-            root_ancestors.insert(xingbiao::canonicalize_or_fail(f)?);
-        }
-        graph.by_module.insert(
-            "crate".to_string(),
-            root_files
-                .iter()
-                .map(|f| ScanSource::File {
-                    file: (*f).clone(),
-                    path_base: src_dir.to_path_buf(),
-                    child_base: src_dir.to_path_buf(),
-                    ancestors: root_ancestors.clone(),
-                })
-                .collect(),
-        );
+        graph
+            .by_module
+            .insert("crate".to_string(), root_scan_sources(root_files, src_dir)?);
     }
     let mut queue = vec!["crate".to_string()];
     while let Some(module) = queue.pop() {
