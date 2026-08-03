@@ -1805,6 +1805,35 @@ fn a_flag_shaped_value_is_a_usage_error() {
 }
 
 #[test]
+fn an_empty_flag_value_is_a_usage_error_in_both_forms() {
+    // The third shape of "this flag was given no value", after an absent token and a following
+    // flag. This pins the *contract* — an empty value never exits 0, in either form — and is
+    // deliberately not the regression guard for the rule that produced it: every empty value
+    // already exited 2 before the rule existed (an empty path answers NotFound at the filesystem,
+    // an empty format falls to the unknown-format arm), so no exit code distinguishes them.
+    // Verified by removing the rule and watching this test stay green. What the rule changes is
+    // which mistake the diagnostic names, so its guard asserts stderr end-to-end in
+    // `baseline_cli.rs::an_empty_flag_value_names_the_flag_not_a_missing_file`.
+    for flag in [
+        "--manifest-path",
+        "--baseline",
+        "--write-baseline",
+        "--format",
+    ] {
+        assert_eq!(
+            run_args(&["tianheng", "check", &format!("{flag}=")]),
+            2,
+            "{flag}= (empty equals form) must exit 2",
+        );
+        assert_eq!(
+            run_args(&["tianheng", "check", flag, ""]),
+            2,
+            "{flag} with an explicitly empty value must exit 2",
+        );
+    }
+}
+
+#[test]
 fn a_flag_shaped_write_baseline_value_is_never_silently_written() {
     // The regression guard for the shape that did not even land on a non-zero exit. Given a
     // manifest that evaluates cleanly, `--write-baseline --warn-uncovered` used to consume the

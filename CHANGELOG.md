@@ -162,7 +162,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `--flag=<value>` form is unchanged and remains the way to pass a value that legitimately begins
   with `--`, since it carries its value in the same token; that escape hatch is pinned end-to-end,
   distinguishing the two forms by their diagnostics rather than by an exit code they share.
-  `cli-check-runner` gains the requirement and its two scenarios.
+  An **empty** value is now that same usage error in *both* forms: `--baseline=` and `--baseline ""`
+  are the same mistake as `--baseline` with nothing after it, and used to be carried onward — an
+  empty path answers `NotFound` at the filesystem, so a malformed invocation was reported as
+  `cannot read baseline ` against a path nobody typed, complete with the dangling space where the
+  path would be. The exit code was already 2 in every one of these cases, so what changes is which
+  mistake the diagnostic names; the equals form is the only way to reach an empty value for a path
+  flag, so the rule is shared by both forms rather than living in the space form alone.
+  `cli-check-runner` gains the requirement and its four scenarios.
 - **BREAKING**: 圭表's inbound module-boundary rules (`must_not_be_imported_by`,
   `must_only_be_imported_by`) now react to an item-form import (`use m::Item;`) of the anchored
   module under `ScanDepth::Shallow`, not only a bare import of the module itself. The Shallow

@@ -219,7 +219,7 @@ where
     macro_rules! value {
         ($flag:literal) => {
             match args.next() {
-                Some(value) if !value.starts_with("--") => value,
+                Some(value) if !value.starts_with("--") => require_non_empty($flag, value)?,
                 Some(found) => {
                     return Err(usage(&format!(
                         "{} requires a value, but the next argument is the flag '{found}'; \
@@ -240,14 +240,18 @@ where
             "--warn-uncovered" => warn_uncovered = true,
             "--disallow-stale" => disallow_stale = true,
             other => {
+                // The equals form deliberately does NOT reject a `--`-prefixed value — carrying the
+                // value in the same token is exactly what makes it the escape hatch for one — but it
+                // shares the non-empty rule, so `--flag=` is the usage error it is.
                 if let Some(path) = other.strip_prefix("--manifest-path=") {
-                    manifest_path = Some(path.to_string());
+                    manifest_path = Some(require_non_empty("--manifest-path", path.to_string())?);
                 } else if let Some(path) = other.strip_prefix("--baseline=") {
-                    baseline_path = Some(path.to_string());
+                    baseline_path = Some(require_non_empty("--baseline", path.to_string())?);
                 } else if let Some(path) = other.strip_prefix("--write-baseline=") {
-                    write_baseline_path = Some(path.to_string());
+                    write_baseline_path =
+                        Some(require_non_empty("--write-baseline", path.to_string())?);
                 } else if let Some(value) = other.strip_prefix("--format=") {
-                    format = Some(value.to_string());
+                    format = Some(require_non_empty("--format", value.to_string())?);
                 } else {
                     // An unknown flag, a misspelling, or a stray positional is a
                     // misconfiguration — fail loud (exit 2), never silently ignore
@@ -471,6 +475,22 @@ fn usage(message: &str) -> u8 {
     );
     eprintln!("error: {message}");
     EXIT_CANNOT_JUDGE
+}
+
+/// The one rule both flag forms share: a value must not be empty. `--flag=` and `--flag ""` are the
+/// same mistake as `--flag` with nothing after it — a flag given no value — so all three are one
+/// usage error (exit 2) rather than an empty string carried onward. An empty path reaches the
+/// filesystem as `""` and answers `NotFound`, which reads as "cannot read baseline " against a path
+/// nobody typed: the malformed invocation misreported as a missing file, the same misdirection the
+/// flag-shaped-value rule exists to prevent one shape earlier. Shared by the space and equals forms
+/// so the two cannot diverge on what counts as a value.
+fn require_non_empty(flag: &str, value: String) -> Result<String, u8> {
+    if value.is_empty() {
+        return Err(usage(&format!(
+            "{flag} requires a value, but was given an empty one"
+        )));
+    }
+    Ok(value)
 }
 
 /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so
