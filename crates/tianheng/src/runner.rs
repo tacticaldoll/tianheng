@@ -174,13 +174,15 @@ fn evaluate_constitution(
 
 /// The command-line flags `dispatch` parses, before command-specific dispatch reacts to them.
 /// `format` is left as the full [`Format`] (not yet narrowed to [`ReportFormat`]) since `list`
-/// and `check` accept different subsets of it.
+/// and `check` accept different subsets of it, and stays an `Option` so a dispatch can tell an
+/// explicitly requested format from the default: a flag that cannot apply to the requested action
+/// must be rejected rather than silently ignored, which requires knowing it was supplied at all.
 struct ParsedArgs {
     command: Command,
     manifest_path: Option<String>,
     baseline_path: Option<String>,
     write_baseline_path: Option<String>,
-    format: Format,
+    format: Option<Format>,
     warn_uncovered: bool,
     disallow_stale: bool,
 }
@@ -245,25 +247,40 @@ where
     }
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--manifest-path" => manifest_path = Some(value!("--manifest-path")),
-            "--baseline" => baseline_path = Some(value!("--baseline")),
-            "--write-baseline" => write_baseline_path = Some(value!("--write-baseline")),
-            "--format" => format = Some(value!("--format")),
+            "--manifest-path" => {
+                take_once(
+                    &mut manifest_path,
+                    "--manifest-path",
+                    value!("--manifest-path"),
+                )?;
+            }
+            "--baseline" => take_once(&mut baseline_path, "--baseline", value!("--baseline"))?,
+            "--write-baseline" => take_once(
+                &mut write_baseline_path,
+                "--write-baseline",
+                value!("--write-baseline"),
+            )?,
+            "--format" => take_once(&mut format, "--format", value!("--format"))?,
             "--warn-uncovered" => warn_uncovered = true,
             "--disallow-stale" => disallow_stale = true,
             other => {
                 // The equals form deliberately does NOT reject a `--`-prefixed value — carrying the
                 // value in the same token is exactly what makes it the escape hatch for one — but it
-                // shares the non-empty rule, so `--flag=` is the usage error it is.
+                // shares the non-empty rule, so `--flag=` is the usage error it is, and the
+                // once-only rule, so the two forms cannot be combined to smuggle a second value past
+                // it (`--baseline a --baseline=b`).
                 if let Some(path) = other.strip_prefix("--manifest-path=") {
-                    manifest_path = Some(require_non_empty("--manifest-path", path.to_string())?);
+                    let path = require_non_empty("--manifest-path", path.to_string())?;
+                    take_once(&mut manifest_path, "--manifest-path", path)?;
                 } else if let Some(path) = other.strip_prefix("--baseline=") {
-                    baseline_path = Some(require_non_empty("--baseline", path.to_string())?);
+                    let path = require_non_empty("--baseline", path.to_string())?;
+                    take_once(&mut baseline_path, "--baseline", path)?;
                 } else if let Some(path) = other.strip_prefix("--write-baseline=") {
-                    write_baseline_path =
-                        Some(require_non_empty("--write-baseline", path.to_string())?);
+                    let path = require_non_empty("--write-baseline", path.to_string())?;
+                    take_once(&mut write_baseline_path, "--write-baseline", path)?;
                 } else if let Some(value) = other.strip_prefix("--format=") {
-                    format = Some(require_non_empty("--format", value.to_string())?);
+                    let value = require_non_empty("--format", value.to_string())?;
+                    take_once(&mut format, "--format", value)?;
                 } else {
                     // An unknown flag, a misspelling, or a stray positional is a
                     // misconfiguration — fail loud (exit 2), never silently ignore
@@ -275,12 +292,16 @@ where
     }
 
     // `--format` is parsed for both commands so the flag contract stays uniform; `markdown`
-    // is recognized here but only honored by `list` (rejected for `check` below).
+    // is recognized here but only honored by `list` (rejected for `check` below). The `None`
+    // (flag absent) case stays `None` rather than collapsing to `Text` here: each dispatch
+    // defaults it at the point of use, so it can still distinguish "text was asked for" from
+    // "nothing was asked for" and reject the former where no report is produced at all.
     let format = match format.as_deref() {
-        None | Some("text") => Format::Text,
-        Some("json") => Format::Json,
-        Some("markdown") => Format::Markdown,
-        Some("sarif") => Format::Sarif,
+        None => None,
+        Some("text") => Some(Format::Text),
+        Some("json") => Some(Format::Json),
+        Some("markdown") => Some(Format::Markdown),
+        Some("sarif") => Some(Format::Sarif),
         Some(other) => {
             return Err(usage(&format!(
                 "unknown --format '{other}' (expected text, json, markdown, or sarif)"
@@ -314,7 +335,10 @@ fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
     }
     let semantic = constitution.semantic_boundaries();
     let runtime = constitution.runtime_boundaries();
-    match parsed.format {
+    // `list` honors every format it supports, so an absent `--format` simply defaults to `text`
+    // here; unlike `check`'s write action, there is no `list` action a requested format cannot
+    // apply to.
+    match parsed.format.unwrap_or(Format::Text) {
         Format::Json => {
             println!(
                 "{}",
@@ -413,8 +437,10 @@ where
 
     // The command is `check`. `markdown` is a `list`-only projection of the declared law;
     // `check`'s machine output is the JSON report, so reject it loud (exit 2) rather than
-    // silently falling back. `text`/`json` map to the existing boolean contract.
-    let report_format = match parsed.format {
+    // silently falling back. `text`/`json` map to the existing boolean contract. An absent
+    // `--format` defaults here, at the point of use, so the write-baseline check below still sees
+    // whether one was requested at all.
+    let report_format = match parsed.format.unwrap_or(Format::Text) {
         Format::Text => ReportFormat::Text,
         Format::Json => ReportFormat::Json,
         Format::Sarif => ReportFormat::Sarif,
@@ -434,6 +460,33 @@ where
     }
     if parsed.disallow_stale && parsed.baseline_path.is_none() {
         return usage("--disallow-stale requires --baseline");
+    }
+    // `--write-baseline` records a snapshot; it emits no report at all, so a flag whose only effect
+    // is on a report has nothing to act on here. `list` already rejects a check-only flag rather
+    // than accepting it as a silent no-op, and `--disallow-stale` without `--baseline` is rejected
+    // just above for the same reason — this is that same rule applied WITHIN `check`, between its
+    // two actions, which was the one place it did not hold: `check --write-baseline out.json
+    // --warn-uncovered --format sarif` recorded the baseline, exited 0, and dropped both flags with
+    // no diagnostic, so an adopter could believe they had coverage advisories or a SARIF document
+    // and receive neither.
+    //
+    // The line drawn here is "the action produces nothing this flag could affect", not "this flag
+    // changes nothing observable". `--warn-uncovered` under `--format json` stays accepted: the JSON
+    // report's `coverage` object already carries every uncovered crate unconditionally, so the flag
+    // is redundant there rather than dropped — the consumer receives the whole fact either way.
+    if parsed.write_baseline_path.is_some() {
+        if parsed.warn_uncovered {
+            return usage(
+                "--warn-uncovered cannot apply to --write-baseline: recording a baseline emits \
+                 no coverage report to raise an advisory in",
+            );
+        }
+        if parsed.format.is_some() {
+            return usage(
+                "--format cannot apply to --write-baseline: recording a baseline emits no report \
+                 to format (the baseline document's own shape is fixed)",
+            );
+        }
     }
 
     let manifest_path = match resolve_manifest_path(parsed.manifest_path) {
@@ -503,6 +556,31 @@ fn require_non_empty(flag: &str, value: String) -> Result<String, u8> {
         )));
     }
     Ok(value)
+}
+
+/// The second rule both flag forms share: a value-taking flag is given its value **once**. A
+/// second occurrence used to overwrite the first silently, so `--baseline a --baseline b` gated
+/// against `b` with no word about `a` — the invocation named two files and the runner acted on one,
+/// which is the same "a flag the invocation supplied was dropped without a diagnostic" mistake the
+/// flag-shaped-value rule exists to prevent, one token further out. Which value a repeat should win
+/// is not knowable from the invocation, so neither is chosen: it is a usage error (exit 2) naming
+/// the flag. Shared by the space and equals forms, so the two cannot be combined to smuggle a
+/// second value past it.
+///
+/// Deliberately scoped to the value-taking flags. Repeating a boolean (`--warn-uncovered
+/// --warn-uncovered`) drops nothing — the second occurrence asks for exactly what the first already
+/// set — so there is no ambiguity to report, and rejecting it would be a style rule rather than a
+/// misconfiguration reaction (PROJECT.md's minimalism bound: fail loud on *observable*
+/// misconfiguration, not on redundancy).
+fn take_once<T>(slot: &mut Option<T>, flag: &str, value: T) -> Result<(), u8> {
+    if slot.is_some() {
+        return Err(usage(&format!(
+            "{flag} was given more than once; it takes a single value, and which of the given \
+             values was meant cannot be inferred"
+        )));
+    }
+    *slot = Some(value);
+    Ok(())
 }
 
 /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so

@@ -156,6 +156,74 @@ fn the_equals_form_still_carries_a_flag_shaped_value() {
 }
 
 #[test]
+fn a_repeated_flag_names_the_repeat_not_a_downstream_failure() {
+    // `--baseline a --baseline b` exited 2 before the once-only rule and exits 2 after it, so no
+    // exit code distinguishes them and this is the guard that actually reacts to the change: what
+    // moved is which mistake the diagnostic names. Before, the second value silently won and the run
+    // reported the FIRST file as if the invocation had never named it — "cannot read baseline
+    // second", against a path the adopter did type but not the one they typed first, with no word
+    // that two were given. Now the parse refuses before any baseline is read.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+
+    let output = command_for(&manifest)
+        .args(["--baseline", "first", "--baseline", "second"])
+        .output()
+        .expect("run tianheng CLI");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    for guidance in ["--baseline was given more than once", "single value"] {
+        assert!(
+            stderr.contains(guidance),
+            "the repeat must be named as the usage error it is, missing `{guidance}`: {stderr}"
+        );
+    }
+    assert!(
+        !stderr.contains("cannot read baseline"),
+        "a repeated flag must be rejected during parsing, before either value reaches the \
+         baseline reader: {stderr}"
+    );
+}
+
+#[test]
+fn write_baseline_names_the_flag_that_cannot_apply_and_records_nothing() {
+    // The end-to-end half of the inapplicable-flag rule: the exit code moves 0 -> 2 (asserted as a
+    // unit test too), but only stderr shows the diagnostic names the flag rather than failing for
+    // some unrelated reason, and only the filesystem shows the recording did not happen anyway.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let baseline = temp_baseline("inapplicable-flag");
+
+    let output = command_for(&manifest)
+        .args([
+            "--write-baseline",
+            &baseline.to_string_lossy(),
+            "--warn-uncovered",
+        ])
+        .output()
+        .expect("run tianheng CLI");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    for guidance in [
+        "--warn-uncovered cannot apply to --write-baseline",
+        "usage:",
+    ] {
+        assert!(
+            stderr.contains(guidance),
+            "the diagnostic must name the inapplicable flag, missing `{guidance}`: {stderr}"
+        );
+    }
+    assert!(
+        !baseline.exists(),
+        "a rejected invocation must record no baseline: {}",
+        baseline.display()
+    );
+    let _ = std::fs::remove_file(&baseline);
+}
+
+#[test]
 fn a_zero_length_baseline_is_recorded_afresh_but_partial_content_is_still_refused() {
     // A crash mid-create leaves exactly a zero-length file: `create_baseline_file` publishes its
     // directory entry before its first byte. Refusing to overwrite it protected nothing — zero bytes

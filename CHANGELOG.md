@@ -197,6 +197,32 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   mistake the diagnostic names; the equals form is the only way to reach an empty value for a path
   flag, so the rule is shared by both forms rather than living in the space form alone.
   `cli-check-runner` gains the requirement and its four scenarios.
+  A value-taking flag is now also required to be given its value **once**: `--baseline a --baseline b`
+  (in either form, or one of each) is a usage error naming the flag instead of the second value
+  silently overwriting the first. The invocation named two files and the runner acted on one, saying
+  nothing about the other — the same dropped-flag mistake one token further out, and which value a
+  repeat means is not inferable, so neither is chosen. The exit code was already 2 for the three path
+  flags (the surviving value's own downstream failure), so what changes there is which mistake the
+  diagnostic names — `--baseline first --baseline second` reported `cannot read baseline second`; for
+  `--manifest-path` given two valid paths it changes 0 → 2. A repeated **boolean**
+  (`--warn-uncovered --warn-uncovered`) is deliberately still accepted: the second occurrence asks
+  for exactly what the first set, so nothing is dropped and there is nothing to report.
+- A flag that `check` recognizes but whose effect the requested action cannot produce is now a usage
+  error naming the flag (exit 2), instead of being accepted and dropped: `--write-baseline` records a
+  snapshot and emits no report, so `check --manifest-path <ws> --write-baseline out.json
+  --warn-uncovered --format sarif` used to record the baseline, exit **0**, and discard both flags
+  with no diagnostic — an adopter could believe they had coverage advisories or a SARIF document and
+  receive neither. A rejected invocation now writes no baseline either. This is the rule `list`
+  already applied across commands ("a flag that is recognized by `check` but inapplicable to `list`
+  SHALL be rejected rather than accepted as a silent no-op"), and that `--disallow-stale requires
+  --baseline` already applied in the other direction, finally applied *within* `check` between its
+  two actions — the one place it did not hold. `--format text` is rejected alongside `sarif`/`json`,
+  since the value asked for is irrelevant to an action that can honor no format at all. The line is
+  deliberately "the action produces nothing this flag could affect", not "this flag changes nothing
+  observable": `--warn-uncovered` under `--format json` stays accepted, because the JSON report's
+  `coverage` object already names every uncovered crate whether or not the flag is given, so the flag
+  is redundant there rather than dropped. `cli-check-runner` gains a requirement stating both halves
+  of that line, with three scenarios.
 - **BREAKING**: 圭表's inbound module-boundary rules (`must_not_be_imported_by`,
   `must_only_be_imported_by`) now react to an item-form import (`use m::Item;`) of the anchored
   module under `ScanDepth::Shallow`, not only a bare import of the module itself. The Shallow
