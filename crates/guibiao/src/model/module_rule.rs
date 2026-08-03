@@ -24,19 +24,6 @@ impl ModuleBoundary {
         }
     }
 
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before. Chained after [`because`](ModuleBoundaryDraft::because).
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
     /// The scan depth / granularity recorded with the boundary.
     pub fn scan_depth(&self) -> ScanDepth {
         self.depth
@@ -527,12 +514,6 @@ impl ModuleBoundaryDraft {
         self.depth(ScanDepth::Subtree)
     }
 
-    /// Make this boundary advisory: its violations are reported but do not fail CI.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
     /// Finish the boundary, recording the human-readable `reason` (the repair hint).
     pub fn because(self, reason: &str) -> ModuleBoundary {
         ModuleBoundary {
@@ -643,12 +624,6 @@ impl InlineConfinementDraft {
         self
     }
 
-    /// Make this boundary advisory: its violations are reported but do not fail CI.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
     /// Finish the boundary, recording the human-readable `reason` (the repair hint).
     pub fn because(self, reason: &str) -> ModuleBoundary {
         let rule = ModuleRule::ConfineInlineSymbolPath {
@@ -668,3 +643,7 @@ impl InlineConfinementDraft {
         }
     }
 }
+
+boundary_common!(ModuleBoundary);
+draft_common!(ModuleBoundaryDraft);
+draft_common!(InlineConfinementDraft);
