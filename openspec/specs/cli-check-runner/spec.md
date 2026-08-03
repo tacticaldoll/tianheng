@@ -31,7 +31,19 @@ a check.
 
 Every value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `--format`) SHALL be given a value in its own right. A flag whose value token is absent SHALL be a usage error that exits 2. A flag whose next argument is itself a `--`-prefixed token SHALL likewise be a usage error that exits 2, because the value is missing and the following flag would otherwise be consumed in its place: the runner MUST NOT silently drop a flag the invocation supplied, and MUST NOT proceed to observe a workspace or write a file under a path the invocation never named. An **empty** value SHALL be a usage error that exits 2 in both forms — `--flag=` and `--flag ""` are the same mistake as `--flag` with nothing after it — and MUST NOT be carried onward, where an empty path answers `NotFound` at the filesystem and reports a malformed invocation as a missing file against a path the invocation never named.
 
-The usage error SHALL name the flag and, where one was found, the offending token, so the diagnostic points at the malformed invocation rather than at a downstream unreadable path or unknown format. The rejection SHALL happen during argument parsing, before any workspace observation. The `--flag=<value>` form SHALL remain accepted for a value that legitimately begins with `--`, since it carries its value in the same token and can consume no following flag; only the empty-value rule is shared by both forms.
+The usage error SHALL name the flag and, where one was found, the offending token, so the diagnostic points at the malformed invocation rather than at a downstream unreadable path or unknown format. The rejection SHALL happen during argument parsing, before any workspace observation. The `--flag=<value>` form SHALL remain accepted for a value that legitimately begins with `--`, since it carries its value in the same token and can consume no following flag; the empty-value rule and the once-only rule below are shared by both forms.
+
+A value-taking flag SHALL be given its value **once**: a second occurrence of the same flag, in either form or a mix of the two, SHALL be a usage error that exits 2 naming the flag, rather than one value silently overwriting the other. The invocation named two values and which one it meant cannot be inferred from it, so neither SHALL be chosen — and acting on one while dropping the other with no diagnostic is the same dropped-flag mistake the flag-shaped-value rule above exists to prevent, one token further out. A repeated **boolean** flag (`--warn-uncovered`, `--disallow-stale`) SHALL NOT be a usage error: the second occurrence asks for exactly what the first already set, so nothing the invocation supplied is dropped and there is no ambiguity to report — rejecting it would be a style rule rather than a reaction to observable misconfiguration.
+
+#### Scenario: A value-taking flag given twice is a usage error
+
+- **WHEN** the runner is invoked as `tianheng check --manifest-path <path> --manifest-path <path>` (two valid values, in the space form, the equals form, or one of each)
+- **THEN** the runner reports that the flag was given more than once and exits 2, having read neither value — never silently proceeding with one of them
+
+#### Scenario: A repeated boolean flag is accepted
+
+- **WHEN** the runner is invoked as `tianheng check --manifest-path <path> --warn-uncovered --warn-uncovered`
+- **THEN** the runner behaves exactly as it does for a single `--warn-uncovered`, because a repeated boolean drops nothing
 
 #### Scenario: A flag with no value at all is a usage error
 
@@ -431,6 +443,27 @@ The `list` command observes no workspace and performs no reaction; it SHALL acce
 
 - **WHEN** the runner is invoked as `list --bogus`
 - **THEN** it prints usage guidance and exits `2`, exactly as the unrecognized-argument rule already requires
+
+### Requirement: A recognized flag that cannot apply to the requested action is a usage error
+
+The rule the `list` requirement above states across commands SHALL hold **within** `check`, between its actions: a flag the runner recognizes but whose effect the requested action cannot produce SHALL be a usage error that names the flag and exits `2`, never accepted as a silent no-op. `--write-baseline` records a snapshot and emits no report, so `--warn-uncovered` (which raises advisories in a coverage report) and `--format` (which shapes a report) SHALL both be rejected when combined with it — including `--format text`, since the value asked for is irrelevant to an action that can honor no format at all. A rejected invocation SHALL perform no part of the action: no baseline file is written. This completes the same principle `--disallow-stale requires --baseline` already applies in the other direction, so the runner has no remaining combination in which it accepts a flag and then drops it.
+
+The line SHALL be "the requested action produces nothing this flag could affect", NOT "this flag changes nothing observable". A flag whose information the action already delivers unconditionally is **redundant, not dropped**, and SHALL stay accepted: `--warn-uncovered` under `--format json` is accepted, because the JSON report's `coverage` object already carries every uncovered crate name whether or not the flag is given, so the consumer receives the whole fact either way.
+
+#### Scenario: A report flag supplied to the write-baseline action is a usage error
+
+- **WHEN** the runner is invoked as `tianheng check --manifest-path <path> --write-baseline <file> --warn-uncovered` (or with `--format text|json|sarif`)
+- **THEN** it names the flag that cannot apply, exits `2`, and writes no baseline file — rather than recording the baseline, exiting `0`, and dropping the flag without a diagnostic
+
+#### Scenario: The write-baseline action still accepts what does apply to it
+
+- **WHEN** the runner is invoked as `tianheng check --manifest-path <path> --write-baseline <file>`
+- **THEN** it records the baseline and exits `0`, unchanged by the rule above
+
+#### Scenario: A redundant flag whose information the action already carries is accepted
+
+- **WHEN** the runner is invoked as `tianheng check --manifest-path <path> --format json --warn-uncovered`
+- **THEN** it emits the JSON report and exits normally: the coverage object already names every uncovered crate, so the flag adds nothing rather than being dropped
 
 ### Requirement: Unified constitution declaration
 

@@ -1884,6 +1884,138 @@ fn list_unknown_format_is_a_usage_error() {
 }
 
 #[test]
+fn write_baseline_rejects_a_flag_that_cannot_apply_to_it() {
+    // The regression guard for the last place "a recognized flag is never a silent no-op" did not
+    // hold. `--write-baseline` records a snapshot and emits no report, so `--warn-uncovered` (a
+    // coverage-report flag) and `--format` (a report-shape flag) had nothing to act on — and were
+    // accepted anyway: the run recorded the baseline, exited 0, and dropped them without a word, so
+    // an adopter could believe they had coverage advisories or a SARIF document and have neither.
+    //
+    // The exit code is what changes here (0 -> 2), and the baseline must not be written either: a
+    // rejected invocation performs no action at all. Both are asserted, so this cannot pass by
+    // rejecting the flags while still leaving an artifact behind.
+    for extra in [
+        vec!["--warn-uncovered"],
+        vec!["--format", "sarif"],
+        vec!["--format", "json"],
+        // Even the default format: it was still *requested*, and the write action can honor no
+        // format at all. Accepting `text` while rejecting `sarif` would make the rule depend on
+        // which value was asked for rather than on whether the action can apply it.
+        vec!["--format", "text"],
+        vec!["--format=json"],
+    ] {
+        let out = TempPath::named("inapplicable-flag-baseline");
+        let mut args = vec![
+            "tianheng".to_string(),
+            "check".to_string(),
+            "--manifest-path".to_string(),
+            fixture("clean"),
+            "--write-baseline".to_string(),
+            out.path().to_string_lossy().into_owned(),
+        ];
+        args.extend(extra.iter().map(|a| (*a).to_string()));
+        let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+        assert_eq!(
+            run_args(&argv),
+            2,
+            "--write-baseline with {extra:?} must be a usage error, not a silent no-op",
+        );
+        assert!(
+            !out.path().exists(),
+            "a rejected invocation must write no baseline: {extra:?}",
+        );
+    }
+}
+
+#[test]
+fn write_baseline_still_accepts_the_flags_that_do_apply() {
+    // The other direction, so the rule above cannot quietly grow into "write-baseline rejects
+    // everything": the action's own flags still work, and a plain write still exits 0.
+    let out = TempPath::named("applicable-flag-baseline");
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            "--write-baseline",
+            &out.path().to_string_lossy(),
+        ]),
+        0,
+        "a plain --write-baseline must still record and exit 0",
+    );
+    assert!(out.path().exists(), "the baseline must have been written");
+}
+
+#[test]
+fn a_value_taking_flag_given_more_than_once_is_a_usage_error() {
+    // A second occurrence used to overwrite the first silently: the invocation named two values and
+    // the runner acted on one, with no diagnostic about the other — the same dropped-flag mistake
+    // the flag-shaped-value rule closed, one token further out. Which value a repeat means cannot be
+    // inferred, so neither is chosen.
+    //
+    // `--manifest-path` given twice is the exit-code-visible case (two VALID paths: 0 -> 2), so this
+    // is a real guard and not merely the surrounding contract. The other three flags' repeats
+    // already reached exit 2 through a downstream failure, so what changes for them is which mistake
+    // the diagnostic names — asserted end-to-end on stderr in
+    // `baseline_cli.rs::a_repeated_flag_names_the_repeat_not_a_downstream_failure`.
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            "--manifest-path",
+            &fixture("clean"),
+        ]),
+        2,
+        "--manifest-path given twice must be a usage error, even with two identical valid values",
+    );
+    // Mixing the two forms must not smuggle a second value past the rule.
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            &format!("--manifest-path={}", fixture("clean")),
+        ]),
+        2,
+        "the space and equals forms share the once-only rule",
+    );
+    for flag in ["--baseline", "--write-baseline", "--format"] {
+        assert_eq!(
+            run_args(&[
+                "tianheng",
+                "check",
+                "--manifest-path",
+                &fixture("clean"),
+                flag,
+                "first",
+                flag,
+                "second",
+            ]),
+            2,
+            "{flag} given twice must exit 2",
+        );
+    }
+    // A repeated BOOLEAN is not this mistake and stays accepted: the second occurrence asks for
+    // exactly what the first already set, so nothing the invocation supplied is dropped.
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            "--warn-uncovered",
+            "--warn-uncovered",
+        ]),
+        0,
+        "a repeated boolean flag drops nothing and must not be a usage error",
+    );
+}
+
+#[test]
 fn misspelled_flag_fails_loud_instead_of_being_ignored() {
     // The foot-gun: a typo'd --write-baseline must not silently run a plain
     // check (and write no baseline).
