@@ -27,10 +27,34 @@ A runtime boundary SHALL be expressed as Rust code and is part of the single sou
 
 A concrete type SHALL opt into an origin via a `macro_rules!` (no proc-macro, no `syn`) that captures `module_path!()` at the registration site as the origin — so the origin is **where the type is registered**, an observed location, not a free self-asserted label. Because std has no pre-`main` hook, registration SHALL be performed by an explicit startup call (the macro yields an entry the startup installs); a type that is never registered has no known origin. Observing the concrete type behind a `dyn Trait` requires the governed trait to carry a `louke::Tracked` supertrait (rust-1.85-compatible; no trait upcasting), and the concrete type to be `'static`.
 
+The guarantee's **trust boundary is the process**, and SHALL be stated rather than implied. A
+`macro_rules!` expands at its call site, so the constructor the macro names must remain reachable from
+there — making it private would break every legitimate registration in an adopter's crate, which is a
+language rule, not an implementation choice. Anything the macro can pass, hand-written code can pass:
+an origin is therefore **observed** for code that registers through the macro and **asserted** by code
+that bypasses it. The system SHALL NOT claim that a type cannot present a false origin. It SHALL make
+the bypass visibly a bypass — the constructor hidden from the documented surface and named so a
+hand-written call reads as one — and SHALL keep the residual pinned by a test, so the bound cannot
+change state in either direction unnoticed. 漏刻 governs architectural drift; it is not an in-process
+adversary defence.
+
+Two paths would close it, neither taken here because each trades something the family has not agreed
+to spend: a proc-macro (no constructor need be public at all, at the cost of a new crate and a
+`syn`-class build dependency in a dimension whose prod face is deliberately std-light), or deriving the
+origin from the concrete type rather than the call site (unforgeable, since a type's own path is not
+the caller's to choose — at the cost of redefining an origin from "where registered" to "where
+defined", invalidating every existing `only_origins` declaration, and resting identity on
+`std::any::type_name`'s deliberately unspecified format).
+
 #### Scenario: A type's origin is its registration location
 
 - **WHEN** `register_origin!(PostgresRepo)` is written in module `app::infra` and installed at startup
-- **THEN** the origin registry maps `TypeId::of::<PostgresRepo>()` to the observed origin `app::infra`, which the type cannot claim falsely without physically registering elsewhere
+- **THEN** the origin registry maps `TypeId::of::<PostgresRepo>()` to the observed origin `app::infra`, rather than to any label the type itself carries
+
+#### Scenario: A hand-built entry's asserted origin is taken as given (known bound)
+
+- **WHEN** code bypasses `register_origin!` and constructs an entry directly with an origin the type does not belong to
+- **THEN** the system records that origin as given — the bypass is hidden and named, not prevented — and this bound stays pinned by a test rather than described as closed
 
 ### Requirement: Seam probe observes the live object's concrete origin
 

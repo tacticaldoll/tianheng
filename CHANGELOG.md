@@ -758,6 +758,35 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   detect the loss from outside the process. Scope stays narrow: a custom sink's own success or
   failure is opaque to the system (`set_sink` takes a `Fn(&Violation)` returning nothing) and is
   never counted. Additive, non-breaking — the only public surface change is the new function.
+- **BREAKING**: 漏刻's `OriginEntry::new` is renamed `OriginEntry::__from_register_origin` and hidden
+  from the documented surface. It was never a supported constructor — every real call goes through
+  `register_origin!`, which is what captures `module_path!()` — but presenting it as ordinary public API
+  advertised the one thing the origin guarantee is not: a way to assert an arbitrary origin. Verified
+  reachable: a hand-built entry naming an allowlisted origin for a type that never registered there
+  produces no reaction at all.
+  It cannot be made private, and that is a language rule rather than an oversight: a `macro_rules!`
+  expands at its *call site*, so anything the macro names must be reachable from there, and
+  `pub(crate)` would break every legitimate `register_origin!` in an adopter's crate. What changes is
+  therefore honesty plus a narrowed accident surface, not a closed hole — and the claim that overstated
+  it is corrected: `runtime-origin-assertion` said a type "cannot claim falsely without physically
+  registering elsewhere", which is false, and now states the trust boundary as the **process**. An
+  origin is observed for code that registers through the macro and asserted by code that bypasses it;
+  漏刻 governs architectural drift, not an in-process adversary. A governance tool asserting a guarantee
+  it does not have is worse than one stating its bound.
+  The residual is now **pinned by a test** rather than only listed
+  (`a_hand_built_origin_entry_is_accepted_a_known_trust_bound`), so it cannot change state in either
+  direction unnoticed — if it starts failing, the bound has been closed and the spec, the constructor's
+  doc, and the backlog entry must move together. The two paths that would close it are recorded with
+  measured costs instead of a plausible-sounding one: the previously recorded
+  `#[track_caller]`/`Location` trigger **does not work**, because `Location` yields a file path while an
+  origin's whole vocabulary is a module path, so adopting it would redefine an origin and invalidate
+  every `only_origins` declaration. What does work is a proc-macro (no public constructor at all; costs
+  a new crate and a `syn`-class build dependency in a deliberately std-light prod face) or deriving the
+  origin from the concrete type via `std::any::type_name` (unforgeable — measured: a type in `rogue`
+  reports `crate::rogue::Repo` where the registration site's `module_path!()` reported only `crate` —
+  but it redefines an origin from "where registered" to "where defined", invalidates every declaration,
+  and rests identity on a format std documents as unspecified). Both are decisions for a human, not a
+  review response.
 
 ### Migration
 
@@ -778,6 +807,8 @@ an adopter reads the work in one place instead of assembling it from five `**BRE
 - **Expect new entries, not only relabeled ones, for an inbound rule at `ScanDepth::Shallow`.** That
   depth now reacts to an item-form import it silently passed before, so its regenerated baseline can
   legitimately be larger than a relabeling would explain.
+- **If you build a 漏刻 `OriginEntry` by hand**, switch to `register_origin!`. The constructor is renamed
+  and hidden; the macro is, and always was, the supported path.
 - **If you call 漏刻's audit directly**, pass the new anchor argument to `audit_probe_coverage` /
   `audit_probe_coverage_with_markers`: the workspace root, via the new
   `xingbiao::workspace_root(&metadata)` for a Cargo workspace. It must be **absolute** — a relative or

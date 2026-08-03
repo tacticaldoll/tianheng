@@ -63,10 +63,17 @@ pub fn runtime_seam_rule_line(allowed_origins: &[&str]) -> String {
 /// `module_path!()` at the call site (so the origin is *where the type is registered*, not a
 /// self-asserted label) and yields an [`OriginEntry`] to pass to [`install`]. Declarative —
 /// no proc-macro, no `syn`.
+///
+/// Use this rather than building an [`OriginEntry`] by hand. The constructor it expands to is
+/// `#[doc(hidden)]` and named accordingly, but it cannot be made private — a `macro_rules!` expands at
+/// its call site, so anything this macro names must be reachable from there. An origin is therefore
+/// observed for code that goes through this macro and assertable by code that does not: 漏刻 catches
+/// architectural drift, not an in-process adversary. That bound is stated on the constructor itself and
+/// pinned by a test, not left for a reader to discover.
 #[macro_export]
 macro_rules! register_origin {
     ($ty:ty) => {
-        $crate::OriginEntry::new(
+        $crate::OriginEntry::__from_register_origin(
             ::std::any::TypeId::of::<$ty>(),
             ::std::module_path!(),
             ::std::any::type_name::<$ty>(),

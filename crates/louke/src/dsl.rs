@@ -171,9 +171,26 @@ pub struct OriginEntry {
 }
 
 impl OriginEntry {
-    /// Construct an origin entry. Prefer [`crate::register_origin!`], which captures the call-site
-    /// `module_path!()` so the origin is observed, not hand-asserted.
-    pub fn new(type_id: TypeId, origin: &'static str, type_name: &'static str) -> Self {
+    /// **Not a supported constructor — [`crate::register_origin!`]'s expansion target.** Hidden from
+    /// the documented surface and named so a hand-written call reads as what it is.
+    ///
+    /// It must stay `pub`: a `macro_rules!` expands at its *call site*, so everything the macro names
+    /// has to be reachable from there — `pub(crate)` here would break every legitimate
+    /// `register_origin!` in an adopter's crate, which is a real Rust rule rather than an oversight.
+    ///
+    /// That is also the honest bound on the origin guarantee, and it is stated rather than implied:
+    /// anything this macro can pass, hand-written code can pass too, so an origin is observed for code
+    /// that uses the macro and **assertable** by code that does not. 漏刻's trust boundary is therefore
+    /// the process — it catches architectural drift, not an in-process adversary. Closing that needs
+    /// either a proc-macro (so no constructor is public at all) or deriving the origin from the type
+    /// instead of the call site; both are recorded, with their costs, in `BACKLOG.md`'s decision index,
+    /// and the gap itself is pinned by `a_hand_built_origin_entry_is_accepted_a_known_trust_bound`.
+    #[doc(hidden)]
+    pub fn __from_register_origin(
+        type_id: TypeId,
+        origin: &'static str,
+        type_name: &'static str,
+    ) -> Self {
         OriginEntry {
             type_id,
             origin,
