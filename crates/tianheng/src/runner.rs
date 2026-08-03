@@ -24,7 +24,10 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::{fs::OpenOptions, io::Write};
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+};
 
 use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
@@ -585,18 +588,61 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     }
 }
 
+/// fsync the directory that holds `path`, so a directory entry a just-completed create or rename
+/// added is itself durable. An fsync on a *file* persists its contents; it does not persist the
+/// name through which anything reaches them, which lives in the parent directory's own data. Both
+/// baseline write paths call this after the step that publishes the entry, so a write this process
+/// already reported as succeeded is not undone by a crash moments later.
+///
+/// Unix only. `File::open` on a directory is not portable — Windows requires
+/// `FILE_FLAG_BACKUP_SEMANTICS`, which `std` does not expose through `OpenOptions` — so the
+/// directory half of the guarantee is stated as unix-only rather than silently assumed everywhere.
+/// The file half (`sync_all` on the written file) is portable and applies on every platform.
+/// A path with no parent component (a bare relative filename) resolves to the working directory,
+/// which is where such a write actually lands.
+fn sync_parent_dir(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        File::open(parent)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
+
 /// `create_new`'s `O_EXCL` fails on any existing directory entry, including a dangling symlink —
 /// a baseline path whose symlink target does not exist reads as `NotFound` one line up (so this,
 /// the create-new path, runs), then hits `AlreadyExists` here, indistinguishable from a genuine
 /// concurrent creation without checking `symlink_metadata` explicitly. That distinction matters:
 /// a dangling symlink is a permanent state, not a race — "rerun the command" (the concurrent-
 /// creation arm's own remedy) would fail identically forever, so this earns its own diagnosis.
+///
+/// The written bytes are fsynced before this reports success, and the new directory entry after it,
+/// so a baseline this process said it wrote survives a crash. Unlike the overwrite path, this one
+/// writes in place rather than through a temp file, so it protects a *reported success* and nothing
+/// more: there is no previous content to preserve, and a crash **mid-write** can leave a
+/// zero-length or partial file — `create_new` publishes the entry before any byte is written, and
+/// no ordering of fsyncs changes that. The next run then refuses to overwrite it as an unsupported
+/// baseline (exit 2, naming the remedy: move or delete it and rerun), which is loud and safe but
+/// does need that one manual step. Making this path atomic too would mean temp-then-rename here as
+/// well, at the cost of the `AlreadyExists`/dangling-symlink distinction above, which depends on
+/// `create_new` landing on the real path — a deliberate trade, not an oversight.
 fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteError> {
     let write_result = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(path)
-        .and_then(|mut file| file.write_all(document.as_bytes()));
+        .and_then(|mut file| {
+            file.write_all(document.as_bytes())
+                .and_then(|()| file.sync_all())
+        })
+        .and_then(|()| sync_parent_dir(Path::new(path)));
     let Err(err) = write_result else {
         return Ok(());
     };
@@ -636,11 +682,24 @@ impl From<std::io::Error> for BaselineWriteError {
 }
 
 /// Overwrites an existing baseline durably: the merged document lands at a sibling temp path
-/// first, then an atomic `rename` swaps it into place. A crash, interrupt, or full disk mid-write
-/// leaves the previous baseline — and the owner/tracker annotations `Baseline::of_preserving` just
-/// merged in — fully intact rather than truncated. `create_baseline_file` above has no pre-existing
-/// content to protect (a crash there simply leaves no file, and the adopter reruns the command), so
-/// only this, the overwrite path, needs the guarantee.
+/// first, is fsynced there, and only then does an atomic `rename` swap it into place. A crash,
+/// interrupt, or full disk mid-write leaves the previous baseline — and the owner/tracker
+/// annotations `Baseline::of_preserving` just merged in — fully intact rather than truncated.
+/// `create_baseline_file` above has no pre-existing content to protect, so only this, the overwrite
+/// path, needs the whole guarantee; see its own doc for what a crash can leave there.
+///
+/// The fsync before the rename is what makes the crash half of that true, and it is not
+/// redundant with the rename's atomicity: `rename` is atomic with respect to *other observers*
+/// (no one ever sees a half-swapped name), but it orders only the directory entry, never the
+/// temp file's still-dirty data pages. Without the fsync, a crash shortly after a successful
+/// rename can leave the baseline path present and empty — losing both the previous content and
+/// the annotations merged into it, the exact loss the temp-then-rename exists to prevent. ext4
+/// happens to paper over this for the replace-via-rename pattern via its `auto_da_alloc`
+/// heuristic, but that is one filesystem's courtesy, disabled by `noauto_da_alloc` and absent
+/// elsewhere; this crate ships to adopters on filesystems it does not choose, so the guarantee
+/// is made explicitly rather than borrowed. The directory fsync after the rename covers the
+/// other half — that the swapped-in *name* survives — and is unix-only for the portability
+/// reason [`sync_parent_dir`] states.
 ///
 /// The swap targets the file's symlink-resolved real path and carries over its existing
 /// permissions: `rename` unconditionally replaces whatever sits at its destination, so renaming
@@ -693,10 +752,16 @@ fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineW
         Err(err) => return Err(err.into()),
     };
 
+    // The fsync sits after `set_permissions` and before the `rename`, so one call flushes both
+    // the bytes and the mode change (both live on the same inode) while the temp file is still
+    // the only name reaching them. Syncing before the chmod would leave the mode unflushed; the
+    // rename must come after both, since it is the step that publishes them.
     let write_result = file
         .write_all(document.as_bytes())
         .and_then(|()| std::fs::set_permissions(&tmp_path, permissions))
-        .and_then(|()| std::fs::rename(&tmp_path, &target));
+        .and_then(|()| file.sync_all())
+        .and_then(|()| std::fs::rename(&tmp_path, &target))
+        .and_then(|()| sync_parent_dir(&target));
     if let Err(err) = write_result {
         let _ = std::fs::remove_file(&tmp_path);
         return Err(err.into());
