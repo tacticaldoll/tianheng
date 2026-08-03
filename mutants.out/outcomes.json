@@ -1,0 +1,174 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.81492386,
+          "process_status": "Success",
+          "argv": [
+            "/home/qaz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tianheng@0.3.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 2.003636906,
+          "process_status": "Success",
+          "argv": [
+            "/home/qaz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tianheng@0.3.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok(String::new())",
+          "package": "tianheng",
+          "file": "crates/tianheng/src/runner.rs",
+          "function": {
+            "function_name": "require_non_empty",
+            "return_type": "-> Result<String, u8>",
+            "span": {
+              "start": {
+                "line": 480,
+                "column": 1
+              },
+              "end": {
+                "line": 494,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 488,
+              "column": 5
+            },
+            "end": {
+              "line": 493,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(String::new())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__tianheng__src__runner.rs_line_488_col_5.log",
+      "diff_path": "diff/crates__tianheng__src__runner.rs_line_488_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.811798453,
+          "process_status": "Success",
+          "argv": [
+            "/home/qaz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tianheng@0.3.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.251927492,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/qaz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tianheng@0.3.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok(\"xyzzy\".into())",
+          "package": "tianheng",
+          "file": "crates/tianheng/src/runner.rs",
+          "function": {
+            "function_name": "require_non_empty",
+            "return_type": "-> Result<String, u8>",
+            "span": {
+              "start": {
+                "line": 480,
+                "column": 1
+              },
+              "end": {
+                "line": 494,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 488,
+              "column": 5
+            },
+            "end": {
+              "line": 493,
+              "column": 14
+            }
+          },
+          "replacement": "Ok(\"xyzzy\".into())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__tianheng__src__runner.rs_line_488_col_5_001.log",
+      "diff_path": "diff/crates__tianheng__src__runner.rs_line_488_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.75236856,
+          "process_status": "Success",
+          "argv": [
+            "/home/qaz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=tianheng@0.3.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.252119429,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/home/qaz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=tianheng@0.3.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 2,
+  "missed": 0,
+  "caught": 2,
+  "timeout": 0,
+  "unviable": 0,
+  "success": 0,
+  "start_time": "2026-08-03T14:53:52.633739993Z",
+  "end_time": "2026-08-03T14:54:08.185971739Z",
+  "cargo_mutants_version": "27.1.0"
+}

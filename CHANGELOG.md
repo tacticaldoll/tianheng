@@ -13,6 +13,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- Made "a guard is not a guard until it has been seen to fail" an explicit rule in `AGENTS.md`'s
+  adversarial-review stance, and required the negative run per new guard in the PR body's
+  `## Verification`. The trap it names is the change whose *outcome* is unaltered: when a fix improves
+  a diagnostic while the exit code stays identical, a test bound to the exit code passes equally
+  before and after, pinning the surrounding contract rather than the change. That was hit twice in
+  this window — once as a conclusion that no test was possible, once as a test that stayed green with
+  its rule removed — so the discipline is written down rather than left to be re-derived. A test kept
+  for the contract rather than the change now earns a comment saying which it is.
+- Recorded the baseline directory flush's absence of a reacting test as `ACCEPTED DEBT` in
+  `BACKLOG.md`, with its measurement (`cargo mutants` reports both of its mutants MISSED, while the
+  rules beside it are caught) and the reason the alternatives are worse. It is unobservable by
+  construction — an infallible best-effort step has no behavior to bind — so the bound is stated
+  instead of implied by a green suite.
 - Stopped tracking `examples/capability-catalog/Cargo.lock`, the only committed example lockfile.
   `.gitignore` had matched it since the examples were introduced — tracking simply overrode the rule —
   and the rule's own comment stated that the examples "carry no lock". It pinned all six family

@@ -1,0 +1,26 @@
+--- crates/tianheng/src/runner.rs
++++ replace require_non_empty -> Result<String, u8> with Ok("xyzzy".into())
+@@ -480,22 +480,17 @@
+ /// The one rule both flag forms share: a value must not be empty. `--flag=` and `--flag ""` are the
+ /// same mistake as `--flag` with nothing after it — a flag given no value — so all three are one
+ /// usage error (exit 2) rather than an empty string carried onward. An empty path reaches the
+ /// filesystem as `""` and answers `NotFound`, which reads as "cannot read baseline " against a path
+ /// nobody typed: the malformed invocation misreported as a missing file, the same misdirection the
+ /// flag-shaped-value rule exists to prevent one shape earlier. Shared by the space and equals forms
+ /// so the two cannot diverge on what counts as a value.
+ fn require_non_empty(flag: &str, value: String) -> Result<String, u8> {
+-    if value.is_empty() {
+-        return Err(usage(&format!(
+-            "{flag} requires a value, but was given an empty one"
+-        )));
+-    }
+-    Ok(value)
++    Ok("xyzzy".into()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so
+ /// `check` can default its target like `cargo` does when `--manifest-path` is omitted.
+ /// The shell reads the cwd; the walk itself is the pure [`nearest_manifest_from`].
+ fn nearest_manifest() -> Option<PathBuf> {
+     nearest_manifest_from(std::env::current_dir().ok()?)
+ }

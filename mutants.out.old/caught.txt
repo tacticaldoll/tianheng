@@ -1,0 +1,4 @@
+crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok(String::new())
+crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok("xyzzy".into())
+crates/tianheng/src/runner.rs:558:21: replace match guard text.is_empty() with true in write_baseline
+crates/tianheng/src/runner.rs:558:21: replace match guard text.is_empty() with false in write_baseline

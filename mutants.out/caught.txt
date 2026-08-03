@@ -1,0 +1,2 @@
+crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok(String::new())
+crates/tianheng/src/runner.rs:488:5: replace require_non_empty -> Result<String, u8> with Ok("xyzzy".into())
