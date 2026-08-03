@@ -152,6 +152,83 @@ fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
 }
 
 #[test]
+#[cfg(unix)]
+fn rewriting_an_existing_baseline_preserves_its_permissions() {
+    // rename replaces whatever sits at its destination unconditionally, so a naive temp-then-
+    // rename write would silently reset the baseline's mode to the temp file's process-umask
+    // default — quietly widening permissions an adopter deliberately narrowed. The overwrite path
+    // must read the existing mode and carry it over to the replacement.
+    use std::os::unix::fs::PermissionsExt;
+
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let path = temp_baseline("overwrite-preserves-mode");
+    let _ = std::fs::remove_file(&path);
+
+    let first = run_with(&manifest, "--write-baseline", &path);
+    assert_eq!(first.status.code(), Some(0), "{first:?}");
+
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+        .expect("narrow the baseline's permissions");
+
+    let second = run_with(&manifest, "--write-baseline", &path);
+    assert_eq!(second.status.code(), Some(0), "{second:?}");
+
+    let mode = std::fs::metadata(&path)
+        .expect("read back the rewritten baseline's metadata")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(
+        mode, 0o600,
+        "rewriting an existing baseline must preserve its permissions, not reset them to the \
+         process umask"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+#[cfg(unix)]
+fn rewriting_a_symlinked_baseline_preserves_the_symlink() {
+    // rename replaces whatever sits at its destination unconditionally, so a naive temp-then-
+    // rename write targeting the symlink path directly would replace the symlink itself with a
+    // plain file, orphaning whatever it pointed at. The overwrite path must resolve the symlink
+    // and swap the real target instead.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let real_target = temp_baseline("symlink-preserved-real-target");
+    let link = temp_baseline("symlink-preserved-link");
+    let _ = std::fs::remove_file(&real_target);
+    let _ = std::fs::remove_file(&link);
+
+    let first = run_with(&manifest, "--write-baseline", &real_target);
+    assert_eq!(first.status.code(), Some(0), "{first:?}");
+    std::os::unix::fs::symlink(&real_target, &link).expect("create the symlinked baseline");
+
+    let second = run_with(&manifest, "--write-baseline", &link);
+    assert_eq!(second.status.code(), Some(0), "{second:?}");
+
+    assert!(
+        link.symlink_metadata()
+            .expect("read the link's own metadata")
+            .file_type()
+            .is_symlink(),
+        "rewriting through a symlinked baseline path must not replace the symlink with a plain file"
+    );
+    assert_eq!(
+        std::fs::read_link(&link).expect("read the symlink target"),
+        real_target,
+        "the symlink must still point at its original target"
+    );
+
+    let _ = std::fs::remove_file(&link);
+    let _ = std::fs::remove_file(&real_target);
+}
+
+#[test]
 fn disallow_stale_without_baseline_is_a_usage_error() {
     let Some(manifest) = fixture_manifest("clean") else {
         return;
