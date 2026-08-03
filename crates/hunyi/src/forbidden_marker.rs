@@ -15,11 +15,29 @@ use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::file_scope::resolve_crate;
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
-    BareFallback, canonical_path_str, canonical_self_owner, path_to_string, resolve_path_all,
-    validate_path_operands,
+    BareFallback, UseMap, canonical_path_str, canonical_self_owner, path_to_string,
+    resolve_path_all, validate_path_operands,
 };
 use crate::rules::FORBIDDEN_MARKER_RULE;
 use crate::scan::scan_crate;
+
+/// Resolve `path` through `uses`/`module`'s use-map (cfg-blind: every candidate checked) and
+/// return each candidate's leaf identifier, falling back to the written path's own leaf when no
+/// use-map candidate resolves. Shared by the derive form and the impl form below, which both need
+/// the identical leaf-matching step: a locally renamed derive macro/trait (`use serde::Serialize
+/// as Ser;`) reacts by its true leaf, while an unresolved bare/prelude/extern path still matches
+/// by its written leaf, so leaf-matching stays cross-crate-blind either way.
+fn resolved_leaves(path: &syn::Path, uses: &UseMap, module: &str) -> Vec<String> {
+    let use_candidates = resolve_path_all(path, uses, module, BareFallback::Ignore);
+    if use_candidates.is_empty() {
+        vec![path_leaf(path)]
+    } else {
+        use_candidates
+            .iter()
+            .map(|p| leaf_of(p).to_string())
+            .collect()
+    }
+}
 
 /// Run the forbidden-marker boundaries against the Cargo workspace at `manifest_path`.
 pub fn check_forbidden_marker(
@@ -115,16 +133,7 @@ pub(crate) fn forbidden_marker_findings(
                 // use-map candidate (cfg-blind): a mutually-exclusive `#[cfg]`-gated alias for the
                 // derive's name must not have its other candidate's leaf silently dropped (found on
                 // adversarial review of `hunyi-cfg-branch-use-reexport-merging`).
-                let use_candidates =
-                    resolve_path_all(derived, &td.uses, &td.module, BareFallback::Ignore);
-                let derived_leaves: Vec<String> = if use_candidates.is_empty() {
-                    vec![path_leaf(derived)]
-                } else {
-                    use_candidates
-                        .iter()
-                        .map(|p| leaf_of(p).to_string())
-                        .collect()
-                };
+                let derived_leaves = resolved_leaves(derived, &td.uses, &td.module);
                 if derived_leaves.iter().any(|leaf| leaf == entry_leaf) {
                     // A derive sits in the defining type's module — its source file, not any
                     // impl site's. Render the marker from the WRITTEN derive path so two distinct
@@ -154,20 +163,7 @@ pub(crate) fn forbidden_marker_findings(
             // keeping leaf-matching cross-crate-blind (a `serde_derive::Serialize` still matches).
             // Checks EVERY use-map candidate (cfg-blind), the identical treatment the derive form
             // above gets (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`).
-            let use_candidates = resolve_path_all(
-                &site.trait_path,
-                &site.uses,
-                &site.module,
-                BareFallback::Ignore,
-            );
-            let trait_leaves: Vec<String> = if use_candidates.is_empty() {
-                vec![path_leaf(&site.trait_path)]
-            } else {
-                use_candidates
-                    .iter()
-                    .map(|p| leaf_of(p).to_string())
-                    .collect()
-            };
+            let trait_leaves = resolved_leaves(&site.trait_path, &site.uses, &site.module);
             if !trait_leaves.iter().any(|leaf| leaf == entry_leaf) {
                 continue;
             }
