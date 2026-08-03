@@ -536,6 +536,32 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     // unreadable content is preserved byte-for-byte: presentation cannot reconstruct identity, and
     // overwriting would silently destroy annotations the adopter may still need to carry manually.
     let (baseline, create_new) = match std::fs::read_to_string(path) {
+        // A zero-length target is the one "unsupported" shape that provably holds nothing worth
+        // protecting. The refusal below exists to stop an overwrite from destroying hand-authored
+        // owner/tracker annotations, which cannot be reconstructed from a rerun — and zero bytes
+        // cannot hold any. Refusing it therefore protects nothing while costing the adopter a manual
+        // file move, and its own guidance ("preserve any desired annotations") names something that
+        // is not there.
+        //
+        // It is also the exact shape an interrupted create leaves: `create_baseline_file` publishes
+        // its directory entry before its first byte, so a crash mid-create leaves an empty file. The
+        // write action's job is to record, so it records — and says that it did, because recovering
+        // in silence is the other extreme. Bounded to *zero* length deliberately: whitespace, a
+        // truncated `{"format":`, or any other partial content might have held annotations before it
+        // was damaged, so those stay refused.
+        //
+        // `create_new` is false: the file exists, so this takes the overwrite path, which preserves
+        // its mode and swaps atomically. Gate mode (`--baseline`) deliberately does NOT share this
+        // tolerance — see `gate`, where an unreadable baseline stays exit 2. Recording may safely
+        // regenerate what it owns; gating consumes a declaration the adopter wrote, and a corrupt
+        // one must be reported rather than read as "nothing is baselined".
+        Ok(text) if text.is_empty() => {
+            eprintln!(
+                "Tianheng: baseline {path} was empty, so there were no owner/tracker annotations to \
+                 preserve (an interrupted write leaves exactly this); recording a fresh snapshot."
+            );
+            (Baseline::of(report), false)
+        }
         Ok(text) => match Baseline::from_json(&text) {
             Ok(existing) => (Baseline::of_preserving(report, &existing), false),
             Err(err) => {

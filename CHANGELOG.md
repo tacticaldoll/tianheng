@@ -126,6 +126,20 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change.
 
 ### Fixed
+- **BREAKING**: `--write-baseline` now records a fresh snapshot over a **zero-length** existing
+  baseline instead of refusing it (exit 2 → exit 0 for that input, reporting what it found). The
+  refusal exists to stop an overwrite from destroying hand-authored owner/tracker annotations, which
+  no rerun can reconstruct — and zero bytes cannot hold any, so it protected nothing while telling
+  the adopter to "preserve any desired annotations" that were not there and to move a file by hand to
+  recover. It is also precisely the shape an interrupted create leaves, since the create path
+  publishes its directory entry before its first byte, so the one state a crash can produce was the
+  one needing manual repair. The recovery is announced on stderr rather than silent. Deliberately
+  bounded to *zero* length: whitespace-only and truncated content might have held annotations before
+  being damaged, and stay refused, byte-for-byte untouched — pinned by the same test. Gate mode
+  (`--baseline`) does **not** share the tolerance: a declared baseline it cannot parse remains exit 2,
+  because recording may regenerate a snapshot it owns while gating consumes a declaration the adopter
+  wrote, and reading a corrupt one as "nothing is accepted" would silently discard their
+  accepted-violation record. `violation-baseline` gains the exception and three scenarios.
 - A baseline write now flushes its bytes to stable storage before reporting success, closing the one
   gap between the overwrite path's documented crash guarantee and what it implemented. Temp-then-
   rename made the swap atomic *for other observers*, but `rename` orders only the directory entry —
