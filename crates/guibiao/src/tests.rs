@@ -441,15 +441,34 @@ fn a_symlinked_module_aliasing_an_unrelated_walked_file_is_still_governed_under_
 
 #[test]
 fn expand_use_tree_does_not_overflow_on_pathological_nesting() {
-    // A pathologically brace-nested `use` must not overflow the stack. The depth cap bounds the
-    // recursion and returns (truncated past the cap — the safe direction for adversarial input no
-    // real, rustfmt-clean source reaches). The point of the test is that it terminates.
+    // A pathologically brace-nested `use` must not overflow the stack, AND must not silently drop
+    // the sub-tree past the depth cap either — a real, compilable `use` nested that deep would
+    // otherwise vanish from observation with no report, the false negative PROJECT.md's core
+    // contract forbids. Past the cap, this must be a scan error, never a silent truncation.
     let deep = format!("use {}b{};", "a::{".repeat(20_000), "}".repeat(20_000));
-    let out = crate::module_scan::imported_module_paths(&deep, "crate::m", &[]);
+    let err = crate::module_scan::imported_module_paths(&deep, "crate::m", &[])
+        .expect_err("a use tree nested past the depth cap must be a scan error, not a silent drop");
     assert!(
-        out.is_empty(),
-        "past the depth cap the sub-tree is not expanded: {out:?}"
+        err.contains("brace levels"),
+        "the error must name the depth bound it could not judge past: {err}"
     );
+}
+
+#[test]
+fn a_use_tree_nested_just_under_the_depth_cap_is_still_observed() {
+    // Control: nesting comfortably under MAX_USE_NEST_DEPTH is unaffected — the fix must not
+    // narrow ordinary observation of a real, deeply (but not pathologically) nested `use`. A
+    // `crate::{...}` prefix (not a bare external-looking head) so the leaf resolves internally.
+    let depth = 50;
+    let source = format!(
+        "use {}Thing{};",
+        "crate::{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let out = crate::module_scan::imported_module_paths(&source, "crate::m", &[])
+        .expect("nesting well under the depth cap must still be judged, not error");
+    assert_eq!(out.len(), 1, "{out:?}");
+    assert!(out[0].contains("Thing"), "{out:?}");
 }
 
 #[test]
@@ -462,10 +481,10 @@ fn a_raw_identifier_use_does_not_swallow_the_following_real_use() {
     // source without the raw-identifier field, and must include the real import.
     let with_raw = "struct Config { r#use: bool }\nuse crate::secret::Thing;\n";
     let without = "struct Config { flag: bool }\nuse crate::secret::Thing;\n";
-    let observed = imported_module_paths(with_raw, "crate::m", &[]);
+    let observed = imported_module_paths(with_raw, "crate::m", &[]).unwrap();
     assert_eq!(
         observed,
-        imported_module_paths(without, "crate::m", &[]),
+        imported_module_paths(without, "crate::m", &[]).unwrap(),
         "an r#use field must not change which imports are observed"
     );
     assert!(
@@ -482,12 +501,14 @@ fn a_use_in_a_whitespace_spaced_macro_body_is_not_a_real_import() {
     // stripped — not observed as a real import (a false positive).
     let spaced = "my_macro ! { use crate::secret::X; }\n";
     assert!(
-        imported_module_paths(spaced, "crate::m", &[]).is_empty(),
+        imported_module_paths(spaced, "crate::m", &[])
+            .unwrap()
+            .is_empty(),
         "a use inside a whitespace-spaced macro invocation body is macro-generated, not a real import"
     );
     let transparent = "cfg_if ! { use crate::secret::X; }\n";
     assert_eq!(
-        imported_module_paths(transparent, "crate::m", &[]),
+        imported_module_paths(transparent, "crate::m", &[]).unwrap(),
         vec![crate::module_scan::ImportedPath::plain("crate::secret::X")],
         "a use inside a transparent control-flow macro (cfg_if!) is observed"
     );
@@ -496,7 +517,9 @@ fn a_use_in_a_whitespace_spaced_macro_body_is_not_a_real_import() {
     // if the whitespace tolerance forgot the keyword check).
     let keyword_not = "pub fn f() -> bool { return !{ use crate::real::Y; true }; }\n";
     assert!(
-        !imported_module_paths(keyword_not, "crate::m", &[]).is_empty(),
+        !imported_module_paths(keyword_not, "crate::m", &[])
+            .unwrap()
+            .is_empty(),
         "a use in a real block after `return !` must still be observed — a keyword is not a macro name"
     );
 }

@@ -52,7 +52,7 @@ mod tests {
             "}",
             "",
         ] {
-            let _ = imported_module_paths(src, "crate::kernel", &[]);
+            let _ = imported_module_paths(src, "crate::kernel", &[]).unwrap();
             let _ = declared_modules(src);
             let _ = strip_macro_bodies(src);
         }
@@ -71,7 +71,7 @@ mod tests {
             use crate::real::A;
         "#;
         assert_eq!(
-            imported_module_paths(with_use, "crate", &[]),
+            imported_module_paths(with_use, "crate", &[]).unwrap(),
             vec![ImportedPath::plain("crate::real::A")],
             "a `use` inside a raw-identifier macro definition is not observed"
         );
@@ -94,7 +94,11 @@ mod tests {
         // The genuine keyword (followed by whitespace) is still detected.
         assert!(keyword_starts_at("use 貓;".as_bytes(), 0, b"use"));
         // And nothing is observed as an import or a declared module from the identifier.
-        assert!(imported_module_paths("fn use貓() {}", "crate", &[]).is_empty());
+        assert!(
+            imported_module_paths("fn use貓() {}", "crate", &[])
+                .unwrap()
+                .is_empty()
+        );
         assert!(declared_modules("fn mod貓() {}").is_empty());
     }
 
@@ -113,7 +117,7 @@ mod tests {
             vec!["type".to_string()]
         );
         assert_eq!(
-            imported_module_paths("use crate::r#type::Thing;", "crate", &[]),
+            imported_module_paths("use crate::r#type::Thing;", "crate", &[]).unwrap(),
             vec![ImportedPath::plain("crate::type::Thing")],
             "a raw-identifier use path is canonicalized to its plain form"
         );
