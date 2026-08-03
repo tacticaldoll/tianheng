@@ -91,6 +91,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change.
 
 ### Fixed
+- A value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `--format`) whose next
+  argument is itself a `--`-prefixed flag is now a usage error that exits 2 and names the token
+  found, instead of consuming that flag as its value. The absent-value case already failed loud; the
+  value-is-a-flag case silently ate the following flag. For `--write-baseline` that reached a silent
+  *success*: `check --manifest-path <ws> --write-baseline --warn-uncovered` wrote a baseline file
+  literally named `--warn-uncovered` into the working directory and exited **0**, with
+  `--warn-uncovered` dropped and no diagnostic — a misconfiguration passing as clean, which
+  PROJECT.md forbids. The other three flags did reach a non-zero exit, but reported it as a
+  downstream unreadable path or unknown format rather than as the malformed invocation it was. The
+  `--flag=<value>` form is unchanged and remains the way to pass a value that legitimately begins
+  with `--`, since it carries its value in the same token. `cli-check-runner` gains the requirement
+  and its two scenarios.
 - **BREAKING**: 圭表's inbound module-boundary rules (`must_not_be_imported_by`,
   `must_only_be_imported_by`) now react to an item-form import (`use m::Item;`) of the anchored
   module under `ScanDepth::Shallow`, not only a bare import of the module itself. The Shallow

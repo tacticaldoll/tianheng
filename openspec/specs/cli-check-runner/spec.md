@@ -27,6 +27,20 @@ a check.
 - **WHEN** the runner is invoked as `tianheng check --manifest-path=<path>`
 - **THEN** the runner uses `<path>` as the target workspace, identically to the space-separated form
 
+### Requirement: A value-taking flag requires its own value
+
+Every value-taking flag (`--manifest-path`, `--baseline`, `--write-baseline`, `--format`) SHALL be given a value in its own right. A flag whose value token is absent SHALL be a usage error that exits 2. A flag whose next argument is itself a `--`-prefixed token SHALL likewise be a usage error that exits 2, because the value is missing and the following flag would otherwise be consumed in its place: the runner MUST NOT silently drop a flag the invocation supplied, and MUST NOT proceed to observe a workspace or write a file under a path the invocation never named. The usage error SHALL name the token found, so the diagnostic points at the malformed invocation rather than at a downstream unreadable path or unknown format. The rejection SHALL happen during argument parsing, before any workspace observation. The `--flag=<value>` form SHALL remain accepted for a value that legitimately begins with `--`, since it carries its value in the same token and can consume no following flag.
+
+#### Scenario: A flag with no value at all is a usage error
+
+- **WHEN** the runner is invoked with a value-taking flag as the final argument, with no value after it
+- **THEN** the runner prints usage guidance and exits 2, never falling back to a default or to a plain check
+
+#### Scenario: A flag whose value is another flag is a usage error
+
+- **WHEN** the runner is invoked as `tianheng check --write-baseline --warn-uncovered` (a value-taking flag immediately followed by another flag)
+- **THEN** the runner prints usage guidance naming the flag it found, exits 2, and writes no baseline file — it does not consume `--warn-uncovered` as the baseline path, and does not exit 0 having silently dropped it
+
 ### Requirement: Process exit code mirrors the reaction outcome
 
 The runner SHALL exit `0` when no enforce-severity boundary is violated, `1` when one or more enforce-severity boundaries are violated, and `2` for a constitution or scan error. Violations of warn-severity boundaries SHALL be reported but SHALL NOT by themselves cause a non-zero exit, so a warn-only run exits `0`. On any non-zero exit the runner SHALL print a human-readable report or error message. The runner MUST NOT exit `0` when it could not evaluate the constitution.
