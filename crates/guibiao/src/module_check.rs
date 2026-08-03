@@ -220,7 +220,7 @@ pub(crate) fn check_module_boundary(
             }
             let text = std::fs::read_to_string(&file)
                 .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
-            for (importer, import) in imports_with_importers(&text, &file_module, &root_modules) {
+            for (importer, import) in imports_with_importers(&text, &file_module, &root_modules)? {
                 // A module importing from within the protected subtree is not an inbound edge
                 // (an inline submodule of the protected module resolves to within it here).
                 if within_scan_depth(&importer, &governed_module, boundary.depth) {
@@ -318,7 +318,7 @@ pub(crate) fn check_module_boundary(
             let text = std::fs::read_to_string(&file)
                 .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
             for (importer, external) in
-                external_imports_with_importers(&text, &file_module, &root_modules)
+                external_imports_with_importers(&text, &file_module, &root_modules)?
             {
                 // Only the confined crate, imported from outside the permitted subtree.
                 if external != confined {
@@ -460,7 +460,7 @@ pub(crate) fn check_module_boundary(
         // (exit 2), never a silent pass.
         let text = std::fs::read_to_string(&file)
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
-        for import in imported_module_paths(&text, &current_module, &root_modules) {
+        for import in imported_module_paths(&text, &current_module, &root_modules)? {
             if is_violation(&import) {
                 findings.push((import.path, file.display().to_string()));
             }
