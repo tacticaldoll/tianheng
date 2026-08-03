@@ -106,6 +106,25 @@ fn read_dir_entries_sorted(dir: &Path) -> Result<Vec<(bool, PathBuf)>, String> {
     Ok(paths)
 }
 
+/// Read `file`'s source and scan it for probes, returning the read source text — the one I/O
+/// touch (a full read, unlike the directory-listing metadata [`read_dir_entries_sorted`] reads)
+/// shared by [`collect_directory_probes`] and [`collect_reachable_probes`], each of which decides
+/// whether to reach this leaf action from cheap metadata alone (an extension check, an `is_dir`
+/// flag) before ever calling it. [`collect_reachable_probes`] also needs the source text
+/// afterward (to walk this file's own further module references), so it is returned rather than
+/// discarded.
+fn scan_rust_file(
+    file: &Path,
+    anchor: &Path,
+    markers: &[&str],
+    probes: &mut Vec<Probe>,
+) -> Result<String, String> {
+    let source = std::fs::read_to_string(file)
+        .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
+    scan_source_with_markers(&source, &labeled(file, anchor), markers, probes);
+    Ok(source)
+}
+
 fn collect_directory_probes(
     dir: &Path,
     anchor: &Path,
@@ -122,9 +141,7 @@ fn collect_directory_probes(
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
             && xingbiao::try_visit(visited, &path)?
         {
-            let source = std::fs::read_to_string(&path)
-                .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
-            scan_source_with_markers(&source, &labeled(&path, anchor), markers, probes);
+            scan_rust_file(&path, anchor, markers, probes)?;
         }
     }
     Ok(())
@@ -146,9 +163,7 @@ fn collect_reachable_probes(
         if !xingbiao::try_visit(&mut visited, &file)? {
             continue;
         }
-        let source = std::fs::read_to_string(&file)
-            .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
-        scan_source_with_markers(&source, &labeled(&file, anchor), markers, probes);
+        let source = scan_rust_file(&file, anchor, markers, probes)?;
         // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
         // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
         // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
