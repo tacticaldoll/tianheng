@@ -563,6 +563,26 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- 圭表's crate rules no longer exempt a **same-named but externally-sourced** dependency as if it were
+  the crate's own self-reference. The self-dependency exemption — which exists for Cargo's legal
+  `main = { path = "." }` doctest/dogfooding idiom, a null-source edge naming no OTHER crate — matched
+  by **name alone**, so a package `foo` declaring `foo = { git = "…" }` was swallowed by it. That is a
+  real wrapper/fork/self-comparison pattern, and cargo reports it as an ordinary edge
+  (`{"name":"foo","source":"git+…"}`, verified against a real `cargo metadata` read), so a genuine
+  external dependency vanished from every rule reading the shared self-excluding observation:
+  `forbid_dependency_on`, `restrict_dependencies_to`, `restrict_workspace_dependencies_to` (through
+  `dependencies()`), `restrict_dependency_sources_to` (through `dependencies_with_disallowed_source()`),
+  and the feature-granularity rules (through the dependency-edge selector) all passed it silently —
+  the false negative PROJECT.md's core contract forbids outright. `deny_external_dependencies` was the
+  one rule that already reacted, since its own observation never applied the exemption; that
+  divergence between siblings reading the same table is what the fix removes. The exemption now
+  additionally requires a **null declared `source`**, so the path idiom stays exempt while a
+  same-named external edge reacts exactly as any other dependency of that name would.
+  `crate-dependency-boundary`'s self-reference scenario is narrowed to the path form and gains its
+  "same-named but externally-sourced dependency is NOT exempted" sibling, and the rule families that
+  read the exempting observation are pinned against this edge by a test. Not breaking — closes a false negative; no identity shape changes and
+  no baseline regeneration is needed. An adopter carrying this dependency shape sees a workspace that
+  passed silently begin to react (exit 0 → 1), which is the reaction it should always have had.
 - **BREAKING**: 漏刻's un-auditable-probe identity no longer embeds a raw absolute filesystem path.
   Reproduced directly: scanning the byte-identical file at two different absolute locations (the
   same relocation a different clone path or CI runner produces) yielded two DIFFERENT
