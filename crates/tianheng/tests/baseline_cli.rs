@@ -296,6 +296,57 @@ fn a_symlink_planted_at_the_predicted_temp_path_is_refused_not_followed() {
 
 #[test]
 #[cfg(unix)]
+fn a_stale_leftover_temp_file_is_reported_by_its_own_name_not_the_baseline_path() {
+    // A stale `<target>.tmp-<pid>` left behind by an interrupted prior run (a killed process, or a
+    // pid reused across a fresh container) makes create_new's open fail with AlreadyExists. That
+    // must not surface as a bare "cannot write baseline <path>: File exists" — <path> already
+    // existing is the whole point of an overwrite, so that message names nothing the adopter can
+    // act on. It must name the actual colliding temp file and say why it's there.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let baseline = temp_baseline("stale-temp-collision-baseline");
+    let _ = std::fs::remove_file(&baseline);
+
+    let first = run_with(&manifest, "--write-baseline", &baseline);
+    assert_eq!(first.status.code(), Some(0), "{first:?}");
+
+    let real_baseline = std::fs::canonicalize(&baseline).expect("canonicalize baseline");
+    let child = command_for(&manifest)
+        .args([
+            "--write-baseline",
+            baseline.to_str().expect("UTF-8 baseline path"),
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn tianheng CLI");
+    let predicted_tmp = format!("{}.tmp-{}", real_baseline.display(), child.id());
+    let _ = std::fs::write(&predicted_tmp, "leftover from an interrupted run");
+    let output = child.wait_with_output().expect("wait for tianheng CLI");
+
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    assert!(
+        stderr.contains(&predicted_tmp),
+        "the message must name the actual colliding temp file, not just the baseline path: {stderr}"
+    );
+    assert!(
+        stderr.contains("interrupted run"),
+        "the message must explain why a leftover temp file is a plausible, non-alarming cause: \
+         {stderr}"
+    );
+    assert!(
+        !stderr.contains("File exists"),
+        "the raw io::Error text must not leak through as the whole explanation: {stderr}"
+    );
+
+    let _ = std::fs::remove_file(&predicted_tmp);
+    let _ = std::fs::remove_file(&baseline);
+}
+
+#[test]
+#[cfg(unix)]
 fn rewriting_through_a_symlink_into_a_non_utf8_named_directory_still_succeeds() {
     // The temp path is built by appending to the resolved target's raw OsString, never through
     // `Path::display()` (which lossily replaces non-UTF-8 bytes for human-readable formatting) — a

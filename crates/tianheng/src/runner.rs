@@ -523,7 +523,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     };
     let document = baseline.to_json();
     let write_result = if create_new {
-        create_baseline_file(path, &document)
+        create_baseline_file(path, &document).map_err(BaselineWriteError::Io)
     } else {
         write_baseline_atomically(path, &document)
     };
@@ -535,14 +535,25 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
             );
             EXIT_OK
         }
-        Err(err) if create_new && err.kind() == std::io::ErrorKind::AlreadyExists => {
+        Err(BaselineWriteError::TempPathCollision(tmp_path)) => {
+            eprintln!(
+                "Tianheng: refusing to overwrite baseline {path}: its temp file {} already \
+                 exists, likely stranded by an interrupted run. Inspect and remove it, then \
+                 rerun the command.",
+                tmp_path.display()
+            );
+            EXIT_CANNOT_JUDGE
+        }
+        Err(BaselineWriteError::Io(err))
+            if create_new && err.kind() == std::io::ErrorKind::AlreadyExists =>
+        {
             eprintln!(
                 "Tianheng: refusing to overwrite baseline {path} because it appeared while the \
                  new snapshot was being prepared. Inspect the file, then rerun the command."
             );
             EXIT_CANNOT_JUDGE
         }
-        Err(err) => {
+        Err(BaselineWriteError::Io(err)) => {
             eprintln!("Tianheng: cannot write baseline {path}: {err}");
             EXIT_CANNOT_JUDGE
         }
@@ -555,6 +566,24 @@ fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
         .create_new(true)
         .open(path)
         .and_then(|mut file| file.write_all(document.as_bytes()))
+}
+
+/// Why [`write_baseline_atomically`] failed. A bare `io::Error` cannot distinguish a stale temp
+/// file left over from an interrupted run (a real, reachable case — a killed process, or a pid
+/// reused across a fresh container) from any other IO failure, and reporting it against the
+/// baseline path (which legitimately already exists — that is the point of an overwrite) rather
+/// than the actual colliding temp path leaves the adopter nothing to act on.
+enum BaselineWriteError {
+    /// The temp file's `create_new` open hit something already at that path. Carries the temp
+    /// path itself so the caller can name the file that is actually blocking the write.
+    TempPathCollision(PathBuf),
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for BaselineWriteError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
+    }
 }
 
 /// Overwrites an existing baseline durably: the merged document lands at a sibling temp path
@@ -584,15 +613,19 @@ fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
 /// target's raw `OsString`, never through `Path::display()` (which lossily replaces non-UTF-8
 /// bytes for human-readable formatting) — a resolved path is not guaranteed valid UTF-8, and a
 /// lossy round-trip through a new string can point at a directory that does not exist, failing an
-/// otherwise-valid overwrite outright. An error after the temp file was actually created is
-/// best-effort cleaned up; `AlreadyExists` from `create_new` itself means this process created
-/// nothing, so nothing here is deleted — mirroring how `write_baseline`'s own `create_new` case
-/// already treats an unexpected `AlreadyExists` as a loud refusal, not something to clear away.
-fn write_baseline_atomically(path: &str, document: &str) -> std::io::Result<()> {
+/// otherwise-valid overwrite outright. `create_new`'s `AlreadyExists` can only come from opening
+/// the temp file itself — the step is split out from the rest so that outcome is reported as
+/// [`BaselineWriteError::TempPathCollision`] (naming the temp path, not this process's io::Error
+/// against the baseline path) rather than inferred from an error kind that could, if a later step
+/// ever changed, silently stop meaning "this process created nothing." Any failure once the temp
+/// file is open unconditionally cleans it up — no kind-based inference needed there, since opening
+/// it is the only step that can fail without this process having created it.
+fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineWriteError> {
     let target = std::fs::canonicalize(path)?;
     let permissions = std::fs::metadata(&target)?.permissions();
     let mut tmp_path = target.clone().into_os_string();
     tmp_path.push(format!(".tmp-{}", std::process::id()));
+    let tmp_path = PathBuf::from(tmp_path);
 
     let mut open_options = OpenOptions::new();
     open_options.write(true).create_new(true);
@@ -603,18 +636,23 @@ fn write_baseline_atomically(path: &str, document: &str) -> std::io::Result<()> 
         open_options.mode(permissions.mode() & 0o777);
     }
 
-    let write_result = open_options
-        .open(&tmp_path)
-        .and_then(|mut file| file.write_all(document.as_bytes()))
+    let mut file = match open_options.open(&tmp_path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(BaselineWriteError::TempPathCollision(tmp_path));
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    let write_result = file
+        .write_all(document.as_bytes())
         .and_then(|()| std::fs::set_permissions(&tmp_path, permissions))
         .and_then(|()| std::fs::rename(&tmp_path, &target));
-
-    if let Err(err) = &write_result {
-        if err.kind() != std::io::ErrorKind::AlreadyExists {
-            let _ = std::fs::remove_file(&tmp_path);
-        }
+    if let Err(err) = write_result {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(err.into());
     }
-    write_result
+    Ok(())
 }
 
 /// Gate against a baseline: suppress recorded violations, fail only on new ones,
