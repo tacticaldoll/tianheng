@@ -160,8 +160,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   PROJECT.md forbids. The other three flags did reach a non-zero exit, but reported it as a
   downstream unreadable path or unknown format rather than as the malformed invocation it was. The
   `--flag=<value>` form is unchanged and remains the way to pass a value that legitimately begins
-  with `--`, since it carries its value in the same token. `cli-check-runner` gains the requirement
-  and its two scenarios.
+  with `--`, since it carries its value in the same token; that escape hatch is pinned end-to-end,
+  distinguishing the two forms by their diagnostics rather than by an exit code they share.
+  `cli-check-runner` gains the requirement and its two scenarios.
 - **BREAKING**: 圭表's inbound module-boundary rules (`must_not_be_imported_by`,
   `must_only_be_imported_by`) now react to an item-form import (`use m::Item;`) of the anchored
   module under `ScanDepth::Shallow`, not only a bare import of the module itself. The Shallow
