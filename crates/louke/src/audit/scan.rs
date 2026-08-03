@@ -42,14 +42,21 @@ fn labeled(path: &Path, anchor: &Path) -> String {
 /// The directory every `source_inputs` root's label is made relative to (see [`labeled`]). A file
 /// input's own directory is used (not the file itself, which would strip to an empty label); a
 /// directory input is used as-is. Empty input has no meaningful anchor.
+/// The directory a path's own children resolve relative to for [`common_ancestor`]'s purposes:
+/// `p` itself if it's a directory, else its parent (a file's identity is a source ROOT, so its
+/// own directory is the anchor, never the file itself). Isolates the one I/O touch (`Path::is_file`)
+/// from the otherwise-pure prefix-intersection algorithm below.
+fn anchor_dir_for(p: &Path) -> PathBuf {
+    if p.is_file() {
+        p.parent()
+            .map_or_else(|| p.to_path_buf(), Path::to_path_buf)
+    } else {
+        p.to_path_buf()
+    }
+}
+
 pub(super) fn common_ancestor(paths: &[PathBuf]) -> PathBuf {
-    let mut candidates = paths.iter().map(|p| {
-        if p.is_file() {
-            p.parent().map_or_else(|| p.clone(), Path::to_path_buf)
-        } else {
-            p.clone()
-        }
-    });
+    let mut candidates = paths.iter().map(|p| anchor_dir_for(p));
     let Some(first) = candidates.next() else {
         return PathBuf::new();
     };
@@ -79,6 +86,26 @@ pub(super) fn collect_probes_with_markers(
     collect_directory_probes(input, anchor, markers, probes, &mut visited)
 }
 
+/// Read `dir`'s entries — I/O only, no scan dispatch — as `(is_dir, path)` pairs sorted so the
+/// downstream traversal order (and thus the violation order in the report) is deterministic
+/// across runs (`read_dir` order is OS/filesystem-dependent and unsorted). `file_type()` does NOT
+/// follow symlinks, so a symlinked directory is reported as a file here — avoiding an infinite
+/// loop on a cyclic symlink (fail safe, not stack-overflow loud).
+fn read_dir_entries_sorted(dir: &Path) -> Result<Vec<(bool, PathBuf)>, String> {
+    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    let mut paths = Vec::new();
+    for entry in read {
+        let entry =
+            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
+        paths.push((file_type.is_dir(), entry.path()));
+    }
+    paths.sort();
+    Ok(paths)
+}
+
 fn collect_directory_probes(
     dir: &Path,
     anchor: &Path,
@@ -89,22 +116,7 @@ fn collect_directory_probes(
     if !xingbiao::try_visit(visited, dir)? {
         return Ok(());
     }
-    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    // Sort entries so the scan order — and thus the violation order in the report — is
-    // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
-    let mut paths = Vec::new();
-    for entry in read {
-        let entry =
-            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
-        // file_type() does NOT follow symlinks, so a symlinked directory does not recurse —
-        // avoiding an infinite loop on a cyclic symlink (fail safe, not stack-overflow loud).
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
-        paths.push((file_type.is_dir(), entry.path()));
-    }
-    paths.sort();
-    for (is_dir, path) in paths {
+    for (is_dir, path) in read_dir_entries_sorted(dir)? {
         if is_dir {
             collect_directory_probes(&path, anchor, markers, probes, visited)?;
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
