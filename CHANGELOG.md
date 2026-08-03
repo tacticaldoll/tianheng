@@ -35,6 +35,15 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   construction code references. `SemanticBoundaries` (the per-dimension aggregate struct
   `hunyi::SemanticBoundaries` holding one `Vec` per capability) and every `semantic_*` dimension
   label are unrelated and unchanged.
+- Test-only, no production code change: 渾儀's `every_public_seam_shape_is_named_and_identity_injective`
+  now derives its coverage check from an exhaustive `seam_kind` match over `PublicSeam` instead of
+  comparing the hand-written fixture's length against itself. `published_seam_fields` and
+  `assert_semantic_fact_is_cataloged` already forced a new `PublicSeam` variant to gain a schema arm
+  (a compile error otherwise), but nothing forced an *instance* of it into the fixture — the old
+  `keys.len() == seams.len()` check would have stayed green even with a variant silently unrepresented.
+  `seam_kind`'s own exhaustive match now fails to compile on a new variant too, and the fixture's
+  distinct-kind count is asserted against it directly. Coverage was already complete (all 11 kinds
+  present); only the enforcement was hand-maintained.
 - Internal refactor: 渾儀's three call sites that compose transparent-macro flattening with
   const/fn-body-nested-impl recovery (`scan::flatten_for_walk`,
   `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
