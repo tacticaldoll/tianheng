@@ -1012,8 +1012,9 @@ mod fact_tests {
     /// `seam_kind`'s exhaustive match (above) forces this list to gain a representative when
     /// `PublicSeam` gains a variant, and the checks below prove the representative actually arrived
     /// rather than only that the arm compiled: the observed shape set must *equal* `SeamKind::ALL`,
-    /// and the shape-to-published-label mapping must be a bijection, so a new variant folded into an
-    /// existing shape cannot read as already covered.
+    /// and the shape-to-published-label mapping must be a bijection — checked in both directions,
+    /// since neither count catches the other's failure — so a new variant folded into an existing
+    /// shape cannot read as already covered.
     ///
     /// What remains hand-maintained is the *content* of each representative — picking field values
     /// that actually distinguish it from its siblings (the two-module `InherentMethod` case this
@@ -1177,10 +1178,12 @@ mod fact_tests {
         );
 
         // The test's shape mapping and the published schema's own `seam_kind` label must agree
-        // one-for-one. Counting the distinct (shape, published label) pairs proves the mapping is a
-        // bijection in one assertion: a shape rendered under two labels, or two shapes sharing one
-        // label, both push this count above the shape count. Without it, a new variant mapped to an
-        // existing `SeamKind` would read as already-covered while publishing its own label.
+        // one-for-one. A bijection needs BOTH directions checked, and one count does not give both:
+        // with every shape represented, the distinct (shape, label) pair count rises above the shape
+        // count only when one shape is rendered under two labels. Two shapes *sharing* one label
+        // leaves that count untouched — it is caught by comparing the distinct label count instead.
+        // Together they close the case a new variant mapped to an existing `SeamKind` would
+        // otherwise slip through: reading as already-covered while publishing its own label.
         let paired: std::collections::BTreeSet<_> = seams
             .iter()
             .map(|seam| (seam_kind(seam), published_seam_kind(seam)))
@@ -1188,8 +1191,16 @@ mod fact_tests {
         assert_eq!(
             paired.len(),
             listed.len(),
-            "each PublicSeam shape must map to exactly one published seam_kind label, and each \
-             label to exactly one shape: {paired:?}"
+            "each PublicSeam shape must map to exactly one published seam_kind label: {paired:?}"
+        );
+        let published_labels: std::collections::BTreeSet<_> =
+            seams.iter().map(published_seam_kind).collect();
+        assert_eq!(
+            published_labels.len(),
+            listed.len(),
+            "each published seam_kind label must belong to exactly one PublicSeam shape — two \
+             shapes sharing a label would leave one of them unrepresented in the schema: \
+             {published_labels:?}"
         );
         let keys: std::collections::BTreeSet<_> = seams
             .iter()

@@ -78,9 +78,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `SeamKind::ALL`, so a missing representative fails by name rather than by two integers differing,
   and the shape-to-published-label mapping is asserted to be a bijection against
   `published_seam_fields` — production schema truth — so a new variant folded into an existing shape
-  cannot read as already covered. Verified by adding a twelfth variant: the compiler demands arms at
-  four sites, and with those satisfied but the fixture entry omitted the check now fails naming the
-  shape, where the previous version passed.
+  cannot read as already covered. That bijection is checked in **both** directions, because neither
+  count catches the other's failure: with every shape represented, the distinct (shape, label) pair
+  count rises above the shape count only when one shape is published under two labels, while two
+  shapes *sharing* a label leaves it untouched and is caught by the distinct label count instead.
+  Verified by three probes: adding a twelfth `PublicSeam` variant (the compiler demands arms at four
+  sites, and with those satisfied but the fixture entry omitted the check fails naming the shape,
+  where the previous version passed), publishing one shape under two labels, and publishing two
+  shapes under one label — each failing on its own assertion.
 - Internal refactor: 渾儀's three call sites that compose transparent-macro flattening with
   const/fn-body-nested-impl recovery (`scan::flatten_for_walk`,
   `module_resolve::resolve_module_items_with_files`, `module_resolve::resolve_module_items_with_cfg_tags`)
