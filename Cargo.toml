@@ -15,19 +15,19 @@
 [workspace]
 resolver = "2"
 members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao", "crates/louke", "crates/tianheng"]
-# Test fixtures are their own workspaces (each carries `[workspace]`); exclude them so
-# this workspace does not try to absorb the intentionally-violating ones.
-exclude = [
-    "crates/tianheng/tests/fixtures/clean",
-    "crates/tianheng/tests/fixtures/violating",
-    "crates/tianheng/tests/fixtures/orphan_probe",
-    # Each example is its own workspace (it carries a deliberate fault and the adopter's real
-    # `= "0.3"` dependency form); excluded so this workspace never absorbs it. CI exercises them
-    # in isolation via scripts/test_examples.sh.
-    "examples/guibiao-standalone",
-    "examples/hunyi-standalone",
-    "examples/composed",
-]
+# Every fixture and example is its own workspace root (each carries `[workspace]`), which is what
+# actually keeps this workspace from absorbing their deliberate faults — `members` above is an
+# explicit list with no globs, so nothing under these trees is inferred into it. These two entries
+# are the second line of that defence, for a future fixture or example added without its own
+# `[workspace]` table: excluded, it stays out; unexcluded, cargo would refuse to operate inside it
+# until the author picks one.
+#
+# Named as directory prefixes rather than one entry per package on purpose. The per-package list
+# they replace covered 3 of 5 fixtures and 3 of 6 examples — it had drifted, silently, because a
+# hand-maintained enumeration of a directory's contents rots as the directory grows, and a
+# governance rule that has drifted is read as license rather than law. A prefix cannot fall behind
+# what it contains. CI exercises the examples in isolation via scripts/test_examples.sh.
+exclude = ["crates/tianheng/tests/fixtures", "examples"]
 
 [workspace.package]
 version = "0.3.0"

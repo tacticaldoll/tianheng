@@ -13,6 +13,23 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- Stopped tracking `examples/capability-catalog/Cargo.lock`, the only committed example lockfile.
+  `.gitignore` had matched it since the examples were introduced — tracking simply overrode the rule —
+  and the rule's own comment stated that the examples "carry no lock". It pinned all six family
+  crates to the published 0.3.0, so an example run without the examples gate's local-source patch
+  demonstrated a release other than the tree it was cloned from, and no gate could notice because
+  the gate patches resolution to local source. The same comment also still described the examples'
+  dependency form as `= "0.1"` when all six commit `= "0.3"`; it now points at each example's own
+  manifest instead of naming the version a second place.
+- Replaced the root manifest's per-package `exclude` list with the two directory prefixes that
+  contain them (`crates/tianheng/tests/fixtures`, `examples`). The list had drifted to 3 of 5
+  fixtures and 3 of 6 examples while its comments claimed to cover all of both. No membership change
+  (`cargo metadata` reports the same six members): what actually keeps a fixture's deliberate faults
+  out of this workspace is each one's own `[workspace]` table, with `members` an explicit
+  glob-free list. The exclusion is the second line of that defence, for a future fixture or example
+  added without its own `[workspace]` — verified load-bearing by adding one and observing cargo
+  operate inside it when excluded and refuse when not — and it now covers all eleven rather than six,
+  as a prefix that cannot fall behind what it contains.
 - Derived the branch role from the Conventional Commit type instead of an enumerated prefix list.
   `AGENTS.md` listed `refactor/` and `docs/` but not `fix/` or `test/`, both long-established, and
   declared a `polish/X.Y.Z/<slug>` role no release has ever used — the contributor rule most likely
