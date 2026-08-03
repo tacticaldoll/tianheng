@@ -269,6 +269,35 @@ type ChildEntry = (
     PathBuf,
 );
 
+/// Canonicalize `file`, check it against the descent-path cycle guard and the crate-wide dedup
+/// guard, then read+parse it — the identical "resolve and load a module file" sequence all three
+/// file-loading sites in [`resolve_direct_path_child`]/[`resolve_conventional_child`] share.
+/// `Ok(None)` means the file was already visited by another branch (the dedup guard) and
+/// contributes nothing new; each caller builds its own [`ChildEntry`] from the returned
+/// items/canonical path, since the base directories a caller assigns differ (a mod-rs-like
+/// `#[path]`-loaded file uses its own directory for BOTH tuple positions; a conventional
+/// `<dir>/name.rs` uses the pre-established `<child_dir>/name` for one of them) — that assembly
+/// is deliberately NOT folded in here, so this helper never has to guess which shape a caller
+/// wants.
+fn load_child_file(
+    file: &Path,
+    child_module: &str,
+    crate_package: &str,
+    ancestors: &HashSet<PathBuf>,
+    seen_files: &mut HashSet<(String, PathBuf)>,
+    name: &str,
+) -> Result<Option<(Vec<syn::Item>, PathBuf)>, String> {
+    let canon = xingbiao::canonicalize_or_fail(file)?;
+    if ancestors.contains(&canon) {
+        return Err(module_cycle_error(child_module, crate_package, file));
+    }
+    if !seen_files.insert((name.to_string(), canon.clone())) {
+        return Ok(None);
+    }
+    let parsed = read_parse(file)?;
+    Ok(Some((parsed.items, canon)))
+}
+
 /// The **unconditional** `#[path = "…"]` remap case: its file (or inline body) is *followed* and
 /// observed — closing the relocated-module coverage gap (its `unsafe` sites / items were
 /// previously dropped, a false negative). rustc resolves a non-inline `#[path]` relative to
@@ -327,14 +356,17 @@ fn resolve_direct_path_child(
                 }
                 return Err(missing_module_file_error(child_module, crate_package));
             }
-            let canon = xingbiao::canonicalize_or_fail(&file)?;
-            if ancestors.contains(&canon) {
-                return Err(module_cycle_error(child_module, crate_package, &file));
-            }
-            if !seen_files.insert((name.to_string(), canon.clone())) {
+            let Some((items, canon)) = load_child_file(
+                &file,
+                child_module,
+                crate_package,
+                ancestors,
+                seen_files,
+                name,
+            )?
+            else {
                 return Ok(());
-            }
-            let parsed = read_parse(&file)?;
+            };
             // mod-rs-like: the loaded file's own directory is the base for both its conventional
             // children and any nested `#[path]` beneath it.
             let own_dir = file
@@ -342,7 +374,7 @@ fn resolve_direct_path_child(
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|| file_dir.to_path_buf());
             children.push((
-                parsed.items,
+                items,
                 child_module.to_string(),
                 own_dir.clone(),
                 own_dir,
@@ -407,18 +439,20 @@ fn resolve_conventional_child(
                 let file = file_dir.join(rel);
                 if file.is_file() {
                     has_backing_source = true;
-                    let canon = xingbiao::canonicalize_or_fail(&file)?;
-                    if ancestors.contains(&canon) {
-                        return Err(module_cycle_error(child_module, crate_package, &file));
-                    }
-                    if seen_files.insert((name.to_string(), canon.clone())) {
-                        let parsed = read_parse(&file)?;
+                    if let Some((items, canon)) = load_child_file(
+                        &file,
+                        child_module,
+                        crate_package,
+                        ancestors,
+                        seen_files,
+                        name,
+                    )? {
                         let own_dir = file
                             .parent()
                             .map(Path::to_path_buf)
                             .unwrap_or_else(|| file_dir.to_path_buf());
                         children.push((
-                            parsed.items,
+                            items,
                             child_module.to_string(),
                             own_dir.clone(),
                             own_dir,
@@ -438,18 +472,20 @@ fn resolve_conventional_child(
                     // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
                     // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
                     // misreport them (that would be a false positive on compilable input).
-                    let canon = xingbiao::canonicalize_or_fail(&file)?;
-                    if ancestors.contains(&canon) {
-                        return Err(module_cycle_error(child_module, crate_package, &file));
-                    }
-                    if seen_files.insert((name.to_string(), canon.clone())) {
-                        let parsed = read_parse(&file)?;
+                    if let Some((items, canon)) = load_child_file(
+                        &file,
+                        child_module,
+                        crate_package,
+                        ancestors,
+                        seen_files,
+                        name,
+                    )? {
                         let own_dir = file
                             .parent()
                             .map(Path::to_path_buf)
                             .unwrap_or_else(|| sub_dir.clone());
                         children.push((
-                            parsed.items,
+                            items,
                             child_module.to_string(),
                             sub_dir,
                             own_dir,
