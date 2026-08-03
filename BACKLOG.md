@@ -105,6 +105,24 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   body; the stated bound is also pinned in `crates/louke/src/finding.rs`/`audit.rs`'s own
   doc comments and `openspec/specs/runtime-origin-assertion/spec.md`.
 
+- ~~**`InherentGenerics` seam identity has no per-block distinguisher WITHIN one module.**~~ **CLOSED**
+  in the 0.4.0 window. The seam now carries the **bounded thing** each exposure sits on — a parameter's
+  own name, or a where-predicate's rendered bounded type — so two blocks in one module bounding
+  different parameters to the same forbidden type are two distinct facts. The distinguisher this entry
+  called a design decision is resolved by taking the one the codebase already had: it is keyed exactly
+  like a trait `impl`'s own `where` position, and both now come from one shared walk over an impl's
+  generics positions, so the vocabularies cannot drift. An impl-block **ordinal** was ruled out rather
+  than chosen against, since `semantic-signature-coupling` forbids identity resting on scan order or
+  item ordinal.
+  What remains is a limit, not a gap, and is stated in the seam's own doc: two blocks whose bounds are
+  *textually identical* still resolve to one seam. Nothing structural distinguishes them — their
+  contents carry their own seams and position is forbidden — so two blocks bounding the same parameter
+  to the same forbidden type state one architectural fact twice, exactly as one import on two lines is
+  one violation. Completeness of the position walk rests on a language rule verified against a real
+  `rustc` rather than assumed: an `impl`'s generic parameters cannot carry defaults, so a parameter
+  contributes only its bounds (or, for a const parameter, its type). The original entry is kept below
+  for its reproduction record.
+
 - **`InherentGenerics` seam identity has no per-block distinguisher WITHIN one module.**
   Class: DESIGN-BREAKING. Observed pressure: verified real during
   0.3.1 sweep cleanup (2026-08-02/03) — two separate inherent impl blocks on the same

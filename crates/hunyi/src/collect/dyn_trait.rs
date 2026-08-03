@@ -180,13 +180,22 @@ pub(crate) fn collect_item_dyn_exposures(
             // must not lag it. Parallel to the struct/enum/trait arms, which already walk generics.
             // Module-qualified for the same reason the sibling method seam below is: two inherent
             // impl blocks for one owner may be written in two different modules.
-            out.extend(stamp_seam(
-                dyns_in_generics(&item.generics),
-                &PublicSeam::InherentGenerics {
+            // Per-position, keyed by the bounded thing — the same shared walk the sibling path
+            // collector uses, for the same identity reason (see `PublicSeam::InherentGenerics`).
+            for (bound, positions) in impl_generics_positions(&item.generics, ordinal) {
+                let seam = PublicSeam::InherentGenerics {
                     module: module.to_string(),
                     owner: owner.clone(),
-                },
-            ));
+                    bound,
+                };
+                for position in positions {
+                    let dyns = match position {
+                        GenericsPosition::Bounds(bounds) => dyns_in_bounds(bounds),
+                        GenericsPosition::Type(ty) => dyns_in_type(ty),
+                    };
+                    out.extend(stamp_seam(dyns, &seam));
+                }
+            }
             for impl_item in &item.items {
                 match impl_item {
                     syn::ImplItem::Fn(method) if is_public(&method.vis) => {

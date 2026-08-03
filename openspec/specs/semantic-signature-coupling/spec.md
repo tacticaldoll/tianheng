@@ -428,6 +428,30 @@ differ in one of those two roles. **Every** seam role that is not forced distinc
 SHALL therefore carry its declaring module; a seam whose whole identity is a crate-wide name is not
 an identity.
 
+An impl block's **own generics** seam SHALL additionally encode the **bounded thing** each exposure
+sits on — a generic parameter's own name, or a where-predicate's rendered bounded type — because that
+seam has no per-item name to fall back on and module-plus-owner cannot separate two blocks written in
+one module: module says where a block is written and owner says what it is for, neither says which
+block. Two blocks bounding different parameters to the same forbidden type are two distinct sites and
+SHALL NOT collapse. This role SHALL be keyed identically to a trait `impl`'s own `where` position, from
+one shared walk over the impl's generics positions, so the two vocabularies cannot drift; and an
+unrenderable bounded type SHALL fall back to the internal positional sentinel that fails loud rather
+than to a key two such bounds could share.
+
+Two blocks in one module whose bounds are **textually identical** SHALL resolve to one seam, and that
+is a limit rather than a gap: nothing structural distinguishes them (their contents carry their own
+seams, and identity may not rest on scan order or item ordinal), so two blocks bounding the same
+parameter to the same forbidden type state one architectural fact twice — the same reason one import on
+two lines is one violation.
+
+#### Scenario: Two impl blocks in one module stay distinct by their bound
+
+- **WHEN** one module declares `impl<T: crate::infra::Secret, U> Conn<T, U>` and
+  `impl<T, U: crate::infra::Secret> Conn<T, U>` — same owner, same module, the same forbidden subject
+  through different bounds
+- **THEN** the system emits two distinct violations whose structured facts differ, rather than
+  collapsing them onto one generics seam
+
 #### Scenario: Two impl blocks in different modules for the same owner stay distinct generics seams
 
 - **WHEN** two sibling modules each write `impl<T: crate::infra::Secret> Conn<T> { … }` for a `Conn`

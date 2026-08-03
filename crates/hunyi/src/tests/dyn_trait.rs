@@ -91,10 +91,13 @@ pub(super) fn a_dyn_in_an_inherent_impl_generic_bound_is_observed() {
         "pub struct Foo<T>(T);\nimpl<T: AsRef<Box<dyn crate::ports::Port>>> Foo<T> { pub fn m(&self) {} }\n",
     )
     .unwrap();
+    // The seam now names the bounded parameter (`generics: T`), not a bare `(generics)`: two impl
+    // blocks bounding different parameters to the same forbidden type are two distinct violations,
+    // and rendering them identically made a report unreadable even where identity was correct.
     assert!(
         out.iter()
-            .any(|f| f.contains("dyn crate::ports::Port") && f.contains("(generics)")),
-        "a dyn in an inherent-impl generic bound must be observed: {out:?}"
+            .any(|f| f.contains("dyn crate::ports::Port") && f.contains("(generics: T)")),
+        "a dyn in an inherent-impl generic bound must be observed and name its bound: {out:?}"
     );
 }
 
