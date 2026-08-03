@@ -207,10 +207,26 @@ where
     // A value-taking flag must be given its value; an absent value is a usage error
     // (exit 2), never a silent downgrade to the default or to a plain check
     // (PROJECT.md: misconfiguration fails loud).
+    //
+    // A value that is itself a `--`-prefixed token is the same missing value, one token later:
+    // the flag the user meant to pass gets eaten as this flag's value. Taking it would drop a
+    // real flag with no diagnostic, and for `--write-baseline` it reaches a silent SUCCESS —
+    // writing a baseline file literally named `--warn-uncovered` and exiting 0, the one shape of
+    // this mistake that does not even land on a non-zero exit. So reject it here and name the
+    // token found, rather than let a downstream scan error misreport it as a bad path. The
+    // `--flag=<value>` form stays the escape hatch for a value that must begin with `--`; it
+    // carries its value in the same token, so no following flag can be consumed by mistake.
     macro_rules! value {
         ($flag:literal) => {
             match args.next() {
-                Some(value) => value,
+                Some(value) if !value.starts_with("--") => value,
+                Some(found) => {
+                    return Err(usage(&format!(
+                        "{} requires a value, but the next argument is the flag '{found}'; \
+                         use {}=<value> for a value that begins with '--'",
+                        $flag, $flag
+                    )));
+                }
                 None => return Err(usage(concat!($flag, " requires a value"))),
             }
         };

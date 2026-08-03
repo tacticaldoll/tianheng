@@ -1785,6 +1785,58 @@ fn flag_missing_its_value_is_a_usage_error() {
 }
 
 #[test]
+fn a_flag_shaped_value_is_a_usage_error() {
+    // The sibling of the foot-gun above: the value token is present, but it is itself a flag, so
+    // the flag the user meant to pass is eaten as this one's value. Every value-taking flag must
+    // reject that during parsing — uniformly, before any workspace is observed, so the diagnostic
+    // names the real mistake instead of a downstream "cannot read" against a path no one typed.
+    for flag in [
+        "--manifest-path",
+        "--baseline",
+        "--write-baseline",
+        "--format",
+    ] {
+        assert_eq!(
+            run_args(&["tianheng", "check", flag, "--warn-uncovered"]),
+            2,
+            "{flag} given a flag-shaped value must exit 2",
+        );
+    }
+}
+
+#[test]
+fn a_flag_shaped_write_baseline_value_is_never_silently_written() {
+    // The regression guard for the shape that did not even land on a non-zero exit. Given a
+    // manifest that evaluates cleanly, `--write-baseline --warn-uncovered` used to consume the
+    // following flag as its path: it wrote a baseline file literally named `--warn-uncovered`
+    // into the working directory and exited 0 — a silent success with the user's real flag
+    // dropped and no diagnostic. The other three value-taking flags reach a non-zero exit even
+    // when they eat a flag (a scan error, an unreadable baseline, an unknown format), so this is
+    // the one case whose exit code changes, and the only one where a stray artifact could appear.
+    //
+    // The path is working-directory relative by construction: only a relative path can begin
+    // with `--`. `TempPath` removes it before the run and on drop, so a future regression cannot
+    // leave the artifact behind in the crate directory.
+    let eaten = TempPath::new(PathBuf::from("--warn-uncovered"));
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            "--write-baseline",
+            "--warn-uncovered",
+        ]),
+        2,
+        "--write-baseline given a flag-shaped value must exit 2, not write and exit 0",
+    );
+    assert!(
+        !eaten.path().exists(),
+        "--write-baseline must not consume the following flag as its baseline path",
+    );
+}
+
+#[test]
 fn list_needs_no_manifest_path_and_exits_0() {
     assert_eq!(run_args(&["tianheng", "list"]), 0);
 }
