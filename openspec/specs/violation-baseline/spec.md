@@ -137,3 +137,17 @@ again. It SHALL NOT attempt automatic migration or reconstruct identity from pre
 
 - **WHEN** the constitution cannot be evaluated
 - **THEN** the action exits 2 without writing a baseline
+
+### Requirement: A completed baseline write is durable
+
+The write action SHALL NOT report success before the bytes it recorded are flushed to stable storage. When overwriting an existing baseline it SHALL stage the merged document at a temp path, flush that file, and only then atomically replace the target — so a crash leaves either the previous baseline with its carried-forward owner/tracker annotations fully intact, or the complete new document, never a truncated or empty file in place of either. The ordering is part of the requirement rather than an implementation detail: an atomic replace orders the directory entry alone, so flushing after it would leave exactly the window this closes, and a baseline's hand-authored annotations are not reconstructible from a rerun. On platforms where a directory handle can be flushed, the action SHALL also flush the directory entry that the create or the replace published, so a write it already reported as succeeded is not undone by a later crash. The in-place create path protects a reported success only: it publishes its directory entry before its first byte, so a crash mid-create can leave an empty file, which the next write action refuses to overwrite as unsupported (exit 2) with its remedy named.
+
+#### Scenario: An overwrite flushes the staged document before replacing the target
+
+- **WHEN** the write action overwrites an existing supported baseline
+- **THEN** it flushes the staged temp file to stable storage before the atomic replace, and flushes the containing directory after it
+
+#### Scenario: A newly created baseline is flushed before success is reported
+
+- **WHEN** the write action creates a baseline at a missing path
+- **THEN** it flushes the written file, and the containing directory, before reporting that it wrote the baseline
