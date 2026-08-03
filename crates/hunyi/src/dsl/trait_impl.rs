@@ -22,8 +22,26 @@ pub struct TraitImplBoundary {
 }
 
 impl TraitImplBoundary {
-    /// Stable semantic identity for this trait-implementation locality rule.
+    /// Stable semantic identity for this trait-implementation locality rule, keyed on the trait
+    /// **as declared**. This is the projection's view — what the adopter wrote.
+    ///
+    /// A reaction uses the crate-internal `rule_key_for_anchor` instead, keyed on the anchor the
+    /// declaration actually resolves to, so the same trait reached through a re-export spelling and
+    /// through its canonical one produce one identity rather than two. Both go through the one
+    /// constructor below, so the key's shape cannot drift between the two callers.
     pub fn rule_key(&self) -> RuleKey {
+        self.rule_key_for_anchor(&super::canonical_path(&self.trait_path))
+    }
+
+    /// [`Self::rule_key`] keyed on a caller-resolved trait anchor — the reaction's view.
+    ///
+    /// `allowed_locations` stays in the key, and that is a deliberate trade rather than an oversight:
+    /// it is what keeps two boundaries governing the SAME trait with different allowed sets from
+    /// producing one identity for one misplaced impl (which would let a baseline accepting the first
+    /// suppress the second's never-accepted violation). The cost is that editing the allowed set
+    /// changes this key, so a still-misplaced impl re-fires as new while the old entry reports stale —
+    /// loud churn, never masking, and the direction this project prefers when it must choose.
+    pub(crate) fn rule_key_for_anchor(&self, trait_anchor: &str) -> RuleKey {
         RuleKey::of(
             "tianheng.rule/hunyi/trait-impl-locality",
             [
@@ -31,7 +49,7 @@ impl TraitImplBoundary {
                     "allowed_locations",
                     super::canonical_path_set(&self.allowed_locations),
                 ),
-                ("trait", super::canonical_path(&self.trait_path)),
+                ("trait", trait_anchor.to_string()),
             ],
         )
     }

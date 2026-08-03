@@ -37,6 +37,38 @@ For each boundary, the system SHALL resolve the named governed trait to a real `
 - **WHEN** a boundary anchors to a trait path with no `trait` item reachable (directly or via local `pub use`) in the target crate's source
 - **THEN** the system emits a constitution error naming the unresolved anchor and exits 2, never exit 0 (no silent pass) and never exit 1
 
+The **resolved** anchor, not the declared spelling, SHALL be the violation's governed `target` and the
+trait role of its rule key. Matching already resolves both sides — the declared anchor through this
+crate's re-export closure, and each impl site's own trait path — so keeping the raw declaration in
+identity alone made a pure declaration refactor identity-changing: renaming a boundary from a facade
+spelling to the trait's defining path, with no code change and the same impls still misplaced, gave
+every affected violation a new `ViolationId`, so each accepted violation re-fired as new while its
+recorded baseline entry reported stale. Two equivalent spellings of one trait SHALL therefore produce
+one identity.
+
+Where the declared anchor's own re-export closure reaches **more than one distinct local trait
+definition** — two mutually-exclusive `#[cfg]` branches re-exporting different traits under one facade
+name — the system SHALL emit a constitution error naming the candidates, and SHALL NOT choose one:
+the ambiguity is in the declaration, and choosing would make the governed target arbitrary. The error
+SHALL say that the defining path can be declared instead of the facade.
+
+The rule key SHALL retain the declared allowed-location set. That is a deliberate trade, not an
+oversight: it is what keeps two boundaries governing the same trait with different allowed sets from
+producing one identity for one misplaced impl, which would let a baseline accepting the first suppress
+the second's never-accepted violation. Its cost — editing the allowed set re-fires still-misplaced
+impls as new and reports the previous entries stale — SHALL be stated rather than denied, and is the
+loud direction of the two.
+
+#### Scenario: Two equivalent trait spellings produce one violation identity
+
+- **WHEN** one boundary anchors at a facade `pub use` path and another anchors at the same trait's defining path, over the same crate with the same misplaced impl
+- **THEN** both produce the identical `ViolationId` — target and rule key both keyed on the resolved defining path — so a baseline recorded under either declaration matches the other
+
+#### Scenario: A trait facade reaching two definitions is a constitution error
+
+- **WHEN** a boundary anchors at a facade name that two mutually-exclusive `#[cfg]` branches re-export from different traits, both defined locally
+- **THEN** the system emits a constitution error naming both candidates and exits 2, rather than picking one as the governed target
+
 ### Requirement: Impl-site observation governs locality within the crate
 
 The system SHALL observe **every** `impl <Trait> for <Type>` block in the target crate's own source, descending file-based (`mod x;`) and inline (`mod x { … }`) modules from the crate root while tracking each impl block's module location. For each trait `impl` whose written trait path resolves to the anchored trait, the system SHALL react when the impl block's module location is **not** contained within any allowed-location prefix. The system governs only the target crate's own impl sites and SHALL make no claim about impls in other (downstream) crates — that is an explicit out-of-scope question (external trait sealing), never silently asserted clean.

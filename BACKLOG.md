@@ -130,6 +130,21 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   (above); `openspec/specs/semantic-signature-coupling/spec.md`'s ordinal prohibition for the
   constraint on the trigger.
 
+- ~~**Trait-impl-locality's violation target/rule-key reads the constitution's declared trait
+  spelling instead of the already-resolved canonical anchor.**~~ **CLOSED** in the 0.4.0 window, after
+  an independent review re-derived it. Both roles are now keyed on the resolved anchor, threaded out of
+  the function that already computed it rather than recomputed (a second resolution site could
+  disagree with the one that decided the matches). The multi-candidate question this entry named as the
+  reason it was design work is answered by refusing rather than picking: a declared anchor whose
+  re-export closure reaches more than one distinct local trait DEFINITION is a constitution error
+  naming the candidates, since the ambiguity is in the declaration and choosing would make the
+  governed target arbitrary. A declaration that already names the defining path — the ordinary case —
+  is unchanged, so the fix churns only the baselines it must. `allowed_locations` deliberately stays in
+  the rule key (it keeps two boundaries on one trait distinct) and the in-code comment that wrongly
+  claimed it was NOT identity-bearing is corrected: `ViolationId` compares `rule_key` in full.
+  `semantic-trait-impl-locality` gains all three rules and two scenarios. The original entry is kept
+  below for its reproduction record.
+
 - **Trait-impl-locality's violation target/rule-key reads the constitution's declared
   trait spelling instead of the already-resolved canonical anchor.** Class:
   DESIGN-BREAKING. Observed pressure: verified real during 0.3.1 sweep cleanup

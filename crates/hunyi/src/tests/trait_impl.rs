@@ -12,12 +12,28 @@ pub(super) fn locality_findings(
     tree.write_all(files);
     let allowed: Vec<String> = allowed.iter().map(|s| s.to_string()).collect();
     let result = trait_impl_findings(tree.src(), &tree.root(), trait_path, &allowed, "x");
-    // The pure-heart tests assert on findings only; drop the per-finding module/file here.
-    result.map(|v| {
-        v.into_iter()
+    // The pure-heart tests assert on findings only; drop the resolved anchor and the per-finding
+    // module/file here. `locality_anchor` below is for the tests that are about the anchor itself.
+    result.map(|reaction| {
+        reaction
+            .findings
+            .into_iter()
             .map(|(finding, _module, _file)| finding.to_string())
             .collect()
     })
+}
+
+/// The resolved trait anchor a declaration denotes — the value that becomes the violation's `target`
+/// and rule key, so a test can assert identity stability across two equivalent spellings without
+/// reconstructing a whole `Violation`.
+pub(super) fn locality_anchor(
+    name: &str,
+    files: &[(&str, &str)],
+    trait_path: &str,
+) -> Result<String, String> {
+    let tree = TempSrcTree::new(&format!("loc-anchor-{name}"));
+    tree.write_all(files);
+    trait_impl_findings(tree.src(), &tree.root(), trait_path, &[], "x").map(|r| r.anchor)
 }
 
 /// Two mutually-exclusive `#[cfg]`-gated `use ... as T;` aliases for an `impl T for Foo`'s trait
@@ -687,6 +703,100 @@ pub(super) fn two_impls_in_one_module_are_distinct_findings_by_self_type() {
             "crate::domain (impl crate::command::Command for crate::domain::B)"
         ]
     );
+}
+
+/// Declaring one trait through a facade `pub use` and through its defining path must produce ONE
+/// identity, because it is one governed thing.
+///
+/// Matching already resolved both sides — the anchor is expanded through the crate's own re-export
+/// closure before any impl is compared — but identity kept the raw declared string, so renaming a
+/// constitution declaration between two equivalent spellings (a pure refactor, no code change)
+/// silently invalidated every affected baseline entry: each accepted violation re-fired as new while
+/// its recorded entry reported stale. Both the violation `target` and the rule key now come from the
+/// resolved anchor, so the two spellings converge.
+#[test]
+pub(super) fn two_equivalent_trait_spellings_resolve_to_one_anchor_identity() {
+    let files: &[(&str, &str)] = &[
+        (
+            "lib.rs",
+            "pub mod command;\npub mod api;\npub mod domain;\n",
+        ),
+        ("command.rs", "pub trait Command {}\n"),
+        // The facade: `crate::api::Command` re-exports `crate::command::Command`.
+        ("api.rs", "pub use crate::command::Command;\n"),
+        (
+            "domain.rs",
+            "pub struct Foo;\nimpl crate::command::Command for Foo {}\n",
+        ),
+    ];
+    // Asserted on the real `ViolationId` the reaction publishes, through `check_trait_impl_boundary`
+    // — NOT on the resolved anchor alone. An earlier version of this test compared anchors and passed
+    // even with the identity wiring reverted to the declared spelling: the anchor was always computed
+    // correctly; what was broken was whether identity used it. A guard bound to the wrong surface
+    // reports the surrounding contract, not the change (AGENTS.md).
+    let (metadata, _tree) = fixture_metadata("spelling-identity", files);
+    let ids_for = |declared: &str| {
+        let boundary = TraitImplBoundary::in_crate("x")
+            .trait_("crate::command::Command")
+            .only_implemented_in("crate::command")
+            .because("locality");
+        // Re-declare with the spelling under test, keeping every other field identical.
+        let boundary = TraitImplBoundary {
+            trait_path: declared.to_string(),
+            ..boundary
+        };
+        let mut violations = Vec::new();
+        check_trait_impl_boundary(&metadata, &boundary, &mut violations).unwrap();
+        violations.iter().map(|v| v.id()).collect::<Vec<_>>()
+    };
+    let via_facade = ids_for("crate::api::Command");
+    let via_defining = ids_for("crate::command::Command");
+    assert_eq!(via_facade.len(), 1, "the fixture must really violate");
+    assert_eq!(
+        via_facade, via_defining,
+        "two equivalent spellings of one trait must publish one violation identity, or a pure \
+         declaration refactor invalidates every baseline entry for the same real fact"
+    );
+    assert_eq!(
+        locality_anchor("facade", files, "crate::api::Command").unwrap(),
+        "crate::command::Command",
+        "and the anchor itself is the defining path, not the facade as declared"
+    );
+}
+
+/// The declaration is what is ambiguous when its facade reaches two different traits, so the reaction
+/// is a constitution error naming both — not an arbitrary pick that makes identity a coin flip.
+#[test]
+pub(super) fn a_cfg_collided_trait_facade_is_a_constitution_error() {
+    let error = locality_anchor(
+        "collided-facade",
+        &[
+            (
+                "lib.rs",
+                "pub mod a;\npub mod b;\npub mod api;\npub mod domain;\n",
+            ),
+            ("a.rs", "pub trait Command {}\n"),
+            ("b.rs", "pub trait Command {}\n"),
+            (
+                "api.rs",
+                "#[cfg(unix)]\npub use crate::a::Command;\n#[cfg(not(unix))]\npub use crate::b::Command;\n",
+            ),
+            ("domain.rs", "pub struct Foo;\n"),
+        ],
+        "crate::api::Command",
+    )
+    .unwrap_err();
+    for expected in [
+        "must anchor to exactly one trait",
+        "crate::a::Command",
+        "crate::b::Command",
+        "Declare the defining path instead of the facade",
+    ] {
+        assert!(
+            error.contains(expected),
+            "the error must name the ambiguity and both candidates, missing `{expected}`: {error}"
+        );
+    }
 }
 
 /// A cfg-collided self-type alias cannot be named injectively, so observation refuses instead of
