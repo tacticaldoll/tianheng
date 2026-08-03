@@ -102,6 +102,60 @@ fn baseline_rewrite_refuses_wrong_typed_metadata_and_preserves_the_file() {
 }
 
 #[test]
+fn the_equals_form_still_carries_a_flag_shaped_value() {
+    // `cli-check-runner` requires the `--flag=<value>` form to stay accepted for a value that
+    // legitimately begins with `--`: it carries its value in the same token, so it can consume no
+    // following flag, and rejecting a flag-shaped value in the space form must not also reject it.
+    //
+    // Both invocations exit 2, so the exit code cannot tell them apart — which is why this is an
+    // end-to-end test rather than a `dispatch` unit test. stderr is what distinguishes them: the
+    // space form never reaches the baseline reader and names the flag it found, while the equals
+    // form reaches it with `--weird` as the path and reports it unreadable.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+
+    let space_form = command_for(&manifest)
+        .args(["--baseline", "--weird"])
+        .output()
+        .expect("run tianheng CLI");
+    assert_eq!(space_form.status.code(), Some(2), "{space_form:?}");
+    let space_stderr = String::from_utf8(space_form.stderr).expect("UTF-8 stderr");
+    for guidance in [
+        "--baseline requires a value",
+        "'--weird'",
+        "--baseline=<value>",
+    ] {
+        assert!(
+            space_stderr.contains(guidance),
+            "the space form must fail as a usage error naming the flag it found, missing \
+             `{guidance}`: {space_stderr}"
+        );
+    }
+    assert!(
+        !space_stderr.contains("cannot read baseline"),
+        "the space form must be rejected during parsing, before any baseline is read: \
+         {space_stderr}"
+    );
+
+    let equals_form = command_for(&manifest)
+        .arg("--baseline=--weird")
+        .output()
+        .expect("run tianheng CLI");
+    assert_eq!(equals_form.status.code(), Some(2), "{equals_form:?}");
+    let equals_stderr = String::from_utf8(equals_form.stderr).expect("UTF-8 stderr");
+    assert!(
+        equals_stderr.contains("cannot read baseline --weird"),
+        "the equals form must deliver `--weird` to the baseline reader as a path, not be rejected \
+         as a usage error: {equals_stderr}"
+    );
+    assert!(
+        !equals_stderr.contains("requires a value"),
+        "the equals form must not be treated as a missing value: {equals_stderr}"
+    );
+}
+
+#[test]
 fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
     // The overwrite path (an already-existing, supported baseline) writes durably: the merged
     // document lands at a sibling temp path first, then an atomic rename swaps it into place.
