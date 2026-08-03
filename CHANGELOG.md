@@ -184,8 +184,14 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   the file flush; the directory flush is unix-only besides (`std` exposes no portable way to open a
   directory handle on Windows). `create_baseline_file`'s own doc no longer claims a crash there
   "simply leaves no file": it publishes its directory entry before its first byte, so a crash
-  mid-create can leave an empty file that the next run refuses to overwrite (exit 2, remedy named) —
-  stated instead of overclaimed. `violation-baseline` gains the requirement and its three scenarios,
+  mid-create can leave a file with no bytes in it, or with some — and the two are not the same state.
+  The zero-length exception recorded above in this same window is what separates them: an **empty**
+  residue is recorded afresh on the next run (exit 0, announced), since zero bytes hold none of the
+  annotations the refusal protects, while a **partial** or whitespace-only residue stays refused
+  (exit 2, remedy named), because it may have held annotations before being damaged. This entry's
+  first cut said the next run refuses the empty file too — true when it was written, superseded within
+  the window by that exception, and corrected here so the two entries read as one behavior rather than
+  two. `violation-baseline` gains the requirement and its three scenarios,
   and the tolerance is pinned by a test that first proves its own
   precondition — a directory that is genuinely unreadable to the running process — so it reports a
   vacuous run instead of passing through one.

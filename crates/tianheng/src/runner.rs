@@ -788,9 +788,14 @@ fn sync_parent_dir(path: &Path) {
 /// writes in place rather than through a temp file, so it protects a *reported success* and nothing
 /// more: there is no previous content to preserve, and a crash **mid-write** can leave a
 /// zero-length or partial file — `create_new` publishes the entry before any byte is written, and
-/// no ordering of fsyncs changes that. The next run then refuses to overwrite it as an unsupported
-/// baseline (exit 2, naming the remedy: move or delete it and rerun), which is loud and safe but
-/// does need that one manual step. Making this path atomic too would mean temp-then-rename here as
+/// no ordering of fsyncs changes that. What the next run does with that residue depends on which of
+/// the two it is, and the difference is [`write_baseline`]'s zero-length exception: a **zero-length**
+/// file is recorded afresh (exit 0, announced on stderr) — zero bytes cannot hold the owner/tracker
+/// annotations the refusal exists to protect, and this path is the most likely way one appears — while
+/// a **partial** file is still refused as an unsupported baseline (exit 2, naming the remedy: move or
+/// delete it and rerun), because it may have held annotations before being damaged and no rerun can
+/// tell. So the common residue needs no manual step and the ambiguous one stays loud. Making this path
+/// atomic too would mean temp-then-rename here as
 /// well, at the cost of the `AlreadyExists`/dangling-symlink distinction above, which depends on
 /// `create_new` landing on the real path — a deliberate trade, not an oversight.
 fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteError> {
