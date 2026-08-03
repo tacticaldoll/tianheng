@@ -33,7 +33,7 @@ body:
     id: constitution
     attributes:
       label: The declared boundary
-      description: The `SemanticBoundary` (or sibling exposure rule) you declared, with its `.because(...)`.
+      description: The `SignatureBoundary` (or sibling exposure rule) you declared, with its `.because(...)`.
       render: rust
     validations:
       required: true
