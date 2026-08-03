@@ -84,4 +84,3 @@ The repository documentation SHALL define and teach the **Three-Layer Agent Law*
 
 - **WHEN** an adopter reads [`COOKBOOK.md`](file:///home/qaz/work/tianheng/COOKBOOK.md)
 - **THEN** it contains a dedicated recipe teaching how to assemble the preamble, generate the projection body, gate staleness with `GovernanceTest`, and update the law with `BLESS=1`
-
