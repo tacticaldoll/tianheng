@@ -85,8 +85,6 @@ pub(crate) use async_exposure::{async_exposure_module_findings, async_exposure_s
 #[cfg(test)]
 pub(crate) use dyn_trait::{dyn_module_findings, dyn_operand_module_findings};
 #[cfg(test)]
-pub(crate) use exposure::module_findings;
-#[cfg(test)]
 pub(crate) use forbidden_marker::forbidden_marker_findings;
 #[cfg(test)]
 pub(crate) use impl_trait::{
