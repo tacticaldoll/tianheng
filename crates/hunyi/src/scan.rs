@@ -168,6 +168,7 @@ pub(crate) fn scan_crate(
         crate_package,
         externs,
         &ancestors,
+        0,
         &mut scan,
     )?;
     Ok(scan)
@@ -182,6 +183,38 @@ fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String 
          module cycle (a symlink loop or a circular `#[path]`)",
         file.display()
     )
+}
+
+/// A DoS backstop — native call-stack recursion depth, which grows by one on every recursive
+/// descent into a child module (inline `mod { … }` nesting AND file-backed `mod x;` descent alike,
+/// since both cost one stack frame per level; unlike the symlink/`#[path]`-cycle guard above,
+/// `ancestors` alone cannot bound this, because an inline child never opens a new file and so never
+/// grows `ancestors`). Past the bound, refuse to recurse further rather than risking an
+/// uncontrolled native stack overflow — worse than the contract's own exit-2 "cannot judge", which
+/// at least reports why; never a silent pass either way.
+///
+/// Chosen empirically, not guessed: `walk_module`'s own per-frame footprint (several owned
+/// `HashSet`/`String`/`PathBuf` clones per level) overflowed a 2MB test-thread's stack somewhere
+/// between 80 and 90 levels of genuine recursion in a from-scratch measurement (see
+/// `a_deeply_nested_acyclic_module_tree_is_a_scan_error_not_a_stack_overflow`'s own history) — an
+/// order of magnitude below what a naive guess (512, matching `use_scan.rs`'s much cheaper
+/// string-based `MAX_USE_NEST_DEPTH`) would have allowed. 32 keeps a wide safety margin below that
+/// measured line (real stack-size variance across platforms/threads considered), while still
+/// comfortably exceeding any real crate's module nesting depth.
+const MAX_MODULE_DEPTH: usize = 32;
+
+/// Shared by all three walkers ([`walk_module`], [`collect_subtree`], [`walk_unsafe`]) so the
+/// bound and its wording cannot silently diverge between them (the twin-drift bug class
+/// `resolve_child_modules`'s own doc comment names for its guards).
+fn check_module_depth(depth: usize, module: &str, crate_package: &str) -> Result<(), String> {
+    if depth >= MAX_MODULE_DEPTH {
+        return Err(format!(
+            "cannot judge module '{module}' in package '{crate_package}': module nesting exceeds \
+             the depth bound ({MAX_MODULE_DEPTH}) this scanner supports without risking a native \
+             stack overflow"
+        ));
+    }
+    Ok(())
 }
 
 /// The two views of a module's items each of the three walkers needs — the plain list its own
@@ -488,8 +521,10 @@ fn walk_module(
     crate_package: &str,
     externs: &HashSet<String>,
     ancestors: &HashSet<PathBuf>,
+    depth: usize,
     scan: &mut CrateScan,
 ) -> Result<(), String> {
+    check_module_depth(depth, &module, crate_package)?;
     // ONE flattening pass, two views. `flat` retains arm membership for the child resolution below;
     // `items` is the plain list this module's own observation reads — a re-export, trait definition,
     // trait impl, or type definition written inside an arm is a real declaration of this module, and
@@ -680,6 +715,7 @@ fn walk_module(
                     crate_package,
                     externs,
                     &child_ancestors,
+                    depth + 1,
                     scan,
                 )?;
             }
@@ -692,6 +728,7 @@ fn walk_module(
                 crate_package,
                 externs,
                 ancestors,
+                depth + 1,
                 scan,
             )?,
         }
@@ -751,6 +788,7 @@ pub(crate) fn walk_subtree_modules(
             file,
             crate_package,
             &ancestors,
+            0,
             &mut out,
         )?;
     }
@@ -773,8 +811,10 @@ fn collect_subtree(
     current_file: PathBuf,
     crate_package: &str,
     ancestors: &HashSet<PathBuf>,
+    depth: usize,
     out: &mut Vec<(String, Vec<syn::Item>, PathBuf)>,
 ) -> Result<(), String> {
+    check_module_depth(depth, &module, crate_package)?;
     // Flattened before the items are recorded in `out`: a subtree reaction (`including_submodules`)
     // observes each module's item list directly, so an arm item missing here is a false negative in
     // the subtree scope even though the same item reacts at the anchor itself. `flat` keeps arm
@@ -803,6 +843,7 @@ fn collect_subtree(
                     child_file,
                     crate_package,
                     &child_ancestors,
+                    depth + 1,
                     out,
                 )?;
             }
@@ -814,6 +855,7 @@ fn collect_subtree(
                 child_file,
                 crate_package,
                 ancestors,
+                depth + 1,
                 out,
             )?,
         }
@@ -1147,6 +1189,7 @@ pub(crate) fn scan_unsafe_sites(
         root_file.to_path_buf(),
         crate_package,
         &ancestors,
+        0,
         &mut sites,
     )?;
     Ok(sites)
@@ -1161,8 +1204,10 @@ fn walk_unsafe(
     current_file: PathBuf,
     crate_package: &str,
     ancestors: &HashSet<PathBuf>,
+    depth: usize,
     sites: &mut Vec<UnsafeSite>,
 ) -> Result<(), String> {
+    check_module_depth(depth, &module, crate_package)?;
     // Feed the collector this module's items minus top-level `mod`s (walk-owned); body-nested
     // `mod`s stay in and are caught by the collector's default `visit_item_mod` recursion. Arms
     // flattened first, so an `unsafe` site written inside a `cfg_if!` arm is confined like any
@@ -1212,6 +1257,7 @@ fn walk_unsafe(
                     child_file,
                     crate_package,
                     &child_ancestors,
+                    depth + 1,
                     sites,
                 )?;
             }
@@ -1223,6 +1269,7 @@ fn walk_unsafe(
                 child_file,
                 crate_package,
                 ancestors,
+                depth + 1,
                 sites,
             )?,
         }
