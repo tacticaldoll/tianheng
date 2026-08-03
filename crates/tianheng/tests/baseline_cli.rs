@@ -66,8 +66,9 @@ fn write_baseline_colliding_with(
     mut plant: impl FnMut(&str),
 ) -> (Output, String) {
     for attempt in 1..=TEMP_PLANT_ATTEMPTS {
-        // The overwrite path needs an existing baseline; a previous attempt whose plant landed late
-        // will have rewritten it, which is equally fine.
+        // The overwrite path needs an existing baseline. A previous attempt removed whatever it left
+        // behind (see the reset below), so this reseeds a known-good one each time rather than
+        // inheriting a document some earlier attempt may have corrupted.
         if !baseline.exists() {
             let seed = run_with(manifest, "--write-baseline", baseline);
             assert_eq!(seed.status.code(), Some(0), "{seed:?}");
@@ -92,9 +93,17 @@ fn write_baseline_colliding_with(
         if output.status.code() == Some(2) && stderr.contains(&predicted_tmp) {
             return (output, predicted_tmp);
         }
-        // The plant landed too late (or not at all): remove it so the next attempt starts clean —
+        // The plant landed too late (or not at all). Reset BOTH the plant and the target before
+        // retrying, because a plant that lands mid-window corrupts the baseline: the write stages its
+        // document at the temp path and only then renames it into place, so a `fs::write` arriving
+        // between those two steps replaces the staged bytes and the run renames the plant's own
+        // content onto the target. The next attempt then meets an unparseable baseline and is refused
+        // as unsupported — exit 2, but with a message that names the baseline rather than the temp
+        // path, so the collision check below never matches and no later attempt can recover. Observed
+        // exactly that way in CI, where this loop burned all its attempts against a poisoned target.
         // `remove_file` unlinks a symlink itself, never its target.
         let _ = std::fs::remove_file(&predicted_tmp);
+        let _ = std::fs::remove_file(baseline);
         assert!(
             attempt < TEMP_PLANT_ATTEMPTS,
             "the temp-path plant never landed before the child opened its own temp file in \
