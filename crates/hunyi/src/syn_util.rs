@@ -332,6 +332,22 @@ pub(crate) fn provably_mutually_exclusive(a: &FlatItem, b: &FlatItem) -> bool {
     }
 }
 
+/// The child `mod` names that genuinely shadow `use_flat` (a specific `pub use` item): every
+/// entry of `child_mods` EXCEPT one [`provably_mutually_exclusive`] with `use_flat` — in which
+/// case the two never compile together, so that `mod` does not shadow this `pub use`'s own head.
+/// Shared by [`reexport_externs_for`] and [`reexport_renames_for`], which apply the identical
+/// exclusion to two different maps (the extern-name set and the rename-alias map).
+fn shadowed_child_mod_names<'a>(
+    child_mods: &'a [(String, FlatItem)],
+    use_flat: &FlatItem,
+) -> HashSet<&'a str> {
+    child_mods
+        .iter()
+        .filter(|(_, mod_flat)| !provably_mutually_exclusive(mod_flat, use_flat))
+        .map(|(name, _)| name.as_str())
+        .collect()
+}
+
 /// The extern-crate name set a specific `pub use` item's own bare head should resolve against:
 /// `externs` with every same-named child `mod` declaration removed, UNLESS that particular `mod`
 /// is [`provably_mutually_exclusive`] with `use_flat` — in which case the two never compile
@@ -344,11 +360,7 @@ pub(crate) fn reexport_externs_for(
     child_mods: &[(String, FlatItem)],
     use_flat: &FlatItem,
 ) -> HashSet<String> {
-    let shadowed: HashSet<&str> = child_mods
-        .iter()
-        .filter(|(_, mod_flat)| !provably_mutually_exclusive(mod_flat, use_flat))
-        .map(|(name, _)| name.as_str())
-        .collect();
+    let shadowed = shadowed_child_mod_names(child_mods, use_flat);
     externs
         .iter()
         .filter(|e| !shadowed.contains(e.as_str()))
@@ -370,11 +382,7 @@ pub(crate) fn reexport_renames_for(
     child_mods: &[(String, FlatItem)],
     use_flat: &FlatItem,
 ) -> HashMap<String, String> {
-    let shadowed: HashSet<&str> = child_mods
-        .iter()
-        .filter(|(_, mod_flat)| !provably_mutually_exclusive(mod_flat, use_flat))
-        .map(|(name, _)| name.as_str())
-        .collect();
+    let shadowed = shadowed_child_mod_names(child_mods, use_flat);
     renames
         .iter()
         .filter(|(alias, _)| !shadowed.contains(alias.as_str()))

@@ -81,11 +81,6 @@ impl VisibilityBoundary {
         }
     }
 
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
     /// The governed module path (e.g. `crate::internal`).
     pub fn module(&self) -> &str {
         &self.module
@@ -96,29 +91,13 @@ impl VisibilityBoundary {
         &self.reason
     }
 
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-
     /// The boundary's maximum-visibility ceiling.
     pub fn ceiling(&self) -> VisibilityCeiling {
         self.ceiling
     }
 }
+
+crate::dsl::boundary_common!(VisibilityBoundary, VisibilityBoundaryDraft);
 
 /// A visibility boundary awaiting its module anchor.
 #[doc(hidden)]
@@ -172,13 +151,6 @@ pub struct VisibilityBoundaryDraft {
 }
 
 impl VisibilityBoundaryDraft {
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
     /// Finish the boundary with its human-readable reason (the repair hint).
     pub fn because(self, reason: &str) -> VisibilityBoundary {
         VisibilityBoundary {

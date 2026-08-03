@@ -25,7 +25,15 @@ use crate::resolve::{
 /// file alone: two mutually-exclusive **inline** `#[cfg]` siblings share one identical enclosing
 /// file, so a file-keyed map would re-merge them — the identical conflation one hop past item
 /// observation, found on a round-8 adversarial review; see `PROJECT.md`'s Decisions.
-fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<usize, UseMap> {
+/// Group `items_with_files` by their branch index, dropping the file. Keyed on the branch index
+/// rather than file alone: two mutually-exclusive inline `#[cfg]` siblings share one identical
+/// enclosing file, so a file-keyed map would re-merge them (round-8 adversarial review; see
+/// `PROJECT.md`'s Decisions). Shared by [`uses_by_branch`] and [`operand_module_findings`], which
+/// each derive a different per-branch map (a `UseMap`, a `FileExternScope`) from the identical
+/// grouping.
+fn group_items_by_branch(
+    items_with_files: &[(syn::Item, PathBuf, usize)],
+) -> HashMap<usize, Vec<syn::Item>> {
     let mut items_by_branch: HashMap<usize, Vec<syn::Item>> = HashMap::new();
     for (item, _file, branch) in items_with_files {
         items_by_branch
@@ -34,6 +42,10 @@ fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<u
             .push(item.clone());
     }
     items_by_branch
+}
+
+fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<usize, UseMap> {
+    group_items_by_branch(items_with_files)
         .iter()
         .map(|(branch, branch_items)| (*branch, collect_uses(branch_items)))
         .collect()
@@ -128,16 +140,8 @@ pub(crate) fn operand_module_findings(
     // Per-branch, not crate-wide and not per-file: `externs_type`/`renames_bare` derive from a
     // specific branch's own child-module names, so a #[cfg]-split module's several branches must
     // never share one (see `file_extern_scope`'s doc — the identical conflation class round 6 fixed
-    // for the use-map). Keyed on the branch index rather than file alone: two mutually-exclusive
-    // inline `#[cfg]` siblings share one identical enclosing file, so a file-keyed map would
-    // re-merge them (round-8 adversarial review; see `PROJECT.md`'s Decisions).
-    let mut items_by_branch: HashMap<usize, Vec<syn::Item>> = HashMap::new();
-    for (item, _file, branch) in &items_with_files {
-        items_by_branch
-            .entry(*branch)
-            .or_default()
-            .push(item.clone());
-    }
+    // for the use-map).
+    let items_by_branch = group_items_by_branch(&items_with_files);
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
     let file_scopes: HashMap<usize, crate::crate_scope::FileExternScope> = items_by_branch
         .iter()

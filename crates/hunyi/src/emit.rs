@@ -16,6 +16,50 @@ pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) crate_package: &'a str,
 }
 
+/// The common shape both violation-pushing entry points below build once, then feed to
+/// [`push_violation`] per finding — the single place that assembles a `Violation`. `target` and
+/// `crate_package` map identity (`ViolationId::new` / `finding.into_finding`); `rule`, `reason`,
+/// `severity`, `anchor`, and `polarity` are metadata attached to every finding under this context.
+struct ViolationContext<'a> {
+    target: &'a str,
+    rule: &'a str,
+    rule_key: RuleKey,
+    reason: &'a str,
+    severity: Severity,
+    anchor: Option<String>,
+    polarity: Polarity,
+    crate_package: &'a str,
+}
+
+/// Convert one finding into a `Violation` and push it — the single assembly point both
+/// [`push_single_module_violations`] and [`push_multi_module_violations`] share.
+fn push_violation(
+    violations: &mut Vec<Violation>,
+    context: &ViolationContext<'_>,
+    finding: SemanticFact,
+    file: PathBuf,
+) {
+    let finding = finding.into_finding(context.crate_package);
+    let id = ViolationId::new(
+        context.target,
+        context.rule_key.clone(),
+        finding.fact().clone(),
+    );
+    violations.push(
+        Violation::new(
+            BoundaryKind::Semantic,
+            id,
+            context.rule,
+            finding.text(),
+            context.reason.to_string(),
+            context.severity,
+        )
+        .with_file(Some(file.display().to_string()))
+        .with_anchor(context.anchor.clone())
+        .with_polarity(context.polarity),
+    );
+}
+
 /// Add deny-style violations for a boundary whose findings all sit on one governed module seam.
 /// Each finding carries the real file its own item's branch was resolved from (see
 /// [`crate::module_resolve::resolve_module_items_with_files`]) — never a single, first-branch file
@@ -28,27 +72,18 @@ pub(crate) fn push_single_module_violations(
     context: SingleModuleViolationContext<'_>,
     findings: Vec<(SemanticFact, PathBuf)>,
 ) {
-    let anchor = context.anchor.map(str::to_string);
+    let shared = ViolationContext {
+        target: context.module,
+        rule: context.rule,
+        rule_key: context.rule_key,
+        reason: context.reason,
+        severity: context.severity,
+        anchor: context.anchor.map(str::to_string),
+        polarity: Polarity::DenyBreach,
+        crate_package: context.crate_package,
+    };
     for (finding, file) in findings {
-        let finding = finding.into_finding(context.crate_package);
-        let id = ViolationId::new(
-            context.module,
-            context.rule_key.clone(),
-            finding.fact().clone(),
-        );
-        violations.push(
-            Violation::new(
-                BoundaryKind::Semantic,
-                id,
-                context.rule,
-                finding.text(),
-                context.reason.to_string(),
-                context.severity,
-            )
-            .with_file(Some(file.display().to_string()))
-            .with_anchor(anchor.clone())
-            .with_polarity(Polarity::DenyBreach),
-        );
+        push_violation(violations, &shared, finding, file);
     }
 }
 
@@ -88,26 +123,17 @@ pub(crate) fn push_multi_module_violations(
     context: MultiModuleViolationContext<'_>,
     findings: Vec<(SemanticFact, String, PathBuf)>,
 ) {
-    let anchor = context.anchor.map(str::to_string);
+    let shared = ViolationContext {
+        target: context.target,
+        rule: context.rule,
+        rule_key: context.rule_key,
+        reason: context.reason,
+        severity: context.severity,
+        anchor: context.anchor.map(str::to_string),
+        polarity: context.polarity,
+        crate_package: context.crate_package,
+    };
     for (finding, _module, file) in findings {
-        let finding = finding.into_finding(context.crate_package);
-        let id = ViolationId::new(
-            context.target,
-            context.rule_key.clone(),
-            finding.fact().clone(),
-        );
-        violations.push(
-            Violation::new(
-                BoundaryKind::Semantic,
-                id,
-                context.rule,
-                finding.text(),
-                context.reason.to_string(),
-                context.severity,
-            )
-            .with_file(Some(file.display().to_string()))
-            .with_anchor(anchor.clone())
-            .with_polarity(context.polarity),
-        );
+        push_violation(violations, &shared, finding, file);
     }
 }

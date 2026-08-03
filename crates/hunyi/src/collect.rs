@@ -250,6 +250,37 @@ fn dyns_in_bounds(
 /// Collect the type paths exposed by one item's public surface. Only `pub` items
 /// contribute; `pub(crate)`/`pub(in …)`/private are internal, not exposed. Trait `impl`
 /// blocks are skipped (out of scope — their shape is the trait's, not the impl site's).
+/// Collect a struct-like member list's (a `struct`'s or `union`'s named fields, or one enum
+/// variant's fields) governed-field exposures, tagging each with its per-field member seam — the
+/// field-iteration shape shared by the struct/union/enum-variant arms of both
+/// [`collect_item_exposures`] and [`collect_item_dyn_exposures`]. `is_governed` decides which
+/// fields react: struct/union fields carry their own visibility, so callers pass
+/// `is_public(&field.vis)`; an enum variant's fields are as public as the enum itself regardless
+/// of `field.vis` (always `Inherited` there — never independently `pub`), so that caller passes
+/// an always-true predicate instead — folding `is_public` into every call site here would silently
+/// drop every enum-variant field exposure, a real false negative. `extract` turns one field's type
+/// into its raw, seam-tagged exposures; the two collectors differ only in what it does: path
+/// exposures scoped against the owner's generic params (`paths_in_type_scoped` + `tag_paths`) for
+/// the former, dyn exposures via `dyns_in_type` + `stamp_seam` for the latter — unscoped, since a
+/// `dyn` node is a shape, not a resolvable path, so it carries nothing for a generic parameter to
+/// shadow.
+fn collect_named_field_exposures<'f, E>(
+    fields: impl Iterator<Item = &'f syn::Field>,
+    kind: MemberKind,
+    module: &str,
+    owner: &str,
+    is_governed: impl Fn(&syn::Field) -> bool,
+    mut extract: impl FnMut(&syn::Type, &PublicSeam) -> Vec<E>,
+    out: &mut Vec<E>,
+) {
+    for (index, field) in fields.enumerate() {
+        if is_governed(field) {
+            let seam = field_seam(kind, module, owner, &member_label(index, field));
+            out.extend(extract(&field.ty, &seam));
+        }
+    }
+}
+
 pub(crate) fn collect_item_exposures(
     item: &syn::Item,
     module: &str,
@@ -269,17 +300,15 @@ pub(crate) fn collect_item_exposures(
                 paths_in_generics_scoped(&item.generics, &params),
                 &item_seam(ItemKind::Struct, module, &item.ident),
             ));
-            for (index, field) in item.fields.iter().enumerate() {
-                if is_public(&field.vis) {
-                    let seam = field_seam(
-                        MemberKind::Field,
-                        module,
-                        &name,
-                        &member_label(index, field),
-                    );
-                    out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
-                }
-            }
+            collect_named_field_exposures(
+                item.fields.iter(),
+                MemberKind::Field,
+                module,
+                &name,
+                |field| is_public(&field.vis),
+                |ty, seam| tag_paths(paths_in_type_scoped(ty, &params), seam),
+                out,
+            );
         }
         syn::Item::Enum(item) if is_public(&item.vis) => {
             let name = strip_raw(&item.ident.to_string());
@@ -294,15 +323,15 @@ pub(crate) fn collect_item_exposures(
             // — never collapsing to one `(target, rule, finding)` and masking a new leak.
             for variant in &item.variants {
                 let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
-                for (index, field) in variant.fields.iter().enumerate() {
-                    let seam = field_seam(
-                        MemberKind::Variant,
-                        module,
-                        &owner,
-                        &member_label(index, field),
-                    );
-                    out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
-                }
+                collect_named_field_exposures(
+                    variant.fields.iter(),
+                    MemberKind::Variant,
+                    module,
+                    &owner,
+                    |_| true,
+                    |ty, seam| tag_paths(paths_in_type_scoped(ty, &params), seam),
+                    out,
+                );
             }
         }
         syn::Item::Union(item) if is_public(&item.vis) => {
@@ -312,17 +341,15 @@ pub(crate) fn collect_item_exposures(
                 paths_in_generics_scoped(&item.generics, &params),
                 &item_seam(ItemKind::Union, module, &item.ident),
             ));
-            for (index, field) in item.fields.named.iter().enumerate() {
-                if is_public(&field.vis) {
-                    let seam = field_seam(
-                        MemberKind::Field,
-                        module,
-                        &name,
-                        &member_label(index, field),
-                    );
-                    out.extend(tag_paths(paths_in_type_scoped(&field.ty, &params), &seam));
-                }
-            }
+            collect_named_field_exposures(
+                item.fields.named.iter(),
+                MemberKind::Field,
+                module,
+                &name,
+                |field| is_public(&field.vis),
+                |ty, seam| tag_paths(paths_in_type_scoped(ty, &params), seam),
+                out,
+            );
         }
         syn::Item::Type(item) if is_public(&item.vis) => {
             let seam = item_seam(ItemKind::Type, module, &item.ident);
@@ -843,17 +870,15 @@ pub(crate) fn collect_item_dyn_exposures(
                 dyns_in_generics(&item.generics),
                 &item_seam(ItemKind::Struct, module, &item.ident),
             ));
-            for (index, field) in item.fields.iter().enumerate() {
-                if is_public(&field.vis) {
-                    let seam = field_seam(
-                        MemberKind::Field,
-                        module,
-                        &name,
-                        &member_label(index, field),
-                    );
-                    out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
-                }
-            }
+            collect_named_field_exposures(
+                item.fields.iter(),
+                MemberKind::Field,
+                module,
+                &name,
+                |field| is_public(&field.vis),
+                |ty, seam| stamp_seam(dyns_in_type(ty), seam),
+                out,
+            );
         }
         syn::Item::Enum(item) if is_public(&item.vis) => {
             let name = strip_raw(&item.ident.to_string());
@@ -865,15 +890,15 @@ pub(crate) fn collect_item_dyn_exposures(
             // for the same injectivity guarantee as the type-exposure collector above.
             for variant in &item.variants {
                 let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
-                for (index, field) in variant.fields.iter().enumerate() {
-                    let seam = field_seam(
-                        MemberKind::Variant,
-                        module,
-                        &owner,
-                        &member_label(index, field),
-                    );
-                    out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
-                }
+                collect_named_field_exposures(
+                    variant.fields.iter(),
+                    MemberKind::Variant,
+                    module,
+                    &owner,
+                    |_| true,
+                    |ty, seam| stamp_seam(dyns_in_type(ty), seam),
+                    out,
+                );
             }
         }
         syn::Item::Union(item) if is_public(&item.vis) => {
@@ -882,17 +907,15 @@ pub(crate) fn collect_item_dyn_exposures(
                 dyns_in_generics(&item.generics),
                 &item_seam(ItemKind::Union, module, &item.ident),
             ));
-            for (index, field) in item.fields.named.iter().enumerate() {
-                if is_public(&field.vis) {
-                    let seam = field_seam(
-                        MemberKind::Field,
-                        module,
-                        &name,
-                        &member_label(index, field),
-                    );
-                    out.extend(stamp_seam(dyns_in_type(&field.ty), &seam));
-                }
-            }
+            collect_named_field_exposures(
+                item.fields.named.iter(),
+                MemberKind::Field,
+                module,
+                &name,
+                |field| is_public(&field.vis),
+                |ty, seam| stamp_seam(dyns_in_type(ty), seam),
+                out,
+            );
         }
         syn::Item::Type(item) if is_public(&item.vis) => {
             let seam = item_seam(ItemKind::Type, module, &item.ident);
