@@ -139,6 +139,23 @@ pub fn audit_probe_coverage_with_markers(
     }
 }
 
+/// Push `violation()` into `violations` the first time `key` is inserted into `seen` — the
+/// react-once-per-key guard shared by [`unprobed_seam_violations`] and
+/// [`undeclared_probe_violations`]. [`duplicate_seam_violations`] is deliberately NOT built on
+/// this: duplicate-seam detection needs TWO sets with different roles (a first-seen tracker
+/// gating the reaction, a reported-once tracker deduping it) — a genuinely different shape this
+/// single-set guard would flatten incorrectly if forced onto it.
+fn react_once<T: Eq + std::hash::Hash>(
+    seen: &mut HashSet<T>,
+    key: T,
+    violations: &mut Vec<Violation>,
+    violation: impl FnOnce() -> Violation,
+) {
+    if seen.insert(key) {
+        violations.push(violation());
+    }
+}
+
 /// Duplicate declared seam: the prod `install` fails loud on it (a duplicate would silently
 /// shadow the earlier boundary); catch it at CI too — one enforce violation per duplicated
 /// seam — so the misconfiguration surfaces before it reaches a running binary.
@@ -178,8 +195,8 @@ fn unprobed_seam_violations(
     let mut seen = HashSet::new();
     for boundary in declared {
         let seam = boundary.seam();
-        if !probed_set.contains(seam) && seen.insert(seam) {
-            violations.push(
+        if !probed_set.contains(seam) {
+            react_once(&mut seen, seam, &mut violations, || {
                 audit_violation(
                     seam,
                     "every declared runtime seam must be probed",
@@ -190,8 +207,8 @@ fn unprobed_seam_violations(
                     "a RuntimeBoundary with no probe is never enforced at runtime".to_string(),
                     boundary.severity(),
                 )
-                .with_anchor(boundary.anchor().map(String::from)),
-            );
+                .with_anchor(boundary.anchor().map(String::from))
+            });
         }
     }
     violations
@@ -204,15 +221,19 @@ fn undeclared_probe_violations(probes: &[Probe], declared_set: &HashSet<&str>) -
     let mut seen_probe = HashSet::new();
     for probe in probes {
         if let Probe::Literal(seam) = probe {
-            if !declared_set.contains(seam.as_str()) && seen_probe.insert(seam.as_str()) {
-                violations.push(audit_violation(
-                    seam,
-                    "every probe must reference a declared seam",
-                    AuditRule::ProbeDeclaredSeam.key(),
-                    RuntimeFact::UndeclaredProbe { seam: seam.clone() },
-                    format!("an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"),
-                    Severity::Enforce,
-                ));
+            if !declared_set.contains(seam.as_str()) {
+                react_once(&mut seen_probe, seam.as_str(), &mut violations, || {
+                    audit_violation(
+                        seam,
+                        "every probe must reference a declared seam",
+                        AuditRule::ProbeDeclaredSeam.key(),
+                        RuntimeFact::UndeclaredProbe { seam: seam.clone() },
+                        format!(
+                            "an undeclared seam panics at runtime — {UNDECLARED_SEAM_REPAIR_HINT}"
+                        ),
+                        Severity::Enforce,
+                    )
+                });
             }
         }
     }
