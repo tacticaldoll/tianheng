@@ -172,6 +172,14 @@ pub(crate) enum PublicSeam {
         /// type in two different modules, and two such blocks can carry the same forbidden bound
         /// in their own generics. Without the module the two collapse to one fact, so a baseline
         /// accepting the first would suppress the second's never-accepted violation.
+        ///
+        /// **Stated residual bound**, since this seam is the one with no item name to fall back on:
+        /// two impl blocks for the same owner in the SAME module still resolve to one seam. Module
+        /// plus owner distinguishes where an impl is written and what it is for, never which block
+        /// it is. Closing that needs a per-block structural key, and the shape of one is a design
+        /// decision rather than an omission: `semantic-signature-coupling` forbids identity resting
+        /// on scan order or item ordinal, so the obvious block index is unavailable. Tracked as a
+        /// DESIGN-BREAKING entry in `BACKLOG.md`'s live decision index, not left implicit here.
         module: String,
         owner: String,
     },
