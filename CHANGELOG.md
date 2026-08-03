@@ -109,13 +109,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   instead of a bare truncating write. A crash, interrupt, or full disk mid-write previously left the
   baseline truncated — destroying exactly the owner/tracker annotations the metadata-preserving
   merge exists to carry forward, contradicting the function's own stated intent. The swap targets
-  the file's symlink-resolved real path and carries over its existing permissions: `rename`
-  unconditionally replaces whatever sits at its destination, so writing straight to the given path
-  would otherwise replace a symlinked baseline with a plain file (orphaning whatever it pointed at)
-  and silently reset the mode to the process umask, widening permissions an adopter deliberately
-  narrowed. The create-new path (writing a baseline where none existed) is unaffected: it has no
-  pre-existing content to protect, and already fails loud rather than clobbering if the file
-  appears concurrently.
+  the file's symlink-resolved real path and carries over its existing permissions, set at creation
+  rather than narrowed afterward: `rename` unconditionally replaces whatever sits at its
+  destination, so writing straight to the given path would otherwise replace a symlinked baseline
+  with a plain file (orphaning whatever it pointed at), and creating the temp file at the process
+  umask default before narrowing it would briefly widen permissions an adopter had deliberately
+  restricted. The temp file itself is opened with `create_new` (`O_EXCL`): its name is predictable
+  (`<target>.tmp-<pid>`), so a plain create-or-truncate would follow whatever already sat at that
+  path — a symlink included — letting anything pre-planted there redirect the write onto an
+  arbitrary file; `create_new` refuses outright instead. Its path is built from the resolved
+  target's raw bytes rather than through lossy display formatting, so a target reached through a
+  non-UTF-8-named directory component no longer fails the overwrite outright. The create-new path
+  (writing a baseline where none existed) is unaffected: it has no pre-existing content to protect,
+  and already fails loud rather than clobbering if the file appears concurrently.
 - Bounded native recursion depth across four recursive walkers in three crates, closing the same
   false-negative-adjacent bug class in every observation dimension — a pathologically (but
   genuinely acyclic) nested module tree, `use` tree, or block/macro-arm structure could overflow
