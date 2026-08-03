@@ -570,6 +570,137 @@ fn resolve_child_modules(
 
 // `child_dir` and `file_dir` are distinct module-resolution bases (see `resolve_child_modules`), not
 // bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
+/// Record this module's own facts into `scan` from a single flattened items pass: trait
+/// definitions, trait-impl sites, type definitions, and resolvable type-alias targets (including
+/// the forbidden-marker alias-landing map). Pulled out of `walk_module` as the "this module's own
+/// observation" phase, distinct from the child-descent phase that follows it.
+#[allow(clippy::too_many_arguments)]
+fn record_module_facts(
+    items: &[syn::Item],
+    module: &str,
+    current_file: &Path,
+    uses: &UseMap,
+    externs: &HashSet<String>,
+    externs_type: &HashSet<String>,
+    local_alias_names: &HashSet<String>,
+    scan: &mut CrateScan,
+) -> Result<(), String> {
+    for item in items {
+        match item {
+            syn::Item::Trait(trait_item) => {
+                scan.trait_defs.insert(format!(
+                    "{module}::{}",
+                    strip_raw(&trait_item.ident.to_string())
+                ));
+            }
+            // Trait impls only (`impl Trait for Type`); inherent impls carry no `trait_`.
+            syn::Item::Impl(impl_item) if impl_item.trait_.is_some() => {
+                let (_, trait_path, _) = impl_item.trait_.as_ref().expect("trait_ is Some");
+                scan.impls.push(ImplSite {
+                    module: module.to_string(),
+                    file: current_file.to_path_buf(),
+                    trait_path: trait_path.clone(),
+                    self_ty: (*impl_item.self_ty).clone(),
+                    uses: uses.clone(),
+                    type_params: type_param_names(&impl_item.generics),
+                });
+            }
+            syn::Item::Struct(i) => {
+                push_type_def(&i.attrs, &i.ident, module, current_file, uses, scan)?;
+            }
+            syn::Item::Enum(i) => {
+                push_type_def(&i.attrs, &i.ident, module, current_file, uses, scan)?;
+            }
+            syn::Item::Union(i) => {
+                push_type_def(&i.attrs, &i.ident, module, current_file, uses, scan)?;
+            }
+            // A non-generic `type X = <nominal path>;` alias: record `{module}::X → target`
+            // so the exposure pipeline can follow it to the defining path. The target-resolution
+            // ladder is byte-identical to the query site's, so no resolvable target is dropped and
+            // no local shadow is misread:
+            //   0. a leading-`::` target — an unambiguous extern (raw set, with the crate-root
+            //      rename applied), a HARD short-circuit, so `type X = ::serde::Value;` records the
+            //      extern even under a local `mod serde`, and `type X = ::<rename>::Foo;` too;
+            //   1. `resolve_path_all(Ignore)` — use-map (every cfg-branch candidate) /
+            //      `crate`·`self`·`super`;
+            //   2. `bare_local_alias_target` — a bare single-segment target naming one of THIS
+            //      module's own type aliases recorded as `{module}::{name}` (its canonical alias-map
+            //      key), tried BEFORE the extern oracle so a local alias shadows a same-named
+            //      dependency (rustc's own resolution); the query-time `expand_canonical_paths`
+            //      fixpoint then closes a *bare* alias-of-an-alias chain regardless of source order.
+            //      Gated to local alias names, so a bare non-alias target (a local struct, a std
+            //      prelude type like `String`) is never mis-recorded — no false positive;
+            //   3. `extern_verbatim_renamed` — an extern head, incl. a crate-root `extern crate as`
+            //      rename (the rename map is pre-collected, so this is order-independent).
+            // A generic alias (`type X<T> = …`) or a complex target (`Vec<T>`, `&T`, a
+            // tuple/`dyn`/`impl`) is skipped — a stated coverage bound, never a silent claim.
+            syn::Item::Type(type_item) => {
+                if !type_item.generics.params.is_empty() {
+                    // Stated bound: generic type aliases (`type X<T> = …`) are intentionally skipped.
+                    continue;
+                }
+                // Record the alias's LANDING type — where its target resolves under the same bare-head
+                // `CurrentModule` fallback the impl-self check uses — so the forbidden-marker check can
+                // react on an alias to a crate-defined subtree type (`type Bar = Real`) yet stay silent
+                // on one to a foreign/prelude type (`type Baz = Vec<u8>` / `= String`), whose marker
+                // lands off the governed subtree. Only a nominal `Type::Path` target has a single
+                // landing type; a tuple/ref/`dyn` target has none and is skipped (never governed here).
+                if let syn::Type::Path(tp) = &*type_item.ty {
+                    let landings =
+                        resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
+                    if !landings.is_empty() {
+                        let alias =
+                            format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
+                        let entry = scan.alias_targets.entry(alias).or_default();
+                        for landing in landings {
+                            if !entry.contains(&landing) {
+                                entry.push(landing);
+                            }
+                        }
+                    }
+                }
+                let mut targets = Vec::new();
+                alias_nominal_targets(&type_item.ty, &mut targets);
+                for target in targets {
+                    let alias = format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
+                    let resolved_list: Vec<String> = if target.leading_colon.is_some() {
+                        extern_verbatim_renamed(target, externs, &scan.extern_renames)
+                            .into_iter()
+                            .collect()
+                    } else {
+                        let use_candidates =
+                            resolve_path_all(target, uses, module, BareFallback::Ignore);
+                        if !use_candidates.is_empty() {
+                            use_candidates
+                        } else {
+                            bare_local_alias_target(target, module, local_alias_names)
+                                .or_else(|| {
+                                    extern_verbatim_renamed(
+                                        target,
+                                        externs_type,
+                                        &scan.extern_renames,
+                                    )
+                                })
+                                .into_iter()
+                                .collect()
+                        }
+                    };
+                    for resolved in resolved_list {
+                        if resolved != alias {
+                            let entry = scan.aliases.entry(alias.clone()).or_default();
+                            if !entry.contains(&resolved) {
+                                entry.push(resolved);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn walk_module(
     items: Vec<syn::Item>,
@@ -633,119 +764,16 @@ fn walk_module(
         })
         .collect();
 
-    for item in &items {
-        match item {
-            syn::Item::Trait(trait_item) => {
-                scan.trait_defs.insert(format!(
-                    "{module}::{}",
-                    strip_raw(&trait_item.ident.to_string())
-                ));
-            }
-            // Trait impls only (`impl Trait for Type`); inherent impls carry no `trait_`.
-            syn::Item::Impl(impl_item) if impl_item.trait_.is_some() => {
-                let (_, trait_path, _) = impl_item.trait_.as_ref().expect("trait_ is Some");
-                scan.impls.push(ImplSite {
-                    module: module.clone(),
-                    file: current_file.clone(),
-                    trait_path: trait_path.clone(),
-                    self_ty: (*impl_item.self_ty).clone(),
-                    uses: uses.clone(),
-                    type_params: type_param_names(&impl_item.generics),
-                });
-            }
-            syn::Item::Struct(i) => {
-                push_type_def(&i.attrs, &i.ident, &module, &current_file, &uses, scan)?;
-            }
-            syn::Item::Enum(i) => {
-                push_type_def(&i.attrs, &i.ident, &module, &current_file, &uses, scan)?;
-            }
-            syn::Item::Union(i) => {
-                push_type_def(&i.attrs, &i.ident, &module, &current_file, &uses, scan)?;
-            }
-            // A non-generic `type X = <nominal path>;` alias: record `{module}::X → target`
-            // so the exposure pipeline can follow it to the defining path. The target-resolution
-            // ladder is byte-identical to the query site's, so no resolvable target is dropped and
-            // no local shadow is misread:
-            //   0. a leading-`::` target — an unambiguous extern (raw set, with the crate-root
-            //      rename applied), a HARD short-circuit, so `type X = ::serde::Value;` records the
-            //      extern even under a local `mod serde`, and `type X = ::<rename>::Foo;` too;
-            //   1. `resolve_path_all(Ignore)` — use-map (every cfg-branch candidate) /
-            //      `crate`·`self`·`super`;
-            //   2. `bare_local_alias_target` — a bare single-segment target naming one of THIS
-            //      module's own type aliases recorded as `{module}::{name}` (its canonical alias-map
-            //      key), tried BEFORE the extern oracle so a local alias shadows a same-named
-            //      dependency (rustc's own resolution); the query-time `expand_canonical_paths`
-            //      fixpoint then closes a *bare* alias-of-an-alias chain regardless of source order.
-            //      Gated to local alias names, so a bare non-alias target (a local struct, a std
-            //      prelude type like `String`) is never mis-recorded — no false positive;
-            //   3. `extern_verbatim_renamed` — an extern head, incl. a crate-root `extern crate as`
-            //      rename (the rename map is pre-collected, so this is order-independent).
-            // A generic alias (`type X<T> = …`) or a complex target (`Vec<T>`, `&T`, a
-            // tuple/`dyn`/`impl`) is skipped — a stated coverage bound, never a silent claim.
-            syn::Item::Type(type_item) => {
-                if !type_item.generics.params.is_empty() {
-                    // Stated bound: generic type aliases (`type X<T> = …`) are intentionally skipped.
-                    continue;
-                }
-                // Record the alias's LANDING type — where its target resolves under the same bare-head
-                // `CurrentModule` fallback the impl-self check uses — so the forbidden-marker check can
-                // react on an alias to a crate-defined subtree type (`type Bar = Real`) yet stay silent
-                // on one to a foreign/prelude type (`type Baz = Vec<u8>` / `= String`), whose marker
-                // lands off the governed subtree. Only a nominal `Type::Path` target has a single
-                // landing type; a tuple/ref/`dyn` target has none and is skipped (never governed here).
-                if let syn::Type::Path(tp) = &*type_item.ty {
-                    let landings =
-                        resolve_path_all(&tp.path, &uses, &module, BareFallback::CurrentModule);
-                    if !landings.is_empty() {
-                        let alias =
-                            format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
-                        let entry = scan.alias_targets.entry(alias).or_default();
-                        for landing in landings {
-                            if !entry.contains(&landing) {
-                                entry.push(landing);
-                            }
-                        }
-                    }
-                }
-                let mut targets = Vec::new();
-                alias_nominal_targets(&type_item.ty, &mut targets);
-                for target in targets {
-                    let alias = format!("{module}::{}", strip_raw(&type_item.ident.to_string()));
-                    let resolved_list: Vec<String> = if target.leading_colon.is_some() {
-                        extern_verbatim_renamed(target, externs, &scan.extern_renames)
-                            .into_iter()
-                            .collect()
-                    } else {
-                        let use_candidates =
-                            resolve_path_all(target, &uses, &module, BareFallback::Ignore);
-                        if !use_candidates.is_empty() {
-                            use_candidates
-                        } else {
-                            bare_local_alias_target(target, &module, &local_alias_names)
-                                .or_else(|| {
-                                    extern_verbatim_renamed(
-                                        target,
-                                        &externs_type,
-                                        &scan.extern_renames,
-                                    )
-                                })
-                                .into_iter()
-                                .collect()
-                        }
-                    };
-                    for resolved in resolved_list {
-                        if resolved != alias {
-                            let entry = scan.aliases.entry(alias.clone()).or_default();
-                            if !entry.contains(&resolved) {
-                                entry.push(resolved);
-                            }
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    record_module_facts(
+        &items,
+        &module,
+        &current_file,
+        &uses,
+        externs,
+        &externs_type,
+        &local_alias_names,
+        scan,
+    )?;
 
     for (child_items, child_module, sub_dir, sub_file_dir, opened, child_file) in
         resolve_child_modules(
