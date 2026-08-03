@@ -1,6 +1,6 @@
 //! Core reaction enums and outcome models.
 
-use crate::Report;
+use crate::{Report, Violation};
 
 /// How strongly a boundary reacts.
 ///
@@ -116,9 +116,7 @@ impl Outcome {
         match self {
             Outcome::Clean => 0,
             Outcome::Violations(report) => {
-                if report.violations.iter().any(|violation| {
-                    violation.severity == Severity::Enforce && !violation.baselined
-                }) {
+                if report.violations.iter().any(Violation::is_active_enforce) {
                     1
                 } else {
                     0

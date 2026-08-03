@@ -160,9 +160,23 @@ fn evaluate_constitution(
     (outcome, observed_coverage)
 }
 
-/// The runner's work, returning the exit code as a number so it is assertable
-/// without a subprocess and without inspecting an opaque [`ExitCode`].
-fn dispatch<I, S>(constitution: &Constitution, args: I) -> u8
+/// The command-line flags `dispatch` parses, before command-specific dispatch reacts to them.
+/// `format` is left as the full [`Format`] (not yet narrowed to [`ReportFormat`]) since `list`
+/// and `check` accept different subsets of it.
+struct ParsedArgs {
+    command: Command,
+    manifest_path: Option<String>,
+    baseline_path: Option<String>,
+    write_baseline_path: Option<String>,
+    format: Format,
+    warn_uncovered: bool,
+    disallow_stale: bool,
+}
+
+/// Parse `dispatch`'s process arguments into [`ParsedArgs`], or `Err(exit code)` on a usage
+/// error (an absent flag value, an unrecognized argument, or an unknown `--format`) — a
+/// misconfiguration fails loud (exit 2), never a silent downgrade to a default (PROJECT.md).
+fn parse_args<I, S>(args: I) -> Result<ParsedArgs, u8>
 where
     I: IntoIterator<Item = S>,
     S: Into<String>,
@@ -197,7 +211,7 @@ where
         ($flag:literal) => {
             match args.next() {
                 Some(value) => value,
-                None => return usage(concat!($flag, " requires a value")),
+                None => return Err(usage(concat!($flag, " requires a value"))),
             }
         };
     }
@@ -222,7 +236,7 @@ where
                     // An unknown flag, a misspelling, or a stray positional is a
                     // misconfiguration — fail loud (exit 2), never silently ignore
                     // it (PROJECT.md).
-                    return usage(&format!("unrecognized argument '{other}'"));
+                    return Err(usage(&format!("unrecognized argument '{other}'")));
                 }
             }
         }
@@ -236,69 +250,139 @@ where
         Some("markdown") => Format::Markdown,
         Some("sarif") => Format::Sarif,
         Some(other) => {
-            return usage(&format!(
+            return Err(usage(&format!(
                 "unknown --format '{other}' (expected text, json, markdown, or sarif)"
-            ));
+            )));
         }
     };
 
-    // `list` is a projection, not a reaction: it observes nothing (no
-    // `--manifest-path`), cannot fail a boundary, and always exits 0. It accepts
-    // only `--format`; a check-only flag supplied to `list` is a usage error, not a
-    // silent no-op (PROJECT.md: never silently ignore a flag).
-    if command == Command::List {
-        if manifest_path.is_some()
-            || baseline_path.is_some()
-            || write_baseline_path.is_some()
-            || warn_uncovered
-            || disallow_stale
-        {
-            return usage("list takes only --format; other flags are check-only");
+    Ok(ParsedArgs {
+        command,
+        manifest_path,
+        baseline_path,
+        write_baseline_path,
+        format,
+        warn_uncovered,
+        disallow_stale,
+    })
+}
+
+/// The `list` command's whole reaction: a projection, not a reaction — it observes nothing (no
+/// `--manifest-path`), cannot fail a boundary, and always exits 0. It accepts only `--format`; a
+/// check-only flag supplied to `list` is a usage error, not a silent no-op (PROJECT.md: never
+/// silently ignore a flag).
+fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
+    if parsed.manifest_path.is_some()
+        || parsed.baseline_path.is_some()
+        || parsed.write_baseline_path.is_some()
+        || parsed.warn_uncovered
+        || parsed.disallow_stale
+    {
+        return usage("list takes only --format; other flags are check-only");
+    }
+    let semantic = constitution.semantic_boundaries();
+    let runtime = constitution.runtime_boundaries();
+    match parsed.format {
+        Format::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&list_document(constitution))
+                    .expect("a serde_json::Value is always serializable")
+            );
         }
-        let semantic = constitution.semantic_boundaries();
-        let runtime = constitution.runtime_boundaries();
-        match format {
-            Format::Json => {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&list_document(constitution))
-                        .expect("a serde_json::Value is always serializable")
+        Format::Markdown => {
+            // Rendered from the same `list_document` value the JSON projection emits, so the
+            // Markdown provably carries no less than the JSON and covers exactly the same
+            // dimensions — a pure projection, never a reaction.
+            print!("{}", list_markdown(&list_document(constitution)));
+        }
+        Format::Text => {
+            println!("{}", constitution_text(constitution.static_boundaries()));
+            print!("{}", semantic_text(&semantic.signature));
+            print!("{}", trait_impl_text(&semantic.trait_impl));
+            print!("{}", visibility_text(&semantic.visibility));
+            print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
+            print!("{}", dyn_trait_text(&semantic.dyn_trait));
+            print!("{}", impl_trait_text(&semantic.impl_trait));
+            print!("{}", async_exposure_text(&semantic.async_exposure));
+            print!("{}", unsafe_text(&semantic.unsafe_confinement));
+            print!("{}", runtime_text(runtime));
+        }
+        // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
+        // symmetric to `markdown` being `list`-only.
+        Format::Sarif => {
+            return usage(
+                "list supports --format text|json|markdown; sarif projects the reaction \
+                 (a check output), not the declared law",
+            );
+        }
+    }
+    EXIT_OK
+}
+
+/// Resolve `check`'s target manifest: the given `--manifest-path`, or the nearest `Cargo.toml`
+/// up from the current directory, cargo-style. Defaulting the target location is not a silent
+/// pass: if none is found this is a scan error (exit 2), never 0.
+fn resolve_manifest_path(manifest_path: Option<String>) -> Result<PathBuf, u8> {
+    match manifest_path {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => match nearest_manifest() {
+            Some(path) => Ok(path),
+            None => {
+                let from = std::env::current_dir()
+                    .map(|dir| dir.display().to_string())
+                    .unwrap_or_else(|_| "the current directory".to_string());
+                eprintln!(
+                    "Tianheng: no Cargo.toml found from {from} up to the root; \
+                     pass --manifest-path <path>"
                 );
+                Err(EXIT_CANNOT_JUDGE)
             }
-            Format::Markdown => {
-                // Rendered from the same `list_document` value the JSON projection emits, so the
-                // Markdown provably carries no less than the JSON and covers exactly the same
-                // dimensions — a pure projection, never a reaction.
-                print!("{}", list_markdown(&list_document(constitution)));
-            }
-            Format::Text => {
-                println!("{}", constitution_text(constitution.static_boundaries()));
-                print!("{}", semantic_text(&semantic.signature));
-                print!("{}", trait_impl_text(&semantic.trait_impl));
-                print!("{}", visibility_text(&semantic.visibility));
-                print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
-                print!("{}", dyn_trait_text(&semantic.dyn_trait));
-                print!("{}", impl_trait_text(&semantic.impl_trait));
-                print!("{}", async_exposure_text(&semantic.async_exposure));
-                print!("{}", unsafe_text(&semantic.unsafe_confinement));
-                print!("{}", runtime_text(runtime));
-            }
-            // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
-            // symmetric to `markdown` being `list`-only.
-            Format::Sarif => {
-                return usage(
-                    "list supports --format text|json|markdown; sarif projects the reaction \
-                     (a check output), not the declared law",
-                );
+        },
+    }
+}
+
+/// Print `check`'s final report in the requested format — the tail every non-baseline,
+/// non-write-baseline `check` run reaches. Never affects the exit code (the caller computes
+/// that from `outcome` itself).
+fn print_report(
+    report_format: ReportFormat,
+    outcome: &Outcome,
+    coverage: Option<&Coverage>,
+    warn_uncovered: bool,
+) {
+    match report_format {
+        ReportFormat::Json => println!("{}", report_json(outcome, &[], coverage)),
+        ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+        ReportFormat::Text => {
+            report(outcome);
+            if let Some(coverage) = coverage {
+                report_coverage(coverage, warn_uncovered);
             }
         }
-        return EXIT_OK;
+    }
+}
+
+/// The runner's work, returning the exit code as a number so it is assertable
+/// without a subprocess and without inspecting an opaque [`ExitCode`].
+fn dispatch<I, S>(constitution: &Constitution, args: I) -> u8
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    let parsed = match parse_args(args) {
+        Ok(parsed) => parsed,
+        Err(code) => return code,
+    };
+
+    if parsed.command == Command::List {
+        return dispatch_list(constitution, &parsed);
     }
 
     // The command is `check`. `markdown` is a `list`-only projection of the declared law;
     // `check`'s machine output is the JSON report, so reject it loud (exit 2) rather than
     // silently falling back. `text`/`json` map to the existing boolean contract.
-    let report_format = match format {
+    let report_format = match parsed.format {
         Format::Text => ReportFormat::Text,
         Format::Json => ReportFormat::Json,
         Format::Sarif => ReportFormat::Sarif,
@@ -313,37 +397,21 @@ where
     // A contradictory flag pair is a pure usage error, independent of any workspace — check it
     // before resolving the manifest, so an also-absent `--manifest-path` (whose "no Cargo.toml
     // found" diagnostic would otherwise fire first) cannot mask the real misconfiguration.
-    if baseline_path.is_some() && write_baseline_path.is_some() {
+    if parsed.baseline_path.is_some() && parsed.write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
-    if disallow_stale && baseline_path.is_none() {
+    if parsed.disallow_stale && parsed.baseline_path.is_none() {
         return usage("--disallow-stale requires --baseline");
     }
 
-    // From here on the command is `check`: it requires a workspace to observe.
-    // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
-    // Defaulting the target location is not a silent pass: if none is found the run
-    // exits 2 (a scan error), never 0.
-    let manifest_path = match manifest_path {
-        Some(path) => PathBuf::from(path),
-        None => match nearest_manifest() {
-            Some(path) => path,
-            None => {
-                let from = std::env::current_dir()
-                    .map(|dir| dir.display().to_string())
-                    .unwrap_or_else(|_| "the current directory".to_string());
-                eprintln!(
-                    "Tianheng: no Cargo.toml found from {from} up to the root; \
-                     pass --manifest-path <path>"
-                );
-                return EXIT_CANNOT_JUDGE;
-            }
-        },
+    let manifest_path = match resolve_manifest_path(parsed.manifest_path) {
+        Ok(path) => path,
+        Err(code) => return code,
     };
 
     let (mut outcome, observed_coverage) = evaluate_constitution(constitution, &manifest_path);
 
-    if let Some(path) = write_baseline_path {
+    if let Some(path) = parsed.write_baseline_path {
         return write_baseline(&outcome, &path);
     }
 
@@ -355,27 +423,23 @@ where
         _ => observed_coverage,
     };
 
-    if let Some(path) = baseline_path {
+    if let Some(path) = parsed.baseline_path {
         return gate(
             &mut outcome,
             &path,
             report_format,
             coverage.as_ref(),
-            warn_uncovered,
-            disallow_stale,
+            parsed.warn_uncovered,
+            parsed.disallow_stale,
         );
     }
 
-    match report_format {
-        ReportFormat::Json => println!("{}", report_json(&outcome, &[], coverage.as_ref())),
-        ReportFormat::Sarif => println!("{}", report_sarif(&outcome)),
-        ReportFormat::Text => {
-            report(&outcome);
-            if let Some(coverage) = &coverage {
-                report_coverage(coverage, warn_uncovered);
-            }
-        }
-    }
+    print_report(
+        report_format,
+        &outcome,
+        coverage.as_ref(),
+        parsed.warn_uncovered,
+    );
     outcome.exit_code()
 }
 

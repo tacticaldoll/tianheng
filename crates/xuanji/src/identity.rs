@@ -3,6 +3,17 @@
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+/// Reject an empty identity string component with `message` — the shared empty-check
+/// [`RuleKey::new`] (its `rule_type`) and [`StructuredFactIdentity::new`] (its `fact_type`/
+/// `shape`) each apply before doing any other validation.
+fn require_nonempty(value: &str, message: &str) -> Result<(), String> {
+    if value.is_empty() {
+        Err(message.to_string())
+    } else {
+        Ok(())
+    }
+}
+
 fn canonical_fields<I, K, V>(kind: &str, fields: I) -> Result<BTreeMap<String, String>, String>
 where
     I: IntoIterator<Item = (K, V)>,
@@ -58,9 +69,7 @@ impl RuleKey {
         V: Into<String>,
     {
         let rule_type = rule_type.into();
-        if rule_type.is_empty() {
-            return Err("rule key type must not be empty".to_string());
-        }
+        require_nonempty(&rule_type, "rule key type must not be empty")?;
         Ok(Self {
             rule_type,
             fields: canonical_fields("rule key", fields)?,
@@ -127,13 +136,9 @@ impl StructuredFactIdentity {
         V: Into<String>,
     {
         let fact_type = fact_type.into();
-        if fact_type.is_empty() {
-            return Err("fact identity type must not be empty".to_string());
-        }
+        require_nonempty(&fact_type, "fact identity type must not be empty")?;
         let shape = shape.into();
-        if shape.is_empty() {
-            return Err("fact identity shape must not be empty".to_string());
-        }
+        require_nonempty(&shape, "fact identity shape must not be empty")?;
         Ok(Self {
             fact_type,
             shape,
