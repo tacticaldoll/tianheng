@@ -180,4 +180,3 @@ The system SHALL observe the hand-`impl T for X` acquisition form when the `impl
 
 - **WHEN** the hand-impl is written one level further inside the body (inside an `if`/`loop`/closure/nested `fn`), or the wrapping binding is a `static` rather than a `const`
 - **THEN** the system does not claim to observe it, a stated coverage bound shared with `semantic-trait-impl-locality`'s identical bound on the same underlying observation, rather than a silent claim of cleanliness
-

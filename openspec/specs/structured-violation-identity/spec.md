@@ -174,4 +174,3 @@ capability shipped by the facade.
 
 - **WHEN** adopter-facing release notes summarize the identity migration and reusable testing harness
 - **THEN** they state that identity introduces no plugin protocol while accurately listing the testing harness
-

@@ -613,4 +613,3 @@ The `audit_probe_coverage` scanner SHALL support custom probe macro marker names
 
 - **WHEN** `audit_probe_coverage_with_markers` is called with an empty marker list or a marker string that is empty or blank
 - **THEN** the action fails loud with `Outcome::ConstitutionError`, never silently flooding violations or matching empty strings
-
