@@ -218,34 +218,51 @@ pub(crate) fn declared_features(
     kind: DependencyKind,
 ) -> Vec<String> {
     let mut found = Vec::new();
-    if let Some(deps) = package["dependencies"].as_array() {
-        for dependency in deps {
-            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
-                continue;
-            }
-            // Match by resolved package name, never the local `rename`/alias.
-            if dependency["name"].as_str() != Some(crate_name) {
-                continue;
-            }
-            if let Some(features) = dependency["features"].as_array() {
-                for feature in features {
-                    if let Some(feature) = feature.as_str() {
-                        found.push(feature.to_string());
-                    }
-                }
-            }
-            // Cargo's edge carries `uses_default_features`; an absent field means defaults
-            // are on. Represent "the target requests this dependency's default set" as the
-            // pseudo-feature `default`, so one rule shape governs both explicit features and
-            // the default toggle (`forbid default` ≡ "require default-features = false").
-            if dependency["uses_default_features"].as_bool() != Some(false) {
-                found.push("default".to_string());
-            }
-        }
+    for dependency in matching_dependency_edges(package, crate_name, kind) {
+        found.extend(dependency_feature_request(dependency));
     }
     found.sort();
     found.dedup();
     found
+}
+
+/// Every dependency-table edge on `crate_name` of the requested `kind` — matched by resolved
+/// package name, never the local `rename`/alias — excluding the target's own self-dependency edge
+/// (see [`is_self_dependency`]).
+fn matching_dependency_edges<'a>(
+    package: &'a Value,
+    crate_name: &str,
+    kind: DependencyKind,
+) -> impl Iterator<Item = &'a Value> {
+    package["dependencies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(move |dependency| {
+            kind_matches(dependency, kind)
+                && !is_self_dependency(package, dependency)
+                && dependency["name"].as_str() == Some(crate_name)
+        })
+}
+
+/// The declared feature request for one dependency edge: its explicit `features = [...]` list
+/// plus the pseudo-feature `default` when the edge leaves default features enabled. Cargo's edge
+/// carries `uses_default_features`; an absent field means defaults are on. Representing "the
+/// target requests this dependency's default set" as the pseudo-feature `default` lets one rule
+/// shape govern both explicit features and the default toggle (`forbid default` ≡ "require
+/// default-features = false").
+fn dependency_feature_request(dependency: &Value) -> Vec<String> {
+    let mut requested: Vec<String> = dependency["features"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect();
+    if dependency["uses_default_features"].as_bool() != Some(false) {
+        requested.push("default".to_string());
+    }
+    requested
 }
 
 #[cfg(test)]
