@@ -87,7 +87,10 @@ pub(crate) fn resolve_module_items_with_cfg_tags(
     Ok(items)
 }
 
-/// Resolves a module path to its primary source file (test-only helper).
+/// Resolves a module path to its primary source file (test-only helper). Delegates to
+/// [`resolve_module_root`] directly (one descent backs every view this module offers, so the
+/// file and item views never drift — a `mod`-resolution divergence is the false-negative class
+/// the project forbids).
 #[cfg(test)]
 pub(crate) fn resolve_module_file(
     src_dir: &Path,
@@ -95,22 +98,7 @@ pub(crate) fn resolve_module_file(
     module: &str,
     crate_package: &str,
 ) -> Result<PathBuf, String> {
-    resolve_module(src_dir, root_file, module, crate_package).map(|(_items, file)| file)
-}
-
-/// The shared module resolution backing [`resolve_module_file`] (test-only): the items a module
-/// owns **and** the file they live in, from one descent, so the two views come from the same
-/// traversal and never drift (a `mod`-resolution divergence is the false-negative class the
-/// project forbids).
-#[cfg(test)]
-fn resolve_module(
-    src_dir: &Path,
-    root_file: &Path,
-    module: &str,
-    crate_package: &str,
-) -> Result<(Vec<syn::Item>, PathBuf), String> {
-    resolve_module_root(src_dir, root_file, module, crate_package)
-        .map(|(items, file, _child_dir, _path_base)| (items, file))
+    resolve_module_root(src_dir, root_file, module, crate_package).map(|(_items, file, _, _)| file)
 }
 
 /// Resolves a module path to its items, file, child directory, and path base (test-only helper).
