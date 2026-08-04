@@ -628,6 +628,45 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
     const KEYWORDS: [&[u8]; 9] = [
         b"mod", b"struct", b"enum", b"union", b"trait", b"type", b"fn", b"const", b"static",
     ];
+    collect_definition_names(module, source, &KEYWORDS, true, out);
+}
+
+/// The **value-namespace** names a module declares at its own top level: `fn`, `const`, `static`.
+///
+/// Rust resolves a `mod` in the TYPE namespace, so the only names that can legally collide with
+/// `mod foo` are these — `struct foo` beside `mod foo` would be a duplicate type-namespace
+/// definition and does not compile. One `use m::foo;` then binds **both**, which is why an inbound
+/// module boundary anchored at `m` must consult this: the module reading alone resolves the import to
+/// the descendant `m::foo` and misses that it also reaches `m` itself (see
+/// `module_check::resolve_import_module`).
+///
+/// Shares [`collect_item_definition_names`]'s walk, and with it both disciplines that keep the
+/// answer honest: names are keyed by their **true** (inline-`mod`-qualified) module, and only items at
+/// their own module's top level are captured, so an associated or block-local `fn` of the same name
+/// does not count. Inline `mod` names are deliberately NOT captured here — they are the type-namespace
+/// side of the very collision this exists to detect.
+///
+/// `source` must be declaration-cleaned (comments, strings, and macro bodies stripped), like every
+/// other reader in this module: an item declared inside a macro body is not observed, a stated bound.
+pub(crate) fn value_namespace_item_names(module: &str, source: &str) -> HashSet<String> {
+    const VALUE_KEYWORDS: [&[u8]; 3] = [b"fn", b"const", b"static"];
+    let mut out = HashSet::new();
+    collect_definition_names(module, source, &VALUE_KEYWORDS, false, &mut out);
+    out
+}
+
+/// The shared walk behind [`collect_item_definition_names`] and [`value_namespace_item_names`]:
+/// module-top-level definitions introduced by any of `keywords`, keyed `{true_module}::{name}`.
+/// `capture_inline_mod_names` decides whether an inline `mod x { … }`'s own name is itself recorded as
+/// a definition of the enclosing module — wanted for the local-precedence ladder, not for the
+/// value-namespace query, whose whole point is to distinguish the two namespaces.
+fn collect_definition_names(
+    module: &str,
+    source: &str,
+    keywords: &[&[u8]],
+    capture_inline_mod_names: bool,
+    out: &mut HashSet<String>,
+) {
     let bytes = source.as_bytes();
     let mut i = 0;
     let mut depth = 0usize;
@@ -643,7 +682,9 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
         // captured when the `mod` sits at that module's top level — and its body opens a new scope.
         if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
             let name = normalize_segments(&bytes[name_start..name_end]);
-            if depth == top && !name.is_empty() {
+            // The stack push below is unconditional — the true-module qualification depends on it —
+            // while RECORDING the inline module's own name is the caller's choice.
+            if capture_inline_mod_names && depth == top && !name.is_empty() {
                 out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
             }
             mod_stack.push((canonical_segment(name.trim()).to_string(), depth));
@@ -673,7 +714,7 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
         // Only a module-top-level item keyword introduces a bare-head name into the CURRENT inline
         // module's scope; deeper keywords are associated / block-local items (see doc).
         if depth == top {
-            if let Some(kw) = KEYWORDS
+            if let Some(kw) = keywords
                 .iter()
                 .find(|kw| super::lexer::keyword_starts_at(bytes, i, kw))
             {

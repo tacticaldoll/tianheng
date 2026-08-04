@@ -121,17 +121,42 @@ directly, otherwise its longest reachable-module prefix) before the depth compar
 item-form import (`use m::Item;`) reaches `m` exactly as a bare import of `m` itself does; depth
 then distinguishes that from an import of only a descendant module's item, never by comparing the
 raw import path string (which would conflate an item in `m` with an item in a descendant of `m`).
-That target-match resolution is **namespace-blind**, a stated bound rather than an implied
-guarantee. Rust resolves a module and a value of the same name in different namespaces, so `mod foo`
-and `fn foo` may both be declared in one module and a single `use m::foo;` binds both; observing only
-the path, the system SHALL resolve to the module reading (the longest reachable module) and MAY leave
-the value reading unobserved. This is visible only under `Shallow` anchored at that module's own
-parent, where the value reading would react and the module reading does not; under `Subtree` both
-readings lie within the anchored module, so nothing is lost. The system SHALL NOT close this by
-reacting on both readings, because that would make an ordinary bare import of a child module react
-under `Shallow`, contradicting the exact-seam scenario above — a narrow false negative SHALL NOT be
-traded for a broad false positive. Closing it requires a value-namespace item observation this
-dimension does not have, and SHALL be recorded as a live decision rather than described as absent.
+That path resolution alone is **namespace-blind**, and the target match SHALL compensate for it rather
+than inherit it. Rust resolves a module and a value of the same name in different namespaces, so `mod
+foo` and `fn foo` may both be declared in one module and a single `use m::foo;` binds **both**.
+Observing only the path yields the module reading (the longest reachable module), which under `Shallow`
+anchored at that module's own parent resolves to a mere descendant and would not react — while the value
+reading reaches the anchored module and MUST. Under `Subtree` both readings lie within the anchored
+module, so nothing turns on it there.
+
+The system SHALL close that gap by **observing the value namespace**, and SHALL NOT close it by reacting
+on both readings: reacting on both would make an ordinary bare import of a child module react under
+`Shallow`, contradicting the exact-seam scenario above, and a narrow false negative SHALL NOT be traded
+for a broad false positive. Concretely, an import whose whole path resolves to a module that is a
+single-segment child of the anchored module SHALL additionally react when the anchored module itself
+declares a value-namespace item (`fn`, `const`, `static`) of that same final segment, and SHALL NOT react
+when it declares only the module. This was previously recorded as a live decision on the premise that the
+required observation did not exist in this dimension; the premise was false — the definition observation
+backing the strict-external local-precedence ladder already reads exactly those names, per module, at
+module top level.
+
+What remains bounded is the **observation**, not the resolution: a value declared inside a macro body or
+reaching the module through a re-export is not observed, consistently with every other declaration
+reader in this dimension, and SHALL direct the reaction toward the module reading alone.
+
+#### Scenario: An import binding both a module and a value of the anchored module reacts under Shallow
+
+- **GIVEN** a module `m` declaring both `mod foo` and `fn foo`, and an inbound boundary anchored at `m`
+  with `Shallow` depth
+- **WHEN** an unauthorized module writes `use m::foo;`, which binds both
+- **THEN** it reacts, because the import reaches `m` itself through the value binding
+
+#### Scenario: An import naming only a child module still does not react under Shallow
+
+- **GIVEN** a module `m` declaring `mod child` and no value named `child`, and the same boundary
+- **WHEN** an unauthorized module writes `use m::child;`
+- **THEN** it does not react, the import reaching only a descendant — so closing the case above does not
+  widen an exact-seam boundary into a subtree one
 
 An inbound rule's importer-side self-import exemption — a file within the protected module's own
 subtree is never an inbound importer — is orthogonal to this target match and SHALL NOT be

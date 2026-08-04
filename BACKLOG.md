@@ -60,31 +60,8 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **An inbound rule's target match is namespace-blind, so a name declared in two namespaces at
-  once is observed only as its module.** Class: READY-PATCH (the correction only adds reactions;
-  no public API and no identity shape changes). Observed pressure: raised by an independent review
-  of the 0.4.0 window against `crates/guibiao/src/module_check.rs`'s `resolve_import_module`, then
-  verified against **rustc** rather than reasoned — a crate declaring `pub mod foo;` and
-  `pub fn foo()` in one module compiles, and a single `use crate::internal::foo;` in another module
-  binds both bindings (the importer can call `foo()` *and* reach `foo::INSIDE` from that one
-  `use`). Observation source: that build, plus the pinned test
-  `shallow_inbound_target_match_is_namespace_blind_a_stated_bound`
-  (`crates/guibiao/src/tests/symbol_confinement.rs`). Current bound: the resolver sees only the
-  path, so it returns the longest reachable module — the module reading — and the value reading is
-  unobserved. The two disagree only under `ScanDepth::Shallow` anchored at that module's own
-  parent: the value reading reaches the anchored module and should react, the module reading
-  resolves to the descendant and does not. Under `Subtree` both readings lie within the anchored
-  module, so nothing is lost. Risk: LOW-but-real — a false negative, the one class the Core
-  Contract forbids reacting silently in, confined to one exotic shape (a module and a value
-  sharing a name in the protected module) in one depth cell. Deliberately NOT closed by reacting
-  on both readings: that makes every ordinary `use m::child;` react under `Shallow`, contradicting
-  `rule-model-surface`'s own exact-seam scenario — a narrow false negative must not be traded for
-  a broad false positive. Promotion trigger: a value-namespace item observation for the anchored
-  module (`fn`/`const`/`static` declared directly in it, inline `mod` bodies included), so both
-  readings are unioned exactly when the ambiguity is real; note it carries its own bounds a
-  macro-generated or `pub use`-re-exported `fn` would still escape, which must be stated with it.
-  Version class: PATCH. Authority: `openspec/specs/rule-model-surface/spec.md`'s stated
-  namespace-blind bound and its scenario; the rustc verification and pinned test above.
+**Empty.** The one entry that stood here is closed; its reproduction record is kept under *Closed in the
+0.4.0 window* below, out of this queue for the reason the governance section states.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
@@ -506,6 +483,57 @@ six larger entries it left in place.
   class: DESIGN-BREAKING (a per-target corpus changes which facts exist, and plausibly their target
   role). Authority: `openspec/specs/module-boundary/spec.md`'s single-governed-root requirement and its
   two scenarios; the pinned test above.
+
+- ~~**An inbound rule's target match is namespace-blind, so a name declared in two namespaces at once is
+  observed only as its module.**~~ **CLOSED** in the 0.4.0 window. Closed by observing the value
+  namespace, not by unioning both readings — the entry's own "deliberately NOT" still holds, and that is
+  what keeps `shallow_inbound_rules_protect_only_the_exact_module` passing unchanged: an import reacts
+  only when the anchored module really declares a `fn`/`const`/`static` of that final segment, so an
+  ordinary `use m::child;` naming only a module stays silent.
+
+  The promotion trigger asked for "a value-namespace item observation for the anchored module" as though
+  it had to be built. **It already existed**, one module away: `symbol_scan`'s definition collector reads
+  every module's own top-level `fn`/`const`/`static` from declaration-cleaned source, with the
+  true-inline-module keying and module-top-level-only disciplines already worked out for the
+  strict-external local-precedence ladder. The trigger was a missing *connection*, not a missing
+  capability — the same misjudged cost as the absolute-`#[path]` entry earlier in this window, whose
+  trigger read as a four-function refactor and turned out to be one line. Worth recording as a pattern:
+  a promotion trigger written from inside the code that lacks the observation tends to describe building
+  it rather than looking for it.
+
+  The residual is now the observation rather than the resolution, and is narrower than the entry's own
+  note: a value declared inside a macro body or arriving through a re-export is unobserved, matching
+  every other declaration reader in the dimension, and directs the reaction toward the module reading —
+  the pre-existing behaviour, not a new gap. `rule-model-surface` states it with two scenarios, and the
+  pinned test is inverted rather than deleted (`shallow_inbound_target_match_observes_the_value_namespace`).
+  The original entry is kept below for its reproduction record.
+
+
+- **An inbound rule's target match is namespace-blind, so a name declared in two namespaces at
+  once is observed only as its module.** Class: READY-PATCH (the correction only adds reactions;
+  no public API and no identity shape changes). Observed pressure: raised by an independent review
+  of the 0.4.0 window against `crates/guibiao/src/module_check.rs`'s `resolve_import_module`, then
+  verified against **rustc** rather than reasoned — a crate declaring `pub mod foo;` and
+  `pub fn foo()` in one module compiles, and a single `use crate::internal::foo;` in another module
+  binds both bindings (the importer can call `foo()` *and* reach `foo::INSIDE` from that one
+  `use`). Observation source: that build, plus the pinned test
+  `shallow_inbound_target_match_is_namespace_blind_a_stated_bound`
+  (`crates/guibiao/src/tests/symbol_confinement.rs`). Current bound: the resolver sees only the
+  path, so it returns the longest reachable module — the module reading — and the value reading is
+  unobserved. The two disagree only under `ScanDepth::Shallow` anchored at that module's own
+  parent: the value reading reaches the anchored module and should react, the module reading
+  resolves to the descendant and does not. Under `Subtree` both readings lie within the anchored
+  module, so nothing is lost. Risk: LOW-but-real — a false negative, the one class the Core
+  Contract forbids reacting silently in, confined to one exotic shape (a module and a value
+  sharing a name in the protected module) in one depth cell. Deliberately NOT closed by reacting
+  on both readings: that makes every ordinary `use m::child;` react under `Shallow`, contradicting
+  `rule-model-surface`'s own exact-seam scenario — a narrow false negative must not be traded for
+  a broad false positive. Promotion trigger: a value-namespace item observation for the anchored
+  module (`fn`/`const`/`static` declared directly in it, inline `mod` bodies included), so both
+  readings are unioned exactly when the ambiguity is real; note it carries its own bounds a
+  macro-generated or `pub use`-re-exported `fn` would still escape, which must be stated with it.
+  Version class: PATCH. Authority: `openspec/specs/rule-model-surface/spec.md`'s stated
+  namespace-blind bound and its scenario; the rustc verification and pinned test above.
 
 ## Version horizons
 
