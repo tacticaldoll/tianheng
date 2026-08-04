@@ -121,6 +121,58 @@ for document in $GOVERNANCE_DOCUMENTS; do
   }
 done
 
+# Lexically normalize `<dir>/<reference>` to a repository-relative path, resolving `.` and `..` as TEXT.
+#
+# This replaced `realpath -m --relative-to="$PWD"`, whose `-m` and `--relative-to` are GNU coreutils
+# extensions that BSD and macOS `realpath` do not accept. This script is listed in a Definition of Done
+# that states no platform restriction, and under `set -e` the unrecognized option would have exited with
+# realpath's own status — landing on 1, which in this gate's contract means "stale references found".
+# A portability failure would have been reported as a repository defect.
+#
+# Lexical is not a compromise here, it is the correct semantics: a markdown link is resolved by path text,
+# the target need not exist (a broken one must still be reported with its resolved form), and symlinks
+# must NOT be followed — `realpath -m` was chosen for exactly those properties and pure text has them by
+# construction. A leading `..` that escapes the repository root is kept, so such a reference resolves
+# outside the tracked set and is reported, as it was before.
+normalize_reference() {
+  # Segments accumulate space-separated. The extraction regex admits no whitespace in a reference, so
+  # this cannot lose a segment, and it keeps the pop below a single expansion instead of the nested
+  # suffix trimming a `/`-joined accumulator needs (which silently stopped popping after the first `..`).
+  stack=""
+  # `set -f` stops the unquoted split from glob-expanding a segment; both are restored below.
+  set -f
+  IFS='/'
+  # shellcheck disable=SC2086
+  for segment in $1; do
+    case "$segment" in
+    "" | ".") ;;
+    "..")
+      # A `..` with nothing to pop, or above a `..` already kept, escapes upward and is kept — such a
+      # reference then resolves outside the tracked set and is reported, as it was before.
+      if [ -z "$stack" ] || [ "${stack##* }" = ".." ]; then
+        stack="$stack .."
+      else
+        stack="${stack% *}"
+      fi
+      ;;
+    *) stack="$stack $segment" ;;
+    esac
+  done
+  unset IFS
+  set +f
+  normalized=""
+  for segment in $stack; do
+    if [ -z "$normalized" ]; then
+      normalized="$segment"
+    else
+      normalized="$normalized/$segment"
+    fi
+  done
+  # A reference that reduces to nothing names the directory it started from; `realpath -m` renders that
+  # `.`, and matching it keeps this a drop-in replacement rather than a behaviour change.
+  printf '%s' "${normalized:-.}"
+}
+
 inspected=0
 offenses=0
 
@@ -154,8 +206,8 @@ while IFS= read -r file; do
     # A markdown link target (marked \x01 during extraction) is resolved relative to the REFERRING
     # FILE's directory, which is what a markdown link means — `../../BACKLOG.md` from
     # `docs/history/x.md` is the root document, not a missing one. Prose paths, by contrast, are written
-    # repo-relative throughout this repository. `realpath -m` normalizes `..` without requiring the
-    # path to exist, so a genuinely broken link still reports its resolved form.
+    # repo-relative throughout this repository. `normalize_reference` resolves `..` lexically, so a
+    # genuinely broken link still reports its resolved form.
     from_link=0
     case "$reference" in
     $'\x01'*)
@@ -165,7 +217,7 @@ while IFS= read -r file; do
       case "$reference" in
       *:*) continue ;;
       esac
-      reference=$(realpath -m --relative-to="$PWD" -- "$(dirname -- "$file")/$reference")
+      reference=$(normalize_reference "$(dirname -- "$file")/$reference")
       ;;
     esac
 
