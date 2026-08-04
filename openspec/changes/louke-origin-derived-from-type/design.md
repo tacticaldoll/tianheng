@@ -87,6 +87,17 @@ by the time `install` sees an entry the type is gone. The derivation must happen
 type parameter, which is the macro's expansion target. That is the only available position, and it is
 why "keep the signature, validate inside `install`" is not an option.
 
+**Falsifier attempted against the unforgeability claim — a dependency aliased to the victim's own crate
+name.** If the reported path's leading crate segment could be chosen by the *importer*, a rogue crate
+pulled in as `composed_app = { package = "evil", … }` would define
+`adapters::blessed::Rogue` and report a blessed-looking origin. Tested: the alias does **not** leak
+into the reported path, which names the defining crate — `evil::adapters::blessed::Rogue` — so the
+importer's chosen name is irrelevant. Publishing a crate literally named `composed_app` does not work
+either: two crates of one name in a single build graph collide at compile time (`E0464`, observed while
+constructing the probe). Forging the crate segment therefore requires being the crate, and forging the
+module segments requires writing inside the victim's own module — which is editing the law's subject,
+already out of scope. The claim survives an attack rather than being asserted.
+
 Alternative considered — **keep `module_path!()` and cross-check it against `T`'s own path inside the
 generic constructor, reacting on disagreement.** This also closes forgery, and its error message is
 better ("you registered `Repo` in `app::startup` but it lives in `app::infra`"). Rejected: the check's
@@ -203,7 +214,22 @@ this lands.
 
 ## Open Questions
 
-- None blocking. The two questions raised during exploration are decided above: pure derivation over
-  cross-check (decision 1), and stated bounds over a new fail-loud class for foreign/function-local
-  types (decision 3). Both are recorded with the alternative and the reason it lost, so a future
-  reader can reopen either without re-deriving the evidence.
+- **Should the react→pass transition be made loud for one release?** Decision 1 rejects the
+  cross-check as a *permanent gate*, on minimalism grounds. That argument does not answer a different
+  one, raised by adversarial review of this document: a **one-release migration diagnostic**. The case
+  is a type defined in `app::domain` but registered in `app::startup` under an allowlist of
+  `["app::domain"]` — today it reacts, afterwards it passes. Design decision 2 holds that today's
+  reaction is a false alarm, and that is a defensible reading, but the transition is silent at compile
+  time, and the Core Contract's forbidden bug is a violation that *silently passes*. Turning a live
+  reaction into a pass without a word deserves an explicit ruling rather than an author's assurance.
+
+  If taken, the shape is narrow and does **not** reopen forgery: `module_path!()` would be captured
+  again but feed only a diagnostic, never the origin, so a fabricated value could not influence what is
+  registered. What needs deciding is the diagnostic's form — a `Violation` through the installed sink,
+  a one-time stderr note, or nothing at all — and whether it is temporary or permanent. Left open
+  deliberately: the alternative was rejected for the wrong reason first, and recording that is more
+  useful than a tidy closure.
+
+- The other question raised during exploration is decided above: stated bounds over a new fail-loud
+  class for foreign and function-local types (decision 3), recorded with the alternative and the reason
+  it lost.

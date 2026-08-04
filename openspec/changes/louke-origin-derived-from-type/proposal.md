@@ -62,7 +62,10 @@ None. This closes a stated bound inside an existing capability rather than addin
   carry it.
 - `PROJECT.md` — the Core Contract's "Non-bypassable, precisely" paragraph loses its 漏刻 exception.
 - `crates/louke/README.md`, `README.md`, `COOKBOOK.md`, `CHANGELOG.md`, `BACKLOG.md` — the same claim
-  is stated in five places and must move together; `BACKLOG.md`'s DESIGN-BREAKING entry closes.
+  is stated in five places and must move together; `BACKLOG.md`'s DESIGN-BREAKING entry closes. Note
+  that the `register_origin!` samples in the root `README.md` and `COOKBOOK.md` are compiled by
+  nothing: `ReadmeDoctests` covers `crates/tianheng/README.md`, which does not mention the macro. They
+  are prose that can rot, and this change is what would rot them.
 - **No baseline impact.** An observed origin never reaches a `Report` or a baseline: `check_crossing`
   is reached only from the prod probe path and its `Violation` goes to the sink, while every CI-face
   fact (`UnprobedSeam`, `UndeclaredProbe`, `DuplicateSeam`, `UnauditableProbe`) carries no origin and

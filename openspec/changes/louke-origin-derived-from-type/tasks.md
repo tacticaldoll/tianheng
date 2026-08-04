@@ -51,6 +51,14 @@
 - [ ] 4.3 `README.md` and `COOKBOOK.md`: update the `register_origin!` narration — the invocation is
       unchanged, but "registered inside its own module" stops being a requirement of the idiom and
       becomes a consequence of what an origin is.
+- [ ] 4.3a Give those samples a reaction, or state that they have none. `crates/tianheng/src/lib.rs`'s
+      `ReadmeDoctests` compiles `crates/tianheng/README.md` — which mentions `register_origin!`
+      **zero** times — while the root `README.md` and `COOKBOOK.md`, which do carry the samples, are
+      included by nothing and therefore compiled by nothing. The idiom exists precisely so "snippets
+      cannot rot (a wrong signature or removed export fails `cargo test`)", so a sample of the API this
+      change reshapes sits outside the net that exists for it. Either bring the sample under a
+      `#[cfg(doctest)]` include (watch it fail against a deliberately wrong invocation first) or record
+      the bound where the sample lives. Do not leave it as prose the next macro change can silently rot.
 - [ ] 4.4 `CHANGELOG.md`: one `**BREAKING**` entry naming the closure, the origin's new meaning, the
       byte-identical result for the documented idiom, the migration step for a registration written
       away from its type's module, and the absence of any baseline impact. Also correct this window's

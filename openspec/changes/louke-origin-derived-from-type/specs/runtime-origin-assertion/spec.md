@@ -80,9 +80,10 @@ crossing, and no dependency beyond std.
 ### Requirement: The derived origin's shape bounds are stated, not implied
 
 The system SHALL state the following bounds on the derived origin rather than imply a uniform module
-path, and SHALL NOT introduce a fail-loud class for them, because the existing fail-closed allowlist
-match already reacts to each one loudly and in the safe direction. The origin is derived from the type's
-own reported path, whose shape is not uniform across all types:
+path. None of them is a fail-loud class today, because the existing fail-closed allowlist match already
+reacts to each one loudly and in the safe direction — a bound is stated where a reaction already covers
+it, never used to forbid a future reaction by prose. The origin is derived from the type's own reported
+path, whose shape is not uniform across all types:
 
 - A type defined in **another crate** reports that crate's own defining path, which may be a private
   internal module rather than the public path it is re-exported at. Registering a foreign type
