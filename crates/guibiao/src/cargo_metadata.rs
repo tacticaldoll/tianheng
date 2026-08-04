@@ -8,7 +8,9 @@ use crate::module_scan::package_name_to_import_ident;
 // substrate below the 三儀 — one reader, so the static and semantic dimensions cannot drift apart on
 // how they read the workspace. 圭表 keeps only its own *observation semantics* below (dependency
 // source/kind, workspace membership), which are not neutral infrastructure.
-pub(crate) use xingbiao::{cargo_metadata, crate_root_file, find_package, member_src_dirs};
+pub(crate) use xingbiao::{
+    cargo_metadata, crate_root_file, crate_root_files, find_package, member_src_dirs,
+};
 
 /// The names of the workspace's member crates. Because Modou runs
 /// `cargo metadata --no-deps`, the `packages` array contains exactly the workspace

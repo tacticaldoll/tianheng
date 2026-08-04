@@ -103,7 +103,19 @@ impl ModuleFact {
     /// `"package"` above, which names the *observed dependency*, not the declaring crate. Without
     /// it, two crates declaring the identical boundary against the identical module path produce
     /// identical identities and silently collapse (see `structured-violation-identity` spec).
-    pub(crate) fn into_finding(self, governing_package: &str) -> Finding {
+    /// `unit` is the **compilation unit** the observation came from: the root's source path relative to
+    /// the package's manifest directory (`src/lib.rs`, `src/main.rs`, `tools/x.rs`). A package builds more
+    /// than one root — a library beside a `bin` — and every root denotes the module path `crate` and
+    /// shares the package name, so without this role the same violation in two roots carries ONE identity
+    /// and a baseline accepting it in one silently masks it appearing in the other.
+    ///
+    /// It is not the target's NAME: a package may build a library and a `bin` of the same name (this
+    /// repository does), so a name is not unique within a package. It is not an index or metadata order
+    /// either — `semantic-signature-coupling`'s prohibition on positional identity applies here too. The
+    /// root path is declaration-derived, unique per unit, and moves with neither the checkout nor the
+    /// member set. A root outside the manifest directory keeps its path as given, the same rule 漏刻
+    /// applies to a file reached through an absolute path literal.
+    pub(crate) fn into_finding(self, governing_package: &str, unit: &str) -> Finding {
         match self {
             ModuleFact::ImportedPath(path) => {
                 let key = fact(
@@ -111,6 +123,7 @@ impl ModuleFact {
                     "module-path",
                     [
                         ("governing_package", governing_package),
+                        ("unit", unit),
                         ("path", path.as_str()),
                     ],
                 );
@@ -122,6 +135,7 @@ impl ModuleFact {
                     "module-path",
                     [
                         ("governing_package", governing_package),
+                        ("unit", unit),
                         ("module", module.as_str()),
                     ],
                 );
@@ -133,6 +147,7 @@ impl ModuleFact {
                     "module-path",
                     [
                         ("governing_package", governing_package),
+                        ("unit", unit),
                         ("module", module.as_str()),
                     ],
                 );
@@ -145,6 +160,7 @@ impl ModuleFact {
                     "path-in-module",
                     [
                         ("governing_package", governing_package),
+                        ("unit", unit),
                         ("module", module.as_str()),
                         ("path", path.as_str()),
                     ],
@@ -157,6 +173,7 @@ impl ModuleFact {
                     "path-in-module",
                     [
                         ("governing_package", governing_package),
+                        ("unit", unit),
                         ("module", module.as_str()),
                         ("path", path.as_str()),
                     ],
@@ -241,7 +258,7 @@ mod tests {
 
     impl IntoFinding for ModuleFact {
         fn into_finding(self) -> Finding {
-            ModuleFact::into_finding(self, "app")
+            ModuleFact::into_finding(self, "app", "src/lib.rs")
         }
     }
 
@@ -301,19 +318,19 @@ mod tests {
         let cases = vec![
             ModuleKeyCase {
                 fact: ModuleFact::ImportedPath("crate::ports".to_string()),
-                fields: vec![("governing_package", "app"), ("path", "crate::ports")],
+                fields: vec![("governing_package", "app"), ("path", "crate::ports"), ("unit", "src/lib.rs")],
                 family: "imported-path",
                 shape: "module-path",
             },
             ModuleKeyCase {
                 fact: ModuleFact::ImporterModule("crate::api".to_string()),
-                fields: vec![("governing_package", "app"), ("module", "crate::api")],
+                fields: vec![("governing_package", "app"), ("module", "crate::api"), ("unit", "src/lib.rs")],
                 family: "importer-module",
                 shape: "module-path",
             },
             ModuleKeyCase {
                 fact: ModuleFact::ExternalImporter("crate::ffi".to_string()),
-                fields: vec![("governing_package", "app"), ("module", "crate::ffi")],
+                fields: vec![("governing_package", "app"), ("module", "crate::ffi"), ("unit", "src/lib.rs")],
                 family: "external-importer",
                 shape: "module-path",
             },
@@ -326,6 +343,7 @@ mod tests {
                     ("governing_package", "app"),
                     ("module", "crate::kernel"),
                     ("path", "std::time::SystemTime::now"),
+                    ("unit", "src/lib.rs"),
                 ],
                 family: "inline-path",
                 shape: "path-in-module",
@@ -339,6 +357,7 @@ mod tests {
                     ("governing_package", "app"),
                     ("module", "crate::kernel"),
                     ("path", "std::time::*"),
+                    ("unit", "src/lib.rs"),
                 ],
                 family: "inline-glob",
                 shape: "path-in-module",
@@ -353,11 +372,11 @@ mod tests {
     #[test]
     fn distinct_governing_packages_produce_distinct_module_fact_identity() {
         let alpha = ModuleFact::ImporterModule("crate::app".to_string())
-            .into_finding("alpha")
+            .into_finding("alpha", "src/lib.rs")
             .key()
             .clone();
         let beta = ModuleFact::ImporterModule("crate::app".to_string())
-            .into_finding("beta")
+            .into_finding("beta", "src/lib.rs")
             .key()
             .clone();
         assert_ne!(
@@ -388,11 +407,11 @@ mod tests {
         assert_ne!(normal, feature);
 
         let import = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding("app")
+            .into_finding("app", "src/lib.rs")
             .key()
             .clone();
         let importer = ModuleFact::ImporterModule("crate::ports".to_string())
-            .into_finding("app")
+            .into_finding("app", "src/lib.rs")
             .key()
             .clone();
         assert_ne!(import, importer);
@@ -401,16 +420,16 @@ mod tests {
     #[test]
     fn unrelated_construction_order_does_not_change_fact_identity() {
         let before = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding("app")
+            .into_finding("app", "src/lib.rs")
             .key()
             .clone();
         let _unrelated = ModuleFact::InlinePath {
             path: "std::time::SystemTime::now".to_string(),
             module: "crate::adapter".to_string(),
         }
-        .into_finding("app");
+        .into_finding("app", "src/lib.rs");
         let after = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding("app")
+            .into_finding("app", "src/lib.rs")
             .key()
             .clone();
         assert_eq!(before, after);

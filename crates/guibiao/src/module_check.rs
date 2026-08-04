@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::ScanDepth;
 
-use crate::cargo_metadata::{crate_root_file, find_package};
+use crate::cargo_metadata::{crate_root_file, crate_root_files, find_package};
 use crate::errors::{
     confine_external_crate_on_crate_error, crate_not_found_error, inline_empty_prefix_error,
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
@@ -34,6 +34,7 @@ fn package_src_dir(package: &Value) -> Option<PathBuf> {
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_module_violation(
     violations: &mut Vec<Violation>,
     target: &str,
@@ -41,8 +42,9 @@ fn push_module_violation(
     fact: ModuleFact,
     file: String,
     boundary: &ModuleBoundary,
+    unit: &str,
 ) {
-    let finding = fact.into_finding(&boundary.crate_package);
+    let finding = fact.into_finding(&boundary.crate_package, unit);
     violations.push(
         Violation::new(
             BoundaryKind::Module,
@@ -144,6 +146,8 @@ fn resolve_import_module<'a>(
 /// The crate-wide scan state every rule family below reads from — resolved once in
 /// [`check_module_boundary`], then shared read-only across whichever family actually evaluates.
 struct ScanContext<'a> {
+    /// The compilation unit these observations came from — see `ModuleFact::into_finding`.
+    unit: &'a str,
     src_dir: &'a Path,
     files: &'a [PathBuf],
     root_relative: Option<&'a Path>,
@@ -298,6 +302,7 @@ fn check_inbound_rule(
             ModuleFact::ImporterModule(importer_module),
             file,
             boundary,
+            ctx.unit,
         );
     }
     Ok(())
@@ -368,6 +373,7 @@ fn check_external_confinement(
             ModuleFact::ExternalImporter(importer_module),
             file,
             boundary,
+            ctx.unit,
         );
     }
     Ok(())
@@ -431,7 +437,15 @@ fn check_inline_confinement(
         &dependency_names,
     )?;
     for InlineFinding { fact, file } in findings {
-        push_module_violation(violations, &confined_prefix, rule, fact, file, boundary);
+        push_module_violation(
+            violations,
+            &confined_prefix,
+            rule,
+            fact,
+            file,
+            boundary,
+            ctx.unit,
+        );
     }
     Ok(())
 }
@@ -518,11 +532,24 @@ fn check_outbound_rule(
             ModuleFact::ImportedPath(finding),
             file,
             boundary,
+            ctx.unit,
         );
     }
     Ok(())
 }
 
+/// Evaluate a module boundary against **every** compiled root of its package.
+///
+/// A package's roots are separate compilation units: each denotes the module path `crate`, and neither's
+/// declarations, inline shadowing, nor `#[path]` remaps belong in the other's graph — so each is resolved
+/// as its own corpus and the results are merged. Governing only the first root left a violation written
+/// in a `bin` beside a library unobserved, which is the false negative this composition closes.
+///
+/// The unknown-module error is deliberately deferred to the end: a module legitimately exists in one
+/// root's graph and not another's (a library's internals are not the binary's), so erroring per root
+/// would make a boundary on a library-only module exit 2 for the package's `bin` root — refusing to judge
+/// source that compiles. It fires only when NO root has the module, and then reports the first root's own
+/// reason so the message still names a real expected location.
 pub(crate) fn check_module_boundary(
     metadata: &Value,
     boundary: &ModuleBoundary,
@@ -530,14 +557,83 @@ pub(crate) fn check_module_boundary(
 ) -> Result<(), String> {
     let package = find_package(metadata, &boundary.crate_package)
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let src_dir =
-        package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let roots = crate_root_files(package);
+    if roots.is_empty() {
+        // Metadata reporting no target at all is the shape synthetic metadata in a caller's own tests
+        // carries; the conventional-source-directory fallback below is load-bearing for it, and its
+        // reachability walk already treats every conventional top-level root as a root.
+        return check_one_root(package, None, None, boundary, violations);
+    }
+    let mut deferred: Option<String> = None;
+    let mut governed_somewhere = false;
+    for root in &roots {
+        let mut per_root = Vec::new();
+        match check_one_root(package, Some(root.as_path()), Some(&roots), boundary, &mut per_root) {
+            Ok(()) => {
+                governed_somewhere = true;
+                violations.append(&mut per_root);
+            }
+            Err(reason) => {
+                // A root that cannot host this module is not yet an error — another root may.
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+        }
+    }
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
+}
 
-    // The crate's real root file relative to `src_dir` — usually `lib.rs`/`main.rs`, but Cargo
-    // permits a custom target root (`[lib] path = "src/core.rs"`), which must still map to `crate`.
-    let root_relative = crate_root_file(package)
-        .and_then(|rf| rf.strip_prefix(&src_dir).ok().map(|p| p.to_path_buf()));
-    let files = rust_files(&src_dir)?;
+fn check_one_root(
+    package: &Value,
+    root_file: Option<&Path>,
+    sibling_roots: Option<&[PathBuf]>,
+    boundary: &ModuleBoundary,
+    violations: &mut Vec<Violation>,
+) -> Result<(), String> {
+    let src_dir = match root_file.and_then(Path::parent) {
+        Some(dir) => dir.to_path_buf(),
+        None => package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?,
+    };
+
+    // The root file relative to `src_dir` — usually `lib.rs`/`main.rs`, but Cargo permits a custom
+    // target root (`[lib] path = "src/core.rs"`), which must still map to `crate`. `None` keeps the
+    // conventional-root behaviour the target-less fallback depends on.
+    let root_relative = root_file
+        .and_then(|rf| rf.strip_prefix(&src_dir).ok())
+        .map(|p| p.to_path_buf());
+    // The compilation unit's identity role: the root's path relative to the package's manifest
+    // directory. Both sides come from `cargo metadata`'s own JSON strings, so neither can be non-UTF-8
+    // and no lossy conversion is involved; a root outside the manifest directory keeps its path as
+    // given. With no target at all (synthetic metadata), the conventional source directory the fallback
+    // assumes IS the unit.
+    let manifest_dir = package["manifest_path"]
+        .as_str()
+        .map(Path::new)
+        .and_then(Path::parent);
+    let unit: &str = match (root_file, manifest_dir) {
+        (Some(rf), Some(dir)) => rf
+            .strip_prefix(dir)
+            .ok()
+            .and_then(Path::to_str)
+            .or_else(|| rf.to_str())
+            .unwrap_or("src"),
+        (Some(rf), None) => rf.to_str().unwrap_or("src"),
+        (None, _) => "src",
+    };
+    let mut files = rust_files(&src_dir)?;
+    // A SIBLING root is not a module of this unit — it is another compilation unit. Without this the
+    // conventional-root rule (a top-level `lib.rs`/`main.rs` is segment-less, hence `crate`) makes every
+    // sibling root map to `crate` in *this* root's walk too, so one violation is reported once per root:
+    // a duplicate, and a worse defect than the false negative the per-root corpus closes. A root
+    // declared as a module by another root (`mod main;`) is a stated bound of that exclusion — it is a
+    // dual-role file rustc compiles twice, and this unit's corpus keeps the unit's own root only.
+    if let Some(siblings) = sibling_roots {
+        files.retain(|f| root_file.is_some_and(|r| r == f.as_path()) || !siblings.contains(f));
+    }
     let (reachable, inline_only, remapped, remap_shadowed) =
         reachable_modules(&src_dir, &files, root_relative.as_deref())?;
     // The crate-root module names (direct children of `crate`) feed bare-`use` resolution
@@ -598,6 +694,7 @@ pub(crate) fn check_module_boundary(
 
     let rule = boundary.rule.label();
     let ctx = ScanContext {
+        unit,
         src_dir: &src_dir,
         files: &files,
         root_relative: root_relative.as_deref(),

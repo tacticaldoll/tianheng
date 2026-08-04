@@ -68,6 +68,32 @@ fn target_has_kind(target: &Value, wanted: &str) -> bool {
         .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
 }
 
+/// **Every** compiled crate root of ONE package — each library-kind target and each `bin` target, in
+/// Cargo's reported order, deduplicated.
+///
+/// The per-package counterpart of [`member_root_files`] (which spans the workspace) and the plural of
+/// [`crate_root_file`] (which picks one). A package's roots are separate compilation units: they each
+/// denote the module path `crate` and neither's declarations belong in the other's module graph, so a
+/// dimension that governs a package governs each root as its own corpus. Returning them all is what lets
+/// a violation written in a `bin` beside a library be observed at all.
+///
+/// Empty when the metadata reports no target — the shape synthetic metadata in a caller's own tests
+/// carries. A caller SHALL treat that as "fall back to the conventional source directory", not as "this
+/// package has no source": dropping that fallback silently un-governs every such test fixture.
+pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = package["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|t| {
+            LIBRARY_KINDS.iter().any(|k| target_has_kind(t, k)) || target_has_kind(t, "bin")
+        })
+        .filter_map(|t| t["src_path"].as_str().map(PathBuf::from))
+        .collect();
+    roots.dedup();
+    roots
+}
+
 /// Resolve a crate's root source file from `cargo metadata` (library target else `bin` target).
 pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
     let targets = package["targets"].as_array()?;
