@@ -81,7 +81,11 @@ struct InlineBody {
     start: usize,
     end: usize,
     base: PathBuf,
+    /// A **direct** `#[path]`'s base: it replaces the conventional one outright.
     relocated_base: Option<PathBuf>,
+    /// Every `cfg_attr(…, path = …)` base this declaration carries, when no direct attribute
+    /// overrides them. Candidates, not the base — see [`register_inline_sources`].
+    candidate_bases: Vec<PathBuf>,
     ancestors: HashSet<PathBuf>,
 }
 
@@ -122,12 +126,29 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
             let child_sources = children.entry(declared.name.clone()).or_default();
             if declared.is_inline {
                 child_sources.seen_inline = true;
-                let relocated_base = declared.direct_path_eq.and_then(|eq_cleaned| {
+                let base_at = |eq_cleaned: usize| -> Option<PathBuf> {
                     let &orig_eq = loaded.positions.get(eq_cleaned)?;
                     let rel =
                         read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())?;
                     Some(loaded.path_base.join(rel))
-                });
+                };
+                // A **direct** `#[path]` takes precedence over any sibling `cfg_attr` paths and
+                // relocates the base outright — one base, replacing the conventional one.
+                let relocated_base = declared.direct_path_eq.and_then(base_at);
+                // With no direct attribute, every `cfg_attr(…, path = …)` target is a **candidate**
+                // base rather than the base: the scanner is cfg-blind and cannot know which arm a
+                // given build compiles, so preferring one would silently drop the other's children.
+                // Collected here and unioned in `register_inline_sources`, which owns the
+                // existence rule.
+                let candidate_bases: Vec<PathBuf> = match relocated_base {
+                    Some(_) => Vec::new(),
+                    None => declared
+                        .conditional_path_eqs
+                        .iter()
+                        .copied()
+                        .filter_map(base_at)
+                        .collect(),
+                };
                 if let Some((start, end)) = declared.body {
                     child_sources.bodies.push(InlineBody {
                         file: loaded.file.clone(),
@@ -135,6 +156,7 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                         end,
                         base: loaded.child_base.clone(),
                         relocated_base,
+                        candidate_bases,
                         ancestors: loaded.ancestors.clone(),
                     });
                 }
@@ -205,27 +227,63 @@ struct GraphSources {
     remap_shadowed: BTreeSet<String>,
 }
 
+/// Register an inline `mod name { … }` body as a scan source, once per base its file-form children
+/// may resolve from.
+///
+/// A **direct** `#[path]` relocates that base outright — one source, as before. A `cfg_attr`-wrapped
+/// one names a base per platform predicate, so every target is a **candidate**, unioned with the
+/// conventional directory: the scanner does not evaluate `cfg` and cannot know which arm a build
+/// compiles, so preferring one would silently drop the children beneath the other (the false negative
+/// the core contract forbids). A candidate is descended only when it **exists as a directory** —
+/// recursing into an absent one would spuriously fail loud on the body's other, unrelated nested
+/// items solely because one platform's directory is missing, even when another candidate already
+/// backs them. When no candidate exists at all, the conventional base is descended anyway, so a
+/// nested reference genuinely broken on every platform still fails loud exactly as it did before this
+/// tolerance existed.
+///
+/// This is 漏刻's own already-stated rule for the identical shape, implemented independently here
+/// (三儀 ⊥ 三儀: the same rule, not the same function), so the two dimensions cannot disagree about
+/// what rustc compiles.
 fn register_inline_sources(
     child: &str,
     child_path: &str,
     bodies: Vec<InlineBody>,
     graph: &mut GraphSources,
 ) {
-    graph
-        .by_module
-        .entry(child_path.to_string())
-        .or_default()
-        .extend(bodies.into_iter().map(|body| {
-            let inline_dir = body.relocated_base.unwrap_or_else(|| body.base.join(child));
-            ScanSource::Body {
-                file: body.file,
+    let sources = graph.by_module.entry(child_path.to_string()).or_default();
+    for body in bodies {
+        let conventional = body.base.join(child);
+        let bases: Vec<PathBuf> = match &body.relocated_base {
+            Some(base) => vec![base.clone()],
+            None if body.candidate_bases.is_empty() => vec![conventional],
+            None => {
+                let mut present: Vec<PathBuf> = body
+                    .candidate_bases
+                    .iter()
+                    .cloned()
+                    .chain(std::iter::once(conventional.clone()))
+                    .filter(|base| base.is_dir())
+                    .collect();
+                present.sort();
+                present.dedup();
+                if present.is_empty() {
+                    vec![conventional]
+                } else {
+                    present
+                }
+            }
+        };
+        for base in bases {
+            sources.push(ScanSource::Body {
+                file: body.file.clone(),
                 start: body.start,
                 end: body.end,
-                path_base: inline_dir.clone(),
-                child_base: inline_dir,
-                ancestors: body.ancestors,
-            }
-        }));
+                path_base: base.clone(),
+                child_base: base,
+                ancestors: body.ancestors.clone(),
+            });
+        }
+    }
 }
 
 fn resolve_plain_sources(

@@ -151,6 +151,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change.
 
 ### Fixed
+- 圭表 now follows a `#[cfg_attr(pred, path = "dir")]` remap on an **inline** `mod x { mod y; }` to the
+  base directory that body's file-form children resolve from. Previously only the *unconditional*
+  `#[path]` form was followed, so the walk looked for the conventional `src/x/y.rs` and reported a
+  missing-module constitution error (exit 2) on a crate that compiles cleanly under real rustc — 圭表
+  refused to judge the crate rather than judging it, and an adopter using the idiom could not run
+  `check` on it at all. Reproduced against the real entry point with the unconditional form as the
+  control before the fix. Every `cfg_attr` target is now a **candidate** base unioned with the
+  conventional directory, cfg-blind (the scanner does not evaluate `cfg`, so preferring one would drop
+  every child beneath the other); a candidate is descended only when it exists as a directory, and when
+  none does the conventional base is descended anyway, so a child reference broken on every platform
+  still fails loud. This is 漏刻's own already-stated rule for the identical shape, implemented
+  independently (三儀 ⊥ 三儀). `module-boundary` gains the requirement and three scenarios.
+  Not breaking: no public API, violation identity, or baseline shape changes — but a crate that
+  previously exited 2 is now judged, so its first run may report violations that were never reported
+  before rather than relabeled ones. This closes a `BACKLOG.md` WATCH item whose recorded risk class
+  (a false negative) the reproduction **refuted**: the behaviour was fail-loud throughout.
 - **BREAKING**: `--write-baseline` now records a fresh snapshot over a **zero-length** existing
   baseline instead of refusing it (exit 2 → exit 0 for that input, reporting what it found). The
   refusal exists to stop an overwrite from destroying hand-authored owner/tracker annotations, which

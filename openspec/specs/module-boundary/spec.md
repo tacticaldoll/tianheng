@@ -663,3 +663,49 @@ Nesting comfortably under the cap SHALL be observed exactly as a shallower tree 
 - **WHEN** a crate declares a `use` tree nested well under the depth cap
 - **THEN** the system judges it normally, observing every imported path exactly as a shallower
   tree would be
+
+### Requirement: A conditional path remap on an inline module relocates its children's base
+
+The scanner SHALL treat a `cfg_attr(…, path = "…")` remap on an **inline** `mod name { … }` as naming
+the **base directory** that body's own file-form children resolve from, exactly as it already does for
+an unconditional `#[path]` on the same shape. A direct `#[path]` SHALL continue to take precedence and
+to relocate that base outright; with no direct attribute, every `cfg_attr` target SHALL be a
+**candidate** base rather than the base, because the scanner does not evaluate `cfg` and cannot know
+which arm a given build compiles — preferring one would silently drop every child beneath the other,
+the false negative the core contract forbids.
+
+Each candidate base — every `cfg_attr` target **and** the conventional directory — SHALL be descended
+only when it exists as a directory. Descending an absent one would spuriously fail loud on the body's
+other, unrelated nested items solely because one platform's directory is missing, even when another
+candidate already backs them. When **no** candidate exists as a directory, the conventional base SHALL
+be descended anyway, so a nested reference genuinely broken on every platform still fails loud exactly
+as it did before this tolerance existed.
+
+Without this, the walk resolved such a body's children from the conventional base alone and reported a
+missing-module constitution error (exit 2) on source that compiles cleanly under real rustc — refusing
+to judge a crate rather than judging it. This is 漏刻's own already-stated rule for the identical shape,
+implemented independently (三儀 ⊥ 三儀: the same rule, not the same function), so the two dimensions
+cannot disagree about what rustc compiles.
+
+#### Scenario: A conditional remap on an inline module is followed to its child base
+
+- **WHEN** a crate declares `#[cfg_attr(unix, path = "unix_dir")] pub mod x { pub mod y; }` with
+  `src/unix_dir/y.rs` present, no conventional `src/x/` directory, and `y.rs` importing a forbidden
+  module
+- **THEN** the system observes that import and reacts (exit 1) attributed to `unix_dir/y.rs`, rather
+  than reporting a missing-module constitution error for `src/x/y.rs` on a crate that builds
+
+#### Scenario: Every present conditional base of an inline module is descended
+
+- **WHEN** one inline `mod x { pub mod y; }` carries two `cfg_attr` path remaps naming two directories
+  that both exist, whose `y.rs` files import two different forbidden members
+- **THEN** the system reacts to both — the union is real, cfg-blind, and neither base is silently
+  preferred over the other
+
+#### Scenario: An inline module whose every conditional base is absent still fails loud
+
+- **WHEN** an inline `mod x { pub mod y; }` carries a `cfg_attr` path remap whose directory is absent
+  and no conventional `src/x/` directory exists either
+- **THEN** the system reports the missing-module constitution error (exit 2) for the child, because the
+  reference is broken on every configuration — the absent-base tolerance never becomes a silent pass
+

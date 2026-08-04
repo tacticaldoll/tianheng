@@ -254,14 +254,19 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
 - **WATCH:**
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `qianyi` generator & LSP/editor integration.
-  - A `#[cfg_attr(pred, path=…)]` remap on an **inline** `mod name { … }` (not a file-backed
-    module): the relocated child base is collected in `declarations.rs` but then discarded by
-    `walk.rs`, so the arm's real children may never be scanned. Observed once during the 0.3.1
-    adversarial sweep, upheld by exactly one verification lens and never independently
-    re-tested or refuted — treat as a hypothesis, not a confirmed defect.
-    (`crates/guibiao/src/module_scan/reachability/walk.rs`.) Promotion trigger: reproduce
-    directly against the real entry point before acting; if confirmed, likely mechanical
-    (the collected base already exists, just needs to survive into `walk.rs`'s consumption).
+  - ~~A `#[cfg_attr(pred, path=…)]` remap on an **inline** `mod name { … }`~~ **CLOSED** in the 0.4.0
+    window. Reproduced against the real entry point, as this entry's own trigger required, with the
+    unconditional `#[path]` form as the control — and the reproduction **refuted the recorded risk
+    class**. The entry predicted a false negative ("the arm's real children may never be scanned");
+    the actual behaviour was a *constitution error* (exit 2, "source file could not be located"),
+    so it was fail-loud, never a silent pass. What it really was is narrower and worse for adoption
+    than for correctness: 圭表 refused to judge a crate that compiles cleanly, so an adopter using the
+    idiom could not run `check` at all. The root cause was one line — `walk.rs` read only
+    `direct_path_eq` and never `conditional_path_eqs` — and the fix follows every present candidate
+    base, cfg-blind, exactly as 漏刻's spec already required for the identical shape. The lesson kept:
+    a single-lens hypothesis can be right that something is broken and wrong about **how**, and the
+    risk class is what decides urgency — so reproduce before promoting, which is what this entry's
+    trigger said and why it was worth keeping.
   - A symlinked source subdirectory may silently disappear from 漏刻's directory-mode audit
     while 圭表/渾儀 continue to govern the same subtree — `try_visit`'s cycle guard possibly
     bypassed by a second, weaker guard specific to the audit walker. Observed once during the
