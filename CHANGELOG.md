@@ -261,6 +261,17 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   what counts as *reaching* the protected module, never who counts as *inside* it. Any existing
   `--write-baseline` output for an inbound rule declared at `ScanDepth::Shallow` may need
   regeneration: an import that previously passed silently may now correctly react.
+  That exemption fix reached the per-import check but left the **file-level pre-filter** still gated
+  to `Subtree`, which was dead logic held correct only by a non-local argument — and not inert: at
+  `Shallow` a file the exemption excuses was still read and scanned, so an unreadable one, or one
+  whose `use` tree nests past the scanner's brace-nesting cap, turned a `Shallow` inbound rule into
+  exit 2 where `Subtree` exits 0. Both sites now call one depth-free predicate
+  (`is_inside_protected_module`), so the pre-filter and the rule cannot drift, and what the exemption
+  excuses can no longer decide the exit code. The helper the two families used to share is split:
+  external-crate confinement keeps a depth-sensitive pre-filter under a name that says so
+  (`hosts_only_permitted_importers`), because there the skip is only sound when every importer the
+  file can host is permitted — never under `Shallow`, where an inline `mod` inside the permitted file
+  lies outside the anchored module. `rule-model-surface` gains both requirements and a scenario.
 - 天衡's `--write-baseline` now overwrites an existing, supported baseline durably: the merged
   document is written to a sibling temp path first, then an atomic `rename` swaps it into place,
   instead of a bare truncating write. A crash, interrupt, or full disk mid-write previously left the
