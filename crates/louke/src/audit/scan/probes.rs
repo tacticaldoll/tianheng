@@ -34,11 +34,64 @@ pub(crate) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
 /// match nothing in another. See `runtime-origin-assertion`'s "An un-auditable probe's identity
 /// distinguishes distinct offending expressions" requirement for the checkout-relocation and
 /// member-set scenarios, and for the stated residual gap an absolute `#[path]` literal keeps.
+///
+/// The relative path is encoded, never rendered through `Path::display()`. `display()` is
+/// **lossy**: it replaces every byte it cannot decode with U+FFFD, so two source paths differing
+/// only in invalid-UTF-8 bytes produce one label — one `UnauditableProbe` identity — and a baseline
+/// accepting the first silently suppresses the second's never-accepted violation. That is the
+/// injectivity class this window closed at five other identity sites, and the same lossy-`display`
+/// lesson `write_baseline_atomically` applied to the temp path (built from the resolved target's raw
+/// `OsString`). An identity component must not lose information the observation had.
 pub(crate) fn labeled(path: &Path, anchor: &Path) -> String {
-    path.strip_prefix(anchor)
-        .unwrap_or(path)
-        .display()
-        .to_string()
+    encoded(path.strip_prefix(anchor).unwrap_or(path).as_os_str())
+}
+
+/// A path's bytes as an injective label: percent-escape every byte that is not part of a valid UTF-8
+/// sequence, and escape a literal `%` as `%25` so no escaped label can be spelled by an unescaped
+/// one. Distinct paths therefore keep distinct labels — the property `Path::display()` loses.
+///
+/// A path that is valid UTF-8 and contains no `%` — every realistic source path — is labeled
+/// byte-identically to the old `display()` form, so no existing baseline entry changes. A path
+/// containing a literal `%` re-keys once, which is the price of the guarantee and is why it lands in
+/// a breaking window rather than a patch.
+///
+/// `as_encoded_bytes()`'s encoding is unspecified but self-consistent within a platform, which is all
+/// this needs: the label is never decoded back, only compared with another label produced the same
+/// way. On Windows that encoding is WTF-8, so an unpaired surrogate's bytes escape here exactly as an
+/// invalid Unix byte does.
+fn encoded(name: &std::ffi::OsStr) -> String {
+    fn push_text(out: &mut String, text: &str) {
+        for ch in text.chars() {
+            if ch == '%' {
+                out.push_str("%25");
+            } else {
+                out.push(ch);
+            }
+        }
+    }
+
+    let mut rest = name.as_encoded_bytes();
+    let mut out = String::with_capacity(rest.len());
+    loop {
+        match std::str::from_utf8(rest) {
+            Ok(text) => {
+                push_text(&mut out, text);
+                return out;
+            }
+            Err(err) => {
+                let (valid, invalid) = rest.split_at(err.valid_up_to());
+                // `valid_up_to()` bounds a checked-valid prefix, so this cannot fail.
+                push_text(&mut out, std::str::from_utf8(valid).unwrap_or_default());
+                // `error_len() == None` means the input ends mid-sequence: every remaining byte is
+                // unusable, so escape all of them rather than looping forever on the same slice.
+                let skip = err.error_len().unwrap_or(invalid.len()).max(1);
+                for byte in &invalid[..skip.min(invalid.len())] {
+                    out.push_str(&format!("%{byte:02X}"));
+                }
+                rest = &invalid[skip.min(invalid.len())..];
+            }
+        }
+    }
 }
 
 pub(crate) fn collect_probes_with_markers(

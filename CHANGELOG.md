@@ -708,6 +708,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   below depends on. **Any existing `--write-baseline` output naming
   an `unauditable-probe` violation is now stale** (its `file` field's value changed shape) and must be
   regenerated; every previously accepted one reappears as new exactly once.
+  That `file` label is also no longer produced by `Path::display()`, which is **lossy**: a platform path
+  is a byte string, and `display()` replaces each undecodable byte with one replacement character — so
+  two source files differing only in such bytes collapsed to one label, one identity, and one violation.
+  Reproduced: two roots named `lib<0xFF>.rs` and `lib<0xFE>.rs`, each holding a non-literal probe,
+  produced a single `unauditable-probe` finding labeled `crates/foo/src/lib\u{FFFD}.rs`, so baselining it
+  suppressed a violation that was never accepted — the same injectivity class this window closed at five
+  other identity sites, reached through an identity *component* rather than through the scan. The label
+  is now an injective encoding: an undecodable byte becomes `%XX`, and a literal `%` becomes `%25` so no
+  escaped label can be spelled by a path that needed no escaping (both directions pinned by tests). A
+  path that is valid UTF-8 and contains no `%` — every realistic source path — is labeled byte-identically
+  to before, so this widens nothing beyond the re-key already announced above; only a path containing a
+  literal `%` changes.
   The anchor is a parameter rather than something the audit derives from the roots it is given, and
   that distinction is the fix rather than a detail of it: this entry's first cut computed the longest
   common prefix of every `source_inputs` root, which is checkout-independent but not
