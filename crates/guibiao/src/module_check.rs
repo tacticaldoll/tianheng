@@ -105,6 +105,26 @@ fn hosts_only_permitted_importers(
 /// distinguishable, which a lexical-only (string) comparison against `governed_module` cannot do.
 /// Falls back to the full path when no prefix is reachable (a path through a module
 /// `reachable_modules` cannot model, e.g. produced by a non-`cfg_if!` macro) rather than guessing.
+///
+/// **Stated bound — this resolution is namespace-blind.** Rust resolves `mod foo` and `fn foo` in
+/// different namespaces, so both may be declared in one module, and a single `use m::foo;` then binds
+/// **both** (verified against rustc, not reasoned: with `mod foo` and `pub fn foo` in `m`, an
+/// importer writing that one `use` can call `foo()` *and* reach `foo::INSIDE`). This function sees
+/// only the path, so it returns the longest reachable module — the module reading — and the value
+/// reading is unobserved. The two readings differ only under `Shallow` on the module's own parent:
+/// there, `use m::foo;` meaning the `fn` reaches `m` and should react, while the module reading
+/// resolves to the descendant `m::foo` and does not. Under `Subtree` both readings are within `m`,
+/// so nothing is lost.
+///
+/// Deliberately not "fixed" by reacting on both readings: that would make every ordinary bare import
+/// of a child module (`use m::child;`) react under `Shallow`, contradicting
+/// `rule-model-surface`'s own scenario that an importer of only a descendant module does not violate
+/// an exact-seam boundary — trading a narrow, exotic false negative for a broad false positive.
+/// Distinguishing the two needs a value-namespace item observation this crate does not have (and one
+/// that would carry its own bounds: a macro-generated or re-exported `fn`). Recorded in `BACKLOG.md`
+/// with that promotion trigger, stated in `rule-model-surface`, and pinned by
+/// `shallow_inbound_target_match_is_namespace_blind_a_stated_bound` so the bound cannot change state
+/// unnoticed — the same way this crate states its other observation bounds rather than implying them.
 fn resolve_import_module<'a>(
     import_path: &'a str,
     reachable: &std::collections::BTreeSet<String>,
