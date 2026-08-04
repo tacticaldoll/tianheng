@@ -519,15 +519,6 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 - **WHEN** a crate declares `#[path = "thread_files"] pub mod thread { pub mod local_data; }`, `thread_files/local_data.rs` contains a forbidden import, and no `thread/` directory exists at all
 - **THEN** the system observes the forbidden import under `crate::thread::local_data`, attributed to `thread_files/local_data.rs` — the `#[path]` attribute is not treated as a no-op merely because the module it precedes is inline; it relocates where the inline body's own file-form children resolve from, exactly as it would for a file-form declaration
 
-### Requirement: A multi-target package's cross-root same-named submodule is a stated bound
-
-The system SHALL treat, as a **documented out-of-scope bound** (never a silent claim of cleanliness), the imports written in the **inline** body of a submodule whose name is declared **inline in one crate root and file-backed in the other** of a package that builds both a lib and a bin. Because the system observes a package's source under one conventional-path tree, both crate roots (`lib.rs` and `main.rs`) resolve to `crate` and it maintains no per-target module graphs; so when `lib.rs` declares `mod shared { … }` (inline) and `main.rs` declares `mod shared;` (backed by `shared.rs`), the file-backed `shared.rs` is the governed module and the inline body's imports are NOT observed — the conventional-path model cannot distinguish the lib crate's `crate::shared` from the bin crate's. This is the submodule corollary of the same lib+bin conventional-path conflation the dedup requirement already names; closing it would require per-target module graphs, an amendment beyond the conventional-path scanner.
-
-#### Scenario: A submodule declared inline in the lib root and file-backed in the bin root is a documented bound
-
-- **WHEN** a package's `lib.rs` declares `mod shared { use crate::forbidden::X; }` (inline), its `main.rs` declares `mod shared;` (backed by a clean `shared.rs`), and a boundary governs `crate::shared` forbidding `crate::forbidden`
-- **THEN** the system governs `shared.rs` and does not observe the inline body's `use crate::forbidden::X` — a documented lib+bin conventional-path bound, recorded rather than silently claimed clean
-
 ### Requirement: A module may restrict who imports it to a closed allowlist
 
 A module boundary SHALL support an inbound **closed-allowlist** rule: `ModuleBoundary::in_crate(p).module(m).must_only_be_imported_by([x, …]).because(...)` declares that the protected module `m` may be imported only by a listed importer `x` (or anything beneath it) or by `m`'s own subtree; any **other** module that imports `m` (or anything beneath `m`) SHALL be a violation. This is the inbound dual of `restrict_imports_to` (the outbound closed allowlist), exactly as `must_not_be_imported_by` is the inbound dual of `must_not_import`. An **empty** allowlist permits only `m`'s own subtree (every outside importer reacts).
@@ -708,4 +699,46 @@ cannot disagree about what rustc compiles.
   and no conventional `src/x/` directory exists either
 - **THEN** the system reports the missing-module constitution error (exit 2) for the child, because the
   reference is broken on every configuration — the absent-base tolerance never becomes a silent pass
+
+### Requirement: Only the resolved crate root and its reachable modules are governed
+
+The governed corpus of a package SHALL be the **one** crate root the system resolves for it — the first
+library-kind target, or the first `bin` target when the package builds no library — together with the
+modules reachable from that root through `mod` declarations. Every **other** compiled root of the same
+package SHALL be treated as a **documented out-of-scope bound**, never as a silent claim of
+cleanliness: a `main.rs` beside a `lib.rs`, any `src/bin/*.rs`, and any `[[bin]] path = "…"` target,
+whether inside the package's source directory or outside it, are not observed, so a violation written
+in one of them does not react.
+
+This SHALL be stated wherever the coverage of a package is described, because the shape it affects is
+the most ordinary one in Rust — a library beside its binary — and an adopter who reads "the crate is
+governed" would otherwise reasonably conclude that a boundary on `crate` reaches `main.rs`. It does not.
+The system MUST NOT describe a package's second root as resolving to `crate`, as sharing the first
+root's module graph, or as deduplicated against it; none of those is what happens.
+
+The **cross-root same-named submodule** case is a corollary of this scope rather than a separate bound:
+because only one root's module graph exists, a submodule name declared inline in one root and
+file-backed in another is observed only as whatever the governed root's graph makes of it, and the other
+root's declaration — like the whole of that root — is not seen.
+
+Closing this requires **per-target module graphs**, an amendment beyond the conventional-path scanner:
+two roots of one package both denote module path `crate`, so observing both raises a violation-identity
+question (which `crate` a finding names) that the current identity model does not answer. It SHALL be
+tracked as design work rather than described as a limitation of naming.
+
+#### Scenario: A violation in a package's second crate root is not observed
+
+- **WHEN** a package builds both `src/lib.rs` and `src/main.rs`, an identical forbidden construct is
+  written in each, and a boundary governs `crate`
+- **THEN** the system reacts once, for the construct in `lib.rs`, and does not observe the one in
+  `main.rs` — a documented out-of-scope bound, recorded rather than reported as a clean second root
+
+#### Scenario: A binary target's root is out of scope wherever it lives
+
+- **WHEN** a package with a library root also builds `src/bin/tool.rs`, a `[[bin]]` whose `path` is
+  inside the source directory, and a `[[bin]]` whose `path` is outside it, each containing a forbidden
+  construct
+- **THEN** none of those constructs is observed, because none of those roots is the resolved one —
+  identically for a conventional `src/bin` target and for a custom `path`, so no adopter concludes that
+  one form is covered because the other is not
 

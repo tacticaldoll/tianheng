@@ -221,6 +221,34 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   Authority: `openspec/specs/runtime-origin-assertion/spec.md`; this entry's own reproduction record.
 
 
+- **Only the ONE resolved crate root of a package is governed; its other compiled roots are not
+  observed at all.** Class: DESIGN-BREAKING. Observed pressure: promoted in the 0.4.0 window from a
+  single-lens WATCH hypothesis and a one-line `ACCEPTED DEBT` mention ("multi-target conventional-path
+  conflation"), both of which understated it. Measured through three independent lenses:
+  (1) **mechanism** — `xingbiao::crate_root_file` returns the first library-kind target, else the first
+  `bin`, one root by construction, and 圭表's `package_src_dir` plus reachability walk both start there;
+  (2) **minimal shape** — a package of exactly `src/lib.rs` + `src/main.rs` with the identical offending
+  construct in both files and a boundary on `crate` reports ONE violation, in `lib.rs`;
+  (3) **broader shape** — `src/main.rs`, `src/bin/conventional.rs`, a `[[bin]] path` inside `src/`, and
+  a `[[bin]] path` outside it are all unobserved when a library root exists. Observation source: those
+  measurements, now pinned by `crates/guibiao/tests/single_governed_root_bound.rs` in both directions
+  (the resolved root reacts; the others are silent; a library-less package governs its first `bin`).
+  Current bound: stated in `module-boundary`'s single-governed-root requirement, replacing a
+  requirement whose premise — "both crate roots (`lib.rs` and `main.rs`) resolve to `crate`" — was
+  factually wrong, and whose recorded limitation (a cross-root same-named submodule) was a narrower
+  story than the truth. Risk: HIGH by class, and it lands on the most ordinary Rust package shape — a
+  library beside its binary. A real violation written in `main.rs` passes silently, which is the one bug
+  class the Core Contract forbids; what limits it in practice is that the governed root is usually where
+  the architecture lives, and that a boundary an adopter declares on `crate` still reacts to everything
+  the library reaches. Promotion trigger: **per-target module graphs**. Two roots of one package both
+  denote module path `crate`, so observing both raises a violation-identity question the current model
+  does not answer (which `crate` a finding names) — the same reason the requirement this replaces
+  already named it an amendment beyond the conventional-path scanner. Note also that 渾儀 resolves roots
+  through the same `crate_root_file`, so the scope question is shared rather than 圭表-local. Version
+  class: DESIGN-BREAKING (a per-target corpus changes which facts exist, and plausibly their target
+  role). Authority: `openspec/specs/module-boundary/spec.md`'s single-governed-root requirement and its
+  two scenarios; the pinned test above.
+
 ### READY-PATCH
 
 - **An inbound rule's target match is namespace-blind, so a name declared in two namespaces at
@@ -298,7 +326,6 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     `openspec/specs/rule-model-surface/spec.md` reference-consumer contract, and the Pacta/Modou
     compatibility evidence recorded in `CHANGELOG.md`.
 - **ACCEPTED DEBT:**
-  - Multi-target conventional-path conflation.
   - Macro/configuration coverage bounds. **One** named residual now that all three dimensions read
     `cfg_if!` arms: transparency covers **item position** only — an invocation inside an
     `impl`/`trait` body holds impl items, needing a parallel flattening across ~10 body walkers
