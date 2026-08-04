@@ -619,6 +619,13 @@ fn collect_defs(
 ///   external call). An inline `mod`'s own name is itself such a top-level item. (Comments, strings,
 ///   and char literals are pre-stripped from `source`, so a `'}'` cannot miscount the depth.)
 ///
+///   One brace is transparent to this rule: an `extern` block's. Its `fn`/`static` items are declared in
+///   the module that CONTAINS the block, not in a scope of their own, so they are module-top-level
+///   despite sitting one depth deeper — see [`extern_block_brace_at`]. That is right for this ladder as
+///   well as for the value-namespace query: a bare `rand()` call resolves to a local
+///   `extern "C" { pub fn rand(); }` exactly as it would to a plain local `fn rand()`, so treating the
+///   extern one as absent read a local call as an external dependency.
+///
 /// Residual stated bound: the full single-segment over-reaction (a local `let` / param / closure
 /// binding, `must_not_call_inline("rand")` only; `chrono::Utc` is immune) is canonical in
 /// `strict_external`'s rustdoc and not re-argued here. One corollary specific to this fn's
@@ -646,6 +653,12 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
 /// does not count. Inline `mod` names are deliberately NOT captured here — they are the type-namespace
 /// side of the very collision this exists to detect.
 ///
+/// "Top level" includes an item inside an `extern` block opened at that level, because such a block opens
+/// no naming scope: `unsafe extern "C" { pub fn foo(); }` declares `foo` in the enclosing module, and it
+/// coexists with `mod foo` for exactly the namespace reason this function exists to observe. Treating that
+/// brace like any other made the value invisible and a real import of the governed module pass silently —
+/// the class `PROJECT.md` forbids outright, and the shape 渾儀 had already been corrected for.
+///
 /// `source` must be declaration-cleaned (comments, strings, and macro bodies stripped), like every
 /// other reader in this module: an item declared inside a macro body is not observed, a stated bound.
 pub(crate) fn value_namespace_item_names(module: &str, source: &str) -> HashSet<String> {
@@ -660,6 +673,31 @@ pub(crate) fn value_namespace_item_names(module: &str, source: &str) -> HashSet<
 /// `capture_inline_mod_names` decides whether an inline `mod x { … }`'s own name is itself recorded as
 /// a definition of the enclosing module — wanted for the local-precedence ladder, not for the
 /// value-namespace query, whose whole point is to distinguish the two namespaces.
+/// The `{` of an `extern` block starting at `i`, if one starts there: `extern {`, `extern "C" {`, and the
+/// `unsafe extern "C" {` form Rust 2024 requires (the `unsafe` sits before the keyword, so matching on
+/// `extern` alone reaches all three).
+///
+/// An extern block's brace opens no naming scope — its `fn`/`static` items are declared in the module
+/// that CONTAINS the block, and can legally coexist with a `mod` of the same name because the two live in
+/// different namespaces. `extern crate foo;` is deliberately not matched: it has no brace, so the `{`
+/// requirement excludes it without a special case.
+fn extern_block_brace_at(bytes: &[u8], i: usize) -> Option<usize> {
+    if !super::lexer::keyword_starts_at(bytes, i, b"extern") {
+        return None;
+    }
+    let mut cursor = skip_ws(bytes, i + b"extern".len());
+    // An optional ABI string. Comments and string literals are already stripped from this source, so a
+    // remaining quote can only be the ABI's own — its body is gone, leaving `""`.
+    if bytes.get(cursor) == Some(&b'"') {
+        cursor += 1;
+        while cursor < bytes.len() && bytes[cursor] != b'"' {
+            cursor += 1;
+        }
+        cursor = skip_ws(bytes, cursor.saturating_add(1));
+    }
+    (bytes.get(cursor) == Some(&b'{')).then_some(cursor)
+}
+
 fn collect_definition_names(
     module: &str,
     source: &str,
@@ -674,17 +712,35 @@ fn collect_definition_names(
     // `(name, enclosing brace depth)`. A submodule item is keyed by its true (inline) module
     // (`{module}::inner…::name`), so a submodule-local `fn rand` is `…::tests::rand`, not file-top.
     let mut mod_stack: Vec<(String, usize)> = Vec::new();
+    // Brace depths at which an `extern` block opened. Such a brace opens no naming scope, so an item one
+    // level inside it is still a top-level item of the enclosing module — see `extern_block_brace_at`.
+    // A stack rather than a flag so a malformed or unexpectedly nested block cannot leave the
+    // transparency latched on for the rest of the file.
+    let mut extern_opens: Vec<usize> = Vec::new();
     while i < bytes.len() {
         // Body-open depth of the CURRENT module (0 at file top, +1 per open inline `mod`); only
-        // items at exactly this depth are module-top-level bare-head names (see doc).
-        let top = mod_stack.last().map_or(0, |(_, d)| d + 1);
+        // items at exactly this depth are module-top-level bare-head names (see doc) — plus items
+        // inside an `extern` block opened at that depth, which the block's brace does not re-scope.
+        let module_top = mod_stack.last().map_or(0, |(_, d)| d + 1);
+        let top = if extern_opens.last() == Some(&module_top) {
+            module_top + 1
+        } else {
+            module_top
+        };
+        if let Some(brace) = extern_block_brace_at(bytes, i) {
+            extern_opens.push(depth);
+            i = brace; // let the `{` arm below increment the depth
+            continue;
+        }
         // An inline `mod name {`: its name is a top-level item of the CURRENT (enclosing) module —
         // captured when the `mod` sits at that module's top level — and its body opens a new scope.
         if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
             let name = normalize_segments(&bytes[name_start..name_end]);
             // The stack push below is unconditional — the true-module qualification depends on it —
             // while RECORDING the inline module's own name is the caller's choice.
-            if capture_inline_mod_names && depth == top && !name.is_empty() {
+            // `module_top`, not `top`: an inline `mod` inside an extern block is not legal Rust, and
+            // widening this would record one as the enclosing module's item if it appeared.
+            if capture_inline_mod_names && depth == module_top && !name.is_empty() {
                 out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
             }
             mod_stack.push((canonical_segment(name.trim()).to_string(), depth));
@@ -701,6 +757,9 @@ fn collect_definition_names(
                 depth = depth.saturating_sub(1);
                 while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
                     mod_stack.pop();
+                }
+                while extern_opens.last().is_some_and(|d| *d >= depth) {
+                    extern_opens.pop();
                 }
                 i += 1;
                 continue;

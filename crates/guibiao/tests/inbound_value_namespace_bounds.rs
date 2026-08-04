@@ -154,6 +154,74 @@ fn a_self_brace_import_binds_the_module_only_and_does_not_react() {
     }
 }
 
+/// A value declared inside an `extern` block is a value of the **enclosing** module, and reacts.
+///
+/// An extern block's `{` opens a brace but not a naming scope: `unsafe extern "C" { pub fn foo(); }`
+/// declares `foo` in the module that contains the block, and it can legally coexist with `mod foo`
+/// because the two live in different namespaces. Verified against rustc — the pair compiles, and one
+/// `use m::foo;` binds both, so `unsafe { foo() }` and `foo::INSIDE` both resolve from that single import.
+///
+/// The definition collector treated the block's brace like any other, recording only items at the
+/// module's own depth, so this value was invisible and a real import of the protected module passed
+/// silently — the class `PROJECT.md` forbids outright. 渾儀 had been corrected for this exact shape
+/// earlier in the same window; 圭表's newer reader had not.
+#[test]
+fn a_value_declared_in_an_extern_block_reacts() {
+    for (label, protected) in [
+        (
+            "unsafe-extern",
+            "pub mod foo;\nunsafe extern \"C\" { pub fn foo(); }\n",
+        ),
+        ("bare-extern", "pub mod foo;\nextern { pub fn foo(); }\n"),
+        (
+            "extern-static",
+            "pub mod foo;\nunsafe extern \"C\" { pub static foo: u8; }\n",
+        ),
+    ] {
+        let probe = Probe::new(
+            label,
+            &[
+                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                ("protected.rs", protected),
+                ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
+                ("consumer.rs", "use crate::protected::foo;\n"),
+            ],
+        );
+        assert_eq!(
+            findings(&probe.manifest()),
+            vec!["crate::consumer".to_string()],
+            "`{label}`: an extern block declares its items in the ENCLOSING module, so this import \
+             binds a value of the protected module and must react"
+        );
+    }
+}
+
+/// An `extern` block's transparency SHALL NOT leak into a real nested scope.
+///
+/// The brace of an extern block introduces no naming scope; the brace of an inline `mod` does. A value
+/// declared in an inline submodule is that submodule's, not the enclosing module's, and must keep not
+/// reacting — otherwise closing the extern case would trade one false negative for a false positive.
+#[test]
+fn a_value_in_a_nested_scope_is_still_not_the_enclosing_modules() {
+    let probe = Probe::new(
+        "nested-scope",
+        &[
+            ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+            (
+                "protected.rs",
+                "pub mod foo;\npub mod inner { pub fn foo() -> u8 { 7 } }\n",
+            ),
+            ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
+            ("consumer.rs", "use crate::protected::foo;\n"),
+        ],
+    );
+    assert!(
+        findings(&probe.manifest()).is_empty(),
+        "`inner::foo` is a value of `inner`, not of the protected module, so this import reaches only \
+         the descendant module `foo`"
+    );
+}
+
 /// A value name that is only *text* — a comment, a string literal, a macro body — declares nothing.
 ///
 /// The collector's own precondition is declaration-cleaned source; it was handed the raw file, so any
