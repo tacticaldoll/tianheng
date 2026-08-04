@@ -218,14 +218,29 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   than reasoned: `Location` yields a *file path*, while an origin's whole vocabulary is a module path
   (`register_origin!` captures `module_path!()`, and `only_origins(["app::infra"])` is declared in the
   same terms). Adopting it would redefine what an origin is and invalidate every existing declaration,
-  which is a different change from the one this entry describes. The two paths that do work, with their
-  measured costs: (a) a **proc-macro**, so no constructor need be public at all — cost: a new crate and
-  a `syn`-class build dependency in a dimension whose prod face is deliberately std-light; (b) derive
-  the origin from the concrete type via `std::any::type_name`, which is unforgeable because a type's own
-  path is not the caller's to choose (measured: a type in `rogue` reports `crate::rogue::Repo` while the
-  registration site's `module_path!()` reported only `crate`) — cost: redefines an origin from "where
-  registered" to "where defined", invalidates every `only_origins` declaration, and rests identity on a
-  format std documents as unspecified. What DID land: the constructor is `#[doc(hidden)]` and renamed
+  which is a different change from the one this entry describes.
+  **A second recorded path also does not work**, and it was recorded by this same window before being
+  tested: a **proc-macro** does NOT let the constructor become private. A proc-macro is expanded into
+  its caller's crate and resolved there, exactly as a `macro_rules!` is, so every item its expansion
+  names must be reachable from the call site. Verified with a three-crate probe (proc-macro crate + a
+  lib holding a `pub(crate)` constructor + a consumer): the failure is `error[E0603]: function
+  `hidden_constructor` is private`, reported at the **consumer's** call, not at the macro. A macro form
+  has no privilege its caller lacks, which is the same structural reason the `Location` trigger fails.
+  Both dead ends share one shape — looking for a *macro* that can pass something hand-written code
+  cannot — so no third macro variant is worth recording either.
+  What CAN close it is a mechanism that never takes the origin from the caller, since
+  `std::any::type_name` reports the type's **own** defining path. Two forms, differing in which cost is
+  paid: (a) **redefine** an origin as "where defined" — unforgeable by construction, at the cost of
+  invalidating every `only_origins` declaration and resting *identity* on a format std documents as
+  unspecified (measured: a type in `rogue` reports `crate::rogue::Repo` while the registration site's
+  `module_path!()` reported only `crate`); (b) **cross-check** the asserted origin against the type's own
+  defining path at `install` and react to a disagreement, keeping the origin's meaning and every
+  declaration intact — mechanically available, since `module_path!()` at a type's defining module equals
+  `type_name` minus its trailing type name (measured: `tn_probe::internal` vs
+  `tn_probe::internal::Repo`, and they differ exactly when the registration claims a module the type
+  does not live in) — at the cost of resting a fail-loud gate on that unspecified format, so a toolchain
+  rendering it differently would react against correct adopter code, plus a narrowing of today's
+  behaviour (registering a type from anywhere but its own module becomes an error). What DID land: the constructor is `#[doc(hidden)]` and renamed
   `__from_register_origin` so a hand-written call reads as the bypass it is (it cannot be made private —
   `macro_rules!` visibility is checked at the expansion site, as this entry already recorded); the
   spec's claim that a type "cannot claim falsely" is corrected to state the process trust boundary —

@@ -38,13 +38,32 @@ hand-written call reads as one — and SHALL keep the residual pinned by a test,
 change state in either direction unnoticed. 漏刻 governs architectural drift; it is not an in-process
 adversary defence.
 
-Two paths would close it, neither taken here because each trades something the family has not agreed
-to spend: a proc-macro (no constructor need be public at all, at the cost of a new crate and a
-`syn`-class build dependency in a dimension whose prod face is deliberately std-light), or deriving the
-origin from the concrete type rather than the call site (unforgeable, since a type's own path is not
-the caller's to choose — at the cost of redefining an origin from "where registered" to "where
-defined", invalidating every existing `only_origins` declaration, and resting identity on
-`std::any::type_name`'s deliberately unspecified format).
+No macro form closes it, and the specification SHALL NOT record one as a way to. A **proc-macro** is
+expanded into its caller's crate and resolved there, exactly as a `macro_rules!` is, so every item its
+expansion names must be reachable from the call site: making the constructor private breaks the
+proc-macro path with `E0603` at the adopter's own call, not at the macro's definition (verified against
+rustc with a three-crate probe, not reasoned). A macro therefore has no privilege its caller lacks, and
+neither does a `#[track_caller]`/`std::panic::Location` variant, whose value is a *file path* while an
+origin's whole vocabulary is a module path.
+
+What can close it is a mechanism that does not take the origin from the caller at all, because
+`std::any::type_name` reports a type's **own** defining path, which the caller cannot choose. Two forms
+exist, and the difference between them is which cost is paid:
+
+- **Redefine** an origin as "where the type is defined" rather than "where it is registered".
+  Unforgeable by construction, at the cost of invalidating every existing `only_origins` declaration and
+  resting the *identity* on a format std documents as unspecified.
+- **Cross-check** the asserted origin against the type's own defining path at `install`, keeping the
+  origin's meaning and every declaration intact, and reacting to a disagreement rather than preventing
+  it. Mechanically available: `module_path!()` at a type's defining module equals `type_name` minus its
+  trailing type name (verified: `tn_probe::internal` and `tn_probe::internal::Repo`), and the two
+  disagree exactly when a registration claims a module the type does not live in. Its cost is that a
+  fail-loud gate would then rest on that unspecified format, so a toolchain that rendered it differently
+  would react against correct adopter code — and it forbids registering a type from anywhere but its own
+  module, which is a narrowing of today's behaviour rather than a pure addition.
+
+Neither is taken here; both are recorded with these costs in `BACKLOG.md` rather than presented as a
+mechanical fix.
 
 #### Scenario: A type's origin is its registration location
 
