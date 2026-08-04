@@ -222,8 +222,14 @@ cargo clippy -p louke -- -D warnings       # louke's audit-OFF library on its ow
                                            # an unused audit-gated item would otherwise hide until publish
 cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
+                                           # --document-private-items is NOT optional: nearly every item in
+                                           # these crates is crate-private, so without it a broken intra-doc
+                                           # link in that majority is invisible locally (17 had accumulated
+                                           # before CI gained the flag, every one pointing at something a
+                                           # module split had moved or renamed)
 cargo deny check
+bash scripts/check_dod_coherence.sh     # this list is a subset of CI's — checked, not promised
 bash scripts/test_release_coherence.sh # prove every release state and failure direction
 bash scripts/check_release_coherence.sh # react against this checkout (requires release history)
 bash scripts/test_examples.sh            # every dogfood example still reacts as declared
