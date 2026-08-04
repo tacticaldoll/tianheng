@@ -532,6 +532,17 @@ audit over a Cargo workspace SHALL pass the workspace root Cargo itself resolves
 `tianheng` shell SHALL do so, falling back to the target manifest's own directory only when metadata
 carries no such field.
 
+That `file` label SHALL be an **injective** encoding of the observed path, never a lossy rendering of
+it. A platform path is a byte string, not necessarily valid UTF-8, and a lossy conversion replaces
+each undecodable byte with one replacement character — so two distinct source files differing only in
+such bytes would carry one label, hence one identity, and a baseline accepting the first would suppress
+the second's never-accepted violation (the forbidden false negative, reached through an identity
+component rather than through the scan). The encoding SHALL therefore preserve distinctness in both
+directions: an undecodable byte SHALL be escaped, and the escape-introducing character SHALL itself be
+escaped, so no escaped label can be spelled by a path that did not need escaping. A path that is valid
+UTF-8 and contains no escape-introducing character SHALL be labeled unchanged, so no existing baseline
+entry re-keys.
+
 The anchor SHALL be an **absolute** path, and a relative or empty one SHALL be a constitution error
 (exit 2) naming the failed precondition and the value to pass instead — never accepted with a
 silently degraded label. Stripping a relative prefix from an absolute source path cannot succeed, and
@@ -602,6 +613,20 @@ relative sibling-share idiom this rule targets, which SHALL remain checkout-inde
 
 - **WHEN** a single `fn` contains `assert_boundary!(SEAM_A, obj)` written twice, verbatim
 - **THEN** `audit_probe_coverage` emits one un-auditable-probe violation for that site — a stated bound, since no further source content distinguishes the two occurrences
+
+#### Scenario: Two paths differing only in an undecodable byte stay distinct identities
+
+- **WHEN** two observed source files' paths differ only in a byte that is not valid UTF-8, and each
+  contains a non-literal probe
+- **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe identities, so baselining one
+  cannot suppress the other — rather than one label, one identity, and one silently accepted violation
+
+#### Scenario: A literal escape character in a path cannot spell an escaped byte
+
+- **WHEN** one observed path genuinely contains the escape-introducing character followed by hex
+  digits, and another contains the undecodable byte those digits would encode
+- **THEN** the two carry distinct labels, so the encoding is injective in both directions rather than
+  only for undecodable input
 
 #### Scenario: Two files with the identical expression stay distinct by file
 

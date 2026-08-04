@@ -2850,3 +2850,84 @@ fn a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_resid
          should be updated together"
     );
 }
+
+/// `Path::display()` is lossy — it replaces each byte it cannot decode with U+FFFD — so two source
+/// paths differing only in invalid-UTF-8 bytes rendered to ONE label, hence one `UnauditableProbe`
+/// identity: baselining the first would silently suppress the second's never-accepted violation.
+/// That is the injectivity class this window closed at five other identity sites; the `file`
+/// component of this identity is the same kind of component.
+///
+/// Unix-only because this is where such a path can be constructed: on Windows the analogous input is
+/// an unpaired surrogate, which the same encoder escapes (its `as_encoded_bytes()` WTF-8 form is
+/// invalid UTF-8 too) but which no portable API here can create on demand.
+#[cfg(unix)]
+#[test]
+fn two_probe_paths_differing_only_in_an_invalid_byte_stay_distinct_identities() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let tb = TempBase::new("non-utf8-probe-label");
+    let dir = tb.path().join("crates/foo/src");
+    std::fs::create_dir_all(&dir).unwrap();
+    let body = "pub const SEAM_CONST: &str = \"seam\";\npub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }";
+    let roots: Vec<PathBuf> = [b"lib\xff.rs".as_slice(), b"lib\xfe.rs".as_slice()]
+        .iter()
+        .map(|raw| {
+            let path = dir.join(std::ffi::OsStr::from_bytes(raw));
+            std::fs::write(&path, body).unwrap();
+            path
+        })
+        .collect();
+
+    let Outcome::Violations(report) = tb.audit(&[boundary("seam", Severity::Enforce)], &roots)
+    else {
+        panic!("expected the un-auditable probes to react");
+    };
+    let unauditable: Vec<_> = report
+        .violations
+        .iter()
+        .filter(|v| v.rule.contains("string literal"))
+        .collect();
+    assert_eq!(
+        unauditable.len(),
+        2,
+        "both files carry a non-literal probe, so both must react: {:?}",
+        report.violations
+    );
+    assert_ne!(
+        unauditable[0].file, unauditable[1].file,
+        "two paths differing only in an invalid byte must keep distinct labels — a lossy \
+         display() collapses them to one, so one baseline entry would suppress both"
+    );
+    assert_ne!(
+        unauditable[0].id(),
+        unauditable[1].id(),
+        "and therefore distinct violation identities, so baselining one cannot mask the other"
+    );
+}
+
+/// The escape is injective in the other direction too: a literal `%` in a real (valid UTF-8) path
+/// must not be able to spell an escaped byte's label. `a%FF.rs` as a genuine filename and
+/// `a<0xFF>.rs` are distinct observations and must stay distinct labels, which is why `%` itself is
+/// escaped rather than passed through. Every path without a `%` — every realistic one — keeps the
+/// byte-identical label the previous `display()` form produced, so no baseline entry re-keys.
+#[cfg(unix)]
+#[test]
+fn a_literal_percent_in_a_path_cannot_spell_an_escaped_byte() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let anchor = Path::new("/w");
+    let plain = crate::audit::scan::probes::labeled(Path::new("/w/src/lib.rs"), anchor);
+    assert_eq!(plain, "src/lib.rs", "an ordinary path is unchanged");
+
+    let spelled = crate::audit::scan::probes::labeled(Path::new("/w/src/a%FF.rs"), anchor);
+    let raw = crate::audit::scan::probes::labeled(
+        Path::new(std::ffi::OsStr::from_bytes(b"/w/src/a\xff.rs")),
+        anchor,
+    );
+    assert_eq!(spelled, "src/a%25FF.rs");
+    assert_eq!(raw, "src/a%FF.rs");
+    assert_ne!(
+        spelled, raw,
+        "a filename containing a literal % must never collide with an escaped invalid byte"
+    );
+}
