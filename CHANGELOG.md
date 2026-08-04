@@ -1000,6 +1000,21 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   for the same reason: `git check-ignore` reads the filesystem to decide directory-ness, so for a
   directory-only pattern the bare form answers differently in a clone where the directory happens to
   exist (measured in a fresh clone — bare `.github/prompts` is not ignored, `.github/prompts/` is).
+- `scripts/check_reference_integrity.sh` normalizes a link target with portable shell instead of
+  `realpath -m --relative-to`, whose `-m` and `--relative-to` are GNU coreutils extensions that BSD and
+  macOS `realpath` reject. The script sits in a Definition of Done that states no platform restriction,
+  and under `set -e` the unrecognized option would have exited with realpath's own status — landing on
+  **1**, which in this gate's contract means "stale references found", so a portability failure would have
+  been reported as a repository defect. Lexical normalization is not a compromise but the correct
+  semantics: a markdown link resolves by path text, the target need not exist (a broken one must still be
+  reported with its resolved form), and symlinks must not be followed — `realpath -m` was chosen for
+  exactly those properties, and pure text has them by construction. Verified as a drop-in: the replacement
+  agrees with GNU `realpath -m --relative-to` on all 35 markdown link targets in the repository and on 13
+  adversarial shapes (repeated `..`, `..` escaping the root, `a//b`, `a/./b`, a bare `.`), and runs
+  unchanged under `dash`. The first attempt did **not** agree — a `/`-joined accumulator silently stopped
+  popping after the first `..`, so a doubly-ascending link came out with a doubled separator
+  (`…//PROJECT.md`) instead of resolving to the root document — which is what the equivalence comparison
+  was written to catch, and it differed on eight of forty-eight cases.
 - `scripts/check_reference_integrity.sh` covers root-level references and stops swallowing read errors.
   Its extraction regex recognized only paths under `crates/`, `scripts/`, `openspec/`, `docs/`,
   `examples/`, and `.github/`, so 259 references to `PROJECT.md`, `AGENTS.self-law.md`, `BACKLOG.md`,
