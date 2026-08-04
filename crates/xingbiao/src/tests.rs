@@ -137,6 +137,122 @@ fn member_root_files_preserves_exact_custom_roots_and_is_deterministic() {
     );
 }
 
+/// Every shape that actually occurs labels byte-identically to the rendering `path_label` replaced, so
+/// no recorded baseline entry re-keys on unix.
+///
+/// This is the assertion that made the change safe to make at all: 漏刻's observed-file label and
+/// 圭表/渾儀's compilation unit are both baseline identity, so a label that shifted for an ordinary path
+/// would restate every entry an adopter has recorded. The previous rendering was
+/// `encoded(path.as_os_str())` — the bytes escaped, separators untouched — and for a path with one
+/// separator style and no `.`/`//` noise the two agree exactly.
+#[test]
+fn path_label_does_not_re_key_any_shape_that_occurs() {
+    for path in [
+        "src/lib.rs",
+        "src/main.rs",
+        "src/bin/conventional.rs",
+        "tools/outside.rs",
+        "single.rs",
+        "/abs/src/lib.rs",
+        "a/../b",
+    ] {
+        assert_eq!(
+            path_label(Path::new(path)),
+            path,
+            "an ordinary path must label as itself, or every recorded baseline entry re-keys"
+        );
+    }
+    assert_eq!(
+        path_label(Path::new("with%pct/f.rs")),
+        "with%25pct/f.rs",
+        "a literal `%` escapes so no escaped label can be spelled by an unescaped one"
+    );
+    // The stated normalizations. Neither form is reachable from a `cargo metadata` `src_path` or a
+    // walked path, both already canonical; asserted so the bound is pinned rather than implied.
+    assert_eq!(path_label(Path::new("./a")), "a");
+    assert_eq!(path_label(Path::new("a//b")), "a/b");
+    assert_eq!(path_label(Path::new("/")), "/");
+}
+
+/// A byte that is not valid UTF-8 survives as an escape, so two paths differing only there keep two
+/// labels — and a separator byte that is legal *inside* a name is not treated as a separator.
+///
+/// The second half is what proves the separator rule is delegated to `std::path` rather than
+/// hardcoded: on unix `\` is an ordinary byte, so `a\b` is ONE component and must not label as `a/b`.
+/// A `replace('\\', "/")` implementation would map two distinct paths onto one label — the exact
+/// injectivity loss this labeling exists to prevent — and this is the assertion that would catch it.
+#[cfg(unix)]
+#[test]
+fn path_label_preserves_bytes_and_does_not_invent_separators() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let bad = std::ffi::OsStr::from_bytes(b"src/ba\xffd.rs");
+    assert_eq!(
+        path_label(Path::new(bad)),
+        "src/ba%FFd.rs",
+        "an undecodable byte escapes rather than collapsing to U+FFFD"
+    );
+    let other = std::ffi::OsStr::from_bytes(b"src/ba\xfed.rs");
+    assert_ne!(
+        path_label(Path::new(bad)),
+        path_label(Path::new(other)),
+        "two paths differing only in undecodable bytes must keep two identities"
+    );
+
+    let backslash_in_name = std::ffi::OsStr::from_bytes(b"a\\b");
+    assert_eq!(
+        path_label(Path::new(backslash_in_name)),
+        "a\\b",
+        "on unix `\\` is a byte within one component, not a separator: labeling it as `a/b` would \
+         collide with the genuinely two-component path"
+    );
+    assert_ne!(
+        path_label(Path::new(backslash_in_name)),
+        path_label(Path::new("a/b")),
+        "the single file `a\\b` and the file `b` inside directory `a` are distinct observations"
+    );
+}
+
+/// The case this change exists for, asserted where it can actually run.
+///
+/// Not executed in this repository — there is no Windows runner and no wine — so it is here as the
+/// statement of the closed defect rather than as evidence for it. `Components` splits on
+/// `sys::path::is_sep_byte`, which `library/std/src/sys/path/windows.rs` defines as
+/// `path_separator_bytes!(b'\\', b'/')` and `.../unix.rs` as `path_separator_bytes!(b'/')` — so on
+/// Windows `src\lib.rs` is two components and joins back as `src/lib.rs`, matching what Linux CI
+/// recorded, while on unix it is one component and stays one (asserted above, where it does run).
+#[cfg(windows)]
+#[test]
+fn a_windows_separator_labels_as_the_canonical_one() {
+    assert_eq!(path_label(Path::new("src\\lib.rs")), "src/lib.rs");
+    assert_eq!(path_label(Path::new("src\\bin\\x.rs")), "src/bin/x.rs");
+    assert_eq!(
+        path_label(Path::new("src/lib.rs")),
+        path_label(Path::new("src\\lib.rs")),
+        "both separators are separators on Windows, so both must reach one label"
+    );
+}
+
+/// No label carries the platform's own separator unless that separator is already `/`.
+///
+/// **This assertion is vacuous on unix and load-bearing on Windows**, and is written this way
+/// deliberately rather than left to a platform CI runner that does not exist. On unix
+/// `MAIN_SEPARATOR` IS `/`, so the check cannot fail here; on Windows it is `\`, and the defect this
+/// change closes — `src\lib.rs` reaching a baseline as identity — is exactly what it catches. The
+/// Windows behaviour rests on `std::path::Components`' documented separator parsing, not on a
+/// measurement taken in this repository: there is no Windows runner and no wine here, and claiming
+/// otherwise would be the kind of unearned confidence a green unix suite invites.
+#[test]
+fn a_label_never_carries_a_platform_separator() {
+    for path in ["src/lib.rs", "a/b/c.rs", "/abs/x.rs"] {
+        let label = path_label(Path::new(path));
+        assert!(
+            std::path::MAIN_SEPARATOR == '/' || !label.contains(std::path::MAIN_SEPARATOR),
+            "a label must use `/` alone, so one commit yields one identity on every platform: {label:?}"
+        );
+    }
+}
+
 /// A root reported under two target names collapses to one, wherever the two reports sit.
 ///
 /// `Vec::dedup` removes only CONSECUTIVE equal elements, which is total for
