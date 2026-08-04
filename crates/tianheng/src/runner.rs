@@ -813,7 +813,21 @@ fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteE
     };
     if err.kind() == std::io::ErrorKind::AlreadyExists {
         if let Ok(metadata) = std::fs::symlink_metadata(path) {
-            if metadata.file_type().is_symlink() {
+            // Dangling is claimed only when the target still does not resolve. `std::fs::metadata`
+            // follows the link, so its failure IS that condition.
+            //
+            // This function is reached only when `read_to_string` returned `NotFound`, so for a symlink
+            // the target was absent when the path was read — but it can come back before the `O_EXCL`
+            // open (restored file, or the link replaced), and classifying on symlink-ness alone then
+            // told the adopter "it is a symlink to X, which does not exist" about a target that does,
+            // and prescribed a remedy ("recreate the target") already satisfied. Refusing was always
+            // safe; only the reason was false, which is the misdiagnosis class this window corrected
+            // twice elsewhere.
+            //
+            // Falling through loses no diagnostic: [`write_baseline`]'s `create_new && AlreadyExists`
+            // arm already reports that the baseline "appeared while the new snapshot was being
+            // prepared", which is exactly what happened.
+            if metadata.file_type().is_symlink() && std::fs::metadata(path).is_err() {
                 let target = std::fs::read_link(path)?;
                 return Err(BaselineWriteError::DanglingSymlink { target });
             }
