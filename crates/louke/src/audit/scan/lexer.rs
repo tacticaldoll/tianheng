@@ -1,277 +1,5 @@
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-
-/// What the source scan found for a probe occurrence (`assert_boundary!`).
-#[derive(Debug)]
-pub(super) enum Probe {
-    /// A probe whose seam is a string literal (auditable, plain or raw): the seam value.
-    Literal(String),
-    /// A probe whose seam argument is NOT a string literal (a const or expression): the CI
-    /// face cannot trace it to a declared seam, so it reacts rather than skipping. Carries the
-    /// matched marker, source file, an owner-qualified enclosing item (never a bare name — two
-    /// owners may share a method name), and the offending expression's own trimmed source text,
-    /// so distinct non-literal probes in one file are distinct findings (never an absolute byte
-    /// offset; an anonymous lexical scope may carry a parent-local equal-header discriminator —
-    /// see `fn_scopes`/`first_macro_arg_end`).
-    Unauditable {
-        marker: String,
-        file: String,
-        owner: String,
-        expr: String,
-    },
-}
-
-pub(super) const DEFAULT_MARKERS: &[&str] = &["assert_boundary"];
-
-pub(super) fn collect_probes_with_markers(
-    input: &Path,
-    markers: &[&str],
-    probes: &mut Vec<Probe>,
-) -> Result<(), String> {
-    if input.is_file() {
-        return collect_reachable_probes(input, markers, probes);
-    }
-    let mut visited = HashSet::new();
-    collect_directory_probes(input, markers, probes, &mut visited)
-}
-
-fn collect_directory_probes(
-    dir: &Path,
-    markers: &[&str],
-    probes: &mut Vec<Probe>,
-    visited: &mut HashSet<PathBuf>,
-) -> Result<(), String> {
-    if !xingbiao::try_visit(visited, dir)? {
-        return Ok(());
-    }
-    let read = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    // Sort entries so the scan order — and thus the violation order in the report — is
-    // deterministic across runs (read_dir order is OS/filesystem-dependent and unsorted).
-    let mut paths = Vec::new();
-    for entry in read {
-        let entry =
-            entry.map_err(|e| format!("cannot read a dir entry under {}: {e}", dir.display()))?;
-        // file_type() does NOT follow symlinks, so a symlinked directory does not recurse —
-        // avoiding an infinite loop on a cyclic symlink (fail safe, not stack-overflow loud).
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))?;
-        paths.push((file_type.is_dir(), entry.path()));
-    }
-    paths.sort();
-    for (is_dir, path) in paths {
-        if is_dir {
-            collect_directory_probes(&path, markers, probes, visited)?;
-        } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
-            && xingbiao::try_visit(visited, &path)?
-        {
-            let source = std::fs::read_to_string(&path)
-                .map_err(|e| format!("cannot read source {}: {e}", path.display()))?;
-            scan_source_with_markers(&source, &path.display().to_string(), markers, probes);
-        }
-    }
-    Ok(())
-}
-
-fn collect_reachable_probes(
-    root: &Path,
-    markers: &[&str],
-    probes: &mut Vec<Probe>,
-) -> Result<(), String> {
-    let root_parent = root
-        .parent()
-        .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
-    let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
-    // Uses canonicalized path visit tracking to prevent cycle loops on symlinks.
-    let mut visited: HashSet<PathBuf> = HashSet::new();
-    while let Some((file, child_base)) = pending.pop() {
-        if !xingbiao::try_visit(&mut visited, &file)? {
-            continue;
-        }
-        let source = std::fs::read_to_string(&file)
-            .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
-        scan_source_with_markers(&source, &file.display().to_string(), markers, probes);
-        // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
-        // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
-        // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
-        let file_dir = file.parent().unwrap_or(child_base.as_path());
-        let mut children = external_module_files(&source, &child_base, file_dir)?;
-        children.sort();
-        children.reverse();
-        pending.extend(children);
-    }
-    Ok(())
-}
-
-fn external_module_files(
-    source: &str,
-    child_base: &Path,
-    file_dir: &Path,
-) -> Result<Vec<(PathBuf, PathBuf)>, String> {
-    let mut modules = Vec::new();
-    collect_scope_modules(
-        source.as_bytes(),
-        0,
-        source.len(),
-        child_base,
-        file_dir,
-        &mut modules,
-    )?;
-    Ok(modules)
-}
-
-fn collect_scope_modules(
-    bytes: &[u8],
-    start: usize,
-    end: usize,
-    child_base: &Path,
-    file_dir: &Path,
-    modules: &mut Vec<(PathBuf, PathBuf)>,
-) -> Result<(), String> {
-    let mut i = start;
-    while i < end {
-        if let Some(next) = skip_literal_or_comment(bytes, i) {
-            i = next.min(end);
-            continue;
-        }
-        if bytes[i] == b'!' && preceding_token_is_ident(bytes, i) {
-            if let Some(next) = foreign_macro_body_end(bytes, i) {
-                i = next.min(end);
-                continue;
-            }
-        }
-        if is_mod_keyword(bytes, i) {
-            let mut cursor = skip_ascii_space(bytes, i + 3);
-            let name_start = cursor;
-            if bytes.get(cursor..cursor + 2) == Some(b"r#") {
-                cursor += 2;
-            }
-            while cursor < end && is_ident_byte(bytes[cursor]) {
-                cursor += 1;
-            }
-            if cursor == name_start
-                || (cursor == name_start + 2 && &bytes[name_start..cursor] == b"r#")
-            {
-                i += 3;
-                continue;
-            }
-            let raw_name = &bytes[name_start..cursor];
-            let name = if raw_name.starts_with(b"r#") {
-                &raw_name[2..]
-            } else {
-                raw_name
-            };
-            let name = std::str::from_utf8(name).map_err(|e| e.to_string())?;
-            cursor = skip_ascii_space(bytes, cursor);
-            match bytes.get(cursor) {
-                Some(b';') => {
-                    let attrs = mod_preamble_attrs(bytes, start, i);
-                    // Resolve either the unconditional `#[path = "…"]` target (followed to observe
-                    // its probes) or, absent one, the conventional `<base>/name.rs|name/mod.rs`.
-                    let resolved = match &attrs.path {
-                        // A non-inline `#[path]` resolves from the containing file's OWN directory
-                        // (`file_dir`), not the conventional-child base — rustc's mod-rs-blind rule.
-                        Some(rel) => resolve_path_module(file_dir, rel),
-                        None => resolve_external_module(child_base, name),
-                    }?;
-                    match resolved {
-                        Some(resolved) => modules.push(resolved),
-                        // No file at the target/conventional location. A `#[cfg]`-gated declaration
-                        // (or a cfg-conditional relocation) may legitimately have none in this
-                        // configuration (an off feature / another platform), so tolerate it — it
-                        // compiles no probes here, so skipping it cannot silently cover a seam. A
-                        // non-cfg missing module is a real broken reference: fail loud (exit 2).
-                        None if attrs.cfg => {}
-                        None => {
-                            return Err(format!(
-                                "cannot resolve reachable module `{name}` under {}",
-                                child_base.display()
-                            ));
-                        }
-                    }
-                    i = cursor + 1;
-                    continue;
-                }
-                Some(b'{') => {
-                    let close = balanced_brace_end(bytes, cursor, end);
-                    let attrs = mod_preamble_attrs(bytes, start, i);
-                    // Descending an inline `mod x { … }`: x's children resolve from `inline_base` —
-                    // `<child_base>/name`, or `<file_dir>/dir` for an inline `#[path = "dir"]` remap.
-                    // rustc accumulates the inline-module name as a directory component, so this base
-                    // governs BOTH x's conventional file-children AND any `#[path]` nested in x's body
-                    // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
-                    // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
-                    // component and read a same-named orphan — a false negative.)
-                    let inline_base = match &attrs.path {
-                        Some(rel) => file_dir.join(rel),
-                        None => child_base.join(name),
-                    };
-                    collect_scope_modules(
-                        bytes,
-                        cursor + 1,
-                        close.saturating_sub(1),
-                        &inline_base,
-                        &inline_base,
-                        modules,
-                    )?;
-                    i = close;
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        if bytes[i] == b'{' {
-            i = balanced_brace_end(bytes, i, end);
-            continue;
-        }
-        i += 1;
-    }
-    Ok(())
-}
-
-/// Resolve a `mod name;` to its conventional file and the base directory for its own children:
-/// `Ok(Some(..))` for `<base>/name.rs` or `<base>/name/mod.rs`, `Ok(None)` when neither exists (the
-/// caller decides whether an absent file is a legitimate `#[cfg]`-gated skip or a hard error), and
-/// `Err` only for a genuine ambiguity (both files present).
-fn resolve_external_module(base: &Path, name: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
-    let flat = base.join(format!("{name}.rs"));
-    let nested = base.join(name).join("mod.rs");
-    let file = match (flat.is_file(), nested.is_file()) {
-        (true, false) => flat,
-        (false, true) => nested,
-        (true, true) => {
-            return Err(format!(
-                "module `{name}` resolves to both '{}' and '{}'",
-                flat.display(),
-                nested.display()
-            ));
-        }
-        (false, false) => return Ok(None),
-    };
-    let next_base = if file.file_name().and_then(|n| n.to_str()) == Some("mod.rs") {
-        file.parent().unwrap_or(base).to_path_buf()
-    } else {
-        file.parent().unwrap_or(base).join(name)
-    };
-    Ok(Some((file, next_base)))
-}
-
-/// Resolve an unconditional `#[path = "rel"] mod name;` to its author-chosen file and the base
-/// directory for its own children. `rel` is relative to `base` — the containing file's own directory
-/// (`file_dir`), with each enclosing inline-`mod` name already accumulated onto it by the caller;
-/// for a non-mod-rs `name.rs` this differs from the conventional-child directory a plain `mod name;`
-/// uses. A `#[path]`-loaded file is mod-rs-like, so its children resolve from the target file's
-/// **own** directory. `Ok(None)` when the target is absent (the caller tolerates a cfg-conditional
-/// absence and fails loud otherwise) — no ambiguity is possible (the path names one file), unlike the
-/// conventional `name.rs` / `name/mod.rs` pair.
-fn resolve_path_module(base: &Path, rel: &str) -> Result<Option<(PathBuf, PathBuf)>, String> {
-    let file = base.join(rel);
-    if !file.is_file() {
-        return Ok(None);
-    }
-    let next_base = file.parent().unwrap_or(base).to_path_buf();
-    Ok(Some((file, next_base)))
-}
+use super::probes::*;
+use std::collections::HashMap;
 
 /// Read the string-literal value of a `#[path = "…"]` starting just past the `=` (`start`), bounded
 /// by `end`. Handles a normal `"…"` (with the standard escapes) and a raw `r"…"` / `r#…"…"#` string
@@ -279,7 +7,7 @@ fn resolve_path_module(base: &Path, rel: &str) -> Result<Option<(PathBuf, PathBu
 /// is not a valid remap) — the caller then treats the module as non-relocated (conventional
 /// resolution or a loud missing-file error, never a silent skip). Bytes accumulate so a UTF-8
 /// filename round-trips.
-fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
+pub(crate) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
     // Advance past whitespace and comments to the value — but NOT over a string literal, which is
     // exactly what we are here to read (`skip_preamble_trivia` would skip the literal as trivia).
     let mut i = start;
@@ -346,13 +74,13 @@ fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
     None
 }
 
-fn is_mod_keyword(bytes: &[u8], i: usize) -> bool {
+pub(crate) fn is_mod_keyword(bytes: &[u8], i: usize) -> bool {
     bytes.get(i..i + 3) == Some(b"mod")
         && (i == 0 || !is_ident_byte(bytes[i - 1]))
         && bytes.get(i + 3).is_none_or(|b| !is_ident_byte(*b))
 }
 
-fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
+pub(crate) fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
     let mut end = bang;
     while end > 0 && bytes[end - 1].is_ascii_whitespace() {
         end -= 1;
@@ -360,14 +88,86 @@ fn preceding_token_is_ident(bytes: &[u8], bang: usize) -> bool {
     end > 0 && is_ident_byte(bytes[end - 1])
 }
 
-fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
+pub(crate) fn skip_ascii_space(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() && bytes[i].is_ascii_whitespace() {
         i += 1;
     }
     i
 }
 
-fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+/// Advance past whitespace AND any interleaved comments — used between the `mod` keyword and its
+/// name, and between the name and its terminator (`;`/`{`), where a comment is trivia to rustc
+/// (`pub mod /* relocated */ child;` compiles identically to `pub mod child;`) but a bare
+/// whitespace-only skip stops at the comment's leading `/`. There, the following identifier-run
+/// scan finds no valid identifier at that position, so the whole declaration was never recognized
+/// as a `mod` at all — not a graceful skip, a silent corpus drop: the module and its entire
+/// subtree, and every probe beneath it, vanished from the scan (found on adversarial review; a
+/// comment in this position is legal and unremarkable Rust, not a stated bound).
+pub(crate) fn skip_space_and_comments(bytes: &[u8], mut i: usize) -> usize {
+    loop {
+        i = skip_ascii_space(bytes, i);
+        if i >= bytes.len() {
+            return i;
+        }
+        match skip_literal_or_comment(bytes, i) {
+            Some(next) => i = next,
+            None => return i,
+        }
+    }
+}
+
+/// The **interior** byte ranges of each arm of a transparent macro invocation whose `!` is at `bang`
+/// and whose balanced body ends at `body_end` (as [`foreign_macro_body_end`] reports it, one past the
+/// closing delimiter).
+///
+/// `cfg_if!`'s grammar is `if #[cfg(a)] { items } else if #[cfg(b)] { items } else { items }`, so the
+/// body's top-level **brace** groups are exactly the arms. A `#[cfg(…)]` predicate is a `#` plus a
+/// *bracket* group and `if` / `else` are bare identifiers, so those bytes are simply walked over: the
+/// only way a `{` could hide inside a predicate is within a string literal, which
+/// `skip_literal_or_comment` consumes first. The invocation's own outer delimiter is irrelevant —
+/// `cfg_if!( … )` works the same as `cfg_if! { … }`.
+pub(crate) fn transparent_arm_ranges(
+    b: &[u8],
+    bang: usize,
+    body_end: usize,
+) -> Vec<(usize, usize)> {
+    let mut arms = Vec::new();
+    let open = skip_trivia(b, bang + 1);
+    if !matches!(b.get(open), Some(b'{') | Some(b'(') | Some(b'[')) {
+        return arms;
+    }
+    // Just inside the invocation's own delimiter, up to (not including) its closer.
+    let limit = body_end.saturating_sub(1);
+    let mut i = open + 1;
+    while i < limit {
+        if let Some(next) = skip_literal_or_comment(b, i) {
+            i = next.min(limit);
+            continue;
+        }
+        if b[i] == b'{' {
+            let close = balanced_brace_end(b, i, limit);
+            arms.push((i + 1, close.saturating_sub(1)));
+            i = close;
+            continue;
+        }
+        i += 1;
+    }
+    arms
+}
+
+/// Find the index just past the matching closer for a delimiter group opened at `open`
+/// (`(`/`)`, `[`/`]`, `{`/`}`), scanning `[open, limit)` with nesting depth tracked so an inner
+/// delimiter of the SAME kind does not prematurely close the group; literals/comments are skipped
+/// so a delimiter-like byte inside one never miscounts. Returns `limit` if the group never closes
+/// within it — a caller-bound scan limit, never a hang. Shared by [`balanced_brace_end`],
+/// [`paren_group_end`], and [`attr_group_end`], which each pick one delimiter pair.
+pub(crate) fn delimiter_group_end(
+    bytes: &[u8],
+    open: usize,
+    limit: usize,
+    open_b: u8,
+    close_b: u8,
+) -> usize {
     let mut depth = 0usize;
     let mut i = open;
     while i < limit {
@@ -375,35 +175,46 @@ fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
             i = next.min(limit);
             continue;
         }
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
+        if bytes[i] == open_b {
+            depth += 1;
+        } else if bytes[i] == close_b {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return i + 1;
             }
-            _ => {}
         }
         i += 1;
     }
     limit
 }
 
+pub(crate) fn balanced_brace_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    delimiter_group_end(bytes, open, limit, b'{', b'}')
+}
+
 /// Outer attributes on the `mod name;` at `mod_index` that steer the walker.
-struct ModPreambleAttrs {
+pub(crate) struct ModPreambleAttrs {
     /// The target of an **unconditional** `#[path = "..."]` relocation (the direct string form): the
     /// module lives at this author-chosen file, which the walker now *follows* to count its probes
-    /// (closing the relocated-module coverage gap). `None` when there is no such attribute. A
-    /// `cfg_attr`-wrapped `path` reads as `cfg` (below), not here — it is cfg-conditional, so it is
-    /// not followed cfg-blind and stays a stated skip bound.
-    path: Option<String>,
-    /// A `#[cfg(...)]` / `#[cfg_attr(...)]` gate: the module may legitimately have no file in the
-    /// current configuration (an off feature / another platform), so an absent file is tolerated
-    /// rather than a scan error — the same cfg-tolerance 渾儀 applies, reimplemented louke-locally
-    /// (三儀 ⊥ 三儀). This is not `cfg` evaluation: a resolvable cfg-gated module is still scanned
-    /// and its probes still counted; only an *absent* file for a cfg-gated declaration is tolerated.
-    cfg: bool,
+    /// (closing the relocated-module coverage gap). `None` when there is no such attribute.
+    pub(crate) path: Option<String>,
+    /// Every `path = "…"` target found inside a `#[cfg_attr(<pred>, …, path = "…")]` wrapper — a
+    /// module may carry more than one, one per platform predicate. `cfg_attr` never removes the
+    /// `mod` item the way a bare `#[cfg]` does, so cfg-blind observation must union EVERY candidate
+    /// (found on adversarial review: earlier code matched only the exact identifier `cfg`, so
+    /// `cfg_attr` — a different identifier — matched neither the `path` arm above nor the bare-`cfg`
+    /// arm below, and this field did not exist at all; a `cfg_attr`-wrapped `#[path]` target was
+    /// therefore never followed, contradicting this very doc's own prior claim that it "reads as
+    /// cfg"). Each candidate is resolved the identical way the unconditional `path` above is
+    /// (relative to the containing file's own directory), not the conventional-child base.
+    pub(crate) cfg_attr_paths: Vec<String>,
+    /// A **bare** `#[cfg(...)]` gate: the module may legitimately have no file in the current
+    /// configuration (an off feature / another platform), so an absent file is tolerated rather than
+    /// a scan error — the same cfg-tolerance 渾儀 applies, reimplemented louke-locally (三儀 ⊥ 三儀).
+    /// This is not `cfg` evaluation: a resolvable cfg-gated module is still scanned and its probes
+    /// still counted; only an *absent* file for a cfg-gated declaration is tolerated. `cfg_attr` does
+    /// NOT set this — see `cfg_attr_paths` above for its own, additive absence tolerance.
+    pub(super) cfg: bool,
 }
 
 /// Scan a `mod name;`'s preamble (the bytes since the previous item boundary) for the outer
@@ -413,8 +224,9 @@ struct ModPreambleAttrs {
 /// contains the text (`// fast path`, `#[cfg(feature = "fastpath")]`) MUST NOT be read as a `path`
 /// relocation — a false match would drop a reachable module and every probe under it (a silent
 /// coverage false negative, the worst outcome under FN-first). A `#[cfg_attr(.., path = ..)]`
-/// conditional relocation reads as `cfg` (its meta name is `cfg_attr`, not `path`), so an absent
-/// target is tolerated rather than errored.
+/// conditional relocation's own `path = "…"` target is extracted separately (`cfg_attr_paths`, every
+/// candidate the item carries) and unioned with the conventional file by the caller — never treated
+/// as equivalent to a bare `#[cfg]`'s absence tolerance, since `cfg_attr` never removes the item.
 ///
 /// `scope_start` bounds the search for the preamble's own start: it is the enclosing scope's own
 /// start (a real item/scope boundary, never inside a literal or comment), so scanning **forward**
@@ -440,7 +252,11 @@ struct ModPreambleAttrs {
 /// (a preceding sibling item's own block body, or a macro invocation's body) is likewise skipped
 /// as one atomic unit via [`balanced_brace_end`], landing on its own matching `}` — the real
 /// boundary — rather than treating the interior's own bytes as candidates.
-fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> ModPreambleAttrs {
+pub(crate) fn mod_preamble_attrs(
+    bytes: &[u8],
+    scope_start: usize,
+    mod_index: usize,
+) -> ModPreambleAttrs {
     let mut start = scope_start;
     let mut i = scope_start;
     while i < mod_index {
@@ -473,6 +289,7 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
     }
     let mut attrs = ModPreambleAttrs {
         path: None,
+        cfg_attr_paths: Vec::new(),
         cfg: false,
     };
     let mut i = start;
@@ -505,11 +322,32 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
                     // conditionally applies its wrapped attribute(s); the `mod` item itself always
                     // exists regardless of the predicate (verified against a real `rustc` build:
                     // `#[cfg_attr(unix, allow(dead_code))] mod x;` with no `x.rs` is E0583 on every
-                    // platform). A `cfg_attr`-wrapped `path` is a different, already-handled case
-                    // (the `path` arm above, `has_path_attr`'s broader test in the syn-based
-                    // dimensions) — this bare-`cfg` scope is only for the plain-missing-file
-                    // tolerance, so a `cfg_attr` sighting here must never grant it.
+                    // platform) — this bare-`cfg` scope is only for the plain-missing-file
+                    // tolerance, so a `cfg_attr` sighting must never grant it (its own absence
+                    // tolerance is additive, via `cfg_attr_paths` below, not this flag).
                     b"cfg" => attrs.cfg = true,
+                    // `#[cfg_attr(<pred>, …, path = "…")]`: extract the `path = "…"` value from
+                    // WITHIN this attribute's own argument list (skipping the leading predicate,
+                    // which is never itself an identifier spelled `path`), if one is present. A
+                    // module may carry more than one SEPARATE `cfg_attr`-wrapped `#[path]` (one per
+                    // platform predicate); this arm fires once per occurrence of the outer loop, so
+                    // every one is collected. A doubly-nested `#[cfg_attr(a, cfg_attr(b, path =
+                    // "…"))]` is a stated, undetected bound here (a hand-rolled byte scanner, unlike
+                    // `hunyi`'s `syn`-based recursive walk) — rare enough in practice that chasing
+                    // full nested parity was not worth the added scanner complexity; a resolvable
+                    // `path` one level deep is never a silent claim of coverage either way, since the
+                    // scan still falls back to the conventional file.
+                    b"cfg_attr" => {
+                        let paren_open = skip_preamble_trivia(bytes, name_end, mod_index);
+                        if bytes.get(paren_open) == Some(&b'(') {
+                            let paren_close = paren_group_end(bytes, paren_open, mod_index);
+                            if let Some(rel) =
+                                find_path_meta_value(bytes, paren_open + 1, paren_close, mod_index)
+                            {
+                                attrs.cfg_attr_paths.push(rel);
+                            }
+                        }
+                    }
                     _ => {}
                 }
                 i = attr_group_end(bytes, open, mod_index);
@@ -521,10 +359,55 @@ fn mod_preamble_attrs(bytes: &[u8], scope_start: usize, mod_index: usize) -> Mod
     attrs
 }
 
+/// Index just past the `)` closing the paren group opened at `open` (which indexes the `(`),
+/// tracking nested `()` and skipping string/char literals and comments so a `)` inside a
+/// `#[cfg_attr(unix, path = "a)b.rs")]` literal does not close the group early. Mirrors
+/// [`attr_group_end`]'s `[]`-tracking for a `cfg_attr`'s own argument list.
+pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    delimiter_group_end(bytes, open, limit, b'(', b')')
+}
+
+/// The value of a `path = "…"` name-value meta somewhere in `[start, paren_close)` (the interior of
+/// a `cfg_attr`'s own argument list, bounded separately by `mod_index` for `read_path_string`'s own
+/// trivia skip) — `None` if no such meta is present. Scans identifier-by-identifier rather than a
+/// raw substring search, so a predicate that merely contains the text (`target_os = "path_os"`,
+/// a doc comment) is never mistaken for the applied `path` meta.
+pub(crate) fn find_path_meta_value(
+    bytes: &[u8],
+    start: usize,
+    paren_close: usize,
+    mod_index: usize,
+) -> Option<String> {
+    let mut i = start;
+    while i < paren_close {
+        if let Some(next) = skip_literal_or_comment(bytes, i) {
+            i = next.min(paren_close);
+            continue;
+        }
+        if is_ident_byte(bytes[i]) && (i == start || !is_ident_byte(bytes[i - 1])) {
+            let name_start = i;
+            let mut name_end = i;
+            while name_end < paren_close && is_ident_byte(bytes[name_end]) {
+                name_end += 1;
+            }
+            if &bytes[name_start..name_end] == b"path" {
+                let eq = skip_preamble_trivia(bytes, name_end, paren_close);
+                if bytes.get(eq) == Some(&b'=') {
+                    return read_path_string(bytes, eq + 1, mod_index);
+                }
+            }
+            i = name_end;
+            continue;
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Advance past whitespace, comments, and string/char literals to the next significant byte
 /// (bounded by `end`). Shared by the attribute walk so a comment or literal inside a preamble
 /// never derails the meta-name match.
-fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
+pub(crate) fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
     while i < end {
         if let Some(next) = skip_literal_or_comment(bytes, i) {
             i = next.min(end);
@@ -542,34 +425,16 @@ fn skip_preamble_trivia(bytes: &[u8], mut i: usize, end: usize) -> usize {
 /// Index just past the `]` closing the attribute-bracket group opened at `open` (which indexes the
 /// `[`), tracking nested `[]` and skipping string/char literals and comments so a `]` inside a
 /// `#[path = "a]b.rs"]` literal does not close the group early. Mirrors [`balanced_brace_end`].
-fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
-    let mut depth = 0usize;
-    let mut i = open;
-    while i < limit {
-        if let Some(next) = skip_literal_or_comment(bytes, i) {
-            i = next.min(limit);
-            continue;
-        }
-        match bytes[i] {
-            b'[' => depth += 1,
-            b']' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return i + 1;
-                }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    limit
+pub(crate) fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
+    delimiter_group_end(bytes, open, limit, b'[', b']')
 }
 
 /// Skip a (possibly nested) block comment whose opening `/*` is at `i`, returning the index just
 /// past its outermost `*/`. Rust block comments nest, so depth is tracked; an unterminated comment
-/// runs to EOF. Shared by [`scan_source`] and [`skip_trivia`] so the two cannot drift — the
+/// runs to EOF. Shared by [`scan_source_with_markers`] (and its `#[cfg(test)]` `scan_source`
+/// wrapper) and [`skip_trivia`] so the two cannot drift — the
 /// original non-nested bug existed in *both* precisely because they were independent copies.
-fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
+pub(crate) fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
     let mut depth = 1usize;
     i += 2; // past the opening `/*`
     while i + 1 < b.len() && depth > 0 {
@@ -591,11 +456,11 @@ fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
 /// (auditable) or not (un-auditable). Declarations come from the passed `RuntimeBoundary` objects.
 /// `file` labels an un-auditable probe so the reaction is actionable.
 #[cfg(test)]
-pub(super) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
+pub(crate) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
     scan_source_with_markers(source, file, DEFAULT_MARKERS, probes);
 }
 
-pub(super) fn scan_source_with_markers(
+pub(crate) fn scan_source_with_markers(
     source: &str,
     file: &str,
     markers: &[&str],
@@ -661,7 +526,14 @@ pub(super) fn scan_source_with_markers(
             // `match !(x)`), never a macro — treating its parenthesized operand as a macro body would
             // skip real code (and drop any probe inside it). `macro_rules` is not a keyword, so it
             // still reaches `foreign_macro_body_end`'s name-skip.
-            if name_start < name_end && (is_raw_ident || !is_rust_keyword(&b[name_start..name_end]))
+            // The one transparent macro is NOT skipped: its arms hold real, compiled code, so the
+            // scan walks into the body and observes a probe (or a typo'd seam, or an un-auditable
+            // probe) there exactly as at top level. Ordering matters — a transparent invocation
+            // written inside a `macro_rules!` definition is never reached, because that outer body
+            // is skipped first, so the macro-definition exclusion is unaffected.
+            if name_start < name_end
+                && !is_transparent_macro_name(b, name_end)
+                && (is_raw_ident || !is_rust_keyword(&b[name_start..name_end]))
             {
                 if let Some(end) = foreign_macro_body_end(b, i) {
                     i = end;
@@ -678,7 +550,7 @@ pub(super) fn scan_source_with_markers(
 /// handling can never drift apart (the independent-copy drift `skip_block_comment` warns about).
 /// Raw/byte strings are tested before plain strings (an inner `"` would otherwise desync), and a
 /// lifetime (`'a`) is deliberately NOT a literal (left to be walked as code).
-fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
+pub(crate) fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
     // line comment
     if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
         let mut j = i;
@@ -727,12 +599,24 @@ fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
 /// The identifier run ending immediately before `end` equals `target`. Used to recognize a
 /// `macro_rules` keyword before its `!` (the only stable form taking a `name` between `!` and the
 /// body delimiter) without a false match on `my_macro_rules` (the maximal run differs).
-fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
+pub(crate) fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
     let mut start = end;
     while start > 0 && is_ident_byte(b[start - 1]) {
         start -= 1;
     }
     &b[start..end] == target
+}
+
+/// The identifier run ending immediately before `end` (whitespace already stepped over by the
+/// caller) is the one **transparent control-flow macro**, `cfg_if!`. See
+/// `runtime-origin-assertion`'s "CI face — every declared seam is probed" requirement for why
+/// scanning into its arms (rather than skipping them as macro-generated) closes a coverage false
+/// negative, and why the gate is on the macro **name** rather than any body-wrapping macro. Matches
+/// 圭表's `is_transparent_macro_name` and 渾儀's own test — the same rule in three hand-written
+/// copies, never a shared scanner (三儀 ⊥ 三儀), with `cfg_if_transparency_conformance.rs` as the
+/// drift reaction.
+pub(crate) fn is_transparent_macro_name(b: &[u8], end: usize) -> bool {
+    preceding_ident_is(b, end, b"cfg_if")
 }
 
 /// Given `bang` where `b[bang] == b'!'` and the preceding byte is an identifier byte, return the
@@ -744,7 +628,7 @@ fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
 /// a probe inside it (a reintroduced false negative). The balanced walk reuses
 /// `skip_literal_or_comment`, so a delimiter inside a string/char/comment never closes early; an
 /// unterminated body at EOF returns `Some(len)`.
-fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
+pub(crate) fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
     let mut i = skip_trivia(b, bang + 1);
     // The name may be separated from `!` by whitespace (`macro_rules ! foo {…}` is valid Rust),
     // exactly as the caller tolerates when deciding this `!` opens a macro. Skip back over that
@@ -795,7 +679,7 @@ fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
 /// `br"…"`, `br#"…"#`) and return the index past its end, or `None` if `i` is not such a
 /// literal. Rust syntax guarantees `r`/`b` immediately before `"`/`#` is a literal prefix
 /// (no identifier can precede a string), so no token-boundary check is needed.
-fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
+pub(crate) fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
     let mut j = i;
     let byte = j < b.len() && b[j] == b'b';
     if byte {
@@ -853,7 +737,11 @@ fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
 /// [`match_keyword`] so probe markers and structural keywords share one right-boundary rule.
 /// Tolerating the gap closes a false negative: a probe written `assert_boundary !("seam")` was
 /// silently dropped by a contiguous match.
-fn match_probe_marker<'a>(b: &[u8], i: usize, markers: &[&'a str]) -> Option<(usize, &'a str)> {
+pub(crate) fn match_probe_marker<'a>(
+    b: &[u8],
+    i: usize,
+    markers: &[&'a str],
+) -> Option<(usize, &'a str)> {
     for &marker in markers {
         let name = marker.as_bytes();
         if let Some(after_name) = match_keyword(b, i, name) {
@@ -871,7 +759,7 @@ fn match_probe_marker<'a>(b: &[u8], i: usize, markers: &[&'a str]) -> Option<(us
 /// and must keep the boundary, so a foreign macro whose name merely *ends* in `assert_boundary` is
 /// not mis-read as our probe. ASCII-only would treat the `Ω` continuation bytes as a boundary and
 /// falsely match (a false coverage / fabricated probed-but-undeclared reaction).
-fn is_ident_byte(byte: u8) -> bool {
+pub(crate) fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte >= 0x80
 }
 
@@ -879,7 +767,7 @@ fn is_ident_byte(byte: u8) -> bool {
 ///
 /// Plain keywords and invalid identifier spellings are rejected; raw identifiers may escape a
 /// keyword except for Rust's non-escapable path/self names.
-pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
+pub(crate) fn is_valid_macro_marker(marker: &str) -> bool {
     if marker.is_empty() {
         return false;
     }
@@ -922,7 +810,7 @@ pub(super) fn is_valid_macro_marker(marker: &str) -> bool {
 /// (`return !(x)`, `if !(cond) {…}`), not a macro invocation — its operand must not be skipped as a
 /// macro body. `macro_rules` is deliberately absent (it is not a keyword and must reach the
 /// name-skip). A non-ASCII / non-UTF-8 run is never a keyword.
-fn is_rust_keyword(word: &[u8]) -> bool {
+pub(crate) fn is_rust_keyword(word: &[u8]) -> bool {
     let Ok(word) = std::str::from_utf8(word) else {
         return false;
     };
@@ -984,9 +872,9 @@ fn is_rust_keyword(word: &[u8]) -> bool {
 }
 
 /// Skip ASCII whitespace and `//` / `/* */` comments, returning the next code index. Mirrors
-/// the comment handling in [`scan_source`] so a comment between the `!` and `(`, or before the
+/// the comment handling in [`scan_source_with_markers`] so a comment between the `!` and `(`, or before the
 /// seam argument, does not desync probe capture (which would silently drop a real probe).
-fn skip_trivia(b: &[u8], mut i: usize) -> usize {
+pub(crate) fn skip_trivia(b: &[u8], mut i: usize) -> usize {
     loop {
         while i < b.len() && b[i].is_ascii_whitespace() {
             i += 1;
@@ -1013,7 +901,7 @@ fn skip_trivia(b: &[u8], mut i: usize) -> usize {
 /// the marker is not actually a probe call (no opening delimiter follows). `owner` is the
 /// caller-supplied, already-resolved owner-qualified enclosing item (see `fn_scopes`), threaded
 /// straight into an `Unauditable` probe's identity.
-fn capture_probe(
+pub(crate) fn capture_probe(
     b: &[u8],
     i: usize,
     marker: &str,
@@ -1086,7 +974,7 @@ fn capture_probe(
 /// model `foreign_macro_body_end` uses for a whole macro body — so a nested call or index in the
 /// seam expression (`assert_boundary!(some_fn(a, b), obj)`, `assert_boundary!(TABLE[i], obj)`) is
 /// not mistaken for the argument's own end.
-fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
+pub(crate) fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
     let mut depth = 0usize;
     let mut angle_depth = 0usize;
     let mut last_token_was_double_colon = false;
@@ -1161,7 +1049,7 @@ fn first_macro_arg_end(b: &[u8], open: usize) -> usize {
 
 /// Whether `b` consists only of ASCII whitespace, comments, and unary / prefix operator tokens
 /// (`&`, `*`, `!`, `-`, `+`, `mut`, `ref`). Value literals (strings, chars, numbers) return false.
-fn is_unary_prefix_span(b: &[u8]) -> bool {
+pub(crate) fn is_unary_prefix_span(b: &[u8]) -> bool {
     let mut i = 0;
     while i < b.len() {
         let next = skip_trivia(b, i);
@@ -1188,7 +1076,7 @@ fn is_unary_prefix_span(b: &[u8]) -> bool {
 
 /// Trim ASCII whitespace from both ends of a byte slice (a `str::trim` that stays on raw bytes,
 /// since the captured text is not yet known to be valid UTF-8 at the trim point).
-fn trim_bytes(b: &[u8]) -> &[u8] {
+pub(crate) fn trim_bytes(b: &[u8]) -> &[u8] {
     let start = b
         .iter()
         .position(|c| !c.is_ascii_whitespace())
@@ -1204,7 +1092,7 @@ fn trim_bytes(b: &[u8]) -> &[u8] {
 /// carries the trait path. Qualifies a nested `fn`'s owner (never a bare method name — two owners
 /// may share one), mirroring `hunyi`'s `owner`/`trait_ref` qualification for the identical
 /// same-named-item collision (`semantic-unsafe-confinement`).
-enum ImplOrTraitContext {
+pub(crate) enum ImplOrTraitContext {
     Impl {
         trait_ref: Option<String>,
         self_ty: String,
@@ -1218,7 +1106,7 @@ enum ImplOrTraitContext {
 /// same-named local types) declared in different inline `mod { … }` blocks of the *same* file —
 /// two same-named items in *different files* are already distinguished by the outer `file` field,
 /// so this only needs to cover same-file `mod` nesting, not cross-file module identity.
-fn render_owner(
+pub(crate) fn render_owner(
     module_path: &str,
     enclosing_fn: Option<&str>,
     context_stack: &[(usize, ImplOrTraitContext)],
@@ -1255,7 +1143,7 @@ fn render_owner(
     }
 }
 
-pub(super) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> String {
+pub(crate) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> String {
     let header = String::from_utf8_lossy(trim_bytes(&b[start..brace]));
     let normalized = header.split_whitespace().collect::<Vec<_>>().join(" ");
     if normalized.is_empty() {
@@ -1265,7 +1153,7 @@ pub(super) fn anonymous_scope_header(b: &[u8], start: usize, brace: usize) -> St
     }
 }
 
-fn enclosing_owner(
+pub(crate) fn enclosing_owner(
     named_owner: Option<&str>,
     anonymous_stack: &[(usize, String)],
 ) -> Option<String> {
@@ -1280,7 +1168,7 @@ fn enclosing_owner(
 /// Match a bare keyword identifier at `i` (e.g. `fn`, `impl`, `trait`), requiring a right word
 /// boundary so `implx`/`fnx` is not mistaken for the keyword — mirrors [`match_probe_marker`]'s
 /// own boundary discipline. The caller checks the left boundary.
-fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
+pub(crate) fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
     if i + name.len() > b.len() || &b[i..i + name.len()] != name {
         return None;
     }
@@ -1296,7 +1184,7 @@ fn match_keyword(b: &[u8], i: usize, name: &[u8]) -> Option<usize> {
 /// start index. Used to split an `impl` header without being fooled by a `for`/`where` nested in a
 /// generic bound (e.g. an HRTB `for<'a>` inside `<…>`). `>` only closes a generic level when not
 /// preceded by `-` (excluding a `->` return-arrow), matching `skip_to_item_body`'s own rule.
-fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
+pub(crate) fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
     let mut depth = 0usize;
     let mut i = 0;
     while i < header.len() {
@@ -1330,7 +1218,7 @@ fn find_top_level_keyword(header: &[u8], keyword: &[u8]) -> Option<usize> {
 /// Stated bound: a const-generic default expression using a shift operator (`<<`/`>>`) before the
 /// item's own body is not specially handled — vanishingly rare in a bare `fn`/`impl`/`trait`
 /// header and not attempted here.
-fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
+pub(crate) fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
     let mut depth = 0usize;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
@@ -1352,7 +1240,7 @@ fn skip_to_item_body(b: &[u8], mut i: usize) -> Option<usize> {
 
 /// After the `fn`/`trait` keyword (`after_keyword` just past it), parse the item's name and skip
 /// to its opening `{`. Returns `None` for a malformed/nameless item or a body-less declaration.
-fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
+pub(crate) fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, usize)> {
     let name_start = skip_trivia(b, after_keyword);
     let ident_start = if b.get(name_start..name_start + 2) == Some(b"r#") {
         name_start + 2
@@ -1376,7 +1264,10 @@ fn parse_named_item_header(b: &[u8], after_keyword: usize) -> Option<(String, us
 /// `impl Self` header into `(None, self)`. The split searches for a top-level `for` only before
 /// any top-level `where` (a `where`-clause `for<'a>` HRTB must never be mistaken for the impl's
 /// own `for`). Returns `None` only on malformed/truncated input (an `impl` always has a body).
-fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext, usize)> {
+pub(crate) fn parse_impl_header(
+    b: &[u8],
+    after_impl: usize,
+) -> Option<(ImplOrTraitContext, usize)> {
     let header_start = skip_trivia(b, after_impl);
     let body_start = skip_to_item_body(b, header_start)?;
     let header = &b[header_start..body_start - 1];
@@ -1397,32 +1288,178 @@ fn parse_impl_header(b: &[u8], after_impl: usize) -> Option<(ImplOrTraitContext,
     Some((ctx, body_start))
 }
 
+/// Mutable scan state threaded through [`fn_scopes`]'s single byte-walk: the open
+/// mod/impl-or-trait/fn/anonymous-block stacks (each paired with the depth it opened at, so a `}`
+/// pops exactly the frames it closes), the sibling-numbering map for anonymous blocks, the running
+/// brace depth / current-header start the walk advances, and the completed `(body_start, body_end,
+/// owner)` triples.
+struct FnScopeState {
+    depth: usize,
+    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
+    // file) contributes nothing here, since its content is scanned separately, as its own file,
+    // where the outer `file` identity field already disambiguates it.
+    mod_stack: Vec<(usize, String)>,
+    context_stack: Vec<(usize, ImplOrTraitContext)>,
+    fn_stack: Vec<(usize, usize, String)>,
+    anonymous_stack: Vec<(usize, String)>,
+    anonymous_siblings: HashMap<(String, String), usize>,
+    // Start of the current code header, advanced only by code delimiters observed by this
+    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
+    // anonymous-scope boundary.
+    anonymous_header_start: usize,
+    out: Vec<(usize, usize, String)>,
+}
+
+impl FnScopeState {
+    fn new() -> Self {
+        Self {
+            depth: 0,
+            mod_stack: Vec::new(),
+            context_stack: Vec::new(),
+            fn_stack: Vec::new(),
+            anonymous_stack: Vec::new(),
+            anonymous_siblings: HashMap::new(),
+            anonymous_header_start: 0,
+            out: Vec::new(),
+        }
+    }
+
+    /// Try each header keyword (`mod`/`impl`/`trait`/`fn`) at `i` in `b`; on a match, push the
+    /// opened scope's frame and return the walk's next position (the body start) — the caller
+    /// `continue`s the outer loop from there without falling through to the brace/`;` handling.
+    /// `None` when no keyword matches at `i`.
+    fn try_dispatch_keyword(&mut self, b: &[u8], i: usize) -> Option<usize> {
+        if let Some(rest) = match_keyword(b, i, b"mod") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                self.mod_stack.push((self.depth, name));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"impl") {
+            if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
+                self.context_stack.push((self.depth, ctx));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"trait") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                self.context_stack
+                    .push((self.depth, ImplOrTraitContext::Trait(name)));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        } else if let Some(rest) = match_keyword(b, i, b"fn") {
+            if let Some((name, body_start)) = parse_named_item_header(b, rest) {
+                let module_path = self
+                    .mod_stack
+                    .iter()
+                    .map(|(_, name)| name.as_str())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                let enclosing = enclosing_owner(
+                    self.fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+                    &self.anonymous_stack,
+                );
+                let owner = render_owner(
+                    &module_path,
+                    enclosing.as_deref(),
+                    &self.context_stack,
+                    &name,
+                );
+                self.fn_stack.push((self.depth, body_start, owner));
+                self.depth += 1;
+                self.anonymous_header_start = body_start;
+                return Some(body_start);
+            }
+        }
+        None
+    }
+
+    /// Open a new anonymous-block frame at `i`, headed by the code since
+    /// `anonymous_header_start` and numbered against its siblings under the same parent+header.
+    fn open_brace(&mut self, b: &[u8], i: usize) {
+        let header = anonymous_scope_header(b, self.anonymous_header_start, i);
+        let parent = enclosing_owner(
+            self.fn_stack.last().map(|(_, _, owner)| owner.as_str()),
+            &self.anonymous_stack,
+        )
+        .unwrap_or_else(|| "<module scope>".to_string());
+        let sibling = self
+            .anonymous_siblings
+            .entry((parent, header.clone()))
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+        self.anonymous_stack
+            .push((self.depth, format!("block {header}#{sibling}")));
+        self.depth += 1;
+        self.anonymous_header_start = i + 1;
+    }
+
+    /// Close the brace at `i`: pop every stack frame opened at the depth this brace closes,
+    /// recording a completed `(body_start, i, owner)` triple for a closed `fn` scope.
+    fn close_brace(&mut self, i: usize) {
+        self.depth = self.depth.saturating_sub(1);
+        if self
+            .fn_stack
+            .last()
+            .is_some_and(|&(open_depth, _, _)| open_depth == self.depth)
+        {
+            let (_, body_start, owner) = self.fn_stack.pop().expect("checked Some above");
+            self.out.push((body_start, i, owner));
+        }
+        if self
+            .context_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.context_stack.pop();
+        }
+        if self
+            .mod_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.mod_stack.pop();
+        }
+        if self
+            .anonymous_stack
+            .last()
+            .is_some_and(|&(open_depth, _)| open_depth == self.depth)
+        {
+            self.anonymous_stack.pop();
+        }
+        self.anonymous_header_start = i + 1;
+    }
+}
+
 /// Every owner-qualified `fn` body in this source file, as `(body_start, body_end, owner)` byte
 /// ranges — `body_start`/`body_end` bound just inside the fn's own `{ … }` (excluding the braces
 /// themselves). Looked up by [`owner_for`] so an un-auditable probe's identity is qualified by a
 /// real structural discriminator, never a bare name or a position.
 ///
-/// Deliberately does not skip macro-invocation/`macro_rules!` bodies the way `scan_source` does:
-/// a probe is never found inside one (that exclusion already happens in `scan_source` before a
-/// probe is ever captured), so a phantom `fn`/`impl`/`trait` this function might mis-parse out of
-/// macro-template text can never overlap the position of a real probe — it is inert, not a
-/// correctness risk.
-fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
-    let mut depth = 0usize;
-    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
-    // file) contributes nothing here, since its content is scanned separately, as its own file,
-    // where the outer `file` identity field already disambiguates it.
-    let mut mod_stack: Vec<(usize, String)> = Vec::new();
-    let mut context_stack: Vec<(usize, ImplOrTraitContext)> = Vec::new();
-    let mut fn_stack: Vec<(usize, usize, String)> = Vec::new();
-    let mut anonymous_stack: Vec<(usize, String)> = Vec::new();
-    let mut anonymous_siblings: HashMap<(String, String), usize> = HashMap::new();
-    let mut out = Vec::new();
+/// Deliberately does not skip macro-invocation/`macro_rules!` bodies the way `scan_source` does.
+/// The two cases this leaves, both fine:
+///
+/// - A **non-transparent** macro body still yields no probe (`scan_source` skips it before a probe
+///   is ever captured), and a phantom `fn`/`impl`/`trait` mis-parsed out of its macro-template text
+///   lies wholly inside that body's balanced braces, so its range can never overlap a real probe's
+///   position — inert, not a correctness risk. (This was once the *whole* justification, resting on
+///   "a probe is never found inside a macro body". Transparency retired that premise, so it is now
+///   only half the story.)
+/// - A **transparent** `cfg_if!` body does now yield probes, and this walk reads it as ordinary code
+///   — which is exactly right: a `fn` inside an arm becomes a real scope. The invocation's own body
+///   braces and the arm braces are counted as the anonymous block scopes they lexically are, so such
+///   a probe's owner renders as `block cfg_if::cfg_if!#1::block if #[cfg(unix)]#1::fn f`. That is
+///   this function's existing rule for any anonymous scope (a real `if` block reads the same way),
+///   applied unchanged rather than special-cased for arms, and it names the arm in the violation
+///   message — which an adopter reading it wants. Pinned by
+///   `an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner`.
+pub(crate) fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
+    let mut state = FnScopeState::new();
     let mut i = 0;
-    // Start of the current code header, advanced only by code delimiters observed by this
-    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
-    // anonymous-scope boundary.
-    let mut anonymous_header_start = 0usize;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
             i = next;
@@ -1430,109 +1467,27 @@ fn fn_scopes(b: &[u8]) -> Vec<(usize, usize, String)> {
         }
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
-            if let Some(rest) = match_keyword(b, i, b"mod") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    mod_stack.push((depth, name));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"impl") {
-                if let Some((ctx, body_start)) = parse_impl_header(b, rest) {
-                    context_stack.push((depth, ctx));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"trait") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    context_stack.push((depth, ImplOrTraitContext::Trait(name)));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
-            } else if let Some(rest) = match_keyword(b, i, b"fn") {
-                if let Some((name, body_start)) = parse_named_item_header(b, rest) {
-                    let module_path = mod_stack
-                        .iter()
-                        .map(|(_, name)| name.as_str())
-                        .collect::<Vec<_>>()
-                        .join("::");
-                    let enclosing = enclosing_owner(
-                        fn_stack.last().map(|(_, _, owner)| owner.as_str()),
-                        &anonymous_stack,
-                    );
-                    let owner =
-                        render_owner(&module_path, enclosing.as_deref(), &context_stack, &name);
-                    fn_stack.push((depth, body_start, owner));
-                    depth += 1;
-                    anonymous_header_start = body_start;
-                    i = body_start;
-                    continue;
-                }
+            if let Some(next) = state.try_dispatch_keyword(b, i) {
+                i = next;
+                continue;
             }
         }
         match b[i] {
-            b'{' => {
-                let header = anonymous_scope_header(b, anonymous_header_start, i);
-                let parent = enclosing_owner(
-                    fn_stack.last().map(|(_, _, owner)| owner.as_str()),
-                    &anonymous_stack,
-                )
-                .unwrap_or_else(|| "<module scope>".to_string());
-                let sibling = anonymous_siblings
-                    .entry((parent, header.clone()))
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-                anonymous_stack.push((depth, format!("block {header}#{sibling}")));
-                depth += 1;
-                anonymous_header_start = i + 1;
-            }
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if fn_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _, _)| open_depth == depth)
-                {
-                    let (_, body_start, owner) = fn_stack.pop().expect("checked Some above");
-                    out.push((body_start, i, owner));
-                }
-                if context_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    context_stack.pop();
-                }
-                if mod_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    mod_stack.pop();
-                }
-                if anonymous_stack
-                    .last()
-                    .is_some_and(|&(open_depth, _)| open_depth == depth)
-                {
-                    anonymous_stack.pop();
-                }
-                anonymous_header_start = i + 1;
-            }
-            b';' => anonymous_header_start = i + 1,
+            b'{' => state.open_brace(b, i),
+            b'}' => state.close_brace(i),
+            b';' => state.anonymous_header_start = i + 1,
             _ => {}
         }
         i += 1;
     }
-    out
+    state.out
 }
 
 /// Look up the innermost owner-qualified `fn` scope containing byte position `pos` (the smallest
 /// enclosing range, in case of nested `fn`s), or a stated fallback if `pos` falls inside no known
 /// `fn` body (a probe outside any function — not a realistic `assert_boundary!` call site, but
 /// handled rather than panicking).
-fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
+pub(crate) fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
     scopes
         .iter()
         .filter(|(start, end, _)| *start <= pos && pos < *end)
@@ -1543,7 +1498,7 @@ fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String {
 
 /// Parse a raw string literal `r"…"` / `r#…"…"#…` starting at `i`, returning `(value, next)`.
 /// `None` if it is not a well-formed raw string.
-fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
+pub(crate) fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
     let mut j = i + 1; // past `r`
     let mut hashes = 0;
     while b.get(j) == Some(&b'#') {
@@ -1573,20 +1528,15 @@ fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 }
 
 /// Decode a plain-string literal's inner bytes (between the quotes, escapes still present) to the
-/// exact `&str` value the Rust compiler produces, so a probe seam matches the compiler-decoded
-/// declared seam (`RuntimeBoundary::seam()`) rather than the raw source bytes — and so a `#[path]`
-/// value (the OTHER caller, below) matches 渾儀's syn-derived `s.value()` on the same input. Returns
-/// `None` on any escape the decoder does not reproduce exactly — a malformed or unrecognized
-/// escape, an out-of-range `\x`, or an invalid `\u{…}`. Backslash-newline line continuation IS
-/// decoded (strips the backslash, the newline, and the continued line's leading whitespace,
-/// contributing nothing — verified against a real `rustc` build): a real, if rare, valid `#[path]`
-/// value shape, matching `syn`'s `LitStr::value()` fidelity (the fix a v0.2.0..v0.2.1 cross-
-/// dimension sweep found missing here and in 圭表's independent copy). No real seam name spans
-/// lines, so this never meaningfully changes the seam-name caller's behavior. The caller routes
-/// `None` to an un-auditable probe (a loud reaction), never a silent mismatch. The escape set is the
-/// `&str` string-literal set only; byte-string-only escapes never reach here (byte strings are
-/// already un-auditable).
-fn decode_str_escapes(inner: &[u8]) -> Option<String> {
+/// exact `&str` value the Rust compiler produces — see `runtime-origin-assertion`'s "CI face —
+/// every declared seam is probed" requirement for the full decoded-value-matching and
+/// un-auditable-on-failure rationale (including backslash-newline line continuation). Also used
+/// for a `#[path]` value (the OTHER caller, below), matching 渾儀's syn-derived `s.value()` on the
+/// same input — the fix a v0.2.0..v0.2.1 cross-dimension sweep found missing here and in 圭表's
+/// independent copy. No real seam name spans lines, so this never meaningfully changes the
+/// seam-name caller's behavior. The escape set is the `&str` string-literal set only;
+/// byte-string-only escapes never reach here (byte strings are already un-auditable).
+pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {
     // The surrounding source compiled, so it is valid UTF-8; escapes are all ASCII, so iterating
     // by `char` reconstructs any multi-byte content faithfully.
     let s = std::str::from_utf8(inner).ok()?;

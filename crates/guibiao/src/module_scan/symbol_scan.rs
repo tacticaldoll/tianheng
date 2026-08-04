@@ -89,8 +89,8 @@ pub(crate) fn inline_symbol_findings(
         // The per-file `use`-map (alias-carrying): head identifier → target path. A `type`-alias
         // or `pub use` target is resolved through it, so `use std::time::SystemTime; type Clock =
         // SystemTime;` chases correctly.
-        let use_map = collect_use_map(&decl_text, module, root_modules);
-        collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx);
+        let use_map = collect_use_map(&decl_text, module, root_modules)?;
+        collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx)?;
         if external {
             module_paths.insert(module.clone());
             collect_item_definition_names(module, &decl_text, &mut item_defs);
@@ -132,7 +132,7 @@ pub(crate) fn inline_symbol_findings(
 
         // (i) Glob-hazard: a glob import that can bring a prefix-resolving name into scope reacts
         // fail-closed. Read from decl_text (a glob is a `use`, not a call).
-        for glob_path in glob_import_paths(&decl_text) {
+        for glob_path in glob_import_paths(&decl_text)? {
             if let Some(resolved) = resolve_head(
                 &glob_path,
                 module,
@@ -392,15 +392,24 @@ fn is_call_application(bytes: &[u8], end: usize) -> bool {
     bytes.get(j) == Some(&b'(')
 }
 
+/// A brace-nesting depth cap for this file's two hand-rolled `use`-tree walkers ([`glob_bases`],
+/// [`expand_use_leaves`]'s inner `go`), so a pathologically nested `use` cannot overflow the
+/// stack — a DoS backstop set far beyond any real or lint-clean source. Past the cap, fail loud
+/// (a scan error) rather than silently dropping the sub-tree: a real, compilable `use` nested
+/// past this depth would otherwise vanish from observation with no report — the false negative
+/// PROJECT.md's core contract forbids. Mirrors `use_scan::MAX_USE_NEST_DEPTH`'s identical
+/// rationale for the same shape of walker.
+const MAX_SYMBOL_NEST_DEPTH: usize = 64;
+
 /// Every glob import path in already-declaration-cleaned source: a `use <path>::*;` (bare) or a
 /// grouped `use <path>::{ … * … };` (the `*` among the group members). Returns the module-path
 /// `<path>` (without the trailing `::*`), for each glob.
-fn glob_import_paths(source: &str) -> Vec<String> {
+fn glob_import_paths(source: &str) -> Result<Vec<String>, String> {
     let mut paths = Vec::new();
     for tree in use_statements(source) {
-        glob_bases(&tree, &mut paths, 0);
+        glob_bases(&tree, &mut paths, 0)?;
     }
-    paths
+    Ok(paths)
 }
 
 /// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
@@ -408,9 +417,11 @@ fn glob_import_paths(source: &str) -> Vec<String> {
 /// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
 /// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
 /// `}`-before-`{` cannot panic.
-fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
-    if depth > 64 {
-        return;
+fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) -> Result<(), String> {
+    if depth > MAX_SYMBOL_NEST_DEPTH {
+        return Err(format!(
+            "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
+        ));
     }
     let tree = tree.trim();
     match tree.find('{') {
@@ -427,7 +438,7 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
                         out.push(base.to_string());
                     }
                 } else {
-                    glob_bases(&format!("{prefix}{part}"), out, depth + 1);
+                    glob_bases(&format!("{prefix}{part}"), out, depth + 1)?;
                 }
             }
         }
@@ -440,31 +451,30 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) {
             }
         }
     }
+    Ok(())
 }
 
 /// The raw `use …` statement bodies (the text between `use` and `;`), from declaration-cleaned
 /// source. A lightweight cousin of the `use`-scan's walk, sufficient for glob detection.
 fn use_statements(source: &str) -> Vec<String> {
+    use super::lexer::UseStatementScan;
     let bytes = source.as_bytes();
     let mut trees = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         if super::lexer::keyword_starts_at(bytes, i, b"use") {
-            let start = i + 3;
-            let mut p = start;
-            while p < bytes.len() && bytes[p].is_ascii_whitespace() {
-                p += 1;
+            match super::lexer::scan_use_statement(bytes, source, i) {
+                UseStatementScan::Statement { body, next } => {
+                    trees.push(body);
+                    i = next;
+                    continue;
+                }
+                UseStatementScan::NotAStatement { resume_at } => {
+                    i = resume_at;
+                    continue;
+                }
+                UseStatementScan::Unterminated => break,
             }
-            if bytes.get(p) == Some(&b'<') {
-                i = start; // a `use<…>` precise-capturing bound, not an import
-                continue;
-            }
-            if let Some(rel) = source[start..].find(';') {
-                trees.push(source[start..start + rel].trim().to_string());
-                i = start + rel + 1;
-                continue;
-            }
-            break;
         }
         i += 1;
     }
@@ -480,24 +490,26 @@ fn collect_use_map(
     source: &str,
     current_module: &str,
     root_modules: &[String],
-) -> HashMap<String, String> {
+) -> Result<HashMap<String, String>, String> {
     let mut map = HashMap::new();
     for tree in use_statements(source) {
-        for (alias, path) in expand_use_leaves(&tree) {
+        for (alias, path) in expand_use_leaves(&tree)? {
             if let Some(canonical) = resolve_written_path(&path, current_module, root_modules) {
                 map.insert(alias, canonical);
             }
         }
     }
-    map
+    Ok(map)
 }
 
 /// Expand a use tree into `(introduced-head-identifier, written-path)` leaves. `a::{b, c as d}` →
 /// `(b, a::b)`, `(d, a::c)`. A `self`/glob leaf introduces no simple head and is skipped.
-fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
-    fn go(tree: &str, out: &mut Vec<(String, String)>, depth: usize) {
-        if depth > 64 {
-            return;
+fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, String> {
+    fn go(tree: &str, out: &mut Vec<(String, String)>, depth: usize) -> Result<(), String> {
+        if depth > MAX_SYMBOL_NEST_DEPTH {
+            return Err(format!(
+                "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
+            ));
         }
         let tree = tree.trim();
         match tree.find('{') {
@@ -518,12 +530,12 @@ fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
                     if part.is_empty() || part == "*" || head == "self" {
                         continue;
                     }
-                    go(&format!("{prefix}{part}"), out, depth + 1);
+                    go(&format!("{prefix}{part}"), out, depth + 1)?;
                 }
             }
             None => {
                 if tree.ends_with("::*") || tree.is_empty() {
-                    return;
+                    return Ok(());
                 }
                 let (path, alias) = match tree.split_once(" as ") {
                     Some((p, a)) => (p.trim().to_string(), a.trim().to_string()),
@@ -538,10 +550,11 @@ fn expand_use_leaves(tree: &str) -> Vec<(String, String)> {
                 }
             }
         }
+        Ok(())
     }
     let mut out = Vec::new();
-    go(tree, &mut out, 0);
-    out
+    go(tree, &mut out, 0)?;
+    Ok(out)
 }
 
 /// Collect the `type`-alias and `pub use` re-export definitions of a file into the crate-wide
@@ -554,7 +567,7 @@ fn collect_defs(
     root_modules: &[String],
     use_map: &HashMap<String, String>,
     ctx: &mut ResolveCtx,
-) {
+) -> Result<(), String> {
     // `type Name = Target;`
     for (name, target) in type_aliases(source) {
         if let Some(canonical) = resolve_target(&target, module, use_map, root_modules) {
@@ -569,18 +582,19 @@ fn collect_defs(
     // by the recursive glob-hazard test.
     for tree in pub_use_statements(source) {
         let mut globs = Vec::new();
-        glob_bases(&tree, &mut globs, 0);
+        glob_bases(&tree, &mut globs, 0)?;
         for base in globs {
             if let Some(canonical) = resolve_written_path(&base, module, root_modules) {
                 ctx.glob_reexports.push((module.to_string(), canonical));
             }
         }
-        for (alias, path) in expand_use_leaves(&tree) {
+        for (alias, path) in expand_use_leaves(&tree)? {
             if let Some(canonical) = resolve_written_path(&path, module, root_modules) {
                 ctx.defs.insert(format!("{module}::{alias}"), canonical);
             }
         }
     }
+    Ok(())
 }
 
 /// Collect the **true-module-qualified** names of every reachable module's own item definitions —
@@ -605,6 +619,13 @@ fn collect_defs(
 ///   external call). An inline `mod`'s own name is itself such a top-level item. (Comments, strings,
 ///   and char literals are pre-stripped from `source`, so a `'}'` cannot miscount the depth.)
 ///
+///   One brace is transparent to this rule: an `extern` block's. Its `fn`/`static` items are declared in
+///   the module that CONTAINS the block, not in a scope of their own, so they are module-top-level
+///   despite sitting one depth deeper — see [`extern_block_brace_at`]. That is right for this ladder as
+///   well as for the value-namespace query: a bare `rand()` call resolves to a local
+///   `extern "C" { pub fn rand(); }` exactly as it would to a plain local `fn rand()`, so treating the
+///   extern one as absent read a local call as an external dependency.
+///
 /// Residual stated bound: the full single-segment over-reaction (a local `let` / param / closure
 /// binding, `must_not_call_inline("rand")` only; `chrono::Utc` is immune) is canonical in
 /// `strict_external`'s rustdoc and not re-argued here. One corollary specific to this fn's
@@ -614,6 +635,76 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
     const KEYWORDS: [&[u8]; 9] = [
         b"mod", b"struct", b"enum", b"union", b"trait", b"type", b"fn", b"const", b"static",
     ];
+    collect_definition_names(module, source, &KEYWORDS, true, out);
+}
+
+/// The **value-namespace** names a module declares at its own top level: `fn`, `const`, `static`.
+///
+/// Rust resolves a `mod` in the TYPE namespace, so the only names that can legally collide with
+/// `mod foo` are these — `struct foo` beside `mod foo` would be a duplicate type-namespace
+/// definition and does not compile. One `use m::foo;` then binds **both**, which is why an inbound
+/// module boundary anchored at `m` must consult this: the module reading alone resolves the import to
+/// the descendant `m::foo` and misses that it also reaches `m` itself (see
+/// `module_check::resolve_import_module`).
+///
+/// Shares [`collect_item_definition_names`]'s walk, and with it both disciplines that keep the
+/// answer honest: names are keyed by their **true** (inline-`mod`-qualified) module, and only items at
+/// their own module's top level are captured, so an associated or block-local `fn` of the same name
+/// does not count. Inline `mod` names are deliberately NOT captured here — they are the type-namespace
+/// side of the very collision this exists to detect.
+///
+/// "Top level" includes an item inside an `extern` block opened at that level, because such a block opens
+/// no naming scope: `unsafe extern "C" { pub fn foo(); }` declares `foo` in the enclosing module, and it
+/// coexists with `mod foo` for exactly the namespace reason this function exists to observe. Treating that
+/// brace like any other made the value invisible and a real import of the governed module pass silently —
+/// the class `PROJECT.md` forbids outright, and the shape 渾儀 had already been corrected for.
+///
+/// `source` must be declaration-cleaned (comments, strings, and macro bodies stripped), like every
+/// other reader in this module: an item declared inside a macro body is not observed, a stated bound.
+pub(crate) fn value_namespace_item_names(module: &str, source: &str) -> HashSet<String> {
+    const VALUE_KEYWORDS: [&[u8]; 3] = [b"fn", b"const", b"static"];
+    let mut out = HashSet::new();
+    collect_definition_names(module, source, &VALUE_KEYWORDS, false, &mut out);
+    out
+}
+
+/// The shared walk behind [`collect_item_definition_names`] and [`value_namespace_item_names`]:
+/// module-top-level definitions introduced by any of `keywords`, keyed `{true_module}::{name}`.
+/// `capture_inline_mod_names` decides whether an inline `mod x { … }`'s own name is itself recorded as
+/// a definition of the enclosing module — wanted for the local-precedence ladder, not for the
+/// value-namespace query, whose whole point is to distinguish the two namespaces.
+/// The `{` of an `extern` block starting at `i`, if one starts there: `extern {`, `extern "C" {`, and the
+/// `unsafe extern "C" {` form Rust 2024 requires (the `unsafe` sits before the keyword, so matching on
+/// `extern` alone reaches all three).
+///
+/// An extern block's brace opens no naming scope — its `fn`/`static` items are declared in the module
+/// that CONTAINS the block, and can legally coexist with a `mod` of the same name because the two live in
+/// different namespaces. `extern crate foo;` is deliberately not matched: it has no brace, so the `{`
+/// requirement excludes it without a special case.
+fn extern_block_brace_at(bytes: &[u8], i: usize) -> Option<usize> {
+    if !super::lexer::keyword_starts_at(bytes, i, b"extern") {
+        return None;
+    }
+    let mut cursor = skip_ws(bytes, i + b"extern".len());
+    // An optional ABI string. Comments and string literals are already stripped from this source, so a
+    // remaining quote can only be the ABI's own — its body is gone, leaving `""`.
+    if bytes.get(cursor) == Some(&b'"') {
+        cursor += 1;
+        while cursor < bytes.len() && bytes[cursor] != b'"' {
+            cursor += 1;
+        }
+        cursor = skip_ws(bytes, cursor.saturating_add(1));
+    }
+    (bytes.get(cursor) == Some(&b'{')).then_some(cursor)
+}
+
+fn collect_definition_names(
+    module: &str,
+    source: &str,
+    keywords: &[&[u8]],
+    capture_inline_mod_names: bool,
+    out: &mut HashSet<String>,
+) {
     let bytes = source.as_bytes();
     let mut i = 0;
     let mut depth = 0usize;
@@ -621,15 +712,35 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
     // `(name, enclosing brace depth)`. A submodule item is keyed by its true (inline) module
     // (`{module}::inner…::name`), so a submodule-local `fn rand` is `…::tests::rand`, not file-top.
     let mut mod_stack: Vec<(String, usize)> = Vec::new();
+    // Brace depths at which an `extern` block opened. Such a brace opens no naming scope, so an item one
+    // level inside it is still a top-level item of the enclosing module — see `extern_block_brace_at`.
+    // A stack rather than a flag so a malformed or unexpectedly nested block cannot leave the
+    // transparency latched on for the rest of the file.
+    let mut extern_opens: Vec<usize> = Vec::new();
     while i < bytes.len() {
         // Body-open depth of the CURRENT module (0 at file top, +1 per open inline `mod`); only
-        // items at exactly this depth are module-top-level bare-head names (see doc).
-        let top = mod_stack.last().map_or(0, |(_, d)| d + 1);
+        // items at exactly this depth are module-top-level bare-head names (see doc) — plus items
+        // inside an `extern` block opened at that depth, which the block's brace does not re-scope.
+        let module_top = mod_stack.last().map_or(0, |(_, d)| d + 1);
+        let top = if extern_opens.last() == Some(&module_top) {
+            module_top + 1
+        } else {
+            module_top
+        };
+        if let Some(brace) = extern_block_brace_at(bytes, i) {
+            extern_opens.push(depth);
+            i = brace; // let the `{` arm below increment the depth
+            continue;
+        }
         // An inline `mod name {`: its name is a top-level item of the CURRENT (enclosing) module —
         // captured when the `mod` sits at that module's top level — and its body opens a new scope.
         if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
             let name = normalize_segments(&bytes[name_start..name_end]);
-            if depth == top && !name.is_empty() {
+            // The stack push below is unconditional — the true-module qualification depends on it —
+            // while RECORDING the inline module's own name is the caller's choice.
+            // `module_top`, not `top`: an inline `mod` inside an extern block is not legal Rust, and
+            // widening this would record one as the enclosing module's item if it appeared.
+            if capture_inline_mod_names && depth == module_top && !name.is_empty() {
                 out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
             }
             mod_stack.push((canonical_segment(name.trim()).to_string(), depth));
@@ -647,6 +758,9 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
                 while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
                     mod_stack.pop();
                 }
+                while extern_opens.last().is_some_and(|d| *d >= depth) {
+                    extern_opens.pop();
+                }
                 i += 1;
                 continue;
             }
@@ -659,15 +773,31 @@ fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<S
         // Only a module-top-level item keyword introduces a bare-head name into the CURRENT inline
         // module's scope; deeper keywords are associated / block-local items (see doc).
         if depth == top {
-            if let Some(kw) = KEYWORDS
+            if let Some(kw) = keywords
                 .iter()
                 .find(|kw| super::lexer::keyword_starts_at(bytes, i, kw))
             {
                 // The declared name is the identifier following the keyword (across whitespace),
-                // tolerating a raw-identifier `r#name`. A non-identifier there (e.g. `const _:` or a
-                // `const fn` where `fn` is itself a keyword) simply captures nothing useful — the
-                // subsequent keyword scan still reaches the real name.
-                let name_start = skip_ws(bytes, i + kw.len());
+                // tolerating a raw-identifier `r#name`. A non-identifier there (e.g. `const _:`)
+                // captures nothing useful.
+                //
+                // An interposed MODIFIER token is skipped only where the recovery below cannot handle
+                // it. `const fn` / `async fn` / `unsafe fn` need no help: `fn` is itself an item keyword,
+                // so the walk's next iteration matches it and reaches the real name. `static mut` has no
+                // such second keyword — `mut` is not one — so the name read was `mut`, the module
+                // recorded a value by that name, and a real `use m::foo;` binding the `static mut foo`
+                // beside a `mod foo` passed silently: the false negative `PROJECT.md` forbids. By the
+                // grammar (`static [mut] NAME: TYPE`) this is the only item of that shape.
+                //
+                // Skipped UNRAW'D only. `pub static r#mut: u8` is legal and genuinely names the item
+                // `mut`, so skipping that spelling would attribute the following token — `:` — or the
+                // next declaration's name to this item, turning a fixed false negative into a false
+                // positive. `keyword_starts_at` matches at an identifier boundary, so `r#mut` and a name
+                // merely beginning with `mut` are both left alone.
+                let mut name_start = skip_ws(bytes, i + kw.len());
+                if kw == b"static" && super::lexer::keyword_starts_at(bytes, name_start, b"mut") {
+                    name_start = skip_ws(bytes, name_start + b"mut".len());
+                }
                 if bytes.get(name_start).is_some_and(|b| is_ident_byte(*b)) {
                     let name =
                         normalize_segments(&bytes[name_start..end_of_ident(bytes, name_start)]);

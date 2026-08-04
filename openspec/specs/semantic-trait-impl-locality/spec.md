@@ -3,9 +3,7 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's impl-locality capability: declare in Rust that a trait may be implemented only within an allowed module location **inside the local crate** — "only `crate::commands::*` may `impl Command`". Observed via the AST (`syn`), it governs *impl locality* — the complement of exposure (`semantic-signature-coupling`) and of import (the static dimension). It governs only the crate's own impl sites; it makes no claim about downstream crates (external trait sealing is a rejected, essential-gap non-goal).
-
 ## Requirements
-
 ### Requirement: Trait-impl-locality boundary declared in Rust
 
 A trait-impl-locality boundary SHALL be expressed as Rust code and is part of the single source of truth. Mirroring the semantic dimension's other declarations, each dimension owns its own declaration DSL and the boundaries are **composed at the gate**. A `TraitImplBoundary` SHALL name: a target crate, a governed **trait** path, an **allowed-location** set (one or more module paths/prefixes within the crate where the trait MAY be implemented), a human-readable reason, and a severity. The system MUST NOT require TOML, YAML, Markdown, or any generated policy file to declare or run a trait-impl-locality boundary.
@@ -38,6 +36,38 @@ For each boundary, the system SHALL resolve the named governed trait to a real `
 
 - **WHEN** a boundary anchors to a trait path with no `trait` item reachable (directly or via local `pub use`) in the target crate's source
 - **THEN** the system emits a constitution error naming the unresolved anchor and exits 2, never exit 0 (no silent pass) and never exit 1
+
+The **resolved** anchor, not the declared spelling, SHALL be the violation's governed `target` and the
+trait role of its rule key. Matching already resolves both sides — the declared anchor through this
+crate's re-export closure, and each impl site's own trait path — so keeping the raw declaration in
+identity alone made a pure declaration refactor identity-changing: renaming a boundary from a facade
+spelling to the trait's defining path, with no code change and the same impls still misplaced, gave
+every affected violation a new `ViolationId`, so each accepted violation re-fired as new while its
+recorded baseline entry reported stale. Two equivalent spellings of one trait SHALL therefore produce
+one identity.
+
+Where the declared anchor's own re-export closure reaches **more than one distinct local trait
+definition** — two mutually-exclusive `#[cfg]` branches re-exporting different traits under one facade
+name — the system SHALL emit a constitution error naming the candidates, and SHALL NOT choose one:
+the ambiguity is in the declaration, and choosing would make the governed target arbitrary. The error
+SHALL say that the defining path can be declared instead of the facade.
+
+The rule key SHALL retain the declared allowed-location set. That is a deliberate trade, not an
+oversight: it is what keeps two boundaries governing the same trait with different allowed sets from
+producing one identity for one misplaced impl, which would let a baseline accepting the first suppress
+the second's never-accepted violation. Its cost — editing the allowed set re-fires still-misplaced
+impls as new and reports the previous entries stale — SHALL be stated rather than denied, and is the
+loud direction of the two.
+
+#### Scenario: Two equivalent trait spellings produce one violation identity
+
+- **WHEN** one boundary anchors at a facade `pub use` path and another anchors at the same trait's defining path, over the same crate with the same misplaced impl
+- **THEN** both produce the identical `ViolationId` — target and rule key both keyed on the resolved defining path — so a baseline recorded under either declaration matches the other
+
+#### Scenario: A trait facade reaching two definitions is a constitution error
+
+- **WHEN** a boundary anchors at a facade name that two mutually-exclusive `#[cfg]` branches re-export from different traits, both defined locally
+- **THEN** the system emits a constitution error naming both candidates and exits 2, rather than picking one as the governed target
 
 ### Requirement: Impl-site observation governs locality within the crate
 
@@ -77,9 +107,46 @@ An allowed location SHALL match an impl's module location either by exact path o
 - **WHEN** the boundary allows `crate::command` and an `impl Command for Foo` appears in `crate::commandeer`
 - **THEN** the system emits a violation, because `::`-delimited containment does not treat the sibling as beneath the allowed prefix
 
+### Requirement: A malformed `::`-path allowed-location entry is a constitution error
+
+An allowed-location entry given to `only_implemented_in`/`and_in` SHALL be rejected as a
+**constitution error** (exit 2) when its `::`-delimited spelling has any empty segment — a leading
+`::`, a trailing `::`, a doubled `::`, or the empty string itself — checked before any crate
+scanning. This is the identical restriction `semantic-signature-coupling`'s "A malformed `::`-path
+forbidden operand is a constitution error" requirement already places on `must_not_expose`'s
+operand, read at the allowed-location polarity: `matches_allowed`'s `::`-delimited containment
+(equality or a `prefix::`-boundary match) can never equal or prefix-contain a real module location
+against an operand shaped this way, so without this requirement a malformed entry would not
+silently pass the boundary — the containment check already fails loud, since a location outside
+every (non-matching) allowed entry is reported as a violation — but it would silently misreport
+every genuinely-in-place impl as a spurious violation, naming no cause, rather than a clear
+constitution error identifying the actual typo. There is no legitimate reason to write this shape:
+no canonical module path this system ever resolves carries an empty segment, so the spelling is
+always either inert or broken, never meaningfully different from the bare form.
+
+#### Scenario: A leading-`::` allowed-location entry is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("::crate::commands")` and the crate defines `impl Command for Foo` genuinely inside `crate::commands`
+- **THEN** the system reports a constitution error (exit 2) naming the malformed entry, rather than reporting the genuinely-in-place impl as a spurious violation
+
+#### Scenario: A trailing-`::` allowed-location entry is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("crate::commands::")` against the same crate
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: A doubled-`::` allowed-location entry is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("crate::commands::::sub")` against the same crate
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: The bare-string spelling is unaffected
+
+- **WHEN** a boundary declares `only_implemented_in("crate::commands")` against the same crate
+- **THEN** the system reports no violation for the genuinely-in-place impl, exactly as before this requirement existed
+
 ### Requirement: Trait-path resolution scope and no false negative
 
-The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, a `cfg_attr`-wrapped `#[path]` module (an **unconditional** `#[path = "…"]` module is followed and observed), or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait.
+The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. A module reached only through a `cfg_attr`-wrapped `#[path]` remap is followed too: an inline body regardless of the attribute (which has no effect on an inline module's content), and a file module's conventional file and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait. When a `use`-map name involved in resolution — on either the boundary's own declared anchor (reached through its re-export facade) or an impl site's written trait path — resolves to **more than one** candidate because of a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name, every candidate SHALL be checked, and the anchor match SHALL react if any impl-site candidate canonicalizes to any declared-anchor candidate, never silently keeping only the candidate from whichever declaration was written last (observation cannot know which `#[cfg]` branch is live).
 
 #### Scenario: A use-imported trait path resolves and reacts
 
@@ -114,7 +181,12 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 #### Scenario: An unconditional #[path]-remapped module is followed and its disallowed impl reacts
 
 - **WHEN** a disallowed impl lives in a module declared `#[path = "…"] mod x;` (an unconditional remap) whose file is located off the conventional path
-- **THEN** the system follows the remap to that file and reacts on the impl, attributed to the module's declared path `crate::…::x`, rather than silently asserting the boundary is clean — while a `cfg_attr`-wrapped `#[path]` remains a stated (unfollowed) coverage bound
+- **THEN** the system follows the remap to that file and reacts on the impl, attributed to the module's declared path `crate::…::x`, rather than silently asserting the boundary is clean
+
+#### Scenario: A cfg_attr-remapped module's target is followed when the conventional file is absent
+
+- **WHEN** a disallowed impl lives in a module declared `#[cfg_attr(<pred>, path = "weird.rs")] mod domain;` with no conventional `domain.rs` present, and `weird.rs` (the `cfg_attr` target) exists and contains the impl
+- **THEN** the system reads `weird.rs` — the file every build actually compiles here — and reacts on the impl, attributed to the module's declared path `crate::domain`, rather than treating the `cfg_attr` attribute as an out-of-scope bound; a nested `#[cfg_attr(a, cfg_attr(b, path = "…"))]` is followed the identical way
 
 #### Scenario: Two cfg-siblings declaring the identical name backed by one real file are one finding
 
@@ -135,6 +207,11 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 
 - **WHEN** an impl of the anchored trait is in a disallowed location and its trait path is resolvable by the shared resolver
 - **THEN** the system emits a violation, never exit 0 for that boundary
+
+#### Scenario: A mutually-exclusive cfg-gated use alias for the anchored trait's name reacts regardless of order
+
+- **WHEN** a disallowed module declares `#[cfg(unix)] use crate::command::Command as T; #[cfg(not(unix))] use crate::other::Other as T;` then `impl T for Foo { … }`, under a boundary anchored to `crate::command::Command`, in either declaration order
+- **THEN** the system emits a violation, regardless of which `use` line is written first — every candidate the impl site's `T` could resolve to is checked against the anchor, so the verdict never depends on source order
 
 ### Requirement: CI reaction
 
@@ -192,3 +269,27 @@ classified as identity-bearing or presentation-only; rendered impl text SHALL NO
 #### Scenario: Two impls stay distinct
 - **WHEN** two misplaced impls differ by module, trait, or self type
 - **THEN** their structured facts differ in the corresponding role
+
+### Requirement: An impl nested in a const or fn body is observed
+
+The system SHALL observe a trait `impl` block that is written as a direct statement of the outermost body of a `const` initializer (a bare `{ … }` block expression) or of a `fn`'s own body — the "const-eval trick" idiom (`const _: () = { impl Trait for Type { … } };`, commonly used for a compile-time trait assertion or a doctest/dogfooding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Trait for Type { … } }`) — exactly as if it were written at the enclosing module's own top level. Rust binds a trait `impl` to its self type's coherence set regardless of where the `impl` is lexically written, so wrapping it in a body does not change what it makes real; a walker that stops at a module's own top-level items therefore has a genuine observation gap here, distinct from the correct treatment of a body-nested `mod` (whose contents genuinely are unreachable as `crate::…`, an existing bound this requirement does not disturb). Recovery is bounded to exactly this shape: only an `impl` that is a DIRECT statement of the `const`/`fn`'s own outermost block is recovered — an `impl` nested one level FURTHER inside that body (inside an `if`/`loop`/closure/nested `fn`) is NOT recovered, and a `static` initializer is NOT inspected (the const-eval trick is specifically about `const`, which forces compile-time evaluation even when the binding is never read; no audited idiom uses `static` for it). Both bounds are stated rather than left silent.
+
+#### Scenario: A const-wrapped disallowed trait impl reacts
+
+- **WHEN** the boundary allows `impl Command` only under `crate::commands`, and `crate::rogue` declares `pub struct Rogue; const _: () = { impl Command for Rogue { fn run(&self) {} } };`
+- **THEN** the system emits a violation identifying the offending impl by its location `crate::rogue` and the implemented-for type `Rogue`, rather than reporting zero findings because the impl sits inside a const initializer
+
+#### Scenario: A fn-body-wrapped disallowed trait impl reacts
+
+- **WHEN** the boundary allows `impl Command` only under `crate::commands`, and `crate::rogue` declares `pub struct Rogue2; fn _also() { impl Command for Rogue2 { fn run(&self) {} } }`
+- **THEN** the system emits a violation identifying the offending impl by its location `crate::rogue` and the implemented-for type `Rogue2`, rather than reporting zero findings because the impl sits inside a fn body
+
+#### Scenario: An impl nested one level further inside the body is a stated bound
+
+- **WHEN** a disallowed module declares `fn _also() { if true { impl Command for Foo { fn run(&self) {} } } }`
+- **THEN** the system does not claim to observe it — recovery covers only a direct statement of the const/fn's own outermost block, and this impl is one level further in, a stated coverage bound rather than a silent claim of cleanliness
+
+#### Scenario: A static-wrapped impl is a stated bound
+
+- **WHEN** a disallowed module declares `static S: () = { impl Command for Foo { fn run(&self) {} } };`
+- **THEN** the system does not claim to observe it — only a `const` initializer or a `fn` body is inspected, never a `static` initializer, a stated coverage bound rather than a silent claim of cleanliness

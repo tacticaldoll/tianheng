@@ -114,7 +114,11 @@ SHALL descend the anchored module's **whole subtree** — every descendant modul
 and inline `mod x { … }` alike — and SHALL emit a violation for every returned `impl Trait` node at
 or below the anchor, each attributed to its enclosing module. Anchoring at `crate` with the opt-in
 SHALL govern the whole crate. Within the observed subtree there SHALL be no false negative: a
-returned `impl Trait` in any descendant module MUST react.
+returned `impl Trait` in any descendant module MUST react — including when two descendant modules
+each inherent-`impl` the identical self type (a platform-conditional split legal under Rust's
+coherence rules, since an inherent `impl` may be written in any module of the crate) and each
+declares a same-named public RPIT method: the two are distinct impl **sites** and MUST both react,
+never collapsing to one violation merely because they share a self type and a method name.
 
 The violation `target` SHALL remain the boundary's anchored module (not the deeper enclosing
 module), so a finding's identity `(target, rule_key, fact)` is stable whether or not the opt-in is
@@ -123,13 +127,15 @@ stability). A seam finding (one in the anchored module itself) under the opt-in 
 byte-identical to the same finding under the default scope.
 
 The subtree walk SHALL inherit the crate-scan family's guards so it never silently under-reacts: an
-**unconditional** `#[path = "…"]` module SHALL be followed and observed, while a `cfg_attr`-wrapped
-`#[path]` SHALL remain a stated coverage bound (not followed cfg-blind); a `#[cfg]`-gated module
-absent when its feature is off SHALL be tolerated; a non-`#[cfg]` missing module file SHALL be a scan
-error (exit 2); a symlink module cycle SHALL be a scan error (exit 2), never a stack overflow. A
-`mod` declared inside a **function body** SHALL be a stated bound (not observed) — it is not part of
-the public module tree, so this rule, which governs the *public* seam, makes no claim about it,
-rather than silently asserting cleanliness.
+**unconditional** `#[path = "…"]` module SHALL be followed and observed; a module reached only
+through a `cfg_attr`-wrapped `#[path]` remap SHALL be observed too — an inline body regardless of the
+attribute (which has no effect on an inline module's content), and a file module's conventional file
+and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip
+bound; a `#[cfg]`-gated module absent when its feature is off SHALL be tolerated; a non-`#[cfg]`
+missing module file SHALL be a scan error (exit 2); a symlink module cycle SHALL be a scan error
+(exit 2), never a stack overflow. A `mod` declared inside a **function body** SHALL be a stated
+bound (not observed) — it is not part of the public module tree, so this rule, which governs the
+*public* seam, makes no claim about it, rather than silently asserting cleanliness.
 
 The subtree opt-in SHALL project through the `list` text/JSON/markdown output only when set, so a
 bare boundary's projection stays byte-identical.
@@ -145,32 +151,26 @@ as it already does for the default (seam-only) scope.
 - **WHEN** a boundary anchored at `crate` opts into subtree scope, and a submodule `crate::net` declares `pub fn make() -> impl crate::Port`
 - **THEN** the system emits a violation identifying that returned shape, attributed to `crate::net` — the same case the default scope (seam-only) does not observe
 
-#### Scenario: The anchor's own seam finding is byte-identical under the opt-in
+#### Scenario: A cfg_attr-wrapped-path submodule's returned impl Trait reacts, whichever candidate file exists
 
-- **WHEN** the anchored module itself declares a returned `impl Trait` and a submodule declares another, and the boundary opts into subtree scope
-- **THEN** the system emits a finding for the anchor's own returned shape byte-identical to the default-scope finding, plus a distinct finding for the submodule's — so enabling the opt-in adds the deeper finding without re-identifying the seam one
+- **WHEN** a subtree-scoped boundary anchored at `crate` descends `#[cfg_attr(any(), path = "never.rs")] pub mod net;` with `net.rs` (the conventional file, present) declaring `pub fn make() -> impl crate::Port` and `never.rs` (the target) absent
+- **THEN** the system reads `net.rs` — the file every build actually compiles here — and reacts, attributed to `crate::net`, rather than treating the `cfg_attr` attribute as a bound to skip the submodule outright
 
-#### Scenario: The subtree is bounded by the anchor, not the whole crate
+#### Scenario: Two descendant modules inherent-impling the same owner with the same method name both react
 
-- **WHEN** a boundary anchored at `crate::a` opts into subtree scope, `crate::a::b` returns an `impl Trait`, and a sibling `crate::c` also does
-- **THEN** the system reacts to the one under `crate::a` (including `crate::a::b`) and not to `crate::c` — the subtree is rooted at the anchor
+- **WHEN** a subtree-scoped boundary anchored at `crate` descends a type `Conn` declared in `crate::common`, and two sibling submodules `crate::plat_unix` and `crate::plat_win` each write `impl Conn { pub fn open(&self) -> impl crate::Port { … } }`
+- **THEN** the system emits two distinct violations, one attributed to `crate::plat_unix` and one to `crate::plat_win` — the impl block's own declaring module is part of the seam's identity, so the two do not collapse to one violation merely because they share `Conn` as their owner and `open` as their method name
 
-#### Scenario: A cfg-gated fileless submodule is tolerated; a non-cfg missing file is a scan error
+### Requirement: An impl nested in a const or fn body is observed
 
-- **WHEN** a subtree-scoped boundary descends a `#[cfg]`-gated `mod` with no source file (feature off) alongside a present module, versus a non-`#[cfg]` `mod x;` with no file
-- **THEN** the cfg-gated one is tolerated (the present module still reacts) and the non-cfg missing file is a scan error (exit 2), never a silent pass
+`semantic-signature-coupling` states, on behalf of every single-module-anchored semantic capability that observes an inherent impl's public API, that an `impl` block written as a direct statement of the outermost body of a `const` initializer or a `fn`'s own body (the "const-eval trick" idiom and its fn-body-nested sibling) SHALL be observed exactly as if written at the module's own top level, bounded to one level deep and to `const`/`fn` only (never `static`, never a further-nested `impl`, never any OTHER item kind recovered from a body this way). This capability applies that same property to a returned `impl Trait` (RPIT) in an inherent impl's public method.
 
-#### Scenario: A body-nested module is a stated bound
+#### Scenario: A const-wrapped inherent impl's impl-Trait-returning method reacts
 
-- **WHEN** a subtree-scoped boundary descends a module containing `pub fn outer() { mod inner { pub fn hidden() -> impl crate::Port { .. } } }`
-- **THEN** the system does not observe `hidden` — a `mod` inside a fn body is not public API (not reachable as `crate::…`), a stated bound, never a silent claim about it
+- **WHEN** a governed module declares `pub struct Svc; const _: () = { impl Svc { pub fn existential(&self) -> impl crate::Port { … } } };`
+- **THEN** the system reports `impl crate::Port exposed by fn <crate::m::Svc>::existential`, rather than reporting zero findings because the impl sits inside a const initializer
 
-#### Scenario: The subtree opt-in projects in list output
+#### Scenario: A fn-body-wrapped inherent impl's impl-Trait-returning method reacts
 
-- **WHEN** a subtree-scoped impl-trait boundary is projected via `list` (text/json/markdown)
-- **THEN** the projection surfaces the subtree scope (a `(including submodules)` marker / an `including_submodules: true` field), and a boundary without the opt-in projects byte-identically to before it existed
-
-#### Scenario: An unrenderable self type under subtree scope fails loud rather than publishing a positional label
-
-- **WHEN** a subtree-scoped boundary descends two mutually-exclusive `#[cfg]` branches that each independently declare a same-named type with an unrenderable const-generic self-type argument (e.g. `Arr<{ N + 1 }>` vs `Arr<{ N + 2 }>`), and that type's `impl` block returns an `impl Trait`
-- **THEN** the system reports a constitution error (exit 2) rather than publishing an internal positional label as identity — never silently collapsing the two genuinely distinct sites into one reported finding, and never partially succeeding
+- **WHEN** the identical impl is instead written `fn _also() { impl Svc { pub fn existential(&self) -> impl crate::Port { … } } }`
+- **THEN** the system reports the identical finding, rather than reporting zero findings because the impl sits inside a fn body

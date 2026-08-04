@@ -40,6 +40,13 @@ impl Violation {
         &self.target
     }
 
+    /// Whether this violation is an active, non-baselined `enforce` — the one condition that
+    /// makes an [`Outcome`](crate::Outcome) exit non-zero. Asks the violation for its own state
+    /// rather than a caller reaching into `severity`/`baselined` directly.
+    pub fn is_active_enforce(&self) -> bool {
+        self.severity == Severity::Enforce && !self.baselined
+    }
+
     /// Build a violation observed during evaluation.
     pub fn new(
         kind: BoundaryKind,

@@ -8,7 +8,10 @@ use crate::module_scan::package_name_to_import_ident;
 // substrate below the 三儀 — one reader, so the static and semantic dimensions cannot drift apart on
 // how they read the workspace. 圭表 keeps only its own *observation semantics* below (dependency
 // source/kind, workspace membership), which are not neutral infrastructure.
-pub(crate) use xingbiao::{cargo_metadata, crate_root_file, find_package, member_src_dirs};
+pub(crate) use xingbiao::{
+    cargo_metadata, compilation_unit_label, crate_root_file, crate_root_files, find_package,
+    member_src_dirs,
+};
 
 /// The names of the workspace's member crates. Because Modou runs
 /// `cargo metadata --no-deps`, the `packages` array contains exactly the workspace
@@ -45,6 +48,30 @@ fn kind_matches(dependency: &Value, kind: DependencyKind) -> bool {
     )
 }
 
+/// Every dependency-table edge of the target's declared `kind`, optionally excluding the
+/// target's own self-referential edge (see [`is_self_dependency`]) — the shared filter every
+/// consuming rule ([`external_dependencies`] / [`dependencies`] /
+/// [`dependencies_with_disallowed_source`]) needs, so kind-matching and self-dependency
+/// exclusion cannot silently diverge across them (the round-11→round-12 fix
+/// [`is_self_dependency`]'s own doc names). [`external_dependencies`] passes
+/// `exclude_self: false`: its own `!source.is_null()` filter already excludes a self-dependency
+/// (always a null-source `path` edge), so an extra explicit exclusion there would be redundant,
+/// not a divergence.
+fn governed_dependencies(
+    package: &Value,
+    kind: DependencyKind,
+    exclude_self: bool,
+) -> impl Iterator<Item = &Value> {
+    package["dependencies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(move |dependency| {
+            kind_matches(dependency, kind)
+                && !(exclude_self && is_self_dependency(package, dependency))
+        })
+}
+
 /// Names of the target's dependencies in the selected table that resolve to a registry
 /// or git source. Path/internal dependencies, and dependencies in other tables, are
 /// excluded.
@@ -54,48 +81,35 @@ fn kind_matches(dependency: &Value, kind: DependencyKind) -> bool {
 /// `optional` deps are included — a declared dependency is governed as declared
 /// (PROJECT.md).
 pub(crate) fn external_dependencies(package: &Value, kind: DependencyKind) -> Vec<String> {
-    let mut found = Vec::new();
-    if let Some(dependencies) = package["dependencies"].as_array() {
-        for dependency in dependencies {
-            if !kind_matches(dependency, kind) {
-                continue;
-            }
-            // A path/internal dependency has a null `source`; any non-null source is
-            // external. Match on presence, not on a fixed `registry+`/`git+` prefix
-            // list, so a dependency from an alternative (e.g. `sparse+`) registry
-            // cannot slip through unclassified and silently pass the boundary.
-            let external = !dependency["source"].is_null();
-            if external {
-                // A dependency always carries a string `name` in cargo's metadata schema;
-                // a present-but-non-string `name` (unexpected shape) is skipped rather
-                // than failed. This relies on the schema guarantee — if it could be
-                // violated, the loud path would be a scan error, not a silent skip.
-                if let Some(name) = dependency["name"].as_str() {
-                    found.push(name.to_string());
-                }
-            }
-        }
-    }
+    let mut found: Vec<String> = governed_dependencies(package, kind, false)
+        // A path/internal dependency has a null `source`; any non-null source is
+        // external. Match on presence, not on a fixed `registry+`/`git+` prefix
+        // list, so a dependency from an alternative (e.g. `sparse+`) registry
+        // cannot slip through unclassified and silently pass the boundary.
+        .filter(|dependency| !dependency["source"].is_null())
+        // A dependency always carries a string `name` in cargo's metadata schema;
+        // a present-but-non-string `name` (unexpected shape) is skipped rather
+        // than failed. This relies on the schema guarantee — if it could be
+        // violated, the loud path would be a scan error, not a silent skip.
+        .filter_map(|dependency| dependency["name"].as_str().map(str::to_string))
+        .collect();
     found.sort();
     found.dedup();
     found
 }
 
-/// Whether `dependency` is the package's OWN self-referential edge — Cargo genuinely permits
-/// (and a doctest/dogfooding pattern genuinely uses) a crate declaring itself as a
-/// `[dev-dependencies]` path dependency on itself (`main = { path = "." }`), which
-/// `cargo metadata --no-deps` emits verbatim as an ordinary-shaped edge whose `name` equals the
-/// package's own. This is never a CROSS-crate concern — there is no OTHER crate for a governance
-/// rule to react to — so every rule that scans "the target's dependency names/sources" must
-/// exclude it identically; a per-rule copy of this check (the round-11 fix's original shape,
-/// which excluded it only inside `Rule::RestrictWorkspaceDependenciesTo`'s own arm) left the
-/// identical false positive live in every sibling rule reading the same [`dependencies`] /
-/// [`dependencies_with_disallowed_source`] observation (found on a round-12 adversarial review —
-/// see `PROJECT.md`'s Decisions). Filtering here, at the shared observation source, closes every
-/// consuming rule at once.
+/// Whether `dependency` is the package's OWN self-referential edge — a null-`source` **path**
+/// dependency on itself (e.g. a doctest/dogfooding `[dev-dependencies]` entry like
+/// `main = { path = "." }`). See `crate-dependency-boundary`'s "A crate's own self-referential
+/// PATH dependency is never a violation under any crate rule" requirement for why this is never a
+/// cross-crate concern, and its "same-named but externally-sourced dependency is NOT exempted"
+/// scenario for why `source.is_null()` must gate the name match. Filtering here, at the shared
+/// observation source, is what every consuming rule ([`dependencies`] /
+/// [`dependencies_with_disallowed_source`]) relies on — a per-rule copy left the identical false
+/// positive live in every sibling rule (the round-11→round-12 fix; see `PROJECT.md`'s Decisions).
 fn is_self_dependency(package: &Value, dependency: &Value) -> bool {
     let own_name = package["name"].as_str();
-    own_name.is_some() && dependency["name"].as_str() == own_name
+    own_name.is_some() && dependency["name"].as_str() == own_name && dependency["source"].is_null()
 }
 
 /// Names of the target's dependencies in the selected table, regardless of source —
@@ -105,17 +119,9 @@ fn is_self_dependency(package: &Value, dependency: &Value) -> bool {
 /// local renames), and platform-specific / `optional` deps are included (PROJECT.md).
 /// Never includes the target's own self-referential edge (see [`is_self_dependency`]).
 pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String> {
-    let mut found = Vec::new();
-    if let Some(deps) = package["dependencies"].as_array() {
-        for dependency in deps {
-            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
-                continue;
-            }
-            if let Some(name) = dependency["name"].as_str() {
-                found.push(name.to_string());
-            }
-        }
-    }
+    let mut found: Vec<String> = governed_dependencies(package, kind, true)
+        .filter_map(|dependency| dependency["name"].as_str().map(str::to_string))
+        .collect();
     found.sort();
     found.dedup();
     found
@@ -157,23 +163,12 @@ pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
     names
 }
 
-/// Classify a dependency's **declared** source kind from its `cargo metadata`
-/// (`--no-deps`) `source` field. Mirrors [`external_dependencies`]'s convention (a
-/// null source is internal/path) one notch finer:
-///
-/// - **null** source → `Path` (a `path = "…"` / internal dependency)
-/// - source beginning **`git+`** → `Git` (cargo spells a declared git source `git+<url>`)
-/// - any other non-null source → `Registry` (the residual: `registry+`, `sparse+`, and
-///   alternative registries, so a new registry scheme classifies correctly with no code
-///   change — the same robustness `external_dependencies` relies on)
-///
-/// Only `Git` is matched by a positive prefix and only `Path` by null; `Registry` is the
-/// residual. Verified against `cargo metadata --no-deps` on a probe manifest: a
-/// `git = "…"` dependency reads `source = "git+…"` **even with a `version` key and even
-/// when `optional = true`**, and a workspace-**inherited** git dependency
-/// (`{ workspace = true }`) reads `git+…` too (cargo flattens the inherited source into
-/// the member's manifest). A path dependency reads `source = null`. The read is hermetic
-/// — a pure function of the manifests, no lockfile and no network.
+/// Classify a dependency's **declared** source kind from its `cargo metadata` (`--no-deps`)
+/// `source` field: null → `Path`, `git+`-prefixed → `Git`, any other non-null → `Registry` (the
+/// residual, covering `registry+`/`sparse+`/alternative registries — see `crate-source-boundary`'s
+/// "Declared source kind classified from cargo metadata" requirement for the full rule). Verified
+/// against a probe manifest: a `git = "…"` dependency reads `git+…` even with a `version` key,
+/// `optional = true`, or a workspace-inherited (`{ workspace = true }`) source.
 fn classify_source(dependency: &Value) -> SourceKind {
     match dependency["source"].as_str() {
         None => SourceKind::Path,
@@ -183,34 +178,28 @@ fn classify_source(dependency: &Value) -> SourceKind {
 }
 
 /// The **real package names** (not local renames) and declared source kinds of the target's
-/// dependencies in the selected table whose classified [`SourceKind`] is not in `allowed`. The observation
-/// for [`Rule::RestrictDependencySourcesTo`]. Same conventions as [`dependencies`]:
-/// walks every declared dependency of the kind (path/internal included, since `Path` is
-/// a governed source), reports the package name (a renamed dep by its real name), and
-/// includes `optional` deps — a declared source is governed as declared (PROJECT.md), and
-/// an optional git dependency blocks publishing just as a required one does. An empty
-/// `allowed` set flags every dependency of the kind. Never includes the target's own
-/// self-referential edge (see [`is_self_dependency`]) — its declared source (always `Path`,
-/// a null `source`) is otherwise indistinguishable from a genuine internal dependency.
+/// dependencies in the selected table whose classified [`SourceKind`] is not in `allowed` — the
+/// observation for [`Rule::RestrictDependencySourcesTo`]. See `crate-source-boundary`'s "A
+/// dependency outside the allowed source set is a violation" requirement for the governed-surface
+/// and optional-dependency rationale. Never includes the target's own self-referential edge (see
+/// [`is_self_dependency`]) — its declared source (always `Path`, a null `source`) is otherwise
+/// indistinguishable from a genuine internal dependency.
 pub(crate) fn dependencies_with_disallowed_source(
     package: &Value,
     kind: DependencyKind,
     allowed: &[SourceKind],
 ) -> Vec<(String, SourceKind)> {
-    let mut found = Vec::new();
-    if let Some(deps) = package["dependencies"].as_array() {
-        for dependency in deps {
-            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
-                continue;
-            }
+    let mut found: Vec<(String, SourceKind)> = governed_dependencies(package, kind, true)
+        .filter_map(|dependency| {
             let source = classify_source(dependency);
-            if !allowed.contains(&source) {
-                if let Some(name) = dependency["name"].as_str() {
-                    found.push((name.to_string(), source));
-                }
+            if allowed.contains(&source) {
+                return None;
             }
-        }
-    }
+            dependency["name"]
+                .as_str()
+                .map(|name| (name.to_string(), source))
+        })
+        .collect();
     found.sort_by(|(left_name, left_source), (right_name, right_source)| {
         left_name
             .cmp(right_name)
@@ -220,62 +209,59 @@ pub(crate) fn dependencies_with_disallowed_source(
     found
 }
 
-/// The **declared feature request** the target authors on a dependency `crate_name` in
-/// the selected table: the union, across every matching edge, of each edge's explicit
-/// `features = [...]` list, ∪ the pseudo-feature `default` when any such edge leaves
-/// default features enabled (`uses_default_features` absent, or `true`). Matches
-/// `crate_name` by **package name** (the `name` field), not a local `rename`/alias, exactly
-/// as [`dependencies`]/[`external_dependencies`] do — a dependency renamed `myc` whose real
-/// package is `real-c` is matched as `real-c`. A crate may appear under more than one edge
-/// of the same kind — a plain `[dependencies]` entry and a `[target.'cfg(…)'.dependencies]`
-/// entry are both `Normal` — so the set is the union across all of them.
-///
-/// Reads only the target package's own declared edges: it never reads `crate_name`'s
-/// package entry (unreadable for an external crate under the `--no-deps` substrate) and
-/// never reads `resolve.nodes[].features` (the resolved/unified set, which feature
-/// unification folds every workspace crate's enables into). The result is therefore the
-/// target's authored request alone — declared, not resolved (PROJECT.md) — and does not
-/// expand through `crate_name`'s own `[features]` table, so a transitively-enabled feature
-/// is not chased. When the target does not declare `crate_name` in the selected kind, the
-/// set is empty. If `crate_name` names the target's OWN package (a `RestrictFeaturesOf`/
-/// `ForbidFeaturesOf` boundary naming its own crate — a possible, if unusual, constitution
-/// shape), the target's self-referential edge (see [`is_self_dependency`]) is never matched
-/// either: a self-dependency's "declared feature request" is not a cross-crate feature-flag
-/// concern this rule exists to govern.
+/// The **declared feature request** the target authors on a dependency `crate_name` in the
+/// selected table — the union across every matching edge of its `features = [...]` list plus the
+/// pseudo-feature `default` when any such edge leaves default features enabled. See
+/// `crate-dependency-boundary`'s "Declared feature-request observation model" requirement for the
+/// full union/pseudo-feature/declared-not-resolved rationale. Matches `crate_name` by package
+/// name, not a local rename, like [`dependencies`]/[`external_dependencies`]. The target's own
+/// self-referential edge (see [`is_self_dependency`]) is never matched either, if `crate_name`
+/// happens to name the target's own package — a self-dependency's feature request is not a
+/// cross-crate concern this rule governs.
 pub(crate) fn declared_features(
     package: &Value,
     crate_name: &str,
     kind: DependencyKind,
 ) -> Vec<String> {
     let mut found = Vec::new();
-    if let Some(deps) = package["dependencies"].as_array() {
-        for dependency in deps {
-            if !kind_matches(dependency, kind) || is_self_dependency(package, dependency) {
-                continue;
-            }
-            // Match by resolved package name, never the local `rename`/alias.
-            if dependency["name"].as_str() != Some(crate_name) {
-                continue;
-            }
-            if let Some(features) = dependency["features"].as_array() {
-                for feature in features {
-                    if let Some(feature) = feature.as_str() {
-                        found.push(feature.to_string());
-                    }
-                }
-            }
-            // Cargo's edge carries `uses_default_features`; an absent field means defaults
-            // are on. Represent "the target requests this dependency's default set" as the
-            // pseudo-feature `default`, so one rule shape governs both explicit features and
-            // the default toggle (`forbid default` ≡ "require default-features = false").
-            if dependency["uses_default_features"].as_bool() != Some(false) {
-                found.push("default".to_string());
-            }
-        }
+    for dependency in matching_dependency_edges(package, crate_name, kind) {
+        found.extend(dependency_feature_request(dependency));
     }
     found.sort();
     found.dedup();
     found
+}
+
+/// Every dependency-table edge on `crate_name` of the requested `kind` — matched by resolved
+/// package name, never the local `rename`/alias — excluding the target's own self-dependency edge
+/// (see [`is_self_dependency`]).
+fn matching_dependency_edges<'a>(
+    package: &'a Value,
+    crate_name: &str,
+    kind: DependencyKind,
+) -> impl Iterator<Item = &'a Value> {
+    governed_dependencies(package, kind, true)
+        .filter(move |dependency| dependency["name"].as_str() == Some(crate_name))
+}
+
+/// The declared feature request for one dependency edge: its explicit `features = [...]` list
+/// plus the pseudo-feature `default` when the edge leaves default features enabled. Cargo's edge
+/// carries `uses_default_features`; an absent field means defaults are on. Representing "the
+/// target requests this dependency's default set" as the pseudo-feature `default` lets one rule
+/// shape govern both explicit features and the default toggle (`forbid default` ≡ "require
+/// default-features = false").
+fn dependency_feature_request(dependency: &Value) -> Vec<String> {
+    let mut requested: Vec<String> = dependency["features"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect();
+    if dependency["uses_default_features"].as_bool() != Some(false) {
+        requested.push("default".to_string());
+    }
+    requested
 }
 
 #[cfg(test)]

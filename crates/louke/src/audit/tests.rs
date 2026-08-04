@@ -90,6 +90,28 @@ impl TempBase {
     fn symlink(&self, target: impl AsRef<Path>, link_rel: &str) {
         std::os::unix::fs::symlink(target, self.0.join(link_rel)).expect("create symlink");
     }
+
+    /// [`audit_probe_coverage`] with THIS base as the label anchor — the shape every real caller
+    /// has, a checkout root sitting above every source root it scans (`xingbiao::workspace_root`
+    /// for the `tianheng` shell). Since the anchor is now a caller's argument rather than something
+    /// the audit derives, this is where the tests state theirs once instead of at each call.
+    ///
+    /// A test that is *about* the anchor calls [`audit_probe_coverage`] directly with the anchor it
+    /// means — `two_member_sets_over_one_checkout_label_a_shared_file_identically` varies the input
+    /// set against a fixed anchor, and the absolute-`#[path]` bound tests need a file outside it.
+    fn audit(&self, declared: &[RuntimeBoundary], roots: &[PathBuf]) -> Outcome {
+        audit_probe_coverage(declared, roots, self.path())
+    }
+
+    /// [`TempBase::audit`] with a custom probe-marker list.
+    fn audit_with_markers(
+        &self,
+        declared: &[RuntimeBoundary],
+        roots: &[PathBuf],
+        markers: &[&str],
+    ) -> Outcome {
+        audit_probe_coverage_with_markers(declared, roots, self.path(), markers)
+    }
 }
 
 impl Drop for TempBase {
@@ -127,7 +149,7 @@ fn root_aware_audit_follows_modules_and_excludes_orphans_and_inline_shadows() {
         "fn dead() { assert_boundary!(\"inline-shadow\", o); }",
     );
 
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[
             boundary("adapter", Severity::Enforce),
             boundary("deep", Severity::Enforce),
@@ -160,7 +182,7 @@ fn a_cfg_attr_gated_missing_module_still_fails_loud_not_tolerated() {
         "lib.rs",
         "#[cfg_attr(unix, allow(dead_code))]\nmod gated;\nfn f() { assert_boundary!(\"a\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("a", Severity::Enforce)], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("gated")),
         "a cfg_attr-decorated (not cfg-gated) missing module must still fail loud: {outcome:?}"
@@ -171,10 +193,50 @@ fn a_cfg_attr_gated_missing_module_still_fails_loud_not_tolerated() {
 fn root_aware_audit_fails_loud_on_an_unresolvable_reachable_module() {
     let tb = TempBase::new("root-missing");
     let root = tb.source("lib.rs", "mod missing;");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("missing")),
         "a declared source module cannot disappear silently: {outcome:?}"
+    );
+}
+
+#[test]
+fn deeply_nested_blocks_are_a_scan_error_not_a_stack_overflow() {
+    // A pathologically nested block chain must not overflow the native stack — a real,
+    // malformed or adversarial source nested this deep must fail loud (a scan error) rather
+    // than crash the process. Measured crash threshold for this exact recursion under a 2MB
+    // test-thread stack: safe at depth 1100, a real SIGABRT stack overflow at depth 1105+; the
+    // depth cap this pins is 300, comfortably clear of both that measured line and this test's
+    // depth.
+    let tb = TempBase::new("scope-depth-cap");
+    let depth = 2000;
+    let nested = format!("fn f() {{{}{}}}", "{".repeat(depth), "}".repeat(depth));
+    let root = tb.source("lib.rs", &nested);
+    let outcome = tb.audit(&[], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("depth bound")),
+        "scope nesting past the depth cap must be a scan error, not a stack overflow: {outcome:?}"
+    );
+}
+
+#[test]
+fn moderately_nested_blocks_still_observe_a_real_violation() {
+    // Control: nesting comfortably under the depth cap is unaffected — a real, deeply (but not
+    // pathologically) nested unresolvable module reference must still be observed and fail loud
+    // on its own terms, proving the walk actually reaches this depth rather than being narrowed
+    // by the fix.
+    let tb = TempBase::new("scope-depth-under-cap");
+    let depth = 100;
+    let nested = format!(
+        "fn f() {{{}mod missing;{}}}",
+        "{".repeat(depth),
+        "}".repeat(depth)
+    );
+    let root = tb.source("lib.rs", &nested);
+    let outcome = tb.audit(&[], &[root]);
+    assert!(
+        matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("missing")),
+        "a moderately nested missing module must still be observed: {outcome:?}"
     );
 }
 
@@ -195,7 +257,7 @@ fn a_cfg_gated_module_with_no_file_is_skipped_not_errored() {
         "present.rs",
         "fn live() { assert_boundary!(\"present\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("present", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("present", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -208,7 +270,7 @@ fn root_aware_audit_fails_loud_on_non_utf8_reachable_source() {
     let tb = TempBase::new("root-unreadable");
     let root = tb.source("lib.rs", "mod broken;");
     std::fs::write(tb.path().join("broken.rs"), [0xff, 0xfe]).unwrap();
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("broken.rs")),
         "a selected source that cannot be decoded must fail loud: {outcome:?}"
@@ -222,7 +284,7 @@ fn root_aware_audit_does_not_follow_a_mod_token_inside_a_macro_body() {
         "lib.rs",
         "macro_rules! generated { () => { mod phantom; } } fn live() {}",
     );
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(outcome, Outcome::Clean, "macro tokens are not live modules");
 }
 
@@ -241,7 +303,7 @@ fn a_path_substring_in_a_comment_or_attr_does_not_drop_a_reachable_module() {
         "adapter.rs",
         "fn live() { assert_boundary!(\"adapter\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("adapter", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("adapter", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -264,7 +326,7 @@ fn an_unconditional_path_attribute_is_followed_to_its_target() {
         "generated/a]b.rs",
         "fn inner() { assert_boundary!(\"relocated-seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -294,7 +356,7 @@ fn a_semicolon_inside_an_earlier_doc_attributes_string_does_not_hide_a_later_pat
         "relocated.rs",
         "fn f() { assert_boundary!(\"relocated-seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -326,7 +388,7 @@ fn a_brace_delimited_attribute_argument_does_not_hide_an_earlier_path_attribute(
         "relocated.rs",
         "fn f() { assert_boundary!(\"relocated-seam\", o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -350,7 +412,7 @@ fn path_in_a_non_mod_rs_file_resolves_from_the_containing_files_own_dir() {
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
     tb.source("foo/bar.rs", "fn decoy() {}");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -374,7 +436,7 @@ fn path_nested_in_an_inline_block_resolves_from_the_accumulated_dir() {
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
     tb.source("other.rs", "fn decoy() {}");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -397,7 +459,7 @@ fn a_hex_escape_in_a_path_literal_decodes_to_the_same_file_syn_reads() {
         "fn inner() { assert_boundary!(\"undeclared-seam\", o); }",
     );
     tb.source("name.rs", "fn decoy() {}");
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -415,7 +477,7 @@ fn an_absent_unconditional_path_target_is_a_constitution_error() {
         "lib.rs",
         "#[path = \"missing.rs\"]\nmod relocated;\nfn live() {}",
     );
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(
         outcome.exit_code(),
         2,
@@ -440,7 +502,7 @@ fn a_cfg_attr_path_relocation_with_no_resolution_anywhere_fails_loud() {
         "lib.rs",
         "#[cfg_attr(unix, path = \"unix_seam.rs\")]\nmod plat;\nfn live() {}",
     );
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(ref message) if message.contains("plat")),
         "cfg_attr-wrapped #[path] with no resolution anywhere must fail loud: {outcome:?}"
@@ -452,7 +514,8 @@ fn directory_input_retains_the_recursive_compatibility_corpus() {
     let tb = TempBase::new("dir-compat");
     let dir = tb.dir("legacy", "fn f() { assert_boundary!(\"legacy\", o); }");
     assert_eq!(
-        audit_probe_coverage(&[boundary("legacy", Severity::Enforce)], &[dir]).exit_code(),
+        tb.audit(&[boundary("legacy", Severity::Enforce)], &[dir])
+            .exit_code(),
         0
     );
 }
@@ -867,7 +930,7 @@ fn audit_matches_an_escaped_seam_against_its_escaped_probe() {
     // `assert_boundary!("a\n", o)` — the scanner now decodes the probe to the same value.
     let tb = TempBase::new("audit-esc");
     let dir = tb.dir("esc", "fn f() { assert_boundary!(\"a\\n\", o); }");
-    let outcome = audit_probe_coverage(&[boundary("a\n", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("a\n", Severity::Enforce)], &[dir]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -883,7 +946,7 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
     // catches it. Expect BOTH directions: declared-unprobed and probed-undeclared.
     let tb = TempBase::new("audit-esc2");
     let dir = tb.dir("esc2", "fn f() { assert_boundary!(\"a\\n\", o); }");
-    let outcome = audit_probe_coverage(&[boundary("a\\n", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("a\\n", Severity::Enforce)], &[dir]);
     match outcome {
         Outcome::Violations(report) => {
             assert!(
@@ -1028,7 +1091,7 @@ fn a_declared_seam_probed_only_inside_a_macro_body_reacts_unprobed() {
         "m",
         "macro_rules! g { () => { assert_boundary!(\"seam\", o); }; }",
     );
-    let outcome = audit_probe_coverage(&[boundary("seam", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[dir]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -1098,7 +1161,7 @@ fn audit_reacts_to_a_duplicate_declared_seam() {
     // so the ONLY finding is the duplicate, not a declared-unprobed gap.
     let tb = TempBase::new("audit-dup");
     let dir = tb.dir("m", "fn f() { assert_boundary!(\"twice\", o); }");
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[
             boundary("twice", Severity::Enforce),
             boundary("twice", Severity::Enforce),
@@ -1142,27 +1205,29 @@ fn audit_probe_coverage_reacts_both_directions() {
     // declared + probed match → clean (exit 0)
     let clean = tb.dir("clean", "fn f() { assert_boundary!(\"s\", o); }");
     assert_eq!(
-        audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[clean]).exit_code(),
+        tb.audit(&[boundary("s", Severity::Enforce)], &[clean])
+            .exit_code(),
         0
     );
 
     // declared but unprobed (enforce) → react (exit 1)
     let unprobed = tb.dir("unprobed", "fn f() {}");
     assert_eq!(
-        audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[unprobed]).exit_code(),
+        tb.audit(&[boundary("orphan", Severity::Enforce)], &[unprobed])
+            .exit_code(),
         1
     );
 
     // probed but undeclared (a typo) → react at CI, not a prod panic (exit 1)
     let typo = tb.dir("typo", "fn f() { assert_boundary!(\"ghost\", o); }");
-    assert_eq!(audit_probe_coverage(&[], &[typo]).exit_code(), 1);
+    assert_eq!(tb.audit(&[], &[typo]).exit_code(), 1);
 }
 
 #[test]
 fn audit_production_violation_separates_target_rule_and_fact_roles() {
     let tb = TempBase::new("audit-structured-identity");
     let dir = tb.dir("unprobed", "fn f() {}");
-    let outcome = audit_probe_coverage(&[boundary("checkout", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("checkout", Severity::Enforce)], &[dir]);
     let report = match outcome {
         Outcome::Violations(report) => report,
         other => panic!("expected an unprobed-seam violation, got {other:?}"),
@@ -1187,7 +1252,7 @@ fn a_warn_severity_unprobed_seam_is_advisory_not_a_failure() {
     let tb = TempBase::new("audit-warn");
     let dir = tb.dir("warn", "fn f() {}");
     // A warn boundary with no probe reacts (a Violation) but does not by itself fail CI.
-    let outcome = audit_probe_coverage(&[boundary("soft", Severity::Warn)], &[dir]);
+    let outcome = tb.audit(&[boundary("soft", Severity::Warn)], &[dir]);
     assert_eq!(outcome.exit_code(), 0, "warn-only is advisory: {outcome:?}");
     assert!(
         matches!(outcome, Outcome::Violations(_)),
@@ -1201,7 +1266,7 @@ fn coverage_spans_the_workspace_corpus() {
     // Declared once; its only probe lives in a *different* member dir.
     let decl_only = tb.dir("crate_a", "fn f() {}");
     let probe_only = tb.dir("crate_b", "fn g() { assert_boundary!(\"shared\", o); }");
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[boundary("shared", Severity::Enforce)],
         &[decl_only, probe_only],
     );
@@ -1220,7 +1285,7 @@ fn an_unauditable_probe_reacts() {
         "const SEAM: &str = \"s\"; fn f() { assert_boundary!(SEAM, o); }",
     );
     // Even though a boundary "s" is declared, the probe is non-literal → un-auditable → react.
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     assert_eq!(
         outcome.exit_code(),
         1,
@@ -1255,6 +1320,17 @@ fn unauditable_violations(outcome: &Outcome) -> Vec<&crate::Violation> {
     }
 }
 
+/// Assert that `violations` carries exactly `expected` DISTINCT `fact()` identities — the
+/// count-and-collect shape repeated across the identity-distinctness regression tests below (two
+/// textually/lexically distinct probes must never collapse to fewer findings than expected).
+/// `message` explains WHY these must stay distinct; the violations themselves are appended for a
+/// failing assertion's own debugging.
+fn assert_distinct_fact_count(violations: &[&crate::Violation], expected: usize, message: &str) {
+    let facts: std::collections::BTreeSet<_> =
+        violations.iter().map(|v| v.fact().clone()).collect();
+    assert_eq!(facts.len(), expected, "{message}: {violations:?}");
+}
+
 #[test]
 fn two_distinct_expressions_in_the_same_function_react_separately() {
     let tb = TempBase::new("audit-unaud-two-exprs");
@@ -1263,20 +1339,14 @@ fn two_distinct_expressions_in_the_same_function_react_separately() {
         "fn compute_seam() -> &'static str { \"s\" } \
          fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(compute_seam(), o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "two textually distinct non-literal expressions must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
-        2,
-        "their identities must be distinct: {violations:?}"
-    );
+    assert_distinct_fact_count(&violations, 2, "their identities must be distinct");
 }
 
 #[test]
@@ -1286,19 +1356,17 @@ fn same_expression_in_two_different_free_functions_reacts_separately() {
         "two",
         "fn a() { assert_boundary!(SEAM_A, o); } fn b() { assert_boundary!(SEAM_A, o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "the same expression in two different functions must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "distinguished by enclosing function, not collapsed: {violations:?}"
+        "distinguished by enclosing function, not collapsed",
     );
 }
 
@@ -1310,7 +1378,7 @@ fn raw_identifier_function_names_keep_probe_owners_distinct() {
         "fn r#type() { assert_boundary!(SEAM_A, o); } \
          fn r#async() { assert_boundary!(SEAM_A, o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1342,16 +1410,14 @@ fn same_named_nested_functions_in_different_outer_functions_react_separately() {
         "fn outer_a() { fn inner() { assert_boundary!(SEAM_A, o); } } \
          fn outer_b() { fn inner() { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "same-named nested functions in distinct outer functions must not collapse: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(facts.len(), 2, "lexical owner chains must differ");
+    assert_distinct_fact_count(&violations, 2, "lexical owner chains must differ");
 }
 
 #[test]
@@ -1364,7 +1430,7 @@ fn same_named_nested_functions_in_equal_closures_react_separately_and_stably() {
          (|| { fn inner() { assert_boundary!(SEAM_A, o); } })(); \
          }",
     );
-    let before = audit_probe_coverage(
+    let before = tb.audit(
         &[boundary("s", Severity::Enforce)],
         std::slice::from_ref(&dir),
     );
@@ -1389,7 +1455,7 @@ fn same_named_nested_functions_in_equal_closures_react_separately_and_stably() {
          }",
     )
     .unwrap();
-    let after = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let after = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let after_facts: std::collections::BTreeSet<_> = unauditable_violations(&after)
         .iter()
         .map(|violation| violation.fact().clone())
@@ -1408,19 +1474,17 @@ fn same_named_local_impl_methods_in_different_outer_functions_react_separately()
         "fn outer_a() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } } \
          fn outer_b() { struct Local; impl Local { fn probe() { assert_boundary!(SEAM_A, o); } } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "same-named local impl methods in distinct outer functions must not collapse: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "outer lexical owners must qualify local impls"
+        "outer lexical owners must qualify local impls",
     );
 }
 
@@ -1431,7 +1495,7 @@ fn nested_function_identity_survives_unrelated_item_insertion() {
         "same",
         "fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
     );
-    let before_fact = unauditable_violations(&audit_probe_coverage(
+    let before_fact = unauditable_violations(&tb.audit(
         &[boundary("s", Severity::Enforce)],
         std::slice::from_ref(&dir),
     ))[0]
@@ -1442,12 +1506,10 @@ fn nested_function_identity_survives_unrelated_item_insertion() {
         "fn unrelated() {} fn outer() { fn inner() { assert_boundary!(SEAM_A, o); } }",
     )
     .expect("rewrite fixture with unrelated item");
-    let after_fact = unauditable_violations(&audit_probe_coverage(
-        &[boundary("s", Severity::Enforce)],
-        &[dir],
-    ))[0]
-        .fact()
-        .clone();
+    let after_fact = unauditable_violations(&tb.audit(&[boundary("s", Severity::Enforce)], &[dir]))
+        [0]
+    .fact()
+    .clone();
     assert_eq!(before_fact, after_fact);
 }
 
@@ -1462,19 +1524,17 @@ fn same_named_method_in_two_different_impls_reacts_separately() {
          impl A { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
          impl B { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "same-named method on two different owners must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "distinguished by owner, not collapsed under a bare method name: {violations:?}"
+        "distinguished by owner, not collapsed under a bare method name",
     );
 }
 
@@ -1490,19 +1550,17 @@ fn same_named_free_fn_in_two_different_inline_mods_reacts_separately() {
         "mod a { pub fn probe() { assert_boundary!(SEAM_A, o); } } \
          mod b { pub fn probe() { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "same-named free fn in two different inline mods must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
+    assert_distinct_fact_count(
+        &violations,
         2,
-        "distinguished by module path, not collapsed under a bare fn name: {violations:?}"
+        "distinguished by module path, not collapsed under a bare fn name",
     );
 }
 
@@ -1515,20 +1573,14 @@ fn same_named_method_in_two_different_trait_impls_reacts_separately() {
          impl Foo for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } } \
          impl Bar for T { fn probe(&self) { assert_boundary!(SEAM_A, o); } }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "same-named method on the same Self type via two different traits must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
-        2,
-        "distinguished by trait, not collapsed: {violations:?}"
-    );
+    assert_distinct_fact_count(&violations, 2, "distinguished by trait, not collapsed");
 }
 
 #[test]
@@ -1538,7 +1590,7 @@ fn identical_expression_repeated_in_the_same_function_collapses_to_one_violation
         "dup",
         "fn f() { assert_boundary!(SEAM_A, o); assert_boundary!(SEAM_A, o); }",
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1552,20 +1604,14 @@ fn same_expression_in_two_files_reacts_separately() {
     let tb = TempBase::new("audit-unaud-two-files");
     let dir_a = tb.dir("file-a", "fn f() { assert_boundary!(SEAM_A, o); }");
     let dir_b = tb.dir("file-b", "fn f() { assert_boundary!(SEAM_A, o); }");
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir_a, dir_b]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir_a, dir_b]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
         2,
         "the same expression in two different files must react separately: {violations:?}"
     );
-    let facts: std::collections::BTreeSet<_> =
-        violations.iter().map(|v| v.fact().clone()).collect();
-    assert_eq!(
-        facts.len(),
-        2,
-        "distinguished by file, not collapsed: {violations:?}"
-    );
+    assert_distinct_fact_count(&violations, 2, "distinguished by file, not collapsed");
 }
 
 #[test]
@@ -1574,7 +1620,7 @@ fn a_seam_level_runtime_violation_has_no_file() {
     // is a faithful `None` — distinct from the un-auditable case, which does have a file.
     let tb = TempBase::new("audit-seamnull");
     let dir = tb.dir("unprobed", "fn f() {}");
-    let outcome = audit_probe_coverage(&[boundary("orphan", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("orphan", Severity::Enforce)], &[dir]);
     let violations = match &outcome {
         Outcome::Violations(report) => &report.violations,
         other => panic!("expected violations, got {other:?}"),
@@ -1598,7 +1644,7 @@ fn finder_repro_nonmodrs_path_base() {
     // An orphan at louke's wrong join path (src/app/relocated.rs)
     tb.source("app/relocated.rs", "fn inner() {}\n");
     // Only the REAL target is compiled and has the probe -> must be caught.
-    let outcome = audit_probe_coverage(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("relocated-seam", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome.exit_code(),
         0,
@@ -1619,7 +1665,7 @@ fn finder_repro_fn_orphan() {
     // An orphan at louke's wrong join path (src/app/relocated.rs): louke scans THIS instead. No probe.
     tb.source("app/relocated.rs", "fn inner() {}\n");
     // No declared boundaries: an assert on "undeclared-seam" in the REAL target must be caught.
-    let outcome = audit_probe_coverage(&[], &[root]);
+    let outcome = tb.audit(&[], &[root]);
     assert_eq!(outcome.exit_code(), 1, "Should catch undeclared seam");
 }
 
@@ -1641,7 +1687,7 @@ fn root_aware_audit_does_not_hang_on_a_symlinked_directory_cycle() {
         "mod loop_mod;\nfn f() { assert_boundary!(\"a\", o); }\n",
     );
     tb.symlink(tb.path(), "loop_mod");
-    let outcome = audit_probe_coverage(&[boundary("a", Severity::Enforce)], &[root]);
+    let outcome = tb.audit(&[boundary("a", Severity::Enforce)], &[root]);
     assert_eq!(
         outcome,
         Outcome::Clean,
@@ -1655,7 +1701,7 @@ fn directory_audit_does_not_hang_on_a_symlinked_directory_cycle() {
     let tb = TempBase::new("dir-symlink-cycle");
     let _src = tb.source("main.rs", "fn f() { assert_boundary!(\"a\", o); }\n");
     tb.symlink(tb.path(), "loop_dir");
-    let outcome = audit_probe_coverage(
+    let outcome = tb.audit(
         &[boundary("a", Severity::Enforce)],
         &[tb.path().to_path_buf()],
     );
@@ -1673,7 +1719,7 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
         "main.rs",
         "fn f() { my_custom_seam!(\"custom-seam\", obj); }\n",
     );
-    let outcome = audit_probe_coverage_with_markers(
+    let outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[root],
         &["assert_boundary", "my_custom_seam"],
@@ -1689,7 +1735,7 @@ fn custom_marker_list_recognizes_user_probe_wrapper() {
 fn custom_marker_messages_name_the_configuration_and_actual_matched_marker() {
     let tb = TempBase::new("custom-marker-wording");
     let missing = tb.source("missing.rs", "fn f() {}\n");
-    let missing_outcome = audit_probe_coverage_with_markers(
+    let missing_outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[missing],
         &["my_custom_seam"],
@@ -1709,7 +1755,7 @@ fn custom_marker_messages_name_the_configuration_and_actual_matched_marker() {
     );
 
     let unauditable = tb.source("unauditable.rs", "fn f() { my_custom_seam!(SEAM, obj); }\n");
-    let unauditable_outcome = audit_probe_coverage_with_markers(
+    let unauditable_outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[unauditable],
         &["my_custom_seam"],
@@ -1754,7 +1800,7 @@ fn outer() {
 }
 "#,
     );
-    let outcome = audit_probe_coverage(&[boundary("s", Severity::Enforce)], &[dir]);
+    let outcome = tb.audit(&[boundary("s", Severity::Enforce)], &[dir]);
     let violations = unauditable_violations(&outcome);
     assert_eq!(
         violations.len(),
@@ -1787,7 +1833,7 @@ fn unregistered_custom_marker_is_ignored_by_audit() {
         "main.rs",
         "fn f() { unknown_seam!(\"custom-seam\", obj); }\n",
     );
-    let outcome = audit_probe_coverage_with_markers(
+    let outcome = tb.audit_with_markers(
         &[boundary("custom-seam", Severity::Enforce)],
         &[root],
         &["assert_boundary", "my_custom_seam"],
@@ -1802,8 +1848,7 @@ fn unregistered_custom_marker_is_ignored_by_audit() {
 fn empty_marker_list_is_constitution_error() {
     let tb = TempBase::new("empty-marker-list");
     let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
-    let outcome =
-        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &[]);
+    let outcome = tb.audit_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &[]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(_)),
         "empty markers list must be a constitution error: {outcome:?}"
@@ -1814,8 +1859,7 @@ fn empty_marker_list_is_constitution_error() {
 fn blank_marker_string_is_constitution_error() {
     let tb = TempBase::new("blank-marker");
     let root = tb.source("main.rs", "fn f() { assert_boundary!(\"seam\", obj); }\n");
-    let outcome =
-        audit_probe_coverage_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &["  "]);
+    let outcome = tb.audit_with_markers(&[boundary("seam", Severity::Enforce)], &[root], &["  "]);
     assert!(
         matches!(outcome, Outcome::ConstitutionError(_)),
         "blank marker string must be a constitution error: {outcome:?}"
@@ -1830,7 +1874,7 @@ fn invalid_marker_string_is_constitution_error() {
         "if", "match", "123foo", "foo::bar", "foo-bar", "_", "r#self", "r#super", "r#crate", "r#_",
         "💥", "a💥", "café",
     ] {
-        let outcome = audit_probe_coverage_with_markers(
+        let outcome = tb.audit_with_markers(
             &[boundary("seam", Severity::Enforce)],
             std::slice::from_ref(&root),
             &[invalid],
@@ -1840,4 +1884,1169 @@ fn invalid_marker_string_is_constitution_error() {
             "invalid marker '{invalid}' must be a constitution error: {outcome:?}"
         );
     }
+}
+
+// --- transparent control-flow macro (`cfg_if!`) arms ------------------------
+//
+// `cfg_if!` wraps human-authored code in arms without transforming identities, so an arm's contents
+// are real, compiled code. Skipping such a body like any foreign macro broke two of the audit's
+// three reaction directions, measured on ordinary compilable source: a seam whose only probe lived
+// in an arm was reported unprobed (a false alarm against real coverage), while a typo'd seam and an
+// un-auditable probe inside an arm escaped entirely — the forbidden false negative, and a
+// contradiction of `audit_probe_coverage`'s own never-a-silent-skip rule. 圭表 has read these bodies
+// since 0.2.3 and 渾儀 joined in 0.4.0; these tests are 漏刻's half of one shared rule.
+
+#[test]
+fn a_probe_inside_a_cfg_if_arm_is_counted() {
+    let src = "cfg_if::cfg_if! { if #[cfg(unix)] { fn f(o: u8) { assert_boundary!(\"arm\", o); } } }\n\
+               fn g(o: u8) { assert_boundary!(\"top\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["arm", "top"],
+        "a probe inside a cfg_if arm must count, and the probe after the body must still be seen: {probes:?}"
+    );
+}
+
+#[test]
+fn probes_in_every_cfg_if_arm_are_counted() {
+    // if / else-if / else — arms are a cfg-blind union, so all three count. The audit never
+    // evaluates `cfg`, exactly as its contract already states for `#[cfg]`-gated probes.
+    let src = "cfg_if::cfg_if! {\n\
+               if #[cfg(unix)] { fn a(o: u8) { assert_boundary!(\"a\", o); } }\n\
+               else if #[cfg(windows)] { fn b(o: u8) { assert_boundary!(\"b\", o); } }\n\
+               else { fn c(o: u8) { assert_boundary!(\"c\", o); } }\n\
+               }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["a", "b", "c"],
+        "every arm of an else-if chain must be scanned: {probes:?}"
+    );
+}
+
+#[test]
+fn a_probe_inside_a_nested_cfg_if_is_counted() {
+    let src = "cfg_if::cfg_if! { if #[cfg(unix)] {\n\
+               cfg_if::cfg_if! { if #[cfg(target_pointer_width = \"64\")] {\n\
+               fn f(o: u8) { assert_boundary!(\"inner\", o); } } }\n\
+               } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["inner"],
+        "a nested cfg_if's arm must be scanned: {probes:?}"
+    );
+}
+
+#[test]
+fn a_paren_delimited_and_unqualified_cfg_if_are_both_transparent() {
+    // The invocation's own delimiter is irrelevant, and an adopter who wrote `use cfg_if::cfg_if;`
+    // invokes it bare — the name test matches the identifier before `!`, so both spellings are one
+    // shape (the same last-segment match 圭表 and 渾儀 apply).
+    let src = "cfg_if!( if #[cfg(unix)] { fn f(o: u8) { assert_boundary!(\"paren\", o); } } );\n\
+               cfg_if! { if #[cfg(unix)] { fn g(o: u8) { assert_boundary!(\"brace\", o); } } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["paren", "brace"],
+        "paren-delimited and unqualified cfg_if invocations must both be transparent: {probes:?}"
+    );
+}
+
+#[test]
+fn a_cfg_if_inside_a_macro_rules_body_is_still_skipped() {
+    // Ordering guard: the outer `macro_rules!` body is skipped first, so a transparent invocation
+    // written inside a macro TEMPLATE is never reached and its probe stays macro-generated. The
+    // macro-definition exclusion is unaffected by transparency.
+    let src = "macro_rules! gen { () => { cfg_if::cfg_if! { if #[cfg(unix)] { assert_boundary!(\"dead\", o) } } }; }\n\
+               fn f(o: u8) { assert_boundary!(\"live\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["live"],
+        "a cfg_if inside a macro_rules template must stay skipped: {probes:?}"
+    );
+}
+
+#[test]
+fn a_foreign_macro_body_inside_a_cfg_if_arm_is_still_skipped() {
+    // Transparency is not contagious: the arm is real code, but a foreign macro invoked INSIDE the
+    // arm is still macro-generated, so its probe must not count while the arm's own does.
+    let src = "cfg_if::cfg_if! { if #[cfg(unix)] {\n\
+               fn f(o: u8) { wrap!( assert_boundary!(\"dead\", o) ); assert_boundary!(\"live\", o); }\n\
+               } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["live"],
+        "a foreign macro body inside a transparent arm must still be skipped: {probes:?}"
+    );
+}
+
+#[test]
+fn a_seam_probed_only_inside_a_cfg_if_arm_is_covered() {
+    let tb = TempBase::new("arm-covered");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seam\", o); } } }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a seam probed only inside an arm must be covered, not reported unprobed: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_seam_probed_nowhere_is_still_reported_unprobed() {
+    // The control for the test above: without it, "Clean" could hold for a fixture whose boundary
+    // never reacts at all rather than because the arm's probe was found.
+    let tb = TempBase::new("arm-control");
+    let root = tb.source("lib.rs", "pub fn f() {}");
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "an unprobed seam must still react: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_typod_seam_inside_a_cfg_if_arm_reacts() {
+    // Closed false negative #1: probed-but-undeclared never fired inside an arm, so a mis-typed
+    // seam — which panics at runtime against a seam nobody declared — passed CI.
+    let tb = TempBase::new("arm-typo");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(\"seaam\", o); } } }\n\
+         pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "a typo'd seam inside an arm must react as probed-but-undeclared: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_unauditable_probe_inside_a_cfg_if_arm_reacts_with_its_lexical_owner() {
+    // Closed false negative #2, with its identity pinned. The owner qualifies the probe by the
+    // anonymous block scopes it genuinely sits in — the invocation's own body and the arm — exactly
+    // as it would for a real `if` block's braces. That is 漏刻's existing rule for any anonymous
+    // scope, applied unchanged rather than special-cased for arms, and it names the arm in the
+    // message, which an adopter reading a violation wants.
+    let tb = TempBase::new("arm-unauditable");
+    let root = tb.source(
+        "lib.rs",
+        "const S: &str = \"seam\";\n\
+         cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f(o: u8) { assert_boundary!(S, o); } } }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    let text = format!("{outcome:?}");
+    assert!(
+        text.contains("non-literal seam `S`"),
+        "an un-auditable probe inside an arm must react, never a silent skip: {text}"
+    );
+    assert!(
+        text.contains("block cfg_if::cfg_if!#1::block if #[cfg(unix)]#1::fn f"),
+        "the un-auditable probe's owner must name its real lexical scopes: {text}"
+    );
+}
+
+#[test]
+fn a_module_declared_inside_a_cfg_if_arm_covers_a_seam() {
+    // The module-graph half: a dimension blind to the arm never reaches the file at all, so every
+    // probe beneath it is invisible — a coverage false negative that costs a whole subtree.
+    let tb = TempBase::new("arm-mod");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod net; } }",
+    );
+    tb.source(
+        "net.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "an arm-declared module's probe must count: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_module_declared_after_a_cfg_if_body_is_still_reached() {
+    // Range-resumption guard: the arm descent must not consume the enclosing walk's cursor past the
+    // invocation, or a declaration following the body would be dropped (and its probes with it).
+    let tb = TempBase::new("arm-then-mod");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod first; } }\npub mod second;",
+    );
+    tb.source(
+        "first.rs",
+        "pub fn a(o: u8) { assert_boundary!(\"one\", o); }",
+    );
+    tb.source(
+        "second.rs",
+        "pub fn b(o: u8) { assert_boundary!(\"two\", o); }",
+    );
+    let outcome = tb.audit(
+        &[
+            boundary("one", Severity::Enforce),
+            boundary("two", Severity::Enforce),
+        ],
+        &[root],
+    );
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a module declared after a transparent body must still be reached: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_arm_declared_module_with_no_file_is_tolerated() {
+    // Arm membership is cfg-conditional: the predicate lives in the macro header, so rustc strips
+    // the whole arm and the crate compiles with no such file. 圭表's settled rule, adopted.
+    let tb = TempBase::new("arm-absent");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod unix_impl; } else { pub mod windows_impl; } }",
+    );
+    tb.source(
+        "unix_impl.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a fileless arm declaration must be tolerated, not a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn the_same_fileless_declaration_outside_an_arm_still_fails_loud() {
+    // The control for the tolerance: an unconditional declaration with no file is a broken
+    // reference (exit 2), so the tolerance above is a decision about arms, not a blanket softening.
+    let tb = TempBase::new("arm-absent-control");
+    let root = tb.source("lib.rs", "pub mod windows_impl;");
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "an unconditional fileless declaration must stay a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn arm_membership_is_not_inherited_into_an_inline_module_body() {
+    // The tolerance covers the arm's own declarations, not everything beneath them: a bare `#[cfg]`
+    // on an outer `mod` does not tolerate an absent file for an inner `mod` either, in any of the
+    // three dimensions. Keeping that asymmetry identical across them is the point.
+    let tb = TempBase::new("arm-inline-inherit");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod outer { pub mod missing; } } }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "arm membership must not be inherited into an inline module body: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_arm_declared_dual_backed_module_is_still_a_constitution_error() {
+    // Arm membership makes an ABSENCE tolerable, never an ambiguity resolvable: no predicate value
+    // makes two conventional files compile as one module. The same ordering all three dimensions
+    // apply to this shape.
+    let tb = TempBase::new("arm-dual-backed");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod child; } }",
+    );
+    tb.source("child.rs", "pub fn a() {}");
+    tb.source("child/mod.rs", "pub fn b() {}");
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "an arm-declared dual-backed module must stay a constitution error: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_clean_cfg_if_arm_stays_clean() {
+    // Transparency observes contents; it does not react to the macro. A crate using `cfg_if!`
+    // cleanly must not acquire a finding merely for using it.
+    let tb = TempBase::new("arm-clean");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub fn f() -> u8 { 0 } } }\n\
+         pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a clean cfg_if arm must stay clean: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_spaced_transparent_invocation_is_transparent_in_both_passes() {
+    // `cfg_if ! { … }` is valid Rust, and both passes look back past whitespace for the name before
+    // deciding a `!` opens a macro — so the spaced form must be recognized as transparent too. Were
+    // it recognized as a macro but not as transparent, the probe pass would skip its body and the
+    // module pass would swallow the arm as an opaque block: the false negative in both halves.
+    let src = "cfg_if ! { if #[cfg(unix)] { fn f(o: u8) { assert_boundary!(\"spaced\", o); } } }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["spaced"],
+        "a spaced transparent invocation must be scanned into: {probes:?}"
+    );
+
+    let tb = TempBase::new("spaced-arm-mod");
+    let root = tb.source("lib.rs", "cfg_if ! { if #[cfg(unix)] { pub mod net; } }");
+    tb.source(
+        "net.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a module declared inside a spaced transparent invocation's arm must be reached: {outcome:?}"
+    );
+}
+
+#[test]
+fn a_similarly_named_macro_is_not_transparent() {
+    // The name gate compares the MAXIMAL identifier run, so `my_cfg_if!` is a different macro and its
+    // body stays skipped. A suffix/substring match here would read an arbitrary macro's nested blocks
+    // as arms — the false-positive direction the gate exists to prevent.
+    let src = "fn f(o: u8) { my_cfg_if!( assert_boundary!(\"dead\", o) ); assert_boundary!(\"live\", o); }";
+    let mut probes = Vec::new();
+    scan_source(src, "test.rs", &mut probes);
+    assert_eq!(
+        literal_seams(&probes),
+        ["live"],
+        "only the exact `cfg_if` name is transparent: {probes:?}"
+    );
+}
+
+#[test]
+fn a_module_declared_inside_a_nested_cfg_if_arm_is_reached() {
+    // The module pass's arm descent re-enters the walk, so a nested invocation is covered by the same
+    // recursion rather than a second mechanism — pinned here because the probe pass's nesting test
+    // exercises a different code path.
+    let tb = TempBase::new("nested-arm-mod");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] {\n\
+         cfg_if::cfg_if! { if #[cfg(target_pointer_width = \"64\")] { pub mod deep; } }\n\
+         } }",
+    );
+    tb.source(
+        "deep.rs",
+        "pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "a module declared inside a nested cfg_if arm must be reached: {outcome:?}"
+    );
+}
+
+#[test]
+fn twin_arms_declaring_one_module_do_not_double_report_its_probe() {
+    // The per-platform shim spelled with ONE file: both arms declare the same module, so the arm
+    // descent collects it twice. The walk's canonical-path visit tracking must collapse that to one
+    // scan — otherwise a single un-auditable probe beneath it would be reported twice, inflating one
+    // real finding into two (the false-positive direction of this change).
+    let tb = TempBase::new("twin-arms");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(unix)] { pub mod imp; } else { pub mod imp; } }",
+    );
+    tb.source(
+        "imp.rs",
+        "const S: &str = \"seam\";\npub fn f(o: u8) { assert_boundary!(S, o); }\n\
+         pub fn g(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    let count = match &outcome {
+        Outcome::Violations(report) => report.violations.len(),
+        other => panic!("expected violations, got {other:?}"),
+    };
+    assert_eq!(
+        count, 1,
+        "twin arms declaring one module must yield exactly one un-auditable finding: {outcome:?}"
+    );
+}
+
+#[test]
+fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
+    // The other absence site reads the same gate: a bare `#[cfg]` co-occurring with an unconditional
+    // `#[path]` removes the whole item, `#[path]` included, and arm membership expresses the same
+    // intent. Written because the delta claims it — an untested spec claim is the shape that rots.
+    let tb = TempBase::new("arm-absent-path");
+    let root = tb.source(
+        "lib.rs",
+        "cfg_if::cfg_if! { if #[cfg(windows)] { #[path = \"windows_impl.rs\"] pub mod imp; } }\n\
+         pub fn f(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "an absent unconditional #[path] target inside an arm must be tolerated: {outcome:?}"
+    );
+}
+
+/// A comment between the `mod` keyword and its name is legal, unremarkable Rust (trivia to rustc)
+/// — but a bare whitespace-only skip in that position stopped at the comment's leading `/`, so the
+/// identifier scan found nothing there and the whole declaration was never recognized as a `mod` at
+/// all. The module and its entire subtree — every probe beneath it — silently vanished from the
+/// corpus (exit 0 Clean) instead of reacting to the typo'd seam it actually contains.
+#[test]
+fn a_comment_between_mod_and_its_name_does_not_drop_the_module() {
+    let tb = TempBase::new("comment-before-name");
+    let root = tb.source(
+        "lib.rs",
+        "pub mod /* relocated */ child;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "child.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the comment-relocated module must react: {outcome:?}"
+    );
+}
+
+/// The identical shape with the comment AFTER the module's name, before its terminator.
+#[test]
+fn a_comment_between_the_mod_name_and_its_terminator_does_not_drop_the_module() {
+    let tb = TempBase::new("comment-after-name");
+    let root = tb.source(
+        "lib.rs",
+        "pub mod child /* relocated */;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "child.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the comment-relocated module must react: {outcome:?}"
+    );
+}
+
+/// The only legal non-inline module form inside a function/block body is one carrying `#[path]`
+/// (a bare `mod name;` with no established file-path convention there does not compile) — but the
+/// catch-all brace skip treated every non-`mod`, non-arm brace as one opaque unit, so this legal
+/// form was never observed: the module and the typo'd seam it contains silently vanished from the
+/// corpus (exit 0 Clean).
+#[test]
+fn a_path_mod_inside_a_function_body_reacts() {
+    let tb = TempBase::new("block-scoped-path-mod");
+    let root = tb.source(
+        "lib.rs",
+        "pub fn f() { #[path = \"inner.rs\"] mod inner; }\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "inner.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the block-scoped #[path] module must react: {outcome:?}"
+    );
+}
+
+/// The identical shape nested one bare block deeper (`{ { #[path] mod inner; } }`), confirming the
+/// generalized brace descent is not narrowly scoped to a function's own immediate body.
+#[test]
+fn a_path_mod_inside_a_nested_bare_block_reacts() {
+    let tb = TempBase::new("nested-block-scoped-path-mod");
+    let root = tb.source(
+        "lib.rs",
+        "pub fn f() { { #[path = \"inner.rs\"] mod inner; } }\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "inner.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the typo'd seam in the nested-block #[path] module must react: {outcome:?}"
+    );
+}
+
+/// `mod_preamble_attrs` documented a `cfg_attr(path)` tolerance the code never implemented: the
+/// attribute-matching pass checked for the exact identifier `cfg`, so `cfg_attr` — a different
+/// identifier — matched neither the `path` arm nor the bare-`cfg` arm. A module stacking two
+/// `cfg_attr`-wrapped `#[path]` declarations that together cover every platform (both targets
+/// present, compiling cleanly on every configuration) was reported a hard constitution error
+/// instead of being scanned.
+#[test]
+fn two_cfg_attr_path_declarations_covering_every_platform_are_scanned_not_erred() {
+    let tb = TempBase::new("two-cfg-attr-path");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"u.rs\")]\n#[cfg_attr(not(unix), path = \"w.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "u.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    tb.source(
+        "w.rs",
+        "pub fn r(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "both cfg_attr(path) targets must be scanned (typo'd seam reacts), never a constitution \
+         error on source that compiles on every platform: {outcome:?}"
+    );
+}
+
+/// The identical shape with clean seams in both cfg_attr(path) targets — confirms the fix reports
+/// the boundary satisfied (not merely "not a constitution error").
+#[test]
+fn two_cfg_attr_path_declarations_covering_every_platform_are_clean_when_probes_match() {
+    let tb = TempBase::new("two-cfg-attr-path-clean");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"u.rs\")]\n#[cfg_attr(not(unix), path = \"w.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source("u.rs", "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }");
+    tb.source("w.rs", "pub fn r(o: u8) { assert_boundary!(\"seam\", o); }");
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome,
+        Outcome::Clean,
+        "source compiling cleanly on every platform, with every probe matching the declared seam, \
+         must be Clean: {outcome:?}"
+    );
+}
+
+/// A cfg_attr(path) target that does NOT exist on disk is skipped, not erred, when either the
+/// conventional file or another cfg_attr candidate backs the module — the union-observation
+/// counterpart of the crate-wide walk's own absence tolerance.
+#[test]
+fn a_missing_cfg_attr_path_target_is_tolerated_when_the_conventional_file_backs_the_module() {
+    let tb = TempBase::new("cfg-attr-path-missing-target-conventional-backs");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(windows, path = \"win.rs\")]\npub mod plat;\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "plat.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the conventional file must still be read and react, even with an absent sibling \
+         cfg_attr(path) target: {outcome:?}"
+    );
+}
+
+/// A cfg_attr(path) remap on an INLINE `mod x { … }` (not the external `mod x;` form) redirects
+/// where x's own nested items resolve from — the same union rule applied to a base directory
+/// instead of a file existence check, since the inline body itself is always present in source.
+#[test]
+fn a_cfg_attr_path_remap_on_an_inline_module_redirects_its_nested_items() {
+    let tb = TempBase::new("cfg-attr-path-inline-module-redirect");
+    let root = tb.source(
+        "lib.rs",
+        "#[cfg_attr(unix, path = \"unix_dir\")]\npub mod x {\n    pub mod y;\n}\npub fn p(o: u8) { assert_boundary!(\"seam\", o); }",
+    );
+    tb.source(
+        "unix_dir/y.rs",
+        "pub fn q(o: u8) { assert_boundary!(\"seaam\", o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the cfg_attr(path)-remapped directory must be followed for x's nested `mod y;`, not the \
+         conventional (nonexistent) `x/y.rs`, and never a constitution error: {outcome:?}"
+    );
+}
+
+/// The un-auditable-probe fact's identity must not embed a raw, checkout-dependent absolute path:
+/// a byte-identical source file scanned from two different absolute locations (the same
+/// relocation a different clone path / CI runner produces) must yield the IDENTICAL violation
+/// identity, or a baseline recorded in one checkout matches nothing in the other.
+#[test]
+fn unauditable_probe_identity_is_stable_across_checkout_locations() {
+    let tb1 = TempBase::new("probefix1");
+    let root1 = tb1.source(
+        "src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let tb2 = TempBase::new("probefix2");
+    let root2 = tb2.source(
+        "src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    // Each checkout anchors on its OWN base — exactly what a real caller does, since
+    // `workspace_root` is that checkout's own directory. The two absolute prefixes differ; the
+    // labels, and therefore the identities, must not.
+    let outcome1 = tb1.audit(&[boundary("seam", Severity::Enforce)], &[root1]);
+    let outcome2 = tb2.audit(&[boundary("seam", Severity::Enforce)], &[root2]);
+    let Outcome::Violations(report1) = outcome1 else {
+        panic!("expected violations from checkout 1: {outcome1:?}");
+    };
+    let Outcome::Violations(report2) = outcome2 else {
+        panic!("expected violations from checkout 2: {outcome2:?}");
+    };
+    let ids1: Vec<_> = report1.violations.iter().map(|v| v.id()).collect();
+    let ids2: Vec<_> = report2.violations.iter().map(|v| v.id()).collect();
+    assert_eq!(
+        ids1, ids2,
+        "the same source scanned from two different absolute checkout locations must produce \
+         identical violation identities, or a baseline recorded in one never matches the other"
+    );
+    // Non-vacuous: the identity is not merely absent (e.g. both empty) — an unauditable-probe
+    // violation genuinely fired, and its `file` field is relative, never the raw absolute path.
+    let unauditable = report1
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an unauditable-probe violation must have fired");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file, "src/lib.rs",
+        "a scanned file is labeled by its place within the checkout root, not by its own directory \
+         — which is what keeps two members' same-named `lib.rs` apart"
+    );
+    assert!(
+        !file.starts_with('/'),
+        "the identity's file label must never be a raw absolute path: {file}"
+    );
+}
+
+/// The second half of identity stability, and the reason the anchor is the caller's argument rather
+/// than something derived from `source_inputs`: one checkout, one anchor, but two different member
+/// SETS must label a file they share identically.
+///
+/// A derived longest-common-prefix anchor cannot do this. With every member under `crates/` the
+/// derived anchor is `<root>/crates`, labeling a file `a/src/lib.rs`; adding one member outside that
+/// prefix (`tools/c`, or an example, or a fixture crate) drops the anchor to `<root>` and relabels
+/// the very same file `crates/a/src/lib.rs`. Every recorded baseline entry then goes stale and
+/// re-fires as new at once — the exact loss the checkout-relative labeling exists to prevent,
+/// reached by adding an unrelated crate instead of by moving the clone.
+/// A non-absolute anchor is refused, not silently degraded — the precondition the anchor's whole
+/// purpose depends on.
+///
+/// `strip_prefix` cannot remove a relative prefix from an absolute source path, and succeeds
+/// trivially against `""`, so either anchor leaves every label in its raw absolute form: the
+/// checkout-dependent identity the anchor parameter exists to close, reached through an argument
+/// that looked accepted. Measured before the rule existed, through this same public entry point:
+/// anchors `"."`, `"crates"`, and `""` each returned the full `/tmp/.../crates/a/src/lib.rs`.
+///
+/// The empty case is refused by this one rule rather than blessed as a "no anchor" opt-out (an
+/// earlier revision of this crate documented it that way): its effect is precisely the defect, so
+/// there is no correct caller of it, and a caller with no stable directory to name is better told so.
+#[test]
+fn a_non_absolute_anchor_is_a_constitution_error() {
+    let tb = TempBase::new("non-absolute-anchor");
+    let root = tb.source(
+        "crates/a/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    for anchor in ["", ".", "crates", "crates/a/src", "../sibling"] {
+        let outcome = audit_probe_coverage(
+            &[boundary("seam", Severity::Enforce)],
+            std::slice::from_ref(&root),
+            Path::new(anchor),
+        );
+        let Outcome::ConstitutionError(message) = outcome else {
+            panic!("anchor {anchor:?} must be refused, not accepted: {outcome:?}");
+        };
+        assert!(
+            message.contains("is not an absolute path"),
+            "the error must name the precondition it failed: {message}"
+        );
+        assert!(
+            message.contains("workspace_root"),
+            "the error must name the value a caller should pass instead: {message}"
+        );
+    }
+    // The absolute sibling of the same call still works, so the rule rejects the anchor rather than
+    // the invocation shape.
+    let accepted = audit_probe_coverage(
+        &[boundary("seam", Severity::Enforce)],
+        std::slice::from_ref(&root),
+        tb.path(),
+    );
+    assert!(
+        matches!(accepted, Outcome::Violations(_)),
+        "an absolute anchor must still be accepted: {accepted:?}"
+    );
+}
+
+#[test]
+fn two_member_sets_over_one_checkout_label_a_shared_file_identically() {
+    let tb = TempBase::new("member-set-stability");
+    let shared = tb.source(
+        "crates/a/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let sibling = tb.source(
+        "crates/b/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    // The added member sits outside the `crates/` prefix the first two share — the shape that moves
+    // a derived anchor. The anchor itself (the checkout root) is identical in both calls, as it is
+    // for a real caller reading `workspace_root` before and after the member is added.
+    let outsider = tb.source(
+        "tools/c/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let label_of = |roots: &[PathBuf]| -> Vec<String> {
+        let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], roots);
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected violations: {outcome:?}");
+        };
+        report
+            .violations
+            .iter()
+            .filter(|v| v.rule.contains("string literal"))
+            .filter_map(|v| v.file.clone())
+            .filter(|file| file.starts_with("crates/a/"))
+            .collect()
+    };
+    let before = label_of(&[shared.clone(), sibling.clone()]);
+    let after = label_of(&[shared, sibling, outsider]);
+    assert_eq!(
+        before,
+        vec!["crates/a/src/lib.rs".to_string()],
+        "the label must name the file's place in the checkout, whatever else is being scanned"
+    );
+    assert_eq!(
+        before, after,
+        "adding a workspace member outside the other members' shared prefix must not relabel their \
+         findings — every baseline entry recorded against the old label would otherwise go stale \
+         and re-fire as new"
+    );
+}
+
+/// Multiple workspace-member roots (the real `tianheng` caller's shape, one absolute `src_path`
+/// per member from `cargo_metadata`) are each labeled relative to the checkout root the caller
+/// anchors on — never a raw absolute path, and distinct members never collide despite sharing a
+/// bare `lib.rs` filename.
+#[test]
+fn multi_root_probe_identity_is_relative_to_the_checkout_anchor() {
+    let tb = TempBase::new("multi-root-common-ancestor");
+    let root_a = tb.source(
+        "crate-a/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let root_b = tb.source(
+        "crate-b/src/lib.rs",
+        "pub const SEAM: &str = \"seam\";\npub fn go(o: u8) { assert_boundary!(SEAM, o); }",
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root_a, root_b]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected violations: {outcome:?}");
+    };
+    let mut files: Vec<&str> = report
+        .violations
+        .iter()
+        .filter(|v| v.rule.contains("string literal"))
+        .filter_map(|v| v.file.as_deref())
+        .collect();
+    files.sort_unstable();
+    assert_eq!(
+        files,
+        vec!["crate-a/src/lib.rs", "crate-b/src/lib.rs"],
+        "each member's identity must be relative to the shared checkout root, distinguishing \
+         same-named files by their own member path"
+    );
+}
+
+/// An ABSOLUTE `#[path = "/…"]` literal whose target lies outside the anchor keeps the raw absolute
+/// path — the violation still fires, it is simply not relabeled.
+///
+/// The behaviour is unchanged; its REASON is not. It used to be a fallback: `strip_prefix` failed
+/// because `Path::join` discards the receiver for an absolute joinee, so there was no relationship to
+/// the anchor to exploit. It is now the rule — an absolute literal's label is the path the literal
+/// wrote, wherever the target sits — which is what makes the outside-the-anchor case and the
+/// inside-the-anchor case agree instead of diverging. This test therefore passed before and after, and
+/// is kept for the outside-the-anchor half of the rule rather than as evidence of the change (the
+/// sibling test that changed answer is the evidence).
+#[test]
+fn an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote() {
+    let tb = TempBase::new("abs-path-literal-bound");
+    // The target must sit OUTSIDE the anchor for the fallback to be what is under test, so it goes
+    // in a separate base rather than a sibling directory inside this one. With the anchor now the
+    // caller's checkout root (not the scanned file's own directory), a target *inside* the checkout
+    // gets a relative label instead — pinned by the sibling test below, which is a real narrowing
+    // of this bound rather than a change of it.
+    let outside = TempBase::new("abs-path-literal-outside");
+    let target_dir = outside.path().join("shared_outside");
+    std::fs::create_dir_all(&target_dir).unwrap();
+    let abs_target = target_dir.join("thing.rs");
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        &format!(
+            "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+            abs_target.display().to_string()
+        ),
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected an unauditable-probe violation to fire: {outcome:?}");
+    };
+    let unauditable = report
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an absolute #[path] target's probe must still react, never silently dropped");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file,
+        abs_target.display().to_string(),
+        "an absolute #[path] literal's target outside the anchor has no relationship to it, so its \
+         label stays the raw absolute path — a documented, deliberate bound, not a silent regression"
+    );
+}
+
+/// An absolute `#[path]` literal's target keeps the path **as the literal wrote it**, even when it
+/// happens to lie inside the caller's checkout root — and that is what makes its identity
+/// checkout-independent, the opposite of what this test asserted while the gap was open.
+///
+/// Relativizing it was the gap's own mechanism: `strip_prefix` succeeded by pure text match wherever
+/// the target coincidentally shared the anchor's prefix and failed everywhere else, so one identical
+/// committed literal produced a relative-looking label in one checkout and an absolute one in another.
+/// An absolute literal does not move with the checkout, so neither should its label. The
+/// coincidence — does this target happen to sit under this checkout's anchor — is exactly the input
+/// an identity must not depend on.
+#[test]
+fn an_absolute_path_literal_keeps_the_path_the_literal_wrote() {
+    let tb = TempBase::new("abs-path-literal-inside");
+    let abs_target = tb.path().join("crates/shared/src/thing.rs");
+    std::fs::create_dir_all(abs_target.parent().unwrap()).unwrap();
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        &format!(
+            "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+            abs_target.display().to_string()
+        ),
+    );
+    let outcome = tb.audit(&[boundary("seam", Severity::Enforce)], &[root]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("expected an unauditable-probe violation to fire: {outcome:?}");
+    };
+    let unauditable = report
+        .violations
+        .iter()
+        .find(|v| v.rule.contains("string literal"))
+        .expect("an absolute #[path] target's probe must still react, never silently dropped");
+    let file = unauditable.file.as_deref().expect("file field must be set");
+    assert_eq!(
+        file,
+        abs_target.display().to_string(),
+        "an absolute literal's target keeps the path as written, whether or not it happens to lie \
+         under this checkout's anchor — the coincidence is what identity must not depend on"
+    );
+}
+
+/// The same rule, one level in: an **inline** `mod`'s absolute `#[path]` base is inherited by the
+/// children resolved from it.
+///
+/// `Path::join` discards its receiver when the joinee is absolute, so `#[path = "/abs/dir"] mod thing
+/// { mod child; }` makes `/abs/dir` the base the body's file-form children resolve against — and
+/// `inline_mod_bases` returned those bases as bare paths, carrying no record that the base was reached
+/// through an absolute literal. The walk's own inheritance (`absolute_reached || child_absolute`, applied
+/// where a file's children are queued) cannot recover it: it threads provenance down the FILE chain, and
+/// this base is introduced *within* one file, so a conventionally-declared child of the inline body was
+/// queued with `false` and its label relativized whenever the absolute target happened to sit under this
+/// checkout's anchor.
+///
+/// Asserted the way the file-level case is: one committed literal, two checkouts, and the identity must
+/// be the same in both. Checkout a's anchor contains the target and checkout b's does not, which is
+/// exactly the coincidence a label must not encode.
+#[test]
+fn an_inline_mods_absolute_path_base_is_inherited_by_its_children() {
+    let tb_a = TempBase::new("inline-abs-base-a");
+    let tb_b = TempBase::new("inline-abs-base-b");
+    // The inline body's base — under checkout a's own tree, so a's anchor contains it.
+    let abs_base = tb_a.path().join("crates/foo/src/inline_remapped");
+    std::fs::create_dir_all(&abs_base).unwrap();
+    // A conventionally-declared child of the inline body, resolved from that absolute base.
+    std::fs::write(
+        abs_base.join("child.rs"),
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    let source = format!(
+        "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing {{ mod child; }}",
+        abs_base.display().to_string()
+    );
+    let root_a = tb_a.source("crates/foo/src/lib.rs", &source);
+    let root_b = tb_b.source("crates/foo/src/lib.rs", &source);
+
+    let id_of = |outcome: Outcome, label: &str| match outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .find_map(|v| v.rule.contains("string literal").then(|| v.id().clone()))
+            .unwrap_or_else(|| panic!("{label}: expected an un-auditable probe violation")),
+        other => panic!("{label}: expected Violations, got {other:?}"),
+    };
+    let id_a = id_of(
+        tb_a.audit(&[boundary("seam", Severity::Enforce)], &[root_a]),
+        "checkout a",
+    );
+    let id_b = id_of(
+        tb_b.audit(&[boundary("seam", Severity::Enforce)], &[root_b]),
+        "checkout b",
+    );
+    assert_eq!(
+        id_a, id_b,
+        "a child resolved from an inline mod's absolute `#[path]` base must carry one identity in every \
+         checkout: a's anchor happens to contain that base and b's does not, and that coincidence must \
+         not reach the label"
+    );
+}
+
+/// The gap that closes: the identical hardcoded absolute `#[path]` literal, committed into two
+/// different checkouts, now yields the **same** identity in both.
+///
+/// It did not before. `strip_prefix` succeeded by pure text match wherever the literal's target
+/// happened to be nested under a given checkout's own anchor — producing a clean, relative-looking
+/// label — while the same literal scanned from a checkout that did not share that prefix fell back to
+/// the full absolute path. One committed literal, two identities: the checkout-dependent identity the
+/// anchor exists to prevent, reached through the one construct that was carved out of it.
+///
+/// The fix is to stop relativizing what does not move: a file reached through an absolute literal keeps
+/// the path the literal wrote, in every checkout. This test is the closure, and its predecessor pinned
+/// the gap — which is why the predecessor started failing (with EQUAL identities) the moment the flag
+/// landed, exactly as its own doc said it should.
+#[test]
+fn a_nested_absolute_path_literal_now_agrees_across_checkouts() {
+    let tb_a = TempBase::new("nested-abs-checkout-a");
+    let tb_b = TempBase::new("nested-abs-checkout-b");
+    let abs_target = tb_a
+        .path()
+        .join("crates/foo/src/nested_under_anchor/thing.rs");
+    std::fs::create_dir_all(abs_target.parent().unwrap()).unwrap();
+    std::fs::write(
+        &abs_target,
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    // The identical hardcoded literal (checkout a's own absolute path) is committed into BOTH
+    // checkouts, which is what a real absolute `#[path]` in version control is.
+    let source = format!(
+        "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
+        abs_target.display().to_string()
+    );
+    let root_a = tb_a.source("crates/foo/src/lib.rs", &source);
+    let root_b = tb_b.source("crates/foo/src/lib.rs", &source);
+
+    let id_of = |outcome: Outcome, label: &str| match outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .find_map(|v| v.rule.contains("string literal").then(|| v.id().clone()))
+            .unwrap_or_else(|| panic!("{label}: expected an un-auditable probe violation")),
+        other => panic!("{label}: expected Violations, got {other:?}"),
+    };
+    let id_a = id_of(
+        tb_a.audit(&[boundary("seam", Severity::Enforce)], &[root_a]),
+        "checkout a",
+    );
+    let id_b = id_of(
+        tb_b.audit(&[boundary("seam", Severity::Enforce)], &[root_b]),
+        "checkout b",
+    );
+    assert_eq!(
+        id_a, id_b,
+        "one committed absolute literal must yield one identity: checkout a's anchor happens to \
+         contain the target and checkout b's does not, and that coincidence must no longer reach the \
+         label"
+    );
+}
+
+/// `Path::display()` is lossy — it replaces each byte it cannot decode with U+FFFD — so two source
+/// paths differing only in invalid-UTF-8 bytes rendered to ONE label, hence one `UnauditableProbe`
+/// identity: baselining the first would silently suppress the second's never-accepted violation.
+/// That is the injectivity class this window closed at five other identity sites; the `file`
+/// component of this identity is the same kind of component.
+///
+/// Unix-only because this is where such a path can be constructed: on Windows the analogous input is
+/// an unpaired surrogate, which the same encoder escapes (its `as_encoded_bytes()` WTF-8 form is
+/// invalid UTF-8 too) but which no portable API here can create on demand.
+#[cfg(unix)]
+#[test]
+fn two_probe_paths_differing_only_in_an_invalid_byte_stay_distinct_identities() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let tb = TempBase::new("non-utf8-probe-label");
+    let dir = tb.path().join("crates/foo/src");
+    std::fs::create_dir_all(&dir).unwrap();
+    let body = "pub const SEAM_CONST: &str = \"seam\";\npub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }";
+    let roots: Vec<PathBuf> = [b"lib\xff.rs".as_slice(), b"lib\xfe.rs".as_slice()]
+        .iter()
+        .map(|raw| {
+            let path = dir.join(std::ffi::OsStr::from_bytes(raw));
+            std::fs::write(&path, body).unwrap();
+            path
+        })
+        .collect();
+
+    let Outcome::Violations(report) = tb.audit(&[boundary("seam", Severity::Enforce)], &roots)
+    else {
+        panic!("expected the un-auditable probes to react");
+    };
+    let unauditable: Vec<_> = report
+        .violations
+        .iter()
+        .filter(|v| v.rule.contains("string literal"))
+        .collect();
+    assert_eq!(
+        unauditable.len(),
+        2,
+        "both files carry a non-literal probe, so both must react: {:?}",
+        report.violations
+    );
+    assert_ne!(
+        unauditable[0].file, unauditable[1].file,
+        "two paths differing only in an invalid byte must keep distinct labels — a lossy \
+         display() collapses them to one, so one baseline entry would suppress both"
+    );
+    assert_ne!(
+        unauditable[0].id(),
+        unauditable[1].id(),
+        "and therefore distinct violation identities, so baselining one cannot mask the other"
+    );
+}
+
+/// The escape is injective in the other direction too: a literal `%` in a real (valid UTF-8) path
+/// must not be able to spell an escaped byte's label. `a%FF.rs` as a genuine filename and
+/// `a<0xFF>.rs` are distinct observations and must stay distinct labels, which is why `%` itself is
+/// escaped rather than passed through. Every path without a `%` — every realistic one — keeps the
+/// byte-identical label the previous `display()` form produced, so no baseline entry re-keys.
+#[cfg(unix)]
+#[test]
+fn a_literal_percent_in_a_path_cannot_spell_an_escaped_byte() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let anchor = Path::new("/w");
+    let plain = crate::audit::scan::probes::labeled(Path::new("/w/src/lib.rs"), anchor);
+    assert_eq!(plain, "src/lib.rs", "an ordinary path is unchanged");
+
+    let spelled = crate::audit::scan::probes::labeled(Path::new("/w/src/a%FF.rs"), anchor);
+    let raw = crate::audit::scan::probes::labeled(
+        Path::new(std::ffi::OsStr::from_bytes(b"/w/src/a\xff.rs")),
+        anchor,
+    );
+    assert_eq!(spelled, "src/a%25FF.rs");
+    assert_eq!(raw, "src/a%FF.rs");
+    assert_ne!(
+        spelled, raw,
+        "a filename containing a literal % must never collide with an escaped invalid byte"
+    );
+}
+
+/// The legacy **directory** corpus does not descend a symlinked subdirectory; the **target root file**
+/// corpus reaches the same file through the module graph and does. Both directions pinned on one
+/// fixture, because the difference between the two inputs is the whole content of the bound.
+///
+/// This is deliberate, not an oversight: the directory walk classifies entries without following
+/// symlinks (`file_type()`), so a symlinked directory is not recognized as one — which is what keeps a
+/// cyclic symlink from becoming an unbounded walk. Stated in `runtime-origin-assertion` so the legacy
+/// corpus cannot read as equivalent coverage; the 天衡 shell passes root files, so an adopter's `check`
+/// is unaffected.
+///
+/// It replaces a `BACKLOG.md` WATCH hypothesis that guessed a different mechanism — a bypassed cycle
+/// guard — and did not distinguish the two inputs. No guard is bypassed, and the input that matters has
+/// no gap.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory() {
+    let tb = TempBase::new("symlinked-subdir-corpus");
+    let real = tb.path().join("elsewhere");
+    std::fs::create_dir_all(&real).unwrap();
+    std::fs::write(
+        real.join("adapter.rs"),
+        "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }",
+    )
+    .unwrap();
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        "#[path = \"linked/adapter.rs\"]\nmod adapter;",
+    );
+    let src = root.parent().unwrap().to_path_buf();
+    tb.symlink(&real, "crates/foo/src/linked");
+
+    let declared = [boundary("seam", Severity::Enforce)];
+
+    let from_root = tb.audit(&declared, &[root]);
+    assert!(
+        matches!(from_root, Outcome::Clean),
+        "the module graph reaches the file through the symlink — reading a file follows symlinks, so \
+         the root-aware corpus has no bound here: {from_root:?}"
+    );
+
+    let from_dir = tb.audit(&declared, &[src]);
+    let Outcome::Violations(report) = from_dir else {
+        panic!(
+            "STATED BOUND: the legacy directory corpus does not descend a symlinked subdirectory, so \
+             the seam must read as unprobed. If this is now clean, the bound has been closed — update \
+             `runtime-origin-assertion` and `BACKLOG.md` with it"
+        );
+    };
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.rule.contains("must be probed")),
+        "the directory corpus reports the seam unprobed: {:?}",
+        report.violations
+    );
 }

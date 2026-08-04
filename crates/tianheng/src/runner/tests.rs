@@ -1,9 +1,10 @@
 use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
 use super::term_color::Style;
 use super::{
-    Coverage, boundary_params, check_constitution, constitution_markdown, dispatch, dyn_trait_text,
-    impl_trait_text, list_document, list_markdown, merge_outcomes, nearest_manifest_from,
-    projection_gate, report_json, runtime_text, semantic_text, trait_impl_text, visibility_text,
+    BaselineWriteError, Coverage, boundary_params, check_constitution, constitution_markdown,
+    create_baseline_file, dispatch, dyn_trait_text, impl_trait_text, list_document, list_markdown,
+    merge_outcomes, nearest_manifest_from, projection_gate, report_json, runtime_text,
+    semantic_text, trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
 use serde_json::Value;
@@ -141,7 +142,7 @@ fn composed_check_preserves_static_error_precedence() {
                 .because("the static target must resolve first"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("xuanji")
+            SignatureBoundary::in_crate("xuanji")
                 .module("crate::no_such_semantic_module")
                 .must_not_expose("crate::Hidden")
                 .because("the later semantic target is also invalid"),
@@ -155,7 +156,7 @@ fn composed_check_preserves_static_error_precedence() {
 
 #[test]
 fn semantic_text_lists_each_boundary() {
-    let boundary = SemanticBoundary::in_crate("app")
+    let boundary = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types");
@@ -166,7 +167,7 @@ fn semantic_text_lists_each_boundary() {
 
 #[test]
 fn including_trait_impls_projects_into_text_json_and_markdown() {
-    let boundary = SemanticBoundary::in_crate("app")
+    let boundary = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .including_trait_impls()
@@ -190,7 +191,7 @@ fn including_trait_impls_projects_into_text_json_and_markdown() {
 
 #[test]
 fn a_bare_boundary_omits_the_opt_in_from_every_projection() {
-    let boundary = SemanticBoundary::in_crate("app")
+    let boundary = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types");
@@ -205,7 +206,7 @@ fn a_bare_boundary_omits_the_opt_in_from_every_projection() {
 
 #[test]
 fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
-    let anchored = SemanticBoundary::in_crate("app")
+    let anchored = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types")
@@ -228,7 +229,7 @@ fn an_anchored_semantic_boundary_projects_its_anchor_only_when_set() {
         "text projection must surface the anchor line, like json and markdown"
     );
 
-    let bare = SemanticBoundary::in_crate("app")
+    let bare = SignatureBoundary::in_crate("app")
         .module("crate::domain")
         .must_not_expose("crate::infra")
         .because("the domain API must not leak infrastructure types");
@@ -654,6 +655,30 @@ fn fixture(name: &str) -> String {
         .into_owned()
 }
 
+/// [`fixture`], but `None` when that fixture is absent — e.g. inside a published `.crate` tarball,
+/// which ships no fixture packages at all (`cargo package` omits any nested directory carrying its
+/// own `Cargo.toml`, and every fixture is its own workspace).
+///
+/// Only a test that asserts a **successful** run needs this: a usage error is decided during parsing,
+/// before any manifest is read, so those assertions hold with or without the fixture and use
+/// [`fixture`] directly. CI sets `TIANHENG_WORKSPACE_TESTS=1` to turn an absence into a LOUD failure
+/// there rather than a silent skip of the gate, exactly as [`workspace_manifest`] does.
+fn fixture_manifest(name: &str) -> Option<String> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+        .join("Cargo.toml");
+    if path.exists() {
+        return Some(path.to_string_lossy().into_owned());
+    }
+    assert!(
+        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+        "the {name} fixture is expected but absent while TIANHENG_WORKSPACE_TESTS is set — a \
+         successful-run gate must not silently skip in CI"
+    );
+    None
+}
+
 /// The Tianheng workspace manifest, two levels up. `None` when it is absent — e.g. inside a
 /// published `.crate` tarball, which has no workspace root — so the workspace-dependent
 /// dispatch tests below SKIP rather than fail when the crate is tested standalone. In the
@@ -890,7 +915,10 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
     let boundary = RuntimeBoundary::at("a-seam-no-probe-covers")
         .only_origins(["app::domain"])
         .because("wiring check");
-    let outcome = crate::audit_probe_coverage(&[boundary], &src_dirs);
+    // The real shell's own anchor: this workspace's root, the directory holding the manifest the
+    // member src roots were resolved from.
+    let anchor = manifest.parent().unwrap_or(&manifest).to_path_buf();
+    let outcome = crate::audit_probe_coverage(&[boundary], &src_dirs, &anchor);
     match outcome {
         Outcome::Violations(report) => assert!(
             report
@@ -979,7 +1007,7 @@ fn list_document_covers_every_populated_dimension() {
                 .because("core stays light"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("app")
+            SignatureBoundary::in_crate("app")
                 .module("crate::domain")
                 .must_not_expose("crate::infra")
                 .because("no infra leak"),
@@ -1044,7 +1072,7 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
                 .because("the core stays dependency-light"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("app")
+            SignatureBoundary::in_crate("app")
                 .module("crate::domain")
                 .must_not_expose("crate::infra")
                 .because("the domain API must not leak infra"),
@@ -1148,7 +1176,7 @@ fn full_constitution() -> Constitution {
                 .because("core stays light"),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("app")
+            SignatureBoundary::in_crate("app")
                 .module("crate::domain")
                 .must_not_expose("crate::infra")
                 .because("no infra leak"),
@@ -1785,6 +1813,87 @@ fn flag_missing_its_value_is_a_usage_error() {
 }
 
 #[test]
+fn a_flag_shaped_value_is_a_usage_error() {
+    // The sibling of the foot-gun above: the value token is present, but it is itself a flag, so
+    // the flag the user meant to pass is eaten as this one's value. Every value-taking flag must
+    // reject that during parsing — uniformly, before any workspace is observed, so the diagnostic
+    // names the real mistake instead of a downstream "cannot read" against a path no one typed.
+    for flag in [
+        "--manifest-path",
+        "--baseline",
+        "--write-baseline",
+        "--format",
+    ] {
+        assert_eq!(
+            run_args(&["tianheng", "check", flag, "--warn-uncovered"]),
+            2,
+            "{flag} given a flag-shaped value must exit 2",
+        );
+    }
+}
+
+#[test]
+fn an_empty_flag_value_is_a_usage_error_in_both_forms() {
+    // The third shape of "this flag was given no value", after an absent token and a following
+    // flag. This pins the *contract* — an empty value never exits 0, in either form — and is
+    // deliberately not the regression guard for the rule that produced it: every empty value
+    // already exited 2 before the rule existed (an empty path answers NotFound at the filesystem,
+    // an empty format falls to the unknown-format arm), so no exit code distinguishes them.
+    // Verified by removing the rule and watching this test stay green. What the rule changes is
+    // which mistake the diagnostic names, so its guard asserts stderr end-to-end in
+    // `baseline_cli.rs::an_empty_flag_value_names_the_flag_not_a_missing_file`.
+    for flag in [
+        "--manifest-path",
+        "--baseline",
+        "--write-baseline",
+        "--format",
+    ] {
+        assert_eq!(
+            run_args(&["tianheng", "check", &format!("{flag}=")]),
+            2,
+            "{flag}= (empty equals form) must exit 2",
+        );
+        assert_eq!(
+            run_args(&["tianheng", "check", flag, ""]),
+            2,
+            "{flag} with an explicitly empty value must exit 2",
+        );
+    }
+}
+
+#[test]
+fn a_flag_shaped_write_baseline_value_is_never_silently_written() {
+    // The regression guard for the shape that did not even land on a non-zero exit. Given a
+    // manifest that evaluates cleanly, `--write-baseline --warn-uncovered` used to consume the
+    // following flag as its path: it wrote a baseline file literally named `--warn-uncovered`
+    // into the working directory and exited 0 — a silent success with the user's real flag
+    // dropped and no diagnostic. The other three value-taking flags reach a non-zero exit even
+    // when they eat a flag (a scan error, an unreadable baseline, an unknown format), so this is
+    // the one case whose exit code changes, and the only one where a stray artifact could appear.
+    //
+    // The path is working-directory relative by construction: only a relative path can begin
+    // with `--`. `TempPath` removes it before the run and on drop, so a future regression cannot
+    // leave the artifact behind in the crate directory.
+    let eaten = TempPath::new(PathBuf::from("--warn-uncovered"));
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            "--write-baseline",
+            "--warn-uncovered",
+        ]),
+        2,
+        "--write-baseline given a flag-shaped value must exit 2, not write and exit 0",
+    );
+    assert!(
+        !eaten.path().exists(),
+        "--write-baseline must not consume the following flag as its baseline path",
+    );
+}
+
+#[test]
 fn list_needs_no_manifest_path_and_exits_0() {
     assert_eq!(run_args(&["tianheng", "list"]), 0);
 }
@@ -1797,6 +1906,147 @@ fn list_json_exits_0() {
 #[test]
 fn list_unknown_format_is_a_usage_error() {
     assert_eq!(run_args(&["tianheng", "list", "--format", "yaml"]), 2);
+}
+
+#[test]
+fn write_baseline_rejects_a_flag_that_cannot_apply_to_it() {
+    // The regression guard for the last place "a recognized flag is never a silent no-op" did not
+    // hold. `--write-baseline` records a snapshot and emits no report, so `--warn-uncovered` (a
+    // coverage-report flag) and `--format` (a report-shape flag) had nothing to act on — and were
+    // accepted anyway: the run recorded the baseline, exited 0, and dropped them without a word, so
+    // an adopter could believe they had coverage advisories or a SARIF document and have neither.
+    //
+    // The exit code is what changes here (0 -> 2), and the baseline must not be written either: a
+    // rejected invocation performs no action at all. Both are asserted, so this cannot pass by
+    // rejecting the flags while still leaving an artifact behind.
+    for extra in [
+        vec!["--warn-uncovered"],
+        vec!["--format", "sarif"],
+        vec!["--format", "json"],
+        // Even the default format: it was still *requested*, and the write action can honor no
+        // format at all. Accepting `text` while rejecting `sarif` would make the rule depend on
+        // which value was asked for rather than on whether the action can apply it.
+        vec!["--format", "text"],
+        vec!["--format=json"],
+    ] {
+        let out = TempPath::named("inapplicable-flag-baseline");
+        let mut args = vec![
+            "tianheng".to_string(),
+            "check".to_string(),
+            "--manifest-path".to_string(),
+            fixture("clean"),
+            "--write-baseline".to_string(),
+            out.path().to_string_lossy().into_owned(),
+        ];
+        args.extend(extra.iter().map(|a| (*a).to_string()));
+        let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+        assert_eq!(
+            run_args(&argv),
+            2,
+            "--write-baseline with {extra:?} must be a usage error, not a silent no-op",
+        );
+        assert!(
+            !out.path().exists(),
+            "a rejected invocation must write no baseline: {extra:?}",
+        );
+    }
+}
+
+#[test]
+fn write_baseline_still_accepts_the_flags_that_do_apply() {
+    // The other direction, so the rule above cannot quietly grow into "write-baseline rejects
+    // everything": the action's own flags still work, and a plain write still exits 0. This one
+    // asserts a SUCCESSFUL run, so it needs the fixture to exist (see `fixture_manifest`).
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    let out = TempPath::named("applicable-flag-baseline");
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &manifest,
+            "--write-baseline",
+            &out.path().to_string_lossy(),
+        ]),
+        0,
+        "a plain --write-baseline must still record and exit 0",
+    );
+    assert!(out.path().exists(), "the baseline must have been written");
+}
+
+#[test]
+fn a_value_taking_flag_given_more_than_once_is_a_usage_error() {
+    // A second occurrence used to overwrite the first silently: the invocation named two values and
+    // the runner acted on one, with no diagnostic about the other — the same dropped-flag mistake
+    // the flag-shaped-value rule closed, one token further out. Which value a repeat means cannot be
+    // inferred, so neither is chosen.
+    //
+    // `--manifest-path` given twice is the exit-code-visible case (two VALID paths: 0 -> 2), so this
+    // is a real guard and not merely the surrounding contract. The other three flags' repeats
+    // already reached exit 2 through a downstream failure, so what changes for them is which mistake
+    // the diagnostic names — asserted end-to-end on stderr in
+    // `baseline_cli.rs::a_repeated_flag_names_the_repeat_not_a_downstream_failure`.
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            "--manifest-path",
+            &fixture("clean"),
+        ]),
+        2,
+        "--manifest-path given twice must be a usage error, even with two identical valid values",
+    );
+    // Mixing the two forms must not smuggle a second value past the rule.
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &fixture("clean"),
+            &format!("--manifest-path={}", fixture("clean")),
+        ]),
+        2,
+        "the space and equals forms share the once-only rule",
+    );
+    for flag in ["--baseline", "--write-baseline", "--format"] {
+        assert_eq!(
+            run_args(&[
+                "tianheng",
+                "check",
+                "--manifest-path",
+                &fixture("clean"),
+                flag,
+                "first",
+                flag,
+                "second",
+            ]),
+            2,
+            "{flag} given twice must exit 2",
+        );
+    }
+    // A repeated BOOLEAN is not this mistake and stays accepted: the second occurrence asks for
+    // exactly what the first already set, so nothing the invocation supplied is dropped. This is the
+    // one assertion here that needs a successful run, hence a real fixture (see `fixture_manifest`);
+    // every assertion above is decided during parsing, before any manifest is read.
+    let Some(manifest) = fixture_manifest("clean") else {
+        return;
+    };
+    assert_eq!(
+        run_args(&[
+            "tianheng",
+            "check",
+            "--manifest-path",
+            &manifest,
+            "--warn-uncovered",
+            "--warn-uncovered",
+        ]),
+        0,
+        "a repeated boolean flag drops nothing and must not be a usage error",
+    );
 }
 
 #[test]
@@ -2049,7 +2299,12 @@ fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
     let err = super::create_baseline_file(path.to_str().unwrap(), "replacement")
         .expect_err("create-new write must refuse an existing path");
 
-    assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+    match err {
+        super::BaselineWriteError::Io(io_err) => {
+            assert_eq!(io_err.kind(), std::io::ErrorKind::AlreadyExists);
+        }
+        other => panic!("a regular file collision must report a plain IO error: {other:?}"),
+    }
     assert_eq!(
         std::fs::read_to_string(path).unwrap(),
         "appeared concurrently"
@@ -2085,4 +2340,94 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
         err.contains("law.md") && err.contains(hint) && err.contains("stale"),
         "stale must name path + hint: {err}"
     );
+}
+
+/// A symlink at the baseline path is called **dangling** only when its target really does not resolve.
+///
+/// `create_baseline_file` is reached only when `read_to_string` returned `NotFound`, so for a symlink
+/// that means the target was absent when the path was read. Between that read and the `O_EXCL` open the
+/// target can come back — a restored file, or the link replaced — and the branch classified on
+/// symlink-ness ALONE, so it told the adopter "it is a symlink to X, which does not exist" about a
+/// target that does exist, and named a remedy ("recreate the target") already done.
+///
+/// Both arms are asserted here by calling the classifier directly, because the live-symlink case cannot
+/// be reached through the public entry point without winning that race: `read_to_string` follows a live
+/// symlink, so the write is routed to the overwrite path instead. Calling the function is what makes the
+/// case testable at all.
+///
+/// The fall-through is not a lost diagnostic: `write_baseline`'s `create_new && AlreadyExists` arm
+/// already says "it appeared while the new snapshot was being prepared", which is exactly what happened.
+///
+/// **`#[cfg(unix)]` covers the whole test, not only the symlink calls.** Gating just those left the
+/// assertions running on Windows against paths nothing had created, where `create_baseline_file`
+/// succeeds and the very first `match` arm panics. A test that cannot construct its subject must not
+/// run, rather than run and assert about something else.
+#[cfg(unix)]
+#[test]
+fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
+    let dir = TempPath::named("symlink-classification");
+    std::fs::create_dir_all(dir.path()).expect("create dir");
+
+    let dangling = dir.path().join("dangling-baseline.json");
+    std::os::unix::fs::symlink(dir.path().join("absent.json"), &dangling).expect("dangling link");
+    match create_baseline_file(&dangling.to_string_lossy(), "{}") {
+        Err(BaselineWriteError::DanglingSymlink { target }) => {
+            assert!(
+                target.ends_with("absent.json"),
+                "the refusal names the target it cannot reach: {target:?}"
+            );
+        }
+        other => panic!("a genuinely dangling symlink must be classified as one: {other:?}"),
+    }
+
+    // The same shape, except the target resolves — the state the race leaves behind.
+    let real = dir.path().join("real.json");
+    std::fs::write(&real, "{}").expect("write target");
+    let live = dir.path().join("live-baseline.json");
+    std::os::unix::fs::symlink(&real, &live).expect("live link");
+    match create_baseline_file(&live.to_string_lossy(), "{}") {
+        Err(BaselineWriteError::Io(err)) => {
+            assert_eq!(
+                err.kind(),
+                std::io::ErrorKind::AlreadyExists,
+                "a live symlink is an ordinary collision, which write_baseline already reports as \
+                 \"it appeared while the new snapshot was being prepared\""
+            );
+        }
+        other => panic!(
+            "a symlink whose target resolves must NOT be reported as dangling — the message would \
+             name a cause that does not hold: {other:?}"
+        ),
+    }
+
+    // The target EXISTS but cannot be reached. `metadata` follows the link and fails here too, so any
+    // "metadata failed" test calls this dangling and tells the adopter to recreate a file that is
+    // already there. Only absence — `NotFound` — is dangling. This arm needs no race to construct,
+    // unlike the one above.
+    use std::os::unix::fs::PermissionsExt;
+    let locked = dir.path().join("locked");
+    std::fs::create_dir_all(&locked).expect("create locked dir");
+    let hidden = locked.join("target.json");
+    std::fs::write(&hidden, "{}").expect("write hidden target");
+    let unreachable = dir.path().join("unreachable-baseline.json");
+    std::os::unix::fs::symlink(&hidden, &unreachable).expect("link into locked dir");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+        .expect("lock the directory");
+    let outcome = create_baseline_file(&unreachable.to_string_lossy(), "{}");
+    // Restore before asserting, so a failure cannot leave an undeletable temp tree behind.
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+        .expect("unlock the directory");
+    match outcome {
+        Err(BaselineWriteError::Io(err)) => {
+            assert_ne!(
+                err.kind(),
+                std::io::ErrorKind::NotFound,
+                "the target is present, merely unreachable"
+            );
+        }
+        other => panic!(
+            "a symlink whose target exists but is unreachable must NOT be reported as dangling: \
+             {other:?}"
+        ),
+    }
 }

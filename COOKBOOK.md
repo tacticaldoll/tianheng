@@ -25,7 +25,8 @@ Exit codes are the contract: `0` clean / warn-only / fully baselined · `1` enfo
 `2` constitution or scan error. Read a violation's **`reason`** first — it is the repair direction.
 
 > Experimental / pre-1.0. The boundary DSL (the surface these recipes use) is patch-compatible
-> within `0.2.x`; a breaking change must earn a new minor. See [`CHANGELOG.md`](CHANGELOG.md).
+> within each minor line — unbroken from `0.2.0` through `0.4.0` — and a breaking change earns a
+> new minor. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -211,7 +212,10 @@ or a constant — the core may *receive* injected time. Two knobs:
 Stated bounds (declared non-observations, never silent passes): a receiver-method or UFCS read
 whose type is not in a plain path (`instant.elapsed()`, `<T as Tr>::now()`), an alias defined inside
 a macro body, a symbol assembled by a proc-macro, an external-crate re-export, and a path taken as a
-value under the default. A glob that could smuggle the surface in (`use std::time::*`, or a module
+value under the default. (Every "macro body" bound in this file carves out the one **transparent**
+macro, `cfg_if!`: its arms wrap human-authored code without transforming identities, so all three
+dimensions read them as real code — 圭表 since 0.2.3, 渾儀 and 漏刻 in 0.4.0. A body-wrapping macro
+under any other name stays out of scope.) A glob that could smuggle the surface in (`use std::time::*`, or a module
 that re-exports it, globbed) reacts fail-closed.
 
 ### Also catch a fully-qualified external-crate call (opt-in `.strict_external()`)
@@ -252,7 +256,7 @@ the definition site of an associated/nested `fn` named like the crate, may false
 
 ```rust
 .signature_boundary(
-    SemanticBoundary::in_crate("my-app")
+    SignatureBoundary::in_crate("my-app")
         .module("crate::api")
         .must_not_expose("crate::infra::DbPool")
         .because("the public API must not leak the internal database pool"),
@@ -367,6 +371,11 @@ keyword; its call sites still react), and macro-generated `unsafe` are stated bo
 *Intent: only the blessed adapter's origin may cross the port seam — enforced against the live
 object, which static/semantic analysis cannot see.*
 
+An origin is **derived from the type**: the module the concrete type is *defined* in. Nothing at the
+`register_origin!` call site is passed through, so no code can register a type under an origin it does
+not have — and a type from another crate carries that crate's origin, not yours. To give an adapter your
+layer's origin, define the adapter in that layer.
+
 ```rust
 // in the constitution:
 .runtime(
@@ -381,7 +390,7 @@ object, which static/semantic analysis cannot see.*
 //   trait Adapter: louke::Tracked {}
 louke::install(
     constitution().runtime_boundaries().iter().cloned(),
-    [louke::register_origin!(BlessedAdapter) /* registered inside its own module */],
+    [louke::register_origin!(BlessedAdapter) /* origin = where the type is DEFINED */],
 );
 // at the seam:
 //   louke::assert_boundary!("adapter-seam", obj);   // unknown/disallowed origin reacts fail-closed

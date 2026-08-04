@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: every job below only checks out the repo, builds, tests, and lints it — none
+# pushes a tag, comments on a PR, or writes a package. A single read-only grant covers them all,
+# overriding whatever broader default the repo/org GITHUB_TOKEN scope would otherwise carry.
+permissions:
+  contents: read
+
 jobs:
   release-coherence:
     name: Release coherence
@@ -25,6 +31,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: the local Definition of Done matches what CI runs
+        # AGENTS.md's Definition of Done calls itself "the single source for the local pre-flight gate
+        # list ... CI runs a superset of it". That claim drifted once (both `cargo doc` invocations here
+        # gained --document-private-items while the local list kept the flagless form), so the gate a
+        # contributor actually runs went blind to the exact class this job had just learned to catch.
+        # Checked here rather than promised in prose.
+        run: bash scripts/check_dod_coherence.sh
+      - name: whitespace hygiene across every tracked text file
+        # `cargo fmt` governs .rs only, so nothing in the repository checked .md, .toml, .sh, or .yml.
+        # Three blank lines at EOF reached a release branch in the 0.4.0 window, through 23 touched spec
+        # files and two independent full-range adversarial reviews — one of which ran `cargo fmt --all
+        # --check` and reported it passing. Neither had anything to consult, the property being stated
+        # nowhere and reacted nowhere.
+        run: bash scripts/check_whitespace_hygiene.sh
+      - name: in-repository references resolve
+        # A reader who greps for a named file and finds nothing cannot tell stale prose from a bad
+        # checkout. This class was swept by hand twice — the second time across `*.md` only — and a module
+        # split landing after that sweep reintroduced it in nine places, in both documents and `.rs`
+        # comments. A sweep is a snapshot; the next rename re-opens what it closed.
+        run: bash scripts/check_reference_integrity.sh
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace
@@ -42,7 +68,10 @@ jobs:
           cargo clippy -p louke -- -D warnings
           # Doc the default (prod-light) config too: a crate-level doc must not intra-doc-link a
           # feature-gated item (it would break docs.rs, which builds default features).
-          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+          # --document-private-items because nearly every item in these crates is crate-private, and
+          # without it a broken intra-doc link in that majority is invisible: 17 had accumulated,
+          # every one pointing at something a module split had moved or renamed.
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
           # --all-features turns ON louke/audit so the gated probe-coverage scanner tests
           # actually RUN — a plain `--workspace` would cfg them out and silently skip them.
           # TIANHENG_WORKSPACE_TESTS=1 makes the workspace-dependent dogfood/dispatch tests
@@ -50,7 +79,7 @@ jobs:
           TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
           cargo clippy --all-targets --all-features -- -D warnings
           cargo fmt --all --check
-          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
 
   msrv:
     name: MSRV (rust-version)

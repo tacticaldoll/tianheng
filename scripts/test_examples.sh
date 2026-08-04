@@ -3,7 +3,9 @@
 #
 # Each example is its own workspace — its *deliberate* faults (a bad import, an API leak, a rogue
 # runtime origin) must never be swept by Tianheng's workspace-wide gates. Each commits the
-# adopter's real dependency form (`guibiao = "0.3"`), so we resolve the family to LOCAL source via
+# adopter's real dependency form — a plain published version requirement, deliberately not named here
+# because it lives in each example's own manifest and naming it twice is how `.gitignore`'s comment
+# went stale once already — so we resolve the family to LOCAL source via
 # `--config patch.crates-io.<crate>.path=...` — the same idiom the `packaged-selftest` CI job uses:
 # the committed Cargo.toml stays copy-paste-honest while CI exercises the in-development tree.
 #
@@ -45,9 +47,44 @@ expect() { # expect <got> <want> <label>
     echo "ok  $3 (exit $1)"
 }
 
+# Cargo silently drops an incompatible `patch.crates-io` entry (`patch ... was not used in the
+# crate graph`) and falls back to resolving the crate from crates.io instead — e.g. once a local
+# family version no longer satisfies an example's own committed version requirement. Every assertion
+# below would keep passing against that stale, already-published crate, so the dogfood gate would
+# stay green while silently testing the wrong tree. `cargo tree -p <crate> --depth 0` prints the
+# resolved package's own source in parens for a path/patch dependency (absent for a registry
+# resolution), so its presence is a real signal the patch actually took effect — checked against
+# the SAME "$PATCH" args just built for this example, right before those args are used to run it.
+#
+# `cargo tree -p` can itself fail outright (e.g. an ambiguous `-p` match across two
+# semver-incompatible resolved versions) — under this script's `set -euo pipefail`, an unguarded
+# `resolved=$(cargo tree ... | tail -1)` would let that failure kill the whole script before this
+# function's own diagnostic ever ran, silently swallowing cargo's real error along with it (stderr
+# was discarded). `|| true` keeps that failure from aborting the script here, `2>&1` keeps cargo's
+# own message available to report, and grep for the crate's own line (rather than blindly trusting
+# the output's last line) tolerates a warning landing after the tree line in the merged stream.
+assert_patched() { # assert_patched <example-label> <crate>...
+    local label="$1"
+    shift
+    local c output line
+    for c in "$@"; do
+        output="$(cargo tree -p "$c" "${PATCH[@]}" --depth 0 2>&1)" || true
+        line="$(printf '%s\n' "$output" | grep -m1 "^$c ")" || true
+        case "$line" in
+            "$c "*" ($WS/crates/$c)") ;;
+            *)
+                echo "::error::$label: $c did not resolve to local source — patch.crates-io was silently unused (fell back to a published release), or \`cargo tree\` failed outright: ${output}"
+                exit 1
+                ;;
+        esac
+    done
+    echo "ok  $label patched every family crate to local source"
+}
+
 # ---------------------------------------------------------------- guibiao-standalone
 cd "$WS/examples/guibiao-standalone"
 mapfile -d '' PATCH < <(patch guibiao xuanji xingbiao)
+assert_patched "guibiao-standalone" guibiao xuanji xingbiao
 quality_gates "guibiao-standalone" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -59,6 +96,7 @@ fulfill_example guibiao-standalone
 # ---------------------------------------------------------------- hunyi-standalone
 cd "$WS/examples/hunyi-standalone"
 mapfile -d '' PATCH < <(patch hunyi xuanji xingbiao)
+assert_patched "hunyi-standalone" hunyi xuanji xingbiao
 quality_gates "hunyi-standalone" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -73,6 +111,7 @@ fulfill_example hunyi-standalone
 # `#![forbid(unsafe_code)]`), so it needs a crate with real, confined `unsafe`.
 cd "$WS/examples/unsafe-confinement"
 mapfile -d '' PATCH < <(patch hunyi xuanji xingbiao)
+assert_patched "unsafe-confinement" hunyi xuanji xingbiao
 quality_gates "unsafe-confinement" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -86,6 +125,7 @@ fulfill_example unsafe-confinement
 # focused teaching examples. Bind stable structured identity, never the human finding sentence.
 cd "$WS/examples/capability-catalog"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+assert_patched "capability-catalog" xuanji xingbiao guibiao hunyi louke tianheng
 quality_gates "capability-catalog" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0
@@ -118,6 +158,7 @@ fulfill_example capability-catalog
 # ---------------------------------------------------------------- composed
 cd "$WS/examples/composed"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+assert_patched "composed" xuanji xingbiao guibiao hunyi louke tianheng
 quality_gates "composed" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 
@@ -190,6 +231,7 @@ fulfill_example composed
 # async boundary into one declaration; `run` projects both into one exit code.
 cd "$WS/examples/sans-io-pure"
 mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+assert_patched "sans-io-pure" xuanji xingbiao guibiao hunyi louke tianheng
 quality_gates "sans-io-pure" "${PATCH[@]}"
 cargo test "${PATCH[@]}"
 got=0

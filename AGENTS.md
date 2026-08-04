@@ -106,6 +106,20 @@ independent reviewer, and verify each finding against the code before acting on 
 redesign a change rather than let it pass diluted (the no-weakening-to-pass rule itself is
 *Self-governance*, below). (`propose` / `apply` here are the OpenSpec phases above.)
 
+**A guard is not a guard until it has been seen to fail.** Every new test that claims to protect a
+change must be run against the code *without* that change, and the observed failure recorded in the
+PR's `## Verification`. A test written from the same understanding as the fix inherits its blind
+spots, so passing afterwards proves nothing on its own; only the negative run distinguishes a guard
+from a restatement.
+
+The trap this exists for is the change whose outcome is unaltered. When a fix improves a
+**diagnostic** while the exit code, return value, or wire output stays identical, a test bound to
+that outcome passes equally before and after — it pins the surrounding contract, not the change.
+Choose the observation level the change actually moved (stderr text, the emitted document, a
+syscall sequence), and where a test genuinely cannot reach it, say so in the PR and state what
+evidence stands in its place instead of leaving the reader to assume a green suite covered it. A
+test kept for the contract rather than the change earns a comment saying which it is.
+
 A vocabulary- or identity-level breaking change additionally requires grepping every touched spec
 and doc for the retired term across its *whole* file, not only the new diff: sync bolting on a
 correctly-worded requirement while the same file's older prose still names the retired shape is
@@ -126,7 +140,8 @@ itself an undetected drift, invisible to a diff-only read (the 0.3.0 `finding_ke
   intended for the squash commit. Its body uses `## Why`, `## What changed`,
   `## Adversarial review`, `## Verification`, and `## Compatibility`; the last section states the
   public/migration effect and whether manifests or package versions changed. Verification names the
-  commands and external consumers actually checked — never an unqualified "tests pass".
+  commands and external consumers actually checked — never an unqualified "tests pass" — and, for
+  each new guard, the failure observed without the change (see *Adversarial review stance* above).
 - **Curated squash message.** For a development PR into a release branch, set the squash subject
   exactly to the PR title with no auto-appended `(#N)`. Replace GitHub's concatenated commit list
   with a self-contained body distilled from the PR's why, reaction, and compatibility result;
@@ -148,11 +163,17 @@ never land on `main` individually — they collapse through two squash stages on
 way up: a change branch is squash-merged into `release/X.Y.Z`, and that release branch is
 squash-merged into `main`.
 
-Branch names encode role and intent: `change/<openspec-name>` exactly matches an OpenSpec change
-directory; `release/X.Y.Z` is the first squash target; `polish/X.Y.Z/<slug>` carries pre-release
-polish; and `refactor/<scope>-<slug>` / `docs/<scope>-<slug>` carry work outside OpenSpec. Slugs are
-lowercase kebab-case, describe the outcome without an issue number, and never use a placeholder such
-as `spike` after intent is known. `main` takes no direct work — it is release-only.
+Branch names encode role and intent. Two roles are fixed: `change/<openspec-name>` exactly matches
+an OpenSpec change directory, and `release/X.Y.Z` is the first squash target. All other work uses
+`<type>/<scope>-<slug>`, where `<type>` is the *Conventional Commit type the work will land as* (the
+same set *Commits & PRs* above admits — `fix`, `test`, `refactor`, `docs`, `feat`, `ci`, and so on),
+so a branch's role and its squash subject cannot disagree. Deriving the role from the commit type is
+deliberate: an enumerated list of blessed prefixes drifts from what the repository does, and a
+governance rule that has drifted is read as license rather than law. Pre-release polish therefore
+takes the type its own work lands as; there is no separate release-staging role, because a branch's
+role is what it does, not when it happens. Slugs are lowercase kebab-case, describe the outcome
+without an issue number, and never use a placeholder such as `spike` after intent is known. `main`
+takes no direct work — it is release-only.
 
 Both squashes are performed by a GitHub pull request's "Squash and merge", not a local merge. The
 release-branch-to-`main` squash is the sole message exception: its subject is `release: X.Y.Z` and
@@ -201,8 +222,20 @@ cargo clippy -p louke -- -D warnings       # louke's audit-OFF library on its ow
                                            # an unused audit-gated item would otherwise hide until publish
 cargo fmt --all --check
 TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace --all-features
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --document-private-items
+                                           # --document-private-items is NOT optional: nearly every item in
+                                           # these crates is crate-private, so without it a broken intra-doc
+                                           # link in that majority is invisible locally (17 had accumulated
+                                           # before CI gained the flag, every one pointing at something a
+                                           # module split had moved or renamed)
 cargo deny check
+bash scripts/check_whitespace_hygiene.sh # `cargo fmt` governs .rs only; nothing checked .md/.toml/.sh/.yml,
+                                           # so three blank lines at EOF reached a release branch through 23
+                                           # touched spec files and two full-range adversarial reviews
+bash scripts/check_reference_integrity.sh # every in-repo path a document or comment points at must exist:
+                                           # this class was hand-swept twice (once for .md only) and a module
+                                           # split landing after that sweep reintroduced it in nine places
+bash scripts/check_dod_coherence.sh     # this list is a subset of CI's — checked, not promised
 bash scripts/test_release_coherence.sh # prove every release state and failure direction
 bash scripts/check_release_coherence.sh # react against this checkout (requires release history)
 bash scripts/test_examples.sh            # every dogfood example still reacts as declared

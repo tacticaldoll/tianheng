@@ -8,7 +8,7 @@ documented adoption path remains usable and semantically honest across the 0.2 l
 ### Requirement: The prelude is the composed adopter entrypoint
 
 `tianheng::prelude::*` SHALL expose the existing declaration and execution surface: `Constitution`,
-`CrateBoundary`, `ModuleBoundary`, `SemanticBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
+`CrateBoundary`, `ModuleBoundary`, `SignatureBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`, `AsyncExposureBoundary`,
 `UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
 `ScanDepth`, `DependencyKind`, `SourceKind`, `VisibilityCeiling`, `Severity`, and `run`. An

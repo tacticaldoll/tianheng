@@ -36,7 +36,7 @@ pub use audit::{audit_probe_coverage, audit_probe_coverage_with_markers};
 
 // Public re-exports — all previously-public items, same paths as before.
 pub use dsl::{OriginEntry, Posture, RuntimeBoundary, RuntimeBoundaryDraft, RuntimeSeamDraft};
-pub use registry::{__react, install, set_sink};
+pub use registry::{__react, dropped_sink_events, install, set_sink};
 pub use tracked::Tracked;
 
 /// The canonical runtime seam-origin rule label — written **once** here and referenced by
@@ -59,18 +59,19 @@ pub fn runtime_seam_rule_line(allowed_origins: &[&str]) -> String {
     )
 }
 
-/// Register a type's **observed** origin: `register_origin!(PostgresRepo)` captures
-/// `module_path!()` at the call site (so the origin is *where the type is registered*, not a
-/// self-asserted label) and yields an [`OriginEntry`] to pass to [`install`]. Declarative —
+/// Register a type's **observed** origin: `register_origin!(PostgresRepo)` yields an [`OriginEntry`]
+/// to pass to [`install`], whose origin is the module `PostgresRepo` is **defined** in. Declarative —
 /// no proc-macro, no `syn`.
+///
+/// The origin is **derived from the type**, never from this call: nothing at the call site is passed
+/// through, so a registration cannot present an origin the type does not have. Written inside the
+/// type's own module — the natural place — the origin reads exactly like the `module_path!()` there,
+/// which is what it was before it became derived; written anywhere else, it still names the type's own
+/// module rather than the writing one.
 #[macro_export]
 macro_rules! register_origin {
     ($ty:ty) => {
-        $crate::OriginEntry::new(
-            ::std::any::TypeId::of::<$ty>(),
-            ::std::module_path!(),
-            ::std::any::type_name::<$ty>(),
-        )
+        $crate::OriginEntry::__from_register_origin::<$ty>()
     };
 }
 

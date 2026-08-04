@@ -13,12 +13,12 @@ use crate::containment::matches_allowed;
 use crate::driver::run_boundaries;
 use crate::dsl::TraitImplBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
-use crate::errors::unknown_trait_error;
-use crate::file_scope::resolve_crate;
+use crate::errors::{ambiguous_trait_anchor_error, unknown_trait_error};
+use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
-    BareFallback, canonical_path_str, canonical_self_owner, canonicalize_through_reexports,
-    render_last_segment_args, resolve_path,
+    AliasMap, BareFallback, canonical_path_str, canonical_self_owner, expand_canonical_paths,
+    render_last_segment_args, resolve_path_all, validate_path_operands,
 };
 use crate::rules::TRAIT_IMPL_RULE;
 use crate::scan::scan_crate;
@@ -42,75 +42,176 @@ pub(crate) fn check_trait_impl_boundary(
     boundary: &TraitImplBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
-    let src_dir = src_dir.as_path();
+    let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
+    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
+    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
+    // is observed, with the unit carried into each finding's identity.
+    let mut governed_somewhere = false;
+    let mut deferred: Option<String> = None;
+    for (root_file, src_dir, unit) in &units {
+        let unit_outcome = (|| -> Result<(), String> {
+            let src_dir = src_dir.as_path();
+            let unit = unit.as_str();
 
-    let findings = trait_impl_findings(
-        src_dir,
-        &root_file,
-        &boundary.trait_path,
-        &boundary.allowed_locations,
-        &boundary.crate_package,
-    )?;
+            let TraitImplReaction { anchor, findings } = trait_impl_findings(
+                src_dir,
+                root_file,
+                &boundary.trait_path,
+                &boundary.allowed_locations,
+                &boundary.crate_package,
+            )?;
 
-    // A fixed rule string: the allowed locations are policy configuration (surfaced in the
-    // `list` projection and the reason), not part of the violation's identity — so editing
-    // the allowed set does not turn a still-misplaced impl into a "new" violation against a
-    // baseline (mirroring how `xuanji` excludes reason/severity from the violation id). The
-    // violation `target` is the canonical trait anchor (spelling-stable across use/rename forms).
-    let target = canonical_path_str(&boundary.trait_path);
-    // Each finding carries the module its offending impl sits in; the shared emit helper resolves
-    // that module's source file (memoized per module) and stamps the allowlist-gap polarity.
-    push_multi_module_violations(
-        violations,
-        MultiModuleViolationContext {
-            target: &target,
-            rule: TRAIT_IMPL_RULE,
-            rule_key: boundary.rule_key(),
-            reason: &boundary.reason,
-            severity: boundary.severity,
-            anchor: boundary.anchor(),
-            polarity: Polarity::AllowlistGap,
-        },
-        findings,
-    );
-    Ok(())
+            // Both identity components are keyed on the RESOLVED anchor, not the declared spelling: the same
+            // trait declared through a facade `pub use` and through its defining path is one governed thing,
+            // so it must produce one `ViolationId`. Matching already resolved both sides; only identity kept
+            // the raw declaration, so renaming a constitution declaration between two equivalent spellings —
+            // a pure refactor with no code change — silently invalidated every affected baseline entry.
+            //
+            // `allowed_locations` remains inside the rule key. An earlier version of this comment claimed the
+            // opposite ("not part of the violation's identity — so editing the allowed set does not turn a
+            // still-misplaced impl into a new violation"), which `ViolationId`'s own equality contradicts: it
+            // compares `rule_key` in full. Keeping the allowed set in the key is what stops two boundaries
+            // governing the same trait with different allowed sets from collapsing onto one identity for one
+            // misplaced impl, which would let a baseline accepting the first suppress the second's
+            // never-accepted violation. The cost is real and now stated rather than denied: editing the
+            // allowed set re-fires still-misplaced impls as new and reports the old entries stale — loud
+            // churn, never masking.
+            let target = anchor;
+            // Each finding carries the module its offending impl sits in; the shared emit helper resolves
+            // that module's source file (memoized per module) and stamps the allowlist-gap polarity.
+            push_multi_module_violations(
+                violations,
+                MultiModuleViolationContext {
+                    target: &target,
+                    rule: TRAIT_IMPL_RULE,
+                    rule_key: boundary.rule_key_for_anchor(&target),
+                    reason: &boundary.reason,
+                    severity: boundary.severity,
+                    anchor: boundary.anchor(),
+                    polarity: Polarity::AllowlistGap,
+                    crate_package: &boundary.crate_package,
+                    unit,
+                },
+                findings,
+            );
+            Ok(())
+        })();
+        // A governed TRAIT is as unit-varying as a governed module: it exists in the library root's
+        // graph and not in a `src/bin/*.rs` root's. Absence defers to the other units; every other
+        // failure propagates now.
+        match unit_outcome {
+            Ok(()) => governed_somewhere = true,
+            Err(reason)
+                if is_anchor_absent_from_unit(
+                    &reason,
+                    &unknown_trait_error(&boundary.trait_path, &boundary.crate_package),
+                ) =>
+            {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+            Err(reason) => return Err(reason),
+        }
+    }
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
+}
+
+/// One trait-impl-locality evaluation's result: the anchor the declaration resolved to, and the
+/// misplaced impls found under it.
+///
+/// The anchor is returned rather than recomputed by the caller because it is an identity role — the
+/// violation's `target` and its rule key's `trait` field — and recomputing it would mean a second
+/// resolution site free to disagree with the one that decided the matches.
+pub(crate) struct TraitImplReaction {
+    pub(crate) anchor: String,
+    pub(crate) findings: Vec<(SemanticFact, String, PathBuf)>,
 }
 
 /// The pure heart, testable without spawning `cargo`: scan the whole crate for trait
 /// impls and re-exports, resolve the anchor (re-export-aware) to a real local trait —
-/// else a constitution error — then return the sorted, deduplicated findings: the impls
-/// of the anchored trait whose module location lies outside the allowed set.
+/// else a constitution error — then return that anchor with the sorted, deduplicated findings: the
+/// impls of the anchored trait whose module location lies outside the allowed set.
 pub(crate) fn trait_impl_findings(
     src_dir: &Path,
     root_file: &Path,
     trait_path: &str,
     allowed: &[String],
     crate_package: &str,
-) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
+) -> Result<TraitImplReaction, String> {
+    // An allowed-location entry with an empty `::`-segment could never contain a real module
+    // location — checked before any scanning, the identical guard `must_not_expose`/
+    // `must_not_acquire`'s forbidden-operand family applies to their own operand lists
+    // (`resolve::validate_path_operands`). Left unvalidated, such an entry silently matched no
+    // real site in `matches_allowed`, misreporting every legitimately-placed impl as a spurious
+    // violation instead of naming the actual typo.
+    validate_path_operands(allowed)?;
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let given = canonical_path_str(trait_path);
-    let true_anchor = canonicalize_through_reexports(&given, &scan.reexports);
-    if !scan.trait_defs.contains(&true_anchor) {
-        return Err(unknown_trait_error(trait_path, crate_package));
-    }
+    // Every re-export candidate the declared anchor's own facade could denote (cfg-blind): a
+    // `pub use` closure reached through a mutually-exclusive `#[cfg]` collision must not have its
+    // other candidate silently dropped (found on adversarial review of
+    // `hunyi-cfg-branch-use-reexport-merging`).
+    let true_anchors = expand_canonical_paths(&given, &AliasMap::new(), &scan.reexports);
+    // The one anchor the declaration actually denotes — a trait DEFINITION among its re-export
+    // candidates. This, not the declared spelling, becomes the violation's `target` and rule key
+    // below, so declaring the same trait through a facade `pub use` and through its defining path
+    // yields one identity instead of two for the same real-world fact (a pure declaration refactor
+    // used to silently invalidate every affected baseline entry). For a declaration that already
+    // names the defining path — the ordinary case — this is the declared string itself, so nothing
+    // moves.
+    let mut defining_anchors: Vec<String> = true_anchors
+        .iter()
+        .filter(|anchor| scan.trait_defs.contains(*anchor))
+        .cloned()
+        .collect();
+    defining_anchors.sort();
+    defining_anchors.dedup();
+    let anchor = match defining_anchors.len() {
+        0 => return Err(unknown_trait_error(trait_path, crate_package)),
+        1 => defining_anchors.remove(0),
+        // The facade denotes two different traits (cfg-collided `pub use`). Choosing one would make
+        // identity arbitrary, and it is the declaration that is ambiguous — so the adopter hears it.
+        _ => {
+            return Err(ambiguous_trait_anchor_error(
+                trait_path,
+                crate_package,
+                &defining_anchors,
+            ));
+        }
+    };
     let allowed: Vec<String> = allowed.iter().map(|a| canonical_path_str(a)).collect();
 
     let mut findings = Vec::new();
     for (ordinal, site) in scan.impls.iter().enumerate() {
-        let Some(resolved) = resolve_path(
+        let resolved_candidates = resolve_path_all(
             &site.trait_path,
             &site.uses,
             &site.module,
             BareFallback::CurrentModule,
-        ) else {
+        );
+        if resolved_candidates.is_empty() {
             // The trait path did not resolve (a glob/macro bound) — not silently matched.
             continue;
-        };
-        let canonical = canonicalize_through_reexports(&resolved, &scan.reexports);
-        if canonical != true_anchor {
-            continue;
         }
+        // Every candidate, through every re-export candidate, is checked against every possible
+        // anchor (cfg-blind on both sides of the match). The rendered identity below uses
+        // whichever candidate actually matched, so the label reflects the reason for the reaction.
+        let canonical_candidates: Vec<String> = resolved_candidates
+            .iter()
+            .flat_map(|resolved| {
+                expand_canonical_paths(resolved, &AliasMap::new(), &scan.reexports)
+            })
+            .collect();
+        let Some(canonical) = canonical_candidates
+            .iter()
+            .find(|candidate| true_anchors.contains(candidate))
+        else {
+            continue;
+        };
         if matches_allowed(&site.module, &allowed) {
             continue;
         }
@@ -153,5 +254,5 @@ pub(crate) fn trait_impl_findings(
         ));
     }
     sort_attributed_facts(&mut findings)?;
-    Ok(findings)
+    Ok(TraitImplReaction { anchor, findings })
 }

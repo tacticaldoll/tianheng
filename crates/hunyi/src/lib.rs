@@ -5,7 +5,7 @@
 //! import-governance — a type imported for internal use is fine, but a type named in a `pub`
 //! signature or alias chain is observed.
 //!
-//! Declare a [`SemanticBoundary`] in Rust, [`check`] it against a Cargo workspace, and get
+//! Declare a [`SignatureBoundary`] in Rust, [`check`] it against a Cargo workspace, and get
 //! an [`Outcome`]. The heavy `syn` parser is quarantined to this crate, keeping the functional
 //! core dependency-light (`self_governance.rs`).
 //!
@@ -85,12 +85,11 @@ pub(crate) use async_exposure::{async_exposure_module_findings, async_exposure_s
 #[cfg(test)]
 pub(crate) use dyn_trait::{dyn_module_findings, dyn_operand_module_findings};
 #[cfg(test)]
-pub(crate) use exposure::module_findings;
-#[cfg(test)]
 pub(crate) use forbidden_marker::forbidden_marker_findings;
 #[cfg(test)]
 pub(crate) use impl_trait::{
-    impl_trait_module_findings, impl_trait_operand_module_findings, impl_trait_subtree_findings,
+    impl_trait_module_findings, impl_trait_operand_module_findings,
+    impl_trait_operand_subtree_findings, impl_trait_subtree_findings,
 };
 #[cfg(test)]
 pub(crate) use trait_impl::trait_impl_findings;
@@ -117,7 +116,7 @@ use crate::visibility::check_visibility_boundary;
 #[derive(Debug, Clone, Default)]
 pub struct SemanticBoundaries {
     /// Exposure boundaries (`semantic-signature-coupling`).
-    pub signature: Vec<SemanticBoundary>,
+    pub signature: Vec<SignatureBoundary>,
     /// Impl-locality boundaries (`semantic-trait-impl-locality`).
     pub trait_impl: Vec<TraitImplBoundary>,
     /// Visibility boundaries (`semantic-visibility-boundary`).
@@ -134,17 +133,98 @@ pub struct SemanticBoundaries {
     pub unsafe_confinement: Vec<UnsafeBoundary>,
 }
 
+/// One capability's boundaries, its `crate_package` accessor, and its `check_*_boundary`
+/// reaction, behind one dyn-safe surface — so [`SemanticBoundaries::is_empty`],
+/// [`SemanticBoundaries::crate_packages`], and [`eval_all`] each enumerate the eight capabilities
+/// via one loop over [`SemanticBoundaries::capability_sets`] rather than independently
+/// hand-enumerating all eight (the drift risk a ninth capability's addition would otherwise
+/// carry: three lists to remember, not one).
+trait CapabilitySet<'a> {
+    fn is_empty(&self) -> bool;
+    fn crate_packages(&self) -> Vec<&'a str>;
+    fn eval(&self, metadata: &Value, violations: &mut Vec<Violation>) -> Result<(), String>;
+}
+
+/// The generic `CapabilitySet` implementation every capability's field instantiates: its own
+/// boundary slice, its boundary type's `crate_package` accessor, and its `check_*_boundary`
+/// reaction — all plain `fn` items, so no per-capability trait impl is needed. `'a` names the
+/// borrow of the owning `SemanticBoundaries`, carried through to `crate_packages`' return so a
+/// caller can collect it after this value (or its dyn wrapper) has been dropped.
+struct Capability<'a, B> {
+    boundaries: &'a [B],
+    crate_package: fn(&B) -> &str,
+    check: fn(&Value, &B, &mut Vec<Violation>) -> Result<(), String>,
+}
+
+impl<'a, B> CapabilitySet<'a> for Capability<'a, B> {
+    fn is_empty(&self) -> bool {
+        self.boundaries.is_empty()
+    }
+
+    fn crate_packages(&self) -> Vec<&'a str> {
+        self.boundaries
+            .iter()
+            .map(|boundary| (self.crate_package)(boundary))
+            .collect()
+    }
+
+    fn eval(&self, metadata: &Value, violations: &mut Vec<Violation>) -> Result<(), String> {
+        eval_into(metadata, self.boundaries, self.check, violations)
+    }
+}
+
 impl SemanticBoundaries {
+    /// The eight declared capabilities as one dyn-safe list, in the fixed evaluation order
+    /// [`eval_all`] shares. The single enumeration point [`is_empty`](Self::is_empty),
+    /// [`crate_packages`](Self::crate_packages), and [`eval_all`] each loop over.
+    fn capability_sets(&self) -> Vec<Box<dyn CapabilitySet<'_> + '_>> {
+        vec![
+            Box::new(Capability {
+                boundaries: &self.signature,
+                crate_package: SignatureBoundary::crate_package,
+                check: check_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.trait_impl,
+                crate_package: TraitImplBoundary::crate_package,
+                check: check_trait_impl_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.visibility,
+                crate_package: VisibilityBoundary::crate_package,
+                check: check_visibility_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.forbidden_marker,
+                crate_package: ForbiddenMarkerBoundary::crate_package,
+                check: check_forbidden_marker_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.dyn_trait,
+                crate_package: DynTraitBoundary::crate_package,
+                check: check_dyn_trait_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.impl_trait,
+                crate_package: ImplTraitBoundary::crate_package,
+                check: check_impl_trait_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.async_exposure,
+                crate_package: AsyncExposureBoundary::crate_package,
+                check: check_async_exposure_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.unsafe_confinement,
+                crate_package: UnsafeBoundary::crate_package,
+                check: check_unsafe_boundary,
+            }),
+        ]
+    }
+
     /// Whether no semantic boundary of any kind is declared.
     pub fn is_empty(&self) -> bool {
-        self.signature.is_empty()
-            && self.trait_impl.is_empty()
-            && self.visibility.is_empty()
-            && self.forbidden_marker.is_empty()
-            && self.dyn_trait.is_empty()
-            && self.impl_trait.is_empty()
-            && self.async_exposure.is_empty()
-            && self.unsafe_confinement.is_empty()
+        self.capability_sets().iter().all(|set| set.is_empty())
     }
 
     /// The target crate package of every declared semantic boundary, across all capabilities.
@@ -152,88 +232,28 @@ impl SemanticBoundaries {
     /// Centralizes crate-target enumeration for composed consumers such as workspace coverage, so
     /// adding a capability cannot require a second hand-maintained list in the shell.
     pub fn crate_packages(&self) -> impl Iterator<Item = &str> {
-        self.signature
-            .iter()
-            .map(SemanticBoundary::crate_package)
-            .chain(self.trait_impl.iter().map(TraitImplBoundary::crate_package))
-            .chain(
-                self.visibility
-                    .iter()
-                    .map(VisibilityBoundary::crate_package),
-            )
-            .chain(
-                self.forbidden_marker
-                    .iter()
-                    .map(ForbiddenMarkerBoundary::crate_package),
-            )
-            .chain(self.dyn_trait.iter().map(DynTraitBoundary::crate_package))
-            .chain(self.impl_trait.iter().map(ImplTraitBoundary::crate_package))
-            .chain(
-                self.async_exposure
-                    .iter()
-                    .map(AsyncExposureBoundary::crate_package),
-            )
-            .chain(
-                self.unsafe_confinement
-                    .iter()
-                    .map(UnsafeBoundary::crate_package),
-            )
+        self.capability_sets()
+            .into_iter()
+            .flat_map(|set| set.crate_packages())
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 }
 
 // --- Composition: evaluate every capability with a single metadata read ------
 
 /// Evaluate every declared semantic capability against `metadata` into the one accumulator, in a
-/// fixed order; the first constitution error short-circuits. Split out so [`check_all`] keeps the
-/// single-read + exit-2-supersedes contract with plain `?`, not eight repeated error blocks.
+/// fixed order (shared with [`SemanticBoundaries::capability_sets`]); the first constitution error
+/// short-circuits. Split out so [`check_all`] keeps the single-read + exit-2-supersedes contract
+/// with plain `?`, not eight repeated error blocks.
 fn eval_all(
     metadata: &Value,
     boundaries: &SemanticBoundaries,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    eval_into(metadata, &boundaries.signature, check_boundary, violations)?;
-    eval_into(
-        metadata,
-        &boundaries.trait_impl,
-        check_trait_impl_boundary,
-        violations,
-    )?;
-    eval_into(
-        metadata,
-        &boundaries.visibility,
-        check_visibility_boundary,
-        violations,
-    )?;
-    eval_into(
-        metadata,
-        &boundaries.forbidden_marker,
-        check_forbidden_marker_boundary,
-        violations,
-    )?;
-    eval_into(
-        metadata,
-        &boundaries.dyn_trait,
-        check_dyn_trait_boundary,
-        violations,
-    )?;
-    eval_into(
-        metadata,
-        &boundaries.impl_trait,
-        check_impl_trait_boundary,
-        violations,
-    )?;
-    eval_into(
-        metadata,
-        &boundaries.async_exposure,
-        check_async_exposure_boundary,
-        violations,
-    )?;
-    eval_into(
-        metadata,
-        &boundaries.unsafe_confinement,
-        check_unsafe_boundary,
-        violations,
-    )?;
+    for set in boundaries.capability_sets() {
+        set.eval(metadata, violations)?;
+    }
     Ok(())
 }
 

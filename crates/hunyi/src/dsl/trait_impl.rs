@@ -6,11 +6,11 @@ use xuanji::{RuleKey, Severity};
 /// implemented **only** inside the declared allowed module location(s). An
 /// `impl <Trait> for <Type>` block outside them is a violation. Declared in Rust (the
 /// single source of truth) and composed with the other dimensions at the gate. This
-/// governs *impl locality* — the complement of exposure ([`SemanticBoundary`]) and of the
+/// governs *impl locality* — the complement of exposure ([`SignatureBoundary`]) and of the
 /// static import boundary. It governs only the target crate's own impl sites; it makes no
 /// claim about downstream crates (that would be external trait sealing, an essential gap).
 ///
-/// [`SemanticBoundary`]: crate::SemanticBoundary
+/// [`SignatureBoundary`]: crate::SignatureBoundary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraitImplBoundary {
     pub(crate) crate_package: String,
@@ -22,8 +22,26 @@ pub struct TraitImplBoundary {
 }
 
 impl TraitImplBoundary {
-    /// Stable semantic identity for this trait-implementation locality rule.
+    /// Stable semantic identity for this trait-implementation locality rule, keyed on the trait
+    /// **as declared**. This is the projection's view — what the adopter wrote.
+    ///
+    /// A reaction uses the crate-internal `rule_key_for_anchor` instead, keyed on the anchor the
+    /// declaration actually resolves to, so the same trait reached through a re-export spelling and
+    /// through its canonical one produce one identity rather than two. Both go through the one
+    /// constructor below, so the key's shape cannot drift between the two callers.
     pub fn rule_key(&self) -> RuleKey {
+        self.rule_key_for_anchor(&super::canonical_path(&self.trait_path))
+    }
+
+    /// [`Self::rule_key`] keyed on a caller-resolved trait anchor — the reaction's view.
+    ///
+    /// `allowed_locations` stays in the key, and that is a deliberate trade rather than an oversight:
+    /// it is what keeps two boundaries governing the SAME trait with different allowed sets from
+    /// producing one identity for one misplaced impl (which would let a baseline accepting the first
+    /// suppress the second's never-accepted violation). The cost is that editing the allowed set
+    /// changes this key, so a still-misplaced impl re-fires as new while the old entry reports stale —
+    /// loud churn, never masking, and the direction this project prefers when it must choose.
+    pub(crate) fn rule_key_for_anchor(&self, trait_anchor: &str) -> RuleKey {
         RuleKey::of(
             "tianheng.rule/hunyi/trait-impl-locality",
             [
@@ -31,7 +49,7 @@ impl TraitImplBoundary {
                     "allowed_locations",
                     super::canonical_path_set(&self.allowed_locations),
                 ),
-                ("trait", super::canonical_path(&self.trait_path)),
+                ("trait", trait_anchor.to_string()),
             ],
         )
     }
@@ -41,11 +59,6 @@ impl TraitImplBoundary {
         TraitImplCrateDraft {
             crate_package: package.to_string(),
         }
-    }
-
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
     }
 
     /// The governed trait's path (e.g. `crate::command::Command`).
@@ -62,25 +75,9 @@ impl TraitImplBoundary {
     pub fn reason(&self) -> &str {
         &self.reason
     }
-
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
 }
+
+crate::dsl::boundary_common!(TraitImplBoundary, TraitImplBoundaryDraft);
 
 /// A trait-impl-locality boundary awaiting its trait anchor.
 #[doc(hidden)]
@@ -135,13 +132,6 @@ impl TraitImplBoundaryDraft {
     /// boundary MAY allow more than one location).
     pub fn and_in(mut self, location: &str) -> Self {
         self.allowed_locations.push(location.to_string());
-        self
-    }
-
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
         self
     }
 

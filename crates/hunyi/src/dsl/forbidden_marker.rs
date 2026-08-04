@@ -32,11 +32,6 @@ impl ForbiddenMarkerBoundary {
         }
     }
 
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
     /// The governed module-subtree prefix (e.g. `crate::domain`).
     pub fn module(&self) -> &str {
         &self.module
@@ -51,25 +46,9 @@ impl ForbiddenMarkerBoundary {
     pub fn reason(&self) -> &str {
         &self.reason
     }
-
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity.
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
 }
+
+crate::dsl::boundary_common!(ForbiddenMarkerBoundary, ForbiddenMarkerBoundaryDraft);
 
 /// A forbidden-marker boundary awaiting its module-subtree anchor.
 #[doc(hidden)]
@@ -121,12 +100,6 @@ impl ForbiddenMarkerBoundaryDraft {
     /// Also forbid acquiring another trait (a boundary MAY forbid more than one).
     pub fn and_not_acquire(mut self, trait_path: &str) -> Self {
         self.forbidden.push(trait_path.to_string());
-        self
-    }
-
-    /// Make this an advisory (`warn`) boundary.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
         self
     }
 

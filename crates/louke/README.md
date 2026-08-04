@@ -47,8 +47,13 @@ louke::install(
 //    louke::assert_boundary!("domain-entry", obj); // obj: &dyn DomainPort
 ```
 
-Origin is **observed** (`register_origin!` captures `module_path!()`), not a self-asserted
-label. Explicitly **rejected** as a non-goal: runtime capability/effect drift ("no I/O
+Origin is **observed**: it is **derived from the type** — the module the concrete type is *defined*
+in — not taken from the registration call. `register_origin!(MyType)` passes nothing but the type, so
+no code can register a type under an origin it does not have; written inside the type's own module, the
+natural place, the origin reads exactly as that module's own path. A type from another crate therefore
+carries **that** crate's origin, not your layer's: to give a layer's origin to an adapter, define the
+adapter in that layer (a newtype), which is also what actually crosses the seam.
+Explicitly **rejected** as a non-goal: runtime capability/effect drift ("no I/O
 reachable") — a runtime policy engine. The registry holds static label allowlists only, never
 predicates.
 

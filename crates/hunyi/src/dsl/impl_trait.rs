@@ -56,11 +56,6 @@ impl ImplTraitBoundary {
         }
     }
 
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
     /// The governed module path (e.g. `crate::core`).
     pub fn module(&self) -> &str {
         &self.module
@@ -77,30 +72,14 @@ impl ImplTraitBoundary {
         &self.reason
     }
 
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-
     /// Whether the reaction descends the anchored module's whole subtree (`true`) or governs only
     /// its own items (`false`, the default).
     pub fn including_submodules(&self) -> bool {
         self.depth == ScanDepth::Subtree
     }
 }
+
+crate::dsl::boundary_common!(ImplTraitBoundary, ImplTraitBoundaryDraft);
 
 /// An impl-trait boundary awaiting its module anchor.
 #[doc(hidden)]
@@ -185,13 +164,6 @@ impl ImplTraitBoundaryDraft {
     /// Configure the observation scan depth / granularity level.
     pub fn depth(mut self, depth: ScanDepth) -> Self {
         self.depth = depth;
-        self
-    }
-
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
         self
     }
 

@@ -17,9 +17,12 @@ use crate::emit::{
     MultiModuleViolationContext, SingleModuleViolationContext, push_multi_module_violations,
     push_single_module_violations,
 };
-use crate::file_scope::resolve_crate;
+use crate::errors::unknown_module_error;
+use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_attributed_facts};
-use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
+use crate::resolve::{
+    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_path_operands,
+};
 use crate::rules::IMPL_TRAIT_RULE;
 use crate::scan::walk_subtree_modules;
 use crate::shape_scan::{
@@ -41,79 +44,111 @@ pub(crate) fn check_impl_trait_boundary(
     boundary: &ImplTraitBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let (package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
-    let src_dir = src_dir.as_path();
-    let rule_key = boundary.rule_key();
+    let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
+    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
+    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
+    // is observed, with the unit carried into each finding's identity.
+    let mut governed_somewhere = false;
+    let mut deferred: Option<String> = None;
+    for (root_file, src_dir, unit) in &units {
+        let unit_outcome = (|| -> Result<(), String> {
+            let src_dir = src_dir.as_path();
+            let unit = unit.as_str();
+            let rule_key = boundary.rule_key();
 
-    // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
-    // The default path governs only the anchored module's own seam (byte-identical to before).
-    if boundary.including_submodules() {
-        let findings = if boundary.forbidden_operands.is_empty() {
-            impl_trait_subtree_findings(
-                src_dir,
-                &root_file,
-                &boundary.module,
-                &boundary.crate_package,
-            )?
-        } else {
-            impl_trait_operand_subtree_findings(
-                src_dir,
-                &root_file,
-                &boundary.module,
-                &boundary.forbidden_operands,
-                &boundary.crate_package,
-                &dependency_names(package),
-            )?
-        };
-        push_multi_module_violations(
-            violations,
-            MultiModuleViolationContext {
-                target: &boundary.module,
-                rule: IMPL_TRAIT_RULE,
-                rule_key,
-                reason: &boundary.reason,
-                severity: boundary.severity,
-                anchor: boundary.anchor(),
-                polarity: Polarity::DenyBreach,
-            },
-            findings,
-        );
-        return Ok(());
+            // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
+            // The default path governs only the anchored module's own seam (byte-identical to before).
+            if boundary.including_submodules() {
+                let findings = if boundary.forbidden_operands.is_empty() {
+                    impl_trait_subtree_findings(
+                        src_dir,
+                        root_file,
+                        &boundary.module,
+                        &boundary.crate_package,
+                    )?
+                } else {
+                    impl_trait_operand_subtree_findings(
+                        src_dir,
+                        root_file,
+                        &boundary.module,
+                        &boundary.forbidden_operands,
+                        &boundary.crate_package,
+                        &dependency_names(package),
+                    )?
+                };
+                push_multi_module_violations(
+                    violations,
+                    MultiModuleViolationContext {
+                        target: &boundary.module,
+                        rule: IMPL_TRAIT_RULE,
+                        rule_key,
+                        reason: &boundary.reason,
+                        severity: boundary.severity,
+                        anchor: boundary.anchor(),
+                        polarity: Polarity::DenyBreach,
+                        crate_package: &boundary.crate_package,
+                        unit,
+                    },
+                    findings,
+                );
+                return Ok(());
+            }
+
+            // Empty operand set ⇒ shape-only (any returned impl Trait), via the resolution-free path; a
+            // named set ⇒ operand-scoped, resolving each returned impl Trait's principal trait.
+            let findings = if boundary.forbidden_operands.is_empty() {
+                impl_trait_module_findings(
+                    src_dir,
+                    root_file,
+                    &boundary.module,
+                    &boundary.crate_package,
+                )?
+            } else {
+                impl_trait_operand_module_findings(
+                    src_dir,
+                    root_file,
+                    &boundary.module,
+                    &boundary.forbidden_operands,
+                    &boundary.crate_package,
+                    &dependency_names(package),
+                )?
+            };
+
+            push_single_module_violations(
+                violations,
+                SingleModuleViolationContext {
+                    module: &boundary.module,
+                    rule: IMPL_TRAIT_RULE,
+                    rule_key,
+                    reason: &boundary.reason,
+                    severity: boundary.severity,
+                    anchor: boundary.anchor(),
+                    crate_package: &boundary.crate_package,
+                    unit,
+                },
+                findings,
+            );
+            Ok(())
+        })();
+        match unit_outcome {
+            Ok(()) => governed_somewhere = true,
+            Err(reason)
+                if is_anchor_absent_from_unit(
+                    &reason,
+                    &unknown_module_error(&boundary.module, &boundary.crate_package),
+                ) =>
+            {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+            Err(reason) => return Err(reason),
+        }
     }
-
-    // Empty operand set ⇒ shape-only (any returned impl Trait), via the resolution-free path; a
-    // named set ⇒ operand-scoped, resolving each returned impl Trait's principal trait.
-    let findings = if boundary.forbidden_operands.is_empty() {
-        impl_trait_module_findings(
-            src_dir,
-            &root_file,
-            &boundary.module,
-            &boundary.crate_package,
-        )?
-    } else {
-        impl_trait_operand_module_findings(
-            src_dir,
-            &root_file,
-            &boundary.module,
-            &boundary.forbidden_operands,
-            &boundary.crate_package,
-            &dependency_names(package),
-        )?
-    };
-
-    push_single_module_violations(
-        violations,
-        SingleModuleViolationContext {
-            module: &boundary.module,
-            rule: IMPL_TRAIT_RULE,
-            rule_key,
-            reason: &boundary.reason,
-            severity: boundary.severity,
-            anchor: boundary.anchor(),
-        },
-        findings,
-    );
-    Ok(())
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
 }
 
 /// The pure heart of the **subtree** impl-trait reaction: walk the anchored module's whole subtree
@@ -126,13 +161,13 @@ pub(crate) fn check_impl_trait_boundary(
 /// path), applied at every module the subtree walk yields.
 ///
 /// The `ordinal` passed to the collector is ONE counter incrementing continuously across every
-/// item the subtree walk yields — never reset per module or per branch — because (unlike async's
-/// collector, which ignores it) impl-trait's owner resolution can fall back to an ordinal-keyed
-/// positional sentinel for a genuinely unrenderable self type. That sentinel is never published as
-/// identity regardless (`reject_positional_identity`, invoked by [`sort_attributed_facts`] below,
-/// fails the whole reaction loud the moment any sentinel-bearing fact appears), but a non-unique
-/// ordinal would still let two genuinely distinct unrenderable sites collide into one internal
-/// value before that gate ever runs — thread it correctly rather than relying on the gate alone.
+/// item the subtree walk yields — never reset per module or per branch (unlike async's collector,
+/// which ignores it). See `semantic-impl-trait-boundary`'s "Subtree scope opt-in" requirement's
+/// unrenderable-Self-type paragraph for why a positional fallback is never published as identity
+/// (`reject_positional_identity`, invoked by [`sort_attributed_facts`] below, fails the whole
+/// reaction loud instead); a non-unique ordinal would still let two genuinely distinct unrenderable
+/// sites collide into one internal value before that gate ever runs, so it must be threaded
+/// correctly rather than relying on the gate alone.
 pub(crate) fn impl_trait_subtree_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -156,6 +191,10 @@ pub(crate) fn impl_trait_operand_subtree_findings(
     crate_package: &str,
     dep_names: &[String],
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
+    // A forbidden operand with an empty `::`-segment could never match a resolved canonical
+    // principal — checked before any resolution work, exactly as the non-subtree operand path
+    // (`shape_scan::operand_module_findings`) guards its own forbidden set.
+    validate_path_operands(forbidden)?;
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
     let filter = ImplTraitSubtreeFilter::Forbidden {
@@ -256,13 +295,11 @@ pub(crate) fn impl_trait_module_findings(
 
 /// The pure heart of the **operand-scoped** impl-trait boundary: like [`impl_trait_module_findings`]
 /// but keeps only the returned `impl Trait` nodes **any of whose non-auto traits** resolves into
-/// the forbidden operand set — a returned `impl Trait` may name several (`impl Foo + Bar`), and
-/// forbidding any one flags it. The exact pipeline [`dyn_operand_module_findings`] uses
-/// (`resolve_path(BareFallback::Ignore)` → `canonicalize_through_reexports` → `matches_forbidden`,
-/// exact-or-module-prefix), so a re-exported/aliased trait facade matches its defining path. An
-/// empty set ⇒ any returned `impl Trait` (never a silent no-op). An unresolvable trait (a bare
-/// std trait, macro/glob re-export) is dropped — the stated resolver bound, never a silent pass of
-/// a *resolvable* operand. The finding stays the rendered `impl …` shape (parity with shape-only).
+/// the forbidden operand set. See `semantic-impl-trait-operand-boundary`'s "A returned impl Trait
+/// of a forbidden operand is a violation" requirement for the full multi-trait-bound and
+/// resolver-coverage rationale, and its "Empty operand set degenerates to shape-only" requirement
+/// for the empty-set behavior. The exact pipeline `dyn_trait::dyn_operand_module_findings` uses
+/// (`resolve_principal` → `expand_canonical_paths` → `matches_forbidden`).
 pub(crate) fn impl_trait_operand_module_findings(
     src_dir: &Path,
     root_file: &Path,

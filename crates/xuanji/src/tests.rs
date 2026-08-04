@@ -284,63 +284,76 @@ fn wording_violation(text: &str) -> Violation {
     )
 }
 
+/// Assert that setting a violation's metadata field via `with_field` projects `expected` into
+/// `to_json()[field]`, and that the field plays no role in the violation's baseline identity
+/// (`id()` is unchanged by it) — the shared shape behind every metadata-only field (`file`,
+/// `anchor`, `polarity`). Call once per variant for a multi-variant field like `polarity`, since
+/// the identity-exclusion must hold for every value the field can take, not just one.
+fn assert_metadata_field(field: &str, with_field: impl Fn(Violation) -> Violation, expected: &str) {
+    let without = sample_violation();
+    assert_eq!(without.to_json()[field], Value::Null);
+    let with = with_field(sample_violation());
+    assert_eq!(with.to_json()[field], Value::String(expected.to_string()));
+    assert_eq!(without.id(), with.id());
+}
+
 #[test]
 fn to_json_emits_the_file_key_in_both_states() {
-    let without = sample_violation();
-    assert_eq!(without.to_json()["file"], Value::Null);
-    let with = sample_violation().with_file(Some("src/kernel.rs".to_string()));
-    assert_eq!(
-        with.to_json()["file"],
-        Value::String("src/kernel.rs".to_string())
+    assert_metadata_field(
+        "file",
+        |v| v.with_file(Some("src/kernel.rs".to_string())),
+        "src/kernel.rs",
     );
 }
 
 #[test]
 fn file_is_not_part_of_the_baseline_identity() {
-    let without = sample_violation();
-    let with = sample_violation().with_file(Some("src/kernel.rs".to_string()));
-    assert_eq!(without.id(), with.id());
+    assert_metadata_field(
+        "file",
+        |v| v.with_file(Some("src/kernel.rs".to_string())),
+        "src/kernel.rs",
+    );
 }
 
 #[test]
 fn to_json_emits_the_anchor_key_in_both_states() {
-    let without = sample_violation();
-    assert_eq!(without.to_json()["anchor"], Value::Null);
-    let with = sample_violation().with_anchor(Some("ADR-014".to_string()));
-    assert_eq!(
-        with.to_json()["anchor"],
-        Value::String("ADR-014".to_string())
+    assert_metadata_field(
+        "anchor",
+        |v| v.with_anchor(Some("ADR-014".to_string())),
+        "ADR-014",
     );
 }
 
 #[test]
 fn anchor_is_not_part_of_the_baseline_identity() {
-    let without = sample_violation();
-    let with = sample_violation().with_anchor(Some("ADR-014".to_string()));
-    assert_eq!(without.id(), with.id());
+    assert_metadata_field(
+        "anchor",
+        |v| v.with_anchor(Some("ADR-014".to_string())),
+        "ADR-014",
+    );
 }
 
 #[test]
 fn to_json_emits_the_polarity_key_in_both_states() {
-    let without = sample_violation();
-    assert_eq!(without.to_json()["polarity"], Value::Null);
-    let deny = sample_violation().with_polarity(Polarity::DenyBreach);
-    assert_eq!(
-        deny.to_json()["polarity"],
-        Value::String("deny_breach".to_string())
+    assert_metadata_field(
+        "polarity",
+        |v| v.with_polarity(Polarity::DenyBreach),
+        "deny_breach",
     );
-    let allow = sample_violation().with_polarity(Polarity::AllowlistGap);
-    assert_eq!(
-        allow.to_json()["polarity"],
-        Value::String("allowlist_gap".to_string())
+    assert_metadata_field(
+        "polarity",
+        |v| v.with_polarity(Polarity::AllowlistGap),
+        "allowlist_gap",
     );
 }
 
 #[test]
 fn polarity_is_not_part_of_the_baseline_identity() {
-    let without = sample_violation();
-    let with = sample_violation().with_polarity(Polarity::AllowlistGap);
-    assert_eq!(without.id(), with.id());
+    assert_metadata_field(
+        "polarity",
+        |v| v.with_polarity(Polarity::AllowlistGap),
+        "allowlist_gap",
+    );
 }
 
 #[test]

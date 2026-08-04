@@ -13,9 +13,11 @@ use crate::driver::run_boundaries;
 use crate::dsl::UnsafeBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{unsafe_crate_root_allowed_error, unsafe_empty_allowed_error};
-use crate::file_scope::resolve_crate;
+// Crate-scoped: this boundary anchors at no module, so nothing can be absent from one unit
+// and present in another — every per-unit failure propagates.
+use crate::file_scope::resolve_crate_units;
 use crate::finding::{SemanticFact, sort_attributed_facts};
-use crate::resolve::canonical_path_str;
+use crate::resolve::{canonical_path_str, validate_path_operands};
 use crate::rules::UNSAFE_CONFINEMENT_RULE;
 use crate::scan::scan_unsafe_sites;
 
@@ -34,34 +36,44 @@ pub(crate) fn check_unsafe_boundary(
     boundary: &UnsafeBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
-    let src_dir = src_dir.as_path();
+    let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
+    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
+    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
+    // is observed, with the unit carried into each finding's identity.
+    for (root_file, src_dir, unit) in &units {
+        let src_dir = src_dir.as_path();
+        let unit = unit.as_str();
 
-    let allowed: Vec<String> = boundary
-        .allowed_locations
-        .iter()
-        .map(|a| canonical_path_str(a))
-        .collect();
-    let findings = unsafe_findings(src_dir, &root_file, &allowed, &boundary.crate_package)?;
+        let allowed: Vec<String> = boundary
+            .allowed_locations
+            .iter()
+            .map(|a| canonical_path_str(a))
+            .collect();
+        let findings = unsafe_findings(src_dir, root_file, &allowed, &boundary.crate_package)?;
 
-    // Human rule text stays fixed, while the semantic rule key carries the canonical allowed set:
-    // changing where unsafe is permitted changes the law and therefore re-keys the reaction. The
-    // violation target remains the crate package (the confinement scope).
-    // The shared emit helper resolves each finding's module source file and stamps the
-    // allowlist-gap polarity.
-    push_multi_module_violations(
-        violations,
-        MultiModuleViolationContext {
-            target: &boundary.crate_package,
-            rule: UNSAFE_CONFINEMENT_RULE,
-            rule_key: boundary.rule_key(),
-            reason: &boundary.reason,
-            severity: boundary.severity,
-            anchor: boundary.anchor(),
-            polarity: Polarity::AllowlistGap,
-        },
-        findings,
-    );
+        // Human rule text stays fixed, while the semantic rule key carries the canonical allowed set:
+        // changing where unsafe is permitted changes the law and therefore re-keys the reaction. The
+        // violation target remains the crate package (the confinement scope).
+        // The shared emit helper resolves each finding's module source file and stamps the
+        // allowlist-gap polarity.
+        push_multi_module_violations(
+            violations,
+            MultiModuleViolationContext {
+                target: &boundary.crate_package,
+                rule: UNSAFE_CONFINEMENT_RULE,
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                polarity: Polarity::AllowlistGap,
+                // unsafe_confinement's target above is already boundary.crate_package, so this fact
+                // is already crate-scoped; SemanticFact::UnsafeSite deliberately ignores this value.
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+    }
     Ok(())
 }
 
@@ -84,6 +96,15 @@ pub(crate) fn unsafe_findings(
     if allowed.iter().any(|a| a == "crate") {
         return Err(unsafe_crate_root_allowed_error(crate_package));
     }
+    // An allowed-location entry with an empty `::`-segment could never contain a real module
+    // location — the identical guard `must_not_expose`/`must_not_acquire`'s forbidden-operand
+    // family applies to their own operand lists (`resolve::validate_path_operands`). Left
+    // unvalidated, such an entry silently matched no real site in `matches_allowed` below,
+    // misreporting every legitimately-placed `unsafe` site as a spurious violation instead of
+    // naming the actual typo. `allowed` here is already `canonical_path_str`-mapped by the caller,
+    // which never removes or collapses an empty segment, so this reacts identically to validating
+    // the raw declared strings.
+    validate_path_operands(allowed)?;
     let sites = scan_unsafe_sites(src_dir, root_file, crate_package)?;
     let mut findings: Vec<(SemanticFact, String, PathBuf)> = sites
         .into_iter()

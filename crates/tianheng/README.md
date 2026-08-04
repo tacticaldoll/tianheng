@@ -24,7 +24,7 @@ fn constitution() -> Constitution {
                 .because("my-core must stay dependency-light"),
         )
         // 渾儀 (semantic): folded in via typed adders, e.g.
-        // .signature_boundary(SemanticBoundary::in_crate("my-app")…)
+        // .signature_boundary(SignatureBoundary::in_crate("my-app")…)
         // 漏刻 (runtime): a declared seam, audited for probe coverage at CI
         // .runtime(RuntimeBoundary::at("domain-entry").only_origins(["my_app::domain"]).because(…))
 }

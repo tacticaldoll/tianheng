@@ -13,8 +13,9 @@ and it does not instruct your agent. Developers and agents propose change; Tianh
 and runtime *reactions* to keep architectural shape from drifting.
 
 > **Status: experimental — pre-1.0.** Real adopters ended the deliberate `0.1.x` hold and opened the
-> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The `0.3.0` release deliberately
-> uses this breaking window for semantic rule/fact identity and rejects numeric baselines.
+> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). `0.3.0` spent its breaking window on
+> semantic rule/fact identity; `0.4.0` spends its own on violation, baseline, and seam identity. Both
+> reject numeric baselines.
 > The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded drop-in
 > surface.
 
@@ -36,7 +37,7 @@ target, rule, and forward-looking reason.
 |---|---|---|---|
 | the domain depends inward, never on infrastructure | `ModuleBoundary::must_not_import` | a written internal `use` edge | not a runtime call graph or macro-generated import |
 | only the facade may reach an internal module | `ModuleBoundary::must_only_be_imported_by` | an importer outside the closed allowlist | file/module imports, not reflective access |
-| a public seam must not leak an implementation type | `SemanticBoundary::must_not_expose` | the forbidden type in an observed public type position | not a function-body call site |
+| a public seam must not leak an implementation type | `SignatureBoundary::must_not_expose` | the forbidden type in an observed public type position | not a function-body call site |
 | an external crate belongs only under an adapter/FFI subtree | `ModuleBoundary::confine_external_crate` | its written `use` outside that subtree | not dynamic loading or resolved supply-chain provenance |
 | a core subtree stays synchronous and clock-free | `Constitution::sans_io_pure` | inline clock reads and exposed `async fn`s | only the explicit prefixes/verbs you provide; nothing baked in |
 | only registered adapter origins cross a runtime seam | `RuntimeBoundary::only_origins` | a live concrete type crossing the probed seam | not general effect or I/O reachability |
@@ -96,7 +97,7 @@ fn constitution() -> Constitution {
                 .because("the kernel must not depend on a projection"),
         )
         // 渾儀 (semantic): folded in via typed adders (none in this minimal example)
-        // .signature_boundary(SemanticBoundary::in_crate("my-app")…)
+        // .signature_boundary(SignatureBoundary::in_crate("my-app")…)
         // 漏刻 (runtime): a declared seam, audited for probe coverage at CI
         // .runtime(RuntimeBoundary::at("domain-entry").only_origins(["my_app::domain"]).because(…))
 }
@@ -137,7 +138,7 @@ with `--write-baseline` to remove resolved entries. Rewriting preserves hand-add
 `rule_key` + structured `fact`. Human rule/finding wording, complete signature diagnostics, reason,
 severity, file, anchor, polarity, owner, and tracker do not re-key it.
 
-0.3.0 intentionally provides no numeric-baseline adapter. Before upgrading, preserve any desired
+Tianheng intentionally provides no numeric-baseline adapter. Before upgrading, preserve any desired
 `owner` / `tracker` annotations outside the old file. Then move or delete the unsupported baseline,
 run the same `--write-baseline` command to observe a fresh semantic snapshot, and restore the
 annotations onto the corresponding observed facts. Both `--baseline` and `--write-baseline` exit 2
@@ -174,8 +175,8 @@ exit "$status"   # 0 clean · 1 enforced violation · 2 constitution/scan error
 ```
 
 Each instrument also exposes the shared structured `Outcome` for direct Rust architecture tests.
-Tianheng is the sole built-in composer of the 三儀; 0.3.0 does not promise a plugin trait, runtime
-plugin loading, or a `tianheng::testing` macro layer.
+Tianheng is the sole built-in composer of the 三儀, and promises no plugin trait, runtime plugin
+loading, or `tianheng::testing` macro layer.
 
 > The published `tianheng` binary is a *demo* bound to a sample constitution (it governs a
 > crate named `example-core`). Tianheng is consumed as a **library**: declare your own
@@ -275,6 +276,10 @@ louke::install(
 // then at each seam: louke::assert_boundary!("domain-entry", obj);
 ```
 
+A crossing object's **origin is derived from the type** — the module its concrete type is *defined* in —
+never taken from the `register_origin!` call, so no code in the process can register a type under an
+origin it does not have.
+
 **渾儀's depth stair — start shape-only, tighten to a named operand.** A semantic boundary is
 declared at the same seam in two rungs: forbid the *shape* first, then narrow to a *named* trait
 once the intent is precise. The same stair applies to `impl Trait` (`must_not_expose_impl_trait`
@@ -357,7 +362,7 @@ translated into boundaries.
 - **A violation's identity is target + `RuleKey` + `StructuredFactIdentity`.** Human rule/finding
   wording, diagnostics, `file`, `anchor`, and `polarity` remain available outside identity.
 - **The adopter-written builder is the guarded surface.** `Constitution`, the boundary DSL, and
-  `run` are what adopters write; 0.3.0 spends a deliberate breaking window on reaction identity.
+  `run` are what adopters write; 0.4.0 spends a deliberate breaking window on reaction identity.
 
 ## Non-goals
 

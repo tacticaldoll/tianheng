@@ -3,6 +3,19 @@
 //! walks stand on (`keyword_starts_at`, `is_ident_byte`). Pure byte processing — no model
 //! type, no path, only `std` — feeding the module-graph walk in the parent module.
 
+/// Source reduced to its **declarations**: comments, string/char literals, and macro bodies stripped.
+///
+/// The one pipeline every declaration reader in this module composes, named once here rather than
+/// re-spelled at each call site — `use_scan` twice, `symbol_scan` twice, and `module_check`'s
+/// value-namespace query, which is where re-spelling it went wrong: that call passed the RAW file, so a
+/// `fn foo` written in a comment, a string, or a macro body read as a declaration.
+///
+/// Stripping macro bodies is what makes "declared inside a macro body is not observed" a single stated
+/// bound rather than a per-reader accident.
+pub(crate) fn declaration_text(source: &str) -> String {
+    strip_macro_bodies(&strip_comments_and_strings(source))
+}
+
 /// Remove macro bodies so a `use` written inside a macro — a macro-generated import,
 /// out of scope per the module-boundary spec — is not mistaken for a real import. Two
 /// forms are stripped: a `macro_rules! name <delim>…<delim>` **definition** (name and
@@ -293,6 +306,105 @@ pub(super) fn strip_comments_and_strings(source: &str) -> String {
 /// immediately after the comment it replaces — a value real content is never found at, since a
 /// caller only looks up a *kept* byte's original position (e.g. an `=` sign) to resolve a `#[path
 /// = "…"]` value from the untouched original source, never a separator's.
+/// Drop a `//` line comment: to end of line. Pushes nothing — the caller's separator-free
+/// join is fine here since the `\n` it stops at already separates neighboring tokens.
+fn skip_line_comment(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && bytes[i] != b'\n' {
+        i += 1;
+    }
+    i
+}
+
+/// Drop a `/* … */` block comment. Rust nests these, so track depth and drop through to the
+/// `*/` that closes the outermost one — otherwise commented-out code that itself contains a
+/// `/* */` would re-expose a `use` after the inner close.
+fn skip_block_comment(bytes: &[u8], mut i: usize) -> usize {
+    i += 2;
+    let mut depth = 1usize;
+    while i + 1 < bytes.len() && depth > 0 {
+        if bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            depth += 1;
+            i += 2;
+        } else if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+            depth -= 1;
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    if depth > 0 {
+        // Unterminated (Rust itself would reject this as a compile error, but observation
+        // must still react 0/1/2, never panic or corrupt state): the loop above stops
+        // peeking once fewer than two bytes remain, which can leave exactly one trailing
+        // byte unconsumed — and that byte may be the orphaned tail of a multi-byte UTF-8
+        // character whose lead byte(s) were already dropped inside the (still-open)
+        // comment. Left in place, the outer loop would re-scan that lone byte as ordinary
+        // code and push it into `out` on its own, an invalid UTF-8 fragment that
+        // `String::from_utf8_lossy` below then *lengthens* (one byte becomes the 3-byte
+        // U+FFFD), desynchronizing `positions` from the string it maps into and panicking
+        // the next stage's indexing. An unterminated comment logically extends to EOF, so
+        // consume through EOF rather than leaving anything dangling to be re-read as code.
+        i = bytes.len();
+    }
+    i
+}
+
+/// Drop a raw string `r#*"…"#*`: no escapes; closed by `"` plus the same number of `#`.
+fn skip_raw_string(bytes: &[u8], quote: usize, hashes: usize) -> usize {
+    let mut i = quote + 1;
+    while i < bytes.len() {
+        if bytes[i] == b'"' && raw_closing_matches(bytes, i + 1, hashes) {
+            i += 1 + hashes;
+            break;
+        }
+        i += 1;
+    }
+    i
+}
+
+/// Drop a `"…"` string (or byte-string) literal, honoring `\"` and `\\`.
+fn skip_string_literal(bytes: &[u8], mut i: usize) -> usize {
+    i += 1;
+    while i < bytes.len() && bytes[i] != b'"' {
+        i += if bytes[i] == b'\\' { 2 } else { 1 };
+    }
+    i += 1;
+    i
+}
+
+/// A char literal must be skipped whole so a quote it contains (`'"'`) cannot open a spurious
+/// string. `None` for a lifetime (`'a`) or stray quote, which the caller emits as ordinary text.
+fn skip_char_literal(bytes: &[u8], i: usize) -> Option<usize> {
+    if i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+        // Escaped char literal (`'\n'`, `'\''`, `'\u{…}'`): skip the opening quote and the
+        // backslash, then the escaped character itself (which may be a `'`, as in `'\''`), then
+        // scan to the closing quote. Skipping the escaped character first is what keeps `'\''`
+        // from ending on its own escaped quote and leaking the real closing quote.
+        let mut j = i + 2;
+        if j < bytes.len() {
+            j += 1;
+        }
+        while j < bytes.len() && bytes[j] != b'\'' {
+            j += 1;
+        }
+        j += 1;
+        Some(j)
+    } else {
+        // Simple char literal (`'x'`, `'"'`, or a non-ASCII scalar like `'«'`/`'未'`): skip the
+        // opening quote, the scalar's full UTF-8 encoding, and the closing quote. Measuring the
+        // scalar's real byte length (rather than assuming exactly one, as `'x'` alone would
+        // suggest) matters: a multi-byte scalar's closing quote sits further away, and
+        // mis-locating it treats the opening quote as a lone stray quote instead — whereupon the
+        // scalar's raw bytes leak into the cleaned text as ordinary code, and (if two such
+        // literals sit adjacent, as in `['«','{']`) a *later* literal's own closing/opening quote
+        // pair can then be misread as a fake 3-byte char literal, silently swallowing the
+        // intervening comma and the next literal's opening quote — which unprotects that next
+        // literal's payload, leaking a real `{`/`}` byte into the cleaned text as a spurious
+        // structural brace. `None` here (no scalar found) means a lifetime or stray quote.
+        simple_char_literal_scalar_len(bytes, i).map(|len| i + 1 + len + 1)
+    }
+}
+
 pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<usize>) {
     let bytes = source.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -300,27 +412,9 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
-            // Line comment: drop to end of line.
-            while i < bytes.len() && bytes[i] != b'\n' {
-                i += 1;
-            }
+            i = skip_line_comment(bytes, i);
         } else if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'*' {
-            // Block comment: Rust nests these, so track depth and drop through to the
-            // `*/` that closes the outermost one — otherwise commented-out code that
-            // itself contains a `/* */` would re-expose a `use` after the inner close.
-            i += 2;
-            let mut depth = 1usize;
-            while i + 1 < bytes.len() && depth > 0 {
-                if bytes[i] == b'/' && bytes[i + 1] == b'*' {
-                    depth += 1;
-                    i += 2;
-                } else if bytes[i] == b'*' && bytes[i + 1] == b'/' {
-                    depth -= 1;
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
+            i = skip_block_comment(bytes, i);
             // Emit a separator so a comment wedged between two tokens does not fuse them: without
             // it, `use/*c*/crate::X;` becomes `usecrate::X;` and the `use` keyword is no longer
             // recognized (its following byte is an identifier byte), silently dropping the import.
@@ -329,49 +423,17 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
             out.push(b' ');
             positions.push(i);
         } else if let Some((hashes, quote)) = raw_string_prefix(bytes, i) {
-            // Raw string `r#*"…"#*`: no escapes; closed by `"` plus the same number
-            // of `#`. Drop the whole literal so its text is never scanned.
-            i = quote + 1;
-            while i < bytes.len() {
-                if bytes[i] == b'"' && raw_closing_matches(bytes, i + 1, hashes) {
-                    i += 1 + hashes;
-                    break;
-                }
-                i += 1;
-            }
+            i = skip_raw_string(bytes, quote, hashes);
         } else if bytes[i] == b'"' {
-            // String (or byte-string) literal: drop it, honoring `\"` and `\\`.
-            i += 1;
-            while i < bytes.len() && bytes[i] != b'"' {
-                i += if bytes[i] == b'\\' { 2 } else { 1 };
-            }
-            i += 1;
+            i = skip_string_literal(bytes, i);
         } else if bytes[i] == b'\'' {
-            // A char literal must be skipped whole so a quote it contains (`'"'`)
-            // cannot open a spurious string. A lifetime (`'a`) has no closing quote
-            // and is emitted as ordinary text.
-            if i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
-                // Escaped char literal (`'\n'`, `'\''`, `'\u{…}'`): skip the opening
-                // quote and the backslash, then the escaped character itself (which may
-                // be a `'`, as in `'\''`), then scan to the closing quote. Skipping the
-                // escaped character first is what keeps `'\''` from ending on its own
-                // escaped quote and leaking the real closing quote.
-                i += 2;
-                if i < bytes.len() {
+            match skip_char_literal(bytes, i) {
+                Some(next) => i = next,
+                None => {
+                    out.push(bytes[i]);
+                    positions.push(i);
                     i += 1;
                 }
-                while i < bytes.len() && bytes[i] != b'\'' {
-                    i += 1;
-                }
-                i += 1;
-            } else if i + 2 < bytes.len() && bytes[i + 2] == b'\'' {
-                // Simple char literal (`'x'`, `'"'`).
-                i += 3;
-            } else {
-                // A lifetime or stray quote.
-                out.push(bytes[i]);
-                positions.push(i);
-                i += 1;
             }
         } else {
             out.push(bytes[i]);
@@ -380,6 +442,38 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
         }
     }
     (String::from_utf8_lossy(&out).into_owned(), positions)
+}
+
+/// If a simple (non-escaped) char literal begins at `i` — an opening `'` the caller has already
+/// confirmed, not followed by a backslash — return the byte length of its single scalar value:
+/// 1 for an ASCII character, more for a multi-byte UTF-8 scalar (`'«'` is 2, `'未'` is 3), only
+/// when the byte immediately after that scalar's full encoding is the closing `'`. `None` for a
+/// lifetime (`'a`), a stray quote, or anything malformed — the caller then falls through to
+/// treating the `'` as ordinary text, exactly as it already did for those cases.
+fn simple_char_literal_scalar_len(bytes: &[u8], i: usize) -> Option<usize> {
+    let len = utf8_scalar_len(*bytes.get(i + 1)?)?;
+    if bytes.get(i + 1 + len) == Some(&b'\'') {
+        Some(len)
+    } else {
+        None
+    }
+}
+
+/// The byte length of one UTF-8 scalar value's encoding, read from its lead byte — 1 for ASCII,
+/// 2/3/4 for a valid multi-byte lead byte, `None` for a byte that cannot start a scalar (a bare
+/// continuation byte, or a lead byte Rust's `char` never encodes to, e.g. an overlong or
+/// surrogate-range form). Trusts the lead byte's class rather than validating the full encoding —
+/// this only needs to *locate* the scalar's end to find the literal's closing quote, not confirm
+/// the source is well-formed UTF-8 (a governed file already is, being real Rust source `rustc`
+/// itself would have to accept).
+fn utf8_scalar_len(lead: u8) -> Option<usize> {
+    match lead {
+        0x00..=0x7F => Some(1),
+        0xC2..=0xDF => Some(2),
+        0xE0..=0xEF => Some(3),
+        0xF0..=0xF4 => Some(4),
+        _ => None,
+    }
 }
 
 /// If a raw string literal begins at `i` — `r`, `br`, or `cr` at a token boundary, then any
@@ -441,6 +535,46 @@ pub(super) fn keyword_starts_at(bytes: &[u8], i: usize, keyword: &[u8]) -> bool 
     let after = i + keyword.len();
     let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
     before_ok && after_ok
+}
+
+/// The outcome of scanning what follows a keyword-confirmed `use` at `bytes[i]`: a real
+/// `use … ;` statement (its trimmed body, and the cursor just past the `;`), a `use<'a, T>`
+/// precise-capturing type bound — not an import — (where to resume ordinary scanning), or an
+/// unterminated statement (the caller scans to EOF).
+pub(super) enum UseStatementScan {
+    Statement { body: String, next: usize },
+    NotAStatement { resume_at: usize },
+    Unterminated,
+}
+
+/// Classify what follows a keyword-confirmed `use` at `bytes[i]` (see [`keyword_starts_at`]).
+/// Shared by `use_statements` (symbol_scan.rs, flat glob detection) and `use_trees_with_modules`
+/// (use_scan.rs's inline-module-aware walk) — the one place both interpret "what is a `use`
+/// statement's body" identically; each still owns its own surrounding loop, since their
+/// module/brace tracking around this scan genuinely differs.
+pub(super) fn scan_use_statement(bytes: &[u8], source: &str, i: usize) -> UseStatementScan {
+    let start = i + 3;
+    // A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use` token
+    // inside a type bound: it is followed by `<`, whereas a `use` *statement* is always followed
+    // by a path (ident / `{` / `*` / `::` / `crate`/`self`/`super`). So a `<` here means this is
+    // a bound, not an import — the caller resumes scanning from `start` (letting the `<…>` be
+    // walked as ordinary bytes) rather than scanning to the next `;`, which would swallow the
+    // following real `use` (a false negative). A comment between `use` and `<` is already
+    // removed by the upstream comment/string strip.
+    let mut p = start;
+    while p < bytes.len() && bytes[p].is_ascii_whitespace() {
+        p += 1;
+    }
+    if bytes.get(p) == Some(&b'<') {
+        return UseStatementScan::NotAStatement { resume_at: start };
+    }
+    match source[start..].find(';') {
+        Some(rel) => UseStatementScan::Statement {
+            body: source[start..start + rel].trim().to_string(),
+            next: start + rel + 1,
+        },
+        None => UseStatementScan::Unterminated,
+    }
 }
 
 /// Whether the word beginning at `pos` is a raw identifier (`r#word`) — i.e. immediately preceded by

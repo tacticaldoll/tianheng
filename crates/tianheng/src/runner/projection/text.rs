@@ -1,7 +1,7 @@
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, SemanticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
+    SIGNATURE_RULE, SignatureBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
     UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RuntimeBoundary, runtime_seam_rule_line};
@@ -56,7 +56,7 @@ fn render_section(title: &str, blocks: &[ModuleBlockSpec<'_>]) -> String {
 }
 
 /// The text projection of the semantic boundaries.
-pub(in crate::runner) fn semantic_text(boundaries: &[SemanticBoundary]) -> String {
+pub(in crate::runner) fn semantic_text(boundaries: &[SignatureBoundary]) -> String {
     render_section(
         "Semantic",
         &boundaries

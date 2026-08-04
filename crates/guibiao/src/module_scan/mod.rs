@@ -17,12 +17,11 @@ mod symbol_scan;
 mod use_scan;
 
 pub(crate) use fs_walk::rust_files;
+pub(crate) use lexer::declaration_text;
 pub(crate) use path_vocab::{canonical_module_path, package_name_to_import_ident, path_within};
 pub(crate) use reachability::{governed_files, reachable_modules};
-pub(crate) use symbol_scan::{InlineFinding, inline_symbol_findings};
-pub(crate) use use_scan::{
-    ImportedPath, external_imports_with_importers, imported_module_paths, imports_with_importers,
-};
+pub(crate) use symbol_scan::{InlineFinding, inline_symbol_findings, value_namespace_item_names};
+pub(crate) use use_scan::{ImportedPath, external_imports_with_importers, imports_with_importers};
 
 // Cross-cutting tests assert invariants that span the dimensions the scanner is split into:
 // the `use`-scan ([`use_scan`]) and the declaration walk ([`reachability`]) must share exactly
@@ -34,7 +33,25 @@ mod tests {
     use super::lexer::{keyword_starts_at, strip_macro_bodies};
     use super::path_vocab::canonical_segment;
     use super::reachability::declared_modules;
-    use super::{ImportedPath, canonical_module_path, imported_module_paths};
+    use super::{ImportedPath, canonical_module_path, imports_with_importers};
+
+    /// Import PATHS only, derived from [`imports_with_importers`] — the paths-only accessor these
+    /// assertions were written against lost its last production caller when the outbound rules began
+    /// carrying their importing module in identity. Their subject (path normalization) is unchanged.
+    fn imported_module_paths(
+        source: &str,
+        current_module: &str,
+        root_modules: &[String],
+    ) -> Result<Vec<ImportedPath>, String> {
+        let mut paths: Vec<ImportedPath> =
+            imports_with_importers(source, current_module, root_modules)?
+                .into_iter()
+                .map(|(_importer, import)| import)
+                .collect();
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
 
     #[test]
     fn scanner_does_not_panic_on_odd_input() {
@@ -52,7 +69,7 @@ mod tests {
             "}",
             "",
         ] {
-            let _ = imported_module_paths(src, "crate::kernel", &[]);
+            let _ = imported_module_paths(src, "crate::kernel", &[]).unwrap();
             let _ = declared_modules(src);
             let _ = strip_macro_bodies(src);
         }
@@ -71,7 +88,7 @@ mod tests {
             use crate::real::A;
         "#;
         assert_eq!(
-            imported_module_paths(with_use, "crate", &[]),
+            imported_module_paths(with_use, "crate", &[]).unwrap(),
             vec![ImportedPath::plain("crate::real::A")],
             "a `use` inside a raw-identifier macro definition is not observed"
         );
@@ -94,7 +111,11 @@ mod tests {
         // The genuine keyword (followed by whitespace) is still detected.
         assert!(keyword_starts_at("use 貓;".as_bytes(), 0, b"use"));
         // And nothing is observed as an import or a declared module from the identifier.
-        assert!(imported_module_paths("fn use貓() {}", "crate", &[]).is_empty());
+        assert!(
+            imports_with_importers("fn use貓() {}", "crate", &[])
+                .unwrap()
+                .is_empty()
+        );
         assert!(declared_modules("fn mod貓() {}").is_empty());
     }
 
@@ -113,7 +134,7 @@ mod tests {
             vec!["type".to_string()]
         );
         assert_eq!(
-            imported_module_paths("use crate::r#type::Thing;", "crate", &[]),
+            imported_module_paths("use crate::r#type::Thing;", "crate", &[]).unwrap(),
             vec![ImportedPath::plain("crate::type::Thing")],
             "a raw-identifier use path is canonicalized to its plain form"
         );

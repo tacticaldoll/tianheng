@@ -28,7 +28,18 @@ pub(crate) enum RuntimeFact {
     // `owner` is the owner-qualified enclosing item (never a bare name — see `fn_scopes` in
     // `audit::scan`), `marker` the actual configured wrapper matched, and `expr` the offending
     // expression's own trimmed source text; together with `file` these are the identity
-    // discriminator, never a byte offset or occurrence count.
+    // discriminator, never a byte offset or occurrence count. `file` is labeled relative to the
+    // caller-supplied anchor — its checkout/workspace root (see `audit::scan::labeled` and
+    // `audit_probe_coverage_with_markers`, which owns why the caller supplies it) — whenever the file
+    // lies under it, rather than the raw absolute path: a checkout-dependent absolute path would make
+    // a recorded baseline stale in any other clone or CI runner, and an anchor derived from the
+    // scanned roots instead would restate every label whenever the member set changed. A file reached
+    // through an ABSOLUTE `#[path = "/…"]` literal is the one exception, and it is a rule rather than a
+    // gap: it keeps the path the literal wrote, never relativized, because an absolute literal does not
+    // move with the checkout and relativizing it made its identity depend on whether a given checkout's
+    // anchor happened to contain the target (relative-looking here, absolute there, for one committed
+    // literal). Pinned by `a_nested_absolute_path_literal_now_agrees_across_checkouts` in
+    // `audit::tests`.
     #[cfg(feature = "audit")]
     UnauditableProbe {
         marker: String,

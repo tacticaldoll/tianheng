@@ -3,7 +3,7 @@
 use xuanji::{RuleKey, Severity};
 
 /// A dyn-trait boundary: a module's public API must not **expose** trait-object (`dyn`)
-/// syntax. The type-shape complement of [`SemanticBoundary`] (signature-coupling): where
+/// syntax. The type-shape complement of [`SignatureBoundary`] (signature-coupling): where
 /// that forbids an exposed *named type*, this forbids an exposed *type shape* — a `dyn`
 /// node at any depth in the governed public surface. Internal `dyn` is never a violation —
 /// this governs exposure across the declared seam, not internal dynamic dispatch, so it is
@@ -16,7 +16,7 @@ use xuanji::{RuleKey, Severity};
 /// - [`must_not_expose_dyn_of`](DynTraitModuleDraft::must_not_expose_dyn_of) — **operand-scoped**:
 ///   only a `dyn` whose principal trait resolves into the named `forbidden_operands` set reacts.
 ///
-/// [`SemanticBoundary`]: crate::SemanticBoundary
+/// [`SignatureBoundary`]: crate::SignatureBoundary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynTraitBoundary {
     pub(crate) crate_package: String,
@@ -48,11 +48,6 @@ impl DynTraitBoundary {
         }
     }
 
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
     /// The governed module path (e.g. `crate::core`).
     pub fn module(&self) -> &str {
         &self.module
@@ -68,25 +63,9 @@ impl DynTraitBoundary {
     pub fn reason(&self) -> &str {
         &self.reason
     }
-
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
 }
+
+crate::dsl::boundary_common!(DynTraitBoundary, DynTraitBoundaryDraft);
 
 /// A dyn-trait boundary awaiting its module anchor.
 #[doc(hidden)]
@@ -163,13 +142,6 @@ pub struct DynTraitBoundaryDraft {
 }
 
 impl DynTraitBoundaryDraft {
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
     /// Finish the boundary with its human-readable reason (the repair hint).
     pub fn because(self, reason: &str) -> DynTraitBoundary {
         DynTraitBoundary {

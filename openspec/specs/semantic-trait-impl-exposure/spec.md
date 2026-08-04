@@ -9,13 +9,12 @@ positions — method parameters and the receiver — stay out of scope, since th
 definition (which signature-coupling already governs). Opt-in, not default-on: a bare boundary
 declared trait impls out of scope, and the impl-authored/trait-dictated split is a real narrowing
 choice, so this is additive depth on the patch line, not a false-negative closure.
-
 ## Requirements
 ### Requirement: Opt-in modifier deepens signature-coupling to trait impls
 
 Trait-impl exposure SHALL be declared as an **opt-in modifier on the existing signature-coupling
-`SemanticBoundary`**, not as a new boundary type. A boundary written
-`SemanticBoundary::in_crate(c).module(m).must_not_expose(p).including_trait_impls().because(r)`
+`SignatureBoundary`**, not as a new boundary type. A boundary written
+`SignatureBoundary::in_crate(c).module(m).must_not_expose(p).including_trait_impls().because(r)`
 SHALL forbid the same type set `p` at the same module anchor `m`, deepening the observed surface to
 include the anchored module's trait `impl` blocks. A boundary WITHOUT `.including_trait_impls()`
 SHALL keep the v1 signature-coupling semantics (trait impls out of scope). The system MUST NOT
@@ -23,7 +22,7 @@ require TOML, YAML, Markdown, or any generated policy file to declare or run thi
 
 #### Scenario: The opt-in modifier deepens the same boundary
 
-- **WHEN** a developer writes `SemanticBoundary::in_crate("app").module("crate::domain").must_not_expose("crate::infra").including_trait_impls().because("domain must not leak infra even through impl-site contracts")`
+- **WHEN** a developer writes `SignatureBoundary::in_crate("app").module("crate::domain").must_not_expose("crate::infra").including_trait_impls().because("domain must not leak infra even through impl-site contracts")`
 - **THEN** a semantic boundary is held, anchored to `crate::domain` in crate `app`, forbidding exposure of `crate::infra` across both the signature-coupling surface AND the module's trait `impl` blocks, with a non-empty reason and a default `enforce` severity
 
 #### Scenario: Without the opt-in, trait impls stay out of scope
@@ -44,7 +43,9 @@ forbidden type that appears in any of them. The observed positions SHALL compris
 5. the impl method **return type as written at the impl site** (position `method {name} return`).
 
 A forbidden type reached only through an impl-site position SHALL react even when it appears in no
-signature-coupling position.
+signature-coupling position. A where-clause bounded type that cannot be rendered (a complex
+const-generic argument) SHALL NOT be silently keyed to a shared placeholder; see "Trait-impl exposure
+uses observed structural seams" for the fail-loud requirement this failure mode falls under.
 
 #### Scenario: A forbidden type in a trait's generic argument is a violation
 
@@ -147,13 +148,16 @@ fallback policy as signature-coupling** — a bare, unqualified local name SHALL
 against the current module (`BareFallback::Ignore`), so an impl position naming a bare local name is
 not turned into a same-module false positive. Resolution SHALL follow in-scope `use`s (incl.
 renames), `crate`/`self`/`super`-relative paths, and local `pub use` re-export chains. A type whose
-resolution requires a glob import, a macro-generated type, a `cfg_attr`-wrapped `#[path]` module (an
-**unconditional** `#[path = "…"]` module is followed and observed), or full
-inference SHALL be an inherited OUT-OF-SCOPE bound, never a silent pass, and no new hole SHALL be
-introduced. Within the resolved scope there SHALL be no false negative. Trait-impl exposure findings
-SHALL fold into the same exit-code contract (**0** clean, **1** enforced violation, **2** constitution
-/scan error), the same `Baseline` gating, and the same severity semantics (`enforce` default, `warn`)
-as signature-coupling.
+resolution requires a glob import, a macro-generated type, or full inference SHALL be an inherited
+OUT-OF-SCOPE bound, never a silent pass, and no new hole SHALL be introduced. A type defined only in
+a module reached through a `cfg_attr`-wrapped `#[path]` remap is NOT out of scope: like the
+already-followed **unconditional** `#[path = "…"]` form, it is collected into the crate-wide closure
+this capability shares with signature-coupling — a file module's conventional file and its
+`cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound. Within
+the resolved scope there SHALL be no false negative. Trait-impl exposure findings SHALL fold into the
+same exit-code contract (**0** clean, **1** enforced violation, **2** constitution/scan error), the
+same `Baseline` gating, and the same severity semantics (`enforce` default, `warn`) as
+signature-coupling.
 
 #### Scenario: A bare local name in an impl position is not a false positive
 
@@ -174,6 +178,11 @@ as signature-coupling.
 
 - **WHEN** an `enforce`-severity boundary's only trait-impl exposures are all present in the baseline
 - **THEN** the system reports them accepted and does not fail; and WHEN a new exposure not in the baseline appears at any position, the system fails the reaction (exit 1)
+
+#### Scenario: A forbidden type re-exported only from a cfg_attr-wrapped-path module resolves and reacts
+
+- **WHEN** a facade module is reached only via `#[cfg_attr(windows, path = "weird.rs")] pub mod facade;` with no conventional `facade.rs` present, `weird.rs` declares `pub use crate::infra::DbPool;`, the governed module declares `use crate::facade::DbPool; impl From<DbPool> for Service` under a boundary forbidding `crate::infra` with `.including_trait_impls()`
+- **THEN** the system reads `weird.rs` into the crate-wide re-export closure, resolves `DbPool` to `crate::infra::DbPool`, and emits a `trait-arg` violation rather than treating the facade module as out of scope
 
 ### Requirement: The opt-in is projected in the declared law
 
@@ -203,9 +212,13 @@ no projection-specific code). The projection remains a pure projection and SHALL
 
 ### Requirement: Trait-impl exposure uses observed structural seams
 
-Trait-impl exposure facts SHALL encode trait, canonical self type, associated item role/name, and
-forbidden subject where observed. A traversal position or impl/item ordinal SHALL NOT substitute for
-an unrenderable structural role.
+Trait-impl exposure facts SHALL encode trait, canonical self type, associated item role/name, the
+where-clause bounded type, and forbidden subject where observed. A traversal position or impl/item
+ordinal SHALL NOT substitute for an unrenderable structural role: when a role's ordinary rendering
+fails (for example, a where-clause bounded type carrying a complex const-generic argument, such as
+`Arr<{ N + 1 }>`, which no observed shape in this capability renders), the system SHALL fail loud
+(a constitution error identifying the failure) rather than fall back to a shared literal that two
+structurally distinct roles could both produce.
 
 #### Scenario: Inherent and trait-impl seams stay distinct
 - **WHEN** the same subject appears in an inherent item and a trait-impl item on one self type
@@ -214,3 +227,14 @@ an unrenderable structural role.
 #### Scenario: An unrenderable seam fails safely
 - **WHEN** ordinary rendering cannot distinguish two structural seams
 - **THEN** an observed discriminator separates them or scanning fails loud, never a positional fallback
+
+#### Scenario: Distinct unrenderable where-clause bounds do not collapse by position
+
+- **WHEN** one impl block declares two where-clause bounds each naming a structurally distinct but
+  ordinarily unrenderable bounded type (for example `Arr<{ N + 1 }>: AsRef<crate::infra::Secret>`
+  and `Arr<{ N + 2 }>: AsRef<crate::infra::Secret>`), each independently exposing the same forbidden
+  type
+- **THEN** the system does not emit one shared fact for both bounds under a common literal
+  placeholder; scanning fails loud (a constitution error) rather than silently reporting only one of
+  the two bounds' violations, and a renderable where-clause bounded type is unaffected by this
+  fail-loud path

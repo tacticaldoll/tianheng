@@ -369,3 +369,32 @@ confinement without the flag, so no existing constitution's reaction changes.
 #### Scenario: Strict-external composes with narrowing
 - **WHEN** a boundary declares `.must_not_call_inline("chrono::Utc").strict_external().ending_with(["now"])` and `crate::core` calls both `chrono::Utc::now()` and `chrono::Utc::today()` (both fully-qualified, no `use`)
 - **THEN** the system reacts on `now()` and does NOT react on `today()` (the external head is resolved, then the leaf-exact narrowing applies) — the two modifiers compose
+
+### Requirement: A pathologically nested glob or alias chain is a scan error, never a silent drop
+
+The system SHALL react 0/1/2 on a grouped `use` whose brace-group nesting depth is bounded by a
+measured stack-safety cap, for both the glob-hazard scan and the alias-carrying use-map expansion
+this capability's confinement check depends on, and past that cap SHALL fail loud (a constitution
+error, exit 2) rather than silently dropping the nested glob base or alias from observation. A
+real, compilable glob-hazard or alias chain nested past the cap would otherwise vanish entirely
+from observation with no report — the false negative the core contract forbids. Nesting
+comfortably under the cap SHALL be observed exactly as a shallower tree would be.
+
+#### Scenario: A grouped glob nested past the depth cap is a scan error
+
+- **WHEN** a governed file declares a grouped glob import whose brace-group nesting exceeds the
+  depth cap this scanner supports
+- **THEN** the system reports a constitution error (exit 2) naming the depth bound it could not
+  judge past, rather than silently treating the glob as absent
+
+#### Scenario: An alias chain nested past the depth cap is a scan error
+
+- **WHEN** a governed file declares a grouped `use` introducing an alias whose brace-group nesting
+  exceeds the depth cap this scanner supports
+- **THEN** the system reports a constitution error (exit 2), rather than silently dropping the
+  alias from the use-map (which would let an inline call through it pass unresolved)
+
+#### Scenario: A grouped glob nested just under the depth cap is still observed
+
+- **WHEN** a governed file declares a grouped glob nested well under the depth cap
+- **THEN** the system observes and reacts to it exactly as a shallower grouped glob would

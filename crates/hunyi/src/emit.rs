@@ -11,6 +11,57 @@ pub(crate) struct SingleModuleViolationContext<'a> {
     pub(crate) reason: &'a str,
     pub(crate) severity: Severity,
     pub(crate) anchor: Option<&'a str>,
+    /// The crate this boundary was declared against (`boundary.crate_package`) — threaded into the
+    /// fact's identity so two crates sharing the identical module path + rule stay distinct.
+    pub(crate) crate_package: &'a str,
+    /// The compilation unit these observations came from — see `SemanticFact::into_finding`.
+    pub(crate) unit: &'a str,
+}
+
+/// The common shape both violation-pushing entry points below build once, then feed to
+/// [`push_violation`] per finding — the single place that assembles a `Violation`. `target` and
+/// `crate_package` map identity (`ViolationId::new` / `finding.into_finding`); `rule`, `reason`,
+/// `severity`, `anchor`, and `polarity` are metadata attached to every finding under this context.
+struct ViolationContext<'a> {
+    /// The compilation unit these observations came from — see `SemanticFact::into_finding`.
+    unit: &'a str,
+    target: &'a str,
+    rule: &'a str,
+    rule_key: RuleKey,
+    reason: &'a str,
+    severity: Severity,
+    anchor: Option<String>,
+    polarity: Polarity,
+    crate_package: &'a str,
+}
+
+/// Convert one finding into a `Violation` and push it — the single assembly point both
+/// [`push_single_module_violations`] and [`push_multi_module_violations`] share.
+fn push_violation(
+    violations: &mut Vec<Violation>,
+    context: &ViolationContext<'_>,
+    finding: SemanticFact,
+    file: PathBuf,
+) {
+    let finding = finding.into_finding(context.crate_package, context.unit);
+    let id = ViolationId::new(
+        context.target,
+        context.rule_key.clone(),
+        finding.fact().clone(),
+    );
+    violations.push(
+        Violation::new(
+            BoundaryKind::Semantic,
+            id,
+            context.rule,
+            finding.text(),
+            context.reason.to_string(),
+            context.severity,
+        )
+        .with_file(Some(file.display().to_string()))
+        .with_anchor(context.anchor.clone())
+        .with_polarity(context.polarity),
+    );
 }
 
 /// Add deny-style violations for a boundary whose findings all sit on one governed module seam.
@@ -25,27 +76,19 @@ pub(crate) fn push_single_module_violations(
     context: SingleModuleViolationContext<'_>,
     findings: Vec<(SemanticFact, PathBuf)>,
 ) {
-    let anchor = context.anchor.map(str::to_string);
+    let shared = ViolationContext {
+        target: context.module,
+        rule: context.rule,
+        rule_key: context.rule_key,
+        reason: context.reason,
+        severity: context.severity,
+        anchor: context.anchor.map(str::to_string),
+        polarity: Polarity::DenyBreach,
+        crate_package: context.crate_package,
+        unit: context.unit,
+    };
     for (finding, file) in findings {
-        let finding = finding.into_finding();
-        let id = ViolationId::new(
-            context.module,
-            context.rule_key.clone(),
-            finding.fact().clone(),
-        );
-        violations.push(
-            Violation::new(
-                BoundaryKind::Semantic,
-                id,
-                context.rule,
-                finding.text(),
-                context.reason.to_string(),
-                context.severity,
-            )
-            .with_file(Some(file.display().to_string()))
-            .with_anchor(anchor.clone())
-            .with_polarity(Polarity::DenyBreach),
-        );
+        push_violation(violations, &shared, finding, file);
     }
 }
 
@@ -61,6 +104,14 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     /// The finding's polarity metadata (deny-breach vs allowlist-gap). Not part of the violation
     /// identity, so each capability passes its own without shifting structured identity.
     pub(crate) polarity: Polarity,
+    /// The crate this boundary was declared against (`boundary.crate_package`) — threaded into the
+    /// fact's identity so two crates sharing the identical anchor + rule stay distinct.
+    /// `unsafe_confinement`'s own fact conversion ignores this (its `target` above is already
+    /// `boundary.crate_package`, so its identity already varies by crate); every other capability
+    /// routed through this context consumes it.
+    pub(crate) crate_package: &'a str,
+    /// The compilation unit these observations came from — see `SemanticFact::into_finding`.
+    pub(crate) unit: &'a str,
 }
 
 /// Add violations for a boundary whose findings sit across many modules — the shared emitter for
@@ -79,26 +130,18 @@ pub(crate) fn push_multi_module_violations(
     context: MultiModuleViolationContext<'_>,
     findings: Vec<(SemanticFact, String, PathBuf)>,
 ) {
-    let anchor = context.anchor.map(str::to_string);
+    let shared = ViolationContext {
+        target: context.target,
+        rule: context.rule,
+        rule_key: context.rule_key,
+        reason: context.reason,
+        severity: context.severity,
+        anchor: context.anchor.map(str::to_string),
+        polarity: context.polarity,
+        crate_package: context.crate_package,
+        unit: context.unit,
+    };
     for (finding, _module, file) in findings {
-        let finding = finding.into_finding();
-        let id = ViolationId::new(
-            context.target,
-            context.rule_key.clone(),
-            finding.fact().clone(),
-        );
-        violations.push(
-            Violation::new(
-                BoundaryKind::Semantic,
-                id,
-                context.rule,
-                finding.text(),
-                context.reason.to_string(),
-                context.severity,
-            )
-            .with_file(Some(file.display().to_string()))
-            .with_anchor(anchor.clone())
-            .with_polarity(context.polarity),
-        );
+        push_violation(violations, &shared, finding, file);
     }
 }

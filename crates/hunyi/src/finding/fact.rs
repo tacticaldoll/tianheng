@@ -1,303 +1,7 @@
-//! The 渾儀 finding vocabulary and seam labels — how a semantic finding and the public **seam**
-//! it sits at are rendered and identified, in one place. A typed semantic fact owns the stable
-//! named values used by `(target, rule key, structured fact)` and renders its human text separately, so
-//! presentation can change without silently changing baseline identity.
-
+use super::seam::*;
 use crate::resolve::{ShapeExposure, strip_raw, type_to_string};
 use crate::syn_util::VisibleItemKind;
 use xuanji::{Finding, StructuredFactIdentity};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum ExposureKind {
-    Signature,
-    DynTrait,
-    ImplTrait,
-}
-
-impl ExposureKind {
-    fn fact_type(self) -> &'static str {
-        match self {
-            Self::Signature => "tianheng.fact/hunyi/signature-exposure",
-            Self::DynTrait => "tianheng.fact/hunyi/dyn-trait-exposure",
-            Self::ImplTrait => "tianheng.fact/hunyi/impl-trait-exposure",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum ItemKind {
-    Struct,
-    Enum,
-    Union,
-    Type,
-    Const,
-    Static,
-    Trait,
-}
-
-impl ItemKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Struct => "struct",
-            Self::Enum => "enum",
-            Self::Union => "union",
-            Self::Type => "type",
-            Self::Const => "const",
-            Self::Static => "static",
-            Self::Trait => "trait",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum MemberKind {
-    Field,
-    Variant,
-}
-
-impl MemberKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Field => "field",
-            Self::Variant => "variant",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum AssocKind {
-    Const,
-    Type,
-}
-
-impl AssocKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Const => "const",
-            Self::Type => "type",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum TraitImplPosition {
-    TraitArg,
-    SelfType,
-    Where(String),
-    Assoc(String),
-    MethodReturn(String),
-}
-
-impl TraitImplPosition {
-    fn key_fields(&self) -> Vec<(&'static str, &str)> {
-        match self {
-            Self::TraitArg => vec![("seam_position", "trait_arg")],
-            Self::SelfType => vec![("seam_position", "self")],
-            Self::Where(subject) => {
-                vec![
-                    ("seam_position", "where"),
-                    ("seam_position_subject", subject),
-                ]
-            }
-            Self::Assoc(name) => {
-                vec![("seam_position", "assoc"), ("seam_position_name", name)]
-            }
-            Self::MethodReturn(name) => vec![
-                ("seam_position", "method_return"),
-                ("seam_position_name", name),
-            ],
-        }
-    }
-}
-
-impl std::fmt::Display for TraitImplPosition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TraitArg => f.write_str("trait-arg"),
-            Self::SelfType => f.write_str("self"),
-            Self::Where(subject) => write!(f, "where {subject}"),
-            Self::Assoc(name) => write!(f, "assoc {name}"),
-            Self::MethodReturn(name) => write!(f, "method {name} return"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum PublicSeam {
-    FreeFn {
-        module: String,
-        name: String,
-    },
-    InherentMethod {
-        owner: String,
-        name: String,
-    },
-    InherentAssoc {
-        kind: AssocKind,
-        owner: String,
-        name: String,
-    },
-    TraitMethod {
-        module: String,
-        trait_name: String,
-        name: String,
-    },
-    Item {
-        kind: ItemKind,
-        module: String,
-        name: String,
-    },
-    Member {
-        kind: MemberKind,
-        module: String,
-        owner: String,
-        member: String,
-    },
-    TraitAssoc {
-        kind: AssocKind,
-        module: String,
-        trait_name: String,
-        name: String,
-    },
-    InherentGenerics {
-        owner: String,
-    },
-    Reexport {
-        module: String,
-        exported: String,
-    },
-    ExternCrate {
-        name: String,
-    },
-    TraitImpl {
-        trait_ref: String,
-        owner: String,
-        position: TraitImplPosition,
-    },
-}
-
-impl PublicSeam {
-    fn key_fields(&self) -> Vec<(&'static str, &str)> {
-        match self {
-            Self::FreeFn { module, name } => vec![
-                ("seam_kind", "free_fn"),
-                ("seam_module", module),
-                ("seam_name", name),
-            ],
-            Self::InherentMethod { owner, name } => vec![
-                ("seam_kind", "inherent_method"),
-                ("seam_owner", owner),
-                ("seam_name", name),
-            ],
-            Self::InherentAssoc { kind, owner, name } => vec![
-                ("seam_kind", "inherent_assoc"),
-                ("seam_item_kind", kind.as_str()),
-                ("seam_owner", owner),
-                ("seam_name", name),
-            ],
-            Self::TraitMethod {
-                module,
-                trait_name,
-                name,
-            } => vec![
-                ("seam_kind", "trait_method"),
-                ("seam_module", module),
-                ("seam_trait", trait_name),
-                ("seam_name", name),
-            ],
-            Self::Item { kind, module, name } => vec![
-                ("seam_kind", "item"),
-                ("seam_item_kind", kind.as_str()),
-                ("seam_module", module),
-                ("seam_name", name),
-            ],
-            Self::Member {
-                kind,
-                module,
-                owner,
-                member,
-            } => vec![
-                ("seam_kind", "member"),
-                ("seam_item_kind", kind.as_str()),
-                ("seam_module", module),
-                ("seam_owner", owner),
-                ("seam_member", member),
-            ],
-            Self::TraitAssoc {
-                kind,
-                module,
-                trait_name,
-                name,
-            } => vec![
-                ("seam_kind", "trait_assoc"),
-                ("seam_item_kind", kind.as_str()),
-                ("seam_module", module),
-                ("seam_trait", trait_name),
-                ("seam_name", name),
-            ],
-            Self::InherentGenerics { owner } => {
-                vec![("seam_kind", "inherent_generics"), ("seam_owner", owner)]
-            }
-            Self::Reexport { module, exported } => vec![
-                ("seam_kind", "reexport"),
-                ("seam_module", module),
-                ("seam_name", exported),
-            ],
-            Self::ExternCrate { name } => vec![("seam_kind", "extern_crate"), ("seam_name", name)],
-            Self::TraitImpl {
-                trait_ref,
-                owner,
-                position,
-            } => {
-                let mut fields = vec![
-                    ("seam_kind", "trait_impl"),
-                    ("seam_trait", trait_ref),
-                    ("seam_owner", owner),
-                ];
-                fields.extend(position.key_fields());
-                fields
-            }
-        }
-    }
-}
-
-impl std::fmt::Display for PublicSeam {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::FreeFn { module, name } => write!(f, "fn {module}::{name}"),
-            Self::InherentMethod { owner, name } => write!(f, "fn <{owner}>::{name}"),
-            Self::InherentAssoc { kind, owner, name } => {
-                write!(f, "{} <{owner}>::{name}", kind.as_str())
-            }
-            Self::TraitMethod {
-                module,
-                trait_name,
-                name,
-            } => write!(f, "fn trait {module}::{trait_name}::{name}"),
-            Self::Item { kind, module, name } => write!(f, "{} {module}::{name}", kind.as_str()),
-            Self::Member {
-                kind,
-                module,
-                owner,
-                member,
-            } => write!(f, "{} {module}::{owner}::{member}", kind.as_str()),
-            Self::TraitAssoc {
-                kind,
-                module,
-                trait_name,
-                name,
-            } => write!(f, "{} trait {module}::{trait_name}::{name}", kind.as_str()),
-            Self::InherentGenerics { owner } => write!(f, "impl <{owner}> (generics)"),
-            Self::Reexport { module, exported } => write!(f, "pub use {module}::{exported}"),
-            Self::ExternCrate { name } => write!(f, "pub extern crate {name}"),
-            Self::TraitImpl {
-                trait_ref,
-                owner,
-                position,
-            } => write!(f, "impl {trait_ref} for {owner} ({position})"),
-        }
-    }
-}
 
 /// One exposed type path (signature-coupling), tagged with the public **seam** it was exposed at
 /// — the `syn::Path` counterpart of [`ShapeExposure`]'s `seam`. The seam becomes part of the
@@ -564,81 +268,41 @@ impl std::fmt::Display for SemanticFact {
 }
 
 impl SemanticFact {
-    pub(crate) fn into_finding(self) -> Finding {
+    /// `governing_package` is the crate the violated boundary was declared against
+    /// (`boundary.crate_package`) — without it, two crates declaring the identical boundary
+    /// against the identical module path produce identical identities and silently collapse (see
+    /// `structured-violation-identity` spec). **Not** added to `UnsafeSite`: unsafe-confinement's
+    /// own `target` is already `boundary.crate_package` directly
+    /// (`crates/hunyi/src/unsafe_confinement.rs`), so this fact is already crate-scoped and a
+    /// second copy of the same value here would be a redundant identity field, not a fix.
+    /// `unit` is the compilation unit the observation came from: the root's source path relative to
+    /// the package's manifest directory, the same value 圭表 uses so one adopter reads one vocabulary
+    /// across both static dimensions. A package builds more than one crate root and every root denotes
+    /// the module path `crate`, so without this role the same exposure in two roots carries one identity
+    /// and a baseline accepting it in one masks it appearing in the other.
+    pub(crate) fn into_finding(self, governing_package: &str, unit: &str) -> Finding {
         let text = self.to_string();
-        self.into_finding_with_text(text)
+        self.into_finding_with_text(text, governing_package, unit)
     }
 
-    fn into_finding_with_text(self, text: String) -> Finding {
+    fn into_finding_with_text(self, text: String, governing_package: &str, unit: &str) -> Finding {
         match &self {
-            SemanticFact::AsyncFreeFn { module, name, .. } => {
-                return Finding::new(
-                    text,
-                    StructuredFactIdentity::of(
-                        "tianheng.fact/hunyi/async-exposure",
-                        "async-free-function",
-                        [
-                            ("module", module.clone()),
-                            ("name", name.clone()),
-                            ("owner", module.clone()),
-                            ("owner_kind", "module".to_string()),
-                        ],
-                    ),
-                );
+            SemanticFact::AsyncFreeFn { .. }
+            | SemanticFact::AsyncTraitMethod { .. }
+            | SemanticFact::AsyncInherentMethod { .. } => {
+                return async_finding(&self, text, governing_package, unit);
             }
-            SemanticFact::AsyncTraitMethod {
-                module,
-                trait_name,
-                name,
-                ..
-            } => {
-                return Finding::new(
-                    text,
-                    StructuredFactIdentity::of(
-                        "tianheng.fact/hunyi/async-exposure",
-                        "async-trait-method",
-                        [
-                            ("module", module.clone()),
-                            ("name", name.clone()),
-                            ("owner", format!("{module}::{trait_name}")),
-                            ("owner_kind", "trait".to_string()),
-                        ],
-                    ),
-                );
-            }
-            SemanticFact::AsyncInherentMethod {
-                module,
-                owner,
-                name,
-                ..
-            } => {
-                return Finding::new(
-                    text,
-                    StructuredFactIdentity::of(
-                        "tianheng.fact/hunyi/async-exposure",
-                        "async-inherent-method",
-                        [
-                            ("module", module.clone()),
-                            ("name", name.clone()),
-                            ("owner", owner.clone()),
-                            ("owner_kind", "inherent".to_string()),
-                        ],
-                    ),
-                );
+            SemanticFact::UnsafeSite { module, site } => {
+                // No `governing_package`: this capability's violation TARGET is already the package, so
+                // the declaring crate is encoded there (`structured-violation-identity`'s own carve-out).
+                // The compilation UNIT is not encoded anywhere, though, and it varies: `crate::m` in a
+                // library and `crate::m` in the `bin` beside it are two modules that would otherwise
+                // produce one identity, so an accepted unsafe site in one root would mask the other's.
+                return unsafe_site_finding(module, site, text, unit);
             }
             _ => {}
         }
-        if let SemanticFact::UnsafeSite { module, site } = &self {
-            return Finding::new(
-                text,
-                StructuredFactIdentity::of(
-                    "tianheng.fact/hunyi/unsafe-site",
-                    site.shape(),
-                    site.key_fields(module),
-                ),
-            );
-        }
-        let (fact_type, shape, fields): (&str, &str, Vec<(&str, &str)>) = match &self {
+        let (fact_type, shape, mut fields): (&str, &str, Vec<(&str, &str)>) = match &self {
             SemanticFact::Exposed {
                 kind,
                 subject,
@@ -676,9 +340,6 @@ impl SemanticFact {
                     ("owner", owner),
                 ],
             ),
-            SemanticFact::AsyncFreeFn { .. } => unreachable!("handled above"),
-            SemanticFact::AsyncTraitMethod { .. } => unreachable!("handled above"),
-            SemanticFact::AsyncInherentMethod { .. } => unreachable!("handled above"),
             SemanticFact::Visibility {
                 visibility,
                 item_kind,
@@ -692,11 +353,99 @@ impl SemanticFact {
                     ("visibility", visibility),
                 ],
             ),
-            SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
+            SemanticFact::AsyncFreeFn { .. }
+            | SemanticFact::AsyncTraitMethod { .. }
+            | SemanticFact::AsyncInherentMethod { .. }
+            | SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
         };
+        fields.push(("governing_package", governing_package));
+        fields.push(("unit", unit));
         let key = StructuredFactIdentity::of(fact_type, shape, fields);
         Finding::new(text, key)
     }
+}
+
+/// The three async-exposure variants' own structured identity — pulled out of
+/// `into_finding_with_text`'s dispatch since each carries a distinct `owner`/`owner_kind`
+/// derivation (module-as-owner, `module::trait_name`, or the seam's own `owner` field) that the
+/// shared `(fact_type, shape, fields)` match below cannot express uniformly.
+fn async_finding(
+    fact: &SemanticFact,
+    text: String,
+    governing_package: &str,
+    unit: &str,
+) -> Finding {
+    match fact {
+        SemanticFact::AsyncFreeFn { module, name, .. } => Finding::new(
+            text,
+            StructuredFactIdentity::of(
+                "tianheng.fact/hunyi/async-exposure",
+                "async-free-function",
+                [
+                    ("governing_package", governing_package.to_string()),
+                    ("unit", unit.to_string()),
+                    ("module", module.clone()),
+                    ("name", name.clone()),
+                    ("owner", module.clone()),
+                    ("owner_kind", "module".to_string()),
+                ],
+            ),
+        ),
+        SemanticFact::AsyncTraitMethod {
+            module,
+            trait_name,
+            name,
+            ..
+        } => Finding::new(
+            text,
+            StructuredFactIdentity::of(
+                "tianheng.fact/hunyi/async-exposure",
+                "async-trait-method",
+                [
+                    ("governing_package", governing_package.to_string()),
+                    ("unit", unit.to_string()),
+                    ("module", module.clone()),
+                    ("name", name.clone()),
+                    ("owner", format!("{module}::{trait_name}")),
+                    ("owner_kind", "trait".to_string()),
+                ],
+            ),
+        ),
+        SemanticFact::AsyncInherentMethod {
+            module,
+            owner,
+            name,
+            ..
+        } => Finding::new(
+            text,
+            StructuredFactIdentity::of(
+                "tianheng.fact/hunyi/async-exposure",
+                "async-inherent-method",
+                [
+                    ("governing_package", governing_package.to_string()),
+                    ("unit", unit.to_string()),
+                    ("module", module.clone()),
+                    ("name", name.clone()),
+                    ("owner", owner.clone()),
+                    ("owner_kind", "inherent".to_string()),
+                ],
+            ),
+        ),
+        _ => unreachable!("async_finding is called only for the three async variants"),
+    }
+}
+
+/// The unsafe-site variant's own structured identity — deliberately no `governing_package` field
+/// (see the doc comment on `into_finding`), the one variant whose identity omits it, which is why
+/// this stays split out of the shared `(fact_type, shape, fields)` dispatch below rather than
+/// folded in as a fourth field push.
+fn unsafe_site_finding(module: &str, site: &UnsafeSiteFact, text: String, unit: &str) -> Finding {
+    let mut fields = site.key_fields(module);
+    fields.push(("unit", unit));
+    Finding::new(
+        text,
+        StructuredFactIdentity::of("tianheng.fact/hunyi/unsafe-site", site.shape(), fields),
+    )
 }
 
 /// Single-module counterpart: each fact rides beside the real file its own item was resolved from
@@ -732,15 +481,30 @@ fn reject_positional_identity<'a>(
     facts: impl IntoIterator<Item = &'a SemanticFact>,
 ) -> Result<(), String> {
     for fact in facts {
-        let identity = fact.clone().into_finding();
-        if identity
+        let identity = fact.clone().into_finding("app", "src/lib.rs");
+        // Name the field that failed and WHICH renderer gave up, so the adopter learns what to
+        // change. The sentinel value itself is never echoed: it encodes traversal position for the
+        // unsupported-syntax case, and publishing that is exactly what this gate exists to prevent
+        // (pinned by `!error.contains("_#")` in every fail-loud test). So the cause is named in
+        // words instead, keyed off the sentinel's own shape.
+        if let Some((field, value)) = identity
             .key()
             .fields()
-            .any(|(_, value)| value.contains("_#"))
+            .find(|(_, value)| value.contains("_#"))
         {
-            return Err(
-                "cannot identify semantic fact without a stable structural label".to_string(),
-            );
+            let cause = if value.contains(crate::resolve::AMBIGUOUS_ALIAS_SENTINEL) {
+                "two mutually-exclusive `#[cfg]` branches bind its head to different targets, so no \
+                 single label can name it injectively — resolve the collision, or govern each \
+                 branch's type by its own path"
+            } else {
+                "its syntax has no supported rendering, and scan position must not become identity"
+            };
+            // The original sentence is kept verbatim as the prefix: several fail-loud tests pin it as
+            // the meaning of this reaction, and adding information should not invalidate a contract
+            // they assert correctly. The cause is appended, not substituted.
+            return Err(format!(
+                "cannot identify semantic fact without a stable structural label: '{field}' — {cause}"
+            ));
         }
     }
     Ok(())
@@ -789,8 +553,14 @@ pub(crate) fn fn_seam(module: &str, name: &syn::Ident) -> PublicSeam {
     }
 }
 
-pub(crate) fn inherent_method_seam(owner: &str, name: &syn::Ident) -> PublicSeam {
+/// `module` is the impl **block's own** declaring module (always the caller's own scan-loop
+/// `module`, already in scope at every call site) — distinct from `owner`, the self type's
+/// canonical path, which may name a type declared in an entirely different module. Two impl
+/// blocks for the same owner written in different modules must stay distinct seams even when they
+/// declare a same-named public method (see `PublicSeam::InherentMethod`'s own doc comment).
+pub(crate) fn inherent_method_seam(module: &str, owner: &str, name: &syn::Ident) -> PublicSeam {
     PublicSeam::InherentMethod {
+        module: module.to_string(),
         owner: owner.to_string(),
         name: strip_raw(&name.to_string()),
     }
@@ -798,11 +568,19 @@ pub(crate) fn inherent_method_seam(owner: &str, name: &syn::Ident) -> PublicSeam
 
 /// The seam for an inherent `impl` block's public associated `const`/`type` — `{kind} <{owner}>::
 /// {name}`, parallel to [`inherent_method_seam`]'s `fn <{owner}>::{name}`. Owner-qualified so
-/// `impl Foo`/`impl Bar` assoc items of the same name never collide, and `kind`-tagged so a `const`
-/// and a `type` (and a method's `fn`) stay distinct findings under the baseline.
-pub(crate) fn inherent_assoc_seam(kind: AssocKind, owner: &str, name: &syn::Ident) -> PublicSeam {
+/// `impl Foo`/`impl Bar` assoc items of the same name never collide, `kind`-tagged so a `const`
+/// and a `type` (and a method's `fn`) stay distinct findings under the baseline, and — like
+/// [`inherent_method_seam`] — module-qualified so two impl blocks for the same owner in different
+/// modules never collide either.
+pub(crate) fn inherent_assoc_seam(
+    kind: AssocKind,
+    module: &str,
+    owner: &str,
+    name: &syn::Ident,
+) -> PublicSeam {
     PublicSeam::InherentAssoc {
         kind,
+        module: module.to_string(),
         owner: owner.to_string(),
         name: strip_raw(&name.to_string()),
     }
@@ -975,17 +753,31 @@ mod fact_tests {
                 ("seam_kind", "free_fn"),
                 ("seam_module", module),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
-            PublicSeam::InherentMethod { owner, name } => vec![
+            PublicSeam::InherentMethod {
+                module,
+                owner,
+                name,
+            } => vec![
                 ("seam_kind", "inherent_method"),
+                ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
-            PublicSeam::InherentAssoc { kind, owner, name } => vec![
+            PublicSeam::InherentAssoc {
+                kind,
+                module,
+                owner,
+                name,
+            } => vec![
                 ("seam_kind", "inherent_assoc"),
                 ("seam_item_kind", published_assoc_kind(kind)),
+                ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::TraitMethod {
                 module,
@@ -996,12 +788,14 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_trait", trait_name),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::Item { kind, module, name } => vec![
                 ("seam_kind", "item"),
                 ("seam_item_kind", published_item_kind(kind)),
                 ("seam_module", module),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::Member {
                 kind,
@@ -1014,6 +808,7 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_member", member),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::TraitAssoc {
                 kind,
@@ -1026,18 +821,31 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_trait", trait_name),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
-            PublicSeam::InherentGenerics { owner } => {
-                vec![("seam_kind", "inherent_generics"), ("seam_owner", owner)]
-            }
+            PublicSeam::InherentGenerics {
+                module,
+                owner,
+                bound,
+            } => vec![
+                ("seam_kind", "inherent_generics"),
+                ("seam_module", module),
+                ("seam_owner", owner),
+                ("seam_bound", bound),
+                ("unit", "src/lib.rs"),
+            ],
             PublicSeam::Reexport { module, exported } => vec![
                 ("seam_kind", "reexport"),
                 ("seam_module", module),
                 ("seam_name", exported),
+                ("unit", "src/lib.rs"),
             ],
-            PublicSeam::ExternCrate { name } => {
-                vec![("seam_kind", "extern_crate"), ("seam_name", name)]
-            }
+            PublicSeam::ExternCrate { module, name } => vec![
+                ("seam_kind", "extern_crate"),
+                ("seam_module", module),
+                ("seam_name", name),
+                ("unit", "src/lib.rs"),
+            ],
             PublicSeam::TraitImpl {
                 trait_ref,
                 owner,
@@ -1047,11 +855,93 @@ mod fact_tests {
                     ("seam_kind", "trait_impl"),
                     ("seam_trait", trait_ref.as_str()),
                     ("seam_owner", owner.as_str()),
+                    ("unit", "src/lib.rs"),
                 ];
                 fields.extend(published_position_fields(position));
                 fields
             }
         }
+    }
+
+    /// The closed set of `PublicSeam` shapes, as its own type rather than a bare string label. Two
+    /// properties come from that: a typo cannot invent a phantom shape the way a free-form label
+    /// could, and the shape set becomes something the coverage check can compare *as a set* instead
+    /// of as a number.
+    ///
+    /// `ALL` sits directly beneath the variants so the two are read and edited together. It replaces
+    /// a `PUBLIC_SEAM_KIND_COUNT: usize = 11` that lived beside this mapping while the fixture it
+    /// described lived a hundred lines below: the compiler forced a new `PublicSeam` variant to gain
+    /// a `seam_kind` arm, but nothing forced the integer, so adding a variant and its arm while
+    /// forgetting both the count and the fixture representative left the check green with the new
+    /// shape uncovered.
+    ///
+    /// One link stays human, and is worth naming rather than implying the loop is closed: a new
+    /// `SeamKind` variant must be listed in `ALL` on the lines below it. Stable Rust cannot
+    /// enumerate an enum's variants, so some single list is unavoidable; this is it. It is strictly
+    /// narrower than the integer it replaces — the omission is now adjacent to the variant rather
+    /// than distant from the fixture, listing a kind whose representative is missing fails loudly
+    /// and names the kind, and a wrong shape-to-kind mapping is caught independently by the
+    /// published-schema cross-check in the test below.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    enum SeamKind {
+        FreeFn,
+        InherentMethod,
+        InherentAssoc,
+        TraitMethod,
+        Item,
+        Member,
+        TraitAssoc,
+        InherentGenerics,
+        Reexport,
+        ExternCrate,
+        TraitImpl,
+    }
+
+    impl SeamKind {
+        const ALL: &'static [SeamKind] = &[
+            SeamKind::FreeFn,
+            SeamKind::InherentMethod,
+            SeamKind::InherentAssoc,
+            SeamKind::TraitMethod,
+            SeamKind::Item,
+            SeamKind::Member,
+            SeamKind::TraitAssoc,
+            SeamKind::InherentGenerics,
+            SeamKind::Reexport,
+            SeamKind::ExternCrate,
+            SeamKind::TraitImpl,
+        ];
+    }
+
+    /// Which shape a seam is, matched exhaustively over the variant (fields ignored). A new
+    /// `PublicSeam` variant fails to compile here until it is mapped, which is the cue to add both
+    /// the `SeamKind` variant, if it needs one, and a representative to the fixture below.
+    fn seam_kind(seam: &PublicSeam) -> SeamKind {
+        match seam {
+            PublicSeam::FreeFn { .. } => SeamKind::FreeFn,
+            PublicSeam::InherentMethod { .. } => SeamKind::InherentMethod,
+            PublicSeam::InherentAssoc { .. } => SeamKind::InherentAssoc,
+            PublicSeam::TraitMethod { .. } => SeamKind::TraitMethod,
+            PublicSeam::Item { .. } => SeamKind::Item,
+            PublicSeam::Member { .. } => SeamKind::Member,
+            PublicSeam::TraitAssoc { .. } => SeamKind::TraitAssoc,
+            PublicSeam::InherentGenerics { .. } => SeamKind::InherentGenerics,
+            PublicSeam::Reexport { .. } => SeamKind::Reexport,
+            PublicSeam::ExternCrate { .. } => SeamKind::ExternCrate,
+            PublicSeam::TraitImpl { .. } => SeamKind::TraitImpl,
+        }
+    }
+
+    /// The `seam_kind` label the **published** fact carries for this seam, read back out of
+    /// `published_seam_fields` rather than restated here. That function is production schema truth
+    /// and already exhaustive over `PublicSeam`, so using it as the oracle means the test holds no
+    /// second copy of the label set to drift from it.
+    fn published_seam_kind(seam: &PublicSeam) -> &str {
+        published_seam_fields(seam)
+            .into_iter()
+            .find(|(name, _)| *name == "seam_kind")
+            .map(|(_, value)| value)
+            .expect("every published seam schema carries a seam_kind field")
     }
 
     fn assert_semantic_fact_is_cataloged(fact: &SemanticFact) {
@@ -1156,7 +1046,7 @@ mod fact_tests {
         ];
         let keys: std::collections::BTreeSet<_> = facts
             .into_iter()
-            .map(|fact| fact.into_finding().key().clone())
+            .map(|fact| fact.into_finding("app", "src/lib.rs").key().clone())
             .collect();
         assert_eq!(keys.len(), 5);
     }
@@ -1164,13 +1054,32 @@ mod fact_tests {
     #[test]
     fn semantic_fact_presentation_is_not_identity() {
         let original = exposure(ExposureKind::Signature, "crate::api", "run")
-            .into_finding_with_text("Port exposed by fn crate::api::run".to_string());
+            .into_finding_with_text(
+                "Port exposed by fn crate::api::run".to_string(),
+                "app",
+                "src/lib.rs",
+            );
         let polished = exposure(ExposureKind::Signature, "crate::api", "run")
-            .into_finding_with_text("fn crate::api::run exposes Port".to_string());
+            .into_finding_with_text(
+                "fn crate::api::run exposes Port".to_string(),
+                "app",
+                "src/lib.rs",
+            );
         assert_eq!(original.key(), polished.key());
         assert_ne!(original.text(), polished.text());
     }
 
+    /// `seam_kind`'s exhaustive match (above) forces this list to gain a representative when
+    /// `PublicSeam` gains a variant, and the checks below prove the representative actually arrived
+    /// rather than only that the arm compiled: the observed shape set must *equal* `SeamKind::ALL`,
+    /// and the shape-to-published-label mapping must be a bijection — checked in both directions,
+    /// since neither count catches the other's failure — so a new variant folded into an existing
+    /// shape cannot read as already covered.
+    ///
+    /// What remains hand-maintained is the *content* of each representative — picking field values
+    /// that actually distinguish it from its siblings (the two-module `InherentMethod` case this
+    /// test was written for) is a human judgment call no structure can force — and the `SeamKind::ALL`
+    /// listing itself, for the reason stated on that constant.
     #[test]
     fn every_public_seam_shape_is_named_and_identity_injective() {
         let seams = vec![
@@ -1179,16 +1088,33 @@ mod fact_tests {
                 name: "run".into(),
             },
             PublicSeam::InherentMethod {
+                module: "crate::api".into(),
+                owner: "crate::Api".into(),
+                name: "run".into(),
+            },
+            // Same owner and method name as above, different declaring module — the two-module
+            // false negative this change closes: without the module field these would collide.
+            PublicSeam::InherentMethod {
+                module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
                 name: "run".into(),
             },
             PublicSeam::InherentAssoc {
                 kind: AssocKind::Const,
+                module: "crate::api".into(),
+                owner: "crate::Api".into(),
+                name: "VALUE".into(),
+            },
+            // Same owner, kind, and name as above, different declaring module.
+            PublicSeam::InherentAssoc {
+                kind: AssocKind::Const,
+                module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
                 name: "VALUE".into(),
             },
             PublicSeam::InherentAssoc {
                 kind: AssocKind::Type,
+                module: "crate::api".into(),
                 owner: "crate::Api".into(),
                 name: "Value".into(),
             },
@@ -1257,13 +1183,39 @@ mod fact_tests {
                 name: "Value".into(),
             },
             PublicSeam::InherentGenerics {
+                module: "crate::api".into(),
                 owner: "crate::Api".into(),
+                bound: "T".into(),
+            },
+            // Same owner, different declaring module — the sibling of the two-module
+            // `InherentMethod` case above, for an impl block's OWN generics. Rust permits two
+            // inherent impl blocks for one self type in two modules, and nothing but the module
+            // distinguishes their generics seams.
+            PublicSeam::InherentGenerics {
+                module: "crate::other_api".into(),
+                owner: "crate::Api".into(),
+                bound: "T".into(),
+            },
+            // Same owner AND same module, different bounded parameter — the case module-plus-owner
+            // cannot separate, and the one this seam's own `bound` role exists for: two impl blocks
+            // in one module, each bounding a different parameter to the same forbidden type.
+            PublicSeam::InherentGenerics {
+                module: "crate::api".into(),
+                owner: "crate::Api".into(),
+                bound: "U".into(),
             },
             PublicSeam::Reexport {
                 module: "crate::api".into(),
                 exported: "Port".into(),
             },
             PublicSeam::ExternCrate {
+                module: "crate::api".into(),
+                name: "port".into(),
+            },
+            // Same republished crate, different declaring module: `pub extern crate port;` is
+            // legal in each of two modules, so the crate name alone is not an identity.
+            PublicSeam::ExternCrate {
+                module: "crate::other_api".into(),
                 name: "port".into(),
             },
             PublicSeam::TraitImpl {
@@ -1292,11 +1244,56 @@ mod fact_tests {
                 position: TraitImplPosition::MethodReturn("run".into()),
             },
         ];
+        // `ALL` must not list a shape twice: a duplicate would collapse in the set comparison
+        // below and quietly shrink the coverage the check believes it is demanding.
+        let listed: std::collections::BTreeSet<_> = SeamKind::ALL.iter().copied().collect();
+        assert_eq!(
+            listed.len(),
+            SeamKind::ALL.len(),
+            "SeamKind::ALL lists a shape more than once: {:?}",
+            SeamKind::ALL
+        );
+
+        // Set equality, not a count: the failure names the shape that is missing a representative
+        // (or the one present but unlisted), instead of only reporting that two numbers differ.
+        let observed: std::collections::BTreeSet<_> = seams.iter().map(seam_kind).collect();
+        assert_eq!(
+            observed, listed,
+            "the fixture must carry a representative of every PublicSeam shape, and no shape \
+             outside SeamKind::ALL"
+        );
+
+        // The test's shape mapping and the published schema's own `seam_kind` label must agree
+        // one-for-one. A bijection needs BOTH directions checked, and one count does not give both:
+        // with every shape represented, the distinct (shape, label) pair count rises above the shape
+        // count only when one shape is rendered under two labels. Two shapes *sharing* one label
+        // leaves that count untouched — it is caught by comparing the distinct label count instead.
+        // Together they close the case a new variant mapped to an existing `SeamKind` would
+        // otherwise slip through: reading as already-covered while publishing its own label.
+        let paired: std::collections::BTreeSet<_> = seams
+            .iter()
+            .map(|seam| (seam_kind(seam), published_seam_kind(seam)))
+            .collect();
+        assert_eq!(
+            paired.len(),
+            listed.len(),
+            "each PublicSeam shape must map to exactly one published seam_kind label: {paired:?}"
+        );
+        let published_labels: std::collections::BTreeSet<_> =
+            seams.iter().map(published_seam_kind).collect();
+        assert_eq!(
+            published_labels.len(),
+            listed.len(),
+            "each published seam_kind label must belong to exactly one PublicSeam shape — two \
+             shapes sharing a label would leave one of them unrepresented in the schema: \
+             {published_labels:?}"
+        );
         let keys: std::collections::BTreeSet<_> = seams
             .iter()
             .map(|seam| {
                 let mut expected_fields = published_seam_fields(seam);
                 expected_fields.push(("subject", "Port"));
+                expected_fields.push(("governing_package", "app"));
                 expected_fields.sort_by_key(|(name, _)| *name);
                 let fact = SemanticFact::Exposed {
                     kind: ExposureKind::Signature,
@@ -1304,7 +1301,7 @@ mod fact_tests {
                     seam: seam.clone(),
                 };
                 assert_semantic_fact_is_cataloged(&fact);
-                let finding = fact.into_finding();
+                let finding = fact.into_finding("app", "src/lib.rs");
                 assert_eq!(
                     finding.key().fact_type(),
                     "tianheng.fact/hunyi/signature-exposure"
@@ -1335,9 +1332,11 @@ mod fact_tests {
                 "tianheng.fact/hunyi/trait-impl-site",
                 "misplaced-implementation",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::m"),
                     ("owner", "crate::Api"),
                     ("trait", "crate::Port"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1349,8 +1348,10 @@ mod fact_tests {
                 "derive",
                 vec![
                     ("form", "derive"),
+                    ("governing_package", "app"),
                     ("marker", "Marker"),
                     ("owner", "crate::Api"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1363,9 +1364,11 @@ mod fact_tests {
                 "impl",
                 vec![
                     ("form", "impl"),
+                    ("governing_package", "app"),
                     ("marker", "Marker"),
                     ("module", "crate::m"),
                     ("owner", "crate::Api"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1377,15 +1380,17 @@ mod fact_tests {
                 "tianheng.fact/hunyi/visibility-exposure",
                 "declared-item-visibility",
                 vec![
+                    ("governing_package", "app"),
                     ("item_kind", "fn"),
                     ("item_name", "run"),
+                    ("unit", "src/lib.rs"),
                     ("visibility", "pub"),
                 ],
             ),
         ];
         for (fact, fact_type, shape, expected_fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            let finding = fact.into_finding("app", "src/lib.rs");
             let fields: Vec<_> = finding.key().fields().collect();
             assert_eq!(finding.key().fact_type(), fact_type, "{}", finding.text());
             assert_eq!(finding.key().shape(), shape, "{}", finding.text());
@@ -1397,12 +1402,16 @@ mod fact_tests {
             site: UnsafeSiteFact::FreeFn { name: "run".into() },
         };
         assert_semantic_fact_is_cataloged(&unsafe_fact);
-        let finding = unsafe_fact.into_finding();
+        let finding = unsafe_fact.into_finding("app", "src/lib.rs");
         assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
         assert_eq!(finding.key().shape(), "unsafe-free-function");
         assert_eq!(
             finding.key().fields().collect::<Vec<_>>(),
-            vec![("module", "crate::m"), ("name", "run")]
+            vec![
+                ("module", "crate::m"),
+                ("name", "run"),
+                ("unit", "src/lib.rs")
+            ]
         );
     }
 
@@ -1416,16 +1425,18 @@ mod fact_tests {
             let expected_type = published_exposure_type(kind);
             let fact = exposure(kind, "crate::api", "run");
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            let finding = fact.into_finding("app", "src/lib.rs");
             assert_eq!(finding.key().fact_type(), expected_type);
             assert_eq!(finding.key().shape(), "public-seam");
             assert_eq!(
                 finding.key().fields().collect::<Vec<_>>(),
                 vec![
+                    ("governing_package", "app"),
                     ("seam_kind", "free_fn"),
                     ("seam_module", "crate::api"),
                     ("seam_name", "run"),
                     ("subject", "Port"),
+                    ("unit", "src/lib.rs"),
                 ]
             );
         }
@@ -1437,12 +1448,16 @@ mod fact_tests {
             (
                 UnsafeSiteFact::Block,
                 "unsafe-block",
-                vec![("module", "crate::m")],
+                vec![("module", "crate::m"), ("unit", "src/lib.rs")],
             ),
             (
                 UnsafeSiteFact::FreeFn { name: "run".into() },
                 "unsafe-free-function",
-                vec![("module", "crate::m"), ("name", "run")],
+                vec![
+                    ("module", "crate::m"),
+                    ("name", "run"),
+                    ("unit", "src/lib.rs"),
+                ],
             ),
             (
                 UnsafeSiteFact::InherentMethod {
@@ -1455,6 +1470,7 @@ mod fact_tests {
                     ("name", "run"),
                     ("owner", "crate::m::Api"),
                     ("owner_kind", "inherent"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1468,6 +1484,7 @@ mod fact_tests {
                     ("name", "run"),
                     ("owner", "crate::m::Port"),
                     ("owner_kind", "trait"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1483,6 +1500,7 @@ mod fact_tests {
                     ("owner", "crate::m::Api"),
                     ("owner_kind", "trait_impl"),
                     ("trait", "Port"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1490,7 +1508,11 @@ mod fact_tests {
                     owner: "crate::m::Api".into(),
                 },
                 "unsafe-inherent-impl",
-                vec![("module", "crate::m"), ("owner", "crate::m::Api")],
+                vec![
+                    ("module", "crate::m"),
+                    ("owner", "crate::m::Api"),
+                    ("unit", "src/lib.rs"),
+                ],
             ),
             (
                 UnsafeSiteFact::TraitImpl {
@@ -1502,6 +1524,7 @@ mod fact_tests {
                     ("module", "crate::m"),
                     ("owner", "crate::m::Api"),
                     ("trait", "Send"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1509,12 +1532,16 @@ mod fact_tests {
                     name: "Port".into(),
                 },
                 "unsafe-trait",
-                vec![("module", "crate::m"), ("name", "Port")],
+                vec![
+                    ("module", "crate::m"),
+                    ("name", "Port"),
+                    ("unit", "src/lib.rs"),
+                ],
             ),
             (
                 UnsafeSiteFact::ExternBlock,
                 "unsafe-extern-block",
-                vec![("module", "crate::m")],
+                vec![("module", "crate::m"), ("unit", "src/lib.rs")],
             ),
         ];
 
@@ -1524,7 +1551,16 @@ mod fact_tests {
                 site,
             };
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            // The compilation-unit coordinate is required here even though `governing_package` is not:
+            // this capability's violation target IS the package, so the declaring crate is already
+            // encoded there, but the unit is encoded nowhere and it varies — `crate::m` in a library and
+            // `crate::m` in the `bin` beside it are two modules. Adding this assertion is what caught
+            // the omission; see `structured-violation-identity`'s coordinate derivation.
+            assert!(
+                fields.iter().any(|(name, _)| *name == "unit"),
+                "an unsafe-site fact must carry the compilation-unit coordinate: {shape}"
+            );
+            let finding = fact.into_finding("app", "src/lib.rs");
             assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
             assert_eq!(finding.key().shape(), shape);
             assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
@@ -1542,10 +1578,12 @@ mod fact_tests {
                 },
                 "async-free-function",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::api"),
                     ("name", "register"),
                     ("owner", "crate::api"),
                     ("owner_kind", "module"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1557,10 +1595,12 @@ mod fact_tests {
                 },
                 "async-trait-method",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::api"),
                     ("name", "register"),
                     ("owner", "crate::api::Registry"),
                     ("owner_kind", "trait"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1572,16 +1612,18 @@ mod fact_tests {
                 },
                 "async-inherent-method",
                 vec![
+                    ("governing_package", "app"),
                     ("module", "crate::api"),
                     ("name", "register"),
                     ("owner", "crate::api::Registry"),
                     ("owner_kind", "inherent"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
         ];
         for (fact, shape, fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding();
+            let finding = fact.into_finding("app", "src/lib.rs");
             assert_eq!(
                 finding.key().fact_type(),
                 "tianheng.fact/hunyi/async-exposure"
@@ -1626,7 +1668,7 @@ mod fact_tests {
         // canonical_self_owner + render_last_segment_args feed semantic owner / seam-owner / trait
         // fields. Renderable forms are public identity; the positional sentinel is pinned only so
         // the shared observation reaction can recognize and reject unsupported syntax.
-        let uses: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let uses: crate::resolve::UseMap = std::collections::HashMap::new();
         let no_params: std::collections::HashSet<String> = std::collections::HashSet::new();
         let owner: syn::Type = syn::parse_str("Repo<crate::Id>").unwrap();
         assert_eq!(

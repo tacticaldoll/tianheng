@@ -31,7 +31,7 @@ use guibiao::{
     constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
 use louke::audit_probe_coverage;
-use xingbiao::{cargo_metadata, member_root_files};
+use xingbiao::{cargo_metadata, member_root_files, workspace_root};
 
 use crate::Constitution;
 
@@ -140,9 +140,17 @@ fn evaluate_constitution(
         match cargo_metadata(manifest_path) {
             Ok(metadata) => {
                 let roots = member_root_files(&metadata);
+                // The audit labels every observed file relative to this anchor, and that label is
+                // baseline identity, so the anchor must be the one directory that moves neither
+                // with the checkout location nor with the workspace's own member set: Cargo's
+                // resolved `workspace_root`. It is the same directory whichever member manifest
+                // `--manifest-path` named. Only if metadata carries no such field does this fall
+                // back to the given manifest's own directory — a real `cargo metadata` read always
+                // carries it, so the fallback exists for a synthetic one rather than as a guess.
+                let anchor = probe_label_anchor(&metadata, manifest_path);
                 outcome = merge_outcomes(
                     outcome,
-                    audit_probe_coverage(constitution.runtime_boundaries(), &roots),
+                    audit_probe_coverage(constitution.runtime_boundaries(), &roots, &anchor),
                 );
             }
             Err(message) => {
@@ -160,9 +168,46 @@ fn evaluate_constitution(
     (outcome, observed_coverage)
 }
 
-/// The runner's work, returning the exit code as a number so it is assertable
-/// without a subprocess and without inspecting an opaque [`ExitCode`].
-fn dispatch<I, S>(constitution: &Constitution, args: I) -> u8
+/// The directory 漏刻's audit labels every observed file's identity relative to: Cargo's own resolved
+/// `workspace_root`, the one directory that moves neither with the checkout location nor with the
+/// workspace's member set, and the same directory whichever member manifest `--manifest-path` named.
+///
+/// The fallback exists only for synthetic metadata (a unit test's hand-built `Value`); a real
+/// `cargo metadata` read always carries the field. It is put through [`std::path::absolute`] rather
+/// than used as-is because the audit **requires** an absolute anchor and refuses anything else: a
+/// relative anchor could never prefix an absolute source path, so it would silently leave every
+/// label checkout-dependent. `absolute` prepends the working directory to a relative path, refuses
+/// only an empty one (hence the `current_dir` last resort, for a bare `Cargo.toml` whose parent is
+/// empty), and leaves an already-absolute path untouched — no canonicalization, so the
+/// cargo-reported root is never rewritten.
+fn probe_label_anchor(metadata: &serde_json::Value, manifest_path: &Path) -> PathBuf {
+    if let Some(root) = workspace_root(metadata) {
+        return root;
+    }
+    let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
+    std::path::absolute(manifest_dir)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
+}
+
+/// The command-line flags `dispatch` parses, before command-specific dispatch reacts to them.
+/// `format` is left as the full [`Format`] (not yet narrowed to [`ReportFormat`]) since `list`
+/// and `check` accept different subsets of it, and stays an `Option` so a dispatch can tell an
+/// explicitly requested format from the default: a flag that cannot apply to the requested action
+/// must be rejected rather than silently ignored, which requires knowing it was supplied at all.
+struct ParsedArgs {
+    command: Command,
+    manifest_path: Option<String>,
+    baseline_path: Option<String>,
+    write_baseline_path: Option<String>,
+    format: Option<Format>,
+    warn_uncovered: bool,
+    disallow_stale: bool,
+}
+
+/// Parse `dispatch`'s process arguments into [`ParsedArgs`], or `Err(exit code)` on a usage
+/// error (an absent flag value, an unrecognized argument, or an unknown `--format`) — a
+/// misconfiguration fails loud (exit 2), never a silent downgrade to a default (PROJECT.md).
+fn parse_args<I, S>(args: I) -> Result<ParsedArgs, u8>
 where
     I: IntoIterator<Item = S>,
     S: Into<String>,
@@ -193,112 +238,226 @@ where
     // A value-taking flag must be given its value; an absent value is a usage error
     // (exit 2), never a silent downgrade to the default or to a plain check
     // (PROJECT.md: misconfiguration fails loud).
+    //
+    // A value that is itself a `--`-prefixed token is the same missing value, one token later:
+    // the flag the user meant to pass gets eaten as this flag's value. Taking it would drop a
+    // real flag with no diagnostic, and for `--write-baseline` it reaches a silent SUCCESS —
+    // writing a baseline file literally named `--warn-uncovered` and exiting 0, the one shape of
+    // this mistake that does not even land on a non-zero exit. So reject it here and name the
+    // token found, rather than let a downstream scan error misreport it as a bad path. The
+    // `--flag=<value>` form stays the escape hatch for a value that must begin with `--`; it
+    // carries its value in the same token, so no following flag can be consumed by mistake.
     macro_rules! value {
         ($flag:literal) => {
             match args.next() {
-                Some(value) => value,
-                None => return usage(concat!($flag, " requires a value")),
+                Some(value) if !value.starts_with("--") => require_non_empty($flag, value)?,
+                Some(found) => {
+                    return Err(usage(&format!(
+                        "{} requires a value, but the next argument is the flag '{found}'; \
+                         use {}=<value> for a value that begins with '--'",
+                        $flag, $flag
+                    )));
+                }
+                None => return Err(usage(concat!($flag, " requires a value"))),
             }
         };
     }
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--manifest-path" => manifest_path = Some(value!("--manifest-path")),
-            "--baseline" => baseline_path = Some(value!("--baseline")),
-            "--write-baseline" => write_baseline_path = Some(value!("--write-baseline")),
-            "--format" => format = Some(value!("--format")),
+            "--manifest-path" => {
+                take_once(
+                    &mut manifest_path,
+                    "--manifest-path",
+                    value!("--manifest-path"),
+                )?;
+            }
+            "--baseline" => take_once(&mut baseline_path, "--baseline", value!("--baseline"))?,
+            "--write-baseline" => take_once(
+                &mut write_baseline_path,
+                "--write-baseline",
+                value!("--write-baseline"),
+            )?,
+            "--format" => take_once(&mut format, "--format", value!("--format"))?,
             "--warn-uncovered" => warn_uncovered = true,
             "--disallow-stale" => disallow_stale = true,
             other => {
+                // The equals form deliberately does NOT reject a `--`-prefixed value — carrying the
+                // value in the same token is exactly what makes it the escape hatch for one — but it
+                // shares the non-empty rule, so `--flag=` is the usage error it is, and the
+                // once-only rule, so the two forms cannot be combined to smuggle a second value past
+                // it (`--baseline a --baseline=b`).
                 if let Some(path) = other.strip_prefix("--manifest-path=") {
-                    manifest_path = Some(path.to_string());
+                    let path = require_non_empty("--manifest-path", path.to_string())?;
+                    take_once(&mut manifest_path, "--manifest-path", path)?;
                 } else if let Some(path) = other.strip_prefix("--baseline=") {
-                    baseline_path = Some(path.to_string());
+                    let path = require_non_empty("--baseline", path.to_string())?;
+                    take_once(&mut baseline_path, "--baseline", path)?;
                 } else if let Some(path) = other.strip_prefix("--write-baseline=") {
-                    write_baseline_path = Some(path.to_string());
+                    let path = require_non_empty("--write-baseline", path.to_string())?;
+                    take_once(&mut write_baseline_path, "--write-baseline", path)?;
                 } else if let Some(value) = other.strip_prefix("--format=") {
-                    format = Some(value.to_string());
+                    let value = require_non_empty("--format", value.to_string())?;
+                    take_once(&mut format, "--format", value)?;
                 } else {
                     // An unknown flag, a misspelling, or a stray positional is a
                     // misconfiguration — fail loud (exit 2), never silently ignore
                     // it (PROJECT.md).
-                    return usage(&format!("unrecognized argument '{other}'"));
+                    return Err(usage(&format!("unrecognized argument '{other}'")));
                 }
             }
         }
     }
 
     // `--format` is parsed for both commands so the flag contract stays uniform; `markdown`
-    // is recognized here but only honored by `list` (rejected for `check` below).
+    // is recognized here but only honored by `list` (rejected for `check` below). The `None`
+    // (flag absent) case stays `None` rather than collapsing to `Text` here: each dispatch
+    // defaults it at the point of use, so it can still distinguish "text was asked for" from
+    // "nothing was asked for" and reject the former where no report is produced at all.
     let format = match format.as_deref() {
-        None | Some("text") => Format::Text,
-        Some("json") => Format::Json,
-        Some("markdown") => Format::Markdown,
-        Some("sarif") => Format::Sarif,
+        None => None,
+        Some("text") => Some(Format::Text),
+        Some("json") => Some(Format::Json),
+        Some("markdown") => Some(Format::Markdown),
+        Some("sarif") => Some(Format::Sarif),
         Some(other) => {
-            return usage(&format!(
+            return Err(usage(&format!(
                 "unknown --format '{other}' (expected text, json, markdown, or sarif)"
-            ));
+            )));
         }
     };
 
-    // `list` is a projection, not a reaction: it observes nothing (no
-    // `--manifest-path`), cannot fail a boundary, and always exits 0. It accepts
-    // only `--format`; a check-only flag supplied to `list` is a usage error, not a
-    // silent no-op (PROJECT.md: never silently ignore a flag).
-    if command == Command::List {
-        if manifest_path.is_some()
-            || baseline_path.is_some()
-            || write_baseline_path.is_some()
-            || warn_uncovered
-            || disallow_stale
-        {
-            return usage("list takes only --format; other flags are check-only");
+    Ok(ParsedArgs {
+        command,
+        manifest_path,
+        baseline_path,
+        write_baseline_path,
+        format,
+        warn_uncovered,
+        disallow_stale,
+    })
+}
+
+/// The `list` command's whole reaction: a projection, not a reaction — it observes nothing (no
+/// `--manifest-path`), cannot fail a boundary, and always exits 0. It accepts only `--format`; a
+/// check-only flag supplied to `list` is a usage error, not a silent no-op (PROJECT.md: never
+/// silently ignore a flag).
+fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
+    if parsed.manifest_path.is_some()
+        || parsed.baseline_path.is_some()
+        || parsed.write_baseline_path.is_some()
+        || parsed.warn_uncovered
+        || parsed.disallow_stale
+    {
+        return usage("list takes only --format; other flags are check-only");
+    }
+    let semantic = constitution.semantic_boundaries();
+    let runtime = constitution.runtime_boundaries();
+    // `list` honors every format it supports, so an absent `--format` simply defaults to `text`
+    // here; unlike `check`'s write action, there is no `list` action a requested format cannot
+    // apply to.
+    match parsed.format.unwrap_or(Format::Text) {
+        Format::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&list_document(constitution))
+                    .expect("a serde_json::Value is always serializable")
+            );
         }
-        let semantic = constitution.semantic_boundaries();
-        let runtime = constitution.runtime_boundaries();
-        match format {
-            Format::Json => {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&list_document(constitution))
-                        .expect("a serde_json::Value is always serializable")
+        Format::Markdown => {
+            // Rendered from the same `list_document` value the JSON projection emits, so the
+            // Markdown provably carries no less than the JSON and covers exactly the same
+            // dimensions — a pure projection, never a reaction.
+            print!("{}", list_markdown(&list_document(constitution)));
+        }
+        Format::Text => {
+            println!("{}", constitution_text(constitution.static_boundaries()));
+            print!("{}", semantic_text(&semantic.signature));
+            print!("{}", trait_impl_text(&semantic.trait_impl));
+            print!("{}", visibility_text(&semantic.visibility));
+            print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
+            print!("{}", dyn_trait_text(&semantic.dyn_trait));
+            print!("{}", impl_trait_text(&semantic.impl_trait));
+            print!("{}", async_exposure_text(&semantic.async_exposure));
+            print!("{}", unsafe_text(&semantic.unsafe_confinement));
+            print!("{}", runtime_text(runtime));
+        }
+        // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
+        // symmetric to `markdown` being `list`-only.
+        Format::Sarif => {
+            return usage(
+                "list supports --format text|json|markdown; sarif projects the reaction \
+                 (a check output), not the declared law",
+            );
+        }
+    }
+    EXIT_OK
+}
+
+/// Resolve `check`'s target manifest: the given `--manifest-path`, or the nearest `Cargo.toml`
+/// up from the current directory, cargo-style. Defaulting the target location is not a silent
+/// pass: if none is found this is a scan error (exit 2), never 0.
+fn resolve_manifest_path(manifest_path: Option<String>) -> Result<PathBuf, u8> {
+    match manifest_path {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => match nearest_manifest() {
+            Some(path) => Ok(path),
+            None => {
+                let from = std::env::current_dir()
+                    .map(|dir| dir.display().to_string())
+                    .unwrap_or_else(|_| "the current directory".to_string());
+                eprintln!(
+                    "Tianheng: no Cargo.toml found from {from} up to the root; \
+                     pass --manifest-path <path>"
                 );
+                Err(EXIT_CANNOT_JUDGE)
             }
-            Format::Markdown => {
-                // Rendered from the same `list_document` value the JSON projection emits, so the
-                // Markdown provably carries no less than the JSON and covers exactly the same
-                // dimensions — a pure projection, never a reaction.
-                print!("{}", list_markdown(&list_document(constitution)));
-            }
-            Format::Text => {
-                println!("{}", constitution_text(constitution.static_boundaries()));
-                print!("{}", semantic_text(&semantic.signature));
-                print!("{}", trait_impl_text(&semantic.trait_impl));
-                print!("{}", visibility_text(&semantic.visibility));
-                print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
-                print!("{}", dyn_trait_text(&semantic.dyn_trait));
-                print!("{}", impl_trait_text(&semantic.impl_trait));
-                print!("{}", async_exposure_text(&semantic.async_exposure));
-                print!("{}", unsafe_text(&semantic.unsafe_confinement));
-                print!("{}", runtime_text(runtime));
-            }
-            // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
-            // symmetric to `markdown` being `list`-only.
-            Format::Sarif => {
-                return usage(
-                    "list supports --format text|json|markdown; sarif projects the reaction \
-                     (a check output), not the declared law",
-                );
+        },
+    }
+}
+
+/// Print `check`'s final report in the requested format — the tail every non-baseline,
+/// non-write-baseline `check` run reaches. Never affects the exit code (the caller computes
+/// that from `outcome` itself).
+fn print_report(
+    report_format: ReportFormat,
+    outcome: &Outcome,
+    coverage: Option<&Coverage>,
+    warn_uncovered: bool,
+) {
+    match report_format {
+        ReportFormat::Json => println!("{}", report_json(outcome, &[], coverage)),
+        ReportFormat::Sarif => println!("{}", report_sarif(outcome)),
+        ReportFormat::Text => {
+            report(outcome);
+            if let Some(coverage) = coverage {
+                report_coverage(coverage, warn_uncovered);
             }
         }
-        return EXIT_OK;
+    }
+}
+
+/// The runner's work, returning the exit code as a number so it is assertable
+/// without a subprocess and without inspecting an opaque [`ExitCode`].
+fn dispatch<I, S>(constitution: &Constitution, args: I) -> u8
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    let parsed = match parse_args(args) {
+        Ok(parsed) => parsed,
+        Err(code) => return code,
+    };
+
+    if parsed.command == Command::List {
+        return dispatch_list(constitution, &parsed);
     }
 
     // The command is `check`. `markdown` is a `list`-only projection of the declared law;
     // `check`'s machine output is the JSON report, so reject it loud (exit 2) rather than
-    // silently falling back. `text`/`json` map to the existing boolean contract.
-    let report_format = match format {
+    // silently falling back. `text`/`json` map to the existing boolean contract. An absent
+    // `--format` defaults here, at the point of use, so the write-baseline check below still sees
+    // whether one was requested at all.
+    let report_format = match parsed.format.unwrap_or(Format::Text) {
         Format::Text => ReportFormat::Text,
         Format::Json => ReportFormat::Json,
         Format::Sarif => ReportFormat::Sarif,
@@ -313,37 +472,48 @@ where
     // A contradictory flag pair is a pure usage error, independent of any workspace — check it
     // before resolving the manifest, so an also-absent `--manifest-path` (whose "no Cargo.toml
     // found" diagnostic would otherwise fire first) cannot mask the real misconfiguration.
-    if baseline_path.is_some() && write_baseline_path.is_some() {
+    if parsed.baseline_path.is_some() && parsed.write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
-    if disallow_stale && baseline_path.is_none() {
+    if parsed.disallow_stale && parsed.baseline_path.is_none() {
         return usage("--disallow-stale requires --baseline");
     }
+    // `--write-baseline` records a snapshot; it emits no report at all, so a flag whose only effect
+    // is on a report has nothing to act on here. `list` already rejects a check-only flag rather
+    // than accepting it as a silent no-op, and `--disallow-stale` without `--baseline` is rejected
+    // just above for the same reason — this is that same rule applied WITHIN `check`, between its
+    // two actions, which was the one place it did not hold: `check --write-baseline out.json
+    // --warn-uncovered --format sarif` recorded the baseline, exited 0, and dropped both flags with
+    // no diagnostic, so an adopter could believe they had coverage advisories or a SARIF document
+    // and receive neither.
+    //
+    // The line drawn here is "the action produces nothing this flag could affect", not "this flag
+    // changes nothing observable". `--warn-uncovered` under `--format json` stays accepted: the JSON
+    // report's `coverage` object already carries every uncovered crate unconditionally, so the flag
+    // is redundant there rather than dropped — the consumer receives the whole fact either way.
+    if parsed.write_baseline_path.is_some() {
+        if parsed.warn_uncovered {
+            return usage(
+                "--warn-uncovered cannot apply to --write-baseline: recording a baseline emits \
+                 no coverage report to raise an advisory in",
+            );
+        }
+        if parsed.format.is_some() {
+            return usage(
+                "--format cannot apply to --write-baseline: recording a baseline emits no report \
+                 to format (the baseline document's own shape is fixed)",
+            );
+        }
+    }
 
-    // From here on the command is `check`: it requires a workspace to observe.
-    // An absent `--manifest-path` defaults to the nearest `Cargo.toml`, cargo-style.
-    // Defaulting the target location is not a silent pass: if none is found the run
-    // exits 2 (a scan error), never 0.
-    let manifest_path = match manifest_path {
-        Some(path) => PathBuf::from(path),
-        None => match nearest_manifest() {
-            Some(path) => path,
-            None => {
-                let from = std::env::current_dir()
-                    .map(|dir| dir.display().to_string())
-                    .unwrap_or_else(|_| "the current directory".to_string());
-                eprintln!(
-                    "Tianheng: no Cargo.toml found from {from} up to the root; \
-                     pass --manifest-path <path>"
-                );
-                return EXIT_CANNOT_JUDGE;
-            }
-        },
+    let manifest_path = match resolve_manifest_path(parsed.manifest_path) {
+        Ok(path) => path,
+        Err(code) => return code,
     };
 
     let (mut outcome, observed_coverage) = evaluate_constitution(constitution, &manifest_path);
 
-    if let Some(path) = write_baseline_path {
+    if let Some(path) = parsed.write_baseline_path {
         return write_baseline(&outcome, &path);
     }
 
@@ -355,27 +525,23 @@ where
         _ => observed_coverage,
     };
 
-    if let Some(path) = baseline_path {
+    if let Some(path) = parsed.baseline_path {
         return gate(
             &mut outcome,
             &path,
             report_format,
             coverage.as_ref(),
-            warn_uncovered,
-            disallow_stale,
+            parsed.warn_uncovered,
+            parsed.disallow_stale,
         );
     }
 
-    match report_format {
-        ReportFormat::Json => println!("{}", report_json(&outcome, &[], coverage.as_ref())),
-        ReportFormat::Sarif => println!("{}", report_sarif(&outcome)),
-        ReportFormat::Text => {
-            report(&outcome);
-            if let Some(coverage) = &coverage {
-                report_coverage(coverage, warn_uncovered);
-            }
-        }
-    }
+    print_report(
+        report_format,
+        &outcome,
+        coverage.as_ref(),
+        parsed.warn_uncovered,
+    );
     outcome.exit_code()
 }
 
@@ -391,6 +557,47 @@ fn usage(message: &str) -> u8 {
     );
     eprintln!("error: {message}");
     EXIT_CANNOT_JUDGE
+}
+
+/// The one rule both flag forms share: a value must not be empty. `--flag=` and `--flag ""` are the
+/// same mistake as `--flag` with nothing after it — a flag given no value — so all three are one
+/// usage error (exit 2) rather than an empty string carried onward. An empty path reaches the
+/// filesystem as `""` and answers `NotFound`, which reads as "cannot read baseline " against a path
+/// nobody typed: the malformed invocation misreported as a missing file, the same misdirection the
+/// flag-shaped-value rule exists to prevent one shape earlier. Shared by the space and equals forms
+/// so the two cannot diverge on what counts as a value.
+fn require_non_empty(flag: &str, value: String) -> Result<String, u8> {
+    if value.is_empty() {
+        return Err(usage(&format!(
+            "{flag} requires a value, but was given an empty one"
+        )));
+    }
+    Ok(value)
+}
+
+/// The second rule both flag forms share: a value-taking flag is given its value **once**. A
+/// second occurrence used to overwrite the first silently, so `--baseline a --baseline b` gated
+/// against `b` with no word about `a` — the invocation named two files and the runner acted on one,
+/// which is the same "a flag the invocation supplied was dropped without a diagnostic" mistake the
+/// flag-shaped-value rule exists to prevent, one token further out. Which value a repeat should win
+/// is not knowable from the invocation, so neither is chosen: it is a usage error (exit 2) naming
+/// the flag. Shared by the space and equals forms, so the two cannot be combined to smuggle a
+/// second value past it.
+///
+/// Deliberately scoped to the value-taking flags. Repeating a boolean (`--warn-uncovered
+/// --warn-uncovered`) drops nothing — the second occurrence asks for exactly what the first already
+/// set — so there is no ambiguity to report, and rejecting it would be a style rule rather than a
+/// misconfiguration reaction (PROJECT.md's minimalism bound: fail loud on *observable*
+/// misconfiguration, not on redundancy).
+fn take_once<T>(slot: &mut Option<T>, flag: &str, value: T) -> Result<(), u8> {
+    if slot.is_some() {
+        return Err(usage(&format!(
+            "{flag} was given more than once; it takes a single value, and which of the given \
+             values was meant cannot be inferred"
+        )));
+    }
+    *slot = Some(value);
+    Ok(())
 }
 
 /// Walk up from the current directory to the nearest `Cargo.toml`, cargo-style, so
@@ -436,6 +643,32 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     // unreadable content is preserved byte-for-byte: presentation cannot reconstruct identity, and
     // overwriting would silently destroy annotations the adopter may still need to carry manually.
     let (baseline, create_new) = match std::fs::read_to_string(path) {
+        // A zero-length target is the one "unsupported" shape that provably holds nothing worth
+        // protecting. The refusal below exists to stop an overwrite from destroying hand-authored
+        // owner/tracker annotations, which cannot be reconstructed from a rerun — and zero bytes
+        // cannot hold any. Refusing it therefore protects nothing while costing the adopter a manual
+        // file move, and its own guidance ("preserve any desired annotations") names something that
+        // is not there.
+        //
+        // It is also the exact shape an interrupted create leaves: `create_baseline_file` publishes
+        // its directory entry before its first byte, so a crash mid-create leaves an empty file. The
+        // write action's job is to record, so it records — and says that it did, because recovering
+        // in silence is the other extreme. Bounded to *zero* length deliberately: whitespace, a
+        // truncated `{"format":`, or any other partial content might have held annotations before it
+        // was damaged, so those stay refused.
+        //
+        // `create_new` is false: the file exists, so this takes the overwrite path, which preserves
+        // its mode and swaps atomically. Gate mode (`--baseline`) deliberately does NOT share this
+        // tolerance — see `gate`, where an unreadable baseline stays exit 2. Recording may safely
+        // regenerate what it owns; gating consumes a declaration the adopter wrote, and a corrupt
+        // one must be reported rather than read as "nothing is baselined".
+        Ok(text) if text.is_empty() => {
+            eprintln!(
+                "Tianheng: baseline {path} was empty, so there were no owner/tracker annotations to \
+                 preserve (an interrupted write leaves exactly this); recording a fresh snapshot."
+            );
+            (Baseline::of(report), false)
+        }
         Ok(text) => match Baseline::from_json(&text) {
             Ok(existing) => (Baseline::of_preserving(report, &existing), false),
             Err(err) => {
@@ -461,7 +694,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     let write_result = if create_new {
         create_baseline_file(path, &document)
     } else {
-        std::fs::write(path, document)
+        write_baseline_atomically(path, &document)
     };
     match write_result {
         Ok(()) => {
@@ -471,26 +704,276 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
             );
             EXIT_OK
         }
-        Err(err) if create_new && err.kind() == std::io::ErrorKind::AlreadyExists => {
+        Err(BaselineWriteError::TempPathCollision(tmp_path)) => {
+            eprintln!(
+                "Tianheng: refusing to overwrite baseline {path}: its temp file {} already \
+                 exists, likely stranded by an interrupted run. Inspect and remove it, then \
+                 rerun the command.",
+                tmp_path.display()
+            );
+            EXIT_CANNOT_JUDGE
+        }
+        Err(BaselineWriteError::DanglingSymlink { target }) => {
+            eprintln!(
+                "Tianheng: refusing to write baseline {path}: it is a symlink to {}, which does \
+                 not exist. Recreate the target or remove the dangling link, then rerun the \
+                 command.",
+                target.display()
+            );
+            EXIT_CANNOT_JUDGE
+        }
+        Err(BaselineWriteError::Io(err))
+            if create_new && err.kind() == std::io::ErrorKind::AlreadyExists =>
+        {
             eprintln!(
                 "Tianheng: refusing to overwrite baseline {path} because it appeared while the \
                  new snapshot was being prepared. Inspect the file, then rerun the command."
             );
             EXIT_CANNOT_JUDGE
         }
-        Err(err) => {
+        Err(BaselineWriteError::Io(err)) => {
             eprintln!("Tianheng: cannot write baseline {path}: {err}");
             EXIT_CANNOT_JUDGE
         }
     }
 }
 
-fn create_baseline_file(path: &str, document: &str) -> std::io::Result<()> {
-    OpenOptions::new()
+/// Best-effort flush of the directory that holds `path`, so a directory entry a just-completed
+/// create or rename added is itself durable. An fsync on a *file* persists its contents; it does
+/// not persist the name through which anything reaches them, which lives in the parent directory's
+/// own data. Both baseline write paths call this after the step that publishes the entry.
+///
+/// Deliberately infallible, and this is the boundary between the two halves of the durability
+/// guarantee. Flushing the written *file* is strict — it is what prevents the empty-baseline loss,
+/// and fsync on a regular file just written is universally supported, so propagating its error
+/// costs nothing. Flushing the *directory* only strengthens a write that has already landed, and
+/// the ways it can be impossible are capability limits rather than storage faults: some FUSE and
+/// network mounts answer `EINVAL`/`ENOSYS` to fsync on a directory handle, and a directory that is
+/// writable but not readable (mode `0300`) cannot be opened for it at all. Turning any of those
+/// into "cannot write baseline" would report failure for a baseline that is sitting correctly on
+/// disk, and would regress adopters for whom this path worked before the flush existed. So a
+/// runtime inability to flush a directory is treated exactly as the compile-time one is below: as
+/// this platform not offering the operation, not as the write having failed.
+///
+/// Unix only for the compile-time half: `File::open` on a directory is not portable — Windows
+/// requires `FILE_FLAG_BACKUP_SEMANTICS`, which `std` does not expose through `OpenOptions`. The
+/// `File` import is scoped to the block for that reason, so it is not an unused import off unix.
+/// A path with no parent component (a bare relative filename) resolves to the working directory,
+/// which is where such a write actually lands.
+fn sync_parent_dir(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::fs::File;
+
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let _ = File::open(parent).and_then(|dir| dir.sync_all());
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
+/// `create_new`'s `O_EXCL` fails on any existing directory entry, including a dangling symlink —
+/// a baseline path whose symlink target does not exist reads as `NotFound` one line up (so this,
+/// the create-new path, runs), then hits `AlreadyExists` here, indistinguishable from a genuine
+/// concurrent creation without checking `symlink_metadata` explicitly. That distinction matters:
+/// a dangling symlink is a permanent state, not a race — "rerun the command" (the concurrent-
+/// creation arm's own remedy) would fail identically forever, so this earns its own diagnosis.
+///
+/// The written bytes are fsynced before this reports success, and the new directory entry is flushed
+/// best-effort after it ([`sync_parent_dir`]), so a baseline this process said it wrote survives a
+/// crash. Unlike the overwrite path, this one
+/// writes in place rather than through a temp file, so it protects a *reported success* and nothing
+/// more: there is no previous content to preserve, and a crash **mid-write** can leave a
+/// zero-length or partial file — `create_new` publishes the entry before any byte is written, and
+/// no ordering of fsyncs changes that. What the next run does with that residue depends on which of
+/// the two it is, and the difference is [`write_baseline`]'s zero-length exception: a **zero-length**
+/// file is recorded afresh (exit 0, announced on stderr) — zero bytes cannot hold the owner/tracker
+/// annotations the refusal exists to protect, and this path is the most likely way one appears — while
+/// a **partial** file is still refused as an unsupported baseline (exit 2, naming the remedy: move or
+/// delete it and rerun), because it may have held annotations before being damaged and no rerun can
+/// tell. So the common residue needs no manual step and the ambiguous one stays loud. Making this path
+/// atomic too would mean temp-then-rename here as
+/// well, at the cost of the `AlreadyExists`/dangling-symlink distinction above, which depends on
+/// `create_new` landing on the real path — a deliberate trade, not an oversight.
+fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteError> {
+    let write_result = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(path)
-        .and_then(|mut file| file.write_all(document.as_bytes()))
+        .and_then(|mut file| {
+            file.write_all(document.as_bytes())
+                .and_then(|()| file.sync_all())
+        });
+    let Err(err) = write_result else {
+        sync_parent_dir(Path::new(path));
+        return Ok(());
+    };
+    if err.kind() == std::io::ErrorKind::AlreadyExists {
+        if let Ok(metadata) = std::fs::symlink_metadata(path) {
+            // Dangling is claimed only when the target is genuinely **absent** — `NotFound`
+            // specifically, not any metadata failure. `std::fs::metadata` follows the link, so it also
+            // fails when the target EXISTS but cannot be reached: `EACCES` on a component of its path,
+            // or `ELOOP`. Treating those as dangling repeats the defect this branch was narrowed to fix,
+            // one error kind further in — "it is a symlink to X, which does not exist" about a target
+            // that does, prescribing a remedy ("recreate the target") that cannot help. Measured: with
+            // the target inside a `chmod 000` directory, `lstat` reports a symlink, the `O_EXCL` open
+            // fails `EEXIST`, and `metadata` fails `EACCES`.
+            //
+            // This function is reached only when `read_to_string` returned `NotFound`, so for a symlink
+            // the target was absent when the path was read — but it can come back before the `O_EXCL`
+            // open (restored file, or the link replaced), and classifying on symlink-ness alone then
+            // told the adopter "it is a symlink to X, which does not exist" about a target that does,
+            // and prescribed a remedy ("recreate the target") already satisfied. Refusing was always
+            // safe; only the reason was false, which is the misdiagnosis class this window corrected
+            // twice elsewhere.
+            //
+            // Falling through loses no diagnostic: [`write_baseline`]'s `create_new && AlreadyExists`
+            // arm already reports that the baseline "appeared while the new snapshot was being
+            // prepared", which is exactly what happened.
+            if metadata.file_type().is_symlink()
+                && matches!(std::fs::metadata(path), Err(err)
+                    if err.kind() == std::io::ErrorKind::NotFound)
+            {
+                let target = std::fs::read_link(path)?;
+                return Err(BaselineWriteError::DanglingSymlink { target });
+            }
+        }
+    }
+    Err(err.into())
+}
+
+/// Why [`write_baseline_atomically`] or [`create_baseline_file`] failed. A bare `io::Error` cannot
+/// distinguish a stale temp file left over from an interrupted run (a real, reachable case — a
+/// killed process, or a pid reused across a fresh container), or a dangling symlink (a baseline
+/// path whose target was deleted), from any other IO failure — and reporting either against the
+/// baseline path with a generic message leaves the adopter nothing to act on.
+#[derive(Debug)]
+enum BaselineWriteError {
+    /// The temp file's `create_new` open hit something already at that path. Carries the temp
+    /// path itself so the caller can name the file that is actually blocking the write.
+    TempPathCollision(PathBuf),
+    /// The baseline path is a symlink whose target does not exist. Carries the target so the
+    /// caller can say what it (no longer) points at.
+    DanglingSymlink {
+        target: PathBuf,
+    },
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for BaselineWriteError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
+    }
+}
+
+/// Overwrites an existing baseline durably: the merged document lands at a sibling temp path
+/// first, is fsynced there, and only then does an atomic `rename` swap it into place. A crash,
+/// interrupt, or full disk mid-write leaves the previous baseline — and the owner/tracker
+/// annotations `Baseline::of_preserving` just merged in — fully intact rather than truncated.
+/// `create_baseline_file` above has no pre-existing content to protect, so only this, the overwrite
+/// path, needs the whole guarantee; see its own doc for what a crash can leave there.
+///
+/// The fsync before the rename is what makes the crash half of that true, and it is not
+/// redundant with the rename's atomicity: `rename` is atomic with respect to *other observers*
+/// (no one ever sees a half-swapped name), but it orders only the directory entry, never the
+/// temp file's still-dirty data pages. Without the fsync, a crash shortly after a successful
+/// rename can leave the baseline path present and empty — losing both the previous content and
+/// the annotations merged into it, the exact loss the temp-then-rename exists to prevent. ext4
+/// happens to paper over this for the replace-via-rename pattern via its `auto_da_alloc`
+/// heuristic, but that is one filesystem's courtesy, disabled by `noauto_da_alloc` and absent
+/// elsewhere; this crate ships to adopters on filesystems it does not choose, so the guarantee
+/// is made explicitly rather than borrowed. The directory flush after the rename covers the
+/// other half — that the swapped-in *name* survives — and is best-effort and unix-only, for the
+/// reasons [`sync_parent_dir`] states: it strengthens a write that has already landed, so a
+/// platform or filesystem that cannot flush a directory must not turn that write into a
+/// reported failure.
+///
+/// The swap targets the file's symlink-resolved real path and carries over its existing
+/// permissions: `rename` unconditionally replaces whatever sits at its destination, so renaming
+/// onto `path` directly would silently replace a symlinked baseline with a plain file (orphaning
+/// whatever the symlink pointed at) and reset the mode to the temp file's process-umask default,
+/// silently widening permissions an adopter deliberately narrowed.
+///
+/// The temp file is opened with `create_new` (`O_EXCL`), never a plain create-or-truncate: a
+/// predictable `<target>.tmp-<pid>` name that instead followed whatever already sat there would
+/// let anything pre-planted at that path — a symlink included — receive the write and the
+/// permission change that follows it, corrupting a file this process never intended to touch.
+/// Measured directly: a symlink planted at the predicted temp path, right after the process was
+/// launched, redirected the write and left the baseline's own path as a dangling symlink to the
+/// victim. `create_new` refuses outright if anything already exists there, closing that off
+/// entirely. Its mode is set to match the original file's at creation (`unix` only — permission
+/// bits are not a portable concept), instead of created at the process umask default and narrowed
+/// afterward — also measured: with a 0600 baseline, the temp file was briefly 0664 before the
+/// follow-up `set_permissions` narrowed it.
+///
+/// That follow-up still has to run — `O_CREAT`'s mode is masked by the process umask, so it can only
+/// *narrow*, and a baseline whose own mode is wider than the umask allows (0666 under umask 022)
+/// would otherwise be silently published at 0644. It runs against the **open descriptor**
+/// ([`std::fs::File::set_permissions`], an `fchmod`), never against the temp path. Applying it by
+/// path would re-open the very race `create_new` was chosen to close, one step after closing it:
+/// between the `O_EXCL` open and a path-based `chmod`, anything able to write the baseline's
+/// directory — the same access the `create_new` reasoning above assumes — can unlink the temp file
+/// and plant a symlink at that predictable name, and `chmod` follows it, stamping the baseline's mode
+/// onto a file the attacker chose. A descriptor names the inode this process created, so there is no
+/// second name lookup to win. Measured as the syscall, since the resulting mode is identical either
+/// way and no test bound to it could tell the two apart: the path form issued
+/// `chmod("<target>.tmp-<pid>", 0100666)`, the descriptor form issues `fchmod(4, 0100666)`.
+///
+/// The cleanup on the failure path below stays `remove_file(&tmp_path)`, and is not the same
+/// exposure: `unlink` does not follow symlinks, so a symlink planted at that name is itself what gets
+/// removed, never its target. The temp path is built by appending to the resolved
+/// target's raw `OsString`, never through `Path::display()` (which lossily replaces non-UTF-8
+/// bytes for human-readable formatting) — a resolved path is not guaranteed valid UTF-8, and a
+/// lossy round-trip through a new string can point at a directory that does not exist, failing an
+/// otherwise-valid overwrite outright. `create_new`'s `AlreadyExists` can only come from opening
+/// the temp file itself — the step is split out from the rest so that outcome is reported as
+/// [`BaselineWriteError::TempPathCollision`] (naming the temp path, not this process's io::Error
+/// against the baseline path) rather than inferred from an error kind that could, if a later step
+/// ever changed, silently stop meaning "this process created nothing." Any failure once the temp
+/// file is open unconditionally cleans it up — no kind-based inference needed there, since opening
+/// it is the only step that can fail without this process having created it.
+fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineWriteError> {
+    let target = std::fs::canonicalize(path)?;
+    let permissions = std::fs::metadata(&target)?.permissions();
+    let mut tmp_path = target.clone().into_os_string();
+    tmp_path.push(format!(".tmp-{}", std::process::id()));
+    let tmp_path = PathBuf::from(tmp_path);
+
+    let mut open_options = OpenOptions::new();
+    open_options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::fs::PermissionsExt;
+        open_options.mode(permissions.mode() & 0o777);
+    }
+
+    let mut file = match open_options.open(&tmp_path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(BaselineWriteError::TempPathCollision(tmp_path));
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    // The fsync sits after `set_permissions` and before the `rename`, so one call flushes both
+    // the bytes and the mode change (both live on the same inode) while the temp file is still
+    // the only name reaching them. Syncing before the chmod would leave the mode unflushed; the
+    // rename must come after both, since it is the step that publishes them.
+    let write_result = file
+        .write_all(document.as_bytes())
+        .and_then(|()| file.set_permissions(permissions))
+        .and_then(|()| file.sync_all())
+        .and_then(|()| std::fs::rename(&tmp_path, &target));
+    if let Err(err) = write_result {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(err.into());
+    }
+    sync_parent_dir(&target);
+    Ok(())
 }
 
 /// Gate against a baseline: suppress recorded violations, fail only on new ones,

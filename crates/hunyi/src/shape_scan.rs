@@ -12,7 +12,9 @@ use crate::containment::matches_forbidden;
 use crate::crate_scope::{extern_resolution, file_extern_scope, resolve_principal};
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
-use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
+use crate::resolve::{
+    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_path_operands,
+};
 
 /// A `use`-map per BRANCH, not one shared map over the flattened cross-branch union: two
 /// mutually-exclusive `#[cfg]` branches are never compiled together, so merging their `use`
@@ -23,7 +25,15 @@ use crate::resolve::{ShapeExposure, UseMap, canonical_path_str, collect_uses};
 /// file alone: two mutually-exclusive **inline** `#[cfg]` siblings share one identical enclosing
 /// file, so a file-keyed map would re-merge them — the identical conflation one hop past item
 /// observation, found on a round-8 adversarial review; see `PROJECT.md`'s Decisions.
-fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<usize, UseMap> {
+/// Group `items_with_files` by their branch index, dropping the file. Keyed on the branch index
+/// rather than file alone: two mutually-exclusive inline `#[cfg]` siblings share one identical
+/// enclosing file, so a file-keyed map would re-merge them (round-8 adversarial review; see
+/// `PROJECT.md`'s Decisions). Shared by [`uses_by_branch`] and [`operand_module_findings`], which
+/// each derive a different per-branch map (a `UseMap`, a `FileExternScope`) from the identical
+/// grouping.
+fn group_items_by_branch(
+    items_with_files: &[(syn::Item, PathBuf, usize)],
+) -> HashMap<usize, Vec<syn::Item>> {
     let mut items_by_branch: HashMap<usize, Vec<syn::Item>> = HashMap::new();
     for (item, _file, branch) in items_with_files {
         items_by_branch
@@ -32,6 +42,10 @@ fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<u
             .push(item.clone());
     }
     items_by_branch
+}
+
+fn uses_by_branch(items_with_files: &[(syn::Item, PathBuf, usize)]) -> HashMap<usize, UseMap> {
+    group_items_by_branch(items_with_files)
         .iter()
         .map(|(branch, branch_items)| (*branch, collect_uses(branch_items)))
         .collect()
@@ -53,7 +67,8 @@ pub(crate) fn matches_forbidden_principal(
     forbidden.is_empty()
         || exposure.principals.iter().any(|path| {
             resolve_principal(path, uses, module, resolution, file_scope)
-                .is_some_and(|canonical| matches_forbidden(&canonical, forbidden))
+                .iter()
+                .any(|canonical| matches_forbidden(canonical, forbidden))
         })
 }
 
@@ -95,15 +110,13 @@ pub(crate) fn shape_module_findings<E>(
 
 /// The operand-scoped heart shared by the dyn / impl-trait boundaries: like
 /// [`shape_module_findings`] over [`ShapeExposure`], but additionally resolves each exposure's
-/// principal traits and keeps only those any of whose principal resolves into `forbidden` (via
-/// `resolve_principal` → `matches_forbidden`, exact-or-module-prefix, so a re-exported/aliased trait
-/// facade matches its defining path). An **empty** forbidden set keeps every exposure — the
-/// shape-only semantic, never a silent no-op, safe even if a caller routes an empty set here. An
-/// unresolvable principal (a bare std trait, macro/glob re-export) is dropped: the stated
-/// resolver-coverage bound, never a silent pass of a *resolvable* operand. `collect` is the only
-/// per-boundary difference; the finding stays the rendered shape (parity with the shape-only rule).
-/// Each finding pairs with the real file its own item's branch was resolved from, like
-/// [`shape_module_findings`].
+/// principal traits via `resolve_principal` → `matches_forbidden` and keeps only those any of
+/// whose principal resolves into `forbidden`. See each boundary's "Empty operand set degenerates
+/// to shape-only, never a silent no-op" requirement for why an empty `forbidden` set keeps every
+/// exposure rather than acting as an inert no-op, and its "A dyn/returned impl Trait of a
+/// forbidden operand is a violation" requirement for the unresolvable-principal resolver-coverage
+/// bound. `collect` is the only per-boundary difference. Each finding pairs with the real file its
+/// own item's branch was resolved from, like [`shape_module_findings`].
 pub(crate) fn operand_module_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -116,22 +129,19 @@ pub(crate) fn operand_module_findings(
         impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
+    // A forbidden operand with an empty `::`-segment could never match a resolved canonical
+    // principal — checked before any resolution work, exactly as `exposure::module_findings`
+    // guards its own forbidden set (both share the identical `extern_verbatim_renamed` resolver,
+    // which never produces a leading-`::` canonical path).
+    validate_path_operands(forbidden)?;
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let uses_by_branch = uses_by_branch(&items_with_files);
     // Per-branch, not crate-wide and not per-file: `externs_type`/`renames_bare` derive from a
     // specific branch's own child-module names, so a #[cfg]-split module's several branches must
     // never share one (see `file_extern_scope`'s doc — the identical conflation class round 6 fixed
-    // for the use-map). Keyed on the branch index rather than file alone: two mutually-exclusive
-    // inline `#[cfg]` siblings share one identical enclosing file, so a file-keyed map would
-    // re-merge them (round-8 adversarial review; see `PROJECT.md`'s Decisions).
-    let mut items_by_branch: HashMap<usize, Vec<syn::Item>> = HashMap::new();
-    for (item, _file, branch) in &items_with_files {
-        items_by_branch
-            .entry(*branch)
-            .or_default()
-            .push(item.clone());
-    }
+    // for the use-map).
+    let items_by_branch = group_items_by_branch(&items_with_files);
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
     let file_scopes: HashMap<usize, crate::crate_scope::FileExternScope> = items_by_branch
         .iter()

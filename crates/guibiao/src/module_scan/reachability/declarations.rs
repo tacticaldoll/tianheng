@@ -12,18 +12,29 @@ use super::super::path_vocab::{canonical_segment, is_mod_declaration_keyword};
 /// declarations nested inside it. `direct_path_eq` is the cleaned-text position of the `=` in an
 /// **unconditional** `#[path = "…"]` preceding a FILE declaration — cleaning has already dropped
 /// the quoted value itself, so a caller resolves it by mapping this position back to the
-/// original source (see [`super::lexer::clean_with_positions`]) and reading from there.
+/// original source (see [`super::super::lexer::clean_with_positions`]) and reading from there.
 pub(super) struct DeclaredModule {
     pub(super) name: String,
     pub(super) is_inline: bool,
     pub(super) body: Option<(usize, usize)>,
     pub(super) direct_path_eq: Option<usize>,
     pub(super) conditional_path_eqs: Vec<usize>,
-    /// Whether a BARE `#[cfg(...)]` (never `cfg_attr`) precedes this declaration — see
-    /// [`has_bare_cfg_attr_before_item`]. Only meaningful for a non-inline (file-form) declaration
-    /// with no resolvable file: it is the "might legitimately be absent on this build" signal, the
-    /// same one hunyi's `has_cfg_attr` checks.
-    pub(super) has_bare_cfg: bool,
+    /// Whether this declaration may legitimately have no source file in the current configuration —
+    /// the "might legitimately be absent on this build" signal. Only meaningful for a non-inline
+    /// (file-form) declaration with no resolvable file, where it decides between a tolerated skip and
+    /// a constitution error, for a plain conventional file and for a `#[path]` remap target alike.
+    ///
+    /// Two sources, treated identically because they express one intent:
+    /// - a BARE `#[cfg(...)]` attribute (never `cfg_attr`) precedes the item — see
+    ///   [`has_bare_cfg_attr_before_item`];
+    /// - the declaration sits directly inside a transparent control-flow macro arm (`cfg_if!`), whose
+    ///   predicate lives in the macro's `if #[cfg(..)]` header rather than on the item. Every arm is
+    ///   conditionally compiled by construction, the trailing `else` on its predicate's negation.
+    ///
+    /// Deliberately NOT the same signal as 渾儀's `has_cfg_attr`, which reads only the item's own
+    /// attributes: the semantic dimension does not observe arm declarations at all yet, so it has
+    /// nothing here to agree or disagree with until it does.
+    pub(super) is_cfg_conditional: bool,
 }
 
 struct MacroScope {
@@ -99,6 +110,16 @@ impl TopLevelTracker {
         }
         ScanPosition::Source { is_top_level }
     }
+
+    /// Whether a transparent control-flow macro (`cfg_if!`) body is open at the position last passed
+    /// to [`Self::advance`] — which, combined with the `is_top_level` gate that already restricts
+    /// `mod` observation to a declaration directly in an arm brace, is arm membership.
+    ///
+    /// Read rather than re-derived: scanning backward for a `cfg_if!` header would duplicate this
+    /// scope model and have to re-solve arm-versus-item-body depth, the exact problem the model owns.
+    fn in_transparent_macro(&self) -> bool {
+        !self.macro_scopes.is_empty()
+    }
 }
 
 /// The test-only `declared_modules_with_kind` generalized to scan `cleaned[range]` instead of a
@@ -107,6 +128,20 @@ impl TopLevelTracker {
 /// from a candidate unbounded by `range.start`, which stays correct here: the nearest preceding
 /// `;`/`{`/`}` it finds is either an earlier sibling's terminator within the range or the range's
 /// own enclosing `{`, never a byte outside the declaration it is checking.
+/// The direct/conditional `#[path]` remap pair for the `mod` declaration at `mod_index`, or
+/// `(None, [])` when there is none — the shared shape both the inline (`{`) and file (`;`) forms
+/// below extract identically from [`path_attr_before_item`], so a fix to one cannot silently
+/// diverge from the other.
+fn path_attr_pair(bytes: &[u8], mod_index: usize) -> (Option<usize>, Vec<usize>) {
+    match path_attr_before_item(bytes, mod_index) {
+        PathAttrKind::Remaps {
+            direct,
+            conditional,
+        } => (direct, conditional),
+        PathAttrKind::None | PathAttrKind::Excluded => (None, Vec::new()),
+    }
+}
+
 pub(super) fn declared_modules_in(
     cleaned: &str,
     range: std::ops::Range<usize>,
@@ -162,16 +197,7 @@ pub(super) fn declared_modules_in(
                             // value is captured here (`direct_path_eq`) for exactly that reason;
                             // a `cfg_attr`-wrapped one stays the same stated, cfg-conditional skip
                             // bound as the file-form case (never followed cfg-blind).
-                            let (direct_path_eq, conditional_path_eqs) =
-                                match path_attr_before_item(bytes, i) {
-                                    PathAttrKind::Remaps {
-                                        direct,
-                                        conditional,
-                                    } => (direct, conditional),
-                                    PathAttrKind::None | PathAttrKind::Excluded => {
-                                        (None, Vec::new())
-                                    }
-                                };
+                            let (direct_path_eq, conditional_path_eqs) = path_attr_pair(bytes, i);
                             let close = balanced_group_end(bytes, k).unwrap_or(bytes.len());
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
@@ -179,30 +205,26 @@ pub(super) fn declared_modules_in(
                                 body: Some((k + 1, close.saturating_sub(1))),
                                 direct_path_eq,
                                 conditional_path_eqs,
-                                has_bare_cfg: false,
+                                is_cfg_conditional: false,
                             });
                             i = close;
                             continue;
                         }
                         Some(b';') => {
-                            let has_bare_cfg = has_bare_cfg_attr_before_item(bytes, i);
-                            let (direct_path_eq, conditional_path_eqs) =
-                                match path_attr_before_item(bytes, i) {
-                                    PathAttrKind::Remaps {
-                                        direct,
-                                        conditional,
-                                    } => (direct, conditional),
-                                    PathAttrKind::None | PathAttrKind::Excluded => {
-                                        (None, Vec::new())
-                                    }
-                                };
+                            // Either source makes an absent file legitimate: a bare `#[cfg]` on the
+                            // item, or membership in a `cfg_if!` arm (whose predicate sits in the
+                            // macro header, not on the item). Without the second, the two spellings
+                            // of one per-platform shim get opposite verdicts on the same tree.
+                            let is_cfg_conditional = has_bare_cfg_attr_before_item(bytes, i)
+                                || top_level.in_transparent_macro();
+                            let (direct_path_eq, conditional_path_eqs) = path_attr_pair(bytes, i);
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
                                 is_inline: false,
                                 body: None,
                                 direct_path_eq,
                                 conditional_path_eqs,
-                                has_bare_cfg,
+                                is_cfg_conditional,
                             });
                         }
                         _ => {}

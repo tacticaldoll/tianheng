@@ -148,3 +148,17 @@ pub(crate) fn unreadable_governed_file_error(file: &Path, err: &str) -> String {
         file.display()
     )
 }
+
+/// A package target whose root source file lies outside the package's own manifest directory cannot be
+/// given a checkout-independent identity label, so it is "cannot judge" rather than a silent pass or a
+/// checkout-dependent label — the same ordering 漏刻 applies when refusing a relative or empty anchor.
+pub(crate) fn out_of_package_root_error(crate_package: &str, root: &std::path::Path) -> String {
+    format!(
+        "a violation's identity is labeled by the compilation unit it came from, relative to the \
+         package's own directory, so a crate root outside that directory cannot be judged without a \
+         checkout-dependent identity: crate '{crate_package}' declares a target rooted at '{}', which \
+         is not under the package's manifest directory; move the target's source under the package \
+         directory, or declare the boundary against the package that owns it",
+        root.display()
+    )
+}

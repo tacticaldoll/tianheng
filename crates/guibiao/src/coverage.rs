@@ -19,7 +19,7 @@ pub(crate) fn coverage_from(members: Vec<String>, constitution: &Constitution) -
     for boundary in constitution.boundaries() {
         match boundary {
             Boundary::Crate(b) => targeted.push(b.target().package.as_str()),
-            Boundary::Module(b) => targeted.push(b.crate_package.as_str()),
+            Boundary::Module(b) => targeted.push(b.crate_package()),
         }
     }
     let total = members.len();

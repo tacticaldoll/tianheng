@@ -46,11 +46,6 @@ impl AsyncExposureBoundary {
         }
     }
 
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
     /// The governed module path (e.g. `crate::core`).
     pub fn module(&self) -> &str {
         &self.module
@@ -61,30 +56,14 @@ impl AsyncExposureBoundary {
         &self.reason
     }
 
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional; a boundary with
-    /// none projects and reacts exactly as before.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-
     /// Whether the reaction descends the anchored module's whole subtree (`true`) or governs only
     /// its own items (`false`, the default).
     pub fn including_submodules(&self) -> bool {
         self.depth == ScanDepth::Subtree
     }
 }
+
+crate::dsl::boundary_common!(AsyncExposureBoundary, AsyncExposureBoundaryDraft);
 
 /// An async-exposure boundary awaiting its module anchor.
 #[doc(hidden)]
@@ -142,20 +121,13 @@ impl AsyncExposureBoundaryDraft {
         self
     }
 
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
     /// Descend the anchored module's **whole subtree**: a public `async fn` in any descendant
     /// module reacts, not only one at the anchored module's own seam. Off by default (the boundary
     /// governs the declared seam alone); with it, anchoring at `crate` governs the whole crate —
-    /// the sans-I/O-purity shape. Mirrors [`SemanticBoundary`]'s `including_trait_impls` opt-in:
+    /// the sans-I/O-purity shape. Mirrors [`SignatureBoundary`]'s `including_trait_impls` opt-in:
     /// projected only when set, so a bare boundary stays byte-identical.
     ///
-    /// [`SemanticBoundary`]: crate::SemanticBoundary
+    /// [`SignatureBoundary`]: crate::SignatureBoundary
     pub fn including_submodules(self) -> Self {
         self.depth(ScanDepth::Subtree)
     }

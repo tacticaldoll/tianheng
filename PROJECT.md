@@ -42,6 +42,16 @@ an explanatory report. The reaction MUST never silently pass, and MUST distingui
 boundary violation (exit 1) from a constitution error / misconfiguration (exit 2). The
 one forbidden bug is a **false negative** (a real violation that silently passes).
 
+**Non-bypassable, precisely.** The governed code's own *shape* cannot make a declared boundary stop
+reacting: no spelling, alias, re-export, `cfg` arm, or macro form escapes observation, and where an
+observation genuinely cannot decide, the reaction is exit 2 rather than a pass. What an observation
+must never accept is a value the observed code chose for itself — a declaration wearing an
+observation's name. 漏刻's runtime origin is the worked example: it is **derived from the type** (the
+module the concrete type is defined in), never taken from the registering call, so no code in the
+process can present a type under an origin it does not have. `runtime-origin-assertion` states it in
+full. A governance tool must claim exactly the guarantee it has — neither more, which is a lie, nor
+less, which invites the workaround.
+
 ## 潛移 (Qiányí) — govern by gravity, too: the idiom is imitated, the reaction is the backstop
 
 The reaction binds, but an autoregressive agent is first an **imitation engine** — it
@@ -193,10 +203,16 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   its partial coverage — bare path expressions and macro-generated imports are out of scope —
   is acceptable because the drift law only enforces what is observed. An unconditional, direct
   `#[path = "…"]` remap is **followed** to its target (0.2.2), matching 渾儀/漏刻, so all three
-  observation dimensions agree on what rustc compiles; a `cfg_attr`-wrapped `path = "…"` stays a
-  cfg-conditional exclusion from the conventional module graph (following it cfg-blind could read
-  a file rustc does not compile in the active configuration), so it fails loud rather than
-  governing a same-named orphan. Comments and
+  observation dimensions agree on what rustc compiles; a `cfg_attr`-wrapped `path = "…"` is
+  **union-scanned** (0.3.x) — every candidate that physically exists on disk is followed, never
+  either silently preferred over the conventional file or dropped for being cfg-conditional. A
+  candidate that resolves is also treated as legitimate grounds for the conventional file's own
+  absence — the same "might legitimately be absent on this build" signal a bare `#[cfg]` or a
+  `cfg_if!` arm already carries — so a module backed only by one or more `cfg_attr(path)` remaps
+  (e.g. two stacked, jointly-exhaustive per-platform attributes, neither a plain file nor a direct
+  `#[path]`) is governed rather than hard-errored, matching 渾儀/漏刻's identical rule for the same
+  shape. Only when every candidate is absent, with no other cfg-conditional gate, does it fail
+  loud rather than governing a same-named orphan. Comments and
   string literals (normal, byte, and raw) are stripped so their text is never mistaken
   for a `use`. A module's identity is derived in three places — its file path, its `mod`
   declaration, and a `use` path that names it — and these MUST stay in lockstep, since a
@@ -207,6 +223,12 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   `use` is attributed to the inline `mod { … }` that encloses it (so `self`/`super`
   resolve correctly); macro bodies are stripped before scanning for `mod` declarations
   too, not just `use`s, so the out-of-scope rule for macro-generated items is symmetric.
+  One macro is carved out of that stripping in **all three** dimensions: `cfg_if!`, whose
+  arms wrap human-authored items without transforming their identities, so its contents
+  are real code (圭表 0.2.3, 渾儀 and 漏刻 0.4.0 — each hand-written, 三儀 ⊥ 三儀, with
+  `cfg_if_transparency_conformance.rs` as the drift reaction). Gating that carve-out on the
+  macro **name** is soundness, not caution: an arbitrary macro's nested blocks are not arms,
+  and reading them as such invents items the macro may never emit.
   Adopting a real parser (`syn`) would resolve all of this for free but would break the
   dependency-light core (the `serde_json`-only self-law); that is an amendment, not a
   silent trade. A boundary's governed *target* is file-based: an inline `mod name { … }`
@@ -220,7 +242,7 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **`xingbiao` is the shared workspace-data substrate.** Cargo metadata reading logic is consolidated into `xingbiao` below the 三儀 to prevent twin-drift.
 - **The semantic capability-admission test (the gate against lints).** A semantic capability is admissible in 渾儀 iff: (1) declarative-not-lint; (2) no essential gap on local-crate AST; (3) anchorable to a `syn`-resolvable element.
 - **Name resolution is a 渾儀-internal shared layer (`hunyi::resolve`).** `guibiao` (syn-free scanner) and `hunyi` (`syn` AST) retain separate resolution engines to maintain the syn quarantine.
-- **漏刻 (runtime) is identity-coherent.** Prod face (`assert_boundary!`) is std-light and fail-closed; CI face (`audit_probe_coverage`) is feature-gated behind `audit` (`xingbiao` dependency).
+- **漏刻 (runtime) is identity-coherent.** Prod face (`assert_boundary!`) is std-light and fail-closed; CI face (`audit_probe_coverage`) is feature-gated behind `audit` (`xingbiao` dependency). The shipped default sink never panics on a broken stderr write, and never silently loses that failure either: it counts it (`dropped_sink_events`), a single infallible atomic add, so an adopter who never calls `set_sink` can still detect the loss from outside the process.
 - **Violation identity is a structured observed fact, not presentation.** 璇璣 carries the vocabulary-neutral `ViolationId`, constructed from a governed target, a validated `RuleKey`, and a `StructuredFactIdentity` — `(target, rule_key, fact)` — with each dimension owning its own fact schemas. Diagnostic text and file paths stay out of baseline identity.
 - **Unsafe-site identity is structurally decomposed, not compressed into one label.** 渾儀's unsafe-confinement fact carries owner, owner kind, trait, and name as separate structured fields across nine site shapes (free fn, inherent/trait/trait-impl method, inherent/trait impl, trait, extern block, block), so two distinct sites sharing a name never collapse under one baseline entry.
 - **Async identity is the seam, not the rendered signature.** An async-exposure fact's identity is its module, owner kind, canonical owner, and item name; the full parameter/return signature is human diagnostic presentation only and never enters identity — a signature-only change preserves the baseline, while a different owner or name is a new fact.

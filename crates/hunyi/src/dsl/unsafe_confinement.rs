@@ -38,11 +38,6 @@ impl UnsafeBoundary {
         }
     }
 
-    /// The crate this boundary governs.
-    pub fn crate_package(&self) -> &str {
-        &self.crate_package
-    }
-
     /// The allowed subtree module paths where `unsafe` MAY appear.
     pub fn allowed_locations(&self) -> &[String] {
         &self.allowed_locations
@@ -52,24 +47,9 @@ impl UnsafeBoundary {
     pub fn reason(&self) -> &str {
         &self.reason
     }
-
-    /// Attach a durable governance anchor (e.g. `"ADR-014"`) — a stable pointer into the
-    /// project's governance, distinct from the free-text `reason`. Optional.
-    pub fn with_anchor(mut self, anchor: &str) -> Self {
-        self.anchor = Some(anchor.to_string());
-        self
-    }
-
-    /// The durable governance anchor recorded with the boundary, if any.
-    pub fn anchor(&self) -> Option<&str> {
-        self.anchor.as_deref()
-    }
-
-    /// The boundary's severity (`enforce` or `warn`).
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
 }
+
+crate::dsl::boundary_common!(UnsafeBoundary, UnsafeBoundaryDraft);
 
 /// An unsafe-confinement boundary awaiting its allowed subtree(s).
 #[doc(hidden)]
@@ -104,13 +84,6 @@ pub struct UnsafeBoundaryDraft {
 }
 
 impl UnsafeBoundaryDraft {
-    /// Make this an advisory (`warn`) boundary: violations are reported but do not fail the
-    /// reaction — the first rung of adoption.
-    pub fn warn(mut self) -> Self {
-        self.severity = Severity::Warn;
-        self
-    }
-
     /// Finish the boundary with its human-readable reason (the repair hint).
     pub fn because(self, reason: &str) -> UnsafeBoundary {
         UnsafeBoundary {
