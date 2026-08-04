@@ -2357,13 +2357,18 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
 ///
 /// The fall-through is not a lost diagnostic: `write_baseline`'s `create_new && AlreadyExists` arm
 /// already says "it appeared while the new snapshot was being prepared", which is exactly what happened.
+///
+/// **`#[cfg(unix)]` covers the whole test, not only the symlink calls.** Gating just those left the
+/// assertions running on Windows against paths nothing had created, where `create_baseline_file`
+/// succeeds and the very first `match` arm panics. A test that cannot construct its subject must not
+/// run, rather than run and assert about something else.
+#[cfg(unix)]
 #[test]
 fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
     let dir = TempPath::named("symlink-classification");
     std::fs::create_dir_all(dir.path()).expect("create dir");
 
     let dangling = dir.path().join("dangling-baseline.json");
-    #[cfg(unix)]
     std::os::unix::fs::symlink(dir.path().join("absent.json"), &dangling).expect("dangling link");
     match create_baseline_file(&dangling.to_string_lossy(), "{}") {
         Err(BaselineWriteError::DanglingSymlink { target }) => {
@@ -2379,7 +2384,6 @@ fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
     let real = dir.path().join("real.json");
     std::fs::write(&real, "{}").expect("write target");
     let live = dir.path().join("live-baseline.json");
-    #[cfg(unix)]
     std::os::unix::fs::symlink(&real, &live).expect("live link");
     match create_baseline_file(&live.to_string_lossy(), "{}") {
         Err(BaselineWriteError::Io(err)) => {
@@ -2393,6 +2397,37 @@ fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
         other => panic!(
             "a symlink whose target resolves must NOT be reported as dangling — the message would \
              name a cause that does not hold: {other:?}"
+        ),
+    }
+
+    // The target EXISTS but cannot be reached. `metadata` follows the link and fails here too, so any
+    // "metadata failed" test calls this dangling and tells the adopter to recreate a file that is
+    // already there. Only absence — `NotFound` — is dangling. This arm needs no race to construct,
+    // unlike the one above.
+    use std::os::unix::fs::PermissionsExt;
+    let locked = dir.path().join("locked");
+    std::fs::create_dir_all(&locked).expect("create locked dir");
+    let hidden = locked.join("target.json");
+    std::fs::write(&hidden, "{}").expect("write hidden target");
+    let unreachable = dir.path().join("unreachable-baseline.json");
+    std::os::unix::fs::symlink(&hidden, &unreachable).expect("link into locked dir");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+        .expect("lock the directory");
+    let outcome = create_baseline_file(&unreachable.to_string_lossy(), "{}");
+    // Restore before asserting, so a failure cannot leave an undeletable temp tree behind.
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+        .expect("unlock the directory");
+    match outcome {
+        Err(BaselineWriteError::Io(err)) => {
+            assert_ne!(
+                err.kind(),
+                std::io::ErrorKind::NotFound,
+                "the target is present, merely unreachable"
+            );
+        }
+        other => panic!(
+            "a symlink whose target exists but is unreachable must NOT be reported as dangling: \
+             {other:?}"
         ),
     }
 }
