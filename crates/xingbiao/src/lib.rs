@@ -80,8 +80,17 @@ fn target_has_kind(target: &Value, wanted: &str) -> bool {
 /// Empty when the metadata reports no target — the shape synthetic metadata in a caller's own tests
 /// carries. A caller SHALL treat that as "fall back to the conventional source directory", not as "this
 /// package has no source": dropping that fallback silently un-governs every such test fixture.
+///
+/// The uniqueness is **total**, not adjacency-dependent, and that distinction is load-bearing here in a
+/// way it is not in [`member_root_files`] (which sorts first, so `Vec::dedup` is total for it by
+/// construction). Two targets may name the same `path` — Cargo accepts it and builds both — and Cargo
+/// reports targets sorted by NAME, so the two reports are adjacent only if no third target's name sorts
+/// between them. `Vec::dedup` alone therefore left `[x, y, x]` intact, and the root was scanned once per
+/// report. Order is Cargo's own and is preserved, because a caller's sibling-root exclusion reads this
+/// slice positionally against the root it is currently walking.
 pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
-    let mut roots: Vec<PathBuf> = package["targets"]
+    let mut seen = std::collections::HashSet::new();
+    package["targets"]
         .as_array()
         .into_iter()
         .flatten()
@@ -89,9 +98,8 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
             LIBRARY_KINDS.iter().any(|k| target_has_kind(t, k)) || target_has_kind(t, "bin")
         })
         .filter_map(|t| t["src_path"].as_str().map(PathBuf::from))
-        .collect();
-    roots.dedup();
-    roots
+        .filter(|root| seen.insert(root.clone()))
+        .collect()
 }
 
 /// A compilation unit's stable identity label: its root source path **relative to the package's own

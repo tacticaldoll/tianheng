@@ -160,6 +160,71 @@ fn a_package_with_no_library_governs_its_first_binary_root() {
     );
 }
 
+/// A root Cargo reports **twice** yields one violation, not two.
+///
+/// **This test pins the contract, not a change.** It passed before `xingbiao::crate_root_files` was made
+/// totally unique and passes after, and saying so is the point: the reason it passed is that both static
+/// dimensions dedup violations by [`xuanji::ViolationId`] before reporting (`guibiao/src/lib.rs`,
+/// `hunyi/src/driver.rs`), each for its own unrelated stated reason — two identical boundaries declared
+/// on one constitution. That dedup is what kept a duplicated corpus from ever being visible, which is
+/// exactly why the duplication survived unnoticed. Measured directly: with `dedup` in place
+/// `crate_root_files` returned `[shared.rs, between.rs, shared.rs]` for the manifest below, and this
+/// assertion still held.
+///
+/// It is kept because the property an adopter depends on is this one — a root Cargo names twice is one
+/// architectural fact — and because it would now catch the composition failing from the other side, if
+/// a consumer's identity dedup were ever removed or narrowed.
+///
+/// Asserted on the real [`xuanji::Violation::id`] rather than on the reported `file`, because `file`
+/// is not identity: two genuinely distinct violations can share one file, so counting files would
+/// answer a different question than the one this test asks.
+#[test]
+fn a_root_cargo_reports_twice_is_scanned_once() {
+    let probe = RootProbe::new(
+        "twicereported",
+        // The target NAMES carry this test, not the declaration order: `cargo metadata` reports
+        // targets sorted by name (measured — declaring `first`/`between`/`third` in that order
+        // reports them as `between`, `first`, `third`). So the duplicate is separated only if the
+        // name that sorts between the two `shared.rs` targets belongs to the OTHER file. `a`, `b`,
+        // `c` gives `shared.rs`, `between.rs`, `shared.rs`; naming them `first`/`between`/`third`
+        // instead sorts the two duplicates adjacent, where `dedup` does collapse them and this test
+        // passes against the very defect it is written to catch.
+        "[[bin]]\nname = \"a\"\npath = \"src/shared.rs\"\n\n\
+         [[bin]]\nname = \"b\"\npath = \"src/between.rs\"\n\n\
+         [[bin]]\nname = \"c\"\npath = \"src/shared.rs\"\n",
+        &[
+            ("src/shared.rs", &format!("fn main() {{}}\n{OFFENDING}")),
+            ("src/between.rs", "fn main() {}\n"),
+        ],
+    );
+
+    let outcome = check(&clock_free("twicereported"), probe.manifest());
+    let Outcome::Violations(report) = &outcome else {
+        panic!("expected Violations, got {outcome:?}");
+    };
+
+    let mut ids: Vec<_> = report.violations.iter().map(|v| v.id()).collect();
+    let total = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(
+        ids.len(),
+        total,
+        "a root Cargo reports twice must be scanned once: {total} violation(s) carry only \
+         {} distinct identities, so the duplicate would be indistinguishable in a baseline — \
+         accepting it once accepts it always, and a second real occurrence could never be told \
+         apart from the echo. Reported files: {:?}",
+        ids.len(),
+        reacting_files(&outcome)
+    );
+    assert_eq!(
+        total,
+        1,
+        "the shared root holds exactly one forbidden call, so exactly one violation is expected: {:?}",
+        reacting_files(&outcome)
+    );
+}
+
 /// The one root shape that is **refused** rather than governed: a target whose source lies outside the
 /// package's own directory.
 ///
