@@ -13,6 +13,8 @@ use crate::driver::run_boundaries;
 use crate::dsl::UnsafeBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{unsafe_crate_root_allowed_error, unsafe_empty_allowed_error};
+// Crate-scoped: this boundary anchors at no module, so nothing can be absent from one unit
+// and present in another — every per-unit failure propagates.
 use crate::file_scope::resolve_crate_units;
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{canonical_path_str, validate_path_operands};

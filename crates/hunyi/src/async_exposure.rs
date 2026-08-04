@@ -14,7 +14,8 @@ use crate::emit::{
     MultiModuleViolationContext, SingleModuleViolationContext, push_multi_module_violations,
     push_single_module_violations,
 };
-use crate::file_scope::resolve_crate_units;
+use crate::errors::unknown_module_error;
+use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::collect_uses;
 use crate::rules::ASYNC_EXPOSURE_RULE;
@@ -40,61 +41,83 @@ pub(crate) fn check_async_exposure_boundary(
     // Each of a package's crate roots is its own compilation unit: same module path `crate`,
     // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
     // is observed, with the unit carried into each finding's identity.
+    let mut governed_somewhere = false;
+    let mut deferred: Option<String> = None;
     for (root_file, src_dir, unit) in &units {
-        let src_dir = src_dir.as_path();
-        let unit = unit.as_str();
-        let rule_key = boundary.rule_key();
+        let unit_outcome = (|| -> Result<(), String> {
+            let src_dir = src_dir.as_path();
+            let unit = unit.as_str();
+            let rule_key = boundary.rule_key();
 
-        // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
-        // The default path governs only the anchored module's own seam (byte-identical to before).
-        if boundary.including_submodules() {
-            let findings = async_exposure_subtree_findings(
+            // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
+            // The default path governs only the anchored module's own seam (byte-identical to before).
+            if boundary.including_submodules() {
+                let findings = async_exposure_subtree_findings(
+                    src_dir,
+                    root_file,
+                    &boundary.module,
+                    &boundary.crate_package,
+                )?;
+                push_multi_module_violations(
+                    violations,
+                    MultiModuleViolationContext {
+                        target: &boundary.module,
+                        rule: ASYNC_EXPOSURE_RULE,
+                        rule_key,
+                        reason: &boundary.reason,
+                        severity: boundary.severity,
+                        anchor: boundary.anchor(),
+                        polarity: Polarity::DenyBreach,
+                        crate_package: &boundary.crate_package,
+                        unit,
+                    },
+                    findings,
+                );
+                return Ok(());
+            }
+
+            let findings = async_exposure_module_findings(
                 src_dir,
                 root_file,
                 &boundary.module,
                 &boundary.crate_package,
             )?;
-            push_multi_module_violations(
+
+            push_single_module_violations(
                 violations,
-                MultiModuleViolationContext {
-                    target: &boundary.module,
+                SingleModuleViolationContext {
+                    module: &boundary.module,
                     rule: ASYNC_EXPOSURE_RULE,
                     rule_key,
                     reason: &boundary.reason,
                     severity: boundary.severity,
                     anchor: boundary.anchor(),
-                    polarity: Polarity::DenyBreach,
                     crate_package: &boundary.crate_package,
                     unit,
                 },
                 findings,
             );
-            return Ok(());
+            Ok(())
+        })();
+        match unit_outcome {
+            Ok(()) => governed_somewhere = true,
+            Err(reason)
+                if is_anchor_absent_from_unit(
+                    &reason,
+                    &unknown_module_error(&boundary.module, &boundary.crate_package),
+                ) =>
+            {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+            Err(reason) => return Err(reason),
         }
-
-        let findings = async_exposure_module_findings(
-            src_dir,
-            root_file,
-            &boundary.module,
-            &boundary.crate_package,
-        )?;
-
-        push_single_module_violations(
-            violations,
-            SingleModuleViolationContext {
-                module: &boundary.module,
-                rule: ASYNC_EXPOSURE_RULE,
-                rule_key,
-                reason: &boundary.reason,
-                severity: boundary.severity,
-                anchor: boundary.anchor(),
-                crate_package: &boundary.crate_package,
-                unit,
-            },
-            findings,
-        );
     }
-    Ok(())
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
 }
 
 /// The pure heart of the **subtree** async-exposure reaction: walk the anchored module's whole

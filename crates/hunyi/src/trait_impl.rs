@@ -14,7 +14,7 @@ use crate::driver::run_boundaries;
 use crate::dsl::TraitImplBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
 use crate::errors::{ambiguous_trait_anchor_error, unknown_trait_error};
-use crate::file_scope::resolve_crate_units;
+use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     AliasMap, BareFallback, canonical_path_str, canonical_self_owner, expand_canonical_paths,
@@ -46,53 +46,78 @@ pub(crate) fn check_trait_impl_boundary(
     // Each of a package's crate roots is its own compilation unit: same module path `crate`,
     // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
     // is observed, with the unit carried into each finding's identity.
+    let mut governed_somewhere = false;
+    let mut deferred: Option<String> = None;
     for (root_file, src_dir, unit) in &units {
-        let src_dir = src_dir.as_path();
-        let unit = unit.as_str();
+        let unit_outcome = (|| -> Result<(), String> {
+            let src_dir = src_dir.as_path();
+            let unit = unit.as_str();
 
-        let TraitImplReaction { anchor, findings } = trait_impl_findings(
-            src_dir,
-            root_file,
-            &boundary.trait_path,
-            &boundary.allowed_locations,
-            &boundary.crate_package,
-        )?;
+            let TraitImplReaction { anchor, findings } = trait_impl_findings(
+                src_dir,
+                root_file,
+                &boundary.trait_path,
+                &boundary.allowed_locations,
+                &boundary.crate_package,
+            )?;
 
-        // Both identity components are keyed on the RESOLVED anchor, not the declared spelling: the same
-        // trait declared through a facade `pub use` and through its defining path is one governed thing,
-        // so it must produce one `ViolationId`. Matching already resolved both sides; only identity kept
-        // the raw declaration, so renaming a constitution declaration between two equivalent spellings —
-        // a pure refactor with no code change — silently invalidated every affected baseline entry.
-        //
-        // `allowed_locations` remains inside the rule key. An earlier version of this comment claimed the
-        // opposite ("not part of the violation's identity — so editing the allowed set does not turn a
-        // still-misplaced impl into a new violation"), which `ViolationId`'s own equality contradicts: it
-        // compares `rule_key` in full. Keeping the allowed set in the key is what stops two boundaries
-        // governing the same trait with different allowed sets from collapsing onto one identity for one
-        // misplaced impl, which would let a baseline accepting the first suppress the second's
-        // never-accepted violation. The cost is real and now stated rather than denied: editing the
-        // allowed set re-fires still-misplaced impls as new and reports the old entries stale — loud
-        // churn, never masking.
-        let target = anchor;
-        // Each finding carries the module its offending impl sits in; the shared emit helper resolves
-        // that module's source file (memoized per module) and stamps the allowlist-gap polarity.
-        push_multi_module_violations(
-            violations,
-            MultiModuleViolationContext {
-                target: &target,
-                rule: TRAIT_IMPL_RULE,
-                rule_key: boundary.rule_key_for_anchor(&target),
-                reason: &boundary.reason,
-                severity: boundary.severity,
-                anchor: boundary.anchor(),
-                polarity: Polarity::AllowlistGap,
-                crate_package: &boundary.crate_package,
-                unit,
-            },
-            findings,
-        );
+            // Both identity components are keyed on the RESOLVED anchor, not the declared spelling: the same
+            // trait declared through a facade `pub use` and through its defining path is one governed thing,
+            // so it must produce one `ViolationId`. Matching already resolved both sides; only identity kept
+            // the raw declaration, so renaming a constitution declaration between two equivalent spellings —
+            // a pure refactor with no code change — silently invalidated every affected baseline entry.
+            //
+            // `allowed_locations` remains inside the rule key. An earlier version of this comment claimed the
+            // opposite ("not part of the violation's identity — so editing the allowed set does not turn a
+            // still-misplaced impl into a new violation"), which `ViolationId`'s own equality contradicts: it
+            // compares `rule_key` in full. Keeping the allowed set in the key is what stops two boundaries
+            // governing the same trait with different allowed sets from collapsing onto one identity for one
+            // misplaced impl, which would let a baseline accepting the first suppress the second's
+            // never-accepted violation. The cost is real and now stated rather than denied: editing the
+            // allowed set re-fires still-misplaced impls as new and reports the old entries stale — loud
+            // churn, never masking.
+            let target = anchor;
+            // Each finding carries the module its offending impl sits in; the shared emit helper resolves
+            // that module's source file (memoized per module) and stamps the allowlist-gap polarity.
+            push_multi_module_violations(
+                violations,
+                MultiModuleViolationContext {
+                    target: &target,
+                    rule: TRAIT_IMPL_RULE,
+                    rule_key: boundary.rule_key_for_anchor(&target),
+                    reason: &boundary.reason,
+                    severity: boundary.severity,
+                    anchor: boundary.anchor(),
+                    polarity: Polarity::AllowlistGap,
+                    crate_package: &boundary.crate_package,
+                    unit,
+                },
+                findings,
+            );
+            Ok(())
+        })();
+        // A governed TRAIT is as unit-varying as a governed module: it exists in the library root's
+        // graph and not in a `src/bin/*.rs` root's. Absence defers to the other units; every other
+        // failure propagates now.
+        match unit_outcome {
+            Ok(()) => governed_somewhere = true,
+            Err(reason)
+                if is_anchor_absent_from_unit(
+                    &reason,
+                    &unknown_trait_error(&boundary.trait_path, &boundary.crate_package),
+                ) =>
+            {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+            Err(reason) => return Err(reason),
+        }
     }
-    Ok(())
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
 }
 
 /// One trait-impl-locality evaluation's result: the anchor the declaration resolved to, and the

@@ -76,3 +76,20 @@ pub(crate) fn resolve_crate<'m>(
         .to_path_buf();
     Ok((package, root_file, src_dir))
 }
+
+/// Whether a per-unit failure is the one kind that legitimately varies BETWEEN units: the boundary's
+/// **anchor** is absent from this root's graph — whichever kind of anchor it is, a governed module or a
+/// governed trait.
+///
+/// A package's roots are separate compilation units, so a library's internals are not the binary's — a
+/// boundary anchored at `crate::api` is real for the library root and meaningless for a `src/bin/*.rs`
+/// root beside it. Erroring per root would refuse to judge source that compiles; the caller therefore
+/// defers this one failure and reports it only if NO unit hosts the module.
+///
+/// The caller passes its own canonical absence error rather than a substring, so a change to the message
+/// moves both sides together. Every OTHER failure — an unreadable source, a resolution ambiguity, a root
+/// outside the package directory — propagates immediately: deferring it until a sibling unit happened to
+/// be governable would silently pass over source the system could not read.
+pub(crate) fn is_anchor_absent_from_unit(err: &str, canonical_absence: &str) -> bool {
+    err == canonical_absence
+}

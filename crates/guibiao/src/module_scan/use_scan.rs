@@ -51,10 +51,10 @@ impl std::ops::Deref for ImportedPath {
 /// Each internal import paired with the **module that actually declares it** — inline-aware, so a
 /// `use` inside an inline `mod inner { … }` is attributed to `{current_module}::inner`, not the
 /// file's module. The inbound rules (`MustNotBeImportedBy` / `MustOnlyBeImportedBy`) test the
-/// *importer's* identity, so they need this pair; [`imported_module_paths`] keeps only the absolute
-/// import path (right for the outbound rules, which test the import), discarding the importer an
-/// inbound rule would otherwise mis-attribute to the file's module. Sorted + deduped by
-/// `(importer, import)`.
+/// *importer's* identity, and so do the OUTBOUND rules since their finding carries the importing module
+/// too — one accessor for both families, so they cannot disagree about who imported something. An
+/// import inside an inline `mod inner { … }` is attributed to that module, not the containing file's.
+/// Sorted + deduped by `(importer, import)`.
 pub(crate) fn imports_with_importers(
     source: &str,
     current_module: &str,

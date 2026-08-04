@@ -13,6 +13,17 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- `structured-violation-identity` now derives identity completeness rather than leaving it to review: a
+  fact carries every coordinate of **where** the observation was made that can vary — the governing
+  declaration, the compilation unit, the module, the owner or item, and the position-free discriminator
+  within that item — and carries none that cannot. Every identity collision this system has had was a
+  missing coordinate found one adversarial review at a time, seven of them in this window alone. The
+  requirement also records why pre-emptive schema widening is not the answer: an identity is its *values*,
+  measured on the real type (no field ≠ an empty field ≠ a real value), so declaring a field early re-keys
+  every baseline once for the field and again when the value arrives. Each dimension's
+  published-identity-schema test is the enforcement point, and it earned that immediately — adding the
+  assertion found 渾儀's unsafe-site fact carrying no compilation unit, where `crate::m` in a library and
+  `crate::m` in the `bin` beside it would otherwise have shared one identity.
 - Swept every repository document for drift against the code, mechanically rather than by reading: each
   referenced repo path exists, each referenced script exists, each cross-referenced capability has a
   spec directory, `PROJECT.md`'s architecture section describes all six crates, and every crate carries
@@ -186,6 +197,28 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change.
 
 ### Fixed
+- **BREAKING**: 圭表 and 渾儀 now govern **every** compiled root of a package — a `main.rs` beside a
+  `lib.rs`, any `src/bin/*.rs`, any `[[bin]] path` — each as its own module graph, and every module and
+  semantic fact carries the **compilation unit** it came from as an identity role (the root's source path
+  relative to the package's own directory). Previously only the first library-kind target, else the first
+  `bin`, was observed, so a violation written in any other root of the same package passed silently — the
+  forbidden false negative, on the most ordinary Rust package shape. 漏刻 already governed every root, so
+  the three dimensions now agree on which of a package's source Cargo actually compiles.
+  The identity role is what keeps the fix from trading one defect for another: every root denotes the
+  module path `crate` and shares the package name, so without it the same violation in two roots would
+  carry one identity and a baseline accepting it in one root would silently mask the other's.
+  A target's **name** is not that role — a package may build a library and a `bin` of the same name, as
+  this repository does — and a root whose path lies outside the package's own directory is a **constitution
+  error** (exit 2) rather than being labeled by the checkout's location, which would make the identity
+  differ between two clones of one commit. That refusal is narrow: a root inside the package but outside
+  its source directory is governed normally.
+  Also **BREAKING**: an outbound rule's finding now carries its **importing module**. Two different modules
+  of a governed subtree importing the same forbidden path used to collapse into one finding, so accepting
+  it in a baseline masked the other; the inbound rules had always qualified by importer, and the two
+  families are now symmetric. The dedup key is the (importing module, import path) pair.
+  **Migration**: every module and semantic baseline entry re-keys, absorbed by the single regeneration this
+  release already requires. Expect **new** entries too, not only relabeled ones: a violation in a second
+  crate root, or in a second module importing an already-recorded path, was never reported before.
 - **BREAKING**: 漏刻 no longer relativizes the identity label of a file reached through an **absolute**
   `#[path = "/…"]` literal — it keeps the path the literal wrote, in every checkout. This closes the last
   open identity gap in the window. Relativizing it *was* the gap: prefix-stripping succeeds by pure text

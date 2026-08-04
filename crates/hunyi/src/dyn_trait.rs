@@ -12,7 +12,8 @@ use crate::crate_scope::dependency_names;
 use crate::driver::run_boundaries;
 use crate::dsl::DynTraitBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::file_scope::resolve_crate_units;
+use crate::errors::unknown_module_error;
+use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
 use crate::finding::{ExposureKind, SemanticFact, shape_finding};
 use crate::rules::DYN_TRAIT_RULE;
 use crate::shape_scan::{operand_module_findings, shape_module_findings};
@@ -37,46 +38,68 @@ pub(crate) fn check_dyn_trait_boundary(
     // Each of a package's crate roots is its own compilation unit: same module path `crate`,
     // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
     // is observed, with the unit carried into each finding's identity.
+    let mut governed_somewhere = false;
+    let mut deferred: Option<String> = None;
     for (root_file, src_dir, unit) in &units {
-        let src_dir = src_dir.as_path();
-        let unit = unit.as_str();
+        let unit_outcome = (|| -> Result<(), String> {
+            let src_dir = src_dir.as_path();
+            let unit = unit.as_str();
 
-        // Empty operand set ⇒ shape-only (any dyn), using the resolution-free path unchanged; a
-        // named set ⇒ operand-scoped, resolving each dyn's principal trait against the forbidden set.
-        let findings = if boundary.forbidden_operands.is_empty() {
-            dyn_module_findings(
-                src_dir,
-                root_file,
-                &boundary.module,
-                &boundary.crate_package,
-            )?
-        } else {
-            dyn_operand_module_findings(
-                src_dir,
-                root_file,
-                &boundary.module,
-                &boundary.forbidden_operands,
-                &boundary.crate_package,
-                &dependency_names(package),
-            )?
-        };
+            // Empty operand set ⇒ shape-only (any dyn), using the resolution-free path unchanged; a
+            // named set ⇒ operand-scoped, resolving each dyn's principal trait against the forbidden set.
+            let findings = if boundary.forbidden_operands.is_empty() {
+                dyn_module_findings(
+                    src_dir,
+                    root_file,
+                    &boundary.module,
+                    &boundary.crate_package,
+                )?
+            } else {
+                dyn_operand_module_findings(
+                    src_dir,
+                    root_file,
+                    &boundary.module,
+                    &boundary.forbidden_operands,
+                    &boundary.crate_package,
+                    &dependency_names(package),
+                )?
+            };
 
-        push_single_module_violations(
-            violations,
-            SingleModuleViolationContext {
-                module: &boundary.module,
-                rule: DYN_TRAIT_RULE,
-                rule_key: boundary.rule_key(),
-                reason: &boundary.reason,
-                severity: boundary.severity,
-                anchor: boundary.anchor(),
-                crate_package: &boundary.crate_package,
-                unit,
-            },
-            findings,
-        );
+            push_single_module_violations(
+                violations,
+                SingleModuleViolationContext {
+                    module: &boundary.module,
+                    rule: DYN_TRAIT_RULE,
+                    rule_key: boundary.rule_key(),
+                    reason: &boundary.reason,
+                    severity: boundary.severity,
+                    anchor: boundary.anchor(),
+                    crate_package: &boundary.crate_package,
+                    unit,
+                },
+                findings,
+            );
+            Ok(())
+        })();
+        match unit_outcome {
+            Ok(()) => governed_somewhere = true,
+            Err(reason)
+                if is_anchor_absent_from_unit(
+                    &reason,
+                    &unknown_module_error(&boundary.module, &boundary.crate_package),
+                ) =>
+            {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+            Err(reason) => return Err(reason),
+        }
     }
-    Ok(())
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
 }
 
 /// The pure heart of dyn-trait-boundary, testable without spawning `cargo`: resolve the

@@ -700,45 +700,91 @@ cannot disagree about what rustc compiles.
 - **THEN** the system reports the missing-module constitution error (exit 2) for the child, because the
   reference is broken on every configuration — the absent-base tolerance never becomes a silent pass
 
-### Requirement: Only the resolved crate root and its reachable modules are governed
+### Requirement: Every compiled root of a package is governed
 
-The governed corpus of a package SHALL be the **one** crate root the system resolves for it — the first
-library-kind target, or the first `bin` target when the package builds no library — together with the
-modules reachable from that root through `mod` declarations. Every **other** compiled root of the same
-package SHALL be treated as a **documented out-of-scope bound**, never as a silent claim of
-cleanliness: a `main.rs` beside a `lib.rs`, any `src/bin/*.rs`, and any `[[bin]] path = "…"` target,
-whether inside the package's source directory or outside it, are not observed, so a violation written
-in one of them does not react.
+The governed corpus of a package SHALL be **every** compiled crate root Cargo reports for it — each
+library-kind target and each `bin` target, wherever its source path lies — together with the modules
+reachable from each root through `mod` declarations. A violation written in any of them SHALL react. The
+static and semantic dimensions SHALL agree on this scope, and the runtime dimension already observes
+every root, so the three no longer disagree about which of a package's source Cargo actually compiles.
 
-This SHALL be stated wherever the coverage of a package is described, because the shape it affects is
-the most ordinary one in Rust — a library beside its binary — and an adopter who reads "the crate is
-governed" would otherwise reasonably conclude that a boundary on `crate` reaches `main.rs`. It does not.
-The system MUST NOT describe a package's second root as resolving to `crate`, as sharing the first
-root's module graph, or as deduplicated against it; none of those is what happens.
+Each root SHALL be resolved as its own module graph: two roots of one package both denote the module path
+`crate`, and neither's declarations, inline-module shadowing, nor `#[path]` remaps SHALL leak into the
+other's resolution. An observation SHALL carry the compilation unit it came from as an identity role, per
+`structured-violation-identity`.
 
-The **cross-root same-named submodule** case is a corollary of this scope rather than a separate bound:
-because only one root's module graph exists, a submodule name declared inline in one root and
-file-backed in another is observed only as whatever the governed root's graph makes of it, and the other
-root's declaration — like the whole of that root — is not seen.
+A governed module SHALL be looked for in **every** root's graph, and an unknown-module constitution error
+SHALL be reported only when **no** root has it. A module legitimately exists in one root's graph and not
+another's — a library's internals are not the binary's — so erroring per root would make a boundary on a
+library-only module exit 2 for the package's `bin` root, refusing to judge source that compiles.
 
-Closing this requires **per-target module graphs**, an amendment beyond the conventional-path scanner:
-two roots of one package both denote module path `crate`, so observing both raises a violation-identity
-question (which `crate` a finding names) that the current identity model does not answer. It SHALL be
-tracked as design work rather than described as a limitation of naming.
+A package whose metadata reports no target at all SHALL fall back to its conventional source directory,
+which is what synthetic metadata in a caller's own tests carries; that fallback is load-bearing and SHALL
+NOT be dropped when the corpus becomes per-root.
 
-#### Scenario: A violation in a package's second crate root is not observed
+A target root whose path does not lie under the package's own directory SHALL be a constitution error
+naming it, because the compilation-unit identity role is that path relative to the package directory and
+no checkout-independent label exists for a root outside it. This SHALL NOT be resolved by using the path
+as given: that path is the checkout's own location, so the identity would differ between two clones of one
+commit. Refusing to judge is the Core Contract's ordering over a silently checkout-dependent identity.
+This bound is narrow by construction — a target rooted anywhere INSIDE the package, including outside its
+source directory, is governed normally.
 
-- **WHEN** a package builds both `src/lib.rs` and `src/main.rs`, an identical forbidden construct is
-  written in each, and a boundary governs `crate`
-- **THEN** the system reacts once, for the construct in `lib.rs`, and does not observe the one in
-  `main.rs` — a documented out-of-scope bound, recorded rather than reported as a clean second root
+While evaluating each root, only "this root does not have the governed module" SHALL be deferred to the
+other roots. Every other failure — an unreadable source, a resolution ambiguity, a root outside the
+package directory — SHALL propagate immediately, because deferring it until a sibling root happened to be
+governable would silently pass over source the system could not read.
 
-#### Scenario: A binary target's root is out of scope wherever it lives
+An outbound rule's finding SHALL carry the **importing module** — the module that lexically declares the
+`use`, so an import inside an inline `mod inner { … }` is attributed to that module rather than the
+containing file's. Without it, two different modules of the governed subtree importing the same forbidden
+path collapse to one finding, so accepting one in a baseline masks the other. The inbound rules already
+qualify by importer; this makes the two families symmetric, and the dedup key becomes the (importing
+module, import path) pair rather than the path alone.
 
-- **WHEN** a package with a library root also builds `src/bin/tool.rs`, a `[[bin]]` whose `path` is
-  inside the source directory, and a `[[bin]]` whose `path` is outside it, each containing a forbidden
-  construct
-- **THEN** none of those constructs is observed, because none of those roots is the resolved one —
-  identically for a conventional `src/bin` target and for a custom `path`, so no adopter concludes that
-  one form is covered because the other is not
+#### Scenario: A violation in a package's binary root reacts
+
+- **WHEN** a package builds both `src/lib.rs` and `src/main.rs`, a forbidden construct is written only in
+  `main.rs`, and a boundary governs `crate`
+- **THEN** the system reacts, naming `main.rs` as the offending file, rather than reporting the package
+  clean
+
+#### Scenario: Every binary target's root is governed wherever it lives
+
+- **WHEN** a package with a library root also builds `src/bin/tool.rs`, a `[[bin]]` whose `path` is inside
+  the source directory, and a `[[bin]]` whose `path` is outside it, each containing a forbidden construct
+- **THEN** each reacts — a conventional `src/bin` target and a custom `path` are treated identically, and
+  a root outside the source directory is not skipped for lying elsewhere
+
+#### Scenario: A module present in only one root is not an unknown-module error
+
+- **WHEN** a boundary governs a module declared only in the library root, and the package also builds a
+  `bin` root whose graph has no such module
+- **THEN** the system governs it in the library root and reports no constitution error, rather than
+  refusing to judge because one root lacks it
+
+#### Scenario: One root's declarations do not leak into another's graph
+- **WHEN** two roots of one package each declare a same-named submodule backed by different files
+- **THEN** each root's graph resolves its own, so neither root's module is observed in place of the
+  other's
+
+#### Scenario: A target root outside the package directory is refused
+
+- **WHEN** a package declares a target whose `path` reaches outside the package's own directory, and a
+  boundary governs that package
+- **THEN** the system reports a constitution error naming that root, rather than labeling the observation
+  by a path that varies with where the repository was cloned
+
+#### Scenario: A scan error in one root is not deferred away by a governable sibling
+
+- **WHEN** one of a package's roots cannot be judged for a reason other than the governed module being
+  absent from it, while another root hosts that module
+- **THEN** the system reports that failure, rather than reporting the sibling's violations and swallowing
+  it
+
+#### Scenario: Two modules importing one forbidden path stay two findings
+
+- **WHEN** two different modules of one governed subtree each import the same forbidden path
+- **THEN** the system emits two findings distinguished by their importing module, so accepting one in a
+  baseline does not suppress the other
 
