@@ -11,6 +11,19 @@
 /// text, so every delimiter is structural and a `macro`/`!` inside a comment or string is
 /// not matched. A real `use` is never inside a macro body, so nothing real is dropped.
 /// The body delimiter may be `{}`, `()`, or `[]`. Never panics on malformed input.
+/// Source reduced to its **declarations**: comments, string/char literals, and macro bodies stripped.
+///
+/// The one pipeline every declaration reader in this module composes, named once here rather than
+/// re-spelled at each call site — `use_scan` twice, `symbol_scan` twice, and `module_check`'s
+/// value-namespace query, which is where re-spelling it went wrong: that call passed the RAW file, so a
+/// `fn foo` written in a comment, a string, or a macro body read as a declaration.
+///
+/// Stripping macro bodies is what makes "declared inside a macro body is not observed" a single stated
+/// bound rather than a per-reader accident.
+pub(crate) fn declaration_text(source: &str) -> String {
+    strip_macro_bodies(&strip_comments_and_strings(source))
+}
+
 pub(super) fn strip_macro_bodies(source: &str) -> String {
     let identity: Vec<usize> = (0..source.len()).collect();
     strip_macro_bodies_tracked(source, &identity).0
