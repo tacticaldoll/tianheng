@@ -796,6 +796,24 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- `--write-baseline`'s atomic write applies the preserved mode to the **open descriptor**
+  (`File::set_permissions`, an `fchmod`) rather than to the temp path. The temp file is opened with
+  `create_new` (`O_EXCL`) precisely so nothing pre-planted at the predictable `<target>.tmp-<pid>`
+  name can receive the write — and the next step then re-opened a variant of that same race by
+  chmod'ing *by path*: anything able to write the baseline's directory (the access the `O_EXCL`
+  reasoning already assumes) could unlink the temp file and plant a symlink at that name in between,
+  and `chmod` follows a symlink, stamping the baseline's mode onto a file the attacker names.
+  Measured in both halves: `chmod 0666` through a planted symlink moves the victim's mode to 0666,
+  while an `O_EXCL` open against a planted name is refused outright — so the descriptor always names
+  the inode this process created and there is no second name lookup to win. The mode application
+  itself cannot simply be dropped: `O_CREAT`'s mode is masked by the process umask, so it can only
+  narrow, and a 0666 baseline under umask 022 would otherwise be silently published at 0644 (verified
+  under umask 0077, where the 0666 mode is still preserved). The resulting mode is identical either
+  way, so the change was verified at the syscall — `chmod("<target>.tmp-<pid>", 0100666)` before,
+  `fchmod(4, 0100666)` after. The failure-path `remove_file(&tmp_path)` is deliberately unchanged and
+  is not the same exposure: `unlink` does not follow symlinks, so a planted symlink is itself what
+  gets removed, never its target (verified). Not breaking — no API, no identity shape, and the
+  published mode is byte-for-byte what it was.
 - A 13th Definition-of-Done gate, `scripts/check_whitespace_hygiene.sh`, asserts over every tracked
   text file that no line carries trailing whitespace, no file ends on a blank line, and every file
   ends with a newline. `cargo fmt` governs `.rs` only, so nothing in the repository checked `.md`,

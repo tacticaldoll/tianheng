@@ -884,7 +884,24 @@ impl From<std::io::Error> for BaselineWriteError {
 /// entirely. Its mode is set to match the original file's at creation (`unix` only — permission
 /// bits are not a portable concept), instead of created at the process umask default and narrowed
 /// afterward — also measured: with a 0600 baseline, the temp file was briefly 0664 before the
-/// follow-up `set_permissions` narrowed it. The temp path is built by appending to the resolved
+/// follow-up `set_permissions` narrowed it.
+///
+/// That follow-up still has to run — `O_CREAT`'s mode is masked by the process umask, so it can only
+/// *narrow*, and a baseline whose own mode is wider than the umask allows (0666 under umask 022)
+/// would otherwise be silently published at 0644. It runs against the **open descriptor**
+/// ([`std::fs::File::set_permissions`], an `fchmod`), never against the temp path. Applying it by
+/// path would re-open the very race `create_new` was chosen to close, one step after closing it:
+/// between the `O_EXCL` open and a path-based `chmod`, anything able to write the baseline's
+/// directory — the same access the `create_new` reasoning above assumes — can unlink the temp file
+/// and plant a symlink at that predictable name, and `chmod` follows it, stamping the baseline's mode
+/// onto a file the attacker chose. A descriptor names the inode this process created, so there is no
+/// second name lookup to win. Measured as the syscall, since the resulting mode is identical either
+/// way and no test bound to it could tell the two apart: the path form issued
+/// `chmod("<target>.tmp-<pid>", 0100666)`, the descriptor form issues `fchmod(4, 0100666)`.
+///
+/// The cleanup on the failure path below stays `remove_file(&tmp_path)`, and is not the same
+/// exposure: `unlink` does not follow symlinks, so a symlink planted at that name is itself what gets
+/// removed, never its target. The temp path is built by appending to the resolved
 /// target's raw `OsString`, never through `Path::display()` (which lossily replaces non-UTF-8
 /// bytes for human-readable formatting) — a resolved path is not guaranteed valid UTF-8, and a
 /// lossy round-trip through a new string can point at a directory that does not exist, failing an
@@ -925,7 +942,7 @@ fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineW
     // rename must come after both, since it is the step that publishes them.
     let write_result = file
         .write_all(document.as_bytes())
-        .and_then(|()| std::fs::set_permissions(&tmp_path, permissions))
+        .and_then(|()| file.set_permissions(permissions))
         .and_then(|()| file.sync_all())
         .and_then(|()| std::fs::rename(&tmp_path, &target));
     if let Err(err) = write_result {
