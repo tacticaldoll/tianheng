@@ -868,6 +868,23 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- **BREAKING for a recorded baseline**: 圭表 now observes a value declared inside an `extern` block as a
+  value of the **enclosing** module, closing a false negative — the class `PROJECT.md` forbids outright.
+  An extern block's `{` opens a brace but no naming scope: `unsafe extern "C" { pub fn foo(); }` declares
+  `foo` in the module containing the block, and it legally coexists with `mod foo` because the two live in
+  different namespaces. Verified against rustc — the pair compiles, and one `use m::foo;` binds both, so
+  `unsafe { foo() }` and `foo::INSIDE` resolve from that single import. The definition collector treated
+  that brace like any other and recorded only items at the module's own depth, so the value was invisible
+  and a real import of a protected module passed silently under an inbound `Shallow` boundary. 渾儀 had been
+  corrected for this exact shape earlier in this window; 圭表's newer reader had not, which is the
+  cross-dimension divergence the conformance ledgers exist to catch and this one slipped past. Three
+  spellings are pinned (`unsafe extern "C"`, bare `extern`, and an `extern static`), and the counterweight
+  is pinned beside them: an inline `mod` body's brace *does* re-scope, so a value declared there stays the
+  submodule's and still does not react — otherwise this would trade a false negative for a false positive.
+  The transparency also reaches the strict-external local-precedence ladder, which shares the walk, and
+  correctly: a bare `rand()` call resolves to a local `extern "C" { pub fn rand(); }` exactly as it would
+  to a plain local `fn rand()`, so treating the extern one as absent had been reading a local call as an
+  external dependency.
 - Closed a **third** import form of that same class: `use m::foo::{self};` binds the module `foo`, never a
   `fn foo` beside it, and was reacting. `use_scan` records a `{self}` leaf as its prefix module, so it
   arrives at the reaction byte-identical to a bare `use m::foo;` — the same collapse the glob condition

@@ -163,6 +163,12 @@ The **observation** carries the remaining bounds, not the resolution, and each S
   literals, and macro bodies removed — so a name appearing only as text declares nothing. Reading raw
   source instead makes a name written in a comment or a string react, which is a false positive in the
   same cell this rule exists to make correct.
+- A value declared inside an **`extern` block** SHALL be observed as a value of the module that contains
+  the block. Such a block opens no naming scope, and its item can coexist with a `mod` of the same name
+  for precisely the namespace reason this rule exists to observe — so treating its brace as a scope makes
+  a real import of the governed module pass silently. The transparency SHALL NOT extend to a brace that
+  *does* re-scope, an inline `mod` body above all: a value declared there belongs to the submodule, and
+  attributing it upward would trade this false negative for a false positive.
 - A value declared inside a macro body, or reaching the module through a re-export, is therefore not
   observed, consistently with every other declaration reader in this dimension, and SHALL direct the
   reaction toward the module reading alone.
