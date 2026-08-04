@@ -60,8 +60,8 @@ pub fn runtime_seam_rule_line(allowed_origins: &[&str]) -> String {
 }
 
 /// Register a type's **observed** origin: `register_origin!(PostgresRepo)` captures
-/// `module_path!()` at the call site (so the origin is *where the type is registered*, not a
-/// self-asserted label) and yields an [`OriginEntry`] to pass to [`install`]. Declarative —
+/// `module_path!()` at the call site (so the origin is *where the type is registered*, rather than
+/// a label the type carries) and yields an [`OriginEntry`] to pass to [`install`]. Declarative —
 /// no proc-macro, no `syn`.
 ///
 /// Use this rather than building an [`OriginEntry`] by hand. The constructor it expands to is

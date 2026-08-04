@@ -306,3 +306,88 @@ fn a_hand_built_origin_entry_is_accepted_a_known_trust_bound() {
          could use to refuse the assertion"
     );
 }
+
+/// The test above pins the *behaviour*; this one pins the **claim**, because that is what actually
+/// drifted. The absolute form ("origin is observed, NOT self-asserted") outlived its own correction
+/// in four places at once — the spec's Purpose summary, the requirement's name, this crate's README,
+/// and the `register_origin!` doc — while the detailed requirement three paragraphs down already
+/// stated the honest process bound. A summary a reader meets first is the capability contract, so a
+/// hand-maintained agreement between summary and detail is not enough: the checkable spine belongs
+/// in a reaction.
+///
+/// Both directions are asserted. The absolute wording must be **absent** from every surface that
+/// describes the guarantee, and the bound must be **present** in the three that carry it — a
+/// deletion that removed the bound would otherwise pass a forbid-only guard. Matching is done on
+/// whitespace-flattened text so a line wrap between the two words cannot hide either direction, and
+/// the needle is assembled from fragments so this test's own source never contains it.
+#[test]
+fn the_origin_guarantee_is_never_summarized_as_absolute() {
+    fn flattened(path: &std::path::Path) -> String {
+        let text = std::fs::read_to_string(path)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+        text.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let absolute_claim = ["self", "-asserted"].concat();
+    let stated_bound = "trust boundary";
+
+    // Crate-local surfaces: present in the published tarball too, so they are always checked. The
+    // source tree is walked rather than enumerated, so a file added later cannot reintroduce the
+    // claim unobserved (this test's own needle is assembled from fragments, so it does not self-trip).
+    fn forbid_claim_under(dir: &std::path::Path, needle: &str) {
+        for entry in std::fs::read_dir(dir).expect("louke's own source directory is readable") {
+            let path = entry.expect("a readable source dir entry").path();
+            if path.is_dir() {
+                forbid_claim_under(&path, needle);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs")
+                // This file quotes the retired wording verbatim, above, to name what drifted;
+                // a test's own doc is not a surface an adopter reads the guarantee from.
+                && path.file_name().and_then(|name| name.to_str()) != Some("tests.rs")
+            {
+                assert!(
+                    !flattened(&path).contains(needle),
+                    "{} states the retired absolute form of the origin guarantee — 漏刻's trust \
+                     boundary is the process, and no surface may promise more than the requirement",
+                    path.display()
+                );
+            }
+        }
+    }
+    forbid_claim_under(&crate_dir.join("src"), &absolute_claim);
+    assert!(
+        !flattened(&crate_dir.join("README.md")).contains(&absolute_claim),
+        "louke's README states the retired absolute form of the origin guarantee — it is where an \
+         adopter meets the capability contract before ever reading the specification"
+    );
+    for relative in ["README.md", "src/dsl.rs"] {
+        let path = crate_dir.join(relative);
+        assert!(
+            flattened(&path).contains(stated_bound),
+            "{relative} no longer states the process trust boundary — the bound must stay stated \
+             where an adopter meets the guarantee, not only in the specification"
+        );
+    }
+
+    // The specification lives outside the crate: absent from the packaged tarball (where this test
+    // still runs), so skip it there — but never silently in CI, where the workspace must be present.
+    let spec = crate_dir.join("../../openspec/specs/runtime-origin-assertion/spec.md");
+    if !spec.exists() {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "the runtime-origin-assertion specification is absent while TIANHENG_WORKSPACE_TESTS \
+             is set — the claim guard must not silently skip its authoritative surface in CI"
+        );
+        return;
+    }
+    let spec_text = flattened(&spec);
+    assert!(
+        !spec_text.contains(&absolute_claim),
+        "the runtime-origin-assertion specification states the retired absolute form of the origin \
+         guarantee — the Purpose summary and the requirement name are read before the bound is"
+    );
+    assert!(
+        spec_text.contains(stated_bound),
+        "the runtime-origin-assertion specification no longer states the process trust boundary"
+    );
+}

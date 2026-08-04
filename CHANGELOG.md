@@ -773,6 +773,15 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   origin is observed for code that registers through the macro and asserted by code that bypasses it;
   漏刻 governs architectural drift, not an in-process adversary. A governance tool asserting a guarantee
   it does not have is worse than one stating its bound.
+  That correction first reached only the requirement's own body, leaving the absolute form on every
+  surface a reader meets *before* it: the specification's Purpose summary, the requirement's own
+  **name**, this crate's README, and the `register_origin!` doc. All four now state the same bound
+  (the requirement is renamed "Origin is observed at the registration site, within a process trust
+  boundary"), and their agreement is no longer hand-maintained —
+  `the_origin_guarantee_is_never_summarized_as_absolute` reacts if the retired wording returns to any
+  louke source, its README, or the specification, and equally if the stated bound is deleted from
+  where an adopter meets the guarantee. A summary is the capability contract for whoever stops
+  reading there, so it is checked rather than trusted.
   The residual is now **pinned by a test** rather than only listed
   (`a_hand_built_origin_entry_is_accepted_a_known_trust_bound`), so it cannot change state in either
   direction unnoticed — if it starts failing, the bound has been closed and the spec, the constructor's
