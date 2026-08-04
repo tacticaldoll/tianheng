@@ -902,6 +902,16 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   something else. The sibling-root exclusion was checked for the worse failure and does not have it —
   it keeps the current root explicitly, so a root appearing twice never excludes itself. Not breaking —
   no API signature, no identity shape, and no reported violation changes.
+- `--write-baseline` calls a symlink at the baseline path **dangling** only when its target really does
+  not resolve. `create_baseline_file` is reached only when reading the path returned `NotFound`, so for a
+  symlink the target was absent when the path was read — but it can come back before the `O_EXCL` open (a
+  restored file, or the link replaced), and the branch classified on symlink-ness alone. It then told the
+  adopter "it is a symlink to X, which does not exist" about a target that does exist, and prescribed a
+  remedy ("recreate the target") already satisfied. Refusing was always safe; only the reason was false —
+  the misdiagnosis class this window corrected twice elsewhere. Falling through loses no diagnostic:
+  the `create_new && AlreadyExists` arm already reports that the baseline "appeared while the new
+  snapshot was being prepared", which is exactly what happened. Not breaking — the exit code is `2`
+  either way; only the sentence changes.
 - `--write-baseline`'s atomic write applies the preserved mode to the **open descriptor**
   (`File::set_permissions`, an `fchmod`) rather than to the temp path. The temp file is opened with
   `create_new` (`O_EXCL`) precisely so nothing pre-planted at the predictable `<target>.tmp-<pid>`

@@ -1,9 +1,10 @@
 use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
 use super::term_color::Style;
 use super::{
-    Coverage, boundary_params, check_constitution, constitution_markdown, dispatch, dyn_trait_text,
-    impl_trait_text, list_document, list_markdown, merge_outcomes, nearest_manifest_from,
-    projection_gate, report_json, runtime_text, semantic_text, trait_impl_text, visibility_text,
+    BaselineWriteError, Coverage, boundary_params, check_constitution, constitution_markdown,
+    create_baseline_file, dispatch, dyn_trait_text, impl_trait_text, list_document, list_markdown,
+    merge_outcomes, nearest_manifest_from, projection_gate, report_json, runtime_text,
+    semantic_text, trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
 use serde_json::Value;
@@ -2339,4 +2340,59 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
         err.contains("law.md") && err.contains(hint) && err.contains("stale"),
         "stale must name path + hint: {err}"
     );
+}
+
+/// A symlink at the baseline path is called **dangling** only when its target really does not resolve.
+///
+/// `create_baseline_file` is reached only when `read_to_string` returned `NotFound`, so for a symlink
+/// that means the target was absent when the path was read. Between that read and the `O_EXCL` open the
+/// target can come back — a restored file, or the link replaced — and the branch classified on
+/// symlink-ness ALONE, so it told the adopter "it is a symlink to X, which does not exist" about a
+/// target that does exist, and named a remedy ("recreate the target") already done.
+///
+/// Both arms are asserted here by calling the classifier directly, because the live-symlink case cannot
+/// be reached through the public entry point without winning that race: `read_to_string` follows a live
+/// symlink, so the write is routed to the overwrite path instead. Calling the function is what makes the
+/// case testable at all.
+///
+/// The fall-through is not a lost diagnostic: `write_baseline`'s `create_new && AlreadyExists` arm
+/// already says "it appeared while the new snapshot was being prepared", which is exactly what happened.
+#[test]
+fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
+    let dir = TempPath::named("symlink-classification");
+    std::fs::create_dir_all(dir.path()).expect("create dir");
+
+    let dangling = dir.path().join("dangling-baseline.json");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(dir.path().join("absent.json"), &dangling).expect("dangling link");
+    match create_baseline_file(&dangling.to_string_lossy(), "{}") {
+        Err(BaselineWriteError::DanglingSymlink { target }) => {
+            assert!(
+                target.ends_with("absent.json"),
+                "the refusal names the target it cannot reach: {target:?}"
+            );
+        }
+        other => panic!("a genuinely dangling symlink must be classified as one: {other:?}"),
+    }
+
+    // The same shape, except the target resolves — the state the race leaves behind.
+    let real = dir.path().join("real.json");
+    std::fs::write(&real, "{}").expect("write target");
+    let live = dir.path().join("live-baseline.json");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&real, &live).expect("live link");
+    match create_baseline_file(&live.to_string_lossy(), "{}") {
+        Err(BaselineWriteError::Io(err)) => {
+            assert_eq!(
+                err.kind(),
+                std::io::ErrorKind::AlreadyExists,
+                "a live symlink is an ordinary collision, which write_baseline already reports as \
+                 \"it appeared while the new snapshot was being prepared\""
+            );
+        }
+        other => panic!(
+            "a symlink whose target resolves must NOT be reported as dangling — the message would \
+             name a cause that does not hold: {other:?}"
+        ),
+    }
 }
