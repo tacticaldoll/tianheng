@@ -68,6 +68,67 @@ fn target_has_kind(target: &Value, wanted: &str) -> bool {
         .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
 }
 
+/// **Every** compiled crate root of ONE package — each library-kind target and each `bin` target, in
+/// Cargo's reported order, deduplicated.
+///
+/// The per-package counterpart of [`member_root_files`] (which spans the workspace) and the plural of
+/// [`crate_root_file`] (which picks one). A package's roots are separate compilation units: they each
+/// denote the module path `crate` and neither's declarations belong in the other's module graph, so a
+/// dimension that governs a package governs each root as its own corpus. Returning them all is what lets
+/// a violation written in a `bin` beside a library be observed at all.
+///
+/// Empty when the metadata reports no target — the shape synthetic metadata in a caller's own tests
+/// carries. A caller SHALL treat that as "fall back to the conventional source directory", not as "this
+/// package has no source": dropping that fallback silently un-governs every such test fixture.
+pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = package["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|t| {
+            LIBRARY_KINDS.iter().any(|k| target_has_kind(t, k)) || target_has_kind(t, "bin")
+        })
+        .filter_map(|t| t["src_path"].as_str().map(PathBuf::from))
+        .collect();
+    roots.dedup();
+    roots
+}
+
+/// A compilation unit's stable identity label: its root source path **relative to the package's own
+/// manifest directory** (`src/lib.rs`, `src/main.rs`, `tools/x.rs`).
+///
+/// `None` when the root does not lie under that directory. A caller SHALL treat that as **cannot
+/// judge** (a constitution error), not as a reason to fall back to the path as given: that path is the
+/// clone's own location, so keeping it would make the identity checkout-dependent — the same commit in
+/// two clones yielding two identities, and a baseline recorded in one matching nothing in the other.
+///
+/// This is deliberately NOT the rule 漏刻 applies to a file reached through an absolute `#[path]`
+/// literal, and the difference is the whole reason this returns `None` rather than the raw path: that
+/// literal is **committed text**, identical in every checkout, so keeping it verbatim is exactly what
+/// makes it stable. A root path outside the manifest directory is the checkout's own location, so
+/// keeping it verbatim is what makes it unstable. Same shape, opposite consequence.
+///
+/// When the metadata carries no `manifest_path` — the shape synthetic metadata in a caller's own tests
+/// has; real `cargo metadata` always carries it — the root's file name is used, which is stable and
+/// sufficient because such metadata declares a single root.
+pub fn compilation_unit_label(package: &Value, root_file: &Path) -> Option<String> {
+    match package["manifest_path"]
+        .as_str()
+        .map(Path::new)
+        .and_then(Path::parent)
+    {
+        Some(dir) => root_file
+            .strip_prefix(dir)
+            .ok()
+            .and_then(Path::to_str)
+            .map(str::to_string),
+        None => root_file
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(str::to_string),
+    }
+}
+
 /// Resolve a crate's root source file from `cargo metadata` (library target else `bin` target).
 pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
     let targets = package["targets"].as_array()?;

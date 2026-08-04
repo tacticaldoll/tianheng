@@ -312,8 +312,15 @@ pub(super) fn must_not_be_imported_by_dedups_an_importer_backed_by_two_reachable
 
 #[test]
 pub(super) fn must_not_import_dedups_a_finding_across_subtree_files() {
-    // crate::kernel spans kernel.rs + kernel/sub.rs; both import the forbidden module.
-    // The same finding must be reported once, not once per file.
+    // `crate::kernel` and `crate::kernel::sub` are two DIFFERENT modules, and each importing the
+    // forbidden path is a separate drift event: two violations, distinguished by their importing
+    // module.
+    //
+    // This test previously asserted one, on the stated reason that "the governed module's subtree can
+    // span more than one file". That reason describes ONE module backed by two files; it does not cover
+    // two distinct modules, and collapsing those meant baselining the first silently masked the second
+    // — a real violation accepted without ever being seen. The inbound rules had always qualified by
+    // importer; the outbound rules now do too, so the two families are symmetric.
     let (result, violations) = run_module_check(
         "dedup-mni-subtree",
         &[
@@ -329,10 +336,30 @@ pub(super) fn must_not_import_dedups_a_finding_across_subtree_files() {
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(
         violations.len(),
-        1,
-        "one violation per distinct finding: {violations:?}"
+        2,
+        "one violation per (importing module, import path): {violations:?}"
     );
-    assert_eq!(violations[0].finding, "crate::forbidden::X");
+    let importers: Vec<String> = violations
+        .iter()
+        .map(|v| {
+            v.id()
+                .fact()
+                .fields()
+                .find(|(name, _)| *name == "importer")
+                .map(|(_, value)| value.to_string())
+                .expect("the outbound fact carries its importing module")
+        })
+        .collect();
+    assert!(
+        importers.iter().any(|i| i == "crate::kernel")
+            && importers.iter().any(|i| i == "crate::kernel::sub"),
+        "the two importing modules must be the discriminator: {importers:?}"
+    );
+    assert!(
+        violations
+            .iter()
+            .all(|v| v.finding == "crate::forbidden::X")
+    );
 }
 
 #[test]
@@ -446,7 +473,10 @@ pub(super) fn inline_symbol_confinement_flags_midpath_super_call() {
 }
 
 #[test]
-pub(super) fn restrict_imports_to_dedups_a_finding_across_subtree_files() {
+pub(super) fn restrict_imports_to_keeps_two_importing_modules_distinct() {
+    // The outbound dual of the inbound rules' long-standing importer qualification: `crate::kernel`
+    // and `crate::kernel::sub` are two modules, so each reaching outward is its own drift event. One
+    // violation here would mean baselining the first masks the second.
     let (result, violations) = run_module_check(
         "dedup-rit-subtree",
         &[
@@ -459,21 +489,25 @@ pub(super) fn restrict_imports_to_dedups_a_finding_across_subtree_files() {
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(
         violations.len(),
-        1,
-        "one violation per distinct finding: {violations:?}"
+        2,
+        "one violation per (importing module, import path): {violations:?}"
     );
-    assert_eq!(violations[0].finding, "crate::io::Sink");
+    assert!(violations.iter().all(|v| v.finding == "crate::io::Sink"));
 }
 
 #[test]
-pub(super) fn outbound_dedup_collapses_identical_findings_but_keeps_distinct_ones() {
-    // Two subtree files: one imports X, the other imports X (duplicate) and Y.
-    // Result must be {X, Y} — the identical finding collapsed, the distinct one kept.
+pub(super) fn outbound_dedup_collapses_a_repeated_pair_but_keeps_distinct_ones() {
+    // The dedup key is the (importing module, import path) PAIR. `crate::kernel` imports X twice — the
+    // same pair, so it collapses to one — while `crate::kernel::sub` importing X is a different pair and
+    // stays, as does its Y. Result: three violations over two importers, not one per path.
     let (result, violations) = run_module_check(
         "dedup-distinct",
         &[
             ("lib.rs", "pub mod kernel;\n"),
-            ("kernel.rs", "pub mod sub;\nuse crate::forbidden::X;\n"),
+            (
+                "kernel.rs",
+                "pub mod sub;\nuse crate::forbidden::X;\nuse crate::forbidden::X as Dup;\n",
+            ),
             (
                 "kernel/sub.rs",
                 "use crate::forbidden::X;\nuse crate::forbidden::Y;\n",
@@ -488,14 +522,18 @@ pub(super) fn outbound_dedup_collapses_identical_findings_but_keeps_distinct_one
     let findings: Vec<&str> = violations.iter().map(|v| v.finding.as_str()).collect();
     assert_eq!(
         findings,
-        ["crate::forbidden::X", "crate::forbidden::Y"],
-        "{violations:?}"
+        [
+            "crate::forbidden::X",
+            "crate::forbidden::X",
+            "crate::forbidden::Y"
+        ],
+        "the repeated pair collapsed; the other importer's X and Y stayed: {violations:?}"
     );
-    // And no two violations share an identity (target, rule, finding).
-    let mut ids: Vec<_> = violations
-        .iter()
-        .map(|v| (v.target(), &v.rule, &v.finding))
-        .collect();
+    // And no two violations share an identity. Compared on the REAL `ViolationId`, not on
+    // `(target, rule, finding)`: two of these legitimately share all three and differ only in the
+    // fact's importing module, so the old proxy would now report a collision that does not exist —
+    // and, worse, would have passed while a real collapse was happening.
+    let mut ids: Vec<String> = violations.iter().map(|v| format!("{:?}", v.id())).collect();
     let before = ids.len();
     ids.sort();
     ids.dedup();

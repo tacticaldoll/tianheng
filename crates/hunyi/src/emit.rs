@@ -14,6 +14,8 @@ pub(crate) struct SingleModuleViolationContext<'a> {
     /// The crate this boundary was declared against (`boundary.crate_package`) — threaded into the
     /// fact's identity so two crates sharing the identical module path + rule stay distinct.
     pub(crate) crate_package: &'a str,
+    /// The compilation unit these observations came from — see `SemanticFact::into_finding`.
+    pub(crate) unit: &'a str,
 }
 
 /// The common shape both violation-pushing entry points below build once, then feed to
@@ -21,6 +23,8 @@ pub(crate) struct SingleModuleViolationContext<'a> {
 /// `crate_package` map identity (`ViolationId::new` / `finding.into_finding`); `rule`, `reason`,
 /// `severity`, `anchor`, and `polarity` are metadata attached to every finding under this context.
 struct ViolationContext<'a> {
+    /// The compilation unit these observations came from — see `SemanticFact::into_finding`.
+    unit: &'a str,
     target: &'a str,
     rule: &'a str,
     rule_key: RuleKey,
@@ -39,7 +43,7 @@ fn push_violation(
     finding: SemanticFact,
     file: PathBuf,
 ) {
-    let finding = finding.into_finding(context.crate_package);
+    let finding = finding.into_finding(context.crate_package, context.unit);
     let id = ViolationId::new(
         context.target,
         context.rule_key.clone(),
@@ -81,6 +85,7 @@ pub(crate) fn push_single_module_violations(
         anchor: context.anchor.map(str::to_string),
         polarity: Polarity::DenyBreach,
         crate_package: context.crate_package,
+        unit: context.unit,
     };
     for (finding, file) in findings {
         push_violation(violations, &shared, finding, file);
@@ -105,6 +110,8 @@ pub(crate) struct MultiModuleViolationContext<'a> {
     /// `boundary.crate_package`, so its identity already varies by crate); every other capability
     /// routed through this context consumes it.
     pub(crate) crate_package: &'a str,
+    /// The compilation unit these observations came from — see `SemanticFact::into_finding`.
+    pub(crate) unit: &'a str,
 }
 
 /// Add violations for a boundary whose findings sit across many modules — the shared emitter for
@@ -132,6 +139,7 @@ pub(crate) fn push_multi_module_violations(
         anchor: context.anchor.map(str::to_string),
         polarity: context.polarity,
         crate_package: context.crate_package,
+        unit: context.unit,
     };
     for (finding, _module, file) in findings {
         push_violation(violations, &shared, finding, file);

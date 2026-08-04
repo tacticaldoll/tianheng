@@ -12,7 +12,8 @@ use crate::containment::{leaf_of, path_leaf, resolve_self_type, under_subtree};
 use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
-use crate::file_scope::resolve_crate;
+use crate::errors::unknown_module_error;
+use crate::file_scope::{is_anchor_absent_from_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     BareFallback, UseMap, canonical_path_str, canonical_self_owner, path_to_string,
@@ -52,35 +53,64 @@ pub(crate) fn check_forbidden_marker_boundary(
     boundary: &ForbiddenMarkerBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
-    let src_dir = src_dir.as_path();
+    let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
+    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
+    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
+    // is observed, with the unit carried into each finding's identity.
+    let mut governed_somewhere = false;
+    let mut deferred: Option<String> = None;
+    for (root_file, src_dir, unit) in &units {
+        let unit_outcome = (|| -> Result<(), String> {
+            let src_dir = src_dir.as_path();
+            let unit = unit.as_str();
 
-    let findings = forbidden_marker_findings(
-        src_dir,
-        &root_file,
-        &boundary.module,
-        &boundary.forbidden,
-        &boundary.crate_package,
-    )?;
+            let findings = forbidden_marker_findings(
+                src_dir,
+                root_file,
+                &boundary.module,
+                &boundary.forbidden,
+                &boundary.crate_package,
+            )?;
 
-    // Each finding carries the module its offending element sits in — the impl site's module for
-    // an `impl`, the defining type's module for a `#[derive]`; the shared emit helper resolves that
-    // module's source file (memoized per module) and stamps the deny-breach polarity.
-    push_multi_module_violations(
-        violations,
-        MultiModuleViolationContext {
-            target: &boundary.module,
-            rule: FORBIDDEN_MARKER_RULE,
-            rule_key: boundary.rule_key(),
-            reason: &boundary.reason,
-            severity: boundary.severity,
-            anchor: boundary.anchor(),
-            polarity: Polarity::DenyBreach,
-            crate_package: &boundary.crate_package,
-        },
-        findings,
-    );
-    Ok(())
+            // Each finding carries the module its offending element sits in — the impl site's module for
+            // an `impl`, the defining type's module for a `#[derive]`; the shared emit helper resolves that
+            // module's source file (memoized per module) and stamps the deny-breach polarity.
+            push_multi_module_violations(
+                violations,
+                MultiModuleViolationContext {
+                    target: &boundary.module,
+                    rule: FORBIDDEN_MARKER_RULE,
+                    rule_key: boundary.rule_key(),
+                    reason: &boundary.reason,
+                    severity: boundary.severity,
+                    anchor: boundary.anchor(),
+                    polarity: Polarity::DenyBreach,
+                    crate_package: &boundary.crate_package,
+                    unit,
+                },
+                findings,
+            );
+            Ok(())
+        })();
+        match unit_outcome {
+            Ok(()) => governed_somewhere = true,
+            Err(reason)
+                if is_anchor_absent_from_unit(
+                    &reason,
+                    &unknown_module_error(&boundary.module, &boundary.crate_package),
+                ) =>
+            {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+            Err(reason) => return Err(reason),
+        }
+    }
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
 }
 
 /// The pure heart: scan the crate, then for each forbidden trait emit findings two ways — a

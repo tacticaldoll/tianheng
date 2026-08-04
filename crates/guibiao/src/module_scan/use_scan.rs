@@ -48,36 +48,13 @@ impl std::ops::Deref for ImportedPath {
     }
 }
 
-/// Internal module paths imported by `source`, normalized to absolute `crate::…` form.
-/// `current_module` is the importing file's module; a `use` inside an inline `mod name { … }` is
-/// attributed to that submodule, so `self`/`super` resolve against the real enclosing module, not
-/// the file's. Only `use` declarations are observed; grouped and glob forms are expanded; raw
-/// identifiers (`r#name`) are canonicalized; paths whose first segment is an external crate are
-/// ignored. Bare path expressions and macro-generated imports are out of scope (PROJECT.md):
-/// comments and string literals are stripped, and macro bodies are removed, so a `use` written
-/// inside one is a macro-generated import and is not observed. Returns sorted, de-duplicated paths.
-pub(crate) fn imported_module_paths(
-    source: &str,
-    current_module: &str,
-    root_modules: &[String],
-) -> Result<Vec<ImportedPath>, String> {
-    let mut paths: Vec<ImportedPath> =
-        imports_with_importers(source, current_module, root_modules)?
-            .into_iter()
-            .map(|(_importer, import)| import)
-            .collect();
-    paths.sort();
-    paths.dedup();
-    Ok(paths)
-}
-
 /// Each internal import paired with the **module that actually declares it** — inline-aware, so a
 /// `use` inside an inline `mod inner { … }` is attributed to `{current_module}::inner`, not the
 /// file's module. The inbound rules (`MustNotBeImportedBy` / `MustOnlyBeImportedBy`) test the
-/// *importer's* identity, so they need this pair; [`imported_module_paths`] keeps only the absolute
-/// import path (right for the outbound rules, which test the import), discarding the importer an
-/// inbound rule would otherwise mis-attribute to the file's module. Sorted + deduped by
-/// `(importer, import)`.
+/// *importer's* identity, and so do the OUTBOUND rules since their finding carries the importing module
+/// too — one accessor for both families, so they cannot disagree about who imported something. An
+/// import inside an inline `mod inner { … }` is attributed to that module, not the containing file's.
+/// Sorted + deduped by `(importer, import)`.
 pub(crate) fn imports_with_importers(
     source: &str,
     current_module: &str,
@@ -353,6 +330,28 @@ fn external_crate_head(
 
 #[cfg(test)]
 mod tests {
+    /// The import PATHS of a source, deduplicated and sorted — derived here from
+    /// [`imports_with_importers`], which production now uses for both rule families.
+    ///
+    /// This was a production accessor until the outbound rules began carrying their importing module
+    /// in identity; with both families reading importers, a paths-only accessor had no caller left. The
+    /// assertions below are the specification of path NORMALIZATION, which is unchanged, so they keep
+    /// their subject through this derivation rather than being deleted with the accessor.
+    fn imported_module_paths(
+        source: &str,
+        current_module: &str,
+        root_modules: &[String],
+    ) -> Result<Vec<ImportedPath>, String> {
+        let mut paths: Vec<ImportedPath> =
+            imports_with_importers(source, current_module, root_modules)?
+                .into_iter()
+                .map(|(_importer, import)| import)
+                .collect();
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
+
     use super::*;
 
     #[test]

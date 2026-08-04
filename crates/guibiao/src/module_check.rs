@@ -3,19 +3,21 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::ScanDepth;
 
-use crate::cargo_metadata::{crate_root_file, find_package};
+use crate::cargo_metadata::{
+    compilation_unit_label, crate_root_file, crate_root_files, find_package,
+};
 use crate::errors::{
     confine_external_crate_on_crate_error, crate_not_found_error, inline_empty_prefix_error,
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
     missing_src_error, must_not_be_imported_by_on_crate_error,
-    must_only_be_imported_by_on_crate_error, restrict_imports_to_on_crate_error,
-    unknown_module_error, unreadable_governed_file_error,
+    must_only_be_imported_by_on_crate_error, out_of_package_root_error,
+    restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
 };
 use crate::finding::ModuleFact;
 use crate::module_scan::{
     ImportedPath, InlineFinding, canonical_module_path, external_imports_with_importers,
-    governed_files, imported_module_paths, imports_with_importers, inline_symbol_findings,
-    package_name_to_import_ident, path_within, reachable_modules, rust_files,
+    governed_files, imports_with_importers, inline_symbol_findings, package_name_to_import_ident,
+    path_within, reachable_modules, rust_files,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -34,6 +36,7 @@ fn package_src_dir(package: &Value) -> Option<PathBuf> {
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_module_violation(
     violations: &mut Vec<Violation>,
     target: &str,
@@ -41,8 +44,9 @@ fn push_module_violation(
     fact: ModuleFact,
     file: String,
     boundary: &ModuleBoundary,
+    unit: &str,
 ) {
-    let finding = fact.into_finding(&boundary.crate_package);
+    let finding = fact.into_finding(&boundary.crate_package, unit);
     violations.push(
         Violation::new(
             BoundaryKind::Module,
@@ -144,6 +148,8 @@ fn resolve_import_module<'a>(
 /// The crate-wide scan state every rule family below reads from — resolved once in
 /// [`check_module_boundary`], then shared read-only across whichever family actually evaluates.
 struct ScanContext<'a> {
+    /// The compilation unit these observations came from — see `ModuleFact::into_finding`.
+    unit: &'a str,
     src_dir: &'a Path,
     files: &'a [PathBuf],
     root_relative: Option<&'a Path>,
@@ -298,6 +304,7 @@ fn check_inbound_rule(
             ModuleFact::ImporterModule(importer_module),
             file,
             boundary,
+            ctx.unit,
         );
     }
     Ok(())
@@ -368,6 +375,7 @@ fn check_external_confinement(
             ModuleFact::ExternalImporter(importer_module),
             file,
             boundary,
+            ctx.unit,
         );
     }
     Ok(())
@@ -431,7 +439,15 @@ fn check_inline_confinement(
         &dependency_names,
     )?;
     for InlineFinding { fact, file } in findings {
-        push_module_violation(violations, &confined_prefix, rule, fact, file, boundary);
+        push_module_violation(
+            violations,
+            &confined_prefix,
+            rule,
+            fact,
+            file,
+            boundary,
+            ctx.unit,
+        );
     }
     Ok(())
 }
@@ -490,39 +506,63 @@ fn check_outbound_rule(
     // `(finding, offending file)` pairs collected before de-duplication, for the same
     // reason as the inbound rule: the file is in hand during the scan but lost once the
     // list collapses to findings. The count stays per-finding; the file is metadata.
-    let mut findings: Vec<(String, String)> = Vec::new();
+    // `(importing module, import path, offending file)`. The importer is the module that
+    // **lexically declares** the `use` — an inline `mod inner { … }` is its own importer, not the
+    // file's — read through the same accessor the inbound rules use so the two families agree on who
+    // imported something. The file is collected before de-duplication for the same reason as the
+    // inbound rule: it is in hand during the scan but gone once the list collapses.
+    let mut findings: Vec<(String, String, String)> = Vec::new();
     for (file, current_module) in governed {
         // A governed file we cannot read is "cannot judge", not "nothing to judge":
         // silently skipping it could hide a real violation. Fail as a scan error
         // (exit 2), never a silent pass.
         let text = std::fs::read_to_string(&file)
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
-        for import in imported_module_paths(&text, &current_module, ctx.root_modules)? {
+        for (importer, import) in imports_with_importers(&text, &current_module, ctx.root_modules)?
+        {
             if is_violation(&import) {
-                findings.push((import.path, file.display().to_string()));
+                findings.push((importer, import.path, file.display().to_string()));
             }
         }
     }
-    // One violation per distinct finding. The governed module's subtree can span more
-    // than one file (a parent and child file, or `lib.rs` + `main.rs` both at `crate`),
-    // so the same forbidden import can be found twice; sort then collapse by the finding
-    // (the identity), keeping the first file as the reported `file` — the same identity
-    // guarantee the inbound rule makes, now for the outbound rules.
+    // One violation per distinct (importing module, import path). A single module can be backed by
+    // more than one reachable source, so the same import can be found twice for one importer; that
+    // pair collapses, and the first file after the sort is the reported one.
+    //
+    // The importing module is part of the identity, not only the report: without it, two DIFFERENT
+    // modules of the governed subtree importing the same forbidden path collapse to one finding, so
+    // baselining the first silently masks the second — a real drift event the tool exists to catch.
+    // The dedup's own stated reason was only ever "one module backed by two files", which is narrower
+    // than collapsing distinct modules, and the inbound rules have always qualified by importer. This
+    // makes the two families symmetric.
     findings.sort();
-    findings.dedup_by(|a, b| a.0 == b.0);
-    for (finding, file) in findings {
+    findings.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+    for (importer, path, file) in findings {
         push_module_violation(
             violations,
             governed_module,
             rule,
-            ModuleFact::ImportedPath(finding),
+            ModuleFact::ImportedPath { path, importer },
             file,
             boundary,
+            ctx.unit,
         );
     }
     Ok(())
 }
 
+/// Evaluate a module boundary against **every** compiled root of its package.
+///
+/// A package's roots are separate compilation units: each denotes the module path `crate`, and neither's
+/// declarations, inline shadowing, nor `#[path]` remaps belong in the other's graph — so each is resolved
+/// as its own corpus and the results are merged. Governing only the first root left a violation written
+/// in a `bin` beside a library unobserved, which is the false negative this composition closes.
+///
+/// The unknown-module error is deliberately deferred to the end: a module legitimately exists in one
+/// root's graph and not another's (a library's internals are not the binary's), so erroring per root
+/// would make a boundary on a library-only module exit 2 for the package's `bin` root — refusing to judge
+/// source that compiles. It fires only when NO root has the module, and then reports the first root's own
+/// reason so the message still names a real expected location.
 pub(crate) fn check_module_boundary(
     metadata: &Value,
     boundary: &ModuleBoundary,
@@ -530,14 +570,99 @@ pub(crate) fn check_module_boundary(
 ) -> Result<(), String> {
     let package = find_package(metadata, &boundary.crate_package)
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let src_dir =
-        package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?;
+    let roots = crate_root_files(package);
+    if roots.is_empty() {
+        // Metadata reporting no target at all is the shape synthetic metadata in a caller's own tests
+        // carries; the conventional-source-directory fallback below is load-bearing for it, and its
+        // reachability walk already treats every conventional top-level root as a root.
+        return match check_one_root(package, None, None, boundary, violations)? {
+            RootOutcome::Governed => Ok(()),
+            RootOutcome::ModuleAbsent(reason) => Err(reason),
+        };
+    }
+    let mut deferred: Option<String> = None;
+    let mut governed_somewhere = false;
+    for root in &roots {
+        let mut per_root = Vec::new();
+        // Only "this root does not have the governed module" is deferrable. Every other failure — an
+        // unreadable source, a resolution ambiguity, a root outside the package directory — is a genuine
+        // "cannot judge" and propagates NOW: swallowing it because a sibling root happened to be
+        // governable would be a silent pass over source the system could not read, which is worse than
+        // the false negative this per-root corpus exists to close.
+        match check_one_root(
+            package,
+            Some(root.as_path()),
+            Some(&roots),
+            boundary,
+            &mut per_root,
+        )? {
+            RootOutcome::Governed => {
+                governed_somewhere = true;
+                violations.append(&mut per_root);
+            }
+            RootOutcome::ModuleAbsent(reason) => {
+                if deferred.is_none() {
+                    deferred = Some(reason);
+                }
+            }
+        }
+    }
+    match deferred {
+        Some(reason) if !governed_somewhere => Err(reason),
+        _ => Ok(()),
+    }
+}
 
-    // The crate's real root file relative to `src_dir` — usually `lib.rs`/`main.rs`, but Cargo
-    // permits a custom target root (`[lib] path = "src/core.rs"`), which must still map to `crate`.
-    let root_relative = crate_root_file(package)
-        .and_then(|rf| rf.strip_prefix(&src_dir).ok().map(|p| p.to_path_buf()));
-    let files = rust_files(&src_dir)?;
+/// Whether one root hosted the governed module. Distinguishing absence from failure is what keeps a real
+/// scan error from being deferred away by a sibling root — see the loop above.
+enum RootOutcome {
+    Governed,
+    ModuleAbsent(String),
+}
+
+fn check_one_root(
+    package: &Value,
+    root_file: Option<&Path>,
+    sibling_roots: Option<&[PathBuf]>,
+    boundary: &ModuleBoundary,
+    violations: &mut Vec<Violation>,
+) -> Result<RootOutcome, String> {
+    let src_dir = match root_file.and_then(Path::parent) {
+        Some(dir) => dir.to_path_buf(),
+        None => {
+            package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?
+        }
+    };
+
+    // The root file relative to `src_dir` — usually `lib.rs`/`main.rs`, but Cargo permits a custom
+    // target root (`[lib] path = "src/core.rs"`), which must still map to `crate`. `None` keeps the
+    // conventional-root behaviour the target-less fallback depends on.
+    let root_relative = root_file
+        .and_then(|rf| rf.strip_prefix(&src_dir).ok())
+        .map(|p| p.to_path_buf());
+    // The compilation unit's identity role, derived by the shared substrate so both static dimensions
+    // label a unit identically. A root outside the package's own manifest directory yields `None` and
+    // is a constitution error rather than a fallback: the path would then be the clone's own location,
+    // and a checkout-dependent identity is the defect this role exists to avoid. With no target at all
+    // (synthetic metadata), the conventional source directory the fallback assumes IS the unit.
+    let unit_owned = match root_file {
+        Some(rf) => Some(
+            compilation_unit_label(package, rf)
+                .ok_or_else(|| out_of_package_root_error(&boundary.crate_package, rf))?,
+        ),
+        None => None,
+    };
+    let unit: &str = unit_owned.as_deref().unwrap_or("src");
+    let mut files = rust_files(&src_dir)?;
+    // A SIBLING root is not a module of this unit — it is another compilation unit. Without this the
+    // conventional-root rule (a top-level `lib.rs`/`main.rs` is segment-less, hence `crate`) makes every
+    // sibling root map to `crate` in *this* root's walk too, so one violation is reported once per root:
+    // a duplicate, and a worse defect than the false negative the per-root corpus closes. A root
+    // declared as a module by another root (`mod main;`) is a stated bound of that exclusion — it is a
+    // dual-role file rustc compiles twice, and this unit's corpus keeps the unit's own root only.
+    if let Some(siblings) = sibling_roots {
+        files.retain(|f| root_file.is_some_and(|r| r == f.as_path()) || !siblings.contains(f));
+    }
     let (reachable, inline_only, remapped, remap_shadowed) =
         reachable_modules(&src_dir, &files, root_relative.as_deref())?;
     // The crate-root module names (direct children of `crate`) feed bare-`use` resolution
@@ -584,20 +709,21 @@ pub(crate) fn check_module_boundary(
                 .rsplit("::")
                 .next()
                 .unwrap_or(&governed_module);
-            return Err(inline_module_target_error(
+            return Ok(RootOutcome::ModuleAbsent(inline_module_target_error(
                 &boundary.module,
                 &boundary.crate_package,
                 leaf,
-            ));
+            )));
         }
-        return Err(unknown_module_error(
+        return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
             &boundary.module,
             &boundary.crate_package,
-        ));
+        )));
     }
 
     let rule = boundary.rule.label();
     let ctx = ScanContext {
+        unit,
         src_dir: &src_dir,
         files: &files,
         root_relative: root_relative.as_deref(),
@@ -613,20 +739,22 @@ pub(crate) fn check_module_boundary(
         ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. }
     );
     if inbound {
-        return check_inbound_rule(&ctx, boundary, &governed_module, rule, violations);
+        check_inbound_rule(&ctx, boundary, &governed_module, rule, violations)?;
+        return Ok(RootOutcome::Governed);
     }
     if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
-        return check_external_confinement(
+        check_external_confinement(
             &ctx,
             boundary,
             &governed_module,
             rule,
             crate_name,
             violations,
-        );
+        )?;
+        return Ok(RootOutcome::Governed);
     }
     if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
-        return check_inline_confinement(
+        check_inline_confinement(
             &ctx,
             boundary,
             package,
@@ -637,7 +765,9 @@ pub(crate) fn check_module_boundary(
             strict,
             external,
             violations,
-        );
+        )?;
+        return Ok(RootOutcome::Governed);
     }
-    check_outbound_rule(&ctx, boundary, &governed_module, governed, rule, violations)
+    check_outbound_rule(&ctx, boundary, &governed_module, governed, rule, violations)?;
+    Ok(RootOutcome::Governed)
 }

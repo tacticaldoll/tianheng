@@ -29,7 +29,7 @@ pub(super) fn async_observations(
         facts
             .into_iter()
             .map(|(fact, _)| {
-                let finding = fact.into_finding("app");
+                let finding = fact.into_finding("app", "src/lib.rs");
                 (finding.key().clone(), finding.text().to_string())
             })
             .collect()
@@ -90,6 +90,7 @@ pub(super) fn async_production_violation_separates_target_rule_and_seam() {
             ("name", "register"),
             ("owner", "crate::registry"),
             ("owner_kind", "module"),
+            ("unit", "lib.rs"),
         ]
     );
 }

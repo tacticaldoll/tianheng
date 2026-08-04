@@ -237,6 +237,25 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   Authority: `openspec/specs/runtime-origin-assertion/spec.md`; this entry's own reproduction record.
 
 
+- ~~**Only the ONE resolved crate root of a package is governed; its other compiled roots are not
+  observed at all.**~~ **CLOSED** in the 0.4.0 window. Every compiled root is now its own corpus in both
+  static dimensions, and an observation carries the compilation unit it came from as an identity role, so
+  the same violation in two roots stays two facts rather than one that masks the other.
+  Three measurements changed the shape of the work and are worth keeping: 漏刻 ALREADY governed every root
+  (`member_root_files`, in production), so this was two dimensions diverging from a third rather than a
+  family-wide bound — correcting this entry's own earlier claim that the scope question was shared because
+  渾儀 uses the same single-root function, which was true of 渾儀 and never checked against 漏刻; a spike over
+  the existing machinery passed 316 of 圭表's 317 tests, so the corpus model tolerated N roots and the
+  remaining work was identity, not a rewrite; and a target's NAME turned out not to be unique within a
+  package (this repository builds a `lib` and a `bin` both named `tianheng`), so the role is the root's
+  path relative to the package directory.
+  Two things the work found that the entry had not predicted: a sibling conventional root leaks into every
+  other root's walk (a top-level `lib.rs`/`main.rs` is `crate` in each), which without exclusion reported
+  one violation once per root — a duplicate worse than the false negative being closed; and a per-root
+  loop that deferred ANY error swallowed genuine scan failures whenever a sibling root happened to be
+  governable, which is a silent pass. Both are fixed and pinned. The original entry is kept below for its
+  reproduction record.
+
 - **Only the ONE resolved crate root of a package is governed; its other compiled roots are not
   observed at all.** Class: DESIGN-BREAKING. Observed pressure: promoted in the 0.4.0 window from a
   single-lens WATCH hypothesis and a one-line `ACCEPTED DEBT` mention ("multi-target conventional-path

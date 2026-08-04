@@ -23,7 +23,7 @@ pub(super) fn unsafe_keys(name: &str, source: &str) -> Result<Vec<StructuredFact
     unsafe_findings(tree.src(), &tree.root(), &["crate::ffi".to_string()], "x").map(|findings| {
         findings
             .into_iter()
-            .map(|(fact, _, _)| fact.into_finding("app").key().clone())
+            .map(|(fact, _, _)| fact.into_finding("app", "src/lib.rs").key().clone())
             .collect()
     })
 }
@@ -166,7 +166,11 @@ pub(super) fn unsafe_production_violation_separates_target_rule_and_fact_roles()
     assert_eq!(fact.shape(), "unsafe-free-function");
     assert_eq!(
         fact.fields().collect::<Vec<_>>(),
-        vec![("module", "crate::net"), ("name", "decode")]
+        vec![
+            ("module", "crate::net"),
+            ("name", "decode"),
+            ("unit", "lib.rs"),
+        ]
     );
 }
 

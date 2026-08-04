@@ -1,18 +1,17 @@
-//! The governed corpus is **one** crate root — the resolved one — and the modules reachable from it.
-//! Every other compiled root of the same package is out of scope: a `main.rs` beside a `lib.rs`, a
-//! `src/bin/*.rs`, a `[[bin]] path` inside the source directory, and one outside it.
+//! **Every** compiled root of a package is governed: a `main.rs` beside a `lib.rs`, a `src/bin/*.rs`, a
+//! `[[bin]] path` inside the source directory, and one outside it.
 //!
-//! This is a **stated bound**, pinned rather than described, because the shape it affects is the most
-//! ordinary one in Rust and because three surfaces used to claim otherwise:
-//! `module-boundary` asserted that "both crate roots (`lib.rs` and `main.rs`) resolve to `crate`",
-//! `module_check.rs` repeated it to justify a dedup step, and a unit test named for the claim could
-//! not distinguish "two roots deduplicated" from "one root scanned" — its synthetic metadata declared
-//! only one target, so its assertion held either way.
+//! This file previously pinned the opposite — that only the first resolved root was governed — as a
+//! stated bound, and said so in both directions so that "if this now reacts, the bound has been closed".
+//! It did, in the same window: these tests started failing the moment the per-target corpus landed,
+//! which is exactly the transition they were written to detect. They are inverted here rather than
+//! deleted, because the direction they now assert is the one an adopter depends on and the one a future
+//! regression would silently undo.
 //!
 //! Pinned at the **real** resolution: a real manifest, real `cargo metadata`, real
-//! `xingbiao::crate_root_file` (which returns the first library-kind target, else the first `bin`).
-//! Both directions are asserted — the governed root reacts, the others are silent — so if the bound is
-//! ever closed this fails and the specification, the comment, and `BACKLOG.md` must move with it.
+//! `xingbiao::crate_root_files`. Each root's violation must be reported with its own file, and — since
+//! every root denotes the module path `crate` — with its own compilation-unit identity, so accepting one
+//! in a baseline cannot suppress another.
 use std::path::{Path, PathBuf};
 
 use guibiao::{Constitution, ModuleBoundary, Outcome, check};
@@ -91,7 +90,7 @@ fn reacting_files(outcome: &Outcome) -> Vec<String> {
 }
 
 #[test]
-fn a_second_crate_root_beside_the_library_is_not_observed() {
+fn a_second_crate_root_beside_the_library_is_governed_too() {
     let probe = RootProbe::new(
         "libmain",
         "",
@@ -102,21 +101,16 @@ fn a_second_crate_root_beside_the_library_is_not_observed() {
     );
 
     let files = reacting_files(&check(&clock_free("libmain"), probe.manifest()));
-    assert!(
-        files.iter().any(|f| f.ends_with("src/lib.rs")),
-        "the resolved library root must react: {files:?}"
-    );
-    assert!(
-        !files.iter().any(|f| f.ends_with("src/main.rs")),
-        "STATED BOUND: `main.rs` beside a `lib.rs` is not the resolved root and is not observed. If \
-         this now reacts, the bound has been closed — update `module-boundary`'s \
-         single-governed-root requirement, the dedup comment in `module_check.rs`, and `BACKLOG.md` \
-         together with it: {files:?}"
-    );
+    for governed in ["src/lib.rs", "src/main.rs"] {
+        assert!(
+            files.iter().any(|f| f.ends_with(governed)),
+            "{governed} is a compiled root of the package, so its violation must react: {files:?}"
+        );
+    }
 }
 
 #[test]
-fn no_binary_target_root_is_observed_wherever_it_lives() {
+fn every_binary_target_root_is_governed_wherever_it_lives() {
     let probe = RootProbe::new(
         "binroots",
         "[[bin]]\nname = \"custom_in_src\"\npath = \"src/custom_in_src.rs\"\n\n\
@@ -140,16 +134,11 @@ fn no_binary_target_root_is_observed_wherever_it_lives() {
         files.iter().any(|f| f.ends_with("src/lib.rs")),
         "the resolved library root must react: {files:?}"
     );
-    for unobserved in [
-        "src/bin/conventional.rs",
-        "src/custom_in_src.rs",
-        "tools/outside.rs",
-    ] {
+    for governed in ["src/bin/conventional.rs", "src/custom_in_src.rs"] {
         assert!(
-            !files.iter().any(|f| f.ends_with(unobserved)),
-            "STATED BOUND: {unobserved} is a binary target's own root, not the resolved one, so it \
-             is not observed — identically for a conventional `src/bin` target and for a custom \
-             `path`, inside the source directory or outside it: {files:?}"
+            files.iter().any(|f| f.ends_with(governed)),
+            "{governed} is a compiled root, so its violation must react — a conventional `src/bin` \
+             target and a custom `path` are treated identically: {files:?}"
         );
     }
 }
@@ -169,4 +158,54 @@ fn a_package_with_no_library_governs_its_first_binary_root() {
         files.iter().any(|f| f.ends_with("src/main.rs")),
         "with no library target, the first binary root is the governed one: {files:?}"
     );
+}
+
+/// The one root shape that is **refused** rather than governed: a target whose source lies outside the
+/// package's own directory.
+///
+/// A violation's identity is labeled by the compilation unit it came from, relative to the package
+/// directory — so a root outside that directory has no checkout-independent label, and using the path as
+/// given would make the identity depend on where the repository happens to be cloned. That is the defect
+/// the label exists to prevent, so this is "cannot judge" (exit 2), the same ordering 漏刻 applies when it
+/// refuses a relative or empty anchor.
+///
+/// Note how narrow this is: `tools/outside.rs` in the test above is outside `src/` and is governed
+/// normally, because it is still inside the package. Only a root reached out of the package — a
+/// `[[bin]] path = "../…"` — is refused.
+#[test]
+fn a_target_root_outside_the_package_directory_is_refused_not_labeled() {
+    // The shared source lives beside the package, so the package's own directory does not contain it.
+    let shared = std::env::temp_dir().join(format!(
+        "guibiao-out-of-package-shared-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&shared);
+    std::fs::create_dir_all(&shared).expect("create shared dir");
+    std::fs::write(
+        shared.join("outside.rs"),
+        format!("fn main() {{}}\n{OFFENDING}"),
+    )
+    .expect("write shared root");
+
+    let probe = RootProbe::new(
+        "outofpackage",
+        &format!(
+            "[[bin]]\nname = \"out\"\npath = {:?}\n",
+            shared.join("outside.rs").display().to_string()
+        ),
+        &[("src/lib.rs", OFFENDING)],
+    );
+
+    match check(&clock_free("outofpackage"), probe.manifest()) {
+        Outcome::ConstitutionError(message) => {
+            assert!(
+                message.contains("cannot be judged without a checkout-dependent identity"),
+                "expected the out-of-package-root constitution error, got: {message}"
+            );
+        }
+        other => panic!(
+            "a target root outside the package directory must be refused, not labeled: {other:?}"
+        ),
+    }
+    let _ = std::fs::remove_dir_all(&shared);
 }
