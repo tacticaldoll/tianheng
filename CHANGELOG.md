@@ -267,7 +267,17 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   whose `use` tree nests past the scanner's brace-nesting cap, turned a `Shallow` inbound rule into
   exit 2 where `Subtree` exits 0. Both sites now call one depth-free predicate
   (`is_inside_protected_module`), so the pre-filter and the rule cannot drift, and what the exemption
-  excuses can no longer decide the exit code. The helper the two families used to share is split:
+  excuses can no longer decide the exit code.
+  That target-match resolution's own **namespace-blind bound** is now stated rather than implied: Rust
+  resolves `mod foo` and `fn foo` in different namespaces, so both can be declared in one module and a
+  single `use m::foo;` binds both (verified against rustc — the importer can call `foo()` and reach
+  `foo::INSIDE` from that one `use`). Seeing only the path, the resolver returns the module reading,
+  so under `Shallow` anchored at that module's own parent the value reading goes unobserved; under
+  `Subtree` both readings coincide. Reacting on both readings would make every ordinary
+  `use m::child;` react under `Shallow`, contradicting the exact-seam scenario — a narrow false
+  negative is not traded for a broad false positive. Stated in `rule-model-surface` with a scenario,
+  pinned by `shallow_inbound_target_match_is_namespace_blind_a_stated_bound`, and recorded in
+  `BACKLOG.md` as READY-PATCH with the value-namespace observation as its promotion trigger. The helper the two families used to share is split:
   external-crate confinement keeps a depth-sensitive pre-filter under a name that says so
   (`hosts_only_permitted_importers`), because there the skip is only sound when every importer the
   file can host is permitted — never under `Shallow`, where an inline `mod` inside the permitted file

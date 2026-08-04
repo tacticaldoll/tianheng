@@ -121,6 +121,18 @@ directly, otherwise its longest reachable-module prefix) before the depth compar
 item-form import (`use m::Item;`) reaches `m` exactly as a bare import of `m` itself does; depth
 then distinguishes that from an import of only a descendant module's item, never by comparing the
 raw import path string (which would conflate an item in `m` with an item in a descendant of `m`).
+That target-match resolution is **namespace-blind**, a stated bound rather than an implied
+guarantee. Rust resolves a module and a value of the same name in different namespaces, so `mod foo`
+and `fn foo` may both be declared in one module and a single `use m::foo;` binds both; observing only
+the path, the system SHALL resolve to the module reading (the longest reachable module) and MAY leave
+the value reading unobserved. This is visible only under `Shallow` anchored at that module's own
+parent, where the value reading would react and the module reading does not; under `Subtree` both
+readings lie within the anchored module, so nothing is lost. The system SHALL NOT close this by
+reacting on both readings, because that would make an ordinary bare import of a child module react
+under `Shallow`, contradicting the exact-seam scenario above — a narrow false negative SHALL NOT be
+traded for a broad false positive. Closing it requires a value-namespace item observation this
+dimension does not have, and SHALL be recorded as a live decision rather than described as absent.
+
 An inbound rule's importer-side self-import exemption — a file within the protected module's own
 subtree is never an inbound importer — is orthogonal to this target match and SHALL NOT be
 depth-gated: it holds identically at `Shallow` and `Subtree`, because depth narrows what counts as
@@ -152,6 +164,14 @@ anchored module.
 - **WHEN** a module within the protected module's own subtree imports an item declared directly in
   the protected module, under `Shallow`
 - **THEN** the importer is exempt as a self-import, exactly as it would be under `Subtree`
+
+#### Scenario: A name living in two namespaces resolves to its module reading (stated bound)
+
+- **WHEN** a `Shallow` inbound rule protects a module that declares both `mod foo;` and `fn foo`, and
+  an outside importer writes the single `use <protected>::foo;` that binds both
+- **THEN** the target match resolves to the descendant module `<protected>::foo` and does not react —
+  the observed bound, pinned by a test and recorded as a live decision, never a silent claim that the
+  value reading was considered
 
 #### Scenario: An excused file's content cannot decide the inbound exit code
 

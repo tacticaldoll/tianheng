@@ -1720,6 +1720,62 @@ pub(super) fn shallow_inbound_rules_never_flag_the_protected_modules_own_descend
 }
 
 #[test]
+pub(super) fn shallow_inbound_target_match_is_namespace_blind_a_stated_bound() {
+    // Rust resolves `mod foo` and `fn foo` in DIFFERENT namespaces, so both may live in one module
+    // and one `use protected::foo;` binds both — verified against rustc, not reasoned: an importer
+    // writing only that `use` can call `foo()` and also reach `foo::INSIDE`.
+    //
+    // `resolve_import_module` sees only the path, so it returns the module reading. Under `Shallow`
+    // anchored at `crate::protected`, the value reading (an item declared directly in the protected
+    // module — reacts) and the module reading (only a descendant module — does not react) disagree,
+    // and the module reading wins. This test pins that observed answer.
+    //
+    // It is a bound, not a bug left unrecorded: reacting on both readings would make every ordinary
+    // `use protected::child;` react under `Shallow`, contradicting
+    // `shallow_inbound_rules_protect_only_the_exact_module` above. Trading this narrow false negative
+    // for that broad false positive is the wrong direction; closing it needs a value-namespace item
+    // observation guibiao does not have. If this test starts failing, the bound has been closed and
+    // `rule-model-surface`, `resolve_import_module`'s doc, and the backlog entry must move with it.
+    let files = &[
+        ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+        ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
+        ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
+        ("consumer.rs", "use crate::protected::foo;\n"),
+    ];
+
+    let shallow = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .depth(xuanji::ScanDepth::Shallow)
+        .because("only the facade may reach into protected");
+    let (shallow_result, shallow_violations) =
+        run_module_check("namespace-blind-shallow", files, shallow);
+    assert!(shallow_result.is_ok(), "{shallow_result:?}");
+    assert!(
+        shallow_violations.is_empty(),
+        "the module reading wins under Shallow — the stated namespace-blind bound: \
+         {shallow_violations:?}"
+    );
+
+    // Under `Subtree` both readings lie within the protected module, so the import reacts either
+    // way — the bound is confined to the `Shallow` cell, which is what makes it narrow.
+    let subtree = ModuleBoundary::in_crate("x")
+        .module("crate::protected")
+        .must_only_be_imported_by(["crate::facade"])
+        .depth(xuanji::ScanDepth::Subtree)
+        .because("only the facade may reach into protected");
+    let (subtree_result, subtree_violations) =
+        run_module_check("namespace-blind-subtree", files, subtree);
+    assert!(subtree_result.is_ok(), "{subtree_result:?}");
+    assert_eq!(
+        subtree_violations.len(),
+        1,
+        "under Subtree the two readings coincide, so the import must react: {subtree_violations:?}"
+    );
+    assert_eq!(subtree_violations[0].finding, "crate::consumer");
+}
+
+#[test]
 pub(super) fn shallow_inbound_rules_do_not_read_a_file_the_self_import_exemption_excuses() {
     // The exemption above is observable in the violation output at either depth, because the
     // per-import check excuses these importers even when the file IS read. What was NOT the same at
