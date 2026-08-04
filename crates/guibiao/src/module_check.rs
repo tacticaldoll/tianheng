@@ -163,13 +163,14 @@ fn resolve_import_module<'a>(
 /// Four conditions must hold together, and each is what keeps this from becoming the broad false
 /// positive that reacting on both readings would have been:
 ///
-/// 1. The import is **not a glob**. `use_scan` stores a glob at its base module with `::*` stripped, so
-///    `use m::foo::*;` arrives here byte-identical to a plain `use m::foo;` — same path, same
-///    single-segment leaf, same declared `fn foo` — and satisfied every other condition. A glob imports
-///    the *contents* of the module `foo` and never binds `foo` itself, so the value reading is not
-///    merely unlikely but unrepresentable. Verified against rustc rather than reasoned: with both
-///    declared, `use m::foo;` compiles using `foo()` **and** `foo::INSIDE`, while `use m::foo::*;` fails
-///    `error[E0425]: cannot find function 'foo' in this scope`.
+/// 1. The import **form can bind a value at all** ([`ImportedPath::can_bind_a_value`]). Two forms
+///    cannot, and both normalize to a path indistinguishable from a plain import of the same module —
+///    which is exactly how each was missed: a **glob** (`use m::foo::*;`, stored at its base module with
+///    `::*` stripped) and a **`{self}` leaf** (`use m::foo::{self};`, stored as its prefix module). Each
+///    arrives byte-identical to a bare `use m::foo;` — same path, same single-segment leaf, same declared
+///    `fn foo`. Neither can bind a value of the *parent*, by the language rather than by likelihood, and
+///    the rule lives on `ImportedPath` rather than as conditions here so the next form is one question,
+///    not a third ad-hoc test.
 /// 2. The whole import path resolved to itself as a module (`import_module == import_path`). With a
 ///    further segment — `use m::foo::deep::Thing;` — only the *module* `foo` can be meant, since a `fn`
 ///    has no children, so there is no ambiguity to resolve.
@@ -190,11 +191,11 @@ fn also_binds_a_value_of_the_governed_module(
     import_path: &str,
     import_module: &str,
     governed_module: &str,
-    is_glob: bool,
+    can_bind_a_value: bool,
     cache: &mut Option<std::collections::HashSet<String>>,
     ctx: &ScanContext<'_>,
 ) -> Result<bool, String> {
-    if is_glob {
+    if !can_bind_a_value {
         return Ok(false);
     }
     if import_module != import_path {
@@ -378,7 +379,7 @@ fn check_inbound_rule(
                         &import.path,
                         import_module,
                         governed_module,
-                        import.is_glob,
+                        import.can_bind_a_value(),
                         &mut governed_value_items,
                         ctx,
                     )?;

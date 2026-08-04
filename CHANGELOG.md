@@ -868,6 +868,18 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- Closed a **third** import form of that same class: `use m::foo::{self};` binds the module `foo`, never a
+  `fn foo` beside it, and was reacting. `use_scan` records a `{self}` leaf as its prefix module, so it
+  arrives at the reaction byte-identical to a bare `use m::foo;` — the same collapse the glob condition
+  had just been added for, one form over, in the same function. Verified against rustc: with both
+  declared, `use m::foo::{self};` then `foo()` is `error[E0423]: expected function, found module 'foo'`
+  while `foo::INSIDE` compiles. All four spellings were measured reacting — bare, `{self as f}`, nested in
+  an outer brace group, and beside a sibling leaf — because each takes a different path through the
+  use-tree expansion. The fix does not add a third condition: the language rule now lives on
+  `ImportedPath::can_bind_a_value`, one question with the two ruled-out forms behind it, so the next form
+  is one place to look rather than a third ad-hoc test. `rule-model-surface` is restated the same way —
+  naming only the glob is what let this through, since the requirement read as complete while mandating a
+  false positive in the same cell.
 - Bounded that value-namespace reaction to what actually binds a value, closing two false positives it
   shipped with — both in the very cell it was written to make correct, and both contradicting its own
   central claim that "a narrow false negative must not be traded for a broad false positive". A **glob**

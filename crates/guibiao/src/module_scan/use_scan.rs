@@ -15,20 +15,56 @@ use super::path_vocab::{
     is_crate_root_shadow, resolve_self_super, split_top_commas,
 };
 
-/// One normalized internal import path, retaining whether the source used a glob so boundary
-/// evaluation can distinguish a direct import from an ancestor-glob hazard.
+/// One normalized internal import path, retaining **which form** the source wrote: a glob so boundary
+/// evaluation can distinguish a direct import from an ancestor-glob hazard, and a `{self}` leaf so it
+/// can tell an import of a module from an import of something in it.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ImportedPath {
     pub path: String,
     pub is_glob: bool,
+    /// The source wrote the path as a `{self}` leaf — `use m::foo::{self};`, or `{self as f}`.
+    ///
+    /// Recorded because the normalized path cannot show it: a `{self}` leaf normalizes to its prefix
+    /// module, so `use m::foo::{self};` and a bare `use m::foo;` are byte-identical afterward while
+    /// binding different things.
+    pub is_self_leaf: bool,
 }
 
 impl ImportedPath {
+    /// Whether this import form can bind a **value** declared in the path's parent module.
+    ///
+    /// Only a plain leaf can. Both other forms are ruled out by the language, not by likelihood:
+    ///
+    /// - a **glob** imports the *contents* of the named module and never the name itself, so with
+    ///   `mod foo` and `fn foo` both declared, `use m::foo::*;` then calling `foo()` is
+    ///   `error[E0425]: cannot find function 'foo' in this scope`;
+    /// - a **`{self}` leaf** imports the named module, so the same declarations give
+    ///   `error[E0423]: expected function, found module 'foo'` while `foo::INSIDE` compiles.
+    ///
+    /// One question with two source facts behind it, named here so a reader of the inbound
+    /// value-namespace reaction meets the language rule rather than two ad-hoc conditions — the second
+    /// of which was missed when the first was added.
+    pub(crate) fn can_bind_a_value(&self) -> bool {
+        !self.is_glob && !self.is_self_leaf
+    }
+
     #[cfg(test)]
     pub(crate) fn plain(path: impl Into<String>) -> Self {
         ImportedPath {
             path: path.into(),
             is_glob: false,
+            is_self_leaf: false,
+        }
+    }
+
+    /// A `{self}` leaf: the same path a plain import of this module would normalize to, with the form
+    /// recorded — which is the whole distinction, since the paths are otherwise identical.
+    #[cfg(test)]
+    pub(crate) fn self_leaf(path: impl Into<String>) -> Self {
+        ImportedPath {
+            path: path.into(),
+            is_glob: false,
+            is_self_leaf: true,
         }
     }
 
@@ -37,6 +73,7 @@ impl ImportedPath {
         ImportedPath {
             path: path.into(),
             is_glob: true,
+            is_self_leaf: false,
         }
     }
 }
@@ -63,13 +100,14 @@ pub(crate) fn imports_with_importers(
     let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
     let mut pairs = Vec::new();
     for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
-        for (leaf, is_glob) in expand_use_tree(&tree)? {
+        for (leaf, is_glob, is_self_leaf) in expand_use_tree(&tree)? {
             if let Some(absolute) = normalize_module_path(&leaf, &module, root_modules) {
                 pairs.push((
                     module.clone(),
                     ImportedPath {
                         path: absolute,
                         is_glob,
+                        is_self_leaf,
                     },
                 ));
             }
@@ -94,7 +132,7 @@ pub(crate) fn external_imports_with_importers(
     let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
     let mut pairs = Vec::new();
     for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
-        for (leaf, _is_glob) in expand_use_tree(&tree)? {
+        for (leaf, _is_glob, _is_self_leaf) in expand_use_tree(&tree)? {
             if let Some(head) = external_crate_head(&leaf, &module, root_modules) {
                 pairs.push((module.clone(), head));
             }
@@ -161,7 +199,7 @@ fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, Strin
 
 /// Expand a use tree into leaf paths: `a::{b, c::d}` -> `a::b`, `a::c::d`; drop
 /// `::*` and ` as alias`; `{self}` resolves to the prefix module.
-fn expand_use_tree(tree: &str) -> Result<Vec<(String, bool)>, String> {
+fn expand_use_tree(tree: &str) -> Result<Vec<(String, bool, bool)>, String> {
     expand_use_tree_depth(tree, 0)
 }
 
@@ -172,7 +210,7 @@ fn expand_use_tree(tree: &str) -> Result<Vec<(String, bool)>, String> {
 /// from observation with no report — the false negative PROJECT.md's core contract forbids.
 const MAX_USE_NEST_DEPTH: usize = 128;
 
-fn expand_use_tree_depth(tree: &str, depth: usize) -> Result<Vec<(String, bool)>, String> {
+fn expand_use_tree_depth(tree: &str, depth: usize) -> Result<Vec<(String, bool, bool)>, String> {
     if depth >= MAX_USE_NEST_DEPTH {
         return Err(format!(
             "cannot judge a `use` tree nested past {MAX_USE_NEST_DEPTH} brace levels: '{tree}'"
@@ -200,7 +238,11 @@ fn expand_use_tree_depth(tree: &str, depth: usize) -> Result<Vec<(String, bool)>
                 if head == "self" {
                     let module = prefix.trim_end_matches(':').trim();
                     if !module.is_empty() {
-                        out.push((module.to_string(), false));
+                        // A `{self}` leaf denotes the PREFIX MODULE, so it normalizes to a path
+                        // indistinguishable from a bare import of that module. The form is recorded
+                        // rather than inferred: `use m::foo::{self};` binds the module `foo`, never a
+                        // `fn foo` beside it, and the normalized path cannot say which was written.
+                        out.push((module.to_string(), false, true));
                     }
                 } else {
                     out.extend(expand_use_tree_depth(
@@ -224,7 +266,7 @@ fn expand_use_tree_depth(tree: &str, depth: usize) -> Result<Vec<(String, bool)>
             if leaf_path.is_empty() {
                 Ok(Vec::new())
             } else {
-                Ok(vec![(leaf_path.to_string(), is_glob)])
+                Ok(vec![(leaf_path.to_string(), is_glob, false)])
             }
         }
     }
@@ -413,12 +455,18 @@ mod tests {
         // `use crate::config::{self as cfg, Setting};` imports the
         // module `crate::config` (under the alias) plus `crate::config::Setting`. The `self as cfg`
         // form must resolve to the prefix module, not leave a phantom `crate::config::self` segment.
+        //
+        // The resolved PATH is what it always was; what is added is that the `{self}` form is now
+        // recorded on the import rather than erased by normalization. It has to be: a `{self}` leaf
+        // binds the module, a plain leaf can bind a value beside it, and the two normalize to the same
+        // string — so the inbound value-namespace reaction could not tell them apart and reacted to
+        // both (see `ImportedPath::can_bind_a_value`).
         let source = "use crate::config::{self as cfg, Setting};";
         let imports = imported_module_paths(source, "crate", &[]).unwrap();
         assert_eq!(
             imports,
             vec![
-                ImportedPath::plain("crate::config"),
+                ImportedPath::self_leaf("crate::config"),
                 ImportedPath::plain("crate::config::Setting"),
             ],
             "a `self as alias` in a group resolves to the prefix module: {imports:?}"
@@ -426,7 +474,13 @@ mod tests {
         // A lone `{self as x}` likewise resolves to the prefix module, never `…::self`.
         assert_eq!(
             imported_module_paths("use crate::config::{self as cfg};", "crate", &[]).unwrap(),
-            vec![ImportedPath::plain("crate::config")],
+            vec![ImportedPath::self_leaf("crate::config")],
+        );
+        // And the sibling leaf beside it is a plain import, so the form is per-leaf rather than
+        // per-statement — a `{self}` in one group does not mark the group's other leaves.
+        assert!(
+            !imports[1].is_self_leaf && imports[1].can_bind_a_value(),
+            "a sibling leaf keeps the plain form: {imports:?}"
         );
     }
 

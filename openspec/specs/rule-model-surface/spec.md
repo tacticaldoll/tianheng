@@ -140,11 +140,22 @@ required observation did not exist in this dimension; the premise was false — 
 backing the strict-external local-precedence ladder already reads exactly those names, per module, at
 module top level.
 
-A **glob** import SHALL NOT react through the value reading, whatever the anchored module declares. A
-glob imports the *contents* of the named module and never binds the name itself, so no value reading of
-it exists to observe — the exclusion rests on what the language admits, not on likelihood. This SHALL be
-stated because a glob is not distinguishable from a bare import by its recorded path: the scan stores a
-glob at its base module with the `::*` removed, so the two arrive at the reaction identical.
+An import whose **form cannot bind a value** SHALL NOT react through the value reading, whatever the
+anchored module declares. Two forms cannot, and the exclusions rest on what the language admits rather
+than on likelihood:
+
+- a **glob** (`use m::foo::*;`) imports the *contents* of the named module and never binds the name
+  itself, so with `mod foo` and `fn foo` both declared, calling `foo()` is `error[E0425]`;
+- a **`{self}` leaf** (`use m::foo::{self};`, or `{self as f}`) imports the named module, so the same
+  declarations give `error[E0423]: expected function, found module` while `foo::INSIDE` compiles.
+
+Both SHALL be stated, and stated together, because neither is distinguishable from a bare import by its
+**recorded path**: a glob is stored at its base module with `::*` removed, and a `{self}` leaf is stored
+as its prefix module, so all three arrive at the reaction as the same string. The import form SHALL
+therefore be carried alongside the normalized path rather than inferred from it. Naming only the glob is
+what let the `{self}` form through: the requirement read as complete while admitting a false positive in
+the same cell, so this bound SHALL be expressed as the single question "can this form bind a value" rather
+than as a list of excluded spellings.
 
 The **observation** carries the remaining bounds, not the resolution, and each SHALL be stated:
 
@@ -162,6 +173,14 @@ The **observation** carries the remaining bounds, not the resolution, and each S
   with `Shallow` depth
 - **WHEN** an unauthorized module writes `use m::foo;`, which binds both
 - **THEN** it reacts, because the import reaches `m` itself through the value binding
+
+#### Scenario: A `{self}` leaf naming the child module does not react under Shallow
+
+- **GIVEN** a module `m` declaring both `mod foo` and `fn foo`, and an inbound boundary anchored at `m`
+  with `Shallow` depth
+- **WHEN** an unauthorized module writes `use m::foo::{self};`, in any spelling — aliased, nested inside
+  an outer brace group, or beside a sibling leaf
+- **THEN** it does not react, the leaf binding the module `foo` and no value of `m`
 
 #### Scenario: A glob import of the child module does not react under Shallow
 
