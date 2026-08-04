@@ -30,6 +30,20 @@
 #     absent. All three of the above are `.gitignore` entries, and the sentences citing them say so
 #     ("Stopped tracking …", "Ignored …"). Asking git rather than listing them keeps the rule honest as
 #     `.gitignore` changes.
+#   * Root-level references are covered by two unambiguous forms, because a BARE filename in prose is
+#     usually generic rather than a location: `Cargo.toml` almost always means "some package's
+#     manifest", `lib.rs` means "a crate root", `spec.md` means "the capability's spec", and
+#     `README.md` names one of fourteen. So:
+#       - a **markdown link target** (`](path)`) is checked unconditionally, being a link by syntax;
+#       - a **bare filename** is checked only when that basename is tracked at the repository root and
+#         nowhere else, which is what makes it unambiguous (`PROJECT.md`, `BACKLOG.md`, `deny.toml` — but
+#         not `Cargo.toml`, `README.md`, or `spec.md`). This also skips names that are illustrative by
+#         construction: README's own code samples write `AGENTS.my-project-law.md` into the *adopter's*
+#         repository, and it is correctly not expected here.
+#     Neither form catches a bare reference to a document that has been renamed AWAY (its basename is
+#     then tracked nowhere, so the second rule declines to judge it). The governance-document assertion
+#     below is what catches that, and it is a REQUIRED set rather than an allowlist: an allowlist of
+#     exceptions rots silently, a required set fails loudly the moment reality diverges from it.
 #   * A bare `tests/…rs` reference is satisfied if that file exists under ANY member's `tests/`, not
 #     only the referring member's. Such a reference is genuinely cross-crate in practice — 圭表's crate
 #     doc points at "`tianheng` workspace `tests/self_governance.rs`", naming the crate in prose rather
@@ -60,6 +74,20 @@ is_member() {
   esac
 }
 
+# The reference forms this gate recognizes:
+#   1. a path under one of the repository's own top-level directories;
+#   2. a bare `tests/…rs`, resolved against the members (see the header);
+#   3. a markdown link target — `](path)` — which is a link by syntax, so never generic;
+#   4. a bare filename, admitted only when unambiguous (see `is_unambiguous_basename`).
+REFERENCE_PATTERN='(crates|scripts|openspec|docs|examples|\.github)/[A-Za-z0-9_./*-]+|(^|[^A-Za-z0-9_/-])tests/[A-Za-z0-9_/-]+\.rs|\]\([A-Za-z0-9_.#/-]+\)|[A-Za-z0-9_][A-Za-z0-9_.-]*\.(md|toml|sh|yml|lock)'
+
+# The repository's governance surface, as a REQUIRED set: each of these must be tracked. This is the
+# rename detector the bare-name rule cannot be — rename `PROJECT.md` and its basename is tracked
+# nowhere, so a reference to it becomes unjudgeable rather than wrong. Asserting the documents
+# themselves exist turns that silence into a loud failure. A required set is safe to write down where
+# an allowlist is not: this one fails the moment it goes stale, so it cannot quietly excuse anything.
+GOVERNANCE_DOCUMENTS='AGENTS.md AGENTS.self-law.md BACKLOG.md CHANGELOG.md COOKBOOK.md PROJECT.md README.md Cargo.toml deny.toml'
+
 # Every tracked path, plus each of their ancestor directories — a directory is not itself a git object,
 # so `docs/` must be recognized through the files under it.
 tracked=$(mktemp)
@@ -75,6 +103,24 @@ is_tracked() {
   grep -qxF -- "$1" "$tracked"
 }
 
+# A bare filename names one location only if exactly one tracked path ends in it, and that path IS it —
+# i.e. it lives at the repository root and nowhere else. `PROJECT.md` and `deny.toml` qualify;
+# `Cargo.toml` (root plus every crate), `README.md` (root plus fourteen), `lib.rs`, and `spec.md` do not,
+# and a bare mention of those means the generic thing, not the root file.
+is_unambiguous_basename() {
+  [ "$(grep -cxF -- "$1" "$tracked")" = 1 ] && [ "$(grep -cE "(^|/)$(printf '%s' "$1" | sed 's/[.[\*^$]/\\&/g')\$" "$tracked")" = 1 ]
+}
+
+for document in $GOVERNANCE_DOCUMENTS; do
+  is_tracked "$document" || {
+    echo "cannot judge: '$document' is named as one of this repository's governance documents and is" >&2
+    echo "not tracked. If it was renamed, update GOVERNANCE_DOCUMENTS in this script and every prose" >&2
+    echo "reference to it; a bare reference to a renamed-away document is unjudgeable, which is exactly" >&2
+    echo "why this set is asserted rather than inferred." >&2
+    exit 2
+  }
+done
+
 inspected=0
 offenses=0
 
@@ -85,12 +131,42 @@ while IFS= read -r file; do
   crates/*) crate_dir="crates/$(printf '%s' "$file" | cut -d/ -f2)" ;;
   esac
 
+  # `grep` exit 1 means "no match" and exit >1 means "could not read". Discarding stderr and running
+  # inside a process substitution hid the second entirely: `set -e` cannot see it there, the file still
+  # counted as inspected, and an unreadable tracked file left the run reporting clean. Captured here so
+  # the two are distinguishable, and the unreadable case refuses to judge.
+  status=0
+  matches=$(grep -oE "$REFERENCE_PATTERN" -- "$file" 2>/dev/null) || status=$?
+  if [ "$status" -gt 1 ]; then
+    echo "cannot judge: cannot read tracked file '$file' (grep exit $status) — a file this gate claims" >&2
+    echo "to cover must not be counted as inspected without having been read" >&2
+    exit 2
+  fi
+
   # Trailing `.`/`,`/`)`/`` ` `` are prose punctuation, not part of the path. A reference containing a
   # glob is a pattern rather than a location and is not resolvable by existence.
   while IFS= read -r reference; do
     [ -n "$reference" ] || continue
     case "$reference" in
     *'*'*) continue ;;
+    esac
+
+    # A markdown link target (marked \x01 during extraction) is resolved relative to the REFERRING
+    # FILE's directory, which is what a markdown link means — `../../BACKLOG.md` from
+    # `docs/history/x.md` is the root document, not a missing one. Prose paths, by contrast, are written
+    # repo-relative throughout this repository. `realpath -m` normalizes `..` without requiring the
+    # path to exist, so a genuinely broken link still reports its resolved form.
+    from_link=0
+    case "$reference" in
+    $'\x01'*)
+      from_link=1
+      reference=${reference#$'\x01'}
+      [ -n "$reference" ] || continue
+      case "$reference" in
+      *:*) continue ;;
+      esac
+      reference=$(realpath -m --relative-to="$PWD" -- "$(dirname -- "$file")/$reference")
+      ;;
     esac
 
     target="$reference"
@@ -115,6 +191,15 @@ while IFS= read -r file; do
       fi
       continue
       ;;
+    */*) ;;
+    *)
+      # A bare filename in PROSE is generic unless it names exactly one tracked location (see the
+      # header). A link target is exempt: it is a link by syntax, so it is never generic — and a
+      # relative one resolving to a root-level name (`../../GONE.md`) would otherwise be swallowed by
+      # the very ambiguity rule that exists for prose. Measured: without this exemption a broken
+      # relative link was reported clean.
+      [ "$from_link" = 1 ] || is_unambiguous_basename "$reference" || continue
+      ;;
     esac
 
     # A trailing slash marks prose naming a directory; the tracked set holds directories unslashed.
@@ -138,8 +223,9 @@ while IFS= read -r file; do
       offenses=$((offenses + 1))
       echo "$file: references '$reference', which is not tracked in this repository"
     fi
-  done < <(grep -oE '(crates|scripts|openspec|docs|examples|\.github)/[A-Za-z0-9_./*-]+|(^|[^A-Za-z0-9_/-])tests/[A-Za-z0-9_/-]+\.rs' -- "$file" 2>/dev/null |
-    sed -E 's/^[^A-Za-z0-9_.]+//; s/[.,)`]+$//' | sort -u)
+  done < <(printf '%s\n' "$matches" |
+    sed -E 's#^\]\((.*)\)$#\x01\1#; s/^[^\x01A-Za-z0-9_.]+//; s/[.,)`]+$//; s/#.*$//' |
+    grep -v '^\x01?$' | sort -u)
 done < <(git ls-files '*.md' '*.rs')
 
 if [ "$inspected" -eq 0 ]; then
