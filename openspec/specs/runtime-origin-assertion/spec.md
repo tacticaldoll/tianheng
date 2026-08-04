@@ -770,6 +770,17 @@ path, whose shape is not uniform across all types:
   from the outer type's would fire on every ordinary instantiation over a primitive.
 - A **type alias** reports the aliased type's defining path, not the alias's location, so an alias
   cannot relabel an origin.
+- A **composite** shape — a reference, tuple, array, pointer, or function pointer — yields a
+  **truncated** rendering rather than a module path, and SHALL be stated as truncated rather than as
+  unchanged. The argument cut above is delimiter-aware for `<…>` and for nothing else, so for any other
+  composite the search for the final separator lands inside the wrapped type's own path: `&m::Foo`
+  derives `&m`. This SHALL NOT be resolved by widening the cut to the other delimiters, because there is
+  no answer to widen it to — an origin is a **module**, and a composite has no single defining module,
+  the tuple `(a::T, b::U)` requiring two for the same reason a generic's argument cannot contribute one.
+  The reaction is unaffected and SHALL stay fail-closed: such a rendering equals no module name, so it
+  matches no allowlist entry, and in particular it never equals the **wrapped** type's own defining
+  module, so an allowlist permitting that module cannot admit the composite. That last property is what
+  SHALL be pinned by test, rather than the exact rendering, which the paragraph below declares unstable.
 
 The reported path's exact rendering is not guaranteed stable across compiler versions. The system
 SHALL keep that instability confined to loud reactions: a rendering change makes an origin stop

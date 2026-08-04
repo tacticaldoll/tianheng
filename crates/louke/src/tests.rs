@@ -367,10 +367,45 @@ fn the_derived_origin_honors_its_stated_shape_bounds() {
         "the origin is the outermost type's defining module: {outer}"
     );
 
-    // A shape with no path at all yields its own rendering — stated, not an error, because it matches
-    // no allowlist entry and therefore reacts fail-closed.
+    // A shape carrying NO path at all really does yield its own rendering: the cut finds no `::`, so
+    // there is nothing to remove. This is the half of the old stated bound that was true, and the half
+    // its fixture happened to cover.
     assert_eq!(defining_module("&u8"), "&u8");
     assert_eq!(defining_module("(u8, u8)"), "(u8, u8)");
+    assert_eq!(defining_module(std::any::type_name::<u8>()), "u8");
+    assert_eq!(defining_module(std::any::type_name::<&str>()), "&str");
+
+    // A COMPOSITE shape wrapping a pathed type does NOT yield its rendering unchanged, which the bound
+    // used to claim. The cut is delimiter-aware for `<…>` only, so `rfind("::")` lands inside the
+    // wrapped type's path and truncates there: `&m::Foo` derives `&m`, `[m::Foo; 2]` derives `[m`, and
+    // a tuple keeps its first element whole and truncates the last. Measured, not reasoned — the old
+    // fixture asserted the claim with `&u8` and `(u8, u8)`, whose primitives carry no path, so it
+    // inherited the prose's blind spot instead of catching it.
+    //
+    // Asserted as the SAFETY property rather than as rustc's exact rendering, which
+    // `runtime-origin-assertion` itself declares unstable across compiler versions: whatever the
+    // truncation produces, it is never equal to the wrapped type's own defining module, so it can never
+    // be admitted by an allowlist entry that permits that module. The reaction is fail-closed.
+    let inner = defining_module(std::any::type_name::<rogue_layer::Payload>());
+    for composite in [
+        std::any::type_name::<&rogue_layer::Payload>(),
+        std::any::type_name::<(rogue_layer::Payload, rogue_layer::Payload)>(),
+        std::any::type_name::<[rogue_layer::Payload; 2]>(),
+        std::any::type_name::<*const rogue_layer::Payload>(),
+        std::any::type_name::<fn(rogue_layer::Payload) -> rogue_layer::Payload>(),
+    ] {
+        let derived = defining_module(composite);
+        assert_ne!(
+            derived, inner,
+            "a composite shape must not be attributed to the module of the type it wraps, or an \
+             allowlist naming that module would admit it: {composite}"
+        );
+        assert_ne!(
+            derived, composite,
+            "and it does not yield its rendering unchanged either, which is what the bound used to \
+             claim: {composite}"
+        );
+    }
 
     // A foreign type's origin is its OWN defining path, not the registering layer's. Asserted
     // structurally: it is a real path, and it is not this module — pinning std's internal rendering
