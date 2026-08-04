@@ -36,6 +36,41 @@ it. Two previously recorded closure paths were tested and **both fail**:
 Both share one shape: hunting for a **macro** that can pass something hand-written code cannot. No
 such macro exists, in either macro system.
 
+**The residual was narrower than documented, for a Tianheng-governed workspace.** 圭表's inline
+symbol-path confinement already reacts to the hand-written bypass at CI — measured against a real
+adopter workspace with the family patched to local source:
+
+```rust
+ModuleBoundary::in_crate("my_app").module("crate")
+    .must_not_call_inline("louke::OriginEntry")
+    .strict_external()                       // required — see below
+    .depth(ScanDepth::Subtree)
+```
+
+| spelling | reaction |
+|---|---|
+| `louke::OriginEntry::__from_register_origin(…)` | exit 1 |
+| `::louke::OriginEntry::__from_register_origin(…)` | exit 1 |
+| `use louke::OriginEntry as OE; OE::__from_register_origin(…)` | exit 1 (the resolver follows the rename and reports the canonical path) |
+| any of the above **without** `.strict_external()` | clean — the default resolver does not classify an external crate's paths |
+
+A control boundary confining a local path was verified to react first, so the clean row is the rule not
+observing, not the probe failing. The bound worth stating with it: such a boundary scans the adopter's
+own workspace, so a third-party **dependency** that hand-builds an entry is outside it. This does not
+reduce the case for closing the gap in the crate — a crate's own guarantee must not depend on the
+adopter also adopting 圭表 and remembering `.strict_external()` — but it does mean the 0.3.x residual was
+CI-preventable, which the prose never said.
+
+**Capability pressure, recorded rather than faked.** The invariant this change establishes *inside*
+louke — the origin is never taken from the call site — has **no observation source** in the current
+vocabulary. Measured: a `must_not_call_inline("std::module_path").strict_external()` boundary stays
+clean against `std::module_path!()`, `::std::module_path!()`, and bare `module_path!()` alike, because
+the inline symbol scan does not observe a **macro invocation** as a symbol path. Under the drift law
+("no target type or name without a reaction") that invariant therefore must not be given a name in the
+constitution; it stays a test, and "macro invocation as an observable inline call" is a capability
+candidate for `shape-capability`, not something to assert as law. Prose that pulls toward a shape
+Tianheng cannot react to is the open loop this project exists to close.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -214,21 +249,34 @@ this lands.
 
 ## Open Questions
 
-- **Should the react→pass transition be made loud for one release?** Decision 1 rejects the
-  cross-check as a *permanent gate*, on minimalism grounds. That argument does not answer a different
-  one, raised by adversarial review of this document: a **one-release migration diagnostic**. The case
-  is a type defined in `app::domain` but registered in `app::startup` under an allowlist of
-  `["app::domain"]` — today it reacts, afterwards it passes. Design decision 2 holds that today's
-  reaction is a false alarm, and that is a defensible reading, but the transition is silent at compile
-  time, and the Core Contract's forbidden bug is a violation that *silently passes*. Turning a live
-  reaction into a pass without a word deserves an explicit ruling rather than an author's assurance.
+- **Closed: the react→pass transition needs no migration diagnostic, and the reason is a proof rather
+  than an assurance.** Adversarial review of this document upheld that decision 1's minimalism argument
+  did not answer the *one-release diagnostic* case, so it was reopened and settled on the structure of
+  the transition itself.
 
-  If taken, the shape is narrow and does **not** reopen forgery: `module_path!()` would be captured
-  again but feed only a diagnostic, never the origin, so a fabricated value could not influence what is
-  registered. What needs deciding is the diagnostic's form — a `Violation` through the installed sink,
-  a one-time stderr note, or nothing at all — and whether it is temporary or permanent. Left open
-  deliberately: the alternative was rejected for the wrong reason first, and recording that is more
-  useful than a tidy closure.
+  Let `D` be the type's defining module, `R` the registration module, and `A` the seam's allowlist.
+  Today a crossing passes iff `R ∈ A`; afterwards iff `D ∈ A`. So a reaction can only go quiet when
+  `R ∉ A` **and** `D ∈ A` — and `D ∈ A` is the seam explicitly declaring that types defined in `D` may
+  cross, while the crossing type *is* defined in `D`. **Every reaction that goes quiet is therefore one
+  a seam raised against a source it declares allowed**: a false alarm under the definition this change
+  adopts, not a violation. There is no configuration in which a type crosses a seam that forbids its
+  defining module and the reaction disappears.
+
+  Two attempts to break that proof, both failing:
+  - *Multi-seam.* A type allowed at seam 1 (`R ∈ A₁`) and rejected at seam 2 (`R ∉ A₂`) can go quiet at
+    seam 2 with no loud counterpart, if `A₁ ⊇ {R, D}`. Contrived but constructible — and seam 2 still
+    satisfies `D ∈ A₂`, so its reaction was a false alarm too. The proof covers it.
+  - *Population.* `R ∉ A` means that type reacts on **every** crossing today, so an adopter in this
+    state is already living with continuous false violations, not silence. They do not experience a
+    reaction disappearing; they experience spurious ones stopping. Registering a type purely to have it
+    rejected is redundant, since fail-closed already rejects an *unregistered* type.
+
+  The realistic breakage is the opposite direction — `R ∈ A`, `D ∉ A`: registration away from the
+  module with the allowlist naming the registration site. That **starts** reacting, loudly, with a
+  finding naming the real origin and type. Nothing needs to be added for it.
+
+  The proof is relative to the new definition of an origin; a reader who rejects decision 2 rejects
+  this too, which is why decision 2 states its own grounds separately.
 
 - The other question raised during exploration is decided above: stated bounds over a new fail-loud
   class for foreign and function-local types (decision 3), recorded with the alternative and the reason

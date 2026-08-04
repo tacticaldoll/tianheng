@@ -62,7 +62,10 @@
 - [ ] 4.4 `CHANGELOG.md`: one `**BREAKING**` entry naming the closure, the origin's new meaning, the
       byte-identical result for the documented idiom, the migration step for a registration written
       away from its type's module, and the absence of any baseline impact. Also correct this window's
-      own earlier entries, which now describe a cooperative trust boundary that no longer exists.
+      own earlier entries, which now describe a cooperative trust boundary that no longer exists. Record
+      that the 0.3.x residual was CI-preventable for a Tianheng-governed workspace (圭表's
+      `must_not_call_inline("louke::OriginEntry").strict_external()` reacts to the hand-written bypass),
+      which the prose never said — as history, not as a recipe for a hole that is now closed.
 - [ ] 4.5 `BACKLOG.md`: close the DESIGN-BREAKING entry (keep its reproduction record), and retire the
       two closure paths it lists as open options.
 
