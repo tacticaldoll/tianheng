@@ -1059,6 +1059,20 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   for the same reason: `git check-ignore` reads the filesystem to decide directory-ness, so for a
   directory-only pattern the bare form answers differently in a clone where the directory happens to
   exist (measured in a fresh clone — bare `.github/prompts` is not ignored, `.github/prompts/` is).
+- The two new gates drop their remaining **GNU-sed** dependencies, which had the same failure shape the
+  `realpath` fix removed from one of these files a commit earlier. `check_reference_integrity.sh` marked a
+  markdown link target with `\x01` in a `sed` script; `\xHH` is a GNU extension that busybox and BSD `sed`
+  emit **literally**, so under a POSIX `sed` the gate reported **9 stale references that do not exist** —
+  measured, a portability failure surfacing as a repository defect. The marker is now a literal control
+  byte built with `printf` and interpolated, which every implementation agrees on. A companion dead filter
+  went with it: `grep -v '^\x01?$'` could never fire, because without `-E` the `?` is literal, so the
+  pattern meant "SOH followed by a question mark" — its intent was already served by the guard inside the
+  loop. `check_whitespace_hygiene.sh`'s `sed 's/\r$//'` likewise now uses a literal CR byte, since BSD
+  `sed` does not interpret that escape on the left-hand side. `tr -d '\r'` was rejected as the fix despite
+  being portable: it deletes mid-line CRs too, so `text\r\r\n` would stop being an offense at all —
+  trading a portability bug for a false negative. Both gates were verified to give identical verdicts under
+  GNU and busybox userlands, and — the check that matters more — to still *catch* a planted broken relative
+  link, a planted broken prose path, and a planted trailing-whitespace offense under both.
 - `scripts/check_reference_integrity.sh` normalizes a link target with portable shell instead of
   `realpath -m --relative-to`, whose `-m` and `--relative-to` are GNU coreutils extensions that BSD and
   macOS `realpath` reject. The script sits in a Definition of Done that states no platform restriction,

@@ -81,6 +81,15 @@ is_member() {
 #   4. a bare filename, admitted only when unambiguous (see `is_unambiguous_basename`).
 REFERENCE_PATTERN='(crates|scripts|openspec|docs|examples|\.github)/[A-Za-z0-9_./*-]+|(^|[^A-Za-z0-9_/-])tests/[A-Za-z0-9_/-]+\.rs|\]\([A-Za-z0-9_.#/-]+\)|[A-Za-z0-9_][A-Za-z0-9_.-]*\.(md|toml|sh|yml|lock)'
 
+# The byte that marks an extracted reference as a markdown LINK target, so the loop can resolve it
+# relative to the referring file while leaving prose paths repo-relative. Built with `printf` and
+# interpolated as a literal control character, NOT written as `\x01` in the patterns: `\xHH` is a GNU
+# extension that BSD and busybox `sed` emit literally, and doing so made this gate report 9 stale
+# references that do not exist — measured under busybox. That is the same class of failure this file
+# already removed once, when GNU-only `realpath -m` was replaced; the marker was left behind in the same
+# script. A literal byte is what every implementation agrees on.
+LINK_MARK=$(printf '\001')
+
 # The repository's governance surface, as a REQUIRED set: each of these must be tracked. This is the
 # rename detector the bare-name rule cannot be — rename `PROJECT.md` and its basename is tracked
 # nowhere, so a reference to it becomes unjudgeable rather than wrong. Asserting the documents
@@ -210,9 +219,9 @@ while IFS= read -r file; do
     # genuinely broken link still reports its resolved form.
     from_link=0
     case "$reference" in
-    $'\x01'*)
+    "$LINK_MARK"*)
       from_link=1
-      reference=${reference#$'\x01'}
+      reference=${reference#"$LINK_MARK"}
       [ -n "$reference" ] || continue
       case "$reference" in
       *:*) continue ;;
@@ -276,8 +285,8 @@ while IFS= read -r file; do
       echo "$file: references '$reference', which is not tracked in this repository"
     fi
   done < <(printf '%s\n' "$matches" |
-    sed -E 's#^\]\((.*)\)$#\x01\1#; s/^[^\x01A-Za-z0-9_.]+//; s/[.,)`]+$//; s/#.*$//' |
-    grep -v '^\x01?$' | sort -u)
+    sed -E "s#^\]\((.*)\)\$#${LINK_MARK}\1#; s/^[^${LINK_MARK}A-Za-z0-9_.]+//; s/[.,)\`]+\$//; s/#.*\$//" |
+    sort -u)
 done < <(git ls-files '*.md' '*.rs')
 
 if [ "$inspected" -eq 0 ]; then
