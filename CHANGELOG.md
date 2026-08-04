@@ -189,6 +189,19 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `governed_dependencies(package, kind, true)` plus its own name filter, instead of hand-repeating
   the identical `kind_matches`/`!is_self_dependency` conjunction `governed_dependencies` already
   encapsulates. No public API, wire format, or observable behavior change.
+- Internal refactor: 渾儀's `file_scope.rs` drops `resolve_crate`, the single-root preamble
+  `resolve_crate_units` replaced at all of its call sites earlier in this window. It had been kept
+  compiling by an `#[allow(dead_code)]` — the only one in non-test product source — which suppressed
+  the one signal that would have reported it; with the attribute removed the compiler names it
+  directly (`function resolve_crate is never used`). Its removal takes three stale surfaces with it:
+  the module header named it as the preamble every `check_*_boundary` opens with, and the doc comment
+  above `resolve_crate_units` still opened with `resolve_crate`'s own text, so the first sentence a
+  reader met described a `(package, crate-root file, source dir)` return that function does not have.
+  The two sentences of that comment still true of the surviving function — one home for the
+  constitution errors resolution can raise, and each `src_dir` owned rather than borrowing its root
+  file — are kept and corrected to name all three errors, the out-of-package-root case having been
+  added since. The `CompilationUnit` alias also moves below the imports it was inserted between. No
+  public API, wire format, or observable behavior change.
 - Internal refactor: 渾儀's `resolve_direct_path_child`/`resolve_conventional_child`
   (`module_resolve.rs`) now share `load_child_file` for the canonicalize → descent-path
   cycle-check → crate-wide dedup-guard → `read_parse` sequence 3 near-identical call sites
