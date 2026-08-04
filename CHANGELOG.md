@@ -1381,12 +1381,27 @@ dropped rather than corrected a test-suite size elsewhere. Dropping it is the fi
   all, and an outbound rule now reports each importing module separately where it previously collapsed
   several into one. Both are false negatives being paid back, so the new entries are findings that were
   always true and never reported.
-- **Your build may now refuse to judge where it previously answered.** Three shapes became constitution
-  errors (exit 2) rather than silent or collapsed answers, and each names its own remedy: an owner label
-  whose head admits more than one distinct type under mutually-exclusive `#[cfg]`; a package target rooted
-  **outside** its own package directory, which has no checkout-independent label; and a 漏刻 audit anchor
-  that is relative or empty. Exit 2 is "cannot judge", not "violation" — a gate that hits one needs the
-  declaration or layout corrected, not a baseline.
+- **Your build may now refuse to judge where it previously answered.** Several shapes became constitution
+  errors (exit 2) rather than silent or collapsed answers — enumerated rather than counted, for the reason
+  the intro gives — and each names its own remedy: an owner label whose head admits more than one distinct
+  type under mutually-exclusive `#[cfg]`; a package target rooted **outside** its own package directory,
+  which has no checkout-independent label; a 漏刻 audit anchor that is relative or empty; a
+  forbidden/allowed operand carrying an empty `::` segment (a leading, trailing, or doubled `::`, or the
+  empty string) across the six DSL methods that take one — `must_not_expose("::serde")` previously exited
+  0 and never reacted, and now refuses; and, for a **standalone 渾儀** consumer, a plain `mod name;` backed
+  by both `name.rs` and `name/mod.rs`, where the composed `tianheng check` already exited 2. Exit 2 is
+  "cannot judge", not "violation" — a gate that hits one needs the declaration or layout corrected, not a
+  baseline.
+- **Some recorded entries go stale rather than move, and `--disallow-stale` fails on them.** Every step
+  above concerns an entry appearing or re-keying; this window also **narrowed** two reactions, so a
+  violation an adopter legitimately baselined may now be gone. 圭表's strict-external local-precedence
+  ladder now sees a value declared in an `extern` block, so a bare call that resolves to a local
+  `extern "C" { pub fn rand(); }` is no longer read as reaching a `rand` dependency (measured: one
+  violation before, clean after); and the inbound self-import exemption now holds at `Shallow` as well as
+  `Subtree`, removing inbound violations from files inside the protected subtree. A stale entry is not an
+  error by itself — but `--baseline … --disallow-stale` turns an otherwise clean run into **exit 1** on
+  one. Prune the entries the fresh snapshot no longer produces, which the regenerate step above already
+  does if you take it wholesale.
 - **On Windows, regenerate even if nothing else applies to you.** Every identity-bearing path label is now
   canonical — `/` as its only separator, whatever the observing platform uses — so a baseline recorded on
   Windows before this release carries `src\lib.rs` where the label is now `src/lib.rs`, and every entry
