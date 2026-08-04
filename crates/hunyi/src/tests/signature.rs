@@ -29,7 +29,7 @@ pub(super) fn duplicate_semantic_violations_collapse_keeping_the_more_severe() {
                 name: "f".to_string(),
             },
         }
-        .into_finding("app");
+        .into_finding("app", "src/lib.rs");
         Violation::new(
             BoundaryKind::Semantic,
             ViolationId::new(

@@ -275,17 +275,22 @@ impl SemanticFact {
     /// own `target` is already `boundary.crate_package` directly
     /// (`crates/hunyi/src/unsafe_confinement.rs`), so this fact is already crate-scoped and a
     /// second copy of the same value here would be a redundant identity field, not a fix.
-    pub(crate) fn into_finding(self, governing_package: &str) -> Finding {
+    /// `unit` is the compilation unit the observation came from: the root's source path relative to
+    /// the package's manifest directory, the same value 圭表 uses so one adopter reads one vocabulary
+    /// across both static dimensions. A package builds more than one crate root and every root denotes
+    /// the module path `crate`, so without this role the same exposure in two roots carries one identity
+    /// and a baseline accepting it in one masks it appearing in the other.
+    pub(crate) fn into_finding(self, governing_package: &str, unit: &str) -> Finding {
         let text = self.to_string();
-        self.into_finding_with_text(text, governing_package)
+        self.into_finding_with_text(text, governing_package, unit)
     }
 
-    fn into_finding_with_text(self, text: String, governing_package: &str) -> Finding {
+    fn into_finding_with_text(self, text: String, governing_package: &str, unit: &str) -> Finding {
         match &self {
             SemanticFact::AsyncFreeFn { .. }
             | SemanticFact::AsyncTraitMethod { .. }
             | SemanticFact::AsyncInherentMethod { .. } => {
-                return async_finding(&self, text, governing_package);
+                return async_finding(&self, text, governing_package, unit);
             }
             SemanticFact::UnsafeSite { module, site } => {
                 return unsafe_site_finding(module, site, text);
@@ -349,6 +354,7 @@ impl SemanticFact {
             | SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
         };
         fields.push(("governing_package", governing_package));
+        fields.push(("unit", unit));
         let key = StructuredFactIdentity::of(fact_type, shape, fields);
         Finding::new(text, key)
     }
@@ -358,7 +364,12 @@ impl SemanticFact {
 /// `into_finding_with_text`'s dispatch since each carries a distinct `owner`/`owner_kind`
 /// derivation (module-as-owner, `module::trait_name`, or the seam's own `owner` field) that the
 /// shared `(fact_type, shape, fields)` match below cannot express uniformly.
-fn async_finding(fact: &SemanticFact, text: String, governing_package: &str) -> Finding {
+fn async_finding(
+    fact: &SemanticFact,
+    text: String,
+    governing_package: &str,
+    unit: &str,
+) -> Finding {
     match fact {
         SemanticFact::AsyncFreeFn { module, name, .. } => Finding::new(
             text,
@@ -367,6 +378,7 @@ fn async_finding(fact: &SemanticFact, text: String, governing_package: &str) -> 
                 "async-free-function",
                 [
                     ("governing_package", governing_package.to_string()),
+                    ("unit", unit.to_string()),
                     ("module", module.clone()),
                     ("name", name.clone()),
                     ("owner", module.clone()),
@@ -386,6 +398,7 @@ fn async_finding(fact: &SemanticFact, text: String, governing_package: &str) -> 
                 "async-trait-method",
                 [
                     ("governing_package", governing_package.to_string()),
+                    ("unit", unit.to_string()),
                     ("module", module.clone()),
                     ("name", name.clone()),
                     ("owner", format!("{module}::{trait_name}")),
@@ -405,6 +418,7 @@ fn async_finding(fact: &SemanticFact, text: String, governing_package: &str) -> 
                 "async-inherent-method",
                 [
                     ("governing_package", governing_package.to_string()),
+                    ("unit", unit.to_string()),
                     ("module", module.clone()),
                     ("name", name.clone()),
                     ("owner", owner.clone()),
@@ -464,7 +478,7 @@ fn reject_positional_identity<'a>(
     facts: impl IntoIterator<Item = &'a SemanticFact>,
 ) -> Result<(), String> {
     for fact in facts {
-        let identity = fact.clone().into_finding("app");
+        let identity = fact.clone().into_finding("app", "src/lib.rs");
         // Name the field that failed and WHICH renderer gave up, so the adopter learns what to
         // change. The sentinel value itself is never echoed: it encodes traversal position for the
         // unsupported-syntax case, and publishing that is exactly what this gate exists to prevent
@@ -736,6 +750,7 @@ mod fact_tests {
                 ("seam_kind", "free_fn"),
                 ("seam_module", module),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::InherentMethod {
                 module,
@@ -746,6 +761,7 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::InherentAssoc {
                 kind,
@@ -758,6 +774,7 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::TraitMethod {
                 module,
@@ -768,12 +785,14 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_trait", trait_name),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::Item { kind, module, name } => vec![
                 ("seam_kind", "item"),
                 ("seam_item_kind", published_item_kind(kind)),
                 ("seam_module", module),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::Member {
                 kind,
@@ -786,6 +805,7 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_member", member),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::TraitAssoc {
                 kind,
@@ -798,6 +818,7 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_trait", trait_name),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::InherentGenerics {
                 module,
@@ -808,16 +829,19 @@ mod fact_tests {
                 ("seam_module", module),
                 ("seam_owner", owner),
                 ("seam_bound", bound),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::Reexport { module, exported } => vec![
                 ("seam_kind", "reexport"),
                 ("seam_module", module),
                 ("seam_name", exported),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::ExternCrate { module, name } => vec![
                 ("seam_kind", "extern_crate"),
                 ("seam_module", module),
                 ("seam_name", name),
+                ("unit", "src/lib.rs"),
             ],
             PublicSeam::TraitImpl {
                 trait_ref,
@@ -828,6 +852,7 @@ mod fact_tests {
                     ("seam_kind", "trait_impl"),
                     ("seam_trait", trait_ref.as_str()),
                     ("seam_owner", owner.as_str()),
+                    ("unit", "src/lib.rs"),
                 ];
                 fields.extend(published_position_fields(position));
                 fields
@@ -1018,7 +1043,7 @@ mod fact_tests {
         ];
         let keys: std::collections::BTreeSet<_> = facts
             .into_iter()
-            .map(|fact| fact.into_finding("app").key().clone())
+            .map(|fact| fact.into_finding("app", "src/lib.rs").key().clone())
             .collect();
         assert_eq!(keys.len(), 5);
     }
@@ -1026,9 +1051,17 @@ mod fact_tests {
     #[test]
     fn semantic_fact_presentation_is_not_identity() {
         let original = exposure(ExposureKind::Signature, "crate::api", "run")
-            .into_finding_with_text("Port exposed by fn crate::api::run".to_string(), "app");
+            .into_finding_with_text(
+                "Port exposed by fn crate::api::run".to_string(),
+                "app",
+                "src/lib.rs",
+            );
         let polished = exposure(ExposureKind::Signature, "crate::api", "run")
-            .into_finding_with_text("fn crate::api::run exposes Port".to_string(), "app");
+            .into_finding_with_text(
+                "fn crate::api::run exposes Port".to_string(),
+                "app",
+                "src/lib.rs",
+            );
         assert_eq!(original.key(), polished.key());
         assert_ne!(original.text(), polished.text());
     }
@@ -1265,7 +1298,7 @@ mod fact_tests {
                     seam: seam.clone(),
                 };
                 assert_semantic_fact_is_cataloged(&fact);
-                let finding = fact.into_finding("app");
+                let finding = fact.into_finding("app", "src/lib.rs");
                 assert_eq!(
                     finding.key().fact_type(),
                     "tianheng.fact/hunyi/signature-exposure"
@@ -1300,6 +1333,7 @@ mod fact_tests {
                     ("module", "crate::m"),
                     ("owner", "crate::Api"),
                     ("trait", "crate::Port"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1314,6 +1348,7 @@ mod fact_tests {
                     ("governing_package", "app"),
                     ("marker", "Marker"),
                     ("owner", "crate::Api"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1330,6 +1365,7 @@ mod fact_tests {
                     ("marker", "Marker"),
                     ("module", "crate::m"),
                     ("owner", "crate::Api"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1345,12 +1381,13 @@ mod fact_tests {
                     ("item_kind", "fn"),
                     ("item_name", "run"),
                     ("visibility", "pub"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
         ];
         for (fact, fact_type, shape, expected_fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding("app");
+            let finding = fact.into_finding("app", "src/lib.rs");
             let fields: Vec<_> = finding.key().fields().collect();
             assert_eq!(finding.key().fact_type(), fact_type, "{}", finding.text());
             assert_eq!(finding.key().shape(), shape, "{}", finding.text());
@@ -1362,7 +1399,7 @@ mod fact_tests {
             site: UnsafeSiteFact::FreeFn { name: "run".into() },
         };
         assert_semantic_fact_is_cataloged(&unsafe_fact);
-        let finding = unsafe_fact.into_finding("app");
+        let finding = unsafe_fact.into_finding("app", "src/lib.rs");
         assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
         assert_eq!(finding.key().shape(), "unsafe-free-function");
         assert_eq!(
@@ -1381,7 +1418,7 @@ mod fact_tests {
             let expected_type = published_exposure_type(kind);
             let fact = exposure(kind, "crate::api", "run");
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding("app");
+            let finding = fact.into_finding("app", "src/lib.rs");
             assert_eq!(finding.key().fact_type(), expected_type);
             assert_eq!(finding.key().shape(), "public-seam");
             assert_eq!(
@@ -1392,6 +1429,7 @@ mod fact_tests {
                     ("seam_module", "crate::api"),
                     ("seam_name", "run"),
                     ("subject", "Port"),
+                    ("unit", "src/lib.rs"),
                 ]
             );
         }
@@ -1490,7 +1528,7 @@ mod fact_tests {
                 site,
             };
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding("app");
+            let finding = fact.into_finding("app", "src/lib.rs");
             assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
             assert_eq!(finding.key().shape(), shape);
             assert_eq!(finding.key().fields().collect::<Vec<_>>(), fields);
@@ -1513,6 +1551,7 @@ mod fact_tests {
                     ("name", "register"),
                     ("owner", "crate::api"),
                     ("owner_kind", "module"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1529,6 +1568,7 @@ mod fact_tests {
                     ("name", "register"),
                     ("owner", "crate::api::Registry"),
                     ("owner_kind", "trait"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1545,12 +1585,13 @@ mod fact_tests {
                     ("name", "register"),
                     ("owner", "crate::api::Registry"),
                     ("owner_kind", "inherent"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
         ];
         for (fact, shape, fields) in cases {
             assert_semantic_fact_is_cataloged(&fact);
-            let finding = fact.into_finding("app");
+            let finding = fact.into_finding("app", "src/lib.rs");
             assert_eq!(
                 finding.key().fact_type(),
                 "tianheng.fact/hunyi/async-exposure"

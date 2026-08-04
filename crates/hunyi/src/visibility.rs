@@ -9,7 +9,7 @@ use xuanji::{Outcome, Violation};
 use crate::driver::run_boundaries;
 use crate::dsl::VisibilityBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::file_scope::resolve_crate;
+use crate::file_scope::resolve_crate_units;
 use crate::finding::{SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::syn_util::item_observation;
@@ -29,30 +29,37 @@ pub(crate) fn check_visibility_boundary(
     boundary: &VisibilityBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    let (_package, root_file, src_dir) = resolve_crate(metadata, &boundary.crate_package)?;
-    let src_dir = src_dir.as_path();
+    let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
+    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
+    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
+    // is observed, with the unit carried into each finding's identity.
+    for (root_file, src_dir, unit) in &units {
+        let src_dir = src_dir.as_path();
+        let unit = unit.as_str();
 
-    let findings = visibility_findings(
-        src_dir,
-        &root_file,
-        &boundary.module,
-        &boundary.crate_package,
-        boundary.ceiling().rank(),
-    )?;
+        let findings = visibility_findings(
+            src_dir,
+            &root_file,
+            &boundary.module,
+            &boundary.crate_package,
+            boundary.ceiling().rank(),
+        )?;
 
-    push_single_module_violations(
-        violations,
-        SingleModuleViolationContext {
-            module: &boundary.module,
-            rule: boundary.ceiling().rule(),
-            rule_key: boundary.rule_key(),
-            reason: &boundary.reason,
-            severity: boundary.severity,
-            anchor: boundary.anchor(),
-            crate_package: &boundary.crate_package,
-        },
-        findings,
-    );
+        push_single_module_violations(
+            violations,
+            SingleModuleViolationContext {
+                module: &boundary.module,
+                rule: boundary.ceiling().rule(),
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+    }
     Ok(())
 }
 
