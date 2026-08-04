@@ -27,9 +27,12 @@
 #   * Normalizing `\r$` away, because `\r` is a `[[:space:]]` character and a worktree under
 #     `core.autocrlf` holds CRLF. Reading it raw reported every line of every file as trailing
 #     whitespace on a Windows checkout (measured: 7 offenses against the same content that yields 3
-#     on Linux) — a flood that gets a gate disabled rather than obeyed. `sed 's/\r$//'` removes
+#     on Linux) — a flood that gets a gate disabled rather than obeyed. The substitution removes
 #     exactly the line-terminating CR: `text \r\n` keeps its trailing space, `text\r\r\n` keeps the
 #     inner CR, and a CR mid-line is untouched, so every genuine offense survives normalization.
+#     The CR is written as a LITERAL byte via `printf`, not as `\r` in the pattern: BSD `sed` does not
+#     interpret that escape on the left-hand side. `tr -d '\r'` would be portable and is the wrong
+#     tool — it deletes mid-line CRs too, so `text\r\r\n` would stop being an offense at all.
 #
 # The verdict is therefore a property of the content, not of who checked it out — the same
 # platform-independence this window required of every identity label.
@@ -77,7 +80,7 @@ while IFS=$'\t' read -r eol_info path; do
 
   # See the header: the worktree is the subject, with the line-terminating CR normalized away so the
   # verdict does not depend on the checkout's line endings.
-  sed 's/\r$//' -- "$path" >"$blob"
+  sed "s/$(printf '\r')\$//" -- "$path" >"$blob"
 
   # A zero-byte file has no line to be wrong about. (A one-byte `\n` placeholder — what this
   # repository's two `.gitkeep` files actually hold — is not caught either, and correctly so: the
