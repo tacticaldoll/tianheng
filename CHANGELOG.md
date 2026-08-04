@@ -186,6 +186,18 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change.
 
 ### Fixed
+- 渾儀 now follows a `#[cfg_attr(pred, path = "dir")]` remap on an **inline** `mod x { mod y; }` to the
+  base its file-form children resolve from, the same rule 圭表 gained just above and 漏刻's own
+  specification already stated. Before, 渾儀 reported a missing-module constitution error (exit 2) on
+  source that compiles cleanly, while its own **file-form** resolution followed the identical
+  attribute — an inconsistency inside one crate, and the third dimension diverging on a rule the other
+  two now share. Two of 渾儀's walkers needed it (the item scan that loads a child's contents and the
+  branch walk that resolves a boundary's target module), and each was proven load-bearing by reverting
+  it alone and watching the conformance case fail. Found by adding the shape to
+  `cfg_attr_path_only_module_conformance.rs` — the cross-dimension ledger that exists for exactly this
+  divergence — which the 圭表 fix had not done, closing the instance while leaving the class open. That
+  suite now feeds this shape to all three dimensions' real entry points, so the next drift of it is a
+  failing test rather than an adopter's exit 2.
 - 圭表 now follows a `#[cfg_attr(pred, path = "dir")]` remap on an **inline** `mod x { mod y; }` to the
   base directory that body's file-form children resolve from. Previously only the *unconditional*
   `#[path]` form was followed, so the walk looked for the conventional `src/x/y.rs` and reported a

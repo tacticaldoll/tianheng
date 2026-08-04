@@ -198,7 +198,9 @@ struct Branch {
 /// (rustc's rule for an inline module too; it is NOT a no-op merely because the header has a body
 /// — verified against a real build), resolved per-occurrence so two inline arms can each carry
 /// their own relocation (or lack thereof) without one overwriting the other. A `cfg_attr`-wrapped
-/// `path` is not followed (the same cfg-conditional bound [`push_file_form_branches`] applies), so
+/// `path` names a CANDIDATE base per platform predicate and every existing one is descended,
+/// unioned with the conventional directory (cfg-blind, matching this crate's own file-form
+/// resolution and 圭表's/漏刻's rule for the identical shape), so
 /// it does not relocate.
 fn push_inline_mod_branches(
     branch: &Branch,
@@ -214,15 +216,46 @@ fn push_inline_mod_branches(
             let Some((_, inner)) = &module_item.content else {
                 continue; // a file-form declaration of this name; handled by push_file_form_branches
             };
-            let relocated_base =
-                direct_path_value(&module_item.attrs).map(|rel| branch.path_base.join(rel));
-            let inline_dir = relocated_base.unwrap_or_else(|| branch.child_dir.join(seg));
-            next_branches.push(Branch {
-                items: inner.clone(),
-                current_file: branch.current_file.clone(),
-                child_dir: inline_dir.clone(),
-                path_base: inline_dir,
-            });
+            // An unconditional `#[path]` relocates the base outright — one base, replacing the
+            // conventional one. With none, every `cfg_attr(…, path = …)` value is a CANDIDATE base,
+            // unioned with the conventional directory: `syn` does not evaluate `cfg`, so preferring
+            // one would drop every child beneath the other. A candidate is descended only when it
+            // exists as a directory — recursing into an absent one would fail loud on the body's
+            // other, unrelated nested items solely because one platform's directory is missing — and
+            // when no candidate exists the conventional base is descended anyway, so a nested
+            // reference broken on every platform still fails loud. This is 圭表's and 漏刻's own rule
+            // for the identical shape, hand-written here (三儀 ⊥ 三儀), and was previously stated as a
+            // bound: not following it made 渾儀 exit 2 on source that compiles cleanly, while its own
+            // FILE-form resolution followed the same conditional attribute.
+            let conventional = branch.child_dir.join(seg);
+            let bases: Vec<std::path::PathBuf> =
+                match direct_path_value(&module_item.attrs).map(|rel| branch.path_base.join(rel)) {
+                    Some(relocated) => vec![relocated],
+                    None => {
+                        let mut present: Vec<std::path::PathBuf> =
+                            cfg_attr_path_values(&module_item.attrs)
+                                .into_iter()
+                                .map(|rel| branch.path_base.join(rel))
+                                .chain(std::iter::once(conventional.clone()))
+                                .filter(|base| base.is_dir())
+                                .collect();
+                        present.sort();
+                        present.dedup();
+                        if present.is_empty() {
+                            vec![conventional]
+                        } else {
+                            present
+                        }
+                    }
+                };
+            for inline_dir in bases {
+                next_branches.push(Branch {
+                    items: inner.clone(),
+                    current_file: branch.current_file.clone(),
+                    child_dir: inline_dir.clone(),
+                    path_base: inline_dir,
+                });
+            }
         }
     }
 }
