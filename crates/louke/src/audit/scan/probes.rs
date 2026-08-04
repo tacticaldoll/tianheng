@@ -186,6 +186,10 @@ pub(crate) fn external_module_files(
         file_dir,
         &mut modules,
         false,
+        // A file's OWN bases are not absolute-reached by themselves; whether the FILE was reached that
+        // way is ORed in by `collect_reachable_probes` when it queues these children. This flag tracks
+        // only a base made absolute *within* the file, by an inline `mod`'s absolute `#[path]`.
+        false,
         0,
     )?;
     Ok(modules)
@@ -212,11 +216,12 @@ pub(crate) fn resolve_external_mod_decl(
     file_dir: &Path,
     modules: &mut Vec<(PathBuf, PathBuf, bool)>,
     in_transparent_arm: bool,
+    absolute_base: bool,
 ) -> Result<(), String> {
     let attrs = mod_preamble_attrs(bytes, scope_start, mod_index);
     if let Some(rel) = &attrs.path {
         match resolve_path_module(file_dir, rel)? {
-            Some(resolved) => modules.push(resolved),
+            Some((file, base, reached)) => modules.push((file, base, reached || absolute_base)),
             None if absence_is_tolerated(&attrs, in_transparent_arm) => {}
             None => {
                 return Err(format!(
@@ -229,16 +234,17 @@ pub(crate) fn resolve_external_mod_decl(
     }
     let mut has_backing_source = false;
     for rel in &attrs.cfg_attr_paths {
-        if let Some(resolved) = resolve_path_module(file_dir, rel)? {
+        if let Some((file, base, reached)) = resolve_path_module(file_dir, rel)? {
             has_backing_source = true;
-            modules.push(resolved);
+            modules.push((file, base, reached || absolute_base));
         }
     }
     if let Some((file, next_base)) = resolve_external_module(child_base, name)? {
         has_backing_source = true;
-        // A conventional child is reached by construction from its parent's base, never through an
-        // absolute literal, so it relativizes against the anchor exactly as before.
-        modules.push((file, next_base, false));
+        // A conventional child's own EDGE is never an absolute literal, so its provenance is entirely
+        // inherited: from the enclosing file (ORed by the walk) and from the base it resolved against,
+        // which is absolute when an enclosing inline `mod` carried an absolute `#[path]`.
+        modules.push((file, next_base, absolute_base));
     }
     if !(has_backing_source || absence_is_tolerated(&attrs, in_transparent_arm)) {
         return Err(format!(
@@ -278,20 +284,29 @@ pub(crate) fn inline_mod_bases(
     name: &str,
     child_base: &Path,
     file_dir: &Path,
-) -> Vec<PathBuf> {
-    let mut inline_bases: Vec<PathBuf> = Vec::new();
+) -> Vec<(PathBuf, bool)> {
+    // The flag is "this base was reached through an ABSOLUTE `#[path]` literal", and it must ride with
+    // the base rather than be recovered later. `Path::join` discards its receiver exactly when the
+    // joinee is absolute, so an absolute literal makes the base itself absolute and the children
+    // resolved from it inherit the same already-non-portable construct. The walk's file-chain
+    // inheritance cannot supply this: the base is introduced WITHIN one file, so a conventionally
+    // declared child of the body was queued with `false` and its label relativized whenever the target
+    // happened to sit under this checkout's anchor — two identities for one committed literal.
+    let mut inline_bases: Vec<(PathBuf, bool)> = Vec::new();
     match &attrs.path {
-        Some(rel) => inline_bases.push(file_dir.join(rel)),
+        Some(rel) => inline_bases.push((file_dir.join(rel), Path::new(rel).is_absolute())),
         None => {
             for rel in &attrs.cfg_attr_paths {
                 let candidate = file_dir.join(rel);
                 if candidate.is_dir() {
-                    inline_bases.push(candidate);
+                    inline_bases.push((candidate, Path::new(rel).is_absolute()));
                 }
             }
             let conventional = child_base.join(name);
             if inline_bases.is_empty() || conventional.is_dir() {
-                inline_bases.push(conventional);
+                // A conventional base derives from the enclosing base; whether THAT was absolute-reached
+                // is the caller's `absolute_base`, ORed in at the recursion below.
+                inline_bases.push((conventional, false));
             }
         }
     }
@@ -317,6 +332,7 @@ pub(crate) fn collect_scope_modules(
     file_dir: &Path,
     modules: &mut Vec<(PathBuf, PathBuf, bool)>,
     in_transparent_arm: bool,
+    absolute_base: bool,
     depth: usize,
 ) -> Result<(), String> {
     if depth >= MAX_SCOPE_NEST_DEPTH {
@@ -359,6 +375,7 @@ pub(crate) fn collect_scope_modules(
                             file_dir,
                             modules,
                             true,
+                            absolute_base,
                             depth + 1,
                         )?;
                     }
@@ -405,6 +422,7 @@ pub(crate) fn collect_scope_modules(
                         file_dir,
                         modules,
                         in_transparent_arm,
+                        absolute_base,
                     )?;
                     i = cursor + 1;
                     continue;
@@ -420,7 +438,7 @@ pub(crate) fn collect_scope_modules(
                     // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
                     // component and read a same-named orphan — a false negative.)
                     let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir);
-                    for inline_base in &inline_bases {
+                    for (inline_base, base_is_absolute) in &inline_bases {
                         collect_scope_modules(
                             bytes,
                             cursor + 1,
@@ -432,6 +450,10 @@ pub(crate) fn collect_scope_modules(
                             // `#[cfg]` on an outer `mod` does not tolerate an absent file for an
                             // inner one either, in any of the three dimensions.
                             false,
+                            // Absolute-reached IS inherited, and accumulates: an absolute `#[path]` on
+                            // this inline `mod` makes its base absolute, and an enclosing one already
+                            // having done so carries through to a conventional base derived from it.
+                            *base_is_absolute || absolute_base,
                             depth + 1,
                         )?;
                     }
@@ -463,6 +485,9 @@ pub(crate) fn collect_scope_modules(
                 file_dir,
                 modules,
                 in_transparent_arm,
+                // A block scope adds no directory component, so the enclosing base — and whether it was
+                // reached absolutely — carries through unchanged.
+                absolute_base,
                 depth + 1,
             )?;
             i = close;
