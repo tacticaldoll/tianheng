@@ -2931,3 +2931,61 @@ fn a_literal_percent_in_a_path_cannot_spell_an_escaped_byte() {
         "a filename containing a literal % must never collide with an escaped invalid byte"
     );
 }
+
+/// The legacy **directory** corpus does not descend a symlinked subdirectory; the **target root file**
+/// corpus reaches the same file through the module graph and does. Both directions pinned on one
+/// fixture, because the difference between the two inputs is the whole content of the bound.
+///
+/// This is deliberate, not an oversight: the directory walk classifies entries without following
+/// symlinks (`file_type()`), so a symlinked directory is not recognized as one — which is what keeps a
+/// cyclic symlink from becoming an unbounded walk. Stated in `runtime-origin-assertion` so the legacy
+/// corpus cannot read as equivalent coverage; the 天衡 shell passes root files, so an adopter's `check`
+/// is unaffected.
+///
+/// It replaces a `BACKLOG.md` WATCH hypothesis that guessed a different mechanism — a bypassed cycle
+/// guard — and did not distinguish the two inputs. No guard is bypassed, and the input that matters has
+/// no gap.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory() {
+    let tb = TempBase::new("symlinked-subdir-corpus");
+    let real = tb.path().join("elsewhere");
+    std::fs::create_dir_all(&real).unwrap();
+    std::fs::write(
+        real.join("adapter.rs"),
+        "pub fn q(o: u8) { assert_boundary!(\"seam\", o); }",
+    )
+    .unwrap();
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        "#[path = \"linked/adapter.rs\"]\nmod adapter;",
+    );
+    let src = root.parent().unwrap().to_path_buf();
+    tb.symlink(&real, "crates/foo/src/linked");
+
+    let declared = [boundary("seam", Severity::Enforce)];
+
+    let from_root = tb.audit(&declared, &[root]);
+    assert!(
+        matches!(from_root, Outcome::Clean),
+        "the module graph reaches the file through the symlink — reading a file follows symlinks, so \
+         the root-aware corpus has no bound here: {from_root:?}"
+    );
+
+    let from_dir = tb.audit(&declared, &[src]);
+    let Outcome::Violations(report) = from_dir else {
+        panic!(
+            "STATED BOUND: the legacy directory corpus does not descend a symlinked subdirectory, so \
+             the seam must read as unprobed. If this is now clean, the bound has been closed — update \
+             `runtime-origin-assertion` and `BACKLOG.md` with it"
+        );
+    };
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.rule.contains("must be probed")),
+        "the directory corpus reports the seam unprobed: {:?}",
+        report.violations
+    );
+}

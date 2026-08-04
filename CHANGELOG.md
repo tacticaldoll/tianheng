@@ -13,6 +13,17 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- Stated 漏刻's legacy **directory** corpus bound and retired the WATCH hypothesis that guessed at it. A
+  probe behind a symlinked subdirectory is seen when the audit is given a **target root file** (the
+  module graph reaches it; reading a file follows symlinks) and unseen when it is given a **directory**
+  (the walk classifies entries with `file_type()`, which does not, so a symlinked directory is not
+  recognized as one — deliberately, since following it admits an unbounded walk on a cyclic symlink).
+  Measured on one fixture and pinned in both directions rather than described. The hypothesis it replaces
+  guessed a bypassed cycle guard and did not distinguish the two corpora, which is where the whole answer
+  lives: the input the 天衡 shell actually passes has no gap, and the directory input exists for source
+  compatibility. Also retired a stale `ACCEPTED DEBT` line — "file-granular un-auditable-probe identity"
+  — which the 0.4.0 owner-qualified identity had already superseded, so it recorded a bound that no longer
+  exists. No behaviour changes.
 - Corrected a coverage claim three surfaces made and the code never had: `module-boundary` stated that
   a lib+bin package's "both crate roots (`lib.rs` and `main.rs`) resolve to `crate`", `module_check.rs`
   repeated it to justify an inbound dedup step, and a unit test named for it could not have caught the
