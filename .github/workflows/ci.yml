@@ -31,6 +31,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: the local Definition of Done matches what CI runs
+        # AGENTS.md's Definition of Done calls itself "the single source for the local pre-flight gate
+        # list ... CI runs a superset of it". That claim drifted once (both `cargo doc` invocations here
+        # gained --document-private-items while the local list kept the flagless form), so the gate a
+        # contributor actually runs went blind to the exact class this job had just learned to catch.
+        # Checked here rather than promised in prose.
+        run: bash scripts/check_dod_coherence.sh
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace
