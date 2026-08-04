@@ -3,7 +3,7 @@
 //!
 //! The ambiguous outcome (BOTH forms present) is the reason this suite exists: it is a genuine rustc
 //! compile error (E0761) for a live declaration, independent of any `#[cfg]`. 漏刻's own
-//! `resolve_external_module` (`crates/louke/src/audit/scan.rs`) has always hard-errored on it; 圭表's
+//! `resolve_external_module` (`crates/louke/src/audit/scan/probes.rs`) has always hard-errored on it; 圭表's
 //! `reachability` gained the same reaction in 0.2.3, when this suite pinned the two of them; 渾儀's
 //! `locate_module_file` silently returned the first form it probed until it joined them here, so an
 //! item written in the unselected form escaped observation entirely.

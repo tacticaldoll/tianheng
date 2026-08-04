@@ -57,15 +57,32 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   Measured through three lenses: `xingbiao::crate_root_file` returns one root by construction; a minimal
   `src/lib.rs` + `src/main.rs` package with the same offending construct in both reports one violation,
   in `lib.rs`; and `src/bin/*.rs`, a `[[bin]] path` inside `src/`, and one outside it are all unobserved
-  when a library root exists. The real scope — the ONE resolved crate root and the modules reachable
-  from it — is now the stated requirement, with the cross-root same-named-submodule case demoted to a
-  corollary of it. Pinned in both directions by
-  `crates/guibiao/tests/single_governed_root_bound.rs` at the real resolution (real manifest, real
-  `cargo metadata`), and the dedup unit test is replaced by one that asserts its two facts separately so
-  the observed-source half is distinguishing. **No behaviour changes**: a violation in a second crate
-  root was never reported and still is not. What changes is that it is now a recorded bound rather than
-  a silent pass, and it is promoted in `BACKLOG.md` to DESIGN-BREAKING with per-target module graphs as
-  the trigger, replacing the one-line `ACCEPTED DEBT` mention that understated it.
+  when a library root exists. What survived of this entry is the *correction of a false claim*: three
+  surfaces asserted coverage the code did not have, and the measurement is what established the real
+  scope — the ONE resolved crate root and the modules reachable from it — as a recorded bound rather
+  than a silent pass. **That scope did not survive this window.** It was promoted in `BACKLOG.md` to
+  DESIGN-BREAKING with per-target module graphs as the trigger, and the trigger fired inside the same
+  window: see "圭表 and 渾儀 now govern **every** compiled root of a package" under *Fixed*, which is the
+  state 0.4.0 ships. The tests written here as a bound in both directions (real manifest, real `cargo
+  metadata`) are now `crates/guibiao/tests/per_target_corpus.rs`, inverted rather than deleted, since
+  the transition they were written to detect is exactly what happened. This entry is kept for the
+  false-claim correction and the measurements; it is not the shipped scope, and the note is here so a
+  reader meeting it first does not take it for one.
+- Swept the supersession this window's own reversals left behind, and moved closed work out of the live
+  decision queue. `[Unreleased]` had carried two entries describing **incompatible** states of one
+  capability — a *Documentation* entry establishing "the ONE resolved crate root" as the stated
+  requirement, and a *Fixed* entry 150 lines later reporting that every compiled root is governed — so an
+  adopter met the superseded scope first and as fact. The Documentation entry now keeps what survived of
+  it (a false coverage claim corrected, and the measurements that did it) and says plainly that its scope
+  did not survive the window, pointing at the entry that ships. `BACKLOG.md`'s six closed
+  DESIGN-BREAKING items no longer sit struck-through inside that class heading while still carrying
+  present-tense `Class:` / `Risk:` / `Promotion trigger:` lines: their reproduction records move to a
+  *Closed in the 0.4.0 window* section, the class heading is now honestly empty, and the governance
+  vocabulary states the rule so the next closure does not repeat it. Three refuted references are
+  corrected — a test file renamed by this window's own reversal, a regression test that was replaced by
+  its inverse, and a claim that two doc comments pin a bound they now contradict. `scripts/test_examples.sh`
+  stops naming the family version in prose, the fix already applied to `.gitignore`'s comment for the same
+  reason.
 - Made "a guard is not a guard until it has been seen to fail" an explicit rule in `AGENTS.md`'s
   adversarial-review stance, and required the negative run per new guard in the PR body's
   `## Verification`. The trap it names is the change whose *outcome* is unaltered: when a fix improves
@@ -112,6 +129,35 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   constitution error, and a bare `#[cfg]` tolerates absence. No behavior change — the requirement
   truth catches up to the reaction. (A `#[cfg_attr]` wrapper's own tolerance is specified by the
   fix below in this same window, so it is stated there instead of restated here.)
+
+### Added
+
+New public surface, enumerated by diffing each crate's public items between `v0.3.0` and this branch
+rather than by recalling what was added — two of these had reached the branch inside a commit typed
+`docs`, so no narrative entry named them.
+
+- `xingbiao::path_label` — a path as a canonical identity label: `/` as its only component separator,
+  every byte preserved. The one answer both label sites now share; see *Fixed*.
+- `xingbiao::crate_root_files` — every compiled crate root of one package, so a dimension can govern each
+  as its own corpus.
+- `xingbiao::compilation_unit_label` — a compilation unit's stable identity label, its root path relative
+  to the package's own manifest directory.
+- `xingbiao::workspace_root` — the workspace root Cargo resolved, read for its stability as an anchor to
+  label observed files against.
+- `guibiao::ModuleBoundary::reason()` and `ModuleBoundary::module()` — the declared reason and governed
+  module, readable from a boundary rather than only from a violation.
+- `guibiao::CrateTarget::as_str()`, and a `crate_package()` accessor on each rule-DSL boundary type
+  (generated by the shared `boundary_common!` macro rather than hand-repeated eight times).
+- `louke::dropped_sink_events() -> u64` — the count of events the default sink dropped, a single
+  lock-free atomic read.
+- `xuanji::Violation::is_active_enforce()` — whether a violation is an unbaselined `Enforce`, the
+  gating predicate the projections previously each spelled out.
+
+`louke::OriginEntry::__from_register_origin` is also new and is deliberately **not** adopter-facing API:
+it is `#[doc(hidden)]`, exists only as `register_origin!`'s expansion target, and is public solely
+because a macro's expansion runs in the caller's crate. It replaces `OriginEntry::new`, which is removed
+— both recorded under *Fixed*, where the forgery gap it closes is described.
+
 
 ### Changed
 - **BREAKING**: renamed 渾儀's `SemanticBoundary` (the signature-coupling DSL's boundary type,
@@ -874,6 +920,31 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   is not the same exposure: `unlink` does not follow symlinks, so a planted symlink is itself what
   gets removed, never its target (verified). Not breaking — no API, no identity shape, and the
   published mode is byte-for-byte what it was.
+- A 14th Definition-of-Done gate, `scripts/check_reference_integrity.sh`, asserts that every
+  in-repository path a document or a source comment points at exists. This class has now been fixed by
+  hand twice — the second sweep covered `*.md` only — and a module split landing after that sweep
+  reintroduced it in **nine** places across documents and `.rs` comments, two of which no review found.
+  A sweep is a snapshot; the next rename re-opens what it closed. The gate's two scope rules are drawn
+  from what the repository actually contains rather than from a hand-written allowlist: a `crates/<name>/`
+  reference is checked only when `<name>` is a real workspace member, so deliberately illustrative
+  packages (`crates/a/src/lib.rs`, `crates/foo/src`) are skipped and a crate genuinely added under one of
+  those names starts being checked the day it becomes a member; and scripts are out of scope because a
+  script legitimately *constructs* paths that do not exist in the repository. The nine references are
+  corrected, including `tests/dogfood.rs`, a file that exists nowhere and had been cited as the home of
+  圭表's black-box tests.
+- `scripts/check_release_coherence.sh` now also requires every example's committed family-crate version
+  requirement to be satisfiable by the workspace version. The script claimed workspace/dependency version
+  alignment and never read `examples/*/Cargo.toml`, where all seven requirements pin the previous minor.
+  The failure was already caught — `test_examples.sh` asserts each `patch.crates-io` override took
+  effect — but by the dogfood job rather than by the gate that claims alignment, and it surfaced as a
+  resolution puzzle rather than as "the release bump left the examples behind". Cargo *silently drops* a
+  patch whose local version no longer satisfies the requirement, so those examples would resolve the last
+  published family from crates.io instead of the tree under development. Both dependency forms are read
+  (plain and `{ version = "…" }`), so one example moving to the table form is not skipped while the
+  set-level vacuity guard stays satisfied by its siblings, and the family package names are read from the
+  workspace so a seventh crate is covered the day it becomes a member. Three failure directions are added
+  to `test_release_coherence.sh`'s matrix: a stale example pin, a missing `examples/` directory, and a
+  table-form requirement that is stale.
 - A 13th Definition-of-Done gate, `scripts/check_whitespace_hygiene.sh`, asserts over every tracked
   text file that no line carries trailing whitespace, no file ends on a blank line, and every file
   ends with a newline. `cargo fmt` governs `.rs` only, so nothing in the repository checked `.md`,

@@ -76,6 +76,50 @@ require_internal_pins() {
     done < <(grep -E '^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=.*path[[:space:]]*=[[:space:]]*"crates/' "$repo/Cargo.toml")
 }
 
+# Every example's committed family-crate requirement must be satisfiable by the workspace version.
+#
+# The examples commit the adopter's real published form (`guibiao = "0.3"`) and the examples gate
+# resolves the family to local source with `--config patch.crates-io.<crate>.path=…`. Cargo *silently
+# drops* a patch whose local version no longer satisfies the requirement, so the moment the workspace
+# bumps to 0.4.0 every example would resolve the last published 0.3.x from crates.io instead. That
+# failure IS caught — `test_examples.sh` asserts the patch took effect — but it is caught by the dogfood
+# job rather than by the gate that claims workspace/dependency version alignment, and it surfaces as a
+# resolution puzzle rather than as "the release bump left the examples behind". Named here, at the
+# release surface, so a bump reports the one thing the author has to do about it.
+#
+# The family package names are read from the workspace rather than listed, so a seventh crate is covered
+# the day it becomes a member.
+require_example_pins() {
+    local expected_minor manifest dependency pin family seen=0 manifests=0
+    expected_minor=${workspace_version%.*}
+    mapfile -t family < <(workspace_packages)
+    for manifest in "$repo"/examples/*/Cargo.toml; do
+        [[ -f $manifest ]] || continue
+        manifests=$((manifests + 1))
+        for dependency in "${family[@]}"; do
+            # Both dependency forms, so one example switching to the table form is not silently
+            # skipped while the set-level guard below stays satisfied by its siblings:
+            #   plain  `xuanji = "0.3"`
+            #   table  `xuanji = { version = "0.3", features = [...] }`
+            while IFS= read -r pin; do
+                seen=$((seen + 1))
+                [[ $pin == "$expected_minor" || $pin == "$workspace_version" ]] \
+                    || fail "example $(basename "$(dirname "$manifest")") requires $dependency = \"$pin\", which the workspace version $workspace_version does not satisfy; expected \"$expected_minor\" (a release bump must carry the examples with it, or their patch.crates-io override is silently dropped)"
+            done < <(sed -n \
+                -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+                -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+                "$manifest")
+        done
+    done
+    # Vacuity guards, mirroring the workspace-manifest one: a rename of examples/, or a shift to the
+    # table form (`tianheng = { version = "…" }`) that this line-form parse does not read, would
+    # otherwise iterate zero times and pass with zero assertions.
+    [[ $manifests -gt 0 ]] \
+        || fail "found no example manifests under $repo/examples — the layout changed or is absent, so example version coherence cannot be verified"
+    [[ $seen -gt 0 ]] \
+        || fail "read $manifests example manifest(s) but found no family dependency requirement in any of them — the dependency form changed and this gate would pass vacuously"
+}
+
 workspace_packages() {
     local manifest
     for manifest in "${workspace_manifest_files[@]}"; do
@@ -184,6 +228,7 @@ mapfile -t workspace_manifest_files < <(find "$repo/crates" -mindepth 2 -maxdept
 
 require_workspace_manifests
 require_internal_pins
+require_example_pins
 
 case $state in
     development)

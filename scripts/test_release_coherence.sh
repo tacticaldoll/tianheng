@@ -27,6 +27,19 @@ write_workspace() {
             'edition = "2024"' \
             >"$repo/crates/$package/Cargo.toml"
     done
+    # An example carrying the adopter's published requirement, so the fixture has the shape
+    # `require_example_pins` reads. Without one, that check's own vacuity guard fires here and every
+    # state case in this matrix reports the missing-examples failure instead of what it is testing.
+    mkdir -p "$repo/examples/adopter"
+    printf '%s\n' \
+        '[package]' \
+        'name = "adopter"' \
+        'version = "0.0.0"' \
+        'edition = "2024"' \
+        '' \
+        '[dependencies]' \
+        "xuanji = \"${version%.*}\"" \
+        >"$repo/examples/adopter/Cargo.toml"
     printf '%s\n' \
         'version = 4' \
         '' \
@@ -201,6 +214,30 @@ mismatched_pin=$(new_repo mismatched-pin)
 sed -i 's#version = "0.2.0" }#version = "0.1.0" }#' "$mismatched_pin/Cargo.toml"
 commit_all "$mismatched_pin" 'chore: drift an internal pin'
 expect_fail "$mismatched_pin" 'internal dependency xuanji is pinned to 0.1.0; expected 0.2.0'
+
+# An example left behind by a release bump. This is the realistic release-prep slip: the workspace and
+# the internal pins move together, and the examples' committed published requirement does not — after
+# which Cargo silently drops their `patch.crates-io` override and they resolve the LAST PUBLISHED family
+# from crates.io instead of the tree under development.
+stale_example_pin=$(new_repo stale-example-pin)
+sed -i 's/^xuanji = "0.2"$/xuanji = "0.1"/' "$stale_example_pin/examples/adopter/Cargo.toml"
+commit_all "$stale_example_pin" 'chore: leave an example on the previous minor'
+expect_fail "$stale_example_pin" 'example adopter requires xuanji = "0.1"'
+
+# And that check's own vacuity guards, so a renamed examples/ or a changed dependency form cannot make
+# it pass with zero assertions.
+missing_examples=$(new_repo missing-examples)
+rm -rf "$missing_examples/examples"
+commit_all "$missing_examples" 'chore: remove the examples directory'
+expect_fail "$missing_examples" 'found no example manifests'
+
+# The TABLE dependency form is read too, so an example using it is checked rather than skipped. Without
+# this, one example moving to `{ version = "…" }` would go unverified while the set-level guard below
+# stayed satisfied by its siblings — a silent hole exactly where this gate is supposed to be looking.
+table_form_example_pin=$(new_repo table-form-example-pin)
+sed -i 's/^xuanji = "0.2"$/xuanji = { version = "0.1", features = ["audit"] }/' "$table_form_example_pin/examples/adopter/Cargo.toml"
+commit_all "$table_form_example_pin" 'chore: stale table-form requirement in an example'
+expect_fail "$table_form_example_pin" 'example adopter requires xuanji = "0.1"'
 
 # The vacuity guard itself: an empty crate set (layout change / crates removed) must fail loud,
 # not iterate the manifest and lock loops zero times and report coherent.

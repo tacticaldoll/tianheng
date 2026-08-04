@@ -2,8 +2,8 @@
 //! `#[cfg_attr(pred, path = "...")]` remaps — no plain conventional file (`imp.rs` /
 //! `imp/mod.rs`) and no unconditional `#[path]`.
 //!
-//! 渾儀's `has_backing_source` walk (`crates/hunyi/src/scan.rs`) and 漏刻's own copy
-//! (`crates/louke/src/audit/scan.rs`) already tolerated this exact shape, treating a resolved
+//! 渾儀's `has_backing_source` walk (`crates/hunyi/src/scan/items.rs`) and 漏刻's own copy
+//! (`crates/louke/src/audit/scan/probes.rs`) already tolerated this exact shape, treating a resolved
 //! `cfg_attr(path)` candidate as legitimate grounds for the plain file's own absence. 圭表's own
 //! module-boundary reachability walk (`crates/guibiao/src/module_scan/reachability/walk.rs`) did
 //! not: it hard-errored ("source file could not be located", exit 2) on a declaration that

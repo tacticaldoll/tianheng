@@ -3,7 +3,9 @@
 #
 # Each example is its own workspace — its *deliberate* faults (a bad import, an API leak, a rogue
 # runtime origin) must never be swept by Tianheng's workspace-wide gates. Each commits the
-# adopter's real dependency form (`guibiao = "0.3"`), so we resolve the family to LOCAL source via
+# adopter's real dependency form — a plain published version requirement, deliberately not named here
+# because it lives in each example's own manifest and naming it twice is how `.gitignore`'s comment
+# went stale once already — so we resolve the family to LOCAL source via
 # `--config patch.crates-io.<crate>.path=...` — the same idiom the `packaged-selftest` CI job uses:
 # the committed Cargo.toml stays copy-paste-honest while CI exercises the in-development tree.
 #
@@ -47,7 +49,7 @@ expect() { # expect <got> <want> <label>
 
 # Cargo silently drops an incompatible `patch.crates-io` entry (`patch ... was not used in the
 # crate graph`) and falls back to resolving the crate from crates.io instead — e.g. once a local
-# family version no longer satisfies an example's committed `= "0.3"` requirement. Every assertion
+# family version no longer satisfies an example's own committed version requirement. Every assertion
 # below would keep passing against that stale, already-published crate, so the dogfood gate would
 # stay green while silently testing the wrong tree. `cargo tree -p <crate> --depth 0` prints the
 # resolved package's own source in parens for a path/patch dependency (absent for a registry
