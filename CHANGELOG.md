@@ -449,16 +449,19 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   exit 2 where `Subtree` exits 0. Both sites now call one depth-free predicate
   (`is_inside_protected_module`), so the pre-filter and the rule cannot drift, and what the exemption
   excuses can no longer decide the exit code.
-  That target-match resolution's own **namespace-blind bound** is now stated rather than implied: Rust
-  resolves `mod foo` and `fn foo` in different namespaces, so both can be declared in one module and a
-  single `use m::foo;` binds both (verified against rustc — the importer can call `foo()` and reach
-  `foo::INSIDE` from that one `use`). Seeing only the path, the resolver returns the module reading,
-  so under `Shallow` anchored at that module's own parent the value reading goes unobserved; under
-  `Subtree` both readings coincide. Reacting on both readings would make every ordinary
-  `use m::child;` react under `Shallow`, contradicting the exact-seam scenario — a narrow false
-  negative is not traded for a broad false positive. Stated in `rule-model-surface` with a scenario,
-  pinned by `shallow_inbound_target_match_is_namespace_blind_a_stated_bound`, and recorded in
-  `BACKLOG.md` as READY-PATCH with the value-namespace observation as its promotion trigger. The helper the two families used to share is split:
+  That target-match resolution's own namespace-blindness was recorded here as a **stated bound**: `mod
+  foo` and `fn foo` resolve in different namespaces, so both can be declared in one module and a single
+  `use m::foo;` binds both (verified against rustc), while the path-only resolver returns the module
+  reading and leaves the value reading unobserved under `Shallow`. **That bound did not survive this
+  window** — it was a false negative, and it is closed: see "圭表's inbound module rules now observe the
+  **value namespace**" under *Fixed*, which is the state 0.4.0 ships. What this entry recorded that still
+  holds is the reasoning that shaped the fix, not the fix's absence: reacting on both readings was
+  rejected then and is still rejected now, because it would make every ordinary `use m::child;` react
+  under `Shallow`, so the closure consults the value namespace instead of unioning the readings. The test
+  it named was inverted with the bound and is now
+  `shallow_inbound_target_match_observes_the_value_namespace`; `rule-model-surface` states the closure
+  with two scenarios; and the `BACKLOG.md` entry is closed rather than READY-PATCH. The helper the two
+  families used to share is split:
   external-crate confinement keeps a depth-sensitive pre-filter under a name that says so
   (`hosts_only_permitted_importers`), because there the skip is only sound when every importer the
   file can host is permitted — never under `Shallow`, where an inline `mod` inside the permitted file
