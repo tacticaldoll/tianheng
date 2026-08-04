@@ -40,7 +40,11 @@ impl ProbeWorkspace {
         .expect("write Cargo.toml");
         std::fs::write(dir.join("src/lib.rs"), lib_rs).expect("write lib.rs");
         for (path, contents) in extra_files {
-            std::fs::write(dir.join("src").join(path), contents).expect("write extra file");
+            let target = dir.join("src").join(path);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).expect("create extra file parent dir");
+            }
+            std::fs::write(target, contents).expect("write extra file");
         }
         Self { dir, manifest }
     }
@@ -311,5 +315,122 @@ pub mod imp;
         other => {
             panic!("both conventional forms present: expected ConstitutionError, got {other:?}")
         }
+    }
+}
+
+/// The same rule for an **inline** `mod x { … }`, where a `cfg_attr(path)` names the base directory
+/// the body's own file-form children resolve from rather than a file to read.
+///
+/// The spec already required this for an **unconditional** `#[path]` and 圭表 already honored it; only
+/// the conditional form was missed, and it failed in the loud direction: the walk looked for the
+/// conventional `src/x/y.rs` and reported a constitution error on a crate that builds cleanly, so an
+/// adopter using this idiom could not run `check` at all. Reproduced against the real entry point
+/// before the fix, with the unconditional form as the control.
+#[test]
+fn a_conditional_remap_on_an_inline_mod_relocates_its_child_base() {
+    let lib_rs = r#"
+pub mod forbidden {
+    pub struct Thing;
+}
+#[cfg_attr(unix, path = "unix_dir")]
+pub mod x {
+    pub mod y;
+}
+"#;
+    let probe = ProbeWorkspace::new(
+        "inlinecondbase",
+        lib_rs,
+        &[(
+            "unix_dir/y.rs",
+            "use crate::forbidden::Thing;\npub fn f() -> Thing { Thing }\n",
+        )],
+    );
+    let constitution = Constitution::new("repro").boundary(
+        ModuleBoundary::in_crate("inlinecondbase")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("a conditional remap on an inline mod relocates its child base"),
+    );
+
+    let outcome = check(&constitution, probe.manifest());
+    assert_violation_in(&outcome, "cfg_attr(path) on an inline mod", "unix_dir/y.rs");
+}
+
+/// The union half, and the reason a candidate is a candidate rather than the base: the scanner does
+/// not evaluate `cfg`, so both platform bases are descended and the children beneath each are
+/// observed. Each fixture imports a DIFFERENT forbidden member, so a single-base read could not
+/// produce both violations.
+#[test]
+fn every_present_conditional_base_of_an_inline_mod_is_descended() {
+    let lib_rs = r#"
+pub mod forbidden {
+    pub struct Thing;
+    pub struct OtherThing;
+}
+#[cfg_attr(unix, path = "unix_dir")]
+#[cfg_attr(not(unix), path = "other_dir")]
+pub mod x {
+    pub mod y;
+}
+"#;
+    let probe = ProbeWorkspace::new(
+        "inlinecondunion",
+        lib_rs,
+        &[
+            (
+                "unix_dir/y.rs",
+                "use crate::forbidden::Thing;\npub fn f() -> Thing { Thing }\n",
+            ),
+            (
+                "other_dir/y.rs",
+                "use crate::forbidden::OtherThing;\npub fn g() -> OtherThing { OtherThing }\n",
+            ),
+        ],
+    );
+    let constitution = Constitution::new("repro").boundary(
+        ModuleBoundary::in_crate("inlinecondunion")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("every present conditional base of an inline mod is descended"),
+    );
+
+    let outcome = check(&constitution, probe.manifest());
+    assert_violation_in_each(
+        &outcome,
+        "two conditional bases on one inline mod",
+        &["unix_dir/y.rs", "other_dir/y.rs"],
+    );
+}
+
+/// The tolerance must not become a silent pass. When NO candidate base exists and neither does the
+/// conventional one, the body's `mod y;` is a reference broken on every platform — rustc errors on it
+/// — so the conventional base is descended anyway and the missing child still fails loud.
+#[test]
+fn an_inline_mod_whose_every_conditional_base_is_absent_still_fails_loud() {
+    let lib_rs = r#"
+pub mod forbidden {
+    pub struct Thing;
+}
+#[cfg_attr(unix, path = "absent_dir")]
+pub mod x {
+    pub mod y;
+}
+"#;
+    let probe = ProbeWorkspace::new("inlinecondabsent", lib_rs, &[]);
+    let constitution = Constitution::new("repro").boundary(
+        ModuleBoundary::in_crate("inlinecondabsent")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("an absent base is tolerated, a broken child reference is not"),
+    );
+
+    match check(&constitution, probe.manifest()) {
+        Outcome::ConstitutionError(msg) => {
+            assert!(
+                msg.contains("could not be located"),
+                "expected the missing-module constitution error, got: {msg}"
+            );
+        }
+        other => panic!("every base absent: expected ConstitutionError, got {other:?}"),
     }
 }
