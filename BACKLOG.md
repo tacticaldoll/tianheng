@@ -330,14 +330,15 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     a single-lens hypothesis can be right that something is broken and wrong about **how**, and the
     risk class is what decides urgency — so reproduce before promoting, which is what this entry's
     trigger said and why it was worth keeping.
-  - `xingbiao::crate_root_file` may collapse a multi-root package (a manifest declaring more
-    than one crate root, e.g. via `[[bin]]`/`[lib]` combinations) to a single resolved root, so
-    every non-first root of that package would be silently ungoverned by 圭表 and 渾儀. Observed
-    once during the 0.3.1 adversarial sweep, single lens, never independently re-tested — the
-    trigger shape (a real multi-root package in this workspace or an adopter's) was not
-    confirmed to actually arise from `cargo metadata`'s output. (`crates/xingbiao/src/lib.rs`.)
-    Promotion trigger: confirm `cargo metadata` actually emits multiple root files for one
-    package before treating this as more than speculative.
+  - ~~`xingbiao::crate_root_file` may collapse a multi-root package~~ **RETIRED — superseded by its
+    own promotion.** Its trigger was "confirm `cargo metadata` actually emits multiple root files for
+    one package before treating this as more than speculative". That was confirmed in the 0.4.0
+    window (`[[bin]]` targets are reported alongside the `lib`, each with its own `src_path`), which
+    promoted the hypothesis into the DESIGN-BREAKING entry above — now itself CLOSED by the
+    per-target corpus. The WATCH line survived its own promotion and is struck here rather than
+    deleted, since a reader of an older release may still be looking for it. Lesson kept: when a
+    WATCH item is promoted, retire the WATCH line in the same change, or the index carries the
+    question and its answer at once.
   - Baseline debt ratchet (`--require-baseline-reduction`, only-fix-never-add). This remains in
     tension with “baseline is a generated snapshot, not policy” and “not a governance platform”:
     a bounded opt-in gate may fit, while debt scheduling does not. Promote only after that tension
