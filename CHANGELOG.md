@@ -832,13 +832,22 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   measured costs instead of a plausible-sounding one: the previously recorded
   `#[track_caller]`/`Location` trigger **does not work**, because `Location` yields a file path while an
   origin's whole vocabulary is a module path, so adopting it would redefine an origin and invalidate
-  every `only_origins` declaration. What does work is a proc-macro (no public constructor at all; costs
-  a new crate and a `syn`-class build dependency in a deliberately std-light prod face) or deriving the
-  origin from the concrete type via `std::any::type_name` (unforgeable — measured: a type in `rogue`
-  reports `crate::rogue::Repo` where the registration site's `module_path!()` reported only `crate` —
-  but it redefines an origin from "where registered" to "where defined", invalidates every declaration,
-  and rests identity on a format std documents as unspecified). Both are decisions for a human, not a
-  review response.
+  every `only_origins` declaration. The **proc-macro** path this window first recorded alongside it does
+  not work either, and that was found by testing it rather than by reasoning about it: a proc-macro is
+  expanded into its caller's crate and resolved there, exactly as a `macro_rules!` is, so making the
+  constructor private breaks the proc-macro path too — a three-crate probe reports `error[E0603]:
+  function `hidden_constructor` is private` at the *consumer's* call site. A macro form has no privilege
+  its caller lacks, which is the same structural reason `Location` fails, so no third macro variant is
+  recorded. What can close it is a mechanism that never takes the origin from the caller, since
+  `std::any::type_name` reports the type's own defining path: either **redefine** an origin as "where
+  defined" (unforgeable by construction, but invalidates every `only_origins` declaration and rests
+  identity on a format std documents as unspecified — measured: a type in `rogue` reports
+  `crate::rogue::Repo` where the registration site's `module_path!()` reported only `crate`), or
+  **cross-check** the asserted origin against that path at `install` and react to a disagreement, keeping
+  the origin's meaning and every declaration intact (mechanically available — `module_path!()` at a
+  type's defining module equals `type_name` minus its trailing type name — at the cost of resting a
+  fail-loud gate on the same unspecified format, and forbidding registration from anywhere but the type's
+  own module). Both remain decisions for a human, not a review response.
 
 ### Migration
 
