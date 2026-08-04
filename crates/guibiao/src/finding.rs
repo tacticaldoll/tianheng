@@ -113,8 +113,15 @@ impl ModuleFact {
     /// repository does), so a name is not unique within a package. It is not an index or metadata order
     /// either — `semantic-signature-coupling`'s prohibition on positional identity applies here too. The
     /// root path is declaration-derived, unique per unit, and moves with neither the checkout nor the
-    /// member set. A root outside the manifest directory keeps its path as given, the same rule 漏刻
-    /// applies to a file reached through an absolute path literal.
+    /// member set. A root **outside** the manifest directory has no checkout-independent label at all
+    /// and is a constitution error rather than a fallback — see [`xingbiao::compilation_unit_label`],
+    /// whose `None` has exactly that one cause.
+    ///
+    /// This is deliberately NOT the rule 漏刻 applies to a file reached through an absolute `#[path]`
+    /// literal, and the difference is the whole reason: that literal is **committed text**, identical in
+    /// every checkout, so keeping it verbatim is what makes it stable. A root path outside the manifest
+    /// directory is the clone's own location, so keeping it verbatim is what makes it unstable. Same
+    /// shape, opposite consequence.
     pub(crate) fn into_finding(self, governing_package: &str, unit: &str) -> Finding {
         match self {
             ModuleFact::ImportedPath { path, importer } => {
