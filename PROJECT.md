@@ -42,6 +42,16 @@ an explanatory report. The reaction MUST never silently pass, and MUST distingui
 boundary violation (exit 1) from a constitution error / misconfiguration (exit 2). The
 one forbidden bug is a **false negative** (a real violation that silently passes).
 
+**Non-bypassable, precisely.** The governed code's own *shape* cannot make a declared boundary stop
+reacting: no spelling, alias, re-export, `cfg` arm, or macro form escapes observation, and where an
+observation genuinely cannot decide, the reaction is exit 2 rather than a pass. It does not mean the
+observation cannot be fed a false input by code inside the observed process. 漏刻's origin registration
+is deliberately **cooperative** — its trust boundary is the process, stated in full by
+`runtime-origin-assertion` — so a runtime origin is observed for code that registers through the macro
+and assertable by code that bypasses it. That bound is named here rather than left for this sentence to
+imply away; a governance tool claiming a guarantee it does not have is worse than one stating its
+limit.
+
 ## 潛移 (Qiányí) — govern by gravity, too: the idiom is imitated, the reaction is the backstop
 
 The reaction binds, but an autoregressive agent is first an **imitation engine** — it
