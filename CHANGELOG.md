@@ -12,6 +12,12 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 
 ## [Unreleased]
 
+**What earns `**BREAKING**` in this section.** A change that requires an adopter to *do* something —
+including regenerating a recorded baseline — is marked, even when no public API, wire format, or identity
+shape moves. Closing a false negative therefore counts: the reaction is additive, but the adopter's
+baseline is not, and "the defect was ours" does not spare them the work. This is written down because the
+window classified two same-shaped inbound-`Shallow` fixes two different ways before anyone compared them.
+
 ### Documentation
 - Retired a `BACKLOG.md` WATCH line that had survived its own promotion. It asked whether
   `xingbiao::crate_root_file` collapses a multi-root package, with the trigger "confirm `cargo metadata`
@@ -907,10 +913,16 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   the absolute-`#[path]` entry earlier in this window. The residual is now the observation rather than the
   resolution and is stated in `rule-model-surface` with two scenarios: a value declared inside a macro
   body or arriving through a re-export is unobserved, matching every other declaration reader in the
-  dimension, and directs the reaction toward the module reading. **Adopter-visible**: a constitution with
-  an inbound `Shallow` boundary over a module that declares a `mod` and a value of one name will now
-  report imports it previously missed, which is the false negative being paid back rather than a new
-  rule. No public API and no identity shape change.
+  dimension, and directs the reaction toward the module reading. **BREAKING for a recorded baseline**: a
+  constitution with an inbound `Shallow` boundary over a module that declares a `mod` and a value of one
+  name will now report imports it previously missed, so such a baseline needs regeneration. No public API
+  and no identity shape change.
+
+  The marking follows the rule stated once at the head of this section rather than this entry's own
+  reading of it. Both readings are defensible — "a false negative being paid back" and "an adopter's
+  recorded baseline changes" — and an earlier entry in this same window took the second for the identical
+  change to the identical rule family at the identical depth. Two same-shaped changes classified two ways,
+  ~500 lines apart, is worse than either choice: the next contributor copies whichever they read first.
 - **BREAKING (Windows only)**: every identity-bearing path label is now canonical rather than as the
   observing platform renders it. 星表 gains `path_label` — `/` as a path's only component separator,
   and every byte preserved — and both label sites are built on it: 圭表/渾儀's compilation unit
@@ -1265,8 +1277,11 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
 
 ### Migration
 
-Every step below is already stated by the entry it comes from; this section only collects them, so
-an adopter reads the work in one place instead of assembling it from five `**BREAKING**` entries.
+Every step below is already stated by the entry it comes from; this section only collects them, so an
+adopter reads the work in one place instead of assembling it from the `**BREAKING**` entries above. The
+count is deliberately not named: it said "five" while the window grew to fourteen, which is the same
+"a number in prose beside a growing thing drifts by construction" failure this window cited when it
+dropped rather than corrected a test-suite size elsewhere. Dropping it is the fix, not recounting it.
 
 - **Regenerate any recorded baseline.** Violation identity gained a required field in five places
   this window: `governing_package` on every 圭表 and 渾儀 module/semantic fact, the declaring module on
@@ -1280,8 +1295,19 @@ an adopter reads the work in one place instead of assembling it from five `**BRE
   spelling** now identifies by the trait's resolved defining path, so its entries move too — a boundary
   that already named the defining path is untouched.
 - **Expect new entries, not only relabeled ones, for an inbound rule at `ScanDepth::Shallow`.** That
-  depth now reacts to an item-form import it silently passed before, so its regenerated baseline can
-  legitimately be larger than a relabeling would explain.
+  depth now reacts to imports it silently passed before, from **two** independent causes, so a regenerated
+  baseline can legitimately be larger than a relabeling would explain: an item-form import, whose path is
+  resolved to the module it denotes before the depth comparison; and an import binding a **value** the
+  protected module declares under a name it also gives a child module (`mod foo` beside `fn foo`), which
+  the path alone cannot distinguish from an import of the child. Both are false negatives being paid
+  back.
+- **On Windows, regenerate even if nothing else applies to you.** Every identity-bearing path label is now
+  canonical — `/` as its only separator, whatever the observing platform uses — so a baseline recorded on
+  Windows before this release carries `src\lib.rs` where the label is now `src/lib.rs`, and every entry
+  re-fires as new. On unix no label changes and this step is a no-op. This is the one **BREAKING** entry
+  whose step this section previously omitted, which is exactly the failure the completeness claim above
+  invites: an adopter following the section alone would have regenerated nothing and met a wholly
+  new-looking baseline.
 - **If you build a 漏刻 `OriginEntry` by hand**, switch to `register_origin!`. The constructor is renamed,
   hidden, and now takes no arguments at all; the macro is, and always was, the supported path.
 - **If you write `register_origin!` outside the type's own module, check your `only_origins(...)`.** An
