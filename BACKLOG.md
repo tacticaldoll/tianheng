@@ -295,12 +295,6 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     a single-lens hypothesis can be right that something is broken and wrong about **how**, and the
     risk class is what decides urgency — so reproduce before promoting, which is what this entry's
     trigger said and why it was worth keeping.
-  - A symlinked source subdirectory may silently disappear from 漏刻's directory-mode audit
-    while 圭表/渾儀 continue to govern the same subtree — `try_visit`'s cycle guard possibly
-    bypassed by a second, weaker guard specific to the audit walker. Observed once during the
-    0.3.1 adversarial sweep, single lens, never independently re-tested.
-    (`crates/louke/src/audit/scan/probes.rs`.) Promotion trigger: reproduce directly (a real symlinked
-    subdirectory containing a probed seam) before acting.
   - `xingbiao::crate_root_file` may collapse a multi-root package (a manifest declaring more
     than one crate root, e.g. via `[[bin]]`/`[lib]` combinations) to a single resolved root, so
     every non-first root of that package would be silently ungoverned by 圭表 and 渾儀. Observed
@@ -334,7 +328,24 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     as real code in both passes, and `cfg_if_transparency_conformance.rs` now pins all three
     dimensions on the one fixture rather than two of three — its module doc already says so, and this
     entry was the site left behind.
-  - File-granular un-auditable-probe identity.
+  - ~~File-granular un-auditable-probe identity.~~ **RETIRED** — superseded, not accepted: the 0.4.0
+    line qualifies an un-auditable-probe fact by its owner-qualified enclosing item and the offending
+    expression's own text alongside its file, so the identity is no longer file-granular and this bound
+    no longer exists. Kept struck rather than deleted because a reader of an older release may still be
+    looking for it.
+  - **漏刻's legacy directory corpus does not descend a symlinked subdirectory.** Measured on one
+    fixture rather than hypothesised: a module reached through `#[path]` into a symlinked directory,
+    holding a declared seam's only probe, is seen when the audit is given the **target root file**
+    (clean — the module graph reaches it and reading a file follows symlinks) and unseen when it is
+    given the **directory** (the seam reads as unprobed). Deliberate: the directory walk classifies
+    entries with `file_type()`, which does not follow symlinks, so a symlinked directory is not
+    recognized as one — which is what keeps a cyclic symlink from becoming an unbounded walk. Accepted
+    because the input that matters has no gap: the 天衡 shell passes root files, and the directory input
+    exists for source compatibility. Stated in `runtime-origin-assertion` and pinned in both directions
+    by `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`. This replaces
+    a WATCH entry that guessed a different mechanism — "`try_visit`'s cycle guard possibly bypassed by a
+    second, weaker guard" — which is refuted: no guard is bypassed, and the entry did not distinguish
+    the two corpora, which is where the whole answer lives.
   - **The baseline directory flush has no reacting test, by construction.** `sync_parent_dir` is
     infallible and best-effort on purpose — a platform or filesystem that cannot flush a directory
     must not turn an already-landed write into a reported failure — which leaves it with no

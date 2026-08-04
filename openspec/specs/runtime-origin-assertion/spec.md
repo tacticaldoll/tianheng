@@ -837,3 +837,26 @@ widening the comparison.
 - **THEN** the system reacts — the observed origin is not equal to any allowed entry — rather than
   treating the descendant as covered by its ancestor
 
+### Requirement: The legacy directory corpus does not descend a symlinked subdirectory
+
+A **directory** input to the probe-coverage audit is the legacy recursive corpus, and it SHALL NOT
+descend a symlinked subdirectory. The directory walk classifies entries without following symlinks, so a
+symlinked directory is not recognized as one and is skipped — a deliberate choice, because following it
+admits an unbounded walk on a cyclic symlink, which the audit must never turn into a process abort.
+
+The consequence SHALL be stated rather than left as a silent claim of completeness over that corpus: a
+probe living behind a symlinked subdirectory is invisible to a directory-input audit, so a declared seam
+whose only probe sits there reads as **unprobed**, and an undeclared-seam or un-auditable probe there is
+not reacted to at all. A caller that needs such a file observed SHALL pass the **target root file**
+instead, which reaches it through the module graph — reading a file follows symlinks, so no bound
+applies there. The 天衡 shell passes target root files, so an adopter's `check` is unaffected; the bound
+belongs to the directory input that exists for source compatibility.
+
+#### Scenario: A probe behind a symlinked subdirectory is seen from the root and not from the directory
+
+- **WHEN** a module reached through a `#[path]` into a symlinked directory holds the only probe for a
+  declared seam, and the audit is run twice over that package — once with the target root file, once
+  with the source directory
+- **THEN** the root-file run reports the seam covered, while the directory run reports it unprobed — the
+  stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
+
