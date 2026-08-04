@@ -275,6 +275,10 @@ louke::install(
 // then at each seam: louke::assert_boundary!("domain-entry", obj);
 ```
 
+A crossing object's **origin is derived from the type** — the module its concrete type is *defined* in —
+never taken from the `register_origin!` call, so no code in the process can register a type under an
+origin it does not have.
+
 **渾儀's depth stair — start shape-only, tighten to a named operand.** A semantic boundary is
 declared at the same seam in two rungs: forbid the *shape* first, then narrow to a *named* trait
 once the intent is precise. The same stair applies to `impl Trait` (`must_not_expose_impl_trait`

@@ -44,13 +44,13 @@ one forbidden bug is a **false negative** (a real violation that silently passes
 
 **Non-bypassable, precisely.** The governed code's own *shape* cannot make a declared boundary stop
 reacting: no spelling, alias, re-export, `cfg` arm, or macro form escapes observation, and where an
-observation genuinely cannot decide, the reaction is exit 2 rather than a pass. It does not mean the
-observation cannot be fed a false input by code inside the observed process. 漏刻's origin registration
-is deliberately **cooperative** — its trust boundary is the process, stated in full by
-`runtime-origin-assertion` — so a runtime origin is observed for code that registers through the macro
-and assertable by code that bypasses it. That bound is named here rather than left for this sentence to
-imply away; a governance tool claiming a guarantee it does not have is worse than one stating its
-limit.
+observation genuinely cannot decide, the reaction is exit 2 rather than a pass. What an observation
+must never accept is a value the observed code chose for itself — a declaration wearing an
+observation's name. 漏刻's runtime origin is the worked example: it is **derived from the type** (the
+module the concrete type is defined in), never taken from the registering call, so no code in the
+process can present a type under an origin it does not have. `runtime-origin-assertion` states it in
+full. A governance tool must claim exactly the guarantee it has — neither more, which is a lie, nor
+less, which invites the workaround.
 
 ## 潛移 (Qiányí) — govern by gravity, too: the idiom is imitated, the reaction is the backstop
 

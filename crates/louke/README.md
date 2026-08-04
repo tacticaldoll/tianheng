@@ -47,11 +47,13 @@ louke::install(
 //    louke::assert_boundary!("domain-entry", obj); // obj: &dyn DomainPort
 ```
 
-Origin is **observed at the registration site** (`register_origin!` captures `module_path!()`)
-rather than carried by the type. The macro's expansion target must stay `pub` — a `macro_rules!`
-expands at its call site — so code that bypasses the macro can still assert an origin: 漏刻's trust
-boundary is the **process**. It catches architectural drift; it is not a defence against an
-in-process adversary. Explicitly **rejected** as a non-goal: runtime capability/effect drift ("no I/O
+Origin is **observed**: it is **derived from the type** — the module the concrete type is *defined*
+in — not taken from the registration call. `register_origin!(MyType)` passes nothing but the type, so
+no code can register a type under an origin it does not have; written inside the type's own module, the
+natural place, the origin reads exactly as that module's own path. A type from another crate therefore
+carries **that** crate's origin, not your layer's: to give a layer's origin to an adapter, define the
+adapter in that layer (a newtype), which is also what actually crosses the seam.
+Explicitly **rejected** as a non-goal: runtime capability/effect drift ("no I/O
 reachable") — a runtime policy engine. The registry holds static label allowlists only, never
 predicates.
 

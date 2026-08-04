@@ -371,6 +371,11 @@ keyword; its call sites still react), and macro-generated `unsafe` are stated bo
 *Intent: only the blessed adapter's origin may cross the port seam — enforced against the live
 object, which static/semantic analysis cannot see.*
 
+An origin is **derived from the type**: the module the concrete type is *defined* in. Nothing at the
+`register_origin!` call site is passed through, so no code can register a type under an origin it does
+not have — and a type from another crate carries that crate's origin, not yours. To give an adapter your
+layer's origin, define the adapter in that layer.
+
 ```rust
 // in the constitution:
 .runtime(
@@ -385,7 +390,7 @@ object, which static/semantic analysis cannot see.*
 //   trait Adapter: louke::Tracked {}
 louke::install(
     constitution().runtime_boundaries().iter().cloned(),
-    [louke::register_origin!(BlessedAdapter) /* registered inside its own module */],
+    [louke::register_origin!(BlessedAdapter) /* origin = where the type is DEFINED */],
 );
 // at the seam:
 //   louke::assert_boundary!("adapter-seam", obj);   // unknown/disallowed origin reacts fail-closed

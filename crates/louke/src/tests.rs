@@ -48,6 +48,17 @@ fn registry(
 struct Domain;
 struct Infra;
 struct Unrelated;
+/// A module-level generic, so two instantiations can be compared without a fn-local path.
+struct Wrapper<T>(#[allow(dead_code)] T);
+
+/// Two layers, so the generic-argument bound can be pinned with real types rather than a rendered
+/// string: a generic defined in one module, instantiated with a type defined in another.
+mod blessed_layer {
+    pub struct Wrapper<T>(#[allow(dead_code)] pub T);
+}
+mod rogue_layer {
+    pub struct Payload;
+}
 
 #[test]
 fn an_allowed_origin_passes() {
@@ -272,112 +283,210 @@ fn the_fold_hasher_distinguishes_types() {
     assert_eq!(m.len(), 2);
 }
 
-/// KNOWN, DEFERRED trust bound, pinned rather than only listed: an origin is **observed** for code
-/// that goes through `register_origin!`, and merely **asserted** by code that does not.
+/// The closure, asserted in the direction that matters: the only entry constructible for a type is
+/// the honest one. Its predecessor in this file reproduced the false negative it replaces — a rogue
+/// type registered under an allowlisted origin crossed a seam with no reaction — and stopped
+/// **compiling** the moment the constructor stopped accepting an origin. That is the transition; this
+/// test is what holds the ground it took.
 ///
-/// A `macro_rules!` expands at its call site, so the constructor it names must stay reachable from
-/// there — `pub(crate)` would break every legitimate `register_origin!` in an adopter's crate. It is
-/// `#[doc(hidden)]` and named `__from_register_origin` so a hand-written call reads as the bypass it
-/// is, but nothing in std can stop that call. 漏刻's trust boundary is therefore the process: it
-/// catches architectural drift, not an in-process adversary.
-///
-/// This test exists so the gap cannot quietly change state in either direction. If it starts failing,
-/// the bound has been closed — and `runtime-origin-assertion`'s requirement, the constructor's own
-/// doc, and `BACKLOG.md`'s decision entry must be updated together with it.
-///
-/// The second assertion records the evidence a future fix could key on: the type's OWN path disagrees
-/// with the asserted origin, and unlike a call-site string it is not the caller's to choose. Deriving
-/// the origin from it would close this, at the cost of redefining an origin from "where registered" to
-/// "where defined" and resting identity on `type_name`'s deliberately unspecified format — a design
-/// decision, recorded with the proc-macro alternative in the backlog, not taken here.
+/// The first assertion is the whole change's load-bearing claim, machine-checked rather than argued:
+/// for a type registered inside its own module the derived origin equals `module_path!()` there, so the
+/// documented idiom's `only_origins(...)` entries are byte-identical to what they were. If a toolchain
+/// ever renders a type's path differently, this fails here rather than in an adopter's allowlist.
 #[test]
-fn a_hand_built_origin_entry_is_accepted_a_known_trust_bound() {
-    struct Rogue;
-    let forged =
-        crate::OriginEntry::__from_register_origin(TypeId::of::<Rogue>(), "app::blessed", "Rogue");
+fn a_registration_can_only_name_its_own_types_defining_module() {
+    let entry = crate::OriginEntry::__from_register_origin::<Domain>();
     assert_eq!(
-        forged.origin, "app::blessed",
-        "a hand-built entry's asserted origin is taken as given — the bound this test pins"
+        entry.origin,
+        module_path!(),
+        "a type registered in its own module derives exactly the module path that module reports — \
+         the byte-identical claim the migration rests on"
     );
-    let real_path = std::any::type_name::<Rogue>();
+    assert_eq!(entry.type_id, TypeId::of::<Domain>());
+
+    // And the consequence end to end: nothing can present this type under another origin, so a seam
+    // allowing only that other origin reacts instead of passing it.
+    let reg = registry(
+        &[("domain-entry", &["app::blessed"], Severity::Enforce)],
+        &[(entry.type_id, entry.origin, entry.type_name)],
+    );
+    let reaction = check_crossing("domain-entry", TypeId::of::<Domain>(), &reg)
+        .expect("the seam is declared, so this is not a constitution error")
+        .expect("a type whose derived origin is not on the allowlist must react");
     assert!(
-        !real_path.starts_with("app::blessed"),
-        "and the type's own path contradicts it ({real_path}), which is the evidence a future fix \
-         could use to refuse the assertion"
+        reaction.0.finding.contains(module_path!()),
+        "the finding names the origin actually observed, so an adopter reads which value to allow: \
+         {}",
+        reaction.0.finding
     );
 }
 
-/// The test above pins the *behaviour*; this one pins the **claim**, because that is what actually
-/// drifted. The absolute form ("origin is observed, NOT self-asserted") outlived its own correction
-/// in four places at once — the spec's Purpose summary, the requirement's name, this crate's README,
-/// and the `register_origin!` doc — while the detailed requirement three paragraphs down already
-/// stated the honest process bound. A summary a reader meets first is the capability contract, so a
-/// hand-maintained agreement between summary and detail is not enough: the checkable spine belongs
-/// in a reaction.
-///
-/// Both directions are asserted. The absolute wording must be **absent** from every surface that
-/// describes the guarantee, and the bound must be **present** in the three that carry it — a
-/// deletion that removed the bound would otherwise pass a forbid-only guard. Matching is done on
-/// whitespace-flattened text so a line wrap between the two words cannot hide either direction, and
-/// the needle is assembled from fragments so this test's own source never contains it.
+/// The derivation's shape bounds, pinned as *relationships* rather than as rustc's exact rendering —
+/// except the one that must be exact, which the test above owns. `runtime-origin-assertion` states
+/// each of these; this is where they stop being prose.
 #[test]
-fn the_origin_guarantee_is_never_summarized_as_absolute() {
+fn the_derived_origin_honors_its_stated_shape_bounds() {
+    use crate::dsl::defining_module;
+
+    // A generic type's arguments are not part of its origin, and an argument containing path
+    // separators must not be mistaken for the type's own path — the reason the argument list is cut
+    // before the final separator is sought, not after.
+    assert_eq!(defining_module("app::infra::Repo<u8>"), "app::infra");
+    assert_eq!(
+        defining_module("app::infra::Repo<std::string::String>"),
+        "app::infra",
+        "the final `::` inside the ARGUMENTS must never be taken for the type's own"
+    );
+    assert_eq!(
+        defining_module("app::infra::Repo<a::B<c::D>>"),
+        "app::infra",
+        "nesting inside the argument list changes nothing: the first `<` is the top-level one"
+    );
+
+    // Two instantiations of one generic type share one origin (same defining module).
+    assert_eq!(
+        defining_module(std::any::type_name::<Wrapper<u8>>()),
+        defining_module(std::any::type_name::<Wrapper<String>>()),
+    );
+
+    // The generic bound in the direction that matters, with real types: a generic DEFINED in one
+    // module carries that module's origin whatever it wraps, so an argument from another module does
+    // not taint it. Stated in `runtime-origin-assertion` as the bound of observing an origin as a
+    // module — governing which instantiations may cross is a different capability. Pinned here so it
+    // cannot change state silently in either direction.
+    let outer = defining_module(std::any::type_name::<
+        blessed_layer::Wrapper<rogue_layer::Payload>,
+    >());
+    assert_eq!(
+        outer,
+        defining_module(std::any::type_name::<blessed_layer::Wrapper<u8>>()),
+        "the argument does not change the origin"
+    );
+    assert!(
+        outer.ends_with("blessed_layer") && !outer.contains("rogue_layer"),
+        "the origin is the outermost type's defining module: {outer}"
+    );
+
+    // A shape with no path at all yields its own rendering — stated, not an error, because it matches
+    // no allowlist entry and therefore reacts fail-closed.
+    assert_eq!(defining_module("&u8"), "&u8");
+    assert_eq!(defining_module("(u8, u8)"), "(u8, u8)");
+
+    // A foreign type's origin is its OWN defining path, not the registering layer's. Asserted
+    // structurally: it is a real path, and it is not this module — pinning std's internal rendering
+    // would break on a toolchain that reorganizes it, which is not what this bound is about.
+    let foreign = defining_module(std::any::type_name::<std::collections::HashMap<u8, u8>>());
+    assert!(
+        foreign.contains("::") && foreign != module_path!(),
+        "a foreign type does not inherit the registering layer's origin: {foreign}"
+    );
+
+    // A function-local type's path is qualified by its enclosing function, so it is not a module path.
+    fn enclosing() -> &'static str {
+        struct Local;
+        defining_module(std::any::type_name::<Local>())
+    }
+    assert_ne!(
+        enclosing(),
+        module_path!(),
+        "a fn-local type's derived origin is fn-qualified — a stated bound, reacting fail-closed"
+    );
+}
+
+/// The tests above pin the *behaviour*; this one pins the **claim**, because that is what drifted
+/// hardest. It has now been through both states, and its shape follows the ground truth rather than
+/// the other way round.
+///
+/// While the gap was open it required the process-trust-boundary prose to be **present** on every
+/// surface describing the guarantee, and the absolute form ("origin is observed, NOT self-asserted")
+/// to be absent — that absolute form having outlived its own correction in four places at once. The
+/// gap is now closed, so the requirement inverts: an origin is derived from the type and cannot be
+/// asserted at all, so a surface still promising a *bound* promises a limit the crate no longer has.
+/// Understating a guarantee is a smaller sin than overstating one, but it is the same sin: the summary
+/// a reader meets first is the capability contract.
+///
+/// Both directions are asserted, whitespace-flattened so a line wrap cannot hide either, and the
+/// needles are assembled from fragments so this test's own source never contains them.
+#[test]
+fn the_origin_guarantee_is_stated_as_derived_on_every_surface() {
     fn flattened(path: &std::path::Path) -> String {
         let text = std::fs::read_to_string(path)
             .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
         text.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
-    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let absolute_claim = ["self", "-asserted"].concat();
-    let stated_bound = "trust boundary";
+    fn assert_retired_absent(label: &str, text: &str, retired: &[String]) {
+        for needle in retired {
+            assert!(
+                !text.contains(needle.as_str()),
+                "{label} still states a retired form of the origin guarantee ({needle:?}) — an \
+                 origin is derived from the type, so neither an absolute claim nor a cooperative \
+                 bound describes it"
+            );
+        }
+    }
 
-    // Crate-local surfaces: present in the published tarball too, so they are always checked. The
-    // source tree is walked rather than enumerated, so a file added later cannot reintroduce the
-    // claim unobserved (this test's own needle is assembled from fragments, so it does not self-trip).
-    fn forbid_claim_under(dir: &std::path::Path, needle: &str) {
+    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Every retired wording in one list: the absolute claim the 0.4.0 window removed, and the two
+    // forms of the cooperative bound this change removes.
+    let retired = [
+        ["self", "-asserted"].concat(),
+        ["assert", "able"].concat(),
+        ["trust boundary is the ", "process"].concat(),
+    ];
+    let stated = "derived from the type";
+
+    // Crate-local sources: present in the published tarball too, so always checked. The tree is walked
+    // rather than enumerated, so a file added later cannot reintroduce a retired wording unobserved
+    // (this test's own needles are assembled from fragments, so it does not self-trip).
+    fn forbid_under(dir: &std::path::Path, retired: &[String]) {
         for entry in std::fs::read_dir(dir).expect("louke's own source directory is readable") {
             let path = entry.expect("a readable source dir entry").path();
             if path.is_dir() {
-                forbid_claim_under(&path, needle);
+                forbid_under(&path, retired);
             } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs")
-                // This file quotes the retired wording verbatim, above, to name what drifted;
-                // a test's own doc is not a surface an adopter reads the guarantee from.
+                // This file names the retired wordings, above, to say what they were; a test's own doc
+                // is not a surface an adopter reads the guarantee from.
                 && path.file_name().and_then(|name| name.to_str()) != Some("tests.rs")
             {
-                assert!(
-                    !flattened(&path).contains(needle),
-                    "{} states the retired absolute form of the origin guarantee — 漏刻's trust \
-                     boundary is the process, and no surface may promise more than the requirement",
-                    path.display()
-                );
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+                let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                assert_retired_absent(&path.display().to_string(), &flat, retired);
             }
         }
     }
-    forbid_claim_under(&crate_dir.join("src"), &absolute_claim);
-    assert!(
-        !flattened(&crate_dir.join("README.md")).contains(&absolute_claim),
-        "louke's README states the retired absolute form of the origin guarantee — it is where an \
-         adopter meets the capability contract before ever reading the specification"
-    );
-    for relative in ["README.md", "src/dsl.rs"] {
-        let path = crate_dir.join(relative);
+    forbid_under(&crate_dir.join("src"), &retired);
+
+    // The surfaces an adopter meets the guarantee on must state what it now is. A deletion that
+    // removed the statement would otherwise pass a forbid-only guard.
+    for relative in ["README.md", "src/dsl.rs", "src/lib.rs"] {
+        let text = flattened(&crate_dir.join(relative));
+        assert_retired_absent(relative, &text, &retired);
         assert!(
-            flattened(&path).contains(stated_bound),
-            "{relative} no longer states the process trust boundary — the bound must stay stated \
-             where an adopter meets the guarantee, not only in the specification"
+            text.contains(stated),
+            "{relative} does not state that an origin is derived from the type — the summary a \
+             reader meets first is the capability contract"
         );
     }
 
-    // The specification and the project contract live outside the crate: absent from the packaged
-    // tarball (where this test still runs), so skip them there — but never silently in CI, where the
-    // workspace must be present. `PROJECT.md` is in the set because its Core Contract's
-    // "non-bypassable reaction" is the same claim one level up: unqualified, it promises for 漏刻 the
-    // very thing this bound denies, which is how an independent review reached the contradiction from
-    // that document rather than from the spec.
+    // Workspace surfaces: absent from the packaged tarball (where this test still runs), so skipped
+    // there — but never silently in CI, where the workspace must be present.
+    //
+    // `PROJECT.md` is in the set because its Core Contract states the same claim one level up, which
+    // is how an independent review reached this gap from that document rather than from the
+    // specification. The root `README.md` and `COOKBOOK.md` are in it because they carry the
+    // `register_origin!` samples and **nothing compiles them**: `ReadmeDoctests` includes
+    // `crates/tianheng/README.md`, which does not mention the macro, and the root README cannot join
+    // that net — a `#[cfg(doctest)]` include of a file outside the crate would break `cargo test` from
+    // the published tarball, where that file does not exist. So this guard is the only reaction those
+    // samples can have, which is a weaker thing than compiling them and is stated as such rather than
+    // left to look like coverage.
     for relative in [
         "../../openspec/specs/runtime-origin-assertion/spec.md",
         "../../PROJECT.md",
+        "../../README.md",
+        "../../COOKBOOK.md",
     ] {
         let path = crate_dir.join(relative);
         if !path.exists() {
@@ -389,15 +498,10 @@ fn the_origin_guarantee_is_never_summarized_as_absolute() {
             continue;
         }
         let text = flattened(&path);
+        assert_retired_absent(relative, &text, &retired);
         assert!(
-            !text.contains(&absolute_claim),
-            "{relative} states the retired absolute form of the origin guarantee — a summary is read \
-             before the bound it summarizes"
-        );
-        assert!(
-            text.contains(stated_bound),
-            "{relative} no longer states the process trust boundary — an unqualified \
-             non-bypassable/observed claim promises for 漏刻 what its registration cannot deliver"
+            text.contains(stated),
+            "{relative} does not state that an origin is derived from the type"
         );
     }
 }
