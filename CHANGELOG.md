@@ -13,6 +13,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- Retired a `BACKLOG.md` WATCH line that had survived its own promotion. It asked whether
+  `xingbiao::crate_root_file` collapses a multi-root package, with the trigger "confirm `cargo metadata`
+  actually emits multiple root files for one package before treating this as more than speculative" —
+  which was confirmed in this window, promoted the item into the DESIGN-BREAKING entry, and closed with
+  the per-target corpus, while the WATCH line stayed. An index that carries a question and its answer at
+  once is a reader trap, so the lesson is recorded with it: retire the WATCH line in the same change that
+  promotes it.
 - `structured-violation-identity` now derives identity completeness rather than leaving it to review: a
   fact carries every coordinate of **where** the observation was made that can vary — the governing
   declaration, the compilation unit, the module, the owner or item, and the position-free discriminator
