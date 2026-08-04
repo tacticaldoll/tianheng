@@ -113,6 +113,47 @@ fn a_glob_import_does_not_bind_a_value_and_does_not_react() {
     );
 }
 
+/// `use m::foo::{self};` binds the **module** `foo`, never the `fn foo` — so it must not react.
+///
+/// The same collapse the glob condition exists for, one import form over. `use_scan` records a
+/// `{self}` leaf as its prefix module with `is_glob: false`, so it reaches the reaction byte-identical
+/// to a bare `use m::foo;` — same path, same single-segment leaf, same declared `fn foo`.
+///
+/// Verified against rustc rather than reasoned. With both `mod foo` and `pub fn foo` declared,
+/// `use m::foo::{self};` followed by `foo()` fails `error[E0423]: expected function, found module
+/// 'foo'`, while `foo::INSIDE` compiles — so `{self}` reaches the module and no value of its parent.
+///
+/// All four spellings are asserted, because they take different paths through the use-tree expansion:
+/// the bare `{self}`, the aliased `{self as f}`, one nested inside an outer brace group, and one
+/// beside a sibling leaf.
+#[test]
+fn a_self_brace_import_binds_the_module_only_and_does_not_react() {
+    for (label, consumer) in [
+        ("bare", "use crate::protected::foo::{self};\n"),
+        ("aliased", "use crate::protected::foo::{self as f};\n"),
+        ("nested", "use crate::protected::{foo::{self}};\n"),
+        (
+            "with-sibling",
+            "use crate::protected::foo::{self, INSIDE};\n",
+        ),
+    ] {
+        let probe = Probe::new(
+            label,
+            &[
+                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
+                ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
+                ("consumer.rs", consumer),
+            ],
+        );
+        assert!(
+            findings(&probe.manifest()).is_empty(),
+            "`{label}`: a `{{self}}` leaf binds the module `foo`, not the `fn foo`, so it reaches only \
+             the descendant"
+        );
+    }
+}
+
 /// A value name that is only *text* — a comment, a string literal, a macro body — declares nothing.
 ///
 /// The collector's own precondition is declaration-cleaned source; it was handed the raw file, so any
