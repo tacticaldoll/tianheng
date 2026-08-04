@@ -815,6 +815,16 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   louke source, its README, or the specification, and equally if the stated bound is deleted from
   where an adopter meets the guarantee. A summary is the capability contract for whoever stops
   reading there, so it is checked rather than trusted.
+  The same claim exists one level up, and it is now qualified there too: `PROJECT.md`'s Core Contract
+  said a declared boundary produces a "non-bypassable reaction" without saying what non-bypassable
+  covers, which promised for 漏刻 exactly what its cooperative registration cannot deliver — the route by
+  which an independent review reached this contradiction from the contract rather than from the spec.
+  It now states the scope: the governed code's own *shape* cannot make a boundary stop reacting (no
+  spelling, alias, re-export, `cfg` arm, or macro form escapes observation, and an undecidable
+  observation reacts exit 2 rather than passing), which is not the same as an observation that cannot be
+  fed a false input from inside the observed process. Nothing about the CI dimensions' guarantee
+  narrows; what changes is that the runtime dimension's trust boundary is named where the contract is
+  read, and `PROJECT.md` joins the guarded surface set so the qualification cannot be dropped again.
   The residual is now **pinned by a test** rather than only listed
   (`a_hand_built_origin_entry_is_accepted_a_known_trust_bound`), so it cannot change state in either
   direction unnoticed — if it starts failing, the bound has been closed and the spec, the constructor's

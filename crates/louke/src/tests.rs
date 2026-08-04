@@ -369,25 +369,35 @@ fn the_origin_guarantee_is_never_summarized_as_absolute() {
         );
     }
 
-    // The specification lives outside the crate: absent from the packaged tarball (where this test
-    // still runs), so skip it there — but never silently in CI, where the workspace must be present.
-    let spec = crate_dir.join("../../openspec/specs/runtime-origin-assertion/spec.md");
-    if !spec.exists() {
+    // The specification and the project contract live outside the crate: absent from the packaged
+    // tarball (where this test still runs), so skip them there — but never silently in CI, where the
+    // workspace must be present. `PROJECT.md` is in the set because its Core Contract's
+    // "non-bypassable reaction" is the same claim one level up: unqualified, it promises for 漏刻 the
+    // very thing this bound denies, which is how an independent review reached the contradiction from
+    // that document rather than from the spec.
+    for relative in [
+        "../../openspec/specs/runtime-origin-assertion/spec.md",
+        "../../PROJECT.md",
+    ] {
+        let path = crate_dir.join(relative);
+        if !path.exists() {
+            assert!(
+                std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+                "{relative} is absent while TIANHENG_WORKSPACE_TESTS is set — the claim guard must \
+                 not silently skip an authoritative surface in CI"
+            );
+            continue;
+        }
+        let text = flattened(&path);
         assert!(
-            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-            "the runtime-origin-assertion specification is absent while TIANHENG_WORKSPACE_TESTS \
-             is set — the claim guard must not silently skip its authoritative surface in CI"
+            !text.contains(&absolute_claim),
+            "{relative} states the retired absolute form of the origin guarantee — a summary is read \
+             before the bound it summarizes"
         );
-        return;
+        assert!(
+            text.contains(stated_bound),
+            "{relative} no longer states the process trust boundary — an unqualified \
+             non-bypassable/observed claim promises for 漏刻 what its registration cannot deliver"
+        );
     }
-    let spec_text = flattened(&spec);
-    assert!(
-        !spec_text.contains(&absolute_claim),
-        "the runtime-origin-assertion specification states the retired absolute form of the origin \
-         guarantee — the Purpose summary and the requirement name are read before the bound is"
-    );
-    assert!(
-        spec_text.contains(stated_bound),
-        "the runtime-origin-assertion specification no longer states the process trust boundary"
-    );
 }
