@@ -940,6 +940,19 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   something else. The sibling-root exclusion was checked for the worse failure and does not have it —
   it keeps the current root explicitly, so a root appearing twice never excludes itself. Not breaking —
   no API signature, no identity shape, and no reported violation changes.
+- Narrowed that dangling classification to genuine **absence**, and gated its test to the platform that
+  can construct it. The refined condition was `std::fs::metadata(path).is_err()` — any metadata failure,
+  not "the target does not resolve" — so a symlink whose target **exists but cannot be reached** (`EACCES`
+  on a component of its path, or `ELOOP`) still reported "it is a symlink to X, which does not exist" and
+  prescribed recreating a file already there. That is the same misdiagnosis one error kind further in, in
+  the branch narrowed to fix it. Only `NotFound` is dangling now; anything else falls through to the
+  arm that prints the real cause. Unlike the race the previous refinement documented, this one needs no
+  race to construct: with the target inside a `chmod 000` directory, `lstat` reports a symlink, the
+  `O_EXCL` open fails `EEXIST`, and `metadata` fails `EACCES` — so it is pinned by a third test arm rather
+  than argued. Separately, only the test's `symlink` calls carried `#[cfg(unix)]` while its assertions ran
+  everywhere, so on Windows it asserted about paths nothing had created and panicked on its first arm; the
+  whole test is now `#[cfg(unix)]`, because a test that cannot construct its subject must not run rather
+  than run and assert about something else.
 - `--write-baseline` calls a symlink at the baseline path **dangling** only when its target really does
   not resolve. `create_baseline_file` is reached only when reading the path returned `NotFound`, so for a
   symlink the target was absent when the path was read — but it can come back before the `O_EXCL` open (a

@@ -813,8 +813,14 @@ fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteE
     };
     if err.kind() == std::io::ErrorKind::AlreadyExists {
         if let Ok(metadata) = std::fs::symlink_metadata(path) {
-            // Dangling is claimed only when the target still does not resolve. `std::fs::metadata`
-            // follows the link, so its failure IS that condition.
+            // Dangling is claimed only when the target is genuinely **absent** — `NotFound`
+            // specifically, not any metadata failure. `std::fs::metadata` follows the link, so it also
+            // fails when the target EXISTS but cannot be reached: `EACCES` on a component of its path,
+            // or `ELOOP`. Treating those as dangling repeats the defect this branch was narrowed to fix,
+            // one error kind further in — "it is a symlink to X, which does not exist" about a target
+            // that does, prescribing a remedy ("recreate the target") that cannot help. Measured: with
+            // the target inside a `chmod 000` directory, `lstat` reports a symlink, the `O_EXCL` open
+            // fails `EEXIST`, and `metadata` fails `EACCES`.
             //
             // This function is reached only when `read_to_string` returned `NotFound`, so for a symlink
             // the target was absent when the path was read — but it can come back before the `O_EXCL`
@@ -827,7 +833,10 @@ fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteE
             // Falling through loses no diagnostic: [`write_baseline`]'s `create_new && AlreadyExists`
             // arm already reports that the baseline "appeared while the new snapshot was being
             // prepared", which is exactly what happened.
-            if metadata.file_type().is_symlink() && std::fs::metadata(path).is_err() {
+            if metadata.file_type().is_symlink()
+                && matches!(std::fs::metadata(path), Err(err)
+                    if err.kind() == std::io::ErrorKind::NotFound)
+            {
                 let target = std::fs::read_link(path)?;
                 return Err(BaselineWriteError::DanglingSymlink { target });
             }
