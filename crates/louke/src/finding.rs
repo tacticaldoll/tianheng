@@ -33,16 +33,13 @@ pub(crate) enum RuntimeFact {
     // `audit_probe_coverage_with_markers`, which owns why the caller supplies it) — whenever the file
     // lies under it, rather than the raw absolute path: a checkout-dependent absolute path would make
     // a recorded baseline stale in any other clone or CI runner, and an anchor derived from the
-    // scanned roots instead would restate every label whenever the member set changed. KNOWN residual gap, not fully
-    // closed: an ABSOLUTE `#[path = "/…"]` literal whose target does not lie under the anchor has no
-    // textual relationship to it (`Path::join` discards the receiver for an absolute joinee), so its
-    // label falls back to the absolute form — but when the SAME hardcoded literal happens to lie
-    // under a given checkout's own anchor, the label becomes relative-looking instead, so the
-    // identical literal can still disagree across two checkouts (see
-    // `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap` in
-    // `audit::tests`). An absolute-literal `#[path]` is already non-portable/machine-specific either
-    // way; the realistic relative sibling-share idiom this fix targets is unaffected and stays
-    // checkout-independent.
+    // scanned roots instead would restate every label whenever the member set changed. A file reached
+    // through an ABSOLUTE `#[path = "/…"]` literal is the one exception, and it is a rule rather than a
+    // gap: it keeps the path the literal wrote, never relativized, because an absolute literal does not
+    // move with the checkout and relativizing it made its identity depend on whether a given checkout's
+    // anchor happened to contain the target (relative-looking here, absolute there, for one committed
+    // literal). Pinned by `a_nested_absolute_path_literal_now_agrees_across_checkouts` in
+    // `audit::tests`.
     #[cfg(feature = "audit")]
     UnauditableProbe {
         marker: String,

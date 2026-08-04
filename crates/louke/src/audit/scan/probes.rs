@@ -139,10 +139,17 @@ pub(crate) fn scan_rust_file(
     anchor: &Path,
     markers: &[&str],
     probes: &mut Vec<Probe>,
+    absolute_reached: bool,
 ) -> Result<String, String> {
     let source = std::fs::read_to_string(file)
         .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
-    scan_source_with_markers(&source, &labeled(file, anchor), markers, probes);
+    let label = if absolute_reached {
+        // Keep the path as the literal wrote it. See `labeled`.
+        encoded(file.as_os_str())
+    } else {
+        labeled(file, anchor)
+    };
+    scan_source_with_markers(&source, &label, markers, probes);
     Ok(source)
 }
 
@@ -162,7 +169,9 @@ pub(crate) fn collect_directory_probes(
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
             && xingbiao::try_visit(visited, &path)?
         {
-            scan_rust_file(&path, anchor, markers, probes)?;
+            // The legacy directory corpus reaches a file by walking the tree, never through a
+            // `#[path]` literal, so no file it finds is absolute-reached.
+            scan_rust_file(&path, anchor, markers, probes, false)?;
         }
     }
     Ok(())
@@ -177,14 +186,18 @@ pub(crate) fn collect_reachable_probes(
     let root_parent = root
         .parent()
         .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
-    let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf())];
+    // The third element is "reached through an ABSOLUTE `#[path]` literal", which decides whether this
+    // file's identity label may be relativized against the anchor. It is INHERITED by a file's
+    // children: they resolve from the absolute-reached file's own directory, so the same
+    // does-it-happen-to-lie-under-this-checkout's-anchor coincidence applies to them.
+    let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf(), false)];
     // Uses canonicalized path visit tracking to prevent cycle loops on symlinks.
     let mut visited: HashSet<PathBuf> = HashSet::new();
-    while let Some((file, child_base)) = pending.pop() {
+    while let Some((file, child_base, absolute_reached)) = pending.pop() {
         if !xingbiao::try_visit(&mut visited, &file)? {
             continue;
         }
-        let source = scan_rust_file(&file, anchor, markers, probes)?;
+        let source = scan_rust_file(&file, anchor, markers, probes, absolute_reached)?;
         // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
         // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
         // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
@@ -192,7 +205,11 @@ pub(crate) fn collect_reachable_probes(
         let mut children = external_module_files(&source, &child_base, file_dir)?;
         children.sort();
         children.reverse();
-        pending.extend(children);
+        pending.extend(
+            children
+                .into_iter()
+                .map(|(f, b, child_absolute)| (f, b, absolute_reached || child_absolute)),
+        );
     }
     Ok(())
 }
@@ -201,7 +218,7 @@ pub(crate) fn external_module_files(
     source: &str,
     child_base: &Path,
     file_dir: &Path,
-) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+) -> Result<Vec<(PathBuf, PathBuf, bool)>, String> {
     let mut modules = Vec::new();
     collect_scope_modules(
         source.as_bytes(),
@@ -235,7 +252,7 @@ pub(crate) fn resolve_external_mod_decl(
     name: &str,
     child_base: &Path,
     file_dir: &Path,
-    modules: &mut Vec<(PathBuf, PathBuf)>,
+    modules: &mut Vec<(PathBuf, PathBuf, bool)>,
     in_transparent_arm: bool,
 ) -> Result<(), String> {
     let attrs = mod_preamble_attrs(bytes, scope_start, mod_index);
@@ -259,9 +276,11 @@ pub(crate) fn resolve_external_mod_decl(
             modules.push(resolved);
         }
     }
-    if let Some(resolved) = resolve_external_module(child_base, name)? {
+    if let Some((file, next_base)) = resolve_external_module(child_base, name)? {
         has_backing_source = true;
-        modules.push(resolved);
+        // A conventional child is reached by construction from its parent's base, never through an
+        // absolute literal, so it relativizes against the anchor exactly as before.
+        modules.push((file, next_base, false));
     }
     if !(has_backing_source || absence_is_tolerated(&attrs, in_transparent_arm)) {
         return Err(format!(
@@ -338,7 +357,7 @@ pub(crate) fn collect_scope_modules(
     end: usize,
     child_base: &Path,
     file_dir: &Path,
-    modules: &mut Vec<(PathBuf, PathBuf)>,
+    modules: &mut Vec<(PathBuf, PathBuf, bool)>,
     in_transparent_arm: bool,
     depth: usize,
 ) -> Result<(), String> {
@@ -534,14 +553,23 @@ pub(crate) fn resolve_external_module(
 /// **own** directory. `Ok(None)` when the target is absent (the caller tolerates a cfg-conditional
 /// absence and fails loud otherwise) — no ambiguity is possible (the path names one file), unlike the
 /// conventional `name.rs` / `name/mod.rs` pair.
+/// Resolve a `#[path = "…"]` target, reporting whether the literal that reached it was **absolute**.
+///
+/// That third value is load-bearing for identity, not a detail: `Path::join` discards its receiver
+/// exactly when the joinee is absolute, so an absolute literal names the same file in every checkout
+/// while a relative one names a checkout-dependent file that the anchor relativizes. Labeling the
+/// absolute case relative to the anchor is therefore what made its identity checkout-DEPENDENT — the
+/// label came out relative wherever the target happened to lie under that checkout's anchor and
+/// absolute wherever it did not, for one identical committed literal. The flag lets the label keep the
+/// path as written, which is the same in both.
 pub(crate) fn resolve_path_module(
     base: &Path,
     rel: &str,
-) -> Result<Option<(PathBuf, PathBuf)>, String> {
+) -> Result<Option<(PathBuf, PathBuf, bool)>, String> {
     let file = base.join(rel);
     if !file.is_file() {
         return Ok(None);
     }
     let next_base = file.parent().unwrap_or(base).to_path_buf();
-    Ok(Some((file, next_base)))
+    Ok(Some((file, next_base, Path::new(rel).is_absolute())))
 }

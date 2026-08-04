@@ -88,8 +88,8 @@ pub fn audit_probe_coverage(
 /// source files" requirement for this file-input mode's module-graph walk and `#[path]`/
 /// `cfg_attr`-wrapped-`#[path]` union-scan rules; and its "An un-auditable probe's identity
 /// distinguishes distinct offending expressions" requirement for why the `file` field is labeled
-/// relative to `anchor` (including the stated, not-yet-closed residual gap for an absolute
-/// `#[path]` literal that lies under one checkout's anchor but not another's).
+/// relative to `anchor`, and its "A file reached through an absolute path literal keeps the path the
+/// literal wrote" requirement for the one construct that is deliberately not relativized.
 ///
 /// `anchor` is the directory every observed file's `file` identity label is made relative to — the
 /// caller's own checkout/workspace root (`xingbiao::workspace_root`, for the `tianheng` shell). It

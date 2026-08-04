@@ -83,6 +83,21 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   violation-identity decisions, PR #149's commit body (which names this exact gap and
   scopes it out as a follow-up).
 
+- ~~**An absolute `#[path]` literal's identity still disagrees across checkouts when its target
+  coincidentally lies under one checkout's own anchor.**~~ **CLOSED** in the 0.4.0 window — the last
+  open identity gap. Closed by stopping the relativization rather than by threading provenance through
+  a labeling decision: a file reached through an absolute literal keeps the path the literal wrote, in
+  every checkout, and the flag is inherited by the files that target reaches in turn. The recorded
+  promotion trigger described the fix as threading "was this file reached via an absolute `#[path]`
+  literal" through four functions, which read as a broad refactor and is why it sat; it is not, because
+  `Path::join` discards its receiver EXACTLY when the joinee is absolute, so the fact is knowable at the
+  single line that resolves the literal and only has to ride alongside the `(file, base)` pair the walk
+  already carries. The test that pinned the gap failed with EQUAL identities the moment the flag landed
+  — its own doc had said that is what closure would look like — and is replaced by one asserting it;
+  the test that pinned "relativized when inside the anchor" is inverted, that behaviour having been the
+  gap's mechanism. `runtime-origin-assertion` gains the rule and drops the two scenarios describing the
+  old behaviour. The original entry is kept below for its reproduction record.
+
 - **An absolute `#[path]` literal's identity still disagrees across checkouts when its
   target coincidentally lies under one checkout's own anchor.** Class: DESIGN-BREAKING.
   Observed pressure: found during round-2 adversarial review of
