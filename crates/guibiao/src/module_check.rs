@@ -504,32 +504,43 @@ fn check_outbound_rule(
     // `(finding, offending file)` pairs collected before de-duplication, for the same
     // reason as the inbound rule: the file is in hand during the scan but lost once the
     // list collapses to findings. The count stays per-finding; the file is metadata.
-    let mut findings: Vec<(String, String)> = Vec::new();
+    // `(importing module, import path, offending file)`. The importer is the module that
+    // **lexically declares** the `use` — an inline `mod inner { … }` is its own importer, not the
+    // file's — read through the same accessor the inbound rules use so the two families agree on who
+    // imported something. The file is collected before de-duplication for the same reason as the
+    // inbound rule: it is in hand during the scan but gone once the list collapses.
+    let mut findings: Vec<(String, String, String)> = Vec::new();
     for (file, current_module) in governed {
         // A governed file we cannot read is "cannot judge", not "nothing to judge":
         // silently skipping it could hide a real violation. Fail as a scan error
         // (exit 2), never a silent pass.
         let text = std::fs::read_to_string(&file)
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
-        for import in imported_module_paths(&text, &current_module, ctx.root_modules)? {
+        for (importer, import) in imports_with_importers(&text, &current_module, ctx.root_modules)?
+        {
             if is_violation(&import) {
-                findings.push((import.path, file.display().to_string()));
+                findings.push((importer, import.path, file.display().to_string()));
             }
         }
     }
-    // One violation per distinct finding. The governed module's subtree can span more
-    // than one file (a parent and child file, or `lib.rs` + `main.rs` both at `crate`),
-    // so the same forbidden import can be found twice; sort then collapse by the finding
-    // (the identity), keeping the first file as the reported `file` — the same identity
-    // guarantee the inbound rule makes, now for the outbound rules.
+    // One violation per distinct (importing module, import path). A single module can be backed by
+    // more than one reachable source, so the same import can be found twice for one importer; that
+    // pair collapses, and the first file after the sort is the reported one.
+    //
+    // The importing module is part of the identity, not only the report: without it, two DIFFERENT
+    // modules of the governed subtree importing the same forbidden path collapse to one finding, so
+    // baselining the first silently masks the second — a real drift event the tool exists to catch.
+    // The dedup's own stated reason was only ever "one module backed by two files", which is narrower
+    // than collapsing distinct modules, and the inbound rules have always qualified by importer. This
+    // makes the two families symmetric.
     findings.sort();
-    findings.dedup_by(|a, b| a.0 == b.0);
-    for (finding, file) in findings {
+    findings.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+    for (importer, path, file) in findings {
         push_module_violation(
             violations,
             governed_module,
             rule,
-            ModuleFact::ImportedPath(finding),
+            ModuleFact::ImportedPath { path, importer },
             file,
             boundary,
             ctx.unit,
@@ -568,7 +579,13 @@ pub(crate) fn check_module_boundary(
     let mut governed_somewhere = false;
     for root in &roots {
         let mut per_root = Vec::new();
-        match check_one_root(package, Some(root.as_path()), Some(&roots), boundary, &mut per_root) {
+        match check_one_root(
+            package,
+            Some(root.as_path()),
+            Some(&roots),
+            boundary,
+            &mut per_root,
+        ) {
             Ok(()) => {
                 governed_somewhere = true;
                 violations.append(&mut per_root);
@@ -596,7 +613,9 @@ fn check_one_root(
 ) -> Result<(), String> {
     let src_dir = match root_file.and_then(Path::parent) {
         Some(dir) => dir.to_path_buf(),
-        None => package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?,
+        None => {
+            package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?
+        }
     };
 
     // The root file relative to `src_dir` — usually `lib.rs`/`main.rs`, but Cargo permits a custom

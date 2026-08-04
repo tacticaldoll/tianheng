@@ -90,7 +90,7 @@ impl CrateFact {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ModuleFact {
-    ImportedPath(String),
+    ImportedPath { path: String, importer: String },
     ImporterModule(String),
     ExternalImporter(String),
     InlinePath { path: String, module: String },
@@ -117,13 +117,14 @@ impl ModuleFact {
     /// applies to a file reached through an absolute path literal.
     pub(crate) fn into_finding(self, governing_package: &str, unit: &str) -> Finding {
         match self {
-            ModuleFact::ImportedPath(path) => {
+            ModuleFact::ImportedPath { path, importer } => {
                 let key = fact(
                     "imported-path",
                     "module-path",
                     [
                         ("governing_package", governing_package),
                         ("unit", unit),
+                        ("importer", importer.as_str()),
                         ("path", path.as_str()),
                     ],
                 );
@@ -228,7 +229,7 @@ mod tests {
 
     fn assert_module_fact_is_cataloged(fact: &ModuleFact) {
         match fact {
-            ModuleFact::ImportedPath(_)
+            ModuleFact::ImportedPath { .. }
             | ModuleFact::ImporterModule(_)
             | ModuleFact::ExternalImporter(_)
             | ModuleFact::InlinePath { path: _, module: _ }
@@ -317,20 +318,36 @@ mod tests {
 
         let cases = vec![
             ModuleKeyCase {
-                fact: ModuleFact::ImportedPath("crate::ports".to_string()),
-                fields: vec![("governing_package", "app"), ("path", "crate::ports"), ("unit", "src/lib.rs")],
+                fact: ModuleFact::ImportedPath {
+                    path: "crate::ports".to_string(),
+                    importer: "crate::core".to_string(),
+                },
+                fields: vec![
+                    ("governing_package", "app"),
+                    ("importer", "crate::core"),
+                    ("path", "crate::ports"),
+                    ("unit", "src/lib.rs"),
+                ],
                 family: "imported-path",
                 shape: "module-path",
             },
             ModuleKeyCase {
                 fact: ModuleFact::ImporterModule("crate::api".to_string()),
-                fields: vec![("governing_package", "app"), ("module", "crate::api"), ("unit", "src/lib.rs")],
+                fields: vec![
+                    ("governing_package", "app"),
+                    ("module", "crate::api"),
+                    ("unit", "src/lib.rs"),
+                ],
                 family: "importer-module",
                 shape: "module-path",
             },
             ModuleKeyCase {
                 fact: ModuleFact::ExternalImporter("crate::ffi".to_string()),
-                fields: vec![("governing_package", "app"), ("module", "crate::ffi"), ("unit", "src/lib.rs")],
+                fields: vec![
+                    ("governing_package", "app"),
+                    ("module", "crate::ffi"),
+                    ("unit", "src/lib.rs"),
+                ],
                 family: "external-importer",
                 shape: "module-path",
             },
@@ -406,10 +423,13 @@ mod tests {
         assert_ne!(normal, dev);
         assert_ne!(normal, feature);
 
-        let import = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding("app", "src/lib.rs")
-            .key()
-            .clone();
+        let import = ModuleFact::ImportedPath {
+            path: "crate::ports".to_string(),
+            importer: "crate::core".to_string(),
+        }
+        .into_finding("app", "src/lib.rs")
+        .key()
+        .clone();
         let importer = ModuleFact::ImporterModule("crate::ports".to_string())
             .into_finding("app", "src/lib.rs")
             .key()
@@ -419,19 +439,25 @@ mod tests {
 
     #[test]
     fn unrelated_construction_order_does_not_change_fact_identity() {
-        let before = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding("app", "src/lib.rs")
-            .key()
-            .clone();
+        let before = ModuleFact::ImportedPath {
+            path: "crate::ports".to_string(),
+            importer: "crate::core".to_string(),
+        }
+        .into_finding("app", "src/lib.rs")
+        .key()
+        .clone();
         let _unrelated = ModuleFact::InlinePath {
             path: "std::time::SystemTime::now".to_string(),
             module: "crate::adapter".to_string(),
         }
         .into_finding("app", "src/lib.rs");
-        let after = ModuleFact::ImportedPath("crate::ports".to_string())
-            .into_finding("app", "src/lib.rs")
-            .key()
-            .clone();
+        let after = ModuleFact::ImportedPath {
+            path: "crate::ports".to_string(),
+            importer: "crate::core".to_string(),
+        }
+        .into_finding("app", "src/lib.rs")
+        .key()
+        .clone();
         assert_eq!(before, after);
     }
 }
