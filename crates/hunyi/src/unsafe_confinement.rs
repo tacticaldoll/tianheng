@@ -47,7 +47,7 @@ pub(crate) fn check_unsafe_boundary(
             .iter()
             .map(|a| canonical_path_str(a))
             .collect();
-        let findings = unsafe_findings(src_dir, &root_file, &allowed, &boundary.crate_package)?;
+        let findings = unsafe_findings(src_dir, root_file, &allowed, &boundary.crate_package)?;
 
         // Human rule text stays fixed, while the semantic rule key carries the canonical allowed set:
         // changing where unsafe is permitted changes the law and therefore re-keys the reaction. The

@@ -166,7 +166,11 @@ pub(super) fn unsafe_production_violation_separates_target_rule_and_fact_roles()
     assert_eq!(fact.shape(), "unsafe-free-function");
     assert_eq!(
         fact.fields().collect::<Vec<_>>(),
-        vec![("module", "crate::net"), ("name", "decode")]
+        vec![
+            ("module", "crate::net"),
+            ("name", "decode"),
+            ("unit", "lib.rs"),
+        ]
     );
 }
 

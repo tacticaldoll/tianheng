@@ -52,7 +52,7 @@ pub(crate) fn check_trait_impl_boundary(
 
         let TraitImplReaction { anchor, findings } = trait_impl_findings(
             src_dir,
-            &root_file,
+            root_file,
             &boundary.trait_path,
             &boundary.allowed_locations,
             &boundary.crate_package,

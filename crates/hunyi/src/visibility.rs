@@ -39,7 +39,7 @@ pub(crate) fn check_visibility_boundary(
 
         let findings = visibility_findings(
             src_dir,
-            &root_file,
+            root_file,
             &boundary.module,
             &boundary.crate_package,
             boundary.ceiling().rank(),

@@ -58,14 +58,14 @@ pub(crate) fn check_impl_trait_boundary(
             let findings = if boundary.forbidden_operands.is_empty() {
                 impl_trait_subtree_findings(
                     src_dir,
-                    &root_file,
+                    root_file,
                     &boundary.module,
                     &boundary.crate_package,
                 )?
             } else {
                 impl_trait_operand_subtree_findings(
                     src_dir,
-                    &root_file,
+                    root_file,
                     &boundary.module,
                     &boundary.forbidden_operands,
                     &boundary.crate_package,
@@ -95,14 +95,14 @@ pub(crate) fn check_impl_trait_boundary(
         let findings = if boundary.forbidden_operands.is_empty() {
             impl_trait_module_findings(
                 src_dir,
-                &root_file,
+                root_file,
                 &boundary.module,
                 &boundary.crate_package,
             )?
         } else {
             impl_trait_operand_module_findings(
                 src_dir,
-                &root_file,
+                root_file,
                 &boundary.module,
                 &boundary.forbidden_operands,
                 &boundary.crate_package,

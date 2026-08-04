@@ -50,7 +50,7 @@ pub(crate) fn check_async_exposure_boundary(
         if boundary.including_submodules() {
             let findings = async_exposure_subtree_findings(
                 src_dir,
-                &root_file,
+                root_file,
                 &boundary.module,
                 &boundary.crate_package,
             )?;
@@ -74,7 +74,7 @@ pub(crate) fn check_async_exposure_boundary(
 
         let findings = async_exposure_module_findings(
             src_dir,
-            &root_file,
+            root_file,
             &boundary.module,
             &boundary.crate_package,
         )?;

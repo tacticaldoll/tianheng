@@ -57,7 +57,7 @@ pub(crate) fn check_boundary(
 
         let findings = module_findings(
             src_dir,
-            &root_file,
+            root_file,
             &boundary.module,
             &boundary.forbidden,
             &boundary.crate_package,

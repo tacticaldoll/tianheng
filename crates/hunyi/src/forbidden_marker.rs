@@ -62,7 +62,7 @@ pub(crate) fn check_forbidden_marker_boundary(
 
         let findings = forbidden_marker_findings(
             src_dir,
-            &root_file,
+            root_file,
             &boundary.module,
             &boundary.forbidden,
             &boundary.crate_package,

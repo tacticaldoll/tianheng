@@ -382,6 +382,27 @@ mod tests {
         ];
         for case in cases {
             assert_module_fact_is_cataloged(&case.fact);
+            // Every module fact is observed from SOURCE, so two coordinates of the observation's
+            // location can always vary for it and must always be present: which declaration governs it
+            // (a second crate can declare the identical boundary against the identical module path) and
+            // which compilation unit it came from (a package builds more than one crate root, and every
+            // root denotes the module path `crate`). This is the enforcement point
+            // `structured-violation-identity` names: a family added later that omits either fails here,
+            // rather than surviving until two observations are found to collide.
+            //
+            // The remaining coordinates are per-family and are asserted by the exact field lists above:
+            // the module for the inline forms, the importing module for an outbound finding, and the
+            // observed path or module as the thing itself. A crate fact carries neither of these two,
+            // and that omission is recorded rather than silent: its target IS the package, and it
+            // observes the manifest rather than any compilation unit.
+            for required in ["governing_package", "unit"] {
+                assert!(
+                    case.fields.iter().any(|(name, _)| *name == required),
+                    "{}: a source-observed fact must carry the '{required}' coordinate — see \
+                     `structured-violation-identity`'s coordinate derivation",
+                    case.family
+                );
+            }
             assert_key(case.fact, case.family, case.shape, &case.fields);
         }
     }

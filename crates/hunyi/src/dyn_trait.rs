@@ -46,14 +46,14 @@ pub(crate) fn check_dyn_trait_boundary(
         let findings = if boundary.forbidden_operands.is_empty() {
             dyn_module_findings(
                 src_dir,
-                &root_file,
+                root_file,
                 &boundary.module,
                 &boundary.crate_package,
             )?
         } else {
             dyn_operand_module_findings(
                 src_dir,
-                &root_file,
+                root_file,
                 &boundary.module,
                 &boundary.forbidden_operands,
                 &boundary.crate_package,

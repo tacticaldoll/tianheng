@@ -6,7 +6,10 @@
 //! which misattributes a finding whenever two `#[cfg]`-split branches share one module path (see
 //! `PROJECT.md`'s Decisions, the round-5 addendum).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+/// One compilation unit: its root file, that root's own source directory, and the unit's identity label.
+pub(crate) type CompilationUnit = (PathBuf, PathBuf, String);
 
 use serde_json::Value;
 
@@ -31,7 +34,7 @@ use xingbiao::{crate_root_file, find_package};
 pub(crate) fn resolve_crate_units<'m>(
     metadata: &'m Value,
     crate_package: &str,
-) -> Result<(&'m Value, Vec<(PathBuf, PathBuf, String)>), String> {
+) -> Result<(&'m Value, Vec<CompilationUnit>), String> {
     let package = find_package(metadata, crate_package)
         .ok_or_else(|| crate_not_found_error(crate_package))?;
     let mut units = Vec::new();

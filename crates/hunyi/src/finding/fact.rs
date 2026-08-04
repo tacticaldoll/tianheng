@@ -293,7 +293,12 @@ impl SemanticFact {
                 return async_finding(&self, text, governing_package, unit);
             }
             SemanticFact::UnsafeSite { module, site } => {
-                return unsafe_site_finding(module, site, text);
+                // No `governing_package`: this capability's violation TARGET is already the package, so
+                // the declaring crate is encoded there (`structured-violation-identity`'s own carve-out).
+                // The compilation UNIT is not encoded anywhere, though, and it varies: `crate::m` in a
+                // library and `crate::m` in the `bin` beside it are two modules that would otherwise
+                // produce one identity, so an accepted unsafe site in one root would mask the other's.
+                return unsafe_site_finding(module, site, text, unit);
             }
             _ => {}
         }
@@ -434,14 +439,12 @@ fn async_finding(
 /// (see the doc comment on `into_finding`), the one variant whose identity omits it, which is why
 /// this stays split out of the shared `(fact_type, shape, fields)` dispatch below rather than
 /// folded in as a fourth field push.
-fn unsafe_site_finding(module: &str, site: &UnsafeSiteFact, text: String) -> Finding {
+fn unsafe_site_finding(module: &str, site: &UnsafeSiteFact, text: String, unit: &str) -> Finding {
+    let mut fields = site.key_fields(module);
+    fields.push(("unit", unit));
     Finding::new(
         text,
-        StructuredFactIdentity::of(
-            "tianheng.fact/hunyi/unsafe-site",
-            site.shape(),
-            site.key_fields(module),
-        ),
+        StructuredFactIdentity::of("tianheng.fact/hunyi/unsafe-site", site.shape(), fields),
     )
 }
 
@@ -1404,7 +1407,11 @@ mod fact_tests {
         assert_eq!(finding.key().shape(), "unsafe-free-function");
         assert_eq!(
             finding.key().fields().collect::<Vec<_>>(),
-            vec![("module", "crate::m"), ("name", "run")]
+            vec![
+                ("module", "crate::m"),
+                ("name", "run"),
+                ("unit", "src/lib.rs")
+            ]
         );
     }
 
@@ -1441,12 +1448,16 @@ mod fact_tests {
             (
                 UnsafeSiteFact::Block,
                 "unsafe-block",
-                vec![("module", "crate::m")],
+                vec![("module", "crate::m"), ("unit", "src/lib.rs")],
             ),
             (
                 UnsafeSiteFact::FreeFn { name: "run".into() },
                 "unsafe-free-function",
-                vec![("module", "crate::m"), ("name", "run")],
+                vec![
+                    ("module", "crate::m"),
+                    ("name", "run"),
+                    ("unit", "src/lib.rs"),
+                ],
             ),
             (
                 UnsafeSiteFact::InherentMethod {
@@ -1459,6 +1470,7 @@ mod fact_tests {
                     ("name", "run"),
                     ("owner", "crate::m::Api"),
                     ("owner_kind", "inherent"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1472,6 +1484,7 @@ mod fact_tests {
                     ("name", "run"),
                     ("owner", "crate::m::Port"),
                     ("owner_kind", "trait"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1487,6 +1500,7 @@ mod fact_tests {
                     ("owner", "crate::m::Api"),
                     ("owner_kind", "trait_impl"),
                     ("trait", "Port"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1494,7 +1508,11 @@ mod fact_tests {
                     owner: "crate::m::Api".into(),
                 },
                 "unsafe-inherent-impl",
-                vec![("module", "crate::m"), ("owner", "crate::m::Api")],
+                vec![
+                    ("module", "crate::m"),
+                    ("owner", "crate::m::Api"),
+                    ("unit", "src/lib.rs"),
+                ],
             ),
             (
                 UnsafeSiteFact::TraitImpl {
@@ -1506,6 +1524,7 @@ mod fact_tests {
                     ("module", "crate::m"),
                     ("owner", "crate::m::Api"),
                     ("trait", "Send"),
+                    ("unit", "src/lib.rs"),
                 ],
             ),
             (
@@ -1513,12 +1532,16 @@ mod fact_tests {
                     name: "Port".into(),
                 },
                 "unsafe-trait",
-                vec![("module", "crate::m"), ("name", "Port")],
+                vec![
+                    ("module", "crate::m"),
+                    ("name", "Port"),
+                    ("unit", "src/lib.rs"),
+                ],
             ),
             (
                 UnsafeSiteFact::ExternBlock,
                 "unsafe-extern-block",
-                vec![("module", "crate::m")],
+                vec![("module", "crate::m"), ("unit", "src/lib.rs")],
             ),
         ];
 
@@ -1528,6 +1551,15 @@ mod fact_tests {
                 site,
             };
             assert_semantic_fact_is_cataloged(&fact);
+            // The compilation-unit coordinate is required here even though `governing_package` is not:
+            // this capability's violation target IS the package, so the declaring crate is already
+            // encoded there, but the unit is encoded nowhere and it varies — `crate::m` in a library and
+            // `crate::m` in the `bin` beside it are two modules. Adding this assertion is what caught
+            // the omission; see `structured-violation-identity`'s coordinate derivation.
+            assert!(
+                fields.iter().any(|(name, _)| *name == "unit"),
+                "an unsafe-site fact must carry the compilation-unit coordinate: {shape}"
+            );
             let finding = fact.into_finding("app", "src/lib.rs");
             assert_eq!(finding.key().fact_type(), "tianheng.fact/hunyi/unsafe-site");
             assert_eq!(finding.key().shape(), shape);
