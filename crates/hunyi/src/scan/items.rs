@@ -358,14 +358,40 @@ fn resolve_conventional_child(
         // `#[path]` relocated inside an inline block onto the wrong file — a false negative.
         // The body's own content stays in the enclosing file, so `current_file` inherits
         // unchanged.
-        Some((_, inner)) => children.push((
-            inner.clone(),
-            child_module.to_string(),
-            sub_dir.clone(),
-            sub_dir,
-            None,
-            current_file.to_path_buf(),
-        )),
+        // A `cfg_attr(…, path = "dir")` on this inline header names a CANDIDATE base per platform
+        // predicate (the unconditional form is dispatched to `resolve_direct_path_child` before this
+        // point, so only the conditional one reaches here). Every candidate is unioned with the
+        // conventional base, cfg-blind: `syn` does not evaluate `cfg`, so preferring one would drop
+        // every child beneath the other. A candidate is descended only when it EXISTS as a directory
+        // — recursing into an absent one would fail loud on the body's other, unrelated nested items
+        // solely because one platform's directory is missing — and when none exists the conventional
+        // base is descended anyway, so a nested reference broken on every platform still fails loud.
+        // Not following it made 渾儀 exit 2 on source that compiles cleanly, while this crate's own
+        // FILE-form arm below already followed the same attribute; 圭表 and 漏刻 state the same rule
+        // for the identical shape (三儀 ⊥ 三儀: the same rule, hand-written per dimension).
+        Some((_, inner)) => {
+            let mut bases: Vec<PathBuf> = cfg_attr_targets
+                .iter()
+                .map(|rel| file_dir.join(rel))
+                .chain(std::iter::once(sub_dir.clone()))
+                .filter(|base| base.is_dir())
+                .collect();
+            bases.sort();
+            bases.dedup();
+            if bases.is_empty() {
+                bases.push(sub_dir);
+            }
+            for base in bases {
+                children.push((
+                    inner.clone(),
+                    child_module.to_string(),
+                    base.clone(),
+                    base,
+                    None,
+                    current_file.to_path_buf(),
+                ));
+            }
+        }
         // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`; the child's own
         // `file_dir` is the located file's directory (`<dir>` for `x.rs`, `<dir>/x` for
         // `x/mod.rs`), which is where a `#[path]` inside it resolves from.

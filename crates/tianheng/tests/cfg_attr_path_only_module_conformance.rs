@@ -15,13 +15,21 @@
 //! they agree — this is that ledger, mirroring `dual_backed_module_conformance.rs`'s practice of
 //! pinning every relevant outcome of a module-resolution rule, not only the happy one.
 //!
-//! Each dimension hand-writes its own resolution (三儀 ⊥ 三儀: no shared scanner code). Four
+//! Each dimension hand-writes its own resolution (三儀 ⊥ 三儀: no shared scanner code). Five
 //! states are exercised: a stacked (per-platform) `cfg_attr(path)`-only declaration carrying a
 //! violation, a single non-stacked `cfg_attr(path)`-only declaration carrying a violation (the fix
 //! is not specific to "stacked"), a clean `cfg_attr(path)`-only declaration whose only probe lives
 //! inside the remapped file, and the boundary the tolerance must NOT widen — every candidate
 //! absent (no plain file, no resolved `cfg_attr(path)` target, no bare `#[cfg]`) — which must stay
 //! a genuine constitution error (exit 2) in all three dimensions, never a silently-governed orphan.
+//!
+//! The fifth is the SIBLING shape, added after it drifted the same way: a `cfg_attr(path)` on an
+//! **inline** `mod x { mod y; }`, where the remap names the base directory the body's file-form
+//! children resolve from rather than a file to read. 漏刻's specification already required it and 圭表
+//! did not — the identical divergence this ledger exists for, one shape over, found because nothing
+//! fed THIS shape to all three entry points either. Closed by
+//! `fix(guibiao): follow a conditional path remap on an inline mod to its children's base`; pinned
+//! here so the class is closed rather than the instance.
 //!
 //! Exit codes are the claim; error wordings stay `errors_conformance.rs`'s concern.
 
@@ -191,5 +199,51 @@ fn all_three_dimensions_agree_every_candidate_absent_stays_a_scan_error() {
         louke_exit(fixture.lib(), SEAM, REASON),
         2,
         "漏刻: every candidate absent must stay a constitution error"
+    );
+}
+
+/// The sibling shape: a `cfg_attr(path)` on an **inline** `mod x { … }`, naming the base directory
+/// the body's own file-form children resolve from. 圭表 followed only the *unconditional* `#[path]`
+/// form here and reported a missing-module constitution error on source that compiles cleanly, while
+/// 漏刻's specification already required the conditional form — the same one-dimension divergence the
+/// file-form cases above record, on the shape nothing had fed to all three entry points.
+///
+/// All three must observe the child beneath the remapped base and react to what it carries. The two
+/// static dimensions govern `crate::imp::inner` directly — the module that actually holds the
+/// violation — rather than its parent, so neither dimension's own default `ScanDepth` decides the
+/// answer: what is under test is whether that module is REACHED at all, not how far a depth reaches.
+#[test]
+fn all_three_dimensions_agree_a_conditional_remap_on_an_inline_mod_relocates_its_child_base() {
+    let package = "cfg-attr-inline-base";
+    let lib = format!(
+        "{FORBIDDEN_MOD}{TOP_LEVEL_PROBED}\
+         #[cfg_attr(unix, path = \"unix_dir\")]\n\
+         #[cfg_attr(not(unix), path = \"other_dir\")]\n\
+         pub mod imp {{\n    pub mod inner;\n}}\n"
+    );
+    let fixture = TempFixture::new(package, &lib);
+    let src = fixture.lib().parent().expect("lib.rs has a parent");
+    // Both platform bases exist, so the union is real rather than keyed to whichever one happens to
+    // hold the violation — the same practice the stacked file-form case above uses.
+    for dir in ["unix_dir", "other_dir"] {
+        std::fs::create_dir_all(src.join(dir)).expect("create remapped base dir");
+    }
+    std::fs::write(src.join("unix_dir/inner.rs"), IMP_VIOLATIONS).expect("write violating child");
+    std::fs::write(src.join("other_dir/inner.rs"), IMP_STUB).expect("write stub child");
+
+    assert_eq!(
+        guibiao_exit(package, fixture.manifest(), "crate::imp::inner", REASON),
+        1,
+        "圭表: the child beneath a conditional inline-mod base must be observed and react"
+    );
+    assert_eq!(
+        hunyi_exit(package, fixture.manifest(), "crate::imp::inner", REASON),
+        1,
+        "渾儀: the child beneath a conditional inline-mod base must be observed and react"
+    );
+    assert_eq!(
+        louke_exit(fixture.lib(), SEAM, REASON),
+        1,
+        "漏刻: the undeclared-seam probe beneath a conditional inline-mod base must react"
     );
 }
