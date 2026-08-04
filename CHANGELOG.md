@@ -931,7 +931,14 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   those names starts being checked the day it becomes a member; and scripts are out of scope because a
   script legitimately *constructs* paths that do not exist in the repository. The nine references are
   corrected, including `tests/dogfood.rs`, a file that exists nowhere and had been cited as the home of
-  圭表's black-box tests.
+  圭表's black-box tests. Existence is judged against **tracked content**, not the working directory, and
+  a reference git deliberately ignores is skipped — the gate's first version tested the filesystem,
+  passed locally, and failed in CI on three paths that exist in a developer's clone and in no fresh
+  checkout, which is the same checkout-dependence class this window's identity labels were fixed for,
+  landing inside the gate meant to catch drift. The ignore check passes the path with a trailing slash
+  for the same reason: `git check-ignore` reads the filesystem to decide directory-ness, so for a
+  directory-only pattern the bare form answers differently in a clone where the directory happens to
+  exist (measured in a fresh clone — bare `.github/prompts` is not ignored, `.github/prompts/` is).
 - `scripts/check_release_coherence.sh` now also requires every example's committed family-crate version
   requirement to be satisfiable by the workspace version. The script claimed workspace/dependency version
   alignment and never read `examples/*/Cargo.toml`, where all seven requirements pin the previous minor.
