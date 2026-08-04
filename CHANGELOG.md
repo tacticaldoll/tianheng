@@ -13,6 +13,13 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- Swept every repository document for drift against the code, mechanically rather than by reading: each
+  referenced repo path exists, each referenced script exists, each cross-referenced capability has a
+  spec directory, `PROJECT.md`'s architecture section describes all six crates, and every crate carries
+  a README. Two items were stale and are fixed — `BACKLOG.md` claimed an "18-test `baseline_cli` suite"
+  (it now holds twenty, and the count carried no argument, so it is dropped rather than corrected to a
+  number that will drift again), and it named a reproduction test without saying the closure had since
+  removed it, leaving a reader to grep for a symbol that is gone. No behaviour changes.
 - Stated 漏刻's legacy **directory** corpus bound and retired the WATCH hypothesis that guessed at it. A
   probe behind a symlinked subdirectory is seen when the audit is given a **target root file** (the
   module graph reaches it; reading a file follows symlinks) and unseen when it is given a **directory**

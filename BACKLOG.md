@@ -201,7 +201,8 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   reaction for a seam declared `.only_origins(["loukehot::good"])`, even though
   `RogueAdapter` never legitimately registered that origin. Observation source: direct
   reproduction against the real `louke::install`/`assert_boundary!` public API, and later an in-tree
-  test (`a_forged_origin_silently_passes_a_seam_its_type_may_not_cross`) that reproduced the same
+  test (`a_forged_origin_silently_passes_a_seam_its_type_may_not_cross`, since removed with the
+  gap it pinned) that reproduced the same
   silent pass through the registry the way `install` builds it, then stopped **compiling** when the
   closure landed — that transition being the evidence, not a passing assertion.
   Risk: HIGH — it defeated the crate's core stated
@@ -357,7 +358,7 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     failures the way 漏刻's `dropped_sink_events` does — either reintroduces the regression it exists
     to avoid or adds an adopter-visible counter for a CLI-side hygiene step nobody can read. Revisit
     only if a directory-flush regression is ever actually observed. The *strict* half of the
-    guarantee (the file flush) is not in this bound: it is covered by the 18-test `baseline_cli`
+    guarantee (the file flush) is not in this bound: it is covered by the `baseline_cli`
     suite.
 - **DECLINED:**
   - Wall-clock auto-decay / auto-expiration (breaks determinism).
