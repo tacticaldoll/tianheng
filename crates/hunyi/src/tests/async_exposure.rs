@@ -90,6 +90,7 @@ pub(super) fn async_production_violation_separates_target_rule_and_seam() {
             ("name", "register"),
             ("owner", "crate::registry"),
             ("owner_kind", "module"),
+            ("unit", "lib.rs"),
         ]
     );
 }

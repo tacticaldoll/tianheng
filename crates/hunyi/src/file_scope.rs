@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::errors::{crate_not_found_error, missing_src_error};
+use crate::errors::{crate_not_found_error, missing_src_error, out_of_package_root_error};
 use xingbiao::{crate_root_file, find_package};
 
 /// Resolve a semantic boundary's target crate to `(package, crate-root file, source dir)` — the
@@ -34,22 +34,14 @@ pub(crate) fn resolve_crate_units<'m>(
 ) -> Result<(&'m Value, Vec<(PathBuf, PathBuf, String)>), String> {
     let package = find_package(metadata, crate_package)
         .ok_or_else(|| crate_not_found_error(crate_package))?;
-    let manifest_dir = package["manifest_path"]
-        .as_str()
-        .map(Path::new)
-        .and_then(Path::parent);
     let mut units = Vec::new();
     for root_file in xingbiao::crate_root_files(package) {
         let src_dir = root_file
             .parent()
             .ok_or_else(|| missing_src_error(crate_package))?
             .to_path_buf();
-        let unit = manifest_dir
-            .and_then(|dir| root_file.strip_prefix(dir).ok())
-            .and_then(Path::to_str)
-            .or_else(|| root_file.to_str())
-            .unwrap_or("src")
-            .to_string();
+        let unit = xingbiao::compilation_unit_label(package, &root_file)
+            .ok_or_else(|| out_of_package_root_error(crate_package, &root_file))?;
         units.push((root_file, src_dir, unit));
     }
     if units.is_empty() {
@@ -60,7 +52,9 @@ pub(crate) fn resolve_crate_units<'m>(
             .parent()
             .ok_or_else(|| missing_src_error(crate_package))?
             .to_path_buf();
-        units.push((root_file, src_dir, "src".to_string()));
+        let unit = xingbiao::compilation_unit_label(package, &root_file)
+            .ok_or_else(|| out_of_package_root_error(crate_package, &root_file))?;
+        units.push((root_file, src_dir, unit));
     }
     Ok((package, units))
 }

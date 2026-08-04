@@ -154,3 +154,17 @@ pub(crate) fn unparseable_source_error(file: &Path, err: &str) -> String {
     // hide a real exposure. Fail loud as a scan error (exit 2), never a silent pass.
     format!("cannot parse source file '{}': {err}", file.display())
 }
+
+/// The semantic dimension's own copy of the static dimension's rule (三儀 ⊥ 三儀: the same rule, not the
+/// same function): a crate root outside the package's own manifest directory has no
+/// checkout-independent identity label, so it is "cannot judge" rather than a checkout-dependent one.
+pub(crate) fn out_of_package_root_error(crate_package: &str, root: &std::path::Path) -> String {
+    format!(
+        "a violation's identity is labeled by the compilation unit it came from, relative to the \
+         package's own directory, so a crate root outside that directory cannot be judged without a \
+         checkout-dependent identity: crate '{crate_package}' declares a target rooted at '{}', which \
+         is not under the package's manifest directory; move the target's source under the package \
+         directory, or declare the boundary against the package that owns it",
+        root.display()
+    )
+}

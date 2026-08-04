@@ -9,7 +9,8 @@ use crate::module_scan::package_name_to_import_ident;
 // how they read the workspace. 圭表 keeps only its own *observation semantics* below (dependency
 // source/kind, workspace membership), which are not neutral infrastructure.
 pub(crate) use xingbiao::{
-    cargo_metadata, crate_root_file, crate_root_files, find_package, member_src_dirs,
+    cargo_metadata, compilation_unit_label, crate_root_file, crate_root_files, find_package,
+    member_src_dirs,
 };
 
 /// The names of the workspace's member crates. Because Modou runs

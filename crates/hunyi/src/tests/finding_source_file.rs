@@ -466,6 +466,7 @@ pub(super) fn semantic_violation_carries_the_governed_module_file_not_the_types_
             ("seam_module", "crate::domain"),
             ("seam_name", "leak"),
             ("subject", "crate::infra::Db"),
+            ("unit", "lib.rs"),
         ]
     );
     let file = violations[0]

@@ -3,13 +3,15 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::ScanDepth;
 
-use crate::cargo_metadata::{crate_root_file, crate_root_files, find_package};
+use crate::cargo_metadata::{
+    compilation_unit_label, crate_root_file, crate_root_files, find_package,
+};
 use crate::errors::{
     confine_external_crate_on_crate_error, crate_not_found_error, inline_empty_prefix_error,
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
     missing_src_error, must_not_be_imported_by_on_crate_error,
-    must_only_be_imported_by_on_crate_error, restrict_imports_to_on_crate_error,
-    unknown_module_error, unreadable_governed_file_error,
+    must_only_be_imported_by_on_crate_error, out_of_package_root_error,
+    restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
 };
 use crate::finding::ModuleFact;
 use crate::module_scan::{
@@ -573,25 +575,32 @@ pub(crate) fn check_module_boundary(
         // Metadata reporting no target at all is the shape synthetic metadata in a caller's own tests
         // carries; the conventional-source-directory fallback below is load-bearing for it, and its
         // reachability walk already treats every conventional top-level root as a root.
-        return check_one_root(package, None, None, boundary, violations);
+        return match check_one_root(package, None, None, boundary, violations)? {
+            RootOutcome::Governed => Ok(()),
+            RootOutcome::ModuleAbsent(reason) => Err(reason),
+        };
     }
     let mut deferred: Option<String> = None;
     let mut governed_somewhere = false;
     for root in &roots {
         let mut per_root = Vec::new();
+        // Only "this root does not have the governed module" is deferrable. Every other failure — an
+        // unreadable source, a resolution ambiguity, a root outside the package directory — is a genuine
+        // "cannot judge" and propagates NOW: swallowing it because a sibling root happened to be
+        // governable would be a silent pass over source the system could not read, which is worse than
+        // the false negative this per-root corpus exists to close.
         match check_one_root(
             package,
             Some(root.as_path()),
             Some(&roots),
             boundary,
             &mut per_root,
-        ) {
-            Ok(()) => {
+        )? {
+            RootOutcome::Governed => {
                 governed_somewhere = true;
                 violations.append(&mut per_root);
             }
-            Err(reason) => {
-                // A root that cannot host this module is not yet an error — another root may.
+            RootOutcome::ModuleAbsent(reason) => {
                 if deferred.is_none() {
                     deferred = Some(reason);
                 }
@@ -604,13 +613,20 @@ pub(crate) fn check_module_boundary(
     }
 }
 
+/// Whether one root hosted the governed module. Distinguishing absence from failure is what keeps a real
+/// scan error from being deferred away by a sibling root — see the loop above.
+enum RootOutcome {
+    Governed,
+    ModuleAbsent(String),
+}
+
 fn check_one_root(
     package: &Value,
     root_file: Option<&Path>,
     sibling_roots: Option<&[PathBuf]>,
     boundary: &ModuleBoundary,
     violations: &mut Vec<Violation>,
-) -> Result<(), String> {
+) -> Result<RootOutcome, String> {
     let src_dir = match root_file.and_then(Path::parent) {
         Some(dir) => dir.to_path_buf(),
         None => {
@@ -624,25 +640,19 @@ fn check_one_root(
     let root_relative = root_file
         .and_then(|rf| rf.strip_prefix(&src_dir).ok())
         .map(|p| p.to_path_buf());
-    // The compilation unit's identity role: the root's path relative to the package's manifest
-    // directory. Both sides come from `cargo metadata`'s own JSON strings, so neither can be non-UTF-8
-    // and no lossy conversion is involved; a root outside the manifest directory keeps its path as
-    // given. With no target at all (synthetic metadata), the conventional source directory the fallback
-    // assumes IS the unit.
-    let manifest_dir = package["manifest_path"]
-        .as_str()
-        .map(Path::new)
-        .and_then(Path::parent);
-    let unit: &str = match (root_file, manifest_dir) {
-        (Some(rf), Some(dir)) => rf
-            .strip_prefix(dir)
-            .ok()
-            .and_then(Path::to_str)
-            .or_else(|| rf.to_str())
-            .unwrap_or("src"),
-        (Some(rf), None) => rf.to_str().unwrap_or("src"),
-        (None, _) => "src",
+    // The compilation unit's identity role, derived by the shared substrate so both static dimensions
+    // label a unit identically. A root outside the package's own manifest directory yields `None` and
+    // is a constitution error rather than a fallback: the path would then be the clone's own location,
+    // and a checkout-dependent identity is the defect this role exists to avoid. With no target at all
+    // (synthetic metadata), the conventional source directory the fallback assumes IS the unit.
+    let unit_owned = match root_file {
+        Some(rf) => Some(
+            compilation_unit_label(package, rf)
+                .ok_or_else(|| out_of_package_root_error(&boundary.crate_package, rf))?,
+        ),
+        None => None,
     };
+    let unit: &str = unit_owned.as_deref().unwrap_or("src");
     let mut files = rust_files(&src_dir)?;
     // A SIBLING root is not a module of this unit — it is another compilation unit. Without this the
     // conventional-root rule (a top-level `lib.rs`/`main.rs` is segment-less, hence `crate`) makes every
@@ -699,16 +709,16 @@ fn check_one_root(
                 .rsplit("::")
                 .next()
                 .unwrap_or(&governed_module);
-            return Err(inline_module_target_error(
+            return Ok(RootOutcome::ModuleAbsent(inline_module_target_error(
                 &boundary.module,
                 &boundary.crate_package,
                 leaf,
-            ));
+            )));
         }
-        return Err(unknown_module_error(
+        return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
             &boundary.module,
             &boundary.crate_package,
-        ));
+        )));
     }
 
     let rule = boundary.rule.label();
@@ -729,20 +739,22 @@ fn check_one_root(
         ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. }
     );
     if inbound {
-        return check_inbound_rule(&ctx, boundary, &governed_module, rule, violations);
+        check_inbound_rule(&ctx, boundary, &governed_module, rule, violations)?;
+        return Ok(RootOutcome::Governed);
     }
     if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
-        return check_external_confinement(
+        check_external_confinement(
             &ctx,
             boundary,
             &governed_module,
             rule,
             crate_name,
             violations,
-        );
+        )?;
+        return Ok(RootOutcome::Governed);
     }
     if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
-        return check_inline_confinement(
+        check_inline_confinement(
             &ctx,
             boundary,
             package,
@@ -753,7 +765,9 @@ fn check_one_root(
             strict,
             external,
             violations,
-        );
+        )?;
+        return Ok(RootOutcome::Governed);
     }
-    check_outbound_rule(&ctx, boundary, &governed_module, governed, rule, violations)
+    check_outbound_rule(&ctx, boundary, &governed_module, governed, rule, violations)?;
+    Ok(RootOutcome::Governed)
 }

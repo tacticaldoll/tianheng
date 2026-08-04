@@ -94,6 +94,41 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
     roots
 }
 
+/// A compilation unit's stable identity label: its root source path **relative to the package's own
+/// manifest directory** (`src/lib.rs`, `src/main.rs`, `tools/x.rs`).
+///
+/// `None` when the root does not lie under that directory. A caller SHALL treat that as **cannot
+/// judge** (a constitution error), not as a reason to fall back to the path as given: that path is the
+/// clone's own location, so keeping it would make the identity checkout-dependent — the same commit in
+/// two clones yielding two identities, and a baseline recorded in one matching nothing in the other.
+///
+/// This is deliberately NOT the rule 漏刻 applies to a file reached through an absolute `#[path]`
+/// literal, and the difference is the whole reason this returns `None` rather than the raw path: that
+/// literal is **committed text**, identical in every checkout, so keeping it verbatim is exactly what
+/// makes it stable. A root path outside the manifest directory is the checkout's own location, so
+/// keeping it verbatim is what makes it unstable. Same shape, opposite consequence.
+///
+/// When the metadata carries no `manifest_path` — the shape synthetic metadata in a caller's own tests
+/// has; real `cargo metadata` always carries it — the root's file name is used, which is stable and
+/// sufficient because such metadata declares a single root.
+pub fn compilation_unit_label(package: &Value, root_file: &Path) -> Option<String> {
+    match package["manifest_path"]
+        .as_str()
+        .map(Path::new)
+        .and_then(Path::parent)
+    {
+        Some(dir) => root_file
+            .strip_prefix(dir)
+            .ok()
+            .and_then(Path::to_str)
+            .map(str::to_string),
+        None => root_file
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(str::to_string),
+    }
+}
+
 /// Resolve a crate's root source file from `cargo metadata` (library target else `bin` target).
 pub fn crate_root_file(package: &Value) -> Option<PathBuf> {
     let targets = package["targets"].as_array()?;

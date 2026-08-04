@@ -1380,8 +1380,8 @@ mod fact_tests {
                     ("governing_package", "app"),
                     ("item_kind", "fn"),
                     ("item_name", "run"),
-                    ("visibility", "pub"),
                     ("unit", "src/lib.rs"),
+                    ("visibility", "pub"),
                 ],
             ),
         ];
