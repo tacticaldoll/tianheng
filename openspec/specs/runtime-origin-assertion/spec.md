@@ -868,6 +868,14 @@ checkout's anchor happens to contain the target SHALL NOT reach the identity.
 Being reached through such a literal SHALL be **inherited** by the files that literal's target reaches
 in turn: they resolve from its own directory, so the identical coincidence applies to them.
 
+Inheritance SHALL hold along **both** paths by which such a target is reached, and they are distinct: a
+file reached from another file, and a file reached from a *base directory* that an **inline** `mod`'s own
+absolute `#[path]` established within one file. The second is not covered by the first — the base is
+introduced inside a single file, so provenance threaded only from file to file never reaches it — and it
+SHALL be stated separately because implementing one and not the other reads as complete. Provenance
+SHALL also accumulate through nesting, so an inline base derived conventionally from an absolute one is
+itself absolute-reached.
+
 A file reached by any other means — a conventional child, a relative `#[path]`, or the legacy directory
 walk — SHALL continue to be labeled relative to the anchor, which is what keeps the realistic
 sibling-share idiom checkout-independent. The violation SHALL react in every case; no labeling rule

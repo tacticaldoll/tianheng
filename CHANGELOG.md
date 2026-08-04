@@ -296,7 +296,11 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   identity. The property is inherited by the files that target reaches in turn, since they resolve from
   its own directory and the same coincidence applies to them. Every other file — a conventional child, a
   relative `#[path]`, the legacy directory walk — is labeled relative to the anchor exactly as before,
-  which is what keeps the realistic sibling-share idiom checkout-independent.
+  which is what keeps the realistic sibling-share idiom checkout-independent. **The "last open identity
+  gap" claim in this entry was premature**: inheritance was threaded down the file chain only, and an
+  inline `mod`'s own absolute `#[path]` base introduces the same non-portability *within* a file — closed
+  separately below.
+
   The recorded promotion trigger had described this as threading a fact through four functions, which
   read as a broad refactor and is why it stayed open; it is not, because `Path::join` discards its
   receiver *exactly when* the joinee is absolute, so the fact is knowable at the one line that resolves
@@ -871,6 +875,20 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   macro body counted as a declaration; the declaration-cleaning pipeline the dimension's four other
   readers each spelled out by hand is now one named function (`declaration_text`) that all five compose.
   `rule-model-surface` states both bounds with a scenario each. No public API or identity shape change.
+- 漏刻 inherits absolute-reached provenance through an **inline** `mod`'s absolute `#[path]` base, which
+  the earlier closure missed. `Path::join` discards its receiver when the joinee is absolute, so
+  `#[path = "/abs/dir"] mod thing { mod child; }` makes `/abs/dir` the base the body's file-form children
+  resolve against — and those bases were returned as bare paths carrying no record of how they were
+  reached. The walk's own inheritance could not recover it: it threads provenance down the **file** chain,
+  and this base is introduced within one file, so a conventionally declared child of the body was queued
+  as not-absolute and its label relativized whenever the target happened to sit under the checkout's
+  anchor. Measured across two checkouts of one committed literal, the identities differed —
+  `crates/foo/src/inline_remapped/child.rs` in the checkout whose anchor contains the base, the absolute
+  path in the one whose anchor does not — which is exactly the coincidence a label must not encode. The
+  flag now rides with each inline base and accumulates through nesting. This was **reported once and
+  wrongly refuted**: the refutation checked the file-chain inheritance, found it correct, and did not
+  check the second path. Baseline effect is confined to that already-non-portable construct: an
+  `unauditable-probe` entry for a file reached through an inline absolute `#[path]` base re-keys once.
 - 圭表's inbound module rules now observe the **value namespace**, closing a recorded false negative.
   Rust resolves `mod foo` and `fn foo` in different namespaces, so both may be declared in one module and
   a single `use m::foo;` binds **both** — verified against rustc. The target match read only the import

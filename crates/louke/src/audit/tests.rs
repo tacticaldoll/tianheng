@@ -2794,6 +2794,65 @@ fn an_absolute_path_literal_keeps_the_path_the_literal_wrote() {
     );
 }
 
+/// The same rule, one level in: an **inline** `mod`'s absolute `#[path]` base is inherited by the
+/// children resolved from it.
+///
+/// `Path::join` discards its receiver when the joinee is absolute, so `#[path = "/abs/dir"] mod thing
+/// { mod child; }` makes `/abs/dir` the base the body's file-form children resolve against — and
+/// `inline_mod_bases` returned those bases as bare paths, carrying no record that the base was reached
+/// through an absolute literal. The walk's own inheritance (`absolute_reached || child_absolute`, applied
+/// where a file's children are queued) cannot recover it: it threads provenance down the FILE chain, and
+/// this base is introduced *within* one file, so a conventionally-declared child of the inline body was
+/// queued with `false` and its label relativized whenever the absolute target happened to sit under this
+/// checkout's anchor.
+///
+/// Asserted the way the file-level case is: one committed literal, two checkouts, and the identity must
+/// be the same in both. Checkout a's anchor contains the target and checkout b's does not, which is
+/// exactly the coincidence a label must not encode.
+#[test]
+fn an_inline_mods_absolute_path_base_is_inherited_by_its_children() {
+    let tb_a = TempBase::new("inline-abs-base-a");
+    let tb_b = TempBase::new("inline-abs-base-b");
+    // The inline body's base — under checkout a's own tree, so a's anchor contains it.
+    let abs_base = tb_a.path().join("crates/foo/src/inline_remapped");
+    std::fs::create_dir_all(&abs_base).unwrap();
+    // A conventionally-declared child of the inline body, resolved from that absolute base.
+    std::fs::write(
+        abs_base.join("child.rs"),
+        "pub fn q(o: u8) { assert_boundary!(SEAM_CONST, o); }",
+    )
+    .unwrap();
+    let source = format!(
+        "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing {{ mod child; }}",
+        abs_base.display().to_string()
+    );
+    let root_a = tb_a.source("crates/foo/src/lib.rs", &source);
+    let root_b = tb_b.source("crates/foo/src/lib.rs", &source);
+
+    let id_of = |outcome: Outcome, label: &str| match outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .find_map(|v| v.rule.contains("string literal").then(|| v.id().clone()))
+            .unwrap_or_else(|| panic!("{label}: expected an un-auditable probe violation")),
+        other => panic!("{label}: expected Violations, got {other:?}"),
+    };
+    let id_a = id_of(
+        tb_a.audit(&[boundary("seam", Severity::Enforce)], &[root_a]),
+        "checkout a",
+    );
+    let id_b = id_of(
+        tb_b.audit(&[boundary("seam", Severity::Enforce)], &[root_b]),
+        "checkout b",
+    );
+    assert_eq!(
+        id_a, id_b,
+        "a child resolved from an inline mod's absolute `#[path]` base must carry one identity in every \
+         checkout: a's anchor happens to contain that base and b's does not, and that coincidence must \
+         not reach the label"
+    );
+}
+
 /// The gap that closes: the identical hardcoded absolute `#[path]` literal, committed into two
 /// different checkouts, now yields the **same** identity in both.
 ///
