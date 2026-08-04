@@ -163,6 +163,13 @@ The **observation** carries the remaining bounds, not the resolution, and each S
   literals, and macro bodies removed — so a name appearing only as text declares nothing. Reading raw
   source instead makes a name written in a comment or a string react, which is a false positive in the
   same cell this rule exists to make correct.
+- A value name SHALL be read past an interposed **modifier token** where the walk cannot otherwise recover
+  it. `static [mut] NAME` is the one item of that shape: `const fn` / `async fn` / `unsafe fn` recover
+  because `fn` is itself an item keyword and the scan reaches the real name on its next step, while `mut`
+  is not, so reading the identifier straight after `static` recorded a value named `mut` and left the real
+  one unobserved. The skip SHALL apply to the unraw'd token only — `static r#mut` genuinely names the item
+  `mut`, and skipping that spelling would attribute a following token to this item, turning the false
+  negative into a false positive.
 - A value declared inside an **`extern` block** SHALL be observed as a value of the module that contains
   the block. Such a block opens no naming scope, and its item can coexist with a `mod` of the same name
   for precisely the namespace reason this rule exists to observe — so treating its brace as a scope makes
