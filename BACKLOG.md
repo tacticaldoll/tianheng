@@ -50,18 +50,18 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
 ### DESIGN-BREAKING
 
 **Empty.** Every item that stood here when the 0.4.0 window opened is closed; each one's reproduction
-record is kept under *Closed in the 0.4.0 window* below, out of this queue so the index cannot read as
-six open migrations. Nothing currently requires a public or wire migration.
+record is kept under *Closed in the 0.4.0 window* below, out of this queue so the index cannot read as open
+migrations. Nothing currently requires a public or wire migration.
 
-The one item still *classed* DESIGN-BREAKING is the `xuanji` sink for shared run/projection vocabulary,
+The `xuanji` sink for shared run/projection vocabulary remains *classed* DESIGN-BREAKING while sitting
 under WATCH — its promotion trigger (a second standalone instrument consumer demonstrating the same
 projection/run need) has not fired, and acting on it speculatively would break the proven standalone 圭表
 consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-**Empty.** The one entry that stood here is closed; its reproduction record is kept under *Closed in the
-0.4.0 window* below, out of this queue for the reason the governance section states.
+**Empty.** What stood here is closed; its reproduction record is kept under *Closed in the 0.4.0 window*
+below, out of this queue for the reason the governance section states.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
@@ -228,15 +228,18 @@ consumer for an undemonstrated deduplication.
 
 ### Closed in the 0.4.0 window — reproduction records
 
-These are **not** open work. Each was a live DESIGN-BREAKING item when the window opened and is now
-closed; the original entry is kept verbatim beneath its closing note because the reproduction record —
+These are **not** open work. Each was a live item in this index when the window opened and is now closed;
+the original entry is kept verbatim beneath its closing note because the reproduction record —
 what was observed, by which lens, and why the trigger was believed narrower than it was — is the part
 that stops the same defect being re-found from scratch. The present-tense `Class:` / `Risk:` /
 `Promotion trigger:` lines inside each retained entry describe the state **at the time it was written**.
 
-They live here rather than under DESIGN-BREAKING because an index that carries a question and its answer
-at once is a reader trap — the same reason a stale WATCH line was retired in `68e183b`, applied to the
-six larger entries it left in place.
+They live here rather than under their own class heading because an index that carries a question and its
+answer at once is a reader trap — the same reason a stale WATCH line was retired in `68e183b`, applied to
+the larger entries it left in place. Neither the class nor the number is restated collectively: each
+retained entry carries its own `Class:` line, and a count here would go stale the next time an item
+closes — which is how the previous two sentences came to say "DESIGN-BREAKING" and "six" about a section
+that also holds a closed READY-PATCH record.
 
 
 - ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
