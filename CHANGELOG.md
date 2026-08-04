@@ -1058,7 +1058,9 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   module crosses as allowed; that is the bound of observing an origin as a *module* rather than a type,
   it is stated rather than left to be inferred from the deduplication reading, and it is pinned by a
   test. A type alias reports the aliased type's defining path, so an alias cannot relabel an
-  origin; and a shape with no path at all (a primitive, a reference, a tuple) yields its own rendering.
+  origin; a shape carrying no path at all (`u8`, `&str`) yields its own rendering, there being no `::`
+  to find; and a **composite** shape wrapping a pathed type (`&m::Foo`, a tuple, an array, a pointer, a
+  fn pointer) yields a *truncated* rendering, the argument cut being delimiter-aware for `<…>` alone.
   None of these is a new fail-loud class: each matches no allowlist entry and therefore reacts
   fail-closed, which is the safe direction and needs no separate gate.
   For the record, the residual this replaces was **CI-preventable** for a Tianheng-governed workspace

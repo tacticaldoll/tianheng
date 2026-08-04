@@ -179,10 +179,25 @@ pub struct OriginEntry {
 /// inside the arguments and report a module the type has nothing to do with. The first `<` in the
 /// rendering is necessarily the top-level one, since nesting can only begin after it opens.
 ///
-/// A shape with no path at all — a primitive, a reference, a tuple — yields its own rendering
-/// unchanged. That is a stated bound rather than an error: such an origin matches no allowlist entry,
-/// so the crossing reacts fail-closed with the observed value named in the finding, which is the safe
-/// direction and needs no separate gate.
+/// The cut is delimiter-aware for `<…>` and for nothing else, so the bound splits in two:
+///
+/// A shape carrying **no path at all** — `u8`, `&str` — yields its own rendering unchanged, there being
+/// no `::` to find.
+///
+/// A **composite** shape wrapping a pathed type — `&m::Foo`, `(m::Foo, m::Foo)`, `[m::Foo; 2]`,
+/// `*const m::Foo`, `fn(m::Foo) -> m::Foo` — yields a *truncated* rendering, not an unchanged one:
+/// `rfind("::")` lands inside the wrapped type's own path, so `&m::Foo` derives `&m` and `[m::Foo; 2]`
+/// derives `[m`. Measured, not reasoned. This is stated rather than corrected because there is nothing
+/// to correct it to: an origin is a **module**, and a composite has no single defining module — the
+/// tuple `(a::T, b::U)` would need two, which `runtime-origin-assertion` already gives as the reason
+/// the generic-argument bound reads the way it does.
+///
+/// Both remain bounds rather than errors, and for one reason that the truncation does not weaken: such
+/// an origin equals no module name, so it matches no allowlist entry, and the crossing reacts
+/// fail-closed with the observed value named in the finding. In particular it never equals the wrapped
+/// type's own defining module, so an allowlist permitting that module cannot admit the composite —
+/// pinned as a property in `tests.rs`, rather than by asserting rustc's exact rendering, which this
+/// requirement declares unstable across compiler versions.
 pub(crate) fn defining_module(type_path: &'static str) -> &'static str {
     let head = match type_path.find('<') {
         Some(open) => &type_path[..open],
