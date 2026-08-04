@@ -83,10 +83,11 @@ window classified two same-shaped inbound-`Shallow` fixes two different ways bef
   named `0.3.0` as the current line, one of them actively misleading ("0.3.0 spends a deliberate breaking
   window on reaction identity" — that is this window). Two were not load-bearing and now name no version at
   all, following the rule applied to `.gitignore` and `scripts/test_examples.sh`; two are compatibility
-  statements and moved to 0.4.0. The Migration section drops another drifting count and gains the three
-  steps it omitted: new entries from causes outside the inbound `Shallow` cell (a second compiled root, an
-  outbound rule's second importing module), and the three shapes that now refuse to judge (exit 2) where
-  they previously answered. Also restores a doc comment this window displaced: `declaration_text` was
+  statements and moved to 0.4.0. The Migration section drops another drifting count and gains the steps it
+  omitted: new entries from causes outside the inbound `Shallow` cell (a second compiled root, an outbound
+  rule's second importing module), and the shapes that now refuse to judge (exit 2) where they previously
+  answered — enumerated in that section rather than counted here, since counting them is what kept going
+  stale. Also restores a doc comment this window displaced: `declaration_text` was
   inserted between `strip_macro_bodies` and its doc, so the macro-body documentation described the wrong
   function — and described it self-contradictorily, since the text says "runs on already
   comment/string-stripped text" while `declaration_text` performs that stripping itself. `cargo doc -D
@@ -1393,15 +1394,16 @@ dropped rather than corrected a test-suite size elsewhere. Dropping it is the fi
   "cannot judge", not "violation" — a gate that hits one needs the declaration or layout corrected, not a
   baseline.
 - **Some recorded entries go stale rather than move, and `--disallow-stale` fails on them.** Every step
-  above concerns an entry appearing or re-keying; this window also **narrowed** two reactions, so a
-  violation an adopter legitimately baselined may now be gone. 圭表's strict-external local-precedence
-  ladder now sees a value declared in an `extern` block, so a bare call that resolves to a local
-  `extern "C" { pub fn rand(); }` is no longer read as reaching a `rand` dependency (measured: one
-  violation before, clean after); and the inbound self-import exemption now holds at `Shallow` as well as
-  `Subtree`, removing inbound violations from files inside the protected subtree. A stale entry is not an
-  error by itself — but `--baseline … --disallow-stale` turns an otherwise clean run into **exit 1** on
-  one. Prune the entries the fresh snapshot no longer produces, which the regenerate step above already
-  does if you take it wholesale.
+  above concerns an entry appearing or re-keying; this window also **narrowed** reactions, so a violation an
+  adopter legitimately baselined may now be gone. 圭表's strict-external local-precedence ladder now sees a
+  value the collector previously missed and lets it claim the local bare head: one declared inside an
+  `extern` block, and one declared `static mut`. So a bare `rand()` call resolving to a local
+  `extern "C" { pub fn rand(); }` **or** to a local `static mut rand` is no longer read as reaching a `rand`
+  dependency — each measured, one violation before and clean after. And the inbound self-import exemption
+  now holds at `Shallow` as well as `Subtree`, removing inbound violations from files inside the protected
+  subtree. A stale entry is not an error by itself — but `--baseline … --disallow-stale` turns an otherwise
+  clean run into **exit 1** on one. Prune the entries the fresh snapshot no longer produces, which the
+  regenerate step above already does if you take it wholesale.
 - **On Windows, regenerate even if nothing else applies to you.** Every identity-bearing path label is now
   canonical — `/` as its only separator, whatever the observing platform uses — so a baseline recorded on
   Windows before this release carries `src\lib.rs` where the label is now `src/lib.rs`, and every entry
