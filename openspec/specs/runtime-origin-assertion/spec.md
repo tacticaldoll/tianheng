@@ -522,16 +522,11 @@ for it.
 Absoluteness is what the audit itself can verify; being a true ANCESTOR of the observed files is the
 caller's responsibility, and is the reason the anchor is the caller's to supply. An observed file that
 does not lie under the anchor SHALL keep the path as observed, so an absolute anchor unrelated to the
-source roots degrades per file rather than erroring — that per-file fallback is load-bearing for the
-absolute-`#[path]` bound stated next, which is why it cannot itself be an error. A file reached only
-through an ABSOLUTE `#[path = "/…"]`
-literal is a stated, KNOWN residual gap to this rule, not yet closed: such a literal's target has no
-textual relationship to a given checkout's anchor unless it happens to lie under it, so its label MAY
-be the raw absolute path in one checkout and a relative-looking one in another for the identical
-committed literal — the identity can still disagree across checkouts for this one construct. The
-violation SHALL still react rather than being silently dropped either way. An absolute-literal
-`#[path]` is already a non-portable, machine-specific construct on its own, unlike the realistic
-relative sibling-share idiom this rule targets, which SHALL remain checkout-independent.
+source roots degrades per file rather than erroring. A file reached through an ABSOLUTE
+`#[path = "/…"]` literal is governed by its own rule — it keeps the path the literal wrote and is never
+relativized — because relativizing what does not move with the checkout is what made that one
+construct's identity checkout-dependent. The violation SHALL react in every case; no labeling rule may
+drop one.
 
 #### Scenario: Two member sets over one checkout label a shared file identically
 
@@ -548,13 +543,6 @@ relative sibling-share idiom this rule targets, which SHALL remain checkout-inde
 - **THEN** it reports a constitution error naming the failed precondition and the value to pass
   instead, and exits 2 — rather than returning findings whose `file` labels silently kept their raw
   absolute form
-
-#### Scenario: An absolute path literal inside the anchor is labeled relative to it
-
-- **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target lies
-  under the caller's anchor, and its body contains a non-literal probe
-- **THEN** the un-auditable-probe violation's `file` is labeled relative to the anchor like any other
-  observed file, rather than kept absolute
 
 #### Scenario: Same expression in two different free functions stays distinct
 
@@ -613,11 +601,6 @@ relative sibling-share idiom this rule targets, which SHALL remain checkout-inde
 
 - **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target does not lie under the scanning checkout's own anchor, and its body contains a non-literal probe
 - **THEN** `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to the anchor
-
-#### Scenario: An absolute #[path] literal nested under the anchor still disagrees across checkouts (known residual gap)
-
-- **WHEN** the identical absolute `#[path = "/…"]` literal is committed into two different checkouts, and its target happens to lie under one checkout's own anchor but not the other's
-- **THEN** `audit_probe_coverage` emits DIFFERENT un-auditable-probe identities across the two checkouts (a relative-looking label in the one whose anchor matches, the raw absolute path in the other) — a known, not-yet-closed gap for this construct, deliberately not silently claimed as fixed
 
 ### Requirement: Un-auditable probe identity includes lexical ownership
 
@@ -859,4 +842,39 @@ belongs to the directory input that exists for source compatibility.
   with the source directory
 - **THEN** the root-file run reports the seam covered, while the directory run reports it unprobed — the
   stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
+
+### Requirement: A file reached through an absolute path literal keeps the path the literal wrote
+
+A file reached only through an **absolute** `#[path = "/…"]` literal SHALL be labeled with the path as
+that literal wrote it, and SHALL NOT be relativized against the caller's anchor — whether or not its
+target happens to lie under that anchor. Relativizing it is what made this construct's identity
+checkout-DEPENDENT: prefix-stripping succeeds by pure text match wherever the target coincidentally
+shares the anchor's prefix and fails everywhere else, so one identical committed literal produced a
+relative-looking label in one checkout and the raw absolute path in another. An absolute literal does
+not move with the checkout, so its label SHALL NOT either, and the coincidence of whether a given
+checkout's anchor happens to contain the target SHALL NOT reach the identity.
+
+Being reached through such a literal SHALL be **inherited** by the files that literal's target reaches
+in turn: they resolve from its own directory, so the identical coincidence applies to them.
+
+A file reached by any other means — a conventional child, a relative `#[path]`, or the legacy directory
+walk — SHALL continue to be labeled relative to the anchor, which is what keeps the realistic
+sibling-share idiom checkout-independent. The violation SHALL react in every case; no labeling rule
+here may drop one.
+
+#### Scenario: One committed absolute literal yields one identity across checkouts
+
+- **WHEN** the identical absolute `#[path = "/…"]` literal is committed into two different checkouts,
+  its target happens to lie under one checkout's anchor and not the other's, and its body contains a
+  non-literal probe
+- **THEN** `audit_probe_coverage` emits the **same** un-auditable-probe identity in both runs, so a
+  baseline recorded in one checkout remains valid in the other
+
+#### Scenario: An absolute literal's target under the anchor is not relativized
+
+- **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target lies
+  under the caller's anchor, and its body contains a non-literal probe
+- **THEN** the violation's `file` is the path the literal wrote, not a label relative to the anchor —
+  the anchor's containment of that target being the coincidence this rule exists to keep out of the
+  identity
 

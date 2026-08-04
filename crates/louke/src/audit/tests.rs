@@ -2697,17 +2697,18 @@ fn multi_root_probe_identity_is_relative_to_the_checkout_anchor() {
     );
 }
 
-/// Stated bound (documented in `finding.rs`/`audit.rs`): an ABSOLUTE `#[path = "/…"]` literal whose
-/// target does NOT happen to lie under the scanning checkout's own anchor directory has no textual
-/// relationship to it (`Path::join` discards the receiver entirely for an absolute joinee), so its
-/// identity falls back to the raw absolute path — never silently dropped (the violation still
-/// fires), just not relabeled. (When the target DOES happen to lie under the anchor, the label is
-/// relative instead, and the identity can still disagree across checkouts — a separate, KNOWN
-/// residual gap pinned by `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`
-/// below, not silently ignored.) An absolute literal is already a non-portable, machine-specific
-/// construct on its own either way.
+/// An ABSOLUTE `#[path = "/…"]` literal whose target lies outside the anchor keeps the raw absolute
+/// path — the violation still fires, it is simply not relabeled.
+///
+/// The behaviour is unchanged; its REASON is not. It used to be a fallback: `strip_prefix` failed
+/// because `Path::join` discards the receiver for an absolute joinee, so there was no relationship to
+/// the anchor to exploit. It is now the rule — an absolute literal's label is the path the literal
+/// wrote, wherever the target sits — which is what makes the outside-the-anchor case and the
+/// inside-the-anchor case agree instead of diverging. This test therefore passed before and after, and
+/// is kept for the outside-the-anchor half of the rule rather than as evidence of the change (the
+/// sibling test that changed answer is the evidence).
 #[test]
-fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
+fn an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote() {
     let tb = TempBase::new("abs-path-literal-bound");
     // The target must sit OUTSIDE the anchor for the fallback to be what is under test, so it goes
     // in a separate base rather than a sibling directory inside this one. With the anchor now the
@@ -2748,15 +2749,18 @@ fn an_absolute_path_literal_falls_back_to_the_absolute_label_a_stated_bound() {
     );
 }
 
-/// The narrowing the explicit anchor brings to the bound above: an absolute `#[path]` literal whose
-/// target lies INSIDE the caller's checkout root is now labeled relative to it, so that identity is
-/// checkout-independent like every other. Under the previous derived anchor (the scanned file's own
-/// directory) a sibling-tree target like this fell outside it and kept the absolute label; the
-/// workspace root contains it, so it no longer does. Only a target genuinely outside the checkout
-/// keeps the absolute fallback, and only the cross-checkout case of THIS shape stays open (the
-/// residual gap pinned below).
+/// An absolute `#[path]` literal's target keeps the path **as the literal wrote it**, even when it
+/// happens to lie inside the caller's checkout root — and that is what makes its identity
+/// checkout-independent, the opposite of what this test asserted while the gap was open.
+///
+/// Relativizing it was the gap's own mechanism: `strip_prefix` succeeded by pure text match wherever
+/// the target coincidentally shared the anchor's prefix and failed everywhere else, so one identical
+/// committed literal produced a relative-looking label in one checkout and an absolute one in another.
+/// An absolute literal does not move with the checkout, so neither should its label. The
+/// coincidence — does this target happen to sit under this checkout's anchor — is exactly the input
+/// an identity must not depend on.
 #[test]
-fn an_absolute_path_literal_inside_the_anchor_is_labeled_relative_to_it() {
+fn an_absolute_path_literal_keeps_the_path_the_literal_wrote() {
     let tb = TempBase::new("abs-path-literal-inside");
     let abs_target = tb.path().join("crates/shared/src/thing.rs");
     std::fs::create_dir_all(abs_target.parent().unwrap()).unwrap();
@@ -2783,24 +2787,28 @@ fn an_absolute_path_literal_inside_the_anchor_is_labeled_relative_to_it() {
         .expect("an absolute #[path] target's probe must still react, never silently dropped");
     let file = unauditable.file.as_deref().expect("file field must be set");
     assert_eq!(
-        file, "crates/shared/src/thing.rs",
-        "a target under the checkout root is labeled relative to it, not left absolute"
+        file,
+        abs_target.display().to_string(),
+        "an absolute literal's target keeps the path as written, whether or not it happens to lie \
+         under this checkout's anchor — the coincidence is what identity must not depend on"
     );
 }
 
-/// KNOWN, DEFERRED residual gap (see `BACKLOG.md`'s DESIGN-BREAKING decision index and PR #157's
-/// commit body, which recorded this as an explicit non-goal): when an absolute `#[path]` literal's target
-/// happens to be textually nested under a GIVEN checkout's own anchor, `strip_prefix` succeeds by
-/// pure text match — producing a clean, relative-LOOKING label — even though the literal itself is
-/// fixed text that does not move with the checkout. The identical hardcoded literal scanned from a
-/// DIFFERENT checkout (where it no longer shares the anchor's prefix) falls back to the full
-/// absolute path instead, so the two checkouts still disagree — reproducing the very
-/// checkout-dependent-identity problem this whole fix exists to close, just for this one
-/// deliberately out-of-scope construct. Pinned here (not silently left untested) so a future fix
-/// has a failing case to work against, and so this test itself fails loud if that future fix
-/// changes this behavior without updating the assertion.
+/// The gap that closes: the identical hardcoded absolute `#[path]` literal, committed into two
+/// different checkouts, now yields the **same** identity in both.
+///
+/// It did not before. `strip_prefix` succeeded by pure text match wherever the literal's target
+/// happened to be nested under a given checkout's own anchor — producing a clean, relative-looking
+/// label — while the same literal scanned from a checkout that did not share that prefix fell back to
+/// the full absolute path. One committed literal, two identities: the checkout-dependent identity the
+/// anchor exists to prevent, reached through the one construct that was carved out of it.
+///
+/// The fix is to stop relativizing what does not move: a file reached through an absolute literal keeps
+/// the path the literal wrote, in every checkout. This test is the closure, and its predecessor pinned
+/// the gap — which is why the predecessor started failing (with EQUAL identities) the moment the flag
+/// landed, exactly as its own doc said it should.
 #[test]
-fn a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap() {
+fn a_nested_absolute_path_literal_now_agrees_across_checkouts() {
     let tb_a = TempBase::new("nested-abs-checkout-a");
     let tb_b = TempBase::new("nested-abs-checkout-b");
     let abs_target = tb_a
@@ -2813,41 +2821,35 @@ fn a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_resid
     )
     .unwrap();
     // The identical hardcoded literal (checkout a's own absolute path) is committed into BOTH
-    // checkouts' source, exactly as a real clone would carry it verbatim.
-    let lib_body = format!(
+    // checkouts, which is what a real absolute `#[path]` in version control is.
+    let source = format!(
         "pub const SEAM_CONST: &str = \"seam\";\n#[path = {:?}]\nmod thing;",
         abs_target.display().to_string()
     );
-    let root_a = tb_a.source("crates/foo/src/lib.rs", &lib_body);
-    let root_b = tb_b.source("crates/foo/src/lib.rs", &lib_body);
+    let root_a = tb_a.source("crates/foo/src/lib.rs", &source);
+    let root_b = tb_b.source("crates/foo/src/lib.rs", &source);
 
-    // Each checkout anchors on its own root, as a real caller does. The literal names checkout a's
-    // path, so it lies under a's anchor and outside b's — which is the whole gap.
-    let Outcome::Violations(report_a) =
-        tb_a.audit(&[boundary("seam", Severity::Enforce)], &[root_a])
-    else {
-        panic!("expected a violation from checkout a");
+    let id_of = |outcome: Outcome, label: &str| match outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .find_map(|v| v.rule.contains("string literal").then(|| v.id().clone()))
+            .unwrap_or_else(|| panic!("{label}: expected an un-auditable probe violation")),
+        other => panic!("{label}: expected Violations, got {other:?}"),
     };
-    let Outcome::Violations(report_b) =
-        tb_b.audit(&[boundary("seam", Severity::Enforce)], &[root_b])
-    else {
-        panic!("expected a violation from checkout b");
-    };
-    let id_a = report_a
-        .violations
-        .iter()
-        .find_map(|v| v.rule.contains("string literal").then(|| v.id()));
-    let id_b = report_b
-        .violations
-        .iter()
-        .find_map(|v| v.rule.contains("string literal").then(|| v.id()));
-    assert_ne!(
+    let id_a = id_of(
+        tb_a.audit(&[boundary("seam", Severity::Enforce)], &[root_a]),
+        "checkout a",
+    );
+    let id_b = id_of(
+        tb_b.audit(&[boundary("seam", Severity::Enforce)], &[root_b]),
+        "checkout b",
+    );
+    assert_eq!(
         id_a, id_b,
-        "this pins the KNOWN residual gap: a nested absolute #[path] literal's identity still \
-         differs across checkouts (checkout a's own anchor happens to make it relative; \
-         checkout b's does not) — if this ever starts passing with equal IDs, the gap has been \
-         fixed and this test's assertion (and the design.md/CHANGELOG note describing it as open) \
-         should be updated together"
+        "one committed absolute literal must yield one identity: checkout a's anchor happens to \
+         contain the target and checkout b's does not, and that coincidence must no longer reach the \
+         label"
     );
 }
 

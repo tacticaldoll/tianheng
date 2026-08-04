@@ -186,6 +186,25 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   behavior change.
 
 ### Fixed
+- **BREAKING**: 漏刻 no longer relativizes the identity label of a file reached through an **absolute**
+  `#[path = "/…"]` literal — it keeps the path the literal wrote, in every checkout. This closes the last
+  open identity gap in the window. Relativizing it *was* the gap: prefix-stripping succeeds by pure text
+  match wherever such a target happens to be nested under a given checkout's anchor and fails everywhere
+  else, so one identical committed literal produced a relative-looking label in one clone and the raw
+  absolute path in another — a baseline recorded in one going stale and re-firing as new in the other, on
+  a commit that changed nothing. An absolute literal does not move with the checkout, so its label no
+  longer does either, and "does this target happen to sit under this anchor" no longer reaches the
+  identity. The property is inherited by the files that target reaches in turn, since they resolve from
+  its own directory and the same coincidence applies to them. Every other file — a conventional child, a
+  relative `#[path]`, the legacy directory walk — is labeled relative to the anchor exactly as before,
+  which is what keeps the realistic sibling-share idiom checkout-independent.
+  The recorded promotion trigger had described this as threading a fact through four functions, which
+  read as a broad refactor and is why it stayed open; it is not, because `Path::join` discards its
+  receiver *exactly when* the joinee is absolute, so the fact is knowable at the one line that resolves
+  the literal.
+  **Migration**: an `unauditable-probe` baseline entry whose `file` was a relative-looking label produced
+  from an absolute `#[path]` literal re-keys once — regenerate with `--write-baseline`. No other entry is
+  affected, since no other labeling changed.
 - 渾儀 now follows a `#[cfg_attr(pred, path = "dir")]` remap on an **inline** `mod x { mod y; }` to the
   base its file-form children resolve from, the same rule 圭表 gained just above and 漏刻's own
   specification already stated. Before, 渾儀 reported a missing-module constitution error (exit 2) on
