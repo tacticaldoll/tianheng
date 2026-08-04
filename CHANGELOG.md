@@ -855,6 +855,28 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- 圭表's inbound module rules now observe the **value namespace**, closing a recorded false negative.
+  Rust resolves `mod foo` and `fn foo` in different namespaces, so both may be declared in one module and
+  a single `use m::foo;` binds **both** — verified against rustc. The target match read only the import
+  path, so it resolved to the module reading (`m::foo`, a descendant) and under `Shallow` anchored at `m`
+  did not react, while the value reading reaches `m` itself and must: a real import of a protected module
+  passed silently, the one class the Core Contract forbids. It is closed by consulting the value
+  namespace, **not** by reacting on both readings — that would make every ordinary `use m::child;` react
+  under `Shallow`, contradicting `rule-model-surface`'s exact-seam scenario, and the narrow false negative
+  must not be traded for a broad false positive. An import now additionally reacts when its whole path
+  resolves to a single-segment child module of the anchored module *and* that module itself declares a
+  `fn`/`const`/`static` of the same name; when it declares only the module, nothing changes. Recorded
+  honestly: the promotion trigger asked for "a value-namespace item observation guibiao does not have",
+  and that premise was false — `symbol_scan`'s definition collector already read exactly those names, per
+  module, at module top level, with the true-inline-module and top-level-only disciplines already worked
+  out. The trigger was a missing connection, not a missing capability, which is the same misjudged cost as
+  the absolute-`#[path]` entry earlier in this window. The residual is now the observation rather than the
+  resolution and is stated in `rule-model-surface` with two scenarios: a value declared inside a macro
+  body or arriving through a re-export is unobserved, matching every other declaration reader in the
+  dimension, and directs the reaction toward the module reading. **Adopter-visible**: a constitution with
+  an inbound `Shallow` boundary over a module that declares a `mod` and a value of one name will now
+  report imports it previously missed, which is the false negative being paid back rather than a new
+  rule. No public API and no identity shape change.
 - **BREAKING (Windows only)**: every identity-bearing path label is now canonical rather than as the
   observing platform renders it. 星表 gains `path_label` — `/` as a path's only component separator,
   and every byte preserved — and both label sites are built on it: 圭表/渾儀's compilation unit

@@ -17,7 +17,7 @@ use crate::finding::ModuleFact;
 use crate::module_scan::{
     ImportedPath, InlineFinding, canonical_module_path, external_imports_with_importers,
     governed_files, imports_with_importers, inline_symbol_findings, package_name_to_import_ident,
-    path_within, reachable_modules, rust_files,
+    path_within, reachable_modules, rust_files, value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -110,25 +110,27 @@ fn hosts_only_permitted_importers(
 /// Falls back to the full path when no prefix is reachable (a path through a module
 /// `reachable_modules` cannot model, e.g. produced by a non-`cfg_if!` macro) rather than guessing.
 ///
-/// **Stated bound — this resolution is namespace-blind.** Rust resolves `mod foo` and `fn foo` in
-/// different namespaces, so both may be declared in one module, and a single `use m::foo;` then binds
-/// **both** (verified against rustc, not reasoned: with `mod foo` and `pub fn foo` in `m`, an
-/// importer writing that one `use` can call `foo()` *and* reach `foo::INSIDE`). This function sees
-/// only the path, so it returns the longest reachable module — the module reading — and the value
-/// reading is unobserved. The two readings differ only under `Shallow` on the module's own parent:
-/// there, `use m::foo;` meaning the `fn` reaches `m` and should react, while the module reading
-/// resolves to the descendant `m::foo` and does not. Under `Subtree` both readings are within `m`,
-/// so nothing is lost.
+/// **This function is namespace-blind, and its caller compensates.** Rust resolves `mod foo` and
+/// `fn foo` in different namespaces, so both may be declared in one module, and a single `use m::foo;`
+/// then binds **both** (verified against rustc, not reasoned: with `mod foo` and `pub fn foo` in `m`, an
+/// importer writing that one `use` can call `foo()` *and* reach `foo::INSIDE`). Seeing only the path,
+/// this returns the longest reachable module — the module reading. The two readings differ only under
+/// `Shallow` on the module's own parent: there, `use m::foo;` meaning the `fn` reaches `m` and must
+/// react, while the module reading resolves to the descendant `m::foo` and would not. Under `Subtree`
+/// both readings are within `m`, so nothing turns on it.
 ///
-/// Deliberately not "fixed" by reacting on both readings: that would make every ordinary bare import
-/// of a child module (`use m::child;`) react under `Shallow`, contradicting
-/// `rule-model-surface`'s own scenario that an importer of only a descendant module does not violate
-/// an exact-seam boundary — trading a narrow, exotic false negative for a broad false positive.
-/// Distinguishing the two needs a value-namespace item observation this crate does not have (and one
-/// that would carry its own bounds: a macro-generated or re-exported `fn`). Recorded in `BACKLOG.md`
-/// with that promotion trigger, stated in `rule-model-surface`, and pinned by
-/// `shallow_inbound_target_match_is_namespace_blind_a_stated_bound` so the bound cannot change state
-/// unnoticed — the same way this crate states its other observation bounds rather than implying them.
+/// That gap used to be a **stated bound** — a recorded false negative — on the grounds that closing it
+/// "needs a value-namespace item observation this crate does not have". That premise was wrong: it does
+/// have one. [`also_binds_a_value_of_the_governed_module`] consults [`value_namespace_item_names`] and
+/// reacts only when the governed module really declares a `fn`/`const`/`static` of that name, which is
+/// why it does not become the broad false positive that reacting on both readings would have been — an
+/// ordinary `use m::child;` naming only a module still does not react, as `rule-model-surface` requires
+/// and `shallow_inbound_rules_protect_only_the_exact_module` pins.
+///
+/// What remains bounded is the observation, not the resolution: a value declared inside a macro body or
+/// arriving through a re-export is not seen, matching every other reader in `module_scan` (macro bodies
+/// are stripped before declarations are read). Either directs the reaction toward the module reading
+/// alone, which is the pre-existing behaviour rather than a new gap.
 fn resolve_import_module<'a>(
     import_path: &'a str,
     reachable: &std::collections::BTreeSet<String>,
@@ -143,6 +145,57 @@ fn resolve_import_module<'a>(
             None => return import_path,
         }
     }
+}
+
+/// Whether `import_path` ALSO binds a value declared directly in `governed_module`, which
+/// [`resolve_import_module`] cannot see because it reads only the path.
+///
+/// Rust resolves `mod foo` and `fn foo` in different namespaces, so both may be declared in one module
+/// and a single `use m::foo;` binds **both** — verified against rustc. The path alone resolves to the
+/// longest reachable module, `m::foo`, which under `Shallow` anchored at `m` is only a descendant and
+/// does not react; yet the value reading reaches `m` itself and must. That was a recorded false
+/// negative, left because closing it "needs a value-namespace item observation guibiao does not have".
+/// It does have one: [`value_namespace_item_names`] reads exactly the `fn`/`const`/`static` names a
+/// module declares at its own top level, with the true-inline-module and top-level-only disciplines
+/// already established for the local-precedence ladder.
+///
+/// Three conditions must hold together, and each is what keeps this from becoming the broad false
+/// positive that reacting on both readings would have been:
+///
+/// 1. The whole import path resolved to itself as a module (`import_module == import_path`). With a
+///    further segment — `use m::foo::deep::Thing;` — only the *module* `foo` can be meant, since a `fn`
+///    has no children, so there is no ambiguity to resolve.
+/// 2. The path is `{governed_module}::{leaf}` with `leaf` a single segment. A deeper descendant is
+///    reached through the module, never through a value of the governed module.
+/// 3. `governed_module` really declares a value named `leaf`. When it declares only `mod leaf`, an
+///    ordinary `use m::child;` stays silent — the behaviour
+///    `shallow_inbound_rules_protect_only_the_exact_module` pins.
+///
+/// Depth is not tested: under `Subtree` both readings already lie within the governed module, so
+/// [`within_scan_depth`] has returned true and this is never consulted. Naming `Shallow` here would add
+/// a condition the caller's short-circuit already enforces.
+fn also_binds_a_value_of_the_governed_module(
+    import_path: &str,
+    import_module: &str,
+    governed_module: &str,
+    cache: &mut Option<std::collections::HashSet<String>>,
+    ctx: &ScanContext<'_>,
+) -> Result<bool, String> {
+    if import_module != import_path {
+        return Ok(false);
+    }
+    let Some(leaf) = import_path.strip_prefix(&format!("{governed_module}::")) else {
+        return Ok(false);
+    };
+    if leaf.contains("::") {
+        return Ok(false);
+    }
+    if cache.is_none() {
+        *cache = Some(ctx.governed_module_value_items(governed_module)?);
+    }
+    Ok(cache
+        .as_ref()
+        .is_some_and(|items| items.contains(&format!("{governed_module}::{leaf}"))))
 }
 
 /// The crate-wide scan state every rule family below reads from — resolved once in
@@ -161,6 +214,35 @@ struct ScanContext<'a> {
 }
 
 impl ScanContext<'_> {
+    /// The value-namespace item names `governed_module` declares at its own top level, read from the
+    /// files that back that module alone (`Shallow`), not the whole crate: the question is only ever
+    /// about the governed module itself. A module can be backed by more than one reachable file (a
+    /// `#[path]` remap beside a conventional file, a `cfg_attr` union), so every backing file
+    /// contributes, and inline descendants are excluded by the collector's own true-module keying.
+    fn governed_module_value_items(
+        &self,
+        governed_module: &str,
+    ) -> Result<std::collections::HashSet<String>, String> {
+        let mut items = std::collections::HashSet::new();
+        for (file, module) in governed_files(
+            self.src_dir,
+            self.files,
+            governed_module,
+            self.reachable,
+            self.inline_only,
+            self.remapped,
+            self.remap_shadowed,
+            self.root_relative,
+            ScanDepth::Shallow,
+        ) {
+            let raw = std::fs::read_to_string(&file).map_err(|err| {
+                crate::errors::unreadable_governed_file_error(&file, &err.to_string())
+            })?;
+            items.extend(value_namespace_item_names(&module, &raw));
+        }
+        Ok(items)
+    }
+
     /// `governed_files(.., "crate", ScanDepth::Subtree)` reused by every rule family that scans
     /// the whole crate rather than just the governed subtree (inbound, external confinement,
     /// inline confinement) — the identical crate-wide selector, no new scanner.
@@ -223,6 +305,10 @@ fn check_inbound_rule(
     // is its own importer, not the file's module — so an inbound edge from an inline submodule
     // is attributed (and pre-filtered / allow-listed) at its true identity, not the file's.
     let mut offenders: Vec<(String, String)> = Vec::new();
+    // The governed module's own top-level value-namespace names, read at most once and only when an
+    // import actually has the ambiguous shape — see `also_binds_a_value_of_the_governed_module`. Almost
+    // no boundary reaches it, so it stays unread rather than costing every inbound evaluation a file.
+    let mut governed_value_items: Option<std::collections::HashSet<String>> = None;
     for (file, file_module) in ctx.all_files() {
         // Fast path: a file whose module is within the protected subtree hosts only
         // self-imports (its inline descendants are within it, hence within the protected
@@ -267,7 +353,14 @@ fn check_inbound_rule(
             let import_module = resolve_import_module(&import.path, ctx.reachable);
             let imports_protected =
                 within_scan_depth(import_module, governed_module, boundary.depth)
-                    || (import.is_glob && path_within(governed_module, &import.path));
+                    || (import.is_glob && path_within(governed_module, &import.path))
+                    || also_binds_a_value_of_the_governed_module(
+                        &import.path,
+                        import_module,
+                        governed_module,
+                        &mut governed_value_items,
+                        ctx,
+                    )?;
             if !imports_protected {
                 continue;
             }
@@ -289,9 +382,10 @@ fn check_inbound_rule(
     // backed by more than one REACHABLE file, so the same importer can appear twice: a `#[path]`
     // remap and a conventional file of the same name are additive and cfg-blind, and a
     // `cfg_attr(path)` union descends several candidate bases for one inline body. NOT because a
-    // lib+bin package's two roots share module `crate` — they do not: only the ONE resolved crate
-    // root and the modules reachable from it are governed, and a `main.rs` beside a `lib.rs` is not
-    // observed at all (a stated bound — see `module-boundary`'s single-governed-root requirement).
+    // lib+bin package's two roots share module `crate`: they each denote `crate` within their OWN module
+    // graph, and every compiled root is governed as its own corpus, carrying its compilation unit as an
+    // identity role so the two never collapse (see `module-boundary`'s "Every compiled root of a package
+    // is governed" — the requirement that replaced the single-root one this comment used to cite).
     // Sort then collapse by the module (the identity), keeping the first file (deterministic after
     // the sort) as the reported `file`. The count is unchanged.
     offenders.sort();

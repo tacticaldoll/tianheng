@@ -1720,22 +1720,25 @@ pub(super) fn shallow_inbound_rules_never_flag_the_protected_modules_own_descend
 }
 
 #[test]
-pub(super) fn shallow_inbound_target_match_is_namespace_blind_a_stated_bound() {
+pub(super) fn shallow_inbound_target_match_observes_the_value_namespace() {
     // Rust resolves `mod foo` and `fn foo` in DIFFERENT namespaces, so both may live in one module
     // and one `use protected::foo;` binds both — verified against rustc, not reasoned: an importer
     // writing only that `use` can call `foo()` and also reach `foo::INSIDE`.
     //
-    // `resolve_import_module` sees only the path, so it returns the module reading. Under `Shallow`
-    // anchored at `crate::protected`, the value reading (an item declared directly in the protected
-    // module — reacts) and the module reading (only a descendant module — does not react) disagree,
-    // and the module reading wins. This test pins that observed answer.
+    // `resolve_import_module` sees only the path, so on its own it returns the module reading. Under
+    // `Shallow` anchored at `crate::protected`, the value reading (an item declared directly in the
+    // protected module — reacts) and the module reading (only a descendant module — does not react)
+    // disagree, and the module reading used to win: a real import reaching the protected module was
+    // unobserved. That was recorded as a stated bound on the grounds that closing it "needs a
+    // value-namespace item observation guibiao does not have".
     //
-    // It is a bound, not a bug left unrecorded: reacting on both readings would make every ordinary
-    // `use protected::child;` react under `Shallow`, contradicting
-    // `shallow_inbound_rules_protect_only_the_exact_module` above. Trading this narrow false negative
-    // for that broad false positive is the wrong direction; closing it needs a value-namespace item
-    // observation guibiao does not have. If this test starts failing, the bound has been closed and
-    // `rule-model-surface`, `resolve_import_module`'s doc, and the backlog entry must move with it.
+    // 圭表 DOES have it. `symbol_scan`'s definition collector already reads every module's own
+    // top-level `fn`/`const`/`static` from declaration-cleaned source, with the true-inline-module
+    // qualification and module-top-level-only disciplines already worked out. So the reaction now
+    // consults it, and reacts only when the governed module really declares a value item of that
+    // name — which is what keeps `shallow_inbound_rules_protect_only_the_exact_module` (an ordinary
+    // `use protected::child;`, module-only) passing unchanged. The narrow false negative is closed
+    // without buying the broad false positive that reacting on both readings would have cost.
     let files = &[
         ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
         ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
@@ -1751,10 +1754,16 @@ pub(super) fn shallow_inbound_target_match_is_namespace_blind_a_stated_bound() {
     let (shallow_result, shallow_violations) =
         run_module_check("namespace-blind-shallow", files, shallow);
     assert!(shallow_result.is_ok(), "{shallow_result:?}");
+    assert_eq!(
+        shallow_violations.len(),
+        1,
+        "`use crate::protected::foo;` binds the `fn foo` declared directly in the protected module, \
+         so it reaches that module and must react under Shallow: {shallow_violations:?}"
+    );
     assert!(
-        shallow_violations.is_empty(),
-        "the module reading wins under Shallow — the stated namespace-blind bound: \
-         {shallow_violations:?}"
+        shallow_violations[0].finding.contains("crate::consumer"),
+        "the finding names the importing module: {:?}",
+        shallow_violations[0].finding
     );
 
     // Under `Subtree` both readings lie within the protected module, so the import reacts either
