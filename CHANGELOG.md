@@ -939,6 +939,22 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   for the same reason: `git check-ignore` reads the filesystem to decide directory-ness, so for a
   directory-only pattern the bare form answers differently in a clone where the directory happens to
   exist (measured in a fresh clone — bare `.github/prompts` is not ignored, `.github/prompts/` is).
+- `scripts/check_reference_integrity.sh` covers root-level references and stops swallowing read errors.
+  Its extraction regex recognized only paths under `crates/`, `scripts/`, `openspec/`, `docs/`,
+  `examples/`, and `.github/`, so 259 references to `PROJECT.md`, `AGENTS.self-law.md`, `BACKLOG.md`,
+  `Cargo.toml` and their siblings never entered the check — a false negative against the gate's own
+  stated purpose, one release-branch commit after it was added to prevent that class. Two unambiguous
+  forms are added rather than "any bare filename", because a bare filename in prose is usually generic:
+  a **markdown link target** is checked unconditionally (it is a link by syntax, resolved relative to the
+  referring file as markdown means it), and a **bare filename** only when its basename is tracked at the
+  repository root and nowhere else (`PROJECT.md`, `deny.toml` — but not `Cargo.toml`, `README.md`, or
+  `spec.md`, which name the generic thing). Neither form can judge a reference to a document renamed
+  *away*, since its basename is then tracked nowhere, so the repository's governance documents are
+  asserted to exist as a **required set** — safe to write down where an allowlist would not be, because a
+  required set fails the moment it goes stale rather than quietly excusing something. Separately, `grep`
+  ran with `2>/dev/null` inside a process substitution, which hid exit 2 (cannot read) behind exit 1 (no
+  match) where `set -e` could not see it: an unreadable tracked file counted as inspected and the run
+  reported clean. The two exits are now distinguished and the unreadable case refuses to judge.
 - `scripts/check_release_coherence.sh` now also requires every example's committed family-crate version
   requirement to be satisfiable by the workspace version. The script claimed workspace/dependency version
   alignment and never read `examples/*/Cargo.toml`, where all seven requirements pin the previous minor.
