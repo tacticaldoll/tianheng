@@ -140,9 +140,21 @@ required observation did not exist in this dimension; the premise was false — 
 backing the strict-external local-precedence ladder already reads exactly those names, per module, at
 module top level.
 
-What remains bounded is the **observation**, not the resolution: a value declared inside a macro body or
-reaching the module through a re-export is not observed, consistently with every other declaration
-reader in this dimension, and SHALL direct the reaction toward the module reading alone.
+A **glob** import SHALL NOT react through the value reading, whatever the anchored module declares. A
+glob imports the *contents* of the named module and never binds the name itself, so no value reading of
+it exists to observe — the exclusion rests on what the language admits, not on likelihood. This SHALL be
+stated because a glob is not distinguishable from a bare import by its recorded path: the scan stores a
+glob at its base module with the `::*` removed, so the two arrive at the reaction identical.
+
+The **observation** carries the remaining bounds, not the resolution, and each SHALL be stated:
+
+- A value name SHALL be read from **declaration-cleaned** source — comments, string and character
+  literals, and macro bodies removed — so a name appearing only as text declares nothing. Reading raw
+  source instead makes a name written in a comment or a string react, which is a false positive in the
+  same cell this rule exists to make correct.
+- A value declared inside a macro body, or reaching the module through a re-export, is therefore not
+  observed, consistently with every other declaration reader in this dimension, and SHALL direct the
+  reaction toward the module reading alone.
 
 #### Scenario: An import binding both a module and a value of the anchored module reacts under Shallow
 
@@ -150,6 +162,21 @@ reader in this dimension, and SHALL direct the reaction toward the module readin
   with `Shallow` depth
 - **WHEN** an unauthorized module writes `use m::foo;`, which binds both
 - **THEN** it reacts, because the import reaches `m` itself through the value binding
+
+#### Scenario: A glob import of the child module does not react under Shallow
+
+- **GIVEN** a module `m` declaring both `mod foo` and `fn foo`, and an inbound boundary anchored at `m`
+  with `Shallow` depth
+- **WHEN** an unauthorized module writes `use m::foo::*;`
+- **THEN** it does not react, a glob binding the contents of `m::foo` and never the name `foo`, so it
+  reaches only the descendant
+
+#### Scenario: A value name appearing only as text does not react under Shallow
+
+- **GIVEN** a module `m` declaring `mod foo` and no value `foo`, but containing the text `fn foo` inside a
+  comment, a string literal, or a macro body
+- **WHEN** an unauthorized module writes `use m::foo;`
+- **THEN** it does not react, because a name that is only text declares nothing
 
 #### Scenario: An import naming only a child module still does not react under Shallow
 

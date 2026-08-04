@@ -858,6 +858,19 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- Bounded that value-namespace reaction to what actually binds a value, closing two false positives it
+  shipped with — both in the very cell it was written to make correct, and both contradicting its own
+  central claim that "a narrow false negative must not be traded for a broad false positive". A **glob**
+  import reached the reaction byte-identical to a bare one, because the scan stores a glob at its base
+  module with `::*` removed, so `use m::foo::*;` satisfied every condition and reported an import that
+  reaches only the descendant. It cannot bind a value at all — verified against rustc: with both `mod foo`
+  and `pub fn foo` declared, `use m::foo;` compiles using `foo()` and `foo::INSIDE`, while
+  `use m::foo::*;` fails `error[E0425]: cannot find function 'foo' in this scope`, a glob importing the
+  module's *contents* and never the name. Separately, the value collector was handed the **raw** file
+  against its own stated precondition, so a `fn foo` written only in a comment, a string literal, or a
+  macro body counted as a declaration; the declaration-cleaning pipeline the dimension's four other
+  readers each spelled out by hand is now one named function (`declaration_text`) that all five compose.
+  `rule-model-surface` states both bounds with a scenario each. No public API or identity shape change.
 - 圭表's inbound module rules now observe the **value namespace**, closing a recorded false negative.
   Rust resolves `mod foo` and `fn foo` in different namespaces, so both may be declared in one module and
   a single `use m::foo;` binds **both** — verified against rustc. The target match read only the import

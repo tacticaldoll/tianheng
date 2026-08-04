@@ -15,9 +15,10 @@ use crate::errors::{
 };
 use crate::finding::ModuleFact;
 use crate::module_scan::{
-    ImportedPath, InlineFinding, canonical_module_path, external_imports_with_importers,
-    governed_files, imports_with_importers, inline_symbol_findings, package_name_to_import_ident,
-    path_within, reachable_modules, rust_files, value_namespace_item_names,
+    ImportedPath, InlineFinding, canonical_module_path, declaration_text,
+    external_imports_with_importers, governed_files, imports_with_importers,
+    inline_symbol_findings, package_name_to_import_ident, path_within, reachable_modules,
+    rust_files, value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -159,17 +160,28 @@ fn resolve_import_module<'a>(
 /// module declares at its own top level, with the true-inline-module and top-level-only disciplines
 /// already established for the local-precedence ladder.
 ///
-/// Three conditions must hold together, and each is what keeps this from becoming the broad false
+/// Four conditions must hold together, and each is what keeps this from becoming the broad false
 /// positive that reacting on both readings would have been:
 ///
-/// 1. The whole import path resolved to itself as a module (`import_module == import_path`). With a
+/// 1. The import is **not a glob**. `use_scan` stores a glob at its base module with `::*` stripped, so
+///    `use m::foo::*;` arrives here byte-identical to a plain `use m::foo;` — same path, same
+///    single-segment leaf, same declared `fn foo` — and satisfied every other condition. A glob imports
+///    the *contents* of the module `foo` and never binds `foo` itself, so the value reading is not
+///    merely unlikely but unrepresentable. Verified against rustc rather than reasoned: with both
+///    declared, `use m::foo;` compiles using `foo()` **and** `foo::INSIDE`, while `use m::foo::*;` fails
+///    `error[E0425]: cannot find function 'foo' in this scope`.
+/// 2. The whole import path resolved to itself as a module (`import_module == import_path`). With a
 ///    further segment — `use m::foo::deep::Thing;` — only the *module* `foo` can be meant, since a `fn`
 ///    has no children, so there is no ambiguity to resolve.
-/// 2. The path is `{governed_module}::{leaf}` with `leaf` a single segment. A deeper descendant is
+/// 3. The path is `{governed_module}::{leaf}` with `leaf` a single segment. A deeper descendant is
 ///    reached through the module, never through a value of the governed module.
-/// 3. `governed_module` really declares a value named `leaf`. When it declares only `mod leaf`, an
+/// 4. `governed_module` really declares a value named `leaf`. When it declares only `mod leaf`, an
 ///    ordinary `use m::child;` stays silent — the behaviour
 ///    `shallow_inbound_rules_protect_only_the_exact_module` pins.
+///
+/// The outbound family needs no equivalent: it tests `path_within(&import.path, forbidden)` with no
+/// depth narrowing on the target side, so both readings lie within the forbidden module and the
+/// ambiguity cannot arise.
 ///
 /// Depth is not tested: under `Subtree` both readings already lie within the governed module, so
 /// [`within_scan_depth`] has returned true and this is never consulted. Naming `Shallow` here would add
@@ -178,9 +190,13 @@ fn also_binds_a_value_of_the_governed_module(
     import_path: &str,
     import_module: &str,
     governed_module: &str,
+    is_glob: bool,
     cache: &mut Option<std::collections::HashSet<String>>,
     ctx: &ScanContext<'_>,
 ) -> Result<bool, String> {
+    if is_glob {
+        return Ok(false);
+    }
     if import_module != import_path {
         return Ok(false);
     }
@@ -238,7 +254,11 @@ impl ScanContext<'_> {
             let raw = std::fs::read_to_string(&file).map_err(|err| {
                 crate::errors::unreadable_governed_file_error(&file, &err.to_string())
             })?;
-            items.extend(value_namespace_item_names(&module, &raw));
+            // `value_namespace_item_names` states declaration-cleaned source as its precondition, and
+            // it was handed the raw file: a `fn foo` appearing only in a comment, a string literal, or
+            // a macro body then counted as a declaration and made an ordinary `use m::foo;` react. Same
+            // pipeline every other declaration reader in `module_scan` composes.
+            items.extend(value_namespace_item_names(&module, &declaration_text(&raw)));
         }
         Ok(items)
     }
@@ -358,6 +378,7 @@ fn check_inbound_rule(
                         &import.path,
                         import_module,
                         governed_module,
+                        import.is_glob,
                         &mut governed_value_items,
                         ctx,
                     )?;
