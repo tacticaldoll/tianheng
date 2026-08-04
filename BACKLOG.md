@@ -183,8 +183,10 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   canonical member for identity purposes is itself a design decision. Version class:
   DESIGN-BREAKING. Authority: this entry's own reproduction record (above).
 
-- **`OriginEntry::new` lets any code in the process self-assert an arbitrary runtime
-  origin, defeating origin-based fail-closed confinement.** Class: DESIGN-BREAKING.
+- **`OriginEntry`'s public constructor lets any code in the process assert an arbitrary runtime
+  origin, defeating origin-based fail-closed confinement.** (Spelled `OriginEntry::new` when this
+  entry was written; renamed `__from_register_origin` in the 0.4.0 window — see the update below.)
+  Class: DESIGN-BREAKING.
   Observed pressure: verified real during 0.3.1 sweep cleanup (2026-08-02/03) — a
   hand-built `OriginEntry::new(TypeId::of::<RogueAdapter>(), "loukehot::good", "RogueAdapter")`
   passed to `install` alongside genuine `register_origin!` entries produces zero
@@ -192,15 +194,16 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   `RogueAdapter` never legitimately registered that origin. Observation source: direct
   reproduction against the real `louke::install`/`assert_boundary!` public API —
   described above. Current bound: `OriginEntry` is a `pub
-  struct` and `new` a fully `pub fn` taking a caller-supplied `origin: &'static str`
-  with no field-level or capability-level constraint — directly contradicting
-  `openspec/specs/runtime-origin-assertion/spec.md`'s own stated requirement that origin
-  is "observed, not self-asserted... which the type cannot claim falsely without
-  physically registering elsewhere." Risk: HIGH — this defeats the crate's core stated
+  struct` and its constructor a `pub fn` taking a caller-supplied `origin: &'static str`
+  with no field-level or capability-level constraint — which, when this entry was written,
+  directly contradicted `openspec/specs/runtime-origin-assertion/spec.md`'s own stated requirement
+  that origin is "observed, not self-asserted... which the type cannot claim falsely without
+  physically registering elsewhere" (that absolute claim is what the 0.4.0 window retired; the
+  capability gap it described is what stays open). Risk: HIGH — this defeats the crate's core stated
   guarantee outright for any code sharing the process, not merely a narrow idiom;
   unlike the other five entries here, this is a capability gap in the trust boundary
   itself, not an identity-collision edge case. Verified that the obvious mechanical fix
-  (`pub` → `pub(crate)` on `OriginEntry::new`) breaks the legitimate `register_origin!`
+  (`pub` → `pub(crate)` on that constructor) breaks the legitimate `register_origin!`
   macro path too, since `macro_rules!` visibility is checked at the macro's expansion
   site, not its definition site — a real Rust limitation, not an oversight. Promotion
   trigger: a `#[track_caller]`/`std::panic::Location`-based redesign of `OriginEntry::new`
@@ -208,7 +211,7 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   caller-supplied string (achievable in pure std, consistent with 漏刻's `serde_json`-light
   constraint) — real design work, not mechanical, and touches the public DSL surface.
   Version class: DESIGN-BREAKING. Authority: `openspec/specs/runtime-origin-assertion/spec.md`'s
-  "observed, not self-asserted" requirement, which this gap directly contradicts; this
+  origin-observation requirement, whose absolute form this gap directly contradicted; this
   entry's own reproduction record (above) for the rest.
   **Updated in the 0.4.0 window** (the gap itself stays OPEN): the promotion trigger recorded above —
   a `#[track_caller]`/`std::panic::Location` redesign — **does not work as written**, verified rather
@@ -225,9 +228,13 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   format std documents as unspecified. What DID land: the constructor is `#[doc(hidden)]` and renamed
   `__from_register_origin` so a hand-written call reads as the bypass it is (it cannot be made private —
   `macro_rules!` visibility is checked at the expansion site, as this entry already recorded); the
-  spec's claim that a type "cannot claim falsely" is corrected to state the process trust boundary; and
-  the residual is pinned by `a_hand_built_origin_entry_is_accepted_a_known_trust_bound`, so it cannot
-  change state in either direction unnoticed.
+  spec's claim that a type "cannot claim falsely" is corrected to state the process trust boundary —
+  on every surface, not only in the requirement's body (the Purpose summary, the requirement's own
+  name, the crate README, and the `register_origin!` doc each carried the absolute form for one more
+  round), with `the_origin_guarantee_is_never_summarized_as_absolute` now reacting in both directions
+  so the agreement is checked rather than hand-maintained; and the residual itself is pinned by
+  `a_hand_built_origin_entry_is_accepted_a_known_trust_bound`, so it cannot change state in either
+  direction unnoticed.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 

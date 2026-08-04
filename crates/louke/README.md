@@ -47,8 +47,11 @@ louke::install(
 //    louke::assert_boundary!("domain-entry", obj); // obj: &dyn DomainPort
 ```
 
-Origin is **observed** (`register_origin!` captures `module_path!()`), not a self-asserted
-label. Explicitly **rejected** as a non-goal: runtime capability/effect drift ("no I/O
+Origin is **observed at the registration site** (`register_origin!` captures `module_path!()`)
+rather than carried by the type. The macro's expansion target must stay `pub` — a `macro_rules!`
+expands at its call site — so code that bypasses the macro can still assert an origin: 漏刻's trust
+boundary is the **process**. It catches architectural drift; it is not a defence against an
+in-process adversary. Explicitly **rejected** as a non-goal: runtime capability/effect drift ("no I/O
 reachable") — a runtime policy engine. The registry holds static label allowlists only, never
 predicates.
 
