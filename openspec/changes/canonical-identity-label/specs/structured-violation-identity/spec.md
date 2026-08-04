@@ -21,8 +21,9 @@ The rule has two parts, and each closes a defect the other does not:
   first such path would silently suppress the second's never-accepted violation.
 
 A path whose bytes are not valid UTF-8 SHALL therefore be **judged**, not refused: it has a canonical
-label like any other. Refusing it would trade a governed package for nothing, and would leave two
-dimensions disagreeing about what the same input is.
+label like any other. This applies wherever such a path is reachable — an observation dimension that
+walks the filesystem — and the rule SHALL be stated once and shared rather than restated per dimension,
+so a dimension for which the input happens to be unreachable cannot drift from one for which it is not.
 
 #### Scenario: The same commit labels a compilation unit identically on either platform
 
@@ -50,6 +51,6 @@ dimensions disagreeing about what the same input is.
 
 - **GIVEN** a labeling that is defined relative to an anchor, and an observed path not under it
 - **WHEN** the label cannot be formed
-- **THEN** the refusal reports that the path lies outside the anchor, and SHALL NOT be reachable for
-  any other cause — in particular not for the path's bytes, which are labelable — so the diagnostic
-  an adopter reads names the condition that actually holds
+- **THEN** the refusal reports that the path lies outside the anchor, and is unreachable for any other
+  cause — the labeling itself SHALL be total, so no second failure mode can share the one diagnostic —
+  and the message an adopter reads names the condition that actually holds

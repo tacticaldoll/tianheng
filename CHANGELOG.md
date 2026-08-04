@@ -809,6 +809,38 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- **BREAKING (Windows only)**: every identity-bearing path label is now canonical rather than as the
+  observing platform renders it. 星表 gains `path_label` — `/` as a path's only component separator,
+  and every byte preserved — and both label sites are built on it: 圭表/渾儀's compilation unit
+  (`compilation_unit_label`) and 漏刻's observed file (`audit::scan::probes::labeled`, whose private
+  `encoded` is retired into the shared function). Previously each rendered its stripped path verbatim,
+  so one commit yielded `unit: "src/lib.rs"` on Linux and `unit: "src\\lib.rs"` on Windows: a baseline
+  recorded by CI matched nothing for a Windows contributor and every entry re-fired as new. That is the
+  checkout-dependence class this window closed five times, along the one axis none of those five
+  covered — not *where* the repository sits, but *which platform read it*. Separator interpretation is
+  delegated to `Path::components()` rather than performed by substituting characters, and that is the
+  whole of why it is correct: on unix `\` is a legal byte *within* a name (`library/std/src/sys/path/
+  unix.rs` declares `path_separator_bytes!(b'/')`), so substituting it would map the single file `a\b`
+  and the file `b` inside directory `a` onto one label — destroying the injectivity the label exists
+  for — while on Windows both `\` and `/` separate (`.../windows.rs`: `path_separator_bytes!(b'\\',
+  b'/')`), so substituting one is incomplete. **No unix baseline re-keys**: measured, every shape that
+  occurs — `src/lib.rs`, `src/bin/x.rs`, `tools/outside.rs`, an absolute path, a `%`-bearing path, a
+  non-UTF-8 path, and a unix backslash inside one file name — labels byte-identically to before. The
+  Windows behaviour is argued from std's own source rather than executed: there is no Windows runner
+  and no wine here, and the two tests covering it say so instead of letting a green unix suite imply
+  coverage.
+- Review also reported that `compilation_unit_label` conflated two `None` causes and so refused a
+  non-UTF-8 crate root inside its package with a diagnostic naming a cause that is factually false.
+  **Recorded as refuted rather than fixed**, measured four ways: `cargo metadata` under a non-UTF-8
+  directory fails outright (`error: path contains invalid UTF-8 characters`, exit 101); an
+  auto-discovered target whose file name is not valid UTF-8 is silently omitted from the target list; a
+  `Cargo.toml` is UTF-8, so a `[[bin]] path` literal cannot spell such a path; and decisively,
+  `src_path` and `manifest_path` reach 星表 as JSON **strings**, so any path built from them is valid
+  UTF-8 by construction and `to_str()` cannot fail. The `None`-means-one-thing property still arrives,
+  as a free consequence of the shared primitive being total. The byte-injectivity half of that
+  primitive keeps its reason for existing in 漏刻, whose labels come from filesystem walks where such a
+  name *is* reachable — which is why the rule is shared rather than dropped: the dimension where it
+  cannot trigger can no longer drift from the one where it can.
 - `xingbiao::crate_root_files` is now unique by root rather than by adjacency. Its doc promised roots
   "in Cargo's reported order, deduplicated" and it called `Vec::dedup` on an unsorted vector, which
   removes only *consecutive* duplicates — unlike `member_root_files`, which sorts first and is

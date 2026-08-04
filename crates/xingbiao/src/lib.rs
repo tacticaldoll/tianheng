@@ -102,6 +102,110 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
         .collect()
 }
 
+/// A path as a **canonical identity label**: `/` as its only component separator, and every byte the
+/// path carried preserved.
+///
+/// The one answer to "what is the label for an observed path", shared by every dimension that records
+/// one — 圭表/渾儀's compilation unit ([`compilation_unit_label`]) and 漏刻's observed file. Written once
+/// here because two sites answering separately is how they came to disagree.
+///
+/// **Separator.** Built on [`Path::components`], joined with `/`, and that is the whole reason it is
+/// correct rather than an implementation detail: separator semantics are delegated to `std::path`
+/// instead of re-implemented. Substituting characters would be wrong in both directions — on unix `\`
+/// is a legal byte *within* a name, so replacing it would map the single file `a\b` and the file `b`
+/// inside directory `a` onto one label, destroying the injectivity this exists for; on Windows both
+/// `\` and `/` separate, so replacing one is incomplete. `components()` is the only thing that knows
+/// which is which per platform. A component cannot contain `/` anywhere, so `/` in a label
+/// unambiguously means a component boundary.
+///
+/// Without this, one commit produced `src/lib.rs` on Linux and `src\lib.rs` on Windows, and a baseline
+/// recorded by CI matched nothing for a Windows contributor — every entry re-firing as new. That is the
+/// checkout-dependence class this window closed five times, along the one axis none of those five
+/// covered: not where the repository sits, but which platform read it.
+///
+/// **Bytes.** Every byte that is not part of a valid UTF-8 sequence is percent-escaped, and a literal
+/// `%` becomes `%25` so no escaped label can be spelled by an unescaped one. `Path::display()` is
+/// **lossy** — it replaces each undecodable byte with U+FFFD — so two paths differing only in such
+/// bytes would produce one label, one identity, and a baseline accepting the first would silently
+/// suppress the second's never-accepted violation. This half is load-bearing for 漏刻, whose labels come
+/// from filesystem walks where such a name is reachable; for 圭表/渾儀 it cannot trigger, since their
+/// paths are built from `cargo metadata`'s JSON strings and Cargo refuses to operate under a non-UTF-8
+/// path at all (`error: path contains invalid UTF-8 characters`). Holding one rule for both is what
+/// keeps the dimension where it cannot trigger from drifting away from the one where it can.
+///
+/// `as_encoded_bytes`'s encoding is unspecified but self-consistent within a platform, which is all this
+/// needs: a label is never decoded back, only compared with another label produced the same way. On
+/// Windows that encoding is WTF-8, so an unpaired surrogate's bytes escape exactly as an invalid unix
+/// byte does.
+///
+/// **Stated normalizations.** `Component::CurDir` contributes nothing and repeated separators collapse,
+/// so `./a` and `a//b` label as `a` and `a/b`. Both name the same file, and neither form is reachable
+/// from the inputs these labels are built from — a `cargo metadata` `src_path` or a walked path, both
+/// already canonical — but the normalization is stated rather than left implicit. `Component::ParentDir`
+/// is preserved as `..`, being unresolvable without touching the filesystem.
+pub fn path_label(path: &Path) -> String {
+    fn push_escaped(out: &mut String, name: &std::ffi::OsStr) {
+        fn push_text(out: &mut String, text: &str) {
+            for ch in text.chars() {
+                if ch == '%' {
+                    out.push_str("%25");
+                } else {
+                    out.push(ch);
+                }
+            }
+        }
+
+        let mut rest = name.as_encoded_bytes();
+        loop {
+            match std::str::from_utf8(rest) {
+                Ok(text) => {
+                    push_text(out, text);
+                    return;
+                }
+                Err(err) => {
+                    let (valid, invalid) = rest.split_at(err.valid_up_to());
+                    // `valid_up_to()` bounds a checked-valid prefix, so this cannot fail.
+                    push_text(out, std::str::from_utf8(valid).unwrap_or_default());
+                    // `error_len() == None` means the input ends mid-sequence: every remaining byte is
+                    // unusable, so escape all of them rather than looping forever on the same slice.
+                    let skip = err.error_len().unwrap_or(invalid.len()).max(1);
+                    for byte in &invalid[..skip.min(invalid.len())] {
+                        out.push_str(&format!("%{byte:02X}"));
+                    }
+                    rest = &invalid[skip.min(invalid.len())..];
+                }
+            }
+        }
+    }
+
+    let mut label = String::new();
+    let mut first = true;
+    for component in path.components() {
+        match component {
+            // A `RootDir` contributes no text, so the separator written before the NEXT component is
+            // what becomes the leading `/`. A path that is only `RootDir` therefore labels as `/`.
+            std::path::Component::RootDir => {
+                label.push('/');
+                first = true;
+                continue;
+            }
+            std::path::Component::CurDir => continue,
+            _ => {}
+        }
+        if !first {
+            label.push('/');
+        }
+        first = false;
+        match component {
+            std::path::Component::Prefix(prefix) => push_escaped(&mut label, prefix.as_os_str()),
+            std::path::Component::ParentDir => label.push_str(".."),
+            std::path::Component::Normal(name) => push_escaped(&mut label, name),
+            std::path::Component::RootDir | std::path::Component::CurDir => unreachable!(),
+        }
+    }
+    label
+}
+
 /// A compilation unit's stable identity label: its root source path **relative to the package's own
 /// manifest directory** (`src/lib.rs`, `src/main.rs`, `tools/x.rs`).
 ///
@@ -119,21 +223,22 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
 /// When the metadata carries no `manifest_path` — the shape synthetic metadata in a caller's own tests
 /// has; real `cargo metadata` always carries it — the root's file name is used, which is stable and
 /// sufficient because such metadata declares a single root.
+///
+/// The relative path is rendered by [`path_label`], so the label is the platform-independent one: a
+/// Windows checkout labels `src\lib.rs` as `src/lib.rs`, matching what Linux CI recorded, instead of
+/// re-firing every baseline entry as new. Because that rendering is total, `None` has exactly **one**
+/// possible cause — `strip_prefix` failing — so the `out_of_package_root_error` a caller raises from it
+/// is true whenever it fires, by construction rather than by wording.
 pub fn compilation_unit_label(package: &Value, root_file: &Path) -> Option<String> {
     match package["manifest_path"]
         .as_str()
         .map(Path::new)
         .and_then(Path::parent)
     {
-        Some(dir) => root_file
-            .strip_prefix(dir)
-            .ok()
-            .and_then(Path::to_str)
-            .map(str::to_string),
+        Some(dir) => root_file.strip_prefix(dir).ok().map(path_label),
         None => root_file
             .file_name()
-            .and_then(|n| n.to_str())
-            .map(str::to_string),
+            .map(|name| path_label(Path::new(name))),
     }
 }
 
