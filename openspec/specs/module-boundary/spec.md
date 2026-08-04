@@ -787,4 +787,3 @@ module, import path) pair rather than the path alone.
 - **WHEN** two different modules of one governed subtree each import the same forbidden path
 - **THEN** the system emits two findings distinguished by their importing module, so accepting one in a
   baseline does not suppress the other
-

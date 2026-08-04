@@ -877,4 +877,3 @@ here may drop one.
 - **THEN** the violation's `file` is the path the literal wrote, not a label relative to the anchor —
   the anchor's containment of that target being the coincidence this rule exists to keep out of the
   identity
-
