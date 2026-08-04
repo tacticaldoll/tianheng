@@ -137,6 +137,51 @@ fn member_root_files_preserves_exact_custom_roots_and_is_deterministic() {
     );
 }
 
+/// A root reported under two target names collapses to one, wherever the two reports sit.
+///
+/// `Vec::dedup` removes only CONSECUTIVE equal elements, which is total for
+/// [`member_root_files`] because it sorts first — and was not total here, where Cargo's own order is
+/// preserved on purpose. Two targets may legitimately name the same `path`; Cargo accepts it, builds
+/// both, and reports targets sorted by NAME, so the duplicate reports are adjacent only when no third
+/// target's name sorts between them. The `[x, y, x]` arrangement below is that case, and it is what
+/// `dedup` alone left untouched — measured against a real three-`[[bin]]` manifest, where
+/// `crate_root_files` returned `[shared.rs, between.rs, shared.rs]`.
+///
+/// Adjacency is asserted alongside it so the test states the whole rule rather than one arrangement of
+/// it: `[x, x, y]` collapsed under `dedup` too, so a fixture using only that shape would pass against
+/// the defect.
+#[test]
+fn crate_root_files_is_unique_by_root_not_by_adjacency() {
+    let non_adjacent = json!({ "targets": [
+        { "kind": ["bin"], "src_path": "/p/src/shared.rs" },
+        { "kind": ["bin"], "src_path": "/p/src/between.rs" },
+        { "kind": ["bin"], "src_path": "/p/src/shared.rs" }
+    ]});
+    assert_eq!(
+        crate_root_files(&non_adjacent),
+        [
+            PathBuf::from("/p/src/shared.rs"),
+            PathBuf::from("/p/src/between.rs")
+        ],
+        "a root reported twice is ONE compilation unit, and Cargo's reported order is preserved"
+    );
+
+    let adjacent = json!({ "targets": [
+        { "kind": ["lib"], "src_path": "/p/src/shared.rs" },
+        { "kind": ["bin"], "src_path": "/p/src/shared.rs" },
+        { "kind": ["bin"], "src_path": "/p/src/other.rs" }
+    ]});
+    assert_eq!(
+        crate_root_files(&adjacent),
+        [
+            PathBuf::from("/p/src/shared.rs"),
+            PathBuf::from("/p/src/other.rs")
+        ],
+        "the adjacent arrangement collapses too — this half held before the fix, and is here so the \
+         test cannot be mistaken for pinning only it"
+    );
+}
+
 /// A unique, self-cleaning temp directory for a path-identity fixture: replaces the hand-rolled
 /// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two tests below
 /// otherwise each repeat.

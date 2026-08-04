@@ -809,6 +809,21 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- `xingbiao::crate_root_files` is now unique by root rather than by adjacency. Its doc promised roots
+  "in Cargo's reported order, deduplicated" and it called `Vec::dedup` on an unsorted vector, which
+  removes only *consecutive* duplicates — unlike `member_root_files`, which sorts first and is
+  therefore total by construction. Two targets may legitimately name the same `path`: Cargo accepts it
+  and builds both, and it reports targets sorted by **name**, so the two reports are adjacent only when
+  no third target's name sorts between them. Measured against a real three-`[[bin]]` manifest, the
+  function returned `[shared.rs, between.rs, shared.rs]`, and that root was scanned once per report.
+  The consequence is narrower than a duplicated corpus suggests, and is recorded here rather than
+  overstated: **no duplicate finding was reachable**, because both static dimensions already collapse
+  violations by identity before reporting (`guibiao/src/lib.rs`, `hunyi/src/driver.rs`) — each for its
+  own unrelated stated reason, two identical boundaries declared on one constitution. That is also why
+  the duplication went unnoticed: a corpus defect was being underwritten by a dedup that exists for
+  something else. The sibling-root exclusion was checked for the worse failure and does not have it —
+  it keeps the current root explicitly, so a root appearing twice never excludes itself. Not breaking —
+  no API signature, no identity shape, and no reported violation changes.
 - `--write-baseline`'s atomic write applies the preserved mode to the **open descriptor**
   (`File::set_permissions`, an `fchmod`) rather than to the temp path. The temp file is opened with
   `create_new` (`O_EXCL`) precisely so nothing pre-planted at the predictable `<target>.tmp-<pid>`
