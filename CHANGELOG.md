@@ -10,13 +10,16 @@ the first deliberate minor past that hold. Pre-1.0, additive depth on an existin
 and packaging/hygiene are patch releases, a breaking change earns a minor, and no release
 intentionally breaks the adopter-written builder (`Constitution` / boundary DSL / `run`).
 
-## [Unreleased]
-
-**What earns `**BREAKING**` in this section.** A change that requires an adopter to *do* something —
+**What earns `**BREAKING**` in a release section.** A change that requires an adopter to *do* something —
 including regenerating a recorded baseline — is marked, even when no public API, wire format, or identity
 shape moves. Closing a false negative therefore counts: the reaction is additive, but the adopter's
 baseline is not, and "the defect was ours" does not spare them the work. This is written down because the
-window classified two same-shaped inbound-`Shallow` fixes two different ways before anyone compared them.
+0.4.0 window classified two same-shaped inbound-`Shallow` fixes two different ways before anyone compared
+them.
+
+## [Unreleased]
+
+## [0.4.0] - 2026-08-04
 
 ### Documentation
 - Retired a `BACKLOG.md` WATCH line that had survived its own promotion. It asked whether
@@ -1376,8 +1379,8 @@ dropped rather than corrected a test-suite size elsewhere. Dropping it is the fi
   protected module declares under a name it also gives a child module (`mod foo` beside `fn foo`), which
   the path alone cannot distinguish from an import of the child. Both are false negatives being paid
   back.
-- **Expect new entries from causes outside `Shallow` too.** Two more changes enlarge a regenerated
-  baseline for **every** rule family, not only the inbound `Shallow` cell above: a violation written in a
+- **Expect new entries from causes outside `Shallow` too.** Changes beyond that cell enlarge a regenerated
+  baseline for **every** rule family: a violation written in a
   package's second compiled root (a `main.rs` beside a `lib.rs`, any `src/bin/*.rs`) is now observed at
   all, and an outbound rule now reports each importing module separately where it previously collapsed
   several into one. Both are false negatives being paid back, so the new entries are findings that were
@@ -1911,7 +1914,8 @@ adopter-written builder is a drop-in swap (see **Compatibility**).
   the 天衡 (`tianheng`) shell that composes them into one `check` with a `0` / `1` / `2` exit
   contract and `--format json` / `sarif` projections.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/tacticaldoll/tianheng/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tacticaldoll/tianheng/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/tacticaldoll/tianheng/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/tacticaldoll/tianheng/compare/v0.2.1...v0.2.2
