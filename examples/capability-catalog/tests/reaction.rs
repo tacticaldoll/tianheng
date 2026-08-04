@@ -90,7 +90,7 @@ fn uncovered_public_families_react_through_the_composed_evaluator() {
     }
 }
 
-/// 0.3.1 closed the false negative where a `cfg_if!` arm's contents were invisible to hunyi's
+/// 0.4.0 closed the false negative where a `cfg_if!` arm's contents were invisible to hunyi's
 /// item walk. `crate::marked::CfgGatedMarked` acquires the forbidden marker only inside such an
 /// arm (both branches, so the reaction holds on every target); this asserts the specific type is
 /// actually named in the reaction, not merely that *a* forbidden-marker violation exists (the
@@ -112,7 +112,7 @@ fn a_cfg_if_wrapped_marker_acquisition_reacts_by_name() {
     );
 }
 
-/// 0.3.1 closed the false negative where trait-impl-locality treated a `const _: () = { impl … };`
+/// 0.4.0 closed the false negative where trait-impl-locality treated a `const _: () = { impl … };`
 /// body ("const-eval trick") as opaque. `crate::misplaced::Rogue` implements `crate::Command`
 /// only behind that wrapper, outside the declared `crate::allowed` subtree; this asserts the
 /// specific type is named in the reaction, not merely that *a* locality violation exists (the
@@ -157,7 +157,7 @@ fn the_cfg_if_dependency_produces_its_own_dependency_source_finding() {
     );
 }
 
-/// The other closed 0.3.1 shape: a malformed forbidden/allowed operand (here a leading `::`) must
+/// The other closed 0.4.0 shape: a malformed forbidden/allowed operand (here a leading `::`) must
 /// fail loud as a constitution error (exit 2) instead of silently matching nothing. This declares
 /// its own tiny, isolated constitution — deliberately NOT the shared dense one above, since a
 /// constitution error stops the whole evaluation and would mask every other family's reaction.

@@ -1894,7 +1894,7 @@ fn invalid_marker_string_is_constitution_error() {
 // in an arm was reported unprobed (a false alarm against real coverage), while a typo'd seam and an
 // un-auditable probe inside an arm escaped entirely — the forbidden false negative, and a
 // contradiction of `audit_probe_coverage`'s own never-a-silent-skip rule. 圭表 has read these bodies
-// since 0.2.3 and 渾儀 joined in 0.3.1; these tests are 漏刻's half of one shared rule.
+// since 0.2.3 and 渾儀 joined in 0.4.0; these tests are 漏刻's half of one shared rule.
 
 #[test]
 fn a_probe_inside_a_cfg_if_arm_is_counted() {
