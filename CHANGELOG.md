@@ -880,7 +880,11 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   `.toml`, `.sh`, or `.yml` — and three blank lines at EOF reached this release branch through 23
   touched spec files and two independent full-range adversarial reviews, one of which ran `cargo fmt
   --all --check` and reported it passing. Neither review had anything to consult, the property being
-  stated nowhere and reacted nowhere; the three sites are corrected here. `git diff --check` was the
+  stated nowhere and reacted nowhere; the three sites are corrected here. The gate then caught its
+  first regression on its own first real use, and in doing so corrected the attribution: the blank line
+  is appended by `openspec archive`'s sync step, observed directly when this window's next delta was
+  synced. So the source recurs on every sync rather than being a one-off slip, which is exactly the kind
+  of thing prose cannot hold and a reaction can. `git diff --check` was the
   obvious candidate and is the wrong shape for a gate — it answers about a *diff*, so its verdict
   moves with the base it is given, and run locally with no argument it sees only unstaged work
   (observed: with the three fixes staged but uncommitted, `git diff --check v0.3.0..HEAD` still
