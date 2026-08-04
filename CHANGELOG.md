@@ -885,6 +885,18 @@ because a macro's expansion runs in the caller's crate. It replaces `OriginEntry
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- **BREAKING for a recorded baseline**: 圭表 now reads a value's name past a `static mut` modifier,
+  closing the last false negative of that shape. The name was taken as the identifier following the item
+  keyword, which for `static mut foo` is `mut` — so the module recorded a value named `mut`, never `foo`,
+  and an import binding the `static mut foo` declared beside a `mod foo` passed silently. rustc compiles
+  that pair and one `use m::foo;` binds both. The four modifier spellings that already worked
+  (`extern "C" fn`, `const fn`, `async fn`, `unsafe fn`) worked for a reason that does not generalize:
+  `fn` is itself an item keyword, so the walk's next step reaches the real name — `mut` is not one, so
+  nothing recovered. By the grammar (`static [mut] NAME: TYPE`) this is the only item of that shape, and
+  all six spellings are now pinned together so the distinction is visible rather than rediscovered. The
+  token is skipped **unraw'd only**: `pub static r#mut: u8` legally names the item `mut`, so skipping that
+  spelling would attribute the following token to it — trading the fixed false negative for a false
+  positive. That bound is pinned as its own case.
 - **BREAKING for a recorded baseline**: 圭表 now observes a value declared inside an `extern` block as a
   value of the **enclosing** module, closing a false negative — the class `PROJECT.md` forbids outright.
   An extern block's `{` opens a brace but no naming scope: `unsafe extern "C" { pub fn foo(); }` declares

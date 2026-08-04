@@ -778,10 +778,26 @@ fn collect_definition_names(
                 .find(|kw| super::lexer::keyword_starts_at(bytes, i, kw))
             {
                 // The declared name is the identifier following the keyword (across whitespace),
-                // tolerating a raw-identifier `r#name`. A non-identifier there (e.g. `const _:` or a
-                // `const fn` where `fn` is itself a keyword) simply captures nothing useful — the
-                // subsequent keyword scan still reaches the real name.
-                let name_start = skip_ws(bytes, i + kw.len());
+                // tolerating a raw-identifier `r#name`. A non-identifier there (e.g. `const _:`)
+                // captures nothing useful.
+                //
+                // An interposed MODIFIER token is skipped only where the recovery below cannot handle
+                // it. `const fn` / `async fn` / `unsafe fn` need no help: `fn` is itself an item keyword,
+                // so the walk's next iteration matches it and reaches the real name. `static mut` has no
+                // such second keyword — `mut` is not one — so the name read was `mut`, the module
+                // recorded a value by that name, and a real `use m::foo;` binding the `static mut foo`
+                // beside a `mod foo` passed silently: the false negative `PROJECT.md` forbids. By the
+                // grammar (`static [mut] NAME: TYPE`) this is the only item of that shape.
+                //
+                // Skipped UNRAW'D only. `pub static r#mut: u8` is legal and genuinely names the item
+                // `mut`, so skipping that spelling would attribute the following token — `:` — or the
+                // next declaration's name to this item, turning a fixed false negative into a false
+                // positive. `keyword_starts_at` matches at an identifier boundary, so `r#mut` and a name
+                // merely beginning with `mut` are both left alone.
+                let mut name_start = skip_ws(bytes, i + kw.len());
+                if kw == b"static" && super::lexer::keyword_starts_at(bytes, name_start, b"mut") {
+                    name_start = skip_ws(bytes, name_start + b"mut".len());
+                }
                 if bytes.get(name_start).is_some_and(|b| is_ident_byte(*b)) {
                     let name =
                         normalize_segments(&bytes[name_start..end_of_ident(bytes, name_start)]);

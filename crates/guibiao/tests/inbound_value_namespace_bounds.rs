@@ -196,6 +196,63 @@ fn a_value_declared_in_an_extern_block_reacts() {
     }
 }
 
+/// A `static mut` declares its name past a modifier token, and must react.
+///
+/// The name is read as the identifier following the item keyword. For `static mut foo` that identifier
+/// is `mut`, so the module recorded a value named `mut` and never `foo` — and the import of a real
+/// value of the protected module passed silently. rustc compiles `pub static mut foo: u8` beside
+/// `pub mod foo;` and one `use m::foo;` binds both, so this is the forbidden class.
+///
+/// The modifier spellings that already worked are asserted alongside, because they work for a reason
+/// that does NOT generalize: `const fn`, `async fn`, and `unsafe fn` recover because `fn` is itself an
+/// item keyword, so the walk's next iteration finds the real name. `mut` is not a keyword, so nothing
+/// recovered. By the grammar — `static [mut] NAME: TYPE` — this is the only item of that shape.
+///
+/// `static r#mut` is asserted NOT to react, and that is not an edge case to tolerate but the bound the
+/// fix must respect: it genuinely names the item `mut`, so the protected module declares no value
+/// `foo` and the import reaches only the descendant module. Skipping the token unconditionally would
+/// have turned this into a false positive.
+#[test]
+fn a_value_declared_past_a_modifier_token_reacts() {
+    for (label, protected, expected) in [
+        ("static", "pub mod foo;\npub static foo: u8 = 7;\n", 1),
+        (
+            "static-mut",
+            "pub mod foo;\npub static mut foo: u8 = 7;\n",
+            1,
+        ),
+        (
+            "const-fn",
+            "pub mod foo;\npub const fn foo() -> u8 { 7 }\n",
+            1,
+        ),
+        ("async-fn", "pub mod foo;\npub async fn foo() {}\n", 1),
+        ("unsafe-fn", "pub mod foo;\npub unsafe fn foo() {}\n", 1),
+        // Names the item `mut`, not `foo` — so the protected module declares no value `foo`.
+        (
+            "static-raw-mut",
+            "pub mod foo;\npub static r#mut: u8 = 7;\n",
+            0,
+        ),
+    ] {
+        let probe = Probe::new(
+            label,
+            &[
+                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                ("protected.rs", protected),
+                ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
+                ("consumer.rs", "use crate::protected::foo;\n"),
+            ],
+        );
+        assert_eq!(
+            findings(&probe.manifest()).len(),
+            expected,
+            "`{label}`: expected {expected} violation(s) — a value named `foo` reacts, and one named \
+             `mut` (however spelled) does not"
+        );
+    }
+}
+
 /// An `extern` block's transparency SHALL NOT leak into a real nested scope.
 ///
 /// The brace of an extern block introduces no naming scope; the brace of an inline `mod` does. A value
