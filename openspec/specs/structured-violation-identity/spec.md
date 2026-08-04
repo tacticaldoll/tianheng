@@ -262,4 +262,3 @@ whose schema omits a coordinate that can vary SHALL fail that reaction rather th
   all
 - **THEN** the fact does not carry it, and the reason is recorded — so the identity stays as narrow as the
   observation and no baseline re-keys for a field that distinguishes nothing
-

@@ -796,6 +796,26 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   code instead of the in-development tree it exists to exercise. Not breaking — strengthens two CI
   gates to enforce what they already claimed; neither the yanked crate nor the incompatible patch is
   present in the current workspace, so this has no effect on the present green build.
+- A 13th Definition-of-Done gate, `scripts/check_whitespace_hygiene.sh`, asserts over every tracked
+  text file that no line carries trailing whitespace, no file ends on a blank line, and every file
+  ends with a newline. `cargo fmt` governs `.rs` only, so nothing in the repository checked `.md`,
+  `.toml`, `.sh`, or `.yml` — and three blank lines at EOF reached this release branch through 23
+  touched spec files and two independent full-range adversarial reviews, one of which ran `cargo fmt
+  --all --check` and reported it passing. Neither review had anything to consult, the property being
+  stated nowhere and reacted nowhere; the three sites are corrected here. `git diff --check` was the
+  obvious candidate and is the wrong shape for a gate — it answers about a *diff*, so its verdict
+  moves with the base it is given, and run locally with no argument it sees only unstaged work
+  (observed: with the three fixes staged but uncommitted, `git diff --check v0.3.0..HEAD` still
+  reported all three). This asserts the invariant over the checkout instead. It reads the **worktree**
+  with a line-terminating `\r` normalized away, and both halves are load-bearing: reading the index
+  instead would tell a contributor who just added trailing whitespace that the tree is clean, since
+  the offence is unstaged — a false negative, which no amount of platform-independence buys back —
+  while reading the worktree raw reports every line of every file as trailing whitespace under
+  `core.autocrlf`, because `\r` is a `[[:space:]]` character (measured: 7 offenses against the same
+  content that yields 3 on Linux, a flood that gets a gate disabled rather than obeyed). Exit 0
+  clean, 1 violation, 2 cannot judge — refusing to judge rather than skipping when a tracked path's
+  own name would defeat the parse that finds it. Not breaking — no library surface, no identity
+  shape, no adopter-visible behaviour.
 - 圭表's crate rules no longer exempt a **same-named but externally-sourced** dependency as if it were
   the crate's own self-reference. The self-dependency exemption — which exists for Cargo's legal
   `main = { path = "." }` doctest/dogfooding idiom, a null-source edge naming no OTHER crate — matched
