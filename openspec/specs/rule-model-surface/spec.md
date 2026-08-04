@@ -124,7 +124,16 @@ raw import path string (which would conflate an item in `m` with an item in a de
 An inbound rule's importer-side self-import exemption — a file within the protected module's own
 subtree is never an inbound importer — is orthogonal to this target match and SHALL NOT be
 depth-gated: it holds identically at `Shallow` and `Subtree`, because depth narrows what counts as
-*reaching* the protected module, never who counts as *inside* it.
+*reaching* the protected module, never who counts as *inside* it. The exemption SHALL be applied by
+**one** predicate at both the file-level pre-filter and the per-import check, so an excused file is
+never read at either depth. A depth-gated pre-filter over a depth-free exemption leaves the reported
+violations identical while still reading the file, and any fail-loud condition in that read (an
+unreadable file, a `use` tree nested past the scanner's brace-nesting cap) then makes `Shallow` exit 2
+where `Subtree` exits 0 — what the exemption excuses MUST NOT be able to decide the exit code. The
+external-crate confinement family's own file-level pre-filter is a **different** contract and SHALL
+remain depth-sensitive: it may skip a file only when every importer that file can host is permitted,
+which under `Shallow` is never, because an inline `mod` inside the permitted file lies outside the
+anchored module.
 
 #### Scenario: Outbound rules honor Shallow
 
@@ -143,6 +152,14 @@ depth-gated: it holds identically at `Shallow` and `Subtree`, because depth narr
 - **WHEN** a module within the protected module's own subtree imports an item declared directly in
   the protected module, under `Shallow`
 - **THEN** the importer is exempt as a self-import, exactly as it would be under `Subtree`
+
+#### Scenario: An excused file's content cannot decide the inbound exit code
+
+- **WHEN** a file inside the protected module's own subtree contains source the import scanner fails
+  loud on (a `use` tree nested past its brace-nesting cap), and an inbound rule protects that module
+  under `Shallow`
+- **THEN** the rule reports clean at exit 0, exactly as under `Subtree` — the exemption excuses the
+  file from being read at all, rather than excusing its importers after a read that can itself fail
 
 #### Scenario: External confinement honors Shallow
 

@@ -1720,6 +1720,44 @@ pub(super) fn shallow_inbound_rules_never_flag_the_protected_modules_own_descend
 }
 
 #[test]
+pub(super) fn shallow_inbound_rules_do_not_read_a_file_the_self_import_exemption_excuses() {
+    // The exemption above is observable in the violation output at either depth, because the
+    // per-import check excuses these importers even when the file IS read. What was NOT the same at
+    // both depths was whether the file gets read at all: a depth-gated fast path over a depth-free
+    // exemption skipped the read only under `Subtree`, so at `Shallow` a file inside the protected
+    // subtree was read and scanned — and any read that can fail then diverges. A `use` tree nested
+    // past the scanner's brace-nesting cap is such a failure (fail-loud by design, exit 2), so it
+    // pins the divergence: the identical protected-subtree file must be excused, not judged, at both
+    // depths. Anything the exemption excuses must not be able to decide the exit code.
+    let deep_use = format!(
+        "use crate::protected::{}Secret{};\n",
+        "{".repeat(200),
+        "}".repeat(200)
+    );
+    let files = &[
+        ("lib.rs", "pub mod protected;\n"),
+        ("protected.rs", "pub mod detail;\npub struct Secret;\n"),
+        ("protected/detail.rs", deep_use.as_str()),
+    ];
+
+    for depth in [xuanji::ScanDepth::Shallow, xuanji::ScanDepth::Subtree] {
+        let boundary = ModuleBoundary::in_crate("x")
+            .module("crate::protected")
+            .must_only_be_imported_by(["crate::facade"])
+            .depth(depth)
+            .because("the protected module's own descendant is never an inbound importer");
+        let (result, violations) =
+            run_module_check("shallow-inbound-self-descendant-unread", files, boundary);
+        assert!(
+            result.is_ok(),
+            "a file the self-import exemption excuses must never be read, so its content cannot \
+             produce a scan error at {depth:?}: {result:?}"
+        );
+        assert!(violations.is_empty(), "{depth:?}: {violations:?}");
+    }
+}
+
+#[test]
 pub(super) fn shallow_external_confinement_permits_only_the_exact_module() {
     let files = &[
         ("lib.rs", "pub mod secret;\n"),

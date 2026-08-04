@@ -66,7 +66,34 @@ fn within_scan_depth(candidate: &str, anchor: &str, depth: ScanDepth) -> bool {
     }
 }
 
-fn is_self_import_only(file_module: &str, governed_module: &str, depth: ScanDepth) -> bool {
+/// The inbound rules' self-import exemption, in ONE place: a module within the protected module's
+/// own subtree is never an inbound importer of it. Deliberately **depth-free** — `ScanDepth` narrows
+/// what counts as *reaching* the protected module, never who counts as *inside* it
+/// (`rule-model-surface`, and the same distinction outbound's `RestrictImportsTo` already draws).
+///
+/// Called both as the file-level fast path (every importer a file can host is within its own
+/// module's subtree, so a file inside the protected subtree cannot host an inbound edge — skip the
+/// read) and as the per-import exemption. One predicate, two call sites, so the pre-filter and the
+/// real rule cannot drift: a depth-gated fast path over a depth-free exemption left the same
+/// violations but read files the exemption would have excused, and an unreadable or
+/// nest-cap-exceeding one then turned a `Shallow` inbound rule into exit 2 where `Subtree` exits 0.
+fn is_inside_protected_module(module: &str, governed_module: &str) -> bool {
+    path_within(module, governed_module)
+}
+
+/// External confinement's file-level fast path — a different contract from the inbound exemption
+/// above, which is why it is a separate function rather than one shared helper. Skip the read only
+/// when EVERY importer the file can host is permitted. The importers a file can host are its own
+/// module and its inline descendants, all within `file_module`'s subtree, so that holds exactly when
+/// the whole subtree is permitted: under `Subtree` iff the file is within the permitted module;
+/// under `Shallow` never, because the permitted set is the anchored module alone and an inline
+/// `mod inner { … }` inside the permitted file is itself outside it — skipping there would silently
+/// drop a real confinement violation.
+fn hosts_only_permitted_importers(
+    file_module: &str,
+    governed_module: &str,
+    depth: ScanDepth,
+) -> bool {
     depth == ScanDepth::Subtree && path_within(file_module, governed_module)
 }
 
@@ -173,8 +200,9 @@ fn check_inbound_rule(
     for (file, file_module) in ctx.all_files() {
         // Fast path: a file whose module is within the protected subtree hosts only
         // self-imports (its inline descendants are within it, hence within the protected
-        // module too), never an inbound edge — skip the read.
-        if is_self_import_only(&file_module, governed_module, boundary.depth) {
+        // module too), never an inbound edge — skip the read. Same predicate as the
+        // per-import exemption below, at every depth.
+        if is_inside_protected_module(&file_module, governed_module) {
             continue;
         }
         // Forbid-one perf pre-filter: the importers a file can carry are its own module and its
@@ -192,13 +220,10 @@ fn check_inbound_rule(
             .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
         for (importer, import) in imports_with_importers(&text, &file_module, ctx.root_modules)? {
             // A module importing from within the protected subtree is not an inbound edge
-            // (an inline submodule of the protected module resolves to within it here). This
-            // exemption is never depth-gated: `m`'s own subtree is not an inbound importer of
-            // `m` regardless of how narrowly `ScanDepth` scopes what counts as reaching `m` —
-            // the same distinction outbound's `RestrictImportsTo` already draws (its own-subtree
-            // check is plain `path_within`, never `within_scan_depth`). Depth narrows what
-            // counts as *reaching the protected module*, not who counts as *inside it*.
-            if path_within(&importer, governed_module) {
+            // (an inline submodule of the protected module resolves to within it here) — the
+            // same depth-free predicate the file-level fast path above uses, so the two cannot
+            // disagree about who is inside the protected module.
+            if is_inside_protected_module(&importer, governed_module) {
                 continue;
             }
             // Forbid-one: only the forbidden importer (or beneath, `::`-delimited) can violate.
@@ -287,8 +312,9 @@ fn check_external_confinement(
     let mut offenders: Vec<(String, String)> = Vec::new();
     for (file, file_module) in ctx.all_files() {
         // A file whose module is within the permitted subtree hosts only permitted imports
-        // (its inline descendants are within it too) — skip the read.
-        if is_self_import_only(&file_module, governed_module, boundary.depth) {
+        // (its inline descendants are within it too) — skip the read. Depth-gated here, unlike
+        // the inbound exemption: see `hosts_only_permitted_importers`.
+        if hosts_only_permitted_importers(&file_module, governed_module, boundary.depth) {
             continue;
         }
         let text = std::fs::read_to_string(&file)
