@@ -791,63 +791,63 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
   detect the loss from outside the process. Scope stays narrow: a custom sink's own success or
   failure is opaque to the system (`set_sink` takes a `Fn(&Violation)` returning nothing) and is
   never counted. Additive, non-breaking — the only public surface change is the new function.
-- **BREAKING**: 漏刻's `OriginEntry::new` is renamed `OriginEntry::__from_register_origin` and hidden
-  from the documented surface. It was never a supported constructor — every real call goes through
-  `register_origin!`, which is what captures `module_path!()` — but presenting it as ordinary public API
-  advertised the one thing the origin guarantee is not: a way to assert an arbitrary origin. Verified
-  reachable: a hand-built entry naming an allowlisted origin for a type that never registered there
-  produces no reaction at all.
-  It cannot be made private, and that is a language rule rather than an oversight: a `macro_rules!`
-  expands at its *call site*, so anything the macro names must be reachable from there, and
-  `pub(crate)` would break every legitimate `register_origin!` in an adopter's crate. What changes is
-  therefore honesty plus a narrowed accident surface, not a closed hole — and the claim that overstated
-  it is corrected: `runtime-origin-assertion` said a type "cannot claim falsely without physically
-  registering elsewhere", which is false, and now states the trust boundary as the **process**. An
-  origin is observed for code that registers through the macro and asserted by code that bypasses it;
-  漏刻 governs architectural drift, not an in-process adversary. A governance tool asserting a guarantee
-  it does not have is worse than one stating its bound.
-  That correction first reached only the requirement's own body, leaving the absolute form on every
-  surface a reader meets *before* it: the specification's Purpose summary, the requirement's own
-  **name**, this crate's README, and the `register_origin!` doc. All four now state the same bound
-  (the requirement is renamed "Origin is observed at the registration site, within a process trust
-  boundary"), and their agreement is no longer hand-maintained —
-  `the_origin_guarantee_is_never_summarized_as_absolute` reacts if the retired wording returns to any
-  louke source, its README, or the specification, and equally if the stated bound is deleted from
-  where an adopter meets the guarantee. A summary is the capability contract for whoever stops
-  reading there, so it is checked rather than trusted.
-  The same claim exists one level up, and it is now qualified there too: `PROJECT.md`'s Core Contract
-  said a declared boundary produces a "non-bypassable reaction" without saying what non-bypassable
-  covers, which promised for 漏刻 exactly what its cooperative registration cannot deliver — the route by
-  which an independent review reached this contradiction from the contract rather than from the spec.
-  It now states the scope: the governed code's own *shape* cannot make a boundary stop reacting (no
-  spelling, alias, re-export, `cfg` arm, or macro form escapes observation, and an undecidable
-  observation reacts exit 2 rather than passing), which is not the same as an observation that cannot be
-  fed a false input from inside the observed process. Nothing about the CI dimensions' guarantee
-  narrows; what changes is that the runtime dimension's trust boundary is named where the contract is
-  read, and `PROJECT.md` joins the guarded surface set so the qualification cannot be dropped again.
-  The residual is now **pinned by a test** rather than only listed
-  (`a_hand_built_origin_entry_is_accepted_a_known_trust_bound`), so it cannot change state in either
-  direction unnoticed — if it starts failing, the bound has been closed and the spec, the constructor's
-  doc, and the backlog entry must move together. The two paths that would close it are recorded with
-  measured costs instead of a plausible-sounding one: the previously recorded
-  `#[track_caller]`/`Location` trigger **does not work**, because `Location` yields a file path while an
-  origin's whole vocabulary is a module path, so adopting it would redefine an origin and invalidate
-  every `only_origins` declaration. The **proc-macro** path this window first recorded alongside it does
-  not work either, and that was found by testing it rather than by reasoning about it: a proc-macro is
-  expanded into its caller's crate and resolved there, exactly as a `macro_rules!` is, so making the
-  constructor private breaks the proc-macro path too — a three-crate probe reports `error[E0603]:
-  function `hidden_constructor` is private` at the *consumer's* call site. A macro form has no privilege
-  its caller lacks, which is the same structural reason `Location` fails, so no third macro variant is
-  recorded. What can close it is a mechanism that never takes the origin from the caller, since
-  `std::any::type_name` reports the type's own defining path: either **redefine** an origin as "where
-  defined" (unforgeable by construction, but invalidates every `only_origins` declaration and rests
-  identity on a format std documents as unspecified — measured: a type in `rogue` reports
-  `crate::rogue::Repo` where the registration site's `module_path!()` reported only `crate`), or
-  **cross-check** the asserted origin against that path at `install` and react to a disagreement, keeping
-  the origin's meaning and every declaration intact (mechanically available — `module_path!()` at a
-  type's defining module equals `type_name` minus its trailing type name — at the cost of resting a
-  fail-loud gate on the same unspecified format, and forbidding registration from anywhere but the type's
-  own module). Both remain decisions for a human, not a review response.
+- **BREAKING**: 漏刻's runtime **origin is now derived from the registered type**, and its expansion
+  target `OriginEntry::__from_register_origin` (renamed from `OriginEntry::new` in this same window)
+  takes **no arguments** — it is generic over the type and derives the type identity, the origin, and
+  the type name from it.
+  This closes a false negative, not a wording problem. The previous constructor took three ordinary
+  values, so a hand-written call fabricated all three at once and registered a rogue type under an
+  allowlisted origin; the crossing then passed with no reaction. Reproduced in-tree before the fix and
+  re-derived by an independent review. With nothing left to pass, an origin a type does not have is
+  **unrepresentable** rather than detected.
+  An origin is therefore the module the type is **defined** in, not the module the registration call
+  sits in. Earlier in this window the same entry described the gap as a deliberate, cooperative
+  process trust boundary and pinned it with a test; that description is retired here, along with the
+  test. What made the closure possible was giving up on finding a *macro* that can pass something
+  hand-written code cannot — a proc-macro is expanded into its caller's crate and resolved there
+  exactly as a `macro_rules!` is (`E0603` at the consumer's own call), so no macro form has privilege
+  its caller lacks. The origin had to stop coming from the caller at all.
+  **Migration is narrower than it sounds.** `register_origin!(MyType)`'s spelling does not change, so
+  no adopter edits source. A registration written **inside the type's own module** — the documented
+  idiom, and what `examples/composed` does — derives the *byte-identical* origin string it derived
+  before, so its `only_origins(...)` entries need no edit; this is machine-checked by
+  `a_registration_can_only_name_its_own_types_defining_module`, which asserts the derived origin equals
+  `module_path!()` at the defining module. A registration written **outside** the type's module now
+  names the type's own module, so an `only_origins(...)` entry naming the registration site must change
+  to the type's defining module; until it does, the seam reacts fail-closed and the finding names both
+  the observed origin and the concrete type. A type from another crate now carries that crate's own
+  origin: to give an adapter your layer's origin, define the adapter in your layer (a newtype), which
+  is also what actually crosses the seam.
+  **No baseline is affected.** An observed origin never reaches a `Report` or a baseline — the prod
+  reaction's `Violation` goes to the sink, every CI-face fact carries no origin, and the runtime
+  `RuleKey` is built from the **declared** allowlist, which this does not touch. The probe hot path is
+  unchanged: `&'static str` origins resolved once at startup, no lock, no allocation per crossing, no
+  new dependency. The CI face (`audit_probe_coverage`) audits seams and probes and never observed an
+  origin, so it is untouched.
+  Stated bounds, measured rather than assumed: a type defined in another crate reports that crate's own
+  defining path, which may be a private internal module (`std::collections::hash::map`) rather than the
+  public re-export path; a type defined inside a function body reports a path qualified by that
+  function, which is not a module path; a generic type's arguments are not part of its origin (the
+  argument list is cut before the final separator is sought, because an argument can itself contain
+  separators) — which in the direction that matters means a generic **defined in an allowed module
+  carries that origin whatever it wraps**, so an instantiation whose argument comes from a forbidden
+  module crosses as allowed; that is the bound of observing an origin as a *module* rather than a type,
+  it is stated rather than left to be inferred from the deduplication reading, and it is pinned by a
+  test. A type alias reports the aliased type's defining path, so an alias cannot relabel an
+  origin; and a shape with no path at all (a primitive, a reference, a tuple) yields its own rendering.
+  None of these is a new fail-loud class: each matches no allowlist entry and therefore reacts
+  fail-closed, which is the safe direction and needs no separate gate.
+  For the record, the residual this replaces was **CI-preventable** for a Tianheng-governed workspace
+  and the prose never said so: 圭表's `must_not_call_inline("louke::OriginEntry").strict_external()`
+  reacts to the hand-written bypass — measured across the plain path, the leading-`::` spelling, and an
+  alias import — though `.strict_external()` is required, since the default resolver does not classify
+  an external crate's paths. That is history now, not a recipe; and it never covered a third-party
+  dependency, which is why the crate's own guarantee could not rest on it.
+  `runtime-origin-assertion` replaces its origin-observation requirement (the premise changed, not the
+  wording) and adds three: the derivation, its stated shape bounds, and an explicit requirement that
+  the allowlist match stays **equality** — pairing this with prefix matching would let a type defined
+  under a descendant module newly pass a seam that reacts today, the same forbidden bug arriving
+  through the matcher instead of the observation.
 
 ### Migration
 
@@ -868,8 +868,13 @@ an adopter reads the work in one place instead of assembling it from five `**BRE
 - **Expect new entries, not only relabeled ones, for an inbound rule at `ScanDepth::Shallow`.** That
   depth now reacts to an item-form import it silently passed before, so its regenerated baseline can
   legitimately be larger than a relabeling would explain.
-- **If you build a 漏刻 `OriginEntry` by hand**, switch to `register_origin!`. The constructor is renamed
-  and hidden; the macro is, and always was, the supported path.
+- **If you build a 漏刻 `OriginEntry` by hand**, switch to `register_origin!`. The constructor is renamed,
+  hidden, and now takes no arguments at all; the macro is, and always was, the supported path.
+- **If you write `register_origin!` outside the type's own module, check your `only_origins(...)`.** An
+  origin is now the module the type is **defined** in, so an entry naming the registration site must
+  change to the type's defining module. A registration inside the type's own module — the documented
+  idiom — needs no edit at all: the origin string is byte-identical. Registering a type from another
+  crate now carries that crate's origin; wrap it in a newtype defined in your own layer instead.
 - **If you call 漏刻's audit directly**, pass the new anchor argument to `audit_probe_coverage` /
   `audit_probe_coverage_with_markers`: the workspace root, via the new
   `xingbiao::workspace_root(&metadata)` for a Cargo workspace. It must be **absolute** — a relative or

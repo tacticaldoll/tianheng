@@ -160,8 +160,9 @@ impl RuntimeBoundaryDraft {
     }
 }
 
-/// An origin registration produced by [`crate::register_origin!`] — a `TypeId`, the **observed**
-/// origin (`module_path!()` at the registration site), and the type's name (for findings).
+/// An origin registration produced by [`crate::register_origin!`] — a type's identity, its
+/// **observed** origin (the module the type is *defined* in), and its name (for findings). Every field
+/// is **derived from the type**, so a registration cannot present an origin the type does not have.
 /// Pass these to [`crate::install`].
 #[derive(Debug, Clone)]
 pub struct OriginEntry {
@@ -170,36 +171,56 @@ pub struct OriginEntry {
     pub(crate) type_name: &'static str,
 }
 
+/// The module a type is defined in, taken from the type's own reported path — the origin. Not the
+/// caller's to choose, which is the whole point: a type's path is a property of the type.
+///
+/// The generic argument list is cut **first**. A type's own arguments can contain path separators
+/// (`Repo<std::string::String>`), so searching for the final `::` before removing them would land
+/// inside the arguments and report a module the type has nothing to do with. The first `<` in the
+/// rendering is necessarily the top-level one, since nesting can only begin after it opens.
+///
+/// A shape with no path at all — a primitive, a reference, a tuple — yields its own rendering
+/// unchanged. That is a stated bound rather than an error: such an origin matches no allowlist entry,
+/// so the crossing reacts fail-closed with the observed value named in the finding, which is the safe
+/// direction and needs no separate gate.
+pub(crate) fn defining_module(type_path: &'static str) -> &'static str {
+    let head = match type_path.find('<') {
+        Some(open) => &type_path[..open],
+        None => type_path,
+    };
+    match head.rfind("::") {
+        Some(cut) => &head[..cut],
+        None => head,
+    }
+}
+
 impl OriginEntry {
     /// **Not a supported constructor — [`crate::register_origin!`]'s expansion target.** Hidden from
     /// the documented surface and named so a hand-written call reads as what it is.
     ///
     /// It must stay `pub`: a `macro_rules!` expands at its *call site*, so everything the macro names
     /// has to be reachable from there — `pub(crate)` here would break every legitimate
-    /// `register_origin!` in an adopter's crate, which is a real Rust rule rather than an oversight.
+    /// `register_origin!` in an adopter's crate, which is a real Rust rule rather than an oversight. A
+    /// proc-macro would not change that: it is expanded into the caller's crate and resolved there
+    /// too, so a private constructor fails with `E0603` at the adopter's own call (verified with a
+    /// three-crate probe). A macro form has no privilege its caller lacks.
     ///
-    /// That is also the honest bound on the origin guarantee, and it is stated rather than implied:
-    /// anything this macro can pass, hand-written code can pass too, so an origin is observed for code
-    /// that uses the macro and **assertable** by code that does not. 漏刻's trust boundary is therefore
-    /// the process — it catches architectural drift, not an in-process adversary.
+    /// That no longer matters, because being reachable is not the same as being *usable to lie*. This
+    /// takes **no arguments**: the type identity, the origin, and the type name are all derived from
+    /// `T`. A hand-written call is therefore possible and pointless — the only entry it can build for a
+    /// type is the honest one, naming the module that type is defined in. Naming someone else's type
+    /// produces that type's correct registration, which a second registration of the same type then
+    /// rejects as a duplicate. An origin a type does not have is unrepresentable rather than detected.
     ///
-    /// No macro form closes it. A proc-macro would not let this become private either: a proc-macro is
-    /// expanded into its *caller's* crate and resolved there, exactly as a `macro_rules!` is, so a
-    /// `pub(crate)` constructor fails with `E0603` at the adopter's own call (verified with a
-    /// three-crate probe). A macro has no privilege its caller lacks. Closing it needs an origin the
-    /// caller does not supply — derived from the type's own path, either as the origin's new definition
-    /// or as a cross-check reacting when the asserted one disagrees. Both are recorded with their costs
-    /// in `BACKLOG.md`'s decision index; the gap itself is pinned by
-    /// `a_hand_built_origin_entry_is_accepted_a_known_trust_bound`.
+    /// The derivation lives here, where `T` is still a type parameter, because it cannot live anywhere
+    /// later: no reverse lookup from a `TypeId` back to a path exists, so by the time [`crate::install`]
+    /// sees an entry the type is gone.
     #[doc(hidden)]
-    pub fn __from_register_origin(
-        type_id: TypeId,
-        origin: &'static str,
-        type_name: &'static str,
-    ) -> Self {
+    pub fn __from_register_origin<T: 'static>() -> Self {
+        let type_name = std::any::type_name::<T>();
         OriginEntry {
-            type_id,
-            origin,
+            type_id: TypeId::of::<T>(),
+            origin: defining_module(type_name),
             type_name,
         }
     }

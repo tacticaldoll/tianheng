@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The 漏刻 (runtime) dimension's first capability: declare which concrete-type **origins** may cross a named runtime **seam**, and probe live `dyn` objects in production to catch a forbidden-origin type slipping through a `dyn Trait` into a layer it must not reach — what static and semantic analysis structurally cannot see. It has two faces: a **prod face** (the probe reacts fail-closed, emitting a `Violation` event by default, panic opt-in) and a **CI face** (`audit_probe_coverage` verifies every declared seam is probed and every probe references a declared seam). Origin is **observed at the registration site** (`module_path!()`, captured by the macro) rather than carried by the type — and, because a `macro_rules!` expands at its call site, still **assertable** by code that bypasses the macro, so the guarantee's trust boundary is the process (cooperative in-process governance, not a defence against an in-process adversary; the origin requirement below states this bound in full and is authoritative over this summary). The hot path is std-only and lock-free; the crate depends on 璇璣 (`xuanji`) only — 星表 (`xingbiao`) is an additive, `audit`-feature-gated exception for the CI face's own cycle guard that never reaches the production hot path.
+The 漏刻 (runtime) dimension's first capability: declare which concrete-type **origins** may cross a named runtime **seam**, and probe live `dyn` objects in production to catch a forbidden-origin type slipping through a `dyn Trait` into a layer it must not reach — what static and semantic analysis structurally cannot see. It has two faces: a **prod face** (the probe reacts fail-closed, emitting a `Violation` event by default, panic opt-in) and a **CI face** (`audit_probe_coverage` verifies every declared seam is probed and every probe references a declared seam). Origin is **observed**: it is **derived from the type** — the module the concrete type is defined in — and never taken from the registering call, so no code in the process can present a type under an origin it does not have (the origin requirement below states this in full and is authoritative over this summary). The hot path is std-only and lock-free; the crate depends on 璇璣 (`xuanji`) only — 星表 (`xingbiao`) is an additive, `audit`-feature-gated exception for the CI face's own cycle guard that never reaches the production hot path.
 ## Requirements
 ### Requirement: Runtime boundary declared in Rust and installed write-once
 
@@ -22,58 +22,6 @@ A runtime boundary SHALL be expressed as Rust code and is part of the single sou
 
 - **WHEN** `install` is given two `RuntimeBoundary` objects naming the same seam, or two origin registrations for the same type
 - **THEN** the system fails loud (it panics with a constitution-error-style message), never silently keeping only the last — a silent overwrite would shadow the earlier law
-
-### Requirement: Origin is observed at the registration site, within a process trust boundary
-
-A concrete type SHALL opt into an origin via a `macro_rules!` (no proc-macro, no `syn`) that captures `module_path!()` at the registration site as the origin — so the origin is **where the type is registered**, an observed location rather than a label the type carries; the bound on that observation is stated below and SHALL NOT be summarized as an absolute guarantee anywhere in this specification or in the crate's own adopter-facing documentation. Because std has no pre-`main` hook, registration SHALL be performed by an explicit startup call (the macro yields an entry the startup installs); a type that is never registered has no known origin. Observing the concrete type behind a `dyn Trait` requires the governed trait to carry a `louke::Tracked` supertrait (rust-1.85-compatible; no trait upcasting), and the concrete type to be `'static`.
-
-The guarantee's **trust boundary is the process**, and SHALL be stated rather than implied. A
-`macro_rules!` expands at its call site, so the constructor the macro names must remain reachable from
-there — making it private would break every legitimate registration in an adopter's crate, which is a
-language rule, not an implementation choice. Anything the macro can pass, hand-written code can pass:
-an origin is therefore **observed** for code that registers through the macro and **asserted** by code
-that bypasses it. The system SHALL NOT claim that a type cannot present a false origin. It SHALL make
-the bypass visibly a bypass — the constructor hidden from the documented surface and named so a
-hand-written call reads as one — and SHALL keep the residual pinned by a test, so the bound cannot
-change state in either direction unnoticed. 漏刻 governs architectural drift; it is not an in-process
-adversary defence.
-
-No macro form closes it, and the specification SHALL NOT record one as a way to. A **proc-macro** is
-expanded into its caller's crate and resolved there, exactly as a `macro_rules!` is, so every item its
-expansion names must be reachable from the call site: making the constructor private breaks the
-proc-macro path with `E0603` at the adopter's own call, not at the macro's definition (verified against
-rustc with a three-crate probe, not reasoned). A macro therefore has no privilege its caller lacks, and
-neither does a `#[track_caller]`/`std::panic::Location` variant, whose value is a *file path* while an
-origin's whole vocabulary is a module path.
-
-What can close it is a mechanism that does not take the origin from the caller at all, because
-`std::any::type_name` reports a type's **own** defining path, which the caller cannot choose. Two forms
-exist, and the difference between them is which cost is paid:
-
-- **Redefine** an origin as "where the type is defined" rather than "where it is registered".
-  Unforgeable by construction, at the cost of invalidating every existing `only_origins` declaration and
-  resting the *identity* on a format std documents as unspecified.
-- **Cross-check** the asserted origin against the type's own defining path at `install`, keeping the
-  origin's meaning and every declaration intact, and reacting to a disagreement rather than preventing
-  it. Mechanically available: `module_path!()` at a type's defining module equals `type_name` minus its
-  trailing type name (verified: `tn_probe::internal` and `tn_probe::internal::Repo`), and the two
-  disagree exactly when a registration claims a module the type does not live in. Its cost is that a
-  fail-loud gate would then rest on that unspecified format, so a toolchain that rendered it differently
-  would react against correct adopter code — and it forbids registering a type from anywhere but its own
-  module, which is a narrowing of today's behaviour rather than a pure addition.
-
-Neither is taken here; both are recorded with these costs in `BACKLOG.md` rather than presented as a
-mechanical fix.
-
-#### Scenario: A type's origin is its registration location
-
-- **WHEN** `register_origin!(PostgresRepo)` is written in module `app::infra` and installed at startup
-- **THEN** the origin registry maps `TypeId::of::<PostgresRepo>()` to the observed origin `app::infra`, rather than to any label the type itself carries
-
-#### Scenario: A hand-built entry's asserted origin is taken as given (known bound)
-
-- **WHEN** code bypasses `register_origin!` and constructs an entry directly with an origin the type does not belong to
-- **THEN** the system records that origin as given — the bypass is hidden and named, not prevented — and this bound stays pinned by a test rather than described as closed
 
 ### Requirement: Seam probe observes the live object's concrete origin
 
@@ -754,3 +702,138 @@ Nesting comfortably under the cap SHALL be observed exactly as a shallower struc
   well under the depth cap
 - **THEN** the system still reports the missing-module constitution error, proving the walk
   reaches that depth rather than being narrowed by the cap
+
+### Requirement: Origin is derived from the registered type, not supplied by the registering code
+
+A concrete type SHALL opt into an origin via a `macro_rules!` (no proc-macro, no `syn`) whose expansion
+target is **generic over that type and takes no origin argument**. Every component of the resulting
+registration — the type's identity, its origin, and the type name carried in findings — SHALL be
+derived from the type parameter alone. The registering code SHALL have no way to supply, override, or
+influence the origin it registers, so an origin naming a module the type does not belong to is
+**unrepresentable** rather than detected.
+
+An origin SHALL be the module the type is **defined** in. The system MUST NOT derive an origin from the
+registration call's own location, because that location is the caller's choice — a label the
+registering code selects for itself rather than a property of the type; deriving it from the type is
+what makes the origin an observation. For a
+registration written inside the type's own module — the documented idiom — the derived origin equals
+the registration site's module path, so that idiom's declarations are unaffected.
+
+Because std has no pre-`main` hook, registration SHALL be performed by an explicit startup call (the
+macro yields an entry the startup installs); a type that is never registered has no known origin.
+Observing the concrete type behind a `dyn Trait` requires the governed trait to carry a `louke::Tracked`
+supertrait (rust-1.85-compatible; no trait upcasting), and the concrete type to be `'static`.
+
+The derivation SHALL happen where the type is still a type parameter — inside the macro's expansion
+target — because no reverse lookup from a type's identity back to its path exists; a design that
+validated a supplied origin at install time instead would be reacting to a disagreement this
+requirement makes impossible to express. The prod hot path SHALL be unchanged by this derivation: the
+registry still holds `&'static str` origins resolved once at startup, with no lock, no allocation per
+crossing, and no dependency beyond std.
+
+#### Scenario: A type's origin is its defining module
+
+- **WHEN** `register_origin!(PostgresRepo)` is written for a `PostgresRepo` defined in module
+  `app::infra`, and installed at startup
+- **THEN** the origin registry maps that type to the origin `app::infra`, derived from the type itself
+  rather than from any label the registering code supplies
+
+#### Scenario: A registration away from the type's module still names the type's module
+
+- **WHEN** `register_origin!(PostgresRepo)` for a `PostgresRepo` defined in `app::infra` is written
+  instead inside a startup module `app::startup`
+- **THEN** the registered origin is `app::infra`, not `app::startup` — the registration's location does
+  not enter the origin at all
+
+#### Scenario: A registration cannot present an origin the type does not have
+
+- **WHEN** code bypasses `register_origin!` and calls its expansion target directly for a type of its
+  own, intending to register that type under an allowlisted origin it does not belong to
+- **THEN** no such call can be written: the expansion target accepts only the type, so the registered
+  origin is that type's own defining module, and a seam crossing by that type reacts fail-closed
+
+#### Scenario: Naming another type's identity registers that type honestly
+
+- **WHEN** code calls the expansion target with a type it does not own, hoping to inject a false
+  mapping for it
+- **THEN** the registration produced is the correct one for that type, and a second registration of an
+  already-registered type fails loud as a duplicate, exactly as two `register_origin!` sites for one
+  type already do
+
+### Requirement: The derived origin's shape bounds are stated, not implied
+
+The system SHALL state the following bounds on the derived origin rather than imply a uniform module
+path. None of them is a fail-loud class today, because the existing fail-closed allowlist match already
+reacts to each one loudly and in the safe direction — a bound is stated where a reaction already covers
+it, never used to forbid a future reaction by prose. The origin is derived from the type's own reported
+path, whose shape is not uniform across all types:
+
+- A type defined in **another crate** reports that crate's own defining path, which may be a private
+  internal module rather than the public path it is re-exported at. Registering a foreign type
+  therefore does not attribute it to the registering layer; a type that should carry a layer's origin
+  is a type defined in that layer (a newtype), which is also what actually crosses the seam.
+- A type defined inside a **function body** reports a path qualified by the enclosing function, which
+  is not a module path.
+- A **generic** type's arguments are not part of its origin: the origin is taken from the path with its
+  argument list removed, so two instantiations of one generic type share one origin. Argument text may
+  itself contain path separators and nested argument lists, so the removal SHALL be delimiter-aware
+  rather than a search for the last separator. The consequence SHALL be stated in the direction that
+  matters, not only as deduplication: a generic **defined in an allowed module** carries that origin
+  whatever its arguments are, so an instantiation whose argument type comes from a forbidden module
+  crosses as an allowed origin. This follows from an origin being a **module** and not a type, and it is
+  the bound of what a runtime origin observes — governing which *instantiations* may cross is a
+  different capability, not a defect of this one. It is stated because the alternative readings are
+  worse: an origin cannot name two modules at once, and reacting whenever an argument's module differs
+  from the outer type's would fire on every ordinary instantiation over a primitive.
+- A **type alias** reports the aliased type's defining path, not the alias's location, so an alias
+  cannot relabel an origin.
+
+The reported path's exact rendering is not guaranteed stable across compiler versions. The system
+SHALL keep that instability confined to loud reactions: a rendering change makes an origin stop
+matching its allowlist entry, which reacts fail-closed, and SHALL NOT be able to produce a silent pass.
+An observed origin SHALL NOT enter a rule key or any recorded baseline identity, so no accepted
+violation re-keys on a toolchain change.
+
+#### Scenario: A foreign type's origin is its own defining path
+
+- **WHEN** a type defined in another crate is registered
+- **THEN** its origin is that crate's own defining module path for it, so it does not match an
+  allowlist entry naming the registering layer, and the crossing reacts fail-closed with a finding
+  naming the observed origin
+
+#### Scenario: A generic defined in an allowed module carries that origin whatever it wraps
+
+- **WHEN** a generic type defined in an allowed module is instantiated with an argument type defined in
+  a module the seam forbids, and that instantiation crosses the seam
+- **THEN** the crossing carries the allowed origin — the outermost type's defining module — rather than
+  reacting, which is the stated bound of observing an origin as a module: the type that crosses is the
+  one defined in the allowed module
+
+#### Scenario: Two instantiations of one generic type share one origin
+
+- **WHEN** a generic type is registered at two different argument instantiations
+- **THEN** both register the same origin — the type's defining module, with the argument list removed —
+  including when an argument's own text contains path separators or a nested argument list
+
+#### Scenario: An alias cannot relabel an origin
+
+- **WHEN** a type alias declared in one module names a type defined in another, and the alias is
+  registered
+- **THEN** the registered origin is the aliased type's defining module, not the alias's
+
+### Requirement: An observed origin matches an allowed entry by equality
+
+The allowlist match SHALL compare an observed origin to each allowed entry by **equality**, never by
+module-prefix or subtree containment. A containment match would let a type defined in a module beneath
+an allowed entry newly pass a seam that reacts today, converting a live reaction into a silent pass —
+the forbidden false negative, reached by loosening the matcher rather than by missing an observation.
+Governing a subtree SHALL therefore be expressed by declaring each module that may cross, not by
+widening the comparison.
+
+#### Scenario: A type beneath an allowed module does not pass
+
+- **WHEN** a seam allows origin `app::infra` and a crossing object's type is defined in the descendant
+  module `app::infra::pg`
+- **THEN** the system reacts — the observed origin is not equal to any allowed entry — rather than
+  treating the descendant as covered by its ancestor
+

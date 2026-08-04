@@ -183,73 +183,43 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
   canonical member for identity purposes is itself a design decision. Version class:
   DESIGN-BREAKING. Authority: this entry's own reproduction record (above).
 
+- ~~**`OriginEntry`'s public constructor lets any code in the process assert an arbitrary runtime
+  origin, defeating origin-based fail-closed confinement.**~~ **CLOSED** in the 0.4.0 window, by the
+  `louke-origin-derived-from-type` change. Closed by removing the caller's input rather than by
+  guarding it: the expansion target is now generic over the registered type and takes **no
+  arguments**, so an entry's whole content is a function of that type and an origin the type does not
+  have is unrepresentable. The original entry is kept below for its reproduction record and for the two
+  dead ends it cost, both of which were recorded as viable before being tested.
+
 - **`OriginEntry`'s public constructor lets any code in the process assert an arbitrary runtime
   origin, defeating origin-based fail-closed confinement.** (Spelled `OriginEntry::new` when this
-  entry was written; renamed `__from_register_origin` in the 0.4.0 window — see the update below.)
+  entry was written; renamed `__from_register_origin` and made argument-free in the 0.4.0 window.)
   Class: DESIGN-BREAKING.
   Observed pressure: verified real during 0.3.1 sweep cleanup (2026-08-02/03) — a
   hand-built `OriginEntry::new(TypeId::of::<RogueAdapter>(), "loukehot::good", "RogueAdapter")`
   passed to `install` alongside genuine `register_origin!` entries produces zero
   reaction for a seam declared `.only_origins(["loukehot::good"])`, even though
   `RogueAdapter` never legitimately registered that origin. Observation source: direct
-  reproduction against the real `louke::install`/`assert_boundary!` public API —
-  described above. Current bound: `OriginEntry` is a `pub
-  struct` and its constructor a `pub fn` taking a caller-supplied `origin: &'static str`
-  with no field-level or capability-level constraint — which, when this entry was written,
-  directly contradicted `openspec/specs/runtime-origin-assertion/spec.md`'s own stated requirement
-  that origin is "observed, not self-asserted... which the type cannot claim falsely without
-  physically registering elsewhere" (that absolute claim is what the 0.4.0 window retired; the
-  capability gap it described is what stays open). Risk: HIGH — this defeats the crate's core stated
+  reproduction against the real `louke::install`/`assert_boundary!` public API, and later an in-tree
+  test (`a_forged_origin_silently_passes_a_seam_its_type_may_not_cross`) that reproduced the same
+  silent pass through the registry the way `install` builds it, then stopped **compiling** when the
+  closure landed — that transition being the evidence, not a passing assertion.
+  Risk: HIGH — it defeated the crate's core stated
   guarantee outright for any code sharing the process, not merely a narrow idiom;
-  unlike the other five entries here, this is a capability gap in the trust boundary
-  itself, not an identity-collision edge case. Verified that the obvious mechanical fix
-  (`pub` → `pub(crate)` on that constructor) breaks the legitimate `register_origin!`
-  macro path too, since `macro_rules!` visibility is checked at the macro's expansion
-  site, not its definition site — a real Rust limitation, not an oversight. Promotion
-  trigger: a `#[track_caller]`/`std::panic::Location`-based redesign of `OriginEntry::new`
-  so the recorded origin is always the true call-site location rather than a
-  caller-supplied string (achievable in pure std, consistent with 漏刻's `serde_json`-light
-  constraint) — real design work, not mechanical, and touches the public DSL surface.
-  Version class: DESIGN-BREAKING. Authority: `openspec/specs/runtime-origin-assertion/spec.md`'s
-  origin-observation requirement, whose absolute form this gap directly contradicted; this
-  entry's own reproduction record (above) for the rest.
-  **Updated in the 0.4.0 window** (the gap itself stays OPEN): the promotion trigger recorded above —
-  a `#[track_caller]`/`std::panic::Location` redesign — **does not work as written**, verified rather
-  than reasoned: `Location` yields a *file path*, while an origin's whole vocabulary is a module path
-  (`register_origin!` captures `module_path!()`, and `only_origins(["app::infra"])` is declared in the
-  same terms). Adopting it would redefine what an origin is and invalidate every existing declaration,
-  which is a different change from the one this entry describes.
-  **A second recorded path also does not work**, and it was recorded by this same window before being
-  tested: a **proc-macro** does NOT let the constructor become private. A proc-macro is expanded into
-  its caller's crate and resolved there, exactly as a `macro_rules!` is, so every item its expansion
-  names must be reachable from the call site. Verified with a three-crate probe (proc-macro crate + a
-  lib holding a `pub(crate)` constructor + a consumer): the failure is `error[E0603]: function
-  `hidden_constructor` is private`, reported at the **consumer's** call, not at the macro. A macro form
-  has no privilege its caller lacks, which is the same structural reason the `Location` trigger fails.
-  Both dead ends share one shape — looking for a *macro* that can pass something hand-written code
-  cannot — so no third macro variant is worth recording either.
-  What CAN close it is a mechanism that never takes the origin from the caller, since
-  `std::any::type_name` reports the type's **own** defining path. Two forms, differing in which cost is
-  paid: (a) **redefine** an origin as "where defined" — unforgeable by construction, at the cost of
-  invalidating every `only_origins` declaration and resting *identity* on a format std documents as
-  unspecified (measured: a type in `rogue` reports `crate::rogue::Repo` while the registration site's
-  `module_path!()` reported only `crate`); (b) **cross-check** the asserted origin against the type's own
-  defining path at `install` and react to a disagreement, keeping the origin's meaning and every
-  declaration intact — mechanically available, since `module_path!()` at a type's defining module equals
-  `type_name` minus its trailing type name (measured: `tn_probe::internal` vs
-  `tn_probe::internal::Repo`, and they differ exactly when the registration claims a module the type
-  does not live in) — at the cost of resting a fail-loud gate on that unspecified format, so a toolchain
-  rendering it differently would react against correct adopter code, plus a narrowing of today's
-  behaviour (registering a type from anywhere but its own module becomes an error). What DID land: the constructor is `#[doc(hidden)]` and renamed
-  `__from_register_origin` so a hand-written call reads as the bypass it is (it cannot be made private —
-  `macro_rules!` visibility is checked at the expansion site, as this entry already recorded); the
-  spec's claim that a type "cannot claim falsely" is corrected to state the process trust boundary —
-  on every surface, not only in the requirement's body (the Purpose summary, the requirement's own
-  name, the crate README, and the `register_origin!` doc each carried the absolute form for one more
-  round), with `the_origin_guarantee_is_never_summarized_as_absolute` now reacting in both directions
-  so the agreement is checked rather than hand-maintained; and the residual itself is pinned by
-  `a_hand_built_origin_entry_is_accepted_a_known_trust_bound`, so it cannot change state in either
-  direction unnoticed.
+  unlike the other entries here, it was a capability gap in the trust boundary
+  itself, not an identity-collision edge case.
+  **Two recorded promotion triggers turned out not to work, and both were recorded before being
+  tested** — the lasting lesson of this entry. (a) `pub` → `pub(crate)` on the constructor breaks the
+  legitimate `register_origin!` path, since `macro_rules!` visibility is checked at the expansion site.
+  (b) A `#[track_caller]`/`std::panic::Location` redesign yields a *file path* where an origin's whole
+  vocabulary is a module path. (c) A **proc-macro** does not help either: it is expanded into its
+  caller's crate and resolved there exactly as a `macro_rules!` is, so a private constructor fails with
+  `error[E0603]` at the adopter's own call (three-crate probe). All three share one shape — hunting for
+  a macro that can pass something hand-written code cannot. No such macro exists, which is why the
+  closure had to stop taking the origin from the caller at all. A backlog entry naming a fix that
+  cannot be built is worse than one naming none: the next reader spends the budget before finding out.
+  Authority: `openspec/specs/runtime-origin-assertion/spec.md`; this entry's own reproduction record.
+
 
 ### READY-PATCH
 

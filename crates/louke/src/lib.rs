@@ -59,25 +59,19 @@ pub fn runtime_seam_rule_line(allowed_origins: &[&str]) -> String {
     )
 }
 
-/// Register a type's **observed** origin: `register_origin!(PostgresRepo)` captures
-/// `module_path!()` at the call site (so the origin is *where the type is registered*, rather than
-/// a label the type carries) and yields an [`OriginEntry`] to pass to [`install`]. Declarative —
+/// Register a type's **observed** origin: `register_origin!(PostgresRepo)` yields an [`OriginEntry`]
+/// to pass to [`install`], whose origin is the module `PostgresRepo` is **defined** in. Declarative —
 /// no proc-macro, no `syn`.
 ///
-/// Use this rather than building an [`OriginEntry`] by hand. The constructor it expands to is
-/// `#[doc(hidden)]` and named accordingly, but it cannot be made private — a `macro_rules!` expands at
-/// its call site, so anything this macro names must be reachable from there. An origin is therefore
-/// observed for code that goes through this macro and assertable by code that does not: 漏刻 catches
-/// architectural drift, not an in-process adversary. That bound is stated on the constructor itself and
-/// pinned by a test, not left for a reader to discover.
+/// The origin is **derived from the type**, never from this call: nothing at the call site is passed
+/// through, so a registration cannot present an origin the type does not have. Written inside the
+/// type's own module — the natural place — the origin reads exactly like the `module_path!()` there,
+/// which is what it was before it became derived; written anywhere else, it still names the type's own
+/// module rather than the writing one.
 #[macro_export]
 macro_rules! register_origin {
     ($ty:ty) => {
-        $crate::OriginEntry::__from_register_origin(
-            ::std::any::TypeId::of::<$ty>(),
-            ::std::module_path!(),
-            ::std::any::type_name::<$ty>(),
-        )
+        $crate::OriginEntry::__from_register_origin::<$ty>()
     };
 }
 
