@@ -240,32 +240,70 @@ pub(super) fn must_not_be_imported_by_orders_multiple_offenders_deterministicall
 }
 
 #[test]
-pub(super) fn must_not_be_imported_by_dedups_an_importer_backed_by_lib_and_main() {
-    // A lib+bin package has both `lib.rs` and `main.rs` at module `crate`. With
-    // `must_not_be_imported_by("crate")`, both root files importing the protected
-    // module would push `crate` twice — the spec's dedup must collapse it to one.
-    let (result, violations) = run_module_check(
-        "inbound-lib-and-main",
+pub(super) fn must_not_be_imported_by_dedups_an_importer_backed_by_two_reachable_sources() {
+    // One importer module can be backed by two REACHABLE sources, so the same importer would push
+    // `crate::inner` twice and the spec's dedup must collapse it to one.
+    //
+    // The shape is the additive, cfg-blind one `module-boundary` describes: a `mod inner;` and an
+    // inline `mod inner { … }` for the same name, which in valid source arises only under
+    // mutually-exclusive `#[cfg]` (a same-scope duplicate is a compile error). The scanner does not
+    // evaluate `cfg`, so it observes both.
+    //
+    // This replaces a fixture that claimed a lib+bin package's `lib.rs` and `main.rs` both sit at
+    // module `crate`. They do not — only the ONE resolved crate root and its reachable modules are
+    // governed, and a `main.rs` beside a `lib.rs` is not observed at all (pinned in
+    // `tests/single_governed_root_bound.rs`, at the real resolution). That fixture also could not have
+    // caught its own premise being wrong: with dedup collapsing the count to one either way, "two
+    // sources deduplicated" and "one source scanned" produce the identical assertion — the trap
+    // `AGENTS.md` names. So this test asserts the two facts SEPARATELY, and the first of them is what
+    // makes it distinguishing.
+    //
+    // (a) Only the INLINE source imports the protected module; the file source is clean. A run that
+    //     did not read the inline body would report ZERO violations here.
+    let (inline_only_result, inline_only) = run_module_check(
+        "inbound-inline-source-observed",
         &[
             (
                 "lib.rs",
-                "pub mod internal;\nuse crate::internal::Secret;\n",
+                "#[cfg(unix)]\npub mod inner;\n#[cfg(not(unix))]\npub mod inner { use crate::internal::Secret; }\npub mod internal;\n",
             ),
-            ("main.rs", "use crate::internal::Secret;\n"),
+            ("inner.rs", "// clean\n"),
             ("internal.rs", "// protected\n"),
         ],
-        protect_internal_from("crate"),
+        protect_internal_from("crate::inner"),
+    );
+    assert!(inline_only_result.is_ok(), "{inline_only_result:?}");
+    assert_eq!(
+        inline_only.len(),
+        1,
+        "the inline source must be observed on its own — zero here would mean it was never read: \
+         {inline_only:?}"
+    );
+    assert_eq!(inline_only[0].finding, "crate::inner");
+
+    // (b) BOTH sources import it: the count must stay one — the dedup guarantee itself.
+    let (result, violations) = run_module_check(
+        "inbound-two-reachable-sources",
+        &[
+            (
+                "lib.rs",
+                "#[cfg(unix)]\npub mod inner;\n#[cfg(not(unix))]\npub mod inner { use crate::internal::Secret; }\npub mod internal;\n",
+            ),
+            ("inner.rs", "use crate::internal::Secret;\n"),
+            ("internal.rs", "// protected\n"),
+        ],
+        protect_internal_from("crate::inner"),
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(
         violations.len(),
         1,
-        "one offending importer module, even when backed by two root files: {violations:?}"
+        "one offending importer module, even when backed by two reachable sources: {violations:?}"
     );
-    assert_eq!(violations[0].finding, "crate");
-    // The collapsed inbound violation still carries a representative file (the inbound path
-    // also collects (key, file) before de-duplication), so the two-file case is locked on
-    // the inbound rule, not only the outbound one.
+    assert_eq!(violations[0].finding, "crate::inner");
+    // The collapsed inbound violation still carries a representative file (the inbound path also
+    // collects (key, file) before de-duplication), so the two-source case is locked on the inbound
+    // rule, not only the outbound one.
     assert!(
         violations[0].file.is_some(),
         "the surviving inbound violation carries a representative file"

@@ -13,6 +13,23 @@ intentionally breaks the adopter-written builder (`Constitution` / boundary DSL 
 ## [Unreleased]
 
 ### Documentation
+- Corrected a coverage claim three surfaces made and the code never had: `module-boundary` stated that
+  a lib+bin package's "both crate roots (`lib.rs` and `main.rs`) resolve to `crate`", `module_check.rs`
+  repeated it to justify an inbound dedup step, and a unit test named for it could not have caught the
+  premise being wrong — its synthetic metadata declared only one target, so "two roots deduplicated" and
+  "one root scanned" produced the identical assertion (the outcome-unaltered trap `AGENTS.md` names).
+  Measured through three lenses: `xingbiao::crate_root_file` returns one root by construction; a minimal
+  `src/lib.rs` + `src/main.rs` package with the same offending construct in both reports one violation,
+  in `lib.rs`; and `src/bin/*.rs`, a `[[bin]] path` inside `src/`, and one outside it are all unobserved
+  when a library root exists. The real scope — the ONE resolved crate root and the modules reachable
+  from it — is now the stated requirement, with the cross-root same-named-submodule case demoted to a
+  corollary of it. Pinned in both directions by
+  `crates/guibiao/tests/single_governed_root_bound.rs` at the real resolution (real manifest, real
+  `cargo metadata`), and the dedup unit test is replaced by one that asserts its two facts separately so
+  the observed-source half is distinguishing. **No behaviour changes**: a violation in a second crate
+  root was never reported and still is not. What changes is that it is now a recorded bound rather than
+  a silent pass, and it is promoted in `BACKLOG.md` to DESIGN-BREAKING with per-target module graphs as
+  the trigger, replacing the one-line `ACCEPTED DEBT` mention that understated it.
 - Made "a guard is not a guard until it has been seen to fail" an explicit rule in `AGENTS.md`'s
   adversarial-review stance, and required the negative run per new guard in the PR body's
   `## Verification`. The trap it names is the change whose *outcome* is unaltered: when a fix improves

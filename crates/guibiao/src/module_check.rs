@@ -279,11 +279,15 @@ fn check_inbound_rule(
             offenders.push((importer, file.display().to_string()));
         }
     }
-    // One violation per offending importer module (the spec's dedup guarantee). A
-    // module can be backed by more than one file — a lib+bin package has both
-    // `lib.rs` and `main.rs` at module `crate` — so the same importer can appear
-    // twice; sort then collapse by the module (the identity), keeping the first file
-    // (deterministic after the sort) as the reported `file`. The count is unchanged.
+    // One violation per offending importer module (the spec's dedup guarantee). A module can be
+    // backed by more than one REACHABLE file, so the same importer can appear twice: a `#[path]`
+    // remap and a conventional file of the same name are additive and cfg-blind, and a
+    // `cfg_attr(path)` union descends several candidate bases for one inline body. NOT because a
+    // lib+bin package's two roots share module `crate` — they do not: only the ONE resolved crate
+    // root and the modules reachable from it are governed, and a `main.rs` beside a `lib.rs` is not
+    // observed at all (a stated bound — see `module-boundary`'s single-governed-root requirement).
+    // Sort then collapse by the module (the identity), keeping the first file (deterministic after
+    // the sort) as the reported `file`. The count is unchanged.
     offenders.sort();
     offenders.dedup_by(|a, b| a.0 == b.0);
     for (importer_module, file) in offenders {
