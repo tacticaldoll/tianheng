@@ -813,7 +813,7 @@ pub(super) fn an_absent_path_remap_target_inside_a_cfg_if_arm_is_tolerated() {
 /// (`driver::outcome_from`, the analogue of guibiao's `evaluate`) — not just the per-fact catalog
 /// tests. Identical governed module path + rule declared against two different workspace members
 /// must survive as two distinct violations, mirroring the guibiao-side regression in
-/// `crates/guibiao/src/tests.rs`.
+/// `crates/guibiao/src/tests/`.
 #[test]
 pub(super) fn two_crates_with_the_identical_async_exposure_boundary_stay_distinct_violations() {
     fn tree_and_metadata(label: &str, package: &str) -> (TempSrcTree, Value) {

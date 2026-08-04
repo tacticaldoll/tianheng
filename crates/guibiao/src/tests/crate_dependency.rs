@@ -250,9 +250,10 @@ pub(super) fn must_not_be_imported_by_dedups_an_importer_backed_by_two_reachable
     // evaluate `cfg`, so it observes both.
     //
     // This replaces a fixture that claimed a lib+bin package's `lib.rs` and `main.rs` both sit at
-    // module `crate`. They do not — only the ONE resolved crate root and its reachable modules are
-    // governed, and a `main.rs` beside a `lib.rs` is not observed at all (pinned in
-    // `tests/single_governed_root_bound.rs`, at the real resolution). That fixture also could not have
+    // module `crate`. They do not — each compiled root is its OWN module graph, and each denotes
+    // `crate` within its own, which is why every root is governed separately and carries its
+    // compilation unit as an identity role (pinned at the real resolution in
+    // `tests/per_target_corpus.rs`). That fixture also could not have
     // caught its own premise being wrong: with dedup collapsing the count to one either way, "two
     // sources deduplicated" and "one source scanned" produce the identical assertion — the trap
     // `AGENTS.md` names. So this test asserts the two facts SEPARATELY, and the first of them is what

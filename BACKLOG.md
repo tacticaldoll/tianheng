@@ -29,6 +29,10 @@ live item is promoted, it must name: **class**, **observed pressure**, **observa
   requirements live in [`openspec/specs/*`](openspec/specs) and settled rationale in [`PROJECT.md`](PROJECT.md).
   Detailed historical ledgers for 0.1.x – 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
+A **closed** item leaves the live class it was filed under; it does not stay there struck through. Its
+reproduction record moves to *Closed in the 0.4.0 window* below, because a class heading is read as a
+queue and an entry that carries a question and its answer at once is a reader trap.
+
 ## Open defect queue
 
 No live queue currently. The `v0.2.3..release/0.3.1` adversarial sweep that populated this section
@@ -45,244 +49,14 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
 
 ### DESIGN-BREAKING
 
-- ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
-  0.4.0 window, after an independent review re-derived it. Closed by refusing to name the ambiguity
-  rather than by inventing an encoding for it: an owner role whose head admits more than one distinct
-  candidate now reaches the shared fail-loud identity gate (a constitution error, exit 2, naming the
-  `#[cfg]` collision), because neither candidate may be preferred and the candidate SET is identical
-  for both colliding sites, so nothing available separates them. "Cannot judge" over a silent collapse
-  is the Core Contract's own ordering. The single-candidate `resolve_path` that fed every such label
-  was **deleted**, not merely bypassed — `resolve_path_all` is now the only resolver, so a caller
-  needing one value must decide what to do about `len() > 1` instead of receiving an arbitrary pick,
-  and the defect class is unrepresentable rather than fixed at three sites. `semantic-signature-coupling`
-  gains the requirement and two scenarios. The original entry is kept below for its reproduction record.
+**Empty.** Every item that stood here when the 0.4.0 window opened is closed; each one's reproduction
+record is kept under *Closed in the 0.4.0 window* below, out of this queue so the index cannot read as
+six open migrations. Nothing currently requires a public or wire migration.
 
-- **Owner-label identity collapses across a cfg-collided self-type alias.** Class:
-  DESIGN-BREAKING. Observed pressure: reproduced by the maintainer during round-3
-  adversarial review of `change/hunyi-cfg-branch-use-reexport-merging` (PR #149) —
-  two genuinely independent violations sharing one cfg-collided self-type alias
-  (`#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as X;`,
-  each arm implementing the same governed trait) render the identical single-candidate
-  owner label and collapse to one finding under exact-identity dedup, across
-  trait-impl-locality, forbidden-marker, unsafe-confinement, and signature-coupling at
-  once. Observation source: that review's reproduction, described above. Current bound:
-  `canonical_self_owner`/`canonical_self_owner_without_fallback`
-  (`crates/hunyi/src/resolve/shape.rs`) and `canonical_unsafe_owner`
-  (`crates/hunyi/src/scan/unsafe_sites.rs`) each render a label from a single resolved candidate,
-  cfg-blind, feeding straight into a dedup key. Risk: a real, enforce-severity
-  violation is silently lost whenever this exact cfg-collision shape occurs — a false
-  negative, the one bug class PROJECT.md's Core Contract forbids outright — but the
-  trigger (a cfg-gated self-type alias reused across cfg-exclusive impls of the same
-  governed trait/type) is narrow and has not yet been observed outside adversarial
-  probing. Promotion trigger: either a redesigned owner identity that stays injective
-  across cfg-ambiguous candidates, or a different anti-collapse key not fed by a
-  single-candidate renderer — real design work, not a mechanical multi-candidate swap
-  (explicitly scoped out of PR #149 as its own follow-up). Version class:
-  DESIGN-BREAKING (an injective owner identity almost certainly changes baseline
-  `finding_key` shape for every affected capability). Authority: `PROJECT.md`'s
-  violation-identity decisions, PR #149's commit body (which names this exact gap and
-  scopes it out as a follow-up).
-
-- ~~**An absolute `#[path]` literal's identity still disagrees across checkouts when its target
-  coincidentally lies under one checkout's own anchor.**~~ **CLOSED** in the 0.4.0 window — the last
-  open identity gap. Closed by stopping the relativization rather than by threading provenance through
-  a labeling decision: a file reached through an absolute literal keeps the path the literal wrote, in
-  every checkout, and the flag is inherited by the files that target reaches in turn. The recorded
-  promotion trigger described the fix as threading "was this file reached via an absolute `#[path]`
-  literal" through four functions, which read as a broad refactor and is why it sat; it is not, because
-  `Path::join` discards its receiver EXACTLY when the joinee is absolute, so the fact is knowable at the
-  single line that resolves the literal and only has to ride alongside the `(file, base)` pair the walk
-  already carries. The test that pinned the gap failed with EQUAL identities the moment the flag landed
-  — its own doc had said that is what closure would look like — and is replaced by one asserting it;
-  the test that pinned "relativized when inside the anchor" is inverted, that behaviour having been the
-  gap's mechanism. `runtime-origin-assertion` gains the rule and drops the two scenarios describing the
-  old behaviour. The original entry is kept below for its reproduction record.
-
-- **An absolute `#[path]` literal's identity still disagrees across checkouts when its
-  target coincidentally lies under one checkout's own anchor.** Class: DESIGN-BREAKING.
-  Observed pressure: found during round-2 adversarial review of
-  `change/louke-unauditable-probe-relative-identity` (PR #157), which closed the
-  general relative-path case but left this one already-non-portable construct
-  unresolved. Observation source: pinned regression test
-  `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`
-  (`crates/louke/src/audit/tests.rs`). Current bound: `strip_prefix` succeeds by pure
-  textual match wherever an absolute `#[path = "/…"]` literal's target happens to share
-  the anchor's prefix, producing a relative-looking label in that checkout and falling
-  back to the raw absolute path in another — the two checkouts' `unauditable-probe`
-  identities differ. Risk: narrow — an absolute `#[path]` literal is already
-  non-portable and machine-specific by construction; this only affects that one already
-  fragile idiom, not the realistic relative sibling-share case PR #157 fixed. Promotion
-  trigger: threading "was this file reached via an absolute `#[path]` literal" through
-  the whole `resolve_path_module`/`external_module_files`/`collect_scope_modules`/
-  `collect_reachable_probes` pipeline so such a file's label is never relativized at
-  all — a separate, scoped refactor. Version class: DESIGN-BREAKING (changes
-  un-auditable-probe identity shape for this construct). Authority: PR #157's commit
-  body; the stated bound is also pinned in `crates/louke/src/finding.rs`/`audit.rs`'s own
-  doc comments and `openspec/specs/runtime-origin-assertion/spec.md`.
-
-- ~~**`InherentGenerics` seam identity has no per-block distinguisher WITHIN one module.**~~ **CLOSED**
-  in the 0.4.0 window. The seam now carries the **bounded thing** each exposure sits on — a parameter's
-  own name, or a where-predicate's rendered bounded type — so two blocks in one module bounding
-  different parameters to the same forbidden type are two distinct facts. The distinguisher this entry
-  called a design decision is resolved by taking the one the codebase already had: it is keyed exactly
-  like a trait `impl`'s own `where` position, and both now come from one shared walk over an impl's
-  generics positions, so the vocabularies cannot drift. An impl-block **ordinal** was ruled out rather
-  than chosen against, since `semantic-signature-coupling` forbids identity resting on scan order or
-  item ordinal.
-  What remains is a limit, not a gap, and is stated in the seam's own doc: two blocks whose bounds are
-  *textually identical* still resolve to one seam. Nothing structural distinguishes them — their
-  contents carry their own seams and position is forbidden — so two blocks bounding the same parameter
-  to the same forbidden type state one architectural fact twice, exactly as one import on two lines is
-  one violation. Completeness of the position walk rests on a language rule verified against a real
-  `rustc` rather than assumed: an `impl`'s generic parameters cannot carry defaults, so a parameter
-  contributes only its bounds (or, for a const parameter, its type). The original entry is kept below
-  for its reproduction record.
-
-- **`InherentGenerics` seam identity has no per-block distinguisher WITHIN one module.**
-  Class: DESIGN-BREAKING. Observed pressure: verified real during
-  0.3.1 sweep cleanup (2026-08-02/03) — two separate inherent impl blocks on the same
-  type, each exposing the same forbidden subject through a different where-clause
-  bound, collapse to one violation. Observation source: direct reproduction against
-  `hunyi::check` (`crates/hunyi/src/collect/exposure.rs`'s inherent-generics collector) —
-  described above. Current bound: `PublicSeam::InherentGenerics` is keyed on
-  `{module, owner}`. The **cross-module** half of this entry is CLOSED — the module role was
-  added in the 0.4.0 window, after an independent review re-derived it, and the adjacent doc
-  comment that wrongly claimed owner-qualification alone kept the seam "distinct... from
-  another block's generics" was corrected in the same change. What remains is strictly
-  narrower: two impl blocks for the same owner **in the same module** still resolve to one
-  seam, since owner-plus-module distinguishes where an impl is written, not which block it is.
-  Risk: a false negative on a narrow idiom (two inherent impl blocks on one type in one
-  module, each with its own where-clause bound exposing a forbidden type) — not yet observed
-  as adopter pressure, and one step narrower than when this entry was written. Promotion
-  trigger: a real per-block distinguisher added to `PublicSeam::InherentGenerics` — real
-  design work, and constrained rather than open: `semantic-signature-coupling` forbids
-  identity from resting on "scan order, item ordinal, and renderer fallback position", so an
-  impl-block ordinal is NOT available as the distinguisher and a stable structural key (a
-  rendering of the block's own generics, say) has to be designed and its collision behavior
-  argued. Version class: DESIGN-BREAKING. Authority: this entry's own reproduction record
-  (above); `openspec/specs/semantic-signature-coupling/spec.md`'s ordinal prohibition for the
-  constraint on the trigger.
-
-- ~~**Trait-impl-locality's violation target/rule-key reads the constitution's declared trait
-  spelling instead of the already-resolved canonical anchor.**~~ **CLOSED** in the 0.4.0 window, after
-  an independent review re-derived it. Both roles are now keyed on the resolved anchor, threaded out of
-  the function that already computed it rather than recomputed (a second resolution site could
-  disagree with the one that decided the matches). The multi-candidate question this entry named as the
-  reason it was design work is answered by refusing rather than picking: a declared anchor whose
-  re-export closure reaches more than one distinct local trait DEFINITION is a constitution error
-  naming the candidates, since the ambiguity is in the declaration and choosing would make the
-  governed target arbitrary. A declaration that already names the defining path — the ordinary case —
-  is unchanged, so the fix churns only the baselines it must. `allowed_locations` deliberately stays in
-  the rule key (it keeps two boundaries on one trait distinct) and the in-code comment that wrongly
-  claimed it was NOT identity-bearing is corrected: `ViolationId` compares `rule_key` in full.
-  `semantic-trait-impl-locality` gains all three rules and two scenarios. The original entry is kept
-  below for its reproduction record.
-
-- **Trait-impl-locality's violation target/rule-key reads the constitution's declared
-  trait spelling instead of the already-resolved canonical anchor.** Class:
-  DESIGN-BREAKING. Observed pressure: verified real during 0.3.1 sweep cleanup
-  (2026-08-02/03) — declaring the identical boundary via two different (but
-  re-export-equivalent) spellings of the same trait produces two `ViolationId`s for the
-  same real-world fact. Observation source: direct reproduction against
-  `hunyi::check_trait_impl_locality` — described above.
-  Current bound: `target`/`rule_key` in `crates/hunyi/src/trait_impl.rs` are built from
-  `canonical_path_str(&boundary.trait_path)` — raw-identifier stripping only, never
-  re-export resolution — even though the same function already computes a
-  re-export-resolved `true_anchors`/`canonical` value for match-decision purposes,
-  unused for identity. Risk: real baseline-stability consequence — renaming a
-  constitution declaration from a re-export spelling to the canonical spelling (a pure
-  refactor, no code behavior change) silently flips every affected violation's identity
-  and defeats the baseline. Promotion trigger: thread the already-computed resolved
-  anchor into `target`/`rule_key` instead of the raw declared string — real design work,
-  since `true_anchors` is a cfg-blind multi-candidate set and picking one deterministic
-  canonical member for identity purposes is itself a design decision. Version class:
-  DESIGN-BREAKING. Authority: this entry's own reproduction record (above).
-
-- ~~**`OriginEntry`'s public constructor lets any code in the process assert an arbitrary runtime
-  origin, defeating origin-based fail-closed confinement.**~~ **CLOSED** in the 0.4.0 window, by the
-  `louke-origin-derived-from-type` change. Closed by removing the caller's input rather than by
-  guarding it: the expansion target is now generic over the registered type and takes **no
-  arguments**, so an entry's whole content is a function of that type and an origin the type does not
-  have is unrepresentable. The original entry is kept below for its reproduction record and for the two
-  dead ends it cost, both of which were recorded as viable before being tested.
-
-- **`OriginEntry`'s public constructor lets any code in the process assert an arbitrary runtime
-  origin, defeating origin-based fail-closed confinement.** (Spelled `OriginEntry::new` when this
-  entry was written; renamed `__from_register_origin` and made argument-free in the 0.4.0 window.)
-  Class: DESIGN-BREAKING.
-  Observed pressure: verified real during 0.3.1 sweep cleanup (2026-08-02/03) — a
-  hand-built `OriginEntry::new(TypeId::of::<RogueAdapter>(), "loukehot::good", "RogueAdapter")`
-  passed to `install` alongside genuine `register_origin!` entries produces zero
-  reaction for a seam declared `.only_origins(["loukehot::good"])`, even though
-  `RogueAdapter` never legitimately registered that origin. Observation source: direct
-  reproduction against the real `louke::install`/`assert_boundary!` public API, and later an in-tree
-  test (`a_forged_origin_silently_passes_a_seam_its_type_may_not_cross`, since removed with the
-  gap it pinned) that reproduced the same
-  silent pass through the registry the way `install` builds it, then stopped **compiling** when the
-  closure landed — that transition being the evidence, not a passing assertion.
-  Risk: HIGH — it defeated the crate's core stated
-  guarantee outright for any code sharing the process, not merely a narrow idiom;
-  unlike the other entries here, it was a capability gap in the trust boundary
-  itself, not an identity-collision edge case.
-  **Two recorded promotion triggers turned out not to work, and both were recorded before being
-  tested** — the lasting lesson of this entry. (a) `pub` → `pub(crate)` on the constructor breaks the
-  legitimate `register_origin!` path, since `macro_rules!` visibility is checked at the expansion site.
-  (b) A `#[track_caller]`/`std::panic::Location` redesign yields a *file path* where an origin's whole
-  vocabulary is a module path. (c) A **proc-macro** does not help either: it is expanded into its
-  caller's crate and resolved there exactly as a `macro_rules!` is, so a private constructor fails with
-  `error[E0603]` at the adopter's own call (three-crate probe). All three share one shape — hunting for
-  a macro that can pass something hand-written code cannot. No such macro exists, which is why the
-  closure had to stop taking the origin from the caller at all. A backlog entry naming a fix that
-  cannot be built is worse than one naming none: the next reader spends the budget before finding out.
-  Authority: `openspec/specs/runtime-origin-assertion/spec.md`; this entry's own reproduction record.
-
-
-- ~~**Only the ONE resolved crate root of a package is governed; its other compiled roots are not
-  observed at all.**~~ **CLOSED** in the 0.4.0 window. Every compiled root is now its own corpus in both
-  static dimensions, and an observation carries the compilation unit it came from as an identity role, so
-  the same violation in two roots stays two facts rather than one that masks the other.
-  Three measurements changed the shape of the work and are worth keeping: 漏刻 ALREADY governed every root
-  (`member_root_files`, in production), so this was two dimensions diverging from a third rather than a
-  family-wide bound — correcting this entry's own earlier claim that the scope question was shared because
-  渾儀 uses the same single-root function, which was true of 渾儀 and never checked against 漏刻; a spike over
-  the existing machinery passed 316 of 圭表's 317 tests, so the corpus model tolerated N roots and the
-  remaining work was identity, not a rewrite; and a target's NAME turned out not to be unique within a
-  package (this repository builds a `lib` and a `bin` both named `tianheng`), so the role is the root's
-  path relative to the package directory.
-  Two things the work found that the entry had not predicted: a sibling conventional root leaks into every
-  other root's walk (a top-level `lib.rs`/`main.rs` is `crate` in each), which without exclusion reported
-  one violation once per root — a duplicate worse than the false negative being closed; and a per-root
-  loop that deferred ANY error swallowed genuine scan failures whenever a sibling root happened to be
-  governable, which is a silent pass. Both are fixed and pinned. The original entry is kept below for its
-  reproduction record.
-
-- **Only the ONE resolved crate root of a package is governed; its other compiled roots are not
-  observed at all.** Class: DESIGN-BREAKING. Observed pressure: promoted in the 0.4.0 window from a
-  single-lens WATCH hypothesis and a one-line `ACCEPTED DEBT` mention ("multi-target conventional-path
-  conflation"), both of which understated it. Measured through three independent lenses:
-  (1) **mechanism** — `xingbiao::crate_root_file` returns the first library-kind target, else the first
-  `bin`, one root by construction, and 圭表's `package_src_dir` plus reachability walk both start there;
-  (2) **minimal shape** — a package of exactly `src/lib.rs` + `src/main.rs` with the identical offending
-  construct in both files and a boundary on `crate` reports ONE violation, in `lib.rs`;
-  (3) **broader shape** — `src/main.rs`, `src/bin/conventional.rs`, a `[[bin]] path` inside `src/`, and
-  a `[[bin]] path` outside it are all unobserved when a library root exists. Observation source: those
-  measurements, now pinned by `crates/guibiao/tests/single_governed_root_bound.rs` in both directions
-  (the resolved root reacts; the others are silent; a library-less package governs its first `bin`).
-  Current bound: stated in `module-boundary`'s single-governed-root requirement, replacing a
-  requirement whose premise — "both crate roots (`lib.rs` and `main.rs`) resolve to `crate`" — was
-  factually wrong, and whose recorded limitation (a cross-root same-named submodule) was a narrower
-  story than the truth. Risk: HIGH by class, and it lands on the most ordinary Rust package shape — a
-  library beside its binary. A real violation written in `main.rs` passes silently, which is the one bug
-  class the Core Contract forbids; what limits it in practice is that the governed root is usually where
-  the architecture lives, and that a boundary an adopter declares on `crate` still reacts to everything
-  the library reaches. Promotion trigger: **per-target module graphs**. Two roots of one package both
-  denote module path `crate`, so observing both raises a violation-identity question the current model
-  does not answer (which `crate` a finding names) — the same reason the requirement this replaces
-  already named it an amendment beyond the conventional-path scanner. Note also that 渾儀 resolves roots
-  through the same `crate_root_file`, so the scope question is shared rather than 圭表-local. Version
-  class: DESIGN-BREAKING (a per-target corpus changes which facts exist, and plausibly their target
-  role). Authority: `openspec/specs/module-boundary/spec.md`'s single-governed-root requirement and its
-  two scenarios; the pinned test above.
+The one item still *classed* DESIGN-BREAKING is the `xuanji` sink for shared run/projection vocabulary,
+under WATCH — its promotion trigger (a second standalone instrument consumer demonstrating the same
+projection/run need) has not fired, and acting on it speculatively would break the proven standalone 圭表
+consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
@@ -474,6 +248,264 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
     violation rather than a silent pass) — both named call sites are now fixed, not merely one
     (`hunyi-shared-path-operand-validation`).
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
+
+### Closed in the 0.4.0 window — reproduction records
+
+These are **not** open work. Each was a live DESIGN-BREAKING item when the window opened and is now
+closed; the original entry is kept verbatim beneath its closing note because the reproduction record —
+what was observed, by which lens, and why the trigger was believed narrower than it was — is the part
+that stops the same defect being re-found from scratch. The present-tense `Class:` / `Risk:` /
+`Promotion trigger:` lines inside each retained entry describe the state **at the time it was written**.
+
+They live here rather than under DESIGN-BREAKING because an index that carries a question and its answer
+at once is a reader trap — the same reason a stale WATCH line was retired in `68e183b`, applied to the
+six larger entries it left in place.
+
+
+- ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
+  0.4.0 window, after an independent review re-derived it. Closed by refusing to name the ambiguity
+  rather than by inventing an encoding for it: an owner role whose head admits more than one distinct
+  candidate now reaches the shared fail-loud identity gate (a constitution error, exit 2, naming the
+  `#[cfg]` collision), because neither candidate may be preferred and the candidate SET is identical
+  for both colliding sites, so nothing available separates them. "Cannot judge" over a silent collapse
+  is the Core Contract's own ordering. The single-candidate `resolve_path` that fed every such label
+  was **deleted**, not merely bypassed — `resolve_path_all` is now the only resolver, so a caller
+  needing one value must decide what to do about `len() > 1` instead of receiving an arbitrary pick,
+  and the defect class is unrepresentable rather than fixed at three sites. `semantic-signature-coupling`
+  gains the requirement and two scenarios. The original entry is kept below for its reproduction record.
+
+- **Owner-label identity collapses across a cfg-collided self-type alias.** Class:
+  DESIGN-BREAKING. Observed pressure: reproduced by the maintainer during round-3
+  adversarial review of `change/hunyi-cfg-branch-use-reexport-merging` (PR #149) —
+  two genuinely independent violations sharing one cfg-collided self-type alias
+  (`#[cfg(unix)] use crate::a::Foo as X; #[cfg(not(unix))] use crate::b::Bar as X;`,
+  each arm implementing the same governed trait) render the identical single-candidate
+  owner label and collapse to one finding under exact-identity dedup, across
+  trait-impl-locality, forbidden-marker, unsafe-confinement, and signature-coupling at
+  once. Observation source: that review's reproduction, described above. Current bound:
+  `canonical_self_owner`/`canonical_self_owner_without_fallback`
+  (`crates/hunyi/src/resolve/shape.rs`) and `canonical_unsafe_owner`
+  (`crates/hunyi/src/scan/unsafe_sites.rs`) each render a label from a single resolved candidate,
+  cfg-blind, feeding straight into a dedup key. Risk: a real, enforce-severity
+  violation is silently lost whenever this exact cfg-collision shape occurs — a false
+  negative, the one bug class PROJECT.md's Core Contract forbids outright — but the
+  trigger (a cfg-gated self-type alias reused across cfg-exclusive impls of the same
+  governed trait/type) is narrow and has not yet been observed outside adversarial
+  probing. Promotion trigger: either a redesigned owner identity that stays injective
+  across cfg-ambiguous candidates, or a different anti-collapse key not fed by a
+  single-candidate renderer — real design work, not a mechanical multi-candidate swap
+  (explicitly scoped out of PR #149 as its own follow-up). Version class:
+  DESIGN-BREAKING (an injective owner identity almost certainly changes baseline
+  `finding_key` shape for every affected capability). Authority: `PROJECT.md`'s
+  violation-identity decisions, PR #149's commit body (which names this exact gap and
+  scopes it out as a follow-up).
+
+- ~~**An absolute `#[path]` literal's identity still disagrees across checkouts when its target
+  coincidentally lies under one checkout's own anchor.**~~ **CLOSED** in the 0.4.0 window — the last
+  open identity gap. Closed by stopping the relativization rather than by threading provenance through
+  a labeling decision: a file reached through an absolute literal keeps the path the literal wrote, in
+  every checkout, and the flag is inherited by the files that target reaches in turn. The recorded
+  promotion trigger described the fix as threading "was this file reached via an absolute `#[path]`
+  literal" through four functions, which read as a broad refactor and is why it sat; it is not, because
+  `Path::join` discards its receiver EXACTLY when the joinee is absolute, so the fact is knowable at the
+  single line that resolves the literal and only has to ride alongside the `(file, base)` pair the walk
+  already carries. The test that pinned the gap failed with EQUAL identities the moment the flag landed
+  — its own doc had said that is what closure would look like — and is replaced by one asserting it;
+  the test that pinned "relativized when inside the anchor" is inverted, that behaviour having been the
+  gap's mechanism. `runtime-origin-assertion` gains the rule and drops the two scenarios describing the
+  old behaviour. The original entry is kept below for its reproduction record.
+
+- **An absolute `#[path]` literal's identity still disagrees across checkouts when its
+  target coincidentally lies under one checkout's own anchor.** Class: DESIGN-BREAKING.
+  Observed pressure: found during round-2 adversarial review of
+  `change/louke-unauditable-probe-relative-identity` (PR #157), which closed the
+  general relative-path case but left this one already-non-portable construct
+  unresolved. Observation source: pinned regression test
+  `a_nested_absolute_path_literal_still_disagrees_across_checkouts_a_known_residual_gap`, which failed
+  with EQUAL identities the moment the fix landed and is replaced by
+  `a_nested_absolute_path_literal_now_agrees_across_checkouts`
+  (`crates/louke/src/audit/tests.rs`). Current bound: `strip_prefix` succeeds by pure
+  textual match wherever an absolute `#[path = "/…"]` literal's target happens to share
+  the anchor's prefix, producing a relative-looking label in that checkout and falling
+  back to the raw absolute path in another — the two checkouts' `unauditable-probe`
+  identities differ. Risk: narrow — an absolute `#[path]` literal is already
+  non-portable and machine-specific by construction; this only affects that one already
+  fragile idiom, not the realistic relative sibling-share case PR #157 fixed. Promotion
+  trigger: threading "was this file reached via an absolute `#[path]` literal" through
+  the whole `resolve_path_module`/`external_module_files`/`collect_scope_modules`/
+  `collect_reachable_probes` pipeline so such a file's label is never relativized at
+  all — a separate, scoped refactor. Version class: DESIGN-BREAKING (changes
+  un-auditable-probe identity shape for this construct). Authority: PR #157's commit
+  body. The bound was also stated in `crates/louke/src/finding.rs`/`audit.rs`'s own doc comments and in
+  `openspec/specs/runtime-origin-assertion/spec.md`; all three now state the CLOSED rule instead (an
+  absolute literal is never relativized), so this record's description of the old behaviour is history,
+  not a description of any current surface.
+
+- ~~**`InherentGenerics` seam identity has no per-block distinguisher WITHIN one module.**~~ **CLOSED**
+  in the 0.4.0 window. The seam now carries the **bounded thing** each exposure sits on — a parameter's
+  own name, or a where-predicate's rendered bounded type — so two blocks in one module bounding
+  different parameters to the same forbidden type are two distinct facts. The distinguisher this entry
+  called a design decision is resolved by taking the one the codebase already had: it is keyed exactly
+  like a trait `impl`'s own `where` position, and both now come from one shared walk over an impl's
+  generics positions, so the vocabularies cannot drift. An impl-block **ordinal** was ruled out rather
+  than chosen against, since `semantic-signature-coupling` forbids identity resting on scan order or
+  item ordinal.
+  What remains is a limit, not a gap, and is stated in the seam's own doc: two blocks whose bounds are
+  *textually identical* still resolve to one seam. Nothing structural distinguishes them — their
+  contents carry their own seams and position is forbidden — so two blocks bounding the same parameter
+  to the same forbidden type state one architectural fact twice, exactly as one import on two lines is
+  one violation. Completeness of the position walk rests on a language rule verified against a real
+  `rustc` rather than assumed: an `impl`'s generic parameters cannot carry defaults, so a parameter
+  contributes only its bounds (or, for a const parameter, its type). The original entry is kept below
+  for its reproduction record.
+
+- **`InherentGenerics` seam identity has no per-block distinguisher WITHIN one module.**
+  Class: DESIGN-BREAKING. Observed pressure: verified real during
+  0.3.1 sweep cleanup (2026-08-02/03) — two separate inherent impl blocks on the same
+  type, each exposing the same forbidden subject through a different where-clause
+  bound, collapse to one violation. Observation source: direct reproduction against
+  `hunyi::check` (`crates/hunyi/src/collect/exposure.rs`'s inherent-generics collector) —
+  described above. Current bound: `PublicSeam::InherentGenerics` is keyed on
+  `{module, owner}`. The **cross-module** half of this entry is CLOSED — the module role was
+  added in the 0.4.0 window, after an independent review re-derived it, and the adjacent doc
+  comment that wrongly claimed owner-qualification alone kept the seam "distinct... from
+  another block's generics" was corrected in the same change. What remains is strictly
+  narrower: two impl blocks for the same owner **in the same module** still resolve to one
+  seam, since owner-plus-module distinguishes where an impl is written, not which block it is.
+  Risk: a false negative on a narrow idiom (two inherent impl blocks on one type in one
+  module, each with its own where-clause bound exposing a forbidden type) — not yet observed
+  as adopter pressure, and one step narrower than when this entry was written. Promotion
+  trigger: a real per-block distinguisher added to `PublicSeam::InherentGenerics` — real
+  design work, and constrained rather than open: `semantic-signature-coupling` forbids
+  identity from resting on "scan order, item ordinal, and renderer fallback position", so an
+  impl-block ordinal is NOT available as the distinguisher and a stable structural key (a
+  rendering of the block's own generics, say) has to be designed and its collision behavior
+  argued. Version class: DESIGN-BREAKING. Authority: this entry's own reproduction record
+  (above); `openspec/specs/semantic-signature-coupling/spec.md`'s ordinal prohibition for the
+  constraint on the trigger.
+
+- ~~**Trait-impl-locality's violation target/rule-key reads the constitution's declared trait
+  spelling instead of the already-resolved canonical anchor.**~~ **CLOSED** in the 0.4.0 window, after
+  an independent review re-derived it. Both roles are now keyed on the resolved anchor, threaded out of
+  the function that already computed it rather than recomputed (a second resolution site could
+  disagree with the one that decided the matches). The multi-candidate question this entry named as the
+  reason it was design work is answered by refusing rather than picking: a declared anchor whose
+  re-export closure reaches more than one distinct local trait DEFINITION is a constitution error
+  naming the candidates, since the ambiguity is in the declaration and choosing would make the
+  governed target arbitrary. A declaration that already names the defining path — the ordinary case —
+  is unchanged, so the fix churns only the baselines it must. `allowed_locations` deliberately stays in
+  the rule key (it keeps two boundaries on one trait distinct) and the in-code comment that wrongly
+  claimed it was NOT identity-bearing is corrected: `ViolationId` compares `rule_key` in full.
+  `semantic-trait-impl-locality` gains all three rules and two scenarios. The original entry is kept
+  below for its reproduction record.
+
+- **Trait-impl-locality's violation target/rule-key reads the constitution's declared
+  trait spelling instead of the already-resolved canonical anchor.** Class:
+  DESIGN-BREAKING. Observed pressure: verified real during 0.3.1 sweep cleanup
+  (2026-08-02/03) — declaring the identical boundary via two different (but
+  re-export-equivalent) spellings of the same trait produces two `ViolationId`s for the
+  same real-world fact. Observation source: direct reproduction against
+  `hunyi::check_trait_impl_locality` — described above.
+  Current bound: `target`/`rule_key` in `crates/hunyi/src/trait_impl.rs` are built from
+  `canonical_path_str(&boundary.trait_path)` — raw-identifier stripping only, never
+  re-export resolution — even though the same function already computes a
+  re-export-resolved `true_anchors`/`canonical` value for match-decision purposes,
+  unused for identity. Risk: real baseline-stability consequence — renaming a
+  constitution declaration from a re-export spelling to the canonical spelling (a pure
+  refactor, no code behavior change) silently flips every affected violation's identity
+  and defeats the baseline. Promotion trigger: thread the already-computed resolved
+  anchor into `target`/`rule_key` instead of the raw declared string — real design work,
+  since `true_anchors` is a cfg-blind multi-candidate set and picking one deterministic
+  canonical member for identity purposes is itself a design decision. Version class:
+  DESIGN-BREAKING. Authority: this entry's own reproduction record (above).
+
+- ~~**`OriginEntry`'s public constructor lets any code in the process assert an arbitrary runtime
+  origin, defeating origin-based fail-closed confinement.**~~ **CLOSED** in the 0.4.0 window, by the
+  `louke-origin-derived-from-type` change. Closed by removing the caller's input rather than by
+  guarding it: the expansion target is now generic over the registered type and takes **no
+  arguments**, so an entry's whole content is a function of that type and an origin the type does not
+  have is unrepresentable. The original entry is kept below for its reproduction record and for the two
+  dead ends it cost, both of which were recorded as viable before being tested.
+
+- **`OriginEntry`'s public constructor lets any code in the process assert an arbitrary runtime
+  origin, defeating origin-based fail-closed confinement.** (Spelled `OriginEntry::new` when this
+  entry was written; renamed `__from_register_origin` and made argument-free in the 0.4.0 window.)
+  Class: DESIGN-BREAKING.
+  Observed pressure: verified real during 0.3.1 sweep cleanup (2026-08-02/03) — a
+  hand-built `OriginEntry::new(TypeId::of::<RogueAdapter>(), "loukehot::good", "RogueAdapter")`
+  passed to `install` alongside genuine `register_origin!` entries produces zero
+  reaction for a seam declared `.only_origins(["loukehot::good"])`, even though
+  `RogueAdapter` never legitimately registered that origin. Observation source: direct
+  reproduction against the real `louke::install`/`assert_boundary!` public API, and later an in-tree
+  test (`a_forged_origin_silently_passes_a_seam_its_type_may_not_cross`, since removed with the
+  gap it pinned) that reproduced the same
+  silent pass through the registry the way `install` builds it, then stopped **compiling** when the
+  closure landed — that transition being the evidence, not a passing assertion.
+  Risk: HIGH — it defeated the crate's core stated
+  guarantee outright for any code sharing the process, not merely a narrow idiom;
+  unlike the other entries here, it was a capability gap in the trust boundary
+  itself, not an identity-collision edge case.
+  **Two recorded promotion triggers turned out not to work, and both were recorded before being
+  tested** — the lasting lesson of this entry. (a) `pub` → `pub(crate)` on the constructor breaks the
+  legitimate `register_origin!` path, since `macro_rules!` visibility is checked at the expansion site.
+  (b) A `#[track_caller]`/`std::panic::Location` redesign yields a *file path* where an origin's whole
+  vocabulary is a module path. (c) A **proc-macro** does not help either: it is expanded into its
+  caller's crate and resolved there exactly as a `macro_rules!` is, so a private constructor fails with
+  `error[E0603]` at the adopter's own call (three-crate probe). All three share one shape — hunting for
+  a macro that can pass something hand-written code cannot. No such macro exists, which is why the
+  closure had to stop taking the origin from the caller at all. A backlog entry naming a fix that
+  cannot be built is worse than one naming none: the next reader spends the budget before finding out.
+  Authority: `openspec/specs/runtime-origin-assertion/spec.md`; this entry's own reproduction record.
+
+
+- ~~**Only the ONE resolved crate root of a package is governed; its other compiled roots are not
+  observed at all.**~~ **CLOSED** in the 0.4.0 window. Every compiled root is now its own corpus in both
+  static dimensions, and an observation carries the compilation unit it came from as an identity role, so
+  the same violation in two roots stays two facts rather than one that masks the other.
+  Three measurements changed the shape of the work and are worth keeping: 漏刻 ALREADY governed every root
+  (`member_root_files`, in production), so this was two dimensions diverging from a third rather than a
+  family-wide bound — correcting this entry's own earlier claim that the scope question was shared because
+  渾儀 uses the same single-root function, which was true of 渾儀 and never checked against 漏刻; a spike over
+  the existing machinery passed 316 of 圭表's 317 tests, so the corpus model tolerated N roots and the
+  remaining work was identity, not a rewrite; and a target's NAME turned out not to be unique within a
+  package (this repository builds a `lib` and a `bin` both named `tianheng`), so the role is the root's
+  path relative to the package directory.
+  Two things the work found that the entry had not predicted: a sibling conventional root leaks into every
+  other root's walk (a top-level `lib.rs`/`main.rs` is `crate` in each), which without exclusion reported
+  one violation once per root — a duplicate worse than the false negative being closed; and a per-root
+  loop that deferred ANY error swallowed genuine scan failures whenever a sibling root happened to be
+  governable, which is a silent pass. Both are fixed and pinned. The original entry is kept below for its
+  reproduction record.
+
+- **Only the ONE resolved crate root of a package is governed; its other compiled roots are not
+  observed at all.** Class: DESIGN-BREAKING. Observed pressure: promoted in the 0.4.0 window from a
+  single-lens WATCH hypothesis and a one-line `ACCEPTED DEBT` mention ("multi-target conventional-path
+  conflation"), both of which understated it. Measured through three independent lenses:
+  (1) **mechanism** — `xingbiao::crate_root_file` returns the first library-kind target, else the first
+  `bin`, one root by construction, and 圭表's `package_src_dir` plus reachability walk both start there;
+  (2) **minimal shape** — a package of exactly `src/lib.rs` + `src/main.rs` with the identical offending
+  construct in both files and a boundary on `crate` reports ONE violation, in `lib.rs`;
+  (3) **broader shape** — `src/main.rs`, `src/bin/conventional.rs`, a `[[bin]] path` inside `src/`, and
+  a `[[bin]] path` outside it are all unobserved when a library root exists. Observation source: those
+  measurements, pinned in both directions (the resolved root reacts; the others are silent; a
+  library-less package governs its first `bin`) by what is now
+  `crates/guibiao/tests/per_target_corpus.rs` — renamed and inverted when this entry was closed, since
+  the transition those assertions existed to detect is what happened.
+  Current bound: stated in `module-boundary`'s single-governed-root requirement, replacing a
+  requirement whose premise — "both crate roots (`lib.rs` and `main.rs`) resolve to `crate`" — was
+  factually wrong, and whose recorded limitation (a cross-root same-named submodule) was a narrower
+  story than the truth. Risk: HIGH by class, and it lands on the most ordinary Rust package shape — a
+  library beside its binary. A real violation written in `main.rs` passes silently, which is the one bug
+  class the Core Contract forbids; what limits it in practice is that the governed root is usually where
+  the architecture lives, and that a boundary an adopter declares on `crate` still reacts to everything
+  the library reaches. Promotion trigger: **per-target module graphs**. Two roots of one package both
+  denote module path `crate`, so observing both raises a violation-identity question the current model
+  does not answer (which `crate` a finding names) — the same reason the requirement this replaces
+  already named it an amendment beyond the conventional-path scanner. Note also that 渾儀 resolves roots
+  through the same `crate_root_file`, so the scope question is shared rather than 圭表-local. Version
+  class: DESIGN-BREAKING (a per-target corpus changes which facts exist, and plausibly their target
+  role). Authority: `openspec/specs/module-boundary/spec.md`'s single-governed-root requirement and its
+  two scenarios; the pinned test above.
 
 ## Version horizons
 

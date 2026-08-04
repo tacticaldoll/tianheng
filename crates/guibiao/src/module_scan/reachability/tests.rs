@@ -452,7 +452,7 @@ fn a_cfg_attr_path_target_absent_with_no_plain_file_is_still_a_scan_error() {
     // target itself does not exist on disk, and no plain conventional file exists either, and
     // no bare `#[cfg]`/`cfg_if!` arm applies, every candidate is absent — the module is genuinely
     // unbacked on every configuration, matching hunyi's own `!has_backing_source &&
-    // !cfg_conditional` boundary for the identical shape (crates/hunyi/src/scan.rs).
+    // !cfg_conditional` boundary for the identical shape (crates/hunyi/src/scan/items.rs).
     let tree = TempSrcTree::new("cfg-attr-path-absent-no-plain");
     let src = tree.src().to_path_buf();
     std::fs::write(

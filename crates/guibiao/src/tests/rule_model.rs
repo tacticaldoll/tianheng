@@ -1,7 +1,7 @@
 use super::helpers::*;
 // White-box unit tests for the crate-private machinery — the baseline, the JSON
 // and text projections, and the source scanner. Black-box behavior (running
-// `check` against fixture workspaces) lives in `tests/dogfood.rs`.
+// `check` against fixture workspaces) lives in this crate's `tests/` directory.
 
 #[test]
 pub(super) fn every_static_rule_has_an_exact_semantic_key() {
