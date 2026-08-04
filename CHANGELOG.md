@@ -74,6 +74,23 @@ window classified two same-shaped inbound-`Shallow` fixes two different ways bef
   the transition they were written to detect is exactly what happened. This entry is kept for the
   false-claim correction and the measurements; it is not the shipped scope, and the note is here so a
   reader meeting it first does not take it for one.
+- Retired the last of the window's stale version and provenance claims, and completed the Migration
+  collection. Eight sites attributed shipped behaviour to a release **0.3.1** that has no tag and no
+  CHANGELOG section — it was the *branch* `release/0.3.1`, renamed to `release/0.4.0` — so fixes an adopter
+  reads as already released are in fact shipping now; they name 0.4.0. The sweep-provenance mentions
+  (`0.3.1 sweep`, `0.3.1 audit trigger`) are left alone: those name where a finding came from, which is
+  accurate, and `BACKLOG.md` spells the range branch-qualified. Four adopter-facing self-descriptions still
+  named `0.3.0` as the current line, one of them actively misleading ("0.3.0 spends a deliberate breaking
+  window on reaction identity" — that is this window). Two were not load-bearing and now name no version at
+  all, following the rule applied to `.gitignore` and `scripts/test_examples.sh`; two are compatibility
+  statements and moved to 0.4.0. The Migration section drops another drifting count and gains the three
+  steps it omitted: new entries from causes outside the inbound `Shallow` cell (a second compiled root, an
+  outbound rule's second importing module), and the three shapes that now refuse to judge (exit 2) where
+  they previously answered. Also restores a doc comment this window displaced: `declaration_text` was
+  inserted between `strip_macro_bodies` and its doc, so the macro-body documentation described the wrong
+  function — and described it self-contradictorily, since the text says "runs on already
+  comment/string-stripped text" while `declaration_text` performs that stripping itself. `cargo doc -D
+  warnings` cannot see this: it is a misattached comment, not a broken link.
 - Swept the supersession this window's own reversals left behind, and moved closed work out of the live
   decision queue. `[Unreleased]` had carried two entries describing **incompatible** states of one
   capability — a *Documentation* entry establishing "the ONE resolved crate root" as the stated
@@ -1326,10 +1343,12 @@ count is deliberately not named: it said "five" while the window grew to fourtee
 "a number in prose beside a growing thing drifts by construction" failure this window cited when it
 dropped rather than corrected a test-suite size elsewhere. Dropping it is the fix, not recounting it.
 
-- **Regenerate any recorded baseline.** Violation identity gained a required field in five places
-  this window: `governing_package` on every 圭表 and 渾儀 module/semantic fact, the declaring module on
-  inherent method/associated-item seams, the declaring module on impl-generics and extern-crate seams,
-  and the checkout-relative `file` label on every 漏刻 un-auditable probe. `--write-baseline` carries
+- **Regenerate any recorded baseline.** Violation identity gained a required field at several sites this
+  window — the count is not named, for the reason the section intro gives: `governing_package` on every 圭表
+  and 渾儀 module/semantic fact; the compilation unit on every one of them too; the declaring module on
+  inherent method/associated-item seams; the declaring module on impl-generics and extern-crate seams; the
+  **bounded thing** on impl-generics seams; the importing module on outbound module facts; and the
+  checkout-relative `file` label on every 漏刻 un-auditable probe. `--write-baseline` carries
   `owner`/`tracker` annotations forward only where an entry's identity still **matches** (the merge is
   keyed on identity), and each of these identities changed shape, so annotations cannot cross
   automatically: preserve them externally, rewrite the baseline, then restore them onto the newly
@@ -1344,6 +1363,18 @@ dropped rather than corrected a test-suite size elsewhere. Dropping it is the fi
   protected module declares under a name it also gives a child module (`mod foo` beside `fn foo`), which
   the path alone cannot distinguish from an import of the child. Both are false negatives being paid
   back.
+- **Expect new entries from causes outside `Shallow` too.** Two more changes enlarge a regenerated
+  baseline for **every** rule family, not only the inbound `Shallow` cell above: a violation written in a
+  package's second compiled root (a `main.rs` beside a `lib.rs`, any `src/bin/*.rs`) is now observed at
+  all, and an outbound rule now reports each importing module separately where it previously collapsed
+  several into one. Both are false negatives being paid back, so the new entries are findings that were
+  always true and never reported.
+- **Your build may now refuse to judge where it previously answered.** Three shapes became constitution
+  errors (exit 2) rather than silent or collapsed answers, and each names its own remedy: an owner label
+  whose head admits more than one distinct type under mutually-exclusive `#[cfg]`; a package target rooted
+  **outside** its own package directory, which has no checkout-independent label; and a 漏刻 audit anchor
+  that is relative or empty. Exit 2 is "cannot judge", not "violation" — a gate that hits one needs the
+  declaration or layout corrected, not a baseline.
 - **On Windows, regenerate even if nothing else applies to you.** Every identity-bearing path label is now
   canonical — `/` as its only separator, whatever the observing platform uses — so a baseline recorded on
   Windows before this release carries `src\lib.rs` where the label is now `src/lib.rs`, and every entry

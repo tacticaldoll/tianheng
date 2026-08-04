@@ -13,8 +13,9 @@ and it does not instruct your agent. Developers and agents propose change; Tianh
 and runtime *reactions* to keep architectural shape from drifting.
 
 > **Status: experimental — pre-1.0.** Real adopters ended the deliberate `0.1.x` hold and opened the
-> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). The `0.3.0` release deliberately
-> uses this breaking window for semantic rule/fact identity and rejects numeric baselines.
+> `0.2.0` definition window (see [`CHANGELOG.md`](CHANGELOG.md)). `0.3.0` spent its breaking window on
+> semantic rule/fact identity; `0.4.0` spends its own on violation, baseline, and seam identity. Both
+> reject numeric baselines.
 > The adopter-written builder (`Constitution` / boundary DSL / `run`) remains the guarded drop-in
 > surface.
 
@@ -137,7 +138,7 @@ with `--write-baseline` to remove resolved entries. Rewriting preserves hand-add
 `rule_key` + structured `fact`. Human rule/finding wording, complete signature diagnostics, reason,
 severity, file, anchor, polarity, owner, and tracker do not re-key it.
 
-0.3.0 intentionally provides no numeric-baseline adapter. Before upgrading, preserve any desired
+Tianheng intentionally provides no numeric-baseline adapter. Before upgrading, preserve any desired
 `owner` / `tracker` annotations outside the old file. Then move or delete the unsupported baseline,
 run the same `--write-baseline` command to observe a fresh semantic snapshot, and restore the
 annotations onto the corresponding observed facts. Both `--baseline` and `--write-baseline` exit 2
@@ -174,8 +175,8 @@ exit "$status"   # 0 clean · 1 enforced violation · 2 constitution/scan error
 ```
 
 Each instrument also exposes the shared structured `Outcome` for direct Rust architecture tests.
-Tianheng is the sole built-in composer of the 三儀; 0.3.0 does not promise a plugin trait, runtime
-plugin loading, or a `tianheng::testing` macro layer.
+Tianheng is the sole built-in composer of the 三儀, and promises no plugin trait, runtime plugin
+loading, or `tianheng::testing` macro layer.
 
 > The published `tianheng` binary is a *demo* bound to a sample constitution (it governs a
 > crate named `example-core`). Tianheng is consumed as a **library**: declare your own
@@ -361,7 +362,7 @@ translated into boundaries.
 - **A violation's identity is target + `RuleKey` + `StructuredFactIdentity`.** Human rule/finding
   wording, diagnostics, `file`, `anchor`, and `polarity` remain available outside identity.
 - **The adopter-written builder is the guarded surface.** `Constitution`, the boundary DSL, and
-  `run` are what adopters write; 0.3.0 spends a deliberate breaking window on reaction identity.
+  `run` are what adopters write; 0.4.0 spends a deliberate breaking window on reaction identity.
 
 ## Non-goals
 

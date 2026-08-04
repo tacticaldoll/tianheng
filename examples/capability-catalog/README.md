@@ -9,7 +9,7 @@ impl, marker impl, `dyn Trait` API, and `impl Trait` API each violate the Consti
 `src/governance.rs`. Tests identify those reactions by structured identity rather than human
 wording. Start with the standalone or composed examples when learning Tianheng.
 
-Two families additionally carry a closed-false-negative shape from the v0.2.3..0.3.1 adversarial
+Two families additionally carry a closed-false-negative shape from the `v0.2.3..release/0.3.1` adversarial
 sweep, reusing the SAME declared boundary rather than a second one (the point is that one correctly
 scoped boundary catches every shape, not just the plain one it was first written against):
 `src/marked.rs`'s `CfgGatedMarked` acquires the forbidden marker only inside a `cfg_if!` arm, and

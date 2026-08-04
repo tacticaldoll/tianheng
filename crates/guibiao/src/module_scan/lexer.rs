@@ -3,14 +3,6 @@
 //! walks stand on (`keyword_starts_at`, `is_ident_byte`). Pure byte processing — no model
 //! type, no path, only `std` — feeding the module-graph walk in the parent module.
 
-/// Remove macro bodies so a `use` written inside a macro — a macro-generated import,
-/// out of scope per the module-boundary spec — is not mistaken for a real import. Two
-/// forms are stripped: a `macro_rules! name <delim>…<delim>` **definition** (name and
-/// balanced body), and a macro **invocation** `ident! <delim>…<delim>` (the balanced
-/// body; the `ident!` head is kept, harmlessly). Runs on already comment/string-stripped
-/// text, so every delimiter is structural and a `macro`/`!` inside a comment or string is
-/// not matched. A real `use` is never inside a macro body, so nothing real is dropped.
-/// The body delimiter may be `{}`, `()`, or `[]`. Never panics on malformed input.
 /// Source reduced to its **declarations**: comments, string/char literals, and macro bodies stripped.
 ///
 /// The one pipeline every declaration reader in this module composes, named once here rather than
@@ -24,6 +16,14 @@ pub(crate) fn declaration_text(source: &str) -> String {
     strip_macro_bodies(&strip_comments_and_strings(source))
 }
 
+/// Remove macro bodies so a `use` written inside a macro — a macro-generated import,
+/// out of scope per the module-boundary spec — is not mistaken for a real import. Two
+/// forms are stripped: a `macro_rules! name <delim>…<delim>` **definition** (name and
+/// balanced body), and a macro **invocation** `ident! <delim>…<delim>` (the balanced
+/// body; the `ident!` head is kept, harmlessly). Runs on already comment/string-stripped
+/// text, so every delimiter is structural and a `macro`/`!` inside a comment or string is
+/// not matched. A real `use` is never inside a macro body, so nothing real is dropped.
+/// The body delimiter may be `{}`, `()`, or `[]`. Never panics on malformed input.
 pub(super) fn strip_macro_bodies(source: &str) -> String {
     let identity: Vec<usize> = (0..source.len()).collect();
     strip_macro_bodies_tracked(source, &identity).0

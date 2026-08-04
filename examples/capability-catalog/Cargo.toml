@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 tianheng = "0.3"
-# Used only by `marked.rs`'s cfg_if-wrapped marker-acquisition fixture (0.3.1 closed the false
+# Used only by `marked.rs`'s cfg_if-wrapped marker-acquisition fixture (0.4.0 closed the false
 # negative where a cfg_if! arm's contents silently escaped hunyi/guibiao/louke observation).
 cfg-if = "1"
 

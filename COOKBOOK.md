@@ -25,7 +25,7 @@ Exit codes are the contract: `0` clean / warn-only / fully baselined · `1` enfo
 `2` constitution or scan error. Read a violation's **`reason`** first — it is the repair direction.
 
 > Experimental / pre-1.0. The boundary DSL (the surface these recipes use) is patch-compatible
-> within each minor line — unbroken from `0.2.0` through `0.3.0` — and a breaking change earns a
+> within each minor line — unbroken from `0.2.0` through `0.4.0` — and a breaking change earns a
 > new minor. See [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
