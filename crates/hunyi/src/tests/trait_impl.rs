@@ -1124,3 +1124,51 @@ pub(super) fn hunyi_rule_identity_is_set_order_stable_and_parameter_sensitive() 
     assert_ne!(left.rule_key(), expanded.rule_key());
     assert_ne!(left.rule_key(), deeper.rule_key());
 }
+
+/// A glob-imported type in an impl position is not observed — the inherited glob bound, with its control.
+///
+/// Kept for the CONTRACT rather than for a change: `semantic-trait-impl-exposure` declares this and nothing
+/// pinned it. Measured: reached through `use crate::infra::*` the impl-arg yields nothing, while the same
+/// impl written with the full path reacts — so the bound is about glob resolution rather than about the
+/// opt-in failing to observe impl positions at all.
+#[test]
+pub(super) fn a_glob_imported_type_in_an_impl_position_is_a_documented_coverage_bound() {
+    let globbed = super::helpers::findings_including_trait_impls(
+        "ti-glob-impl-pos",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
+            ("infra.rs", "pub struct DbPool;\n"),
+            (
+                "domain.rs",
+                "use crate::infra::*;\npub struct Service;\nimpl From<DbPool> for Service {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert!(
+        globbed.is_empty(),
+        "a glob-imported type in an impl position is a documented bound: {globbed:?}"
+    );
+
+    let written = super::helpers::findings_including_trait_impls(
+        "ti-written-impl-pos",
+        &[
+            ("lib.rs", "pub mod domain;\npub mod infra;\n"),
+            ("infra.rs", "pub struct DbPool;\n"),
+            (
+                "domain.rs",
+                "pub struct Service;\nimpl From<crate::infra::DbPool> for Service {}\n",
+            ),
+        ],
+        "crate::domain",
+        &["crate::infra"],
+    )
+    .unwrap();
+    assert_eq!(
+        written.len(),
+        1,
+        "the control must react, or the empty result above says nothing: {written:?}"
+    );
+}

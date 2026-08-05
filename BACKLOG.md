@@ -60,24 +60,25 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **Eight declared bounds have no pinning test.** Class: READY-PATCH (writing a test; no public API, wire
+- **Five declared bounds have no pinning test.** Class: READY-PATCH (writing a test; no public API, wire
   format, or baseline identity moves). Observed pressure: the observation-bound register's own reaction
-  reports them, so this is measured rather than suspected — eight of the 44 declared bounds, two each in
-  `semantic-dyn-trait-boundary` (macro-generated dyn, unrenderable sub-node),
-  `external-crate-confinement` (cfg-blindness, the lib-and-bin conventional-path conflation) and
-  `runtime-origin-assertion` (the target-subtree corpus, a production probe behind a non-production cfg),
-  one in `semantic-trait-impl-exposure` (a glob-imported type in an impl position) and one in
-  `semantic-visibility-boundary` (the conservative-rank over-reaction). Observation source:
-  `scripts/check_bound_register.sh`, and the eight `UNPINNED` citations that name this entry. Current
+  reports them, so this is measured rather than suspected — five of the 41 declared bounds, two each in
+  `external-crate-confinement` (cfg-blindness, the lib-and-bin conventional-path conflation)
+  and `runtime-origin-assertion` (the target-subtree corpus, a production probe behind a non-production
+  cfg), and one in `semantic-dyn-trait-boundary` (an unrenderable sub-node). Three more closed in this
+  window once probed — the macro-generated dyn, the glob-imported type in an impl position, and the
+  conservative-rank over-reaction, the last of which needed its own test because the nearest candidate
+  pinned a different ceiling. Observation source:
+  `scripts/check_bound_register.sh`, and the five `UNPINNED` citations that name this entry. Current
   bound: each is declared and believed true, and nothing would react if the behaviour changed — a bound
   reads as permission, so an undefended one is the shape that lets a real escape be dismissed as governed
-  policy. Risk: LOW individually and worth naming collectively, since eight of 44 declared bounds are
+  policy. Risk: LOW individually and worth naming collectively, since five of 41 declared bounds are
   undefended. Promotion trigger: none needed — each is a fixture and an assertion. They are debt rather
   than done for a reason of scope, not difficulty: six bounds in this window were probed and pinned first,
-  and stopping to discover a test helper for each of these eight would have held the register itself.
+  and the five that remain need a fixture shape the cheap ones did not.
   **Probe before pinning**: two bounds enumerated in this window described behaviour that had changed and
   were retired rather than pinned, so a test written to match the spec without measuring first would give
-  a false claim a green guard. Version class: PATCH. Authority: the eight `UNPINNED` citations, and
+  a false claim a green guard. Version class: PATCH. Authority: the five `UNPINNED` citations, and
   `PROJECT.md`'s drift law against a claim with no reaction.
 
 - **The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**

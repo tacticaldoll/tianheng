@@ -370,3 +370,33 @@ pub(super) fn dyn_operand_boundary_carries_its_operands_and_severity() {
         .because("no dyn at all");
     assert!(shape.forbidden_operands().is_empty());
 }
+
+/// A macro-generated `dyn` is not observed — the universal 渾儀 macro-expansion bound, with its control.
+///
+/// Kept for the CONTRACT rather than for a change: `semantic-dyn-trait-boundary` declares this and nothing
+/// pinned it. Measured, and the control is what makes the empty result mean something — the same signature
+/// written directly reacts, so the emptiness is about the macro body rather than about a fixture that
+/// reacts to nothing.
+#[test]
+pub(super) fn a_macro_generated_dyn_is_a_documented_coverage_bound() {
+    let hidden = dyn_mod(
+        "macro-dyn",
+        "macro_rules! mk { () => { pub fn c() -> Box<dyn crate::ports::Port> { todo!() } }; }\nmk!();\n",
+    )
+    .unwrap();
+    assert!(
+        hidden.is_empty(),
+        "a dyn produced by a macro expansion is a documented bound: {hidden:?}"
+    );
+
+    let direct = dyn_mod(
+        "macro-dyn-control",
+        "pub fn c() -> Box<dyn crate::ports::Port> { todo!() }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        direct,
+        ["dyn crate::ports::Port exposed by fn crate::m::c"],
+        "the control must react, or the empty result above says nothing"
+    );
+}
