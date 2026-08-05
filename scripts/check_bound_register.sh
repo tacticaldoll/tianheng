@@ -94,10 +94,12 @@ BOUND_PROSE='(stated|documented)( [A-Za-z-]+)? bounds?'
 # Called from inside a process substitution it would exit that subshell and leave the parent reading an
 # empty list — the bug being fixed here, wearing the fix's clothes.
 #
-# The residual, stated rather than left to be inferred: the process substitutions elsewhere in this file
-# read already-materialized data — the attribute-run `sed` over a file `grep` just located, the `awk` over
-# the id table this run wrote — which are computations over what was read, not enumerations of the
-# observation source.
+# The residual, stated rather than left to be inferred — and narrower than it first read. What remains in a
+# process substitution is computation over data this run already materialized: `printf` over a shell string,
+# and `awk` over the record and id tables this run wrote. Every READ of the observation source has its status
+# checked, including the ones that are not enumerations: the attribute-run `sed`, the definition scan's
+# `grep`, and both census `grep`s. An earlier version of this comment counted the attribute-run `sed` as
+# materialized data; it opens a file, so it is a read, and it is checked.
 read_tracked_files() {
     local -n _dest=$1
     shift
@@ -416,10 +418,17 @@ build_harness_index() {
 $(sed 's/^/           /' "$cargo_errors" | tail -n 12)"
             return 0
         }
+        # Captured in the parent, not consumed from a process substitution: a `sed` or `sort` failure there
+        # yields no leaf names for this package, and a citation qualified to it is then reported as one the
+        # harness does not register — a violation invented from a text-processing failure. Command
+        # substitution is safe for this one (test names carry no NUL byte), so no buffer is needed.
+        local leaves
+        leaves=$(printf '%s\n' "$listed" | sed -n 's/: test$//p' | sed 's/.*:://' | sort -u) \
+            || cannot_judge "could not parse the test names \`cargo test -p $member -- --list\` printed; a package whose registered tests cannot be read leaves every citation qualified to it undecided"
         while IFS= read -r leaf; do
             [[ -n $leaf ]] || continue
             harness_packages_of[$leaf]="${harness_packages_of[$leaf]:-,}$member,"
-        done < <(printf '%s\n' "$listed" | sed -n 's/: test$//p' | sed 's/.*:://' | sort -u)
+        done <<<"$leaves"
     done
     harness_state=ready
     printf 'bound register: citation test-ness decided by the test harness (%d registered test names across %d package(s))\n' \
@@ -502,7 +511,13 @@ definition_is_test() {
     local n=0 trimmed
     local above=()
     ((line > 1)) || return 1
-    mapfile -t above < <(sed -n "1,$((line - 1))p" -- "$file")
+    # The preceding lines are READ here, so this is an IO of the observation source rather than a
+    # computation over what was already read — a `sed` failure would empty the attribute run and report a
+    # real test as carrying no `#[test]`. Its status is checked for the same reason every other read's is.
+    local above_text
+    above_text=$(sed -n "1,$((line - 1))p" -- "$file") \
+        || cannot_judge "could not read $file while checking whether the definition at line $line is a test; a citation refused because a file could not be read is a violation invented from an IO failure"
+    mapfile -t above <<<"$above_text"
     for ((n = ${#above[@]}; n >= 1; n--)); do
         trimmed=${above[n - 1]}
         trimmed=${trimmed#"${trimmed%%[![:space:]]*}"}
@@ -901,19 +916,33 @@ read_tracked_files census_files '*.md'
 # The guard is load-bearing: `grep` with no file arguments reads STDIN, which inside this loop's process
 # substitution would block rather than report anything.
 if [[ ${#census_files[@]} -gt 0 ]]; then
+    # `grep` exit 1 is "no census written anywhere", the ordinary case; exit >1 is "could not READ a tracked
+    # document", which was swallowed by `|| true` — so a file the census direction claims to cover went
+    # unexamined and the gate reported clean, the one direction this whole capability opposes. Both greps are
+    # captured in the parent and the two exits separated, as the sibling gate separates them.
+    census_status=0
+    census_sites=$(cd "$repo" && grep -nHE '[0-9]+ bounds across [0-9]+ capabilit' -- "${census_files[@]}") \
+        || census_status=$?
+    ((census_status <= 1)) \
+        || cannot_judge "\`grep\` could not read the tracked Markdown while scanning for a written census (exit $census_status); a document this direction claims to cover must not go unexamined behind a clean report"
     while IFS= read -r site; do
         [[ -n $site ]] || continue
         census_file=${site%%:*}
         census_rest=${site#*:}
         census_line=${census_rest%%:*}
         census_text=${census_rest#*:}
+        figure_status=0
+        census_figures=$(printf '%s' "$census_text" | grep -oE '[0-9]+ bounds across [0-9]+ capabilit') \
+            || figure_status=$?
+        ((figure_status <= 1)) \
+            || cannot_judge "\`grep\` failed extracting the written figures from $census_file:$census_line (exit $figure_status)"
         while IFS= read -r figure; do
             [[ -n $figure ]] || continue
             read -r written_bounds _ _ written_caps _ <<<"$figure"
             [[ $written_bounds == "$declared" && $written_caps == "$capability_count" ]] && continue
             fail "$census_file:$census_line writes \"$written_bounds bounds across $written_caps capabilities\" where the register holds $declared across $capability_count; a hand-written census of a set this reaction enumerates goes stale silently"
-        done < <(printf '%s' "$census_text" | grep -oE '[0-9]+ bounds across [0-9]+ capabilit' || true)
-    done < <(cd "$repo" && grep -nHE '[0-9]+ bounds across [0-9]+ capabilit' -- "${census_files[@]}" 2>/dev/null || true)
+        done <<<"$census_figures"
+    done <<<"$census_sites"
 fi
 
 if [[ ${BLESS:-} == 1 ]]; then

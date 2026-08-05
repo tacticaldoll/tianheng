@@ -255,7 +255,12 @@ them.
   reached that enumerator through a function the caller consumed with its own process substitution, so the
   refusal exited that subshell and the parent still read an empty site list; the scan runs in the parent
   now. `grep`'s read failure is separated from its no-match exit for the same reason — a citation reported
-  as defined nowhere because a file could not be opened is a violation invented from an IO failure.
+  as defined nowhere because a file could not be opened is a violation invented from an IO failure. The
+  remaining reads of the observation source are checked with them — the harness listing's parse, the
+  attribute-run read, and both census `grep`s, the last of which discarded `grep`'s exit **>1** behind
+  `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
+  report. What is left in a process substitution is computation over data this run already materialized, and
+  the reaction says which rather than leaving the scope to be inferred.
 - The reference-integrity gate refuses a **failed extraction** instead of reporting clean. The per-file
   normalization ran inside a process substitution, where a failing `sed` or `sort` reports nothing to the
   parent — `pipefail` does not reach a subshell whose status no one reads — so the stream came back empty,
