@@ -163,6 +163,21 @@ mkdir -p "$no_git"
 write_workspace "$no_git" "$version"
 expect_fail "$no_git" 2 'is not a git worktree'
 
+# The wrapper's own refusal. `publish.sh` resolves its own repository root — deliberately, since it must
+# judge THIS tree — so it cannot be pointed at a fixture the way the gate can; this runs it against the
+# real checkout and asserts the ARGUMENT refusal by its message. That distinction is load-bearing: a
+# development checkout also fails the gate (its HEAD is no release snapshot), and both refusals exit 1,
+# so a status-only assertion would pass with the guard deleted. Exit 1 also proves cargo was never
+# reached, `exec cargo publish` being the only other way this script can terminate.
+for relocate in --manifest-path '--manifest-path=/elsewhere/Cargo.toml'; do
+    wrapper_status=0
+    wrapper_output=$(bash "$script_dir/publish.sh" "$relocate" /elsewhere/Cargo.toml 2>&1) || wrapper_status=$?
+    [[ $wrapper_status -eq 1 ]] \
+        || { printf 'publish.sh must refuse %q with exit 1, got exit %d: %s\n' "$relocate" "$wrapper_status" "$wrapper_output" >&2; exit 1; }
+    grep -Fq "moves cargo's workspace root away from the tree this gate judges" <<<"$wrapper_output" \
+        || { printf 'publish.sh must refuse %q as an argument, not merely fail the gate: %s\n' "$relocate" "$wrapper_output" >&2; exit 1; }
+done
+
 before_tree=$(git -C "$publishable" status --porcelain=v1 --untracked-files=all)
 before_head=$(git -C "$publishable" rev-parse HEAD)
 before_tags=$(git -C "$publishable" tag --list)

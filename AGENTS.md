@@ -198,7 +198,11 @@ branch the ritual archives. `bash scripts/publish.sh` is that path — it runs
 `scripts/check_publish_source.sh` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
 workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the live tip of
 `origin/main`, read from the remote rather than a possibly-stale `refs/remotes/`) and only then
-`cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge.
+`cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge. The
+wrapper forwards extra arguments to cargo but **refuses `--manifest-path`** (either spelling) before
+the gate runs: it would move cargo's workspace root away from the tree the gate judged, which is the
+wrapper's whole claim undone by one argument. The registry-side arguments (`--registry`, `--index`,
+`--token`) change the destination rather than the source and stay forwarded.
 
 **A published release snapshot is immutable.** Once a version is on crates.io, its `release: X.Y.Z`
 commit must never be amended or force-pushed away: the published artifact points at that sha1
