@@ -106,7 +106,7 @@ consumer for an undemonstrated deduplication.
 
 - **Five declared bounds have no pinning test.** Class: READY-PATCH (writing a test; no public API, wire
   format, or baseline identity moves). Observed pressure: the observation-bound register's own reaction
-  reports them, so this is measured rather than suspected — five of the 41 declared bounds, two each in
+  reports them, so this is measured rather than suspected — the projection's headline counts them, two each in
   `external-crate-confinement` (cfg-blindness, the lib-and-bin conventional-path conflation)
   and `runtime-origin-assertion` (the target-subtree corpus, a production probe behind a non-production
   cfg), and one in `semantic-dyn-trait-boundary` (an unrenderable sub-node). Three more closed in this
@@ -116,8 +116,8 @@ consumer for an undemonstrated deduplication.
   `scripts/check_bound_register.sh`, and the five `UNPINNED` citations that name this entry. Current
   bound: each is declared and believed true, and nothing would react if the behaviour changed — a bound
   reads as permission, so an undefended one is the shape that lets a real escape be dismissed as governed
-  policy. Risk: LOW individually and worth naming collectively, since five of 41 declared bounds are
-  undefended. Promotion trigger: none needed — each is a fixture and an assertion. They are debt rather
+  policy. Risk: LOW individually and worth naming collectively, since the bounds the projection's headline
+  counts are undefended. Promotion trigger: none needed — each is a fixture and an assertion. They are debt rather
   than done for a reason of scope, not difficulty: six bounds in this window were probed and pinned first,
   and the five that remain need a fixture shape the cheap ones did not.
   **Probe before pinning**: two bounds enumerated in this window described behaviour that had changed and

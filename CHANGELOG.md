@@ -40,7 +40,7 @@ them.
   rewrite dissolved, so whether they came from `main` is no longer knowable.
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **41 bounds across 15 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **42 bounds across 15 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -50,23 +50,39 @@ them.
 - The bound register refuses a **restatement**: one behaviour has one defence, so a test cited by declared
   bounds in more than one capability now fails, and the bound is declared once with the others referencing
   it. Two behaviours were declared three times each when the register first projected, which is why the
-  register holds 41 bounds rather than the 44 it first listed — and a behaviour change can no longer leave
+  register listed 41 bounds rather than the 44 it first projected — and a behaviour change can no longer leave
   several specs stale at once.
+
+### Changed
+- **A hand-written census of the register no longer lives in prose, and the one figure that must stay is now
+  reacted to.** Adding a single declared bound invalidated fourteen written figures across four files —
+  including the entry below whose own subject is that three measurements had gone stale in this same window.
+  The cause is not carelessness: four independent, deliberate counts of this tree produced four different
+  answers for the number of citations, and an ad-hoc count of unpinned bounds contradicted the generated
+  projection. So a clean run now **prints** what it counted
+  (`42 bounds across 15 capabilities; 38 citations; 5 unpinned; 20 references`), five prose figures that
+  carried no information are number-free, and a tracked document writing `N bounds across M capabilities`
+  **fails** when either number disagrees with the count. The matched shape is deliberately narrow: a general
+  number-in-prose matcher would refuse unrelated figures, which is how a gate earns the false positives that
+  get it disabled.
+- One matcher now decides the `(bound: …)` syntax. Two independently written ones did — an `awk` regex and a
+  shell `grep -qE` whose whitespace classes differed — and clearing disagreeing with resolution about which
+  references exist is the divergence that cost this window a review round.
 
 ### Documentation
 - The previous entry's own repair created a hole, and a review proved it with a fixture. A `(bound: …)`
   reference was only ever resolved through a bound-prose record, and rewording that sentence dropped its line
   out of the scan's pattern — so the two references the repair added were **never resolved again**. Every
   reference is now resolved **wherever it sits**, independent of the wording around it: a Purpose paragraph, a
-  requirement's prose, or inside a declared bound scenario. All 14 references in the tree already resolved, so
-  the direction is a free guard rather than a migration.
+  requirement's prose, or inside a declared bound scenario. Every reference in the tree already resolved when
+  the direction was adopted, so it is a free guard rather than a migration.
 - `` `extern crate`-blind `` was an **undeclared and undefended** bound in the same capability, stated twice
   and invisible to the register both times — once with no trigger words, once as "a stated, inherited bound"
   whose comma breaks the adjacency the scan needs, which is the very wording the projection's first residual
   cites as its example. It is now the capability's **fourth declared bound**, pinned by
   `confine_ignores_an_extern_crate_declaration`: probed before declaring, and discriminating because the
   sibling test puts `use libc as c;` in the identical fixture shape and gets a violation. The register holds
-  **42 bounds with 42 citations**.
+  **42 bounds, every one of them cited**.
 - The projection's **content** is now asserted by the companion test, not only its freshness. Byte-for-byte
   staleness proves the document and the reaction agree; it can never prove either is right, because both come
   from one renderer. That is how `` `author\s:` `` — a shell quoting artifact where an apostrophe was meant —
@@ -169,7 +185,7 @@ them.
   than the line before it. `UNPINNED` accepted any non-empty text as a tracker, so `no test exists`
   satisfied the very requirement forbidding it; a tracker must now name a path the repository tracks.
   Which section of that document owns the debt stays deliberately unchecked — that is prose, and a gate
-  guessing at prose earns the false positives that get gates disabled. Every one of the 41 citations in
+  guessing at prose earns the false positives that get gates disabled. Every citation in
   this repository already satisfies both, so neither is a migration. Nothing about a pinning test's
   **name** is required, which is what keeps the suite's three naming variants working.
 - Regenerating the projection (`BLESS=1`) now carries the same exit contract as judging it. It exited `0`
