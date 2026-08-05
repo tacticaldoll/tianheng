@@ -40,6 +40,11 @@ them.
   rewrite dissolved, so whether they came from `main` is no longer knowable.
 
 ### Added
+- The bound register refuses a **restatement**: one behaviour has one defence, so a test cited by declared
+  bounds in more than one capability now fails, and the bound is declared once with the others referencing
+  it. Two behaviours were declared three times each when the register first projected — the repair leaves 41
+  bounds where there were 44, and a behaviour change can no longer leave several specs stale at once.
+### Added
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
   closing the gap. 44 bounds across 15 capabilities, generated from the specs and staleness-checked, with

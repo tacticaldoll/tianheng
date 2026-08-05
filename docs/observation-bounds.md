@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**8 of 44 declared bounds have no pinning test.** That figure is the register's
+**8 of 41 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -171,13 +171,6 @@ trusted.
 
 - **pinned by**: `an_unresolvable_glob_self_type_is_a_documented_bound`
 
-### `semantic-forbidden-marker/an-impl-nested-one-level-further-or-static-wrapped-is-a-stated-bound`
-
-> the system does not claim to observe it, a stated coverage bound shared with `semantic-trait-impl-locality`'s identical bound on the same underlying observation, rather than a silent claim of cleanliness
-
-- **pinned by**: `an_impl_nested_one_level_further_stays_a_stated_bound`
-- **pinned by**: `a_static_wrapped_impl_stays_a_stated_bound`
-
 ## semantic-impl-trait-operand-boundary
 
 ### `semantic-impl-trait-operand-boundary/a-genuinely-unresolvable-bare-principal-is-a-documented-bound`
@@ -278,18 +271,6 @@ trusted.
 > the whole-crate walk skips the module (a stated coverage bound) rather than failing the gate with a scan error (exit 2)
 
 - **pinned by**: `hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`
-
-### `semantic-trait-impl-locality/an-impl-nested-one-level-further-inside-the-body-is-a-stated-bound`
-
-> the system does not claim to observe it — recovery covers only a direct statement of the const/fn's own outermost block, and this impl is one level further in, a stated coverage bound rather than a silent claim of cleanliness
-
-- **pinned by**: `an_impl_nested_one_level_further_stays_a_stated_bound`
-
-### `semantic-trait-impl-locality/a-static-wrapped-impl-is-a-stated-bound`
-
-> the system does not claim to observe it — only a `const` initializer or a `fn` body is inspected, never a `static` initializer, a stated coverage bound rather than a silent claim of cleanliness
-
-- **pinned by**: `a_static_wrapped_impl_stays_a_stated_bound`
 
 ## semantic-unsafe-confinement
 

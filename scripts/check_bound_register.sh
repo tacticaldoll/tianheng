@@ -303,6 +303,36 @@ $(printf '           %s\n' "${targets[@]}")" ;;
     esac
 done <"$records"
 
+# One behaviour has one defence, so a test cited by declared bounds in more than one capability means the
+# same bound is declared twice. That restatement has cost this repository twice already — the `#[path]`-remap
+# bound was stale in two capabilities at once, and a sync left a contradicting bound beside its own reacting
+# scenario — so one behaviour change must not be able to leave several specs stale.
+#
+# Keyed on the cited test rather than on statement text: two declarations of one behaviour will not have
+# identical prose, and text similarity would be a heuristic where a shared citation is a fact. Repetition
+# WITHIN one capability is not a restatement — a bound covering two shapes cites two tests, and one
+# capability may cite one test from two bounds — so the direction fires only across capabilities.
+#
+# The reaction names the capabilities and demands a choice rather than computing ownership, which would mean
+# modelling which capability a test exercises: the judgment the drift law keeps out of a reaction.
+while IFS=$'\t' read -r test caps; do
+    fail "the test \`$test\` is cited by declared bounds in ${caps//,/, } — one behaviour has one defence, so one capability declares the bound and the others reference it with (bound: …)"
+done < <(awk -F'\t' '
+    $1 == "BOUND" && $5 != "<none>" {
+        cap = $2
+        sub(/^openspec\/specs\//, "", cap)
+        sub(/\/spec\.md$/, "", cap)
+        n = split($5, tests, "|")
+        for (i = 1; i <= n; i++) {
+            if (index("," seen[tests[i]] ",", "," cap ",") == 0) {
+                seen[tests[i]] = (seen[tests[i]] == "" ? cap : seen[tests[i]] "," cap)
+                count[tests[i]]++
+            }
+        }
+    }
+    END { for (t in count) if (count[t] > 1) printf "%s\t%s\n", t, seen[t] }
+' "$records" | sort)
+
 # The projection, built from the SAME records the verdicts came from rather than a second parse, so the
 # document and the reaction cannot disagree about what a bound is.
 #
