@@ -23,11 +23,11 @@ shapes is a semantic judgment — two operand dimensions here declare identicall
 `dyn` and `impl Trait`, each defended by its own test, and each must declare its own — so nothing
 observes it and no bound of the register capability claims it.
 
-The third floor is narrower, and worth knowing when reading a `pinned by` line. A citation resolves
-by matching a LINE'S FORM, not its comment state, so a function definition that sits inside a block
-comment satisfies one. Telling it from a real definition needs a Rust lexer: this tree carries 49
-`/*` occurrences inside string literals, several nested, so a delimiter-counting scan would swallow
-real code instead. A fixture records the behaviour so a later repair cannot be absorbed silently.
+A third floor was stated here for one change and is **retired**: a `pinned by` line could be satisfied
+by a definition that never ran — commented out, inside a string, removed by a `cfg`, or trapped in an
+uninvoked macro — because the scan read only the form of a line. Test-ness is now decided by the test
+harness enumeration, which registers none of those. The weakness survives only in the source-text
+fallback used where no manifest exists, which the register spec describes.
 
 
 ## crate-source-boundary
