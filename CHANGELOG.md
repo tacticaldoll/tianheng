@@ -251,7 +251,11 @@ them.
   status where the reaction can act on it, buffering the NUL stream in a trap-owned file because command
   substitution strips NUL bytes and would have defeated the `-z` silently. The requirement states the
   direction, and states the absent-tracked-spec refusal alongside it — a reaction refusing where the
-  declared law names no refusal is the inverse of the drift this capability ends.
+  declared law names no refusal is the inverse of the drift this capability ends. The **citation** path
+  reached that enumerator through a function the caller consumed with its own process substitution, so the
+  refusal exited that subshell and the parent still read an empty site list; the scan runs in the parent
+  now. `grep`'s read failure is separated from its no-match exit for the same reason — a citation reported
+  as defined nowhere because a file could not be opened is a violation invented from an IO failure.
 - The reference-integrity gate refuses a **failed extraction** instead of reporting clean. The per-file
   normalization ran inside a process substitution, where a failing `sed` or `sort` reports nothing to the
   parent — `pipefail` does not reach a subshell whose status no one reads — so the stream came back empty,

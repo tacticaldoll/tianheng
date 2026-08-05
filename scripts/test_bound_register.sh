@@ -345,6 +345,58 @@ enumeration_output=$(PATH="$git_stub:$PATH" "$check" "$failed_enumeration" 2>&1)
 grep -Fq 'failed enumerating' <<<"$enumeration_output" \
     || { printf 'a failed enumeration must name itself, got: %s\n' "$enumeration_output" >&2; exit 1; }
 
+# The CITATION enumeration, which reaches the same enumerator down a different path — and the path that had
+# to be straightened for its refusal to survive. The scan runs inside `definitions_into`, which was consumed
+# through a process substitution: a `cannot_judge` there exited only that subshell, the parent read an empty
+# site list, and the gate reported "no function under crates/ defines it" — a violation invented from a `git`
+# failure. Asserting the exit CODE distinguishes the two: the false answer is 1, the honest one is 2.
+citation_git_stub=$fixture_root/citation-git-stub
+mkdir -p "$citation_git_stub"
+cat >"$citation_git_stub/git" <<STUB
+#!/usr/bin/env bash
+rs=0
+for arg in "\$@"; do
+    [[ \$arg == 'crates/*.rs' ]] && rs=1
+done
+if [[ \$rs == 1 ]]; then
+    for arg in "\$@"; do
+        [[ \$arg == ls-files ]] && exit 3
+    done
+fi
+exec "$real_git" "\$@"
+STUB
+chmod +x "$citation_git_stub/git"
+
+citation_status=0
+citation_output=$(PATH="$citation_git_stub:$PATH" "$check" "$pinned" 2>&1) || citation_status=$?
+[[ $citation_status -eq 2 ]] \
+    || { printf 'a failed citation enumeration must exit 2, got %d: %s\n' "$citation_status" "$citation_output" >&2; exit 1; }
+grep -Fq 'failed enumerating crates/*.rs' <<<"$citation_output" \
+    || { printf 'a failed citation enumeration must name itself, got: %s\n' "$citation_output" >&2; exit 1; }
+
+# And `grep` failing to READ, which is a different claim from finding no match. Exit 1 is the zero-sites
+# answer the register is written for; exit >1 used to be discarded with `|| true`, so a citation was reported
+# as defined nowhere because a file could not be opened.
+grep_stub=$fixture_root/grep-stub
+mkdir -p "$grep_stub"
+cat >"$grep_stub/grep" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    case \$arg in
+    *'fn[[:space:]]+'*) exit 2 ;;
+    esac
+done
+exec "$(command -v grep)" "\$@"
+STUB
+chmod +x "$grep_stub/grep"
+
+unreadable_status=0
+unreadable_output=$(PATH="$grep_stub:$PATH" "$check" "$pinned" 2>&1) || unreadable_status=$?
+[[ $unreadable_status -eq 2 ]] \
+    || { printf 'grep failing to read must exit 2, got %d: %s\n' "$unreadable_status" "$unreadable_output" >&2; exit 1; }
+grep -Fq 'could not read the tracked Rust files' <<<"$unreadable_output" \
+    || { printf 'an unreadable definition scan must name itself, got: %s\n' "$unreadable_output" >&2; exit 1; }
+
 # --- a tracked spec absent from the worktree cannot be judged ---
 
 # `git ls-files` lists it and the worktree does not hold it. Skipping it dropped its bounds from the
