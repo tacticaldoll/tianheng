@@ -150,9 +150,25 @@ parse_spec() {
 
 # Definitions of a cited test name, as `file:line` records. The definition FORM only: a bare mention in a
 # comment, a string, or a doc link defends nothing, so it must not satisfy a citation.
+#
+# A citation may be written `<crate>::<name>` to disambiguate, and it has to be: two dimensions legitimately
+# give the same-shaped bound the same test name — `a_cfg_gated_module_with_no_file_is_skipped_not_errored`
+# exists in both 渾儀 and 漏刻 — and the alternative would be renaming a pre-existing test to suit this
+# register, which is the one thing it must not require of a suite it does not own.
 definitions_of() {
-    grep -rnE "^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?(async[[:space:]]+)?fn[[:space:]]+$1[[:space:]]*\(" \
-        "$repo/crates" --include='*.rs' 2>/dev/null || true
+    local name=$1 root=$repo/crates
+    case $name in
+    *::*)
+        root=$repo/crates/${name%%::*}
+        name=${name##*::}
+        # Emit NOTHING for an absent crate, so the caller counts zero sites and refuses. An earlier
+        # attempt printed a placeholder, which the caller counted as one site — an absent crate qualifier
+        # then read as coverage, the silent pass this whole gate opposes. Caught by the matrix.
+        [[ -d $root ]] || return 0
+        ;;
+    esac
+    grep -rnE "^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?(async[[:space:]]+)?fn[[:space:]]+$name[[:space:]]*\(" \
+        "$root" --include='*.rs' 2>/dev/null || true
 }
 
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 \

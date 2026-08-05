@@ -116,10 +116,11 @@ both reactions, and that escape is the stated bound, never silently asserted cle
 - **WHEN** the governed module declares `pub type Handler = Box<dyn crate::Port>;`
 - **THEN** the system emits a violation at the alias item, because the public type-alias target exposes `dyn crate::Port`
 
-#### Scenario: A public item naming such an alias is not expanded
+#### Scenario: A public item naming such an alias is not expanded — a stated coverage bound
 
 - **WHEN** the governed module declares `pub type Handler = Box<dyn crate::Port>;` and `pub fn make() -> Handler`
 - **THEN** the system reacts at the alias declaration but emits **no additional** reaction for `make` via alias expansion — the `dyn` is already caught at the alias, and `type` aliases are not expanded (a stated bound)
+- **PINNED-BY** `a_private_alias_hiding_a_dyn_is_a_stated_bound`
 
 #### Scenario: A private alias hiding a dyn in a public position is a stated bound
 

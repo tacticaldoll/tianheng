@@ -93,10 +93,11 @@ The rule is **use-only**, matching the scanner: an `extern crate c;` declaration
 - **WHEN** a file in `crate::service` (a submodule) declares `use libc::c_int;`, and another file declares `use ::libc::c_void;`, under the confinement of `libc` to `crate::ffi`
 - **THEN** the system emits a violation for each, because a submodule's bare first segment reaches only the extern prelude and a leading-`::` path is the explicit external form — both are external imports of `libc` outside the permitted subtree
 
-#### Scenario: A confined-crate use inside a string or macro body is not observed
+#### Scenario: A confined-crate use inside a string or macro body is not observed — a stated coverage bound
 
 - **WHEN** a file in `crate::service` contains a string literal or a macro body whose text is `use libc::c_int;`, and no real `use libc::…` outside it
 - **THEN** the system reports no violation, because comments, string literals, and macro bodies are stripped before scanning, matching the scanner's stated bounds
+- **PINNED-BY** `confine_ignores_a_use_inside_a_string_literal`
 
 ### Requirement: Identity distinguishes the confined crate
 

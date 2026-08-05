@@ -120,6 +120,15 @@ pub fn something_else() {}
 ')
 expect_fail "$mention_only" 1 'which no function under crates/ defines'
 
+# A citation may be crate-qualified, and it has to be: the same test name legitimately exists in two
+# dimensions for the same-shaped bound, and renaming a pre-existing test to suit this register is the one
+# thing it must not require.
+qualified=$(new_repo qualified "$(spec_with '- **PINNED-BY** `probe::a_probe_bound_is_pinned`')")
+expect_pass "$qualified" 'bound register ok (1 declared bounds'
+
+qualified_absent=$(new_repo qualified-absent "$(spec_with '- **PINNED-BY** `nosuchcrate::a_probe_bound_is_pinned`')")
+expect_fail "$qualified_absent" 1 'which no function under crates/ defines'
+
 # --- the prose floor, and the reference that clears it ---
 
 stray_prose=$(new_repo stray-prose "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \

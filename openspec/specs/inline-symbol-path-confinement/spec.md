@@ -238,9 +238,10 @@ a stated bound. Each bound is a declared non-observation, not a silent pass on a
 - **THEN** the system does not claim to observe it (foreign AST is not scanned) — a stated bound
 - **PINNED-BY** `inline_foreign_reexport_of_the_confined_path_is_a_bound`
 
-#### Scenario: An extern-crate rename remains a bound under strict-external
+#### Scenario: An extern-crate rename is a stated bound under strict-external
 - **WHEN** a boundary declares `.must_not_call_inline("chrono::Utc").strict_external()`, `crate::core` declares `extern crate chrono as chr;` then calls `chr::Utc::now()`
 - **THEN** the system does not claim to observe the call through the `chr` alias head (the use-map reads `use` only; the `extern crate … as` rename is a stated bound even under strict-external), never a silent assertion of cleanliness
+- **PINNED-BY** `inline_strict_external_extern_crate_rename_is_a_stated_bound`
 
 ### Requirement: Constitution errors are loud, never silent
 

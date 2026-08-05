@@ -564,10 +564,11 @@ drop one.
 - **WHEN** a single `fn` contains both `assert_boundary!(SEAM_A, obj)` and `assert_boundary!(compute_seam(), obj)`
 - **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by their expression text
 
-#### Scenario: Identical expression repeated in the same function collapses to one finding
+#### Scenario: Identical expression repeated in the same function collapses to one finding — a stated identity bound
 
 - **WHEN** a single `fn` contains `assert_boundary!(SEAM_A, obj)` written twice, verbatim
 - **THEN** `audit_probe_coverage` emits one un-auditable-probe violation for that site — a stated bound, since no further source content distinguishes the two occurrences
+- **PINNED-BY** `identical_expression_repeated_in_the_same_function_collapses_to_one_violation`
 
 #### Scenario: Two paths differing only in an undecodable byte stay distinct identities
 
@@ -597,10 +598,11 @@ drop one.
   runs, so a baseline recorded in one checkout remains valid in the other, rather than differing
   only in the `file` field's absolute prefix
 
-#### Scenario: An absolute #[path] literal's target outside the anchor keeps its absolute label
+#### Scenario: An absolute #[path] literal's target outside the anchor keeps its absolute label — a stated label bound
 
 - **WHEN** a module is reached only through an absolute `#[path = "/…"]` literal whose target does not lie under the scanning checkout's own anchor, and its body contains a non-literal probe
 - **THEN** `audit_probe_coverage` still emits the un-auditable-probe violation, naming the site with the raw absolute path — a stated bound, since the literal has no textual relationship to the anchor
+- **PINNED-BY** `an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote`
 
 ### Requirement: Un-auditable probe identity includes lexical ownership
 
@@ -846,13 +848,14 @@ instead, which reaches it through the module graph — reading a file follows sy
 applies there. The 天衡 shell passes target root files, so an adopter's `check` is unaffected; the bound
 belongs to the directory input that exists for source compatibility.
 
-#### Scenario: A probe behind a symlinked subdirectory is seen from the root and not from the directory
+#### Scenario: A probe behind a symlinked subdirectory is seen from the root and not from the directory — a stated corpus bound
 
 - **WHEN** a module reached through a `#[path]` into a symlinked directory holds the only probe for a
   declared seam, and the audit is run twice over that package — once with the target root file, once
   with the source directory
 - **THEN** the root-file run reports the seam covered, while the directory run reports it unprobed — the
   stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
+- **PINNED-BY** `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
 
 ### Requirement: A file reached through an absolute path literal keeps the path the literal wrote
 

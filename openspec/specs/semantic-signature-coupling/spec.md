@@ -584,10 +584,11 @@ The system SHALL observe the contents of a **transparent control-flow macro** ar
 - **THEN** the system reports no exposure — transparency covers item position, where an arm's contents are items; an `impl`-body invocation's arms are impl items, observed through different walkers, and that remains a declared gap rather than a claimed reaction
 - **PINNED-BY** `a_cfg_if_inside_an_impl_body_is_a_stated_bound`
 
-#### Scenario: A macro under another name is not treated as transparent
+#### Scenario: A macro under another name is not treated as transparent — a stated coverage bound
 
 - **WHEN** a governed module's body is `generate_wrapper! { impl Foo { pub fn hidden() -> crate::forbidden::Thing { … } } }` and a boundary forbids `crate::forbidden::Thing`
 - **THEN** the system reports no exposure — the invocation is not transparent, so its body stays a stated coverage bound; extracting from it would read the `impl` body's braces as an arm and report an item the macro may never emit
+- **PINNED-BY** `an_arbitrary_macro_body_is_not_read_as_transparent_arms`
 
 ### Requirement: An impl nested in a const or fn body is observed
 
