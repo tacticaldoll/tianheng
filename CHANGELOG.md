@@ -29,6 +29,12 @@ them.
   trees are byte-identical, every shipped file in all six `0.4.0` tarballs matches `main`, and nothing
   needs re-fetching or re-resolving. Adopters verifying a `0.4.0` tarball against this repository
   should expect its recorded commit to name that release branch's tip rather than the tag.
+- `docs/history/published-artifact-provenance.md` inventories what commit **every** published version
+  records, audited across all 96 published tarballs. Two versions disagree with their tag for two
+  different reasons — `0.4.0` was published from the release branch, and `0.2.2` was published from
+  `main` correctly and then force-pushed away an hour later — and neither disagreement affects any
+  published crate's content. The eleven `0.1.x` releases point at commits the 2026-07-17 history
+  rewrite dissolved, so whether they came from `main` is no longer knowable.
 
 ### Changed
 - Every release tag is now a signed annotated tag. `v0.1.0` through `v0.1.10` were lightweight and
