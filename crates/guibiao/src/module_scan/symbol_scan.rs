@@ -1194,6 +1194,12 @@ fn resolve_target(
 }
 
 /// Decision helper for whether an occurrence (call or path mention) triggers a boundary reaction.
+///
+/// The three narrowing dials `inline-symbol-path-confinement` declares, in the order they decide:
+/// `strict` widens past calls, `.ending_with([…])` narrows to declared read verbs, and the default
+/// sits between them. Each branch's own reason is stated at the branch — a reader deciding whether a
+/// shape should react must not have to reconstruct the policy from four bare booleans, and one of the
+/// four is a declared observation bound rather than an implementation choice.
 fn should_react_on_occurrence(
     strict: bool,
     is_call: bool,
@@ -1201,15 +1207,26 @@ fn should_react_on_occurrence(
     resolved: &str,
 ) -> bool {
     if strict {
+        // strict: any path under the prefix, call or not
         true
     } else if !is_call {
+        // default: only calls — a mention passes. Declared policy rather than an omission:
+        // `inline-symbol-path-confinement`'s "Call-vs-mention default" requirement states it (a type
+        // annotation and a constant each have their own passing scenario), and the value-capture
+        // corner of it is a registered observation bound
+        // (bound: inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default),
+        // pinned by `inline_value_capture_is_a_bound_under_the_default`. `.strict_prefix_only()` is
+        // what an adopter reaches for to close it, which is the `strict` arm above.
         false
     } else if let Some(verbs) = verbs {
+        // narrowed: the terminal segment must be a declared read verb (leaf-exact, never a prefix
+        // or substring match — `now_ish` is not `now`)
         resolved
             .rsplit("::")
             .next()
             .is_some_and(|leaf| verbs.iter().any(|v| v == leaf))
     } else {
+        // default call, no narrowing: every call under the prefix
         true
     }
 }
