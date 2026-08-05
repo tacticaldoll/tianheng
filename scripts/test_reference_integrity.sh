@@ -129,4 +129,45 @@ git -C "$repo_openspec" add openspec/changes/my-change/proposal.md
 git -C "$repo_openspec" commit -qm 'add openspec change proposal'
 expect_pass "$repo_openspec" "reference integrity ok"
 
+# 10. The reference extraction cannot fail quietly (exit 2)
+#
+# The normalization ran inside a process substitution, where a failing `sed` or `sort` reports nothing
+# to the parent: `set -o pipefail` covers a pipeline the shell runs, not one in a subshell whose status
+# no one reads. The stream came back empty, the loop body never ran, and every reference in that file
+# went unexamined while the file still counted as inspected.
+#
+# The fixture is built on the STALE-PROSE repository deliberately, so the direction is discriminating
+# rather than merely loud: this repository must refuse. With the extraction unchecked the run reports
+# `reference integrity ok` over a reference it never read — a silent pass on a tree known to be bad.
+#
+# `sed` is stubbed to fail only for the extraction's own expression, not unconditionally: `is_tracked`
+# escapes each reference with `sed` too, and a blanket failure would refuse somewhere else and prove a
+# different thing.
+repo_broken_extraction=$(new_valid_repo broken_extraction)
+printf '# PROJECT\nSee [docs/nonexistent.md](docs/nonexistent.md).\n' >"$repo_broken_extraction/PROJECT.md"
+git -C "$repo_broken_extraction" add PROJECT.md
+git -C "$repo_broken_extraction" commit -qm 'add stale prose reference'
+expect_fail "$repo_broken_extraction" 1 "references 'docs/nonexistent.md', which is not tracked in this repository"
+
+stub_bin=$fixture_root/stub-bin
+mkdir -p "$stub_bin"
+real_sed=$(command -v sed)
+cat >"$stub_bin/sed" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    case \$arg in
+    *'s#^\]\\('*) exit 3 ;;
+    esac
+done
+exec "$real_sed" "\$@"
+STUB
+chmod +x "$stub_bin/sed"
+
+broken_status=0
+broken_output=$(PATH="$stub_bin:$PATH" "$check" "$repo_broken_extraction" 2>&1) || broken_status=$?
+[[ $broken_status -eq 2 ]] \
+    || { printf 'a failed reference extraction must exit 2, got %d: %s\n' "$broken_status" "$broken_output" >&2; exit 1; }
+grep -Fq 'could not normalize the references extracted from' <<<"$broken_output" \
+    || { printf 'a failed reference extraction must name itself, got: %s\n' "$broken_output" >&2; exit 1; }
+
 echo "all reference integrity test matrix directions passed"
