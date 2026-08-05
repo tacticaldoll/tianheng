@@ -117,16 +117,23 @@ parse_spec() {
         #
         # Resolution belongs to the id, never to whether the line also happened to say the trigger words.
         # It used to reach references only through a PROSE record, which meant rewording a sentence silently
-        # un-checked them: this repository reworded `the module scanner\047s stated bounds` to
-        # `the module scanner\047s bounds, one reference per bound` — a repair — and the two references that
-        # repair added were never resolved again. Measured on adoption: all 14 references in the tree resolve
-        # against the 41 derived ids, so this direction was free rather than a migration.
+        # un-checked them: a repair reworded one capability overview out of the trigger pattern while
+        # improving it, and the two references that repair added were never resolved again. Measured when
+        # adopted: every reference in the tree resolved against a derived id, so the direction was free
+        # rather than a migration.
         #
-        # The docs-only illustrations in the register\047s own spec are immune by the id character class:
+        # The docs-only illustrations in the register spec are immune by the id character class:
         # `(bound: <capability>/<slug>)` holds `<`, which the class excludes, so it never matches.
+        #
+        # `line_has_reference` is set here and carried on the PROSE record, so ONE matcher decides both
+        # whether a line is cleared and which ids get resolved. Two matchers decided that until now — this
+        # loop and a shell `grep -qE` whose whitespace class differed — and clearing disagreeing with
+        # resolution about which references exist is the divergence that cost this window a review round.
         {
+            line_has_reference = 0
             reference_scan = $0
             while (match(reference_scan, /\(bound:[ \t]*[A-Za-z0-9_.\/-]+\)/)) {
+                line_has_reference = 1
                 reference_id = substr(reference_scan, RSTART, RLENGTH)
                 sub(/^\(bound:[ \t]*/, "", reference_id)
                 sub(/\)$/, "", reference_id)
@@ -210,7 +217,7 @@ parse_spec() {
         open == "" && !req_is_bounds && $0 ~ prose && !negated($0) {
             line = $0
             gsub(/\t/, " ", line)
-            printf "PROSE\t%s\t%d\t%s\n", file, NR, line
+            printf "PROSE\t%s\t%d\t%s\t%s\n", file, NR, line, (line_has_reference ? "referenced" : "bare")
         }
         END {
             flush()
@@ -259,7 +266,7 @@ definitions_of() {
 # since the citation is malformed and not stale. Validation names the actual defect, and the same rule on the
 # qualifier closes the traversal direction for free, a crate-directory name holding neither `/` nor `.`.
 #
-# Measured before it was written: all 36 cited names are plain Rust identifiers and every directory under
+# Measured before it was written: every cited name is a plain Rust identifier and every directory under
 # `crates/` is a plain name, so this refuses nothing that exists. A raw identifier (`r#type`) would be
 # refused; none is cited, and the refusal is loud.
 # A raw identifier is a Rust identifier and this register imposes no naming convention of its own, so `r#name`
@@ -594,9 +601,11 @@ $(printf '           %s\n' "${site_paths[@]}")"
         # them. That is how a retired `#[path]` bound survived two sweeps inside a sentence listing four
         # inherited bounds behind one reference to a fifth. Closing it needs reading which bounds a sentence
         # lists, which is semantic; the discipline is one reference per stated bound, and it is the author's.
-        # Whether the line is CLEARED is all this decides. Resolving the ids is the REFERENCE record's job,
-        # so a reference is checked wherever it sits rather than only where the trigger words also appear.
-        if ! printf '%s' "$a" | grep -qE '\(bound:[[:space:]]*[A-Za-z0-9_./-]+\)'; then
+        # Whether the line is CLEARED is all this decides, and the answer comes from the SAME matcher that
+        # emits the REFERENCE records — carried on the record as `referenced`/`bare` rather than recomputed
+        # by a second regex here. Two matchers deciding one syntax is how clearing and resolution came to
+        # disagree about which references exist.
+        if [[ $b != referenced ]]; then
             fail "$file:$line states a bound outside any declared bound scenario, so it is absent from the register:
            $(printf '%s' "$a" | cut -c1-108)"
         fi
@@ -739,6 +748,37 @@ render_projection() {
 }
 
 unpinned_count=$(awk -F'\t' '$1 == "BOUND" && $5 == "<none>" { n++ } END { print n + 0 }' "$records")
+capability_count=$(awk -F'\t' '$1 == "BOUND" { c = $2; sub(/^openspec\/specs\//, "", c); sub(/\/spec\.md$/, "", c); seen[c] = 1 } END { print length(seen) }' "$records")
+citation_count=$(awk -F'\t' '$1 == "BOUND" && $5 != "<none>" { n += split($5, t, "|") } END { print n + 0 }' "$records")
+reference_count=$(awk -F'\t' '$1 == "REFERENCE" { n++ } END { print n + 0 }' "$records")
+
+# A hand-written census of a set the reaction already enumerates has no reaction, which is the claim class
+# this whole capability exists to end — and it went stale three times in one release window, the third time
+# in the very CHANGELOG entry recording that the first two had. Counting by hand is not the problem:
+# four independent careful counts of this tree produced four different answers for "citations".
+#
+# So the figures are PRINTED for anyone writing prose, and the one shape that must appear in prose — the
+# adopter-facing "N bounds across M capabilities" — is REACTED to. Everything else was deleted from prose
+# instead of being swept a fourth time. The shape is deliberately narrow rather than a general
+# number-in-prose matcher, because a heuristic over prose numbers would refuse unrelated figures and that is
+# how a gate earns the false positives that get it disabled.
+census_offense=0
+while IFS= read -r site; do
+    [[ -n $site ]] || continue
+    census_file=${site%%:*}
+    census_rest=${site#*:}
+    census_line=${census_rest%%:*}
+    census_text=${census_rest#*:}
+    written_bounds=$(printf '%s' "$census_text" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) bounds across \([0-9][0-9]*\) capabilit.*/\1/p' | head -n 1)
+    written_caps=$(printf '%s' "$census_text" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) bounds across \([0-9][0-9]*\) capabilit.*/\2/p' | head -n 1)
+    [[ -n $written_bounds && -n $written_caps ]] || continue
+    if [[ $written_bounds != "$declared" || $written_caps != "$capability_count" ]]; then
+        fail "$census_file:$census_line writes \"$written_bounds bounds across $written_caps capabilities\" where the register holds $declared across $capability_count; a hand-written census of a set this reaction enumerates goes stale silently"
+        census_offense=1
+    fi
+done < <(grep -rnE '[0-9]+ bounds across [0-9]+ capabilit' --include='*.md' -- "$repo" 2>/dev/null \
+    | sed "s|^$repo/||" | grep -v '^target/' || true)
+
 
 # Cannot-judge precedes WRITING, not merely judging. With no declared bound parsed the heading form has
 # changed and the register is not there to be projected, so rendering first would leave behind a `0 of 0`
@@ -783,3 +823,7 @@ if [[ $offenses -gt 0 ]]; then
 fi
 
 printf 'bound register ok (%d declared bounds across %d spec files)\n' "$declared" "$scanned"
+# Printed so prose is written from a measurement rather than from memory. Every one of these went stale in
+# prose at least once during this capability's first release window.
+printf '  %d bounds across %d capabilities; %d citations; %d unpinned; %d references\n' \
+    "$declared" "$capability_count" "$citation_count" "$unpinned_count" "$reference_count"

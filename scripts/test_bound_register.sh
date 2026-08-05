@@ -615,6 +615,25 @@ REQUIRED
     || { printf 'the projection carries a backslash, which its prose never wants: %s\n' \
         "$(grep -n '\\' "$projection" | head -3)" >&2; exit 1; }
 
+# --- the census direction ---
+
+# A hand-written count of a set the reaction enumerates has no reaction, and this one went stale three times
+# in one release window — the third time inside the CHANGELOG entry recording that the first two had. Counting
+# by hand is not the failure: four independent careful counts of this tree produced four different answers for
+# "citations". So the one shape that must live in prose is reacted to, and the rest were deleted from prose.
+census_stale=$(new_repo census-stale "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'The register holds 9 bounds across 4 capabilities.\n' >>"$census_stale/BACKLOG.md"
+git -C "$census_stale" add -A
+git -C "$census_stale" commit -qm 'a stale census'
+expect_fail "$census_stale" 1 'where the register holds 1 across 1'
+
+# And a census that agrees passes, so the direction is not simply refusing the shape.
+census_true=$(new_repo census-true "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'The register holds 1 bounds across 1 capabilities.\n' >>"$census_true/BACKLOG.md"
+git -C "$census_true" add -A
+git -C "$census_true" commit -qm 'a true census'
+expect_pass "$census_true" 'bound register ok (1 declared bounds'
+
 # --- cannot-judge directions ---
 
 not_git=$fixture_root/not-git

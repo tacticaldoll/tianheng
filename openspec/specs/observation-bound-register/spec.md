@@ -27,7 +27,7 @@ deliberately stops at a named shape, so that shape is governed policy rather tha
 declaring file SHALL be `openspec/specs/<capability>/spec.md`.
 
 The declaration SHALL sit under the requirement it qualifies, wherever that is, and SHALL NOT be hoisted
-into a common section. 34 of the 41 bounds declared today sit under the requirement they qualify rather
+into a common section. Nearly every bound declared today sits under the requirement it qualifies rather
 than under an `Observation bounds` requirement, and moving them would separate each bound from the
 reaction it limits — the `Observation bounds` requirement three specs carry is a place bounds are
 gathered, never the definition of one.
@@ -53,7 +53,7 @@ so no identifier ledger is introduced and a citation cannot outlive the declarat
 
 - **WHEN** a bound-marked scenario sits under a requirement that is not named `Observation bounds`
 - **THEN** the reaction reads it as a declared bound and requires its citation, so the register covers
-  the 34 bounds already declared that way without relocating any of them
+  every bound already declared that way without relocating any of them
 
 #### Scenario: A bound's id is derived rather than assigned
 
@@ -398,6 +398,19 @@ SHALL therefore assert that each disclosure the requirements oblige the header t
 and SHALL refuse a rendered backslash, which this document's prose never wants and which is therefore a
 quoting artifact rather than content.
 
+**A hand-written census of the register SHALL NOT live in prose, and the reaction SHALL emit the figures.**
+A count of a set the reaction already enumerates is a claim with no observation source — the class this
+capability exists to end — and it went stale three times in one release window, the third time inside the
+entry recording that the first two had. Carelessness is not the cause: four independent, deliberate counts of
+this tree produced four different answers for the number of citations. A clean run SHALL therefore print the
+bound, capability, citation, unpinned, and reference counts, so prose is written from a measurement rather
+than from memory, and prose SHALL state a figure only where a reader outside the repository needs one.
+
+Where such a figure is stated, the reaction SHALL react to it: a tracked document writing
+`N bounds across M capabilities` SHALL fail when either number disagrees with what the reaction counted. The
+matched shape SHALL be narrow rather than a general number-in-prose matcher, because a heuristic over prose
+figures would refuse unrelated numbers, which is how a gate earns the false positives that get it disabled.
+
 #### Scenario: The projection is stale
 
 - **WHEN** a bound is declared, changed, or removed without regenerating the projection
@@ -418,6 +431,24 @@ quoting artifact rather than content.
 - **WHEN** the companion test runs
 - **THEN** it greps the blessed document for each disclosure the requirements oblige the header to make and
   for the absence of a rendered backslash, so a renderer typo cannot pass by agreeing with itself
+
+#### Scenario: A clean run states the figures it counted
+
+- **WHEN** the reaction reports clean
+- **THEN** it prints the bound, capability, citation, unpinned, and reference counts, so a figure written into
+  prose comes from a measurement rather than from memory
+
+#### Scenario: A tracked document's written census disagrees with the register
+
+- **WHEN** a tracked document states `N bounds across M capabilities` and either number differs from what the
+  reaction counted
+- **THEN** the reaction fails, naming the file, the line, the written figures, and the counted ones
+
+#### Scenario: A written census that agrees passes
+
+- **WHEN** a tracked document's stated figures match what the reaction counted
+- **THEN** the reaction passes for that document, so the direction reacts to disagreement rather than to the
+  shape
 
 ### Requirement: An unpinned bound SHALL be representable, and SHALL name its tracker
 
