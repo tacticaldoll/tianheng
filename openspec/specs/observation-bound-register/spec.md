@@ -1,5 +1,8 @@
-## ADDED Requirements
+# observation-bound-register Specification
 
+## Purpose
+TBD - created by archiving change contract-bound-index. Update Purpose after archive.
+## Requirements
 ### Requirement: An observation bound is declared as a scenario that names itself one
 
 An **observation bound** SHALL be declared as a `#### Scenario:` whose heading marks it as a bound, in
