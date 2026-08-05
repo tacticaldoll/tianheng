@@ -25,6 +25,7 @@ jobs:
         run: |
           bash scripts/test_release_coherence.sh
           bash scripts/check_release_coherence.sh
+          bash scripts/test_publish_source.sh
 
   dod:
     name: Definition of Done

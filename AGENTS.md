@@ -179,7 +179,20 @@ Both squashes are performed by a GitHub pull request's "Squash and merge", not a
 release-branch-to-`main` squash is the sole message exception: its subject is `release: X.Y.Z` and
 its body is deliberately empty. A release snapshot's change is the whole tree; per-change why lives
 in the curated commits and PRs below it. A PR that touches a steward-owned path
-(`.github/CODEOWNERS`) is merged by the steward.
+(`.github/CODEOWNERS`) is merged by the steward. A release branch is archived once it merges; it
+carries no further work and is never a source of record for anything downstream.
+
+**`main` is also the only publish source.** After the release squash and the signed `vX.Y.Z` tag, the
+crates.io publish runs from a checkout of *that tagged `main` commit* — never from the release
+branch. `cargo publish` stamps the sha1 of whatever `HEAD` it ran on into every tarball's
+`.cargo_vcs_info.json`, and a published version can never be re-uploaded, so the pointer is permanent
+from the moment it lands. An identical tree does not make a release branch's tip an acceptable
+source: cargo records the **commit**, not the content, and the commit it would record belongs to a
+branch the ritual archives. `bash scripts/publish.sh` is that path — it runs
+`scripts/check_publish_source.sh` (worktree clean; `HEAD` the `release: X.Y.Z` snapshot for the
+workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the live tip of
+`origin/main`, read from the remote rather than a possibly-stale `refs/remotes/`) and only then
+`cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge.
 
 `bash scripts/check_release_coherence.sh` is the release-state reaction. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
@@ -238,6 +251,12 @@ bash scripts/check_reference_integrity.sh # every in-repo path a document or com
 bash scripts/check_dod_coherence.sh     # this list is a subset of CI's — checked, not promised
 bash scripts/test_release_coherence.sh # prove every release state and failure direction
 bash scripts/check_release_coherence.sh # react against this checkout (requires release history)
+bash scripts/test_publish_source.sh     # prove the publish-source gate refuses every wrong source. The
+                                           # gate itself runs at publish time (see Branching and release),
+                                           # not here — no development checkout is a release snapshot. Its
+                                           # matrix is: 0.4.0's six tarballs recorded the release branch's
+                                           # tip instead of main's tagged release commit, and that stamp
+                                           # can never be re-uploaded
 bash scripts/test_examples.sh            # every dogfood example still reacts as declared
 ```
 
@@ -267,7 +286,9 @@ bundling, the packaged-tarball self-test, and the reaction on the clean/violatin
 
 Merging to `main`, tagging, publishing to crates.io, force-pushing, and deleting a repo
 are confirm-first: get explicit human sign-off even if a permission rule would auto-allow
-it. (crates.io publishes are permanent — only yankable, never deletable.) A local
+it. (crates.io publishes are permanent — only yankable, never deletable, and a version's recorded
+source commit is permanent with it — so *where* the publish runs from is gated rather than
+remembered; see *Branching and release*.) A local
 `.claude/settings.local.json` `permissions.ask` rule on `gh pr merge` is a recommended way to
 mirror this in a dev environment, but the confirm-first rule binds regardless of local settings.
 

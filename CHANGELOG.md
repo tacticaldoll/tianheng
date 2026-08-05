@@ -19,6 +19,24 @@ them.
 
 ## [Unreleased]
 
+### Added
+- The crates.io publish now runs through a source gate (`scripts/check_publish_source.sh`, reached via
+  `scripts/publish.sh`) that refuses any source other than the signed-and-annotated-tagged
+  `release: X.Y.Z` commit at the live tip of `main`. `cargo publish` records the commit it ran on in
+  each tarball's `.cargo_vcs_info.json`, a version can never be re-uploaded, and the `0.4.0` family
+  recorded `f1dba52` — the tip of the since-archived `release/0.4.0` branch — rather than `e645a549`,
+  the `release: 0.4.0` commit that `v0.4.0` tags. **The published content is unaffected**: the two
+  trees are byte-identical, every shipped file in all six `0.4.0` tarballs matches `main`, and nothing
+  needs re-fetching or re-resolving. Adopters verifying a `0.4.0` tarball against this repository
+  should expect its recorded commit to name that release branch's tip rather than the tag.
+
+### Changed
+- Every release tag is now a signed annotated tag. `v0.1.0` through `v0.1.10` were lightweight and
+  unsigned; they were re-created in place on 2026-08-05, each still pointing at its own unchanged
+  release commit, so the whole `v0.1.0`–`v0.4.0` range is uniform and GitHub-verified. A clone that
+  already fetched the old refs needs `git fetch --tags --force` to see the new tag objects; no commit
+  moved and no history was rewritten.
+
 ## [0.4.0] - 2026-08-04
 
 ### Documentation
