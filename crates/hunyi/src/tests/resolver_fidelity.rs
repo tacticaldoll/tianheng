@@ -491,6 +491,25 @@ pub(super) fn dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound() {
 }
 
 #[test]
+pub(super) fn same_module_bare_trait_resolves_without_use() {
+    let out = dyn_operand_findings(
+        "op-same-module-bare-trait",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            ("m.rs", "pub trait Frobnicate {}\npub fn f() -> Box<dyn Frobnicate> { todo!() }\n"),
+        ],
+        "crate::m",
+        &["crate::m::Frobnicate"],
+        &[],
+    )
+    .unwrap();
+    assert!(
+        !out.is_empty(),
+        "same-module bare trait must resolve to crate::m::Frobnicate: {out:?}"
+    );
+}
+
+#[test]
 pub(super) fn impl_trait_operand_inline_sysroot_trait_reacts() {
     // Symmetric with dyn: a returned inline fully-qualified sysroot trait operand reacts.
     let inline = impl_trait_operand_findings(
