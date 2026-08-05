@@ -6,9 +6,12 @@ their pull requests. The format follows [Keep a Changelog](https://keepachangelo
 
 Versioning is **SemVer honesty** for a pre-1.0 line (see `AGENTS.md`): the family is
 **experimental / pre-1.0**. It held at `0.1.x` deliberately until real adopters arrived; `0.2.0` is
-the first deliberate minor past that hold. Pre-1.0, additive depth on an existing observation source
-and packaging/hygiene are patch releases, a breaking change earns a minor, and no release
-intentionally breaks the adopter-written builder (`Constitution` / boundary DSL / `run`).
+the first deliberate minor past that hold. Pre-1.0, packaging/hygiene and **opt-in** depth on an
+existing observation source are patch releases, a breaking change earns a minor, and no release
+intentionally breaks the adopter-written builder (`Constitution` / boundary DSL / `run`). Depth that
+reacts *by default* is not patch-class, whatever its diff size, because it follows the marking rule
+below: it makes an adopter's recorded baseline stale, and that is work they did not choose. (`0.1.3`'s
+default-on re-export exposure predates this and shipped as a patch.)
 
 **What earns `**BREAKING**` in a release section.** A change that requires an adopter to *do* something —
 including regenerating a recorded baseline — is marked, even when no public API, wire format, or identity
@@ -37,6 +40,13 @@ them.
   rewrite dissolved, so whether they came from `main` is no longer knowable.
 
 ### Changed
+- What earns a minor is now stated once, in `AGENTS.md`'s *Versioning* section: any change an adopter
+  has to act on, a stale recorded baseline included. Three documents had grown three answers — the rule
+  above marks a false-negative closure `**BREAKING**`, `BACKLOG.md`'s version horizons listed such
+  closures as patch-class, and this preamble called additive depth patch-class without distinguishing
+  opt-in from default-on. For adopters the operative consequence: a false-negative closure or new
+  default-on depth arrives as a **minor**, however small its diff, while packaging and hygiene, prose,
+  opt-in depth, performance, and unchanged-outcome diagnostics arrive as patches.
 - Every release tag is now a signed annotated tag. `v0.1.0` through `v0.1.10` were lightweight and
   unsigned; they were re-created in place on 2026-08-05, each still pointing at its own unchanged
   release commit, so the whole `v0.1.0`–`v0.4.0` range is uniform and GitHub-verified. A clone that

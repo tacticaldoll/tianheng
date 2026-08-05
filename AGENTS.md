@@ -282,6 +282,16 @@ bundling, the packaged-tarball self-test, and the reaction on the clean/violatin
   break. Do not vanity-bump the minor for a non-breaking change.
 - Graduate to `0.1.0` only when the public API has settled enough to promise
   `0.1.x`-patch compatibility. After that: non-breaking → patch, breaking → minor.
+- **Breaking means the adopter has to act**, which is wider than a moved API. A changed public
+  signature, wire format, or identity shape breaks — and so does a change that leaves a recorded
+  baseline no longer describing the adopter's tree, because regenerating it is work they did not
+  choose. **Closing a false negative therefore earns a minor**, however small its diff: the reaction
+  is additive, the baseline is not, and "the defect was ours" does not spare them the work. So does
+  new depth that reacts by default. Patch-class is what an adopter can take without doing anything —
+  packaging and hygiene, prose and specs, opt-in depth, performance, and a diagnostic whose exit code
+  and emitted documents are unchanged. `CHANGELOG.md` states the same fact as its `**BREAKING**`
+  marking rule, which is that projection for adopters; the version consequence is here, because a
+  release number is decided before the notes are written.
 
 ## Drift law & minimalism (inherited, non-negotiable)
 
