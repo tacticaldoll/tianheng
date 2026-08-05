@@ -181,6 +181,33 @@ Referring to it: a stated bound (bound: probe-capability/a-probed-shape-is-a-sta
 ambiguous=$(new_repo ambiguous "$ambiguous_spec")
 expect_fail "$ambiguous" 1 'which two declared bounds produce'
 
+# A requirement whose heading names bounds may state them in prose — several do it as a numbered list — but
+# it must then declare at least one bound scenario, or the list has no reaction anywhere.
+bounds_req_ok=$(new_repo bounds-req-ok "$(printf '%s\n' \
+    '# probe-capability Specification' '' '## Purpose' '' 'Probe capability.' '## Requirements' \
+    '### Requirement: Observation bounds are stated, not silent' '' \
+    'The following are OUT OF SCOPE as stated coverage bounds: (1) one thing; (2) another.' '' \
+    '#### Scenario: A probed shape is a stated bound' \
+    '- **WHEN** the probe meets the shape' \
+    '- **THEN** it does not claim to observe it' \
+    '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+expect_pass "$bounds_req_ok" 'bound register ok (1 declared bounds'
+
+bounds_req_bare=$(new_repo bounds-req-bare "$(printf '%s\n' \
+    '# probe-capability Specification' '' '## Purpose' '' 'Probe capability.' '## Requirements' \
+    '### Requirement: Observation bounds are stated, not silent' '' \
+    'The following are OUT OF SCOPE as stated coverage bounds: (1) one thing; (2) another.' '' \
+    '#### Scenario: The probe reacts' \
+    '- **WHEN** the probe meets a real shape' \
+    '- **THEN** it reacts' '' \
+    '### Requirement: A second requirement' '' \
+    'It SHALL exist.' '' \
+    '#### Scenario: A probed shape is a stated bound' \
+    '- **WHEN** the probe meets the shape' \
+    '- **THEN** it does not claim to observe it' \
+    '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+expect_fail "$bounds_req_bare" 1 'names bounds, so its prose may state them, but it declares no bound scenario'
+
 # --- cannot-judge directions ---
 
 not_git=$fixture_root/not-git

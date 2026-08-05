@@ -100,13 +100,34 @@ parse_spec() {
         }
         # A requirement or section heading closes any open bound and is never itself scanned: it names the
         # requirement whose scenarios declare the bounds.
-        /^#{1,3} / { flush(); in_scenario = 0; next }
+        #
+        # A requirement whose own heading names bounds DECLARES them, and several do it as a numbered prose
+        # list — `Observation bounds are stated, not silent` enumerates seven. Requiring each item to become
+        # its own scenario would restructure three requirements and read worse, so the prose of such a
+        # requirement is exempt. The exemption is not free: the requirement must hold at least one declared bound
+        # scenario, or its prose list would have no reaction anywhere, which is the state this whole register
+        # opposes. That obligation is emitted as a record and checked by the caller.
+        /^#{1,3} / {
+            flush()
+            if (req != "" && req_is_bounds) {
+                printf "REQBOUNDS\t%s\t%d\t%s\t%s\n", file, req_line, req, (req_declared ? "yes" : "no")
+            }
+            in_scenario = 0
+            req = ""; req_is_bounds = 0; req_declared = 0
+            if ($0 ~ /^### Requirement:/) {
+                req = substr($0, length("### Requirement: ") + 1)
+                req_line = NR
+                req_is_bounds = (tolower(req) ~ /bounds?([^a-z]|$)/)
+            }
+            next
+        }
         /^#### / {
             flush()
             in_scenario = 1
             if ($0 ~ heading) {
                 open = substr($0, length("#### Scenario: ") + 1)
                 open_line = NR
+                req_declared = 1
             }
             next
         }
@@ -139,12 +160,17 @@ parse_spec() {
             return match(text, /(rather than|not|never) an?( [A-Za-z-]+)? bounds?/) > 0
         }
         # Prose stating a bound outside any declared bound scenario.
-        open == "" && $0 ~ prose && !negated($0) {
+        open == "" && !req_is_bounds && $0 ~ prose && !negated($0) {
             line = $0
             gsub(/\t/, " ", line)
             printf "PROSE\t%s\t%d\t%s\n", file, NR, line
         }
-        END { flush() }
+        END {
+            flush()
+            if (req != "" && req_is_bounds) {
+                printf "REQBOUNDS\t%s\t%d\t%s\t%s\n", file, req_line, req, (req_declared ? "yes" : "no")
+            }
+        }
     '
 }
 
@@ -238,6 +264,10 @@ while IFS=$'\t' read -r kind file line a b c; do
 $(printf '           %s\n' "${sites[@]%%:*}")" ;;
             esac
         done < <(printf '%s\n' "${b//|/$'\n'}")
+        ;;
+    REQBOUNDS)
+        [[ $b == yes ]] \
+            || fail "$file:$line — the requirement \"$a\" names bounds, so its prose may state them, but it declares no bound scenario; a prose list with no reaction anywhere is the state this register opposes"
         ;;
     PROSE)
         # A reference is the third option between rewriting prose that is doing its job and restating a

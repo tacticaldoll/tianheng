@@ -790,6 +790,12 @@ matching its allowlist entry, which reacts fail-closed, and SHALL NOT be able to
 An observed origin SHALL NOT enter a rule key or any recorded baseline identity, so no accepted
 violation re-keys on a toolchain change.
 
+#### Scenario: A composite shape yields a truncated origin — a stated shape bound
+
+- **WHEN** a registered type is a composite — a reference, tuple, array, pointer, or function pointer — whose wrapped type is defined in a module the seam allows
+- **THEN** the derived origin is a truncated rendering that equals no module name, so it matches no allowlist entry and in particular never the wrapped type's own defining module; the crossing reacts fail-closed rather than being admitted through the wrapper
+- **PINNED-BY** `the_derived_origin_honors_its_stated_shape_bounds`
+
 #### Scenario: A foreign type's origin is its own defining path
 
 - **WHEN** a type defined in another crate is registered
