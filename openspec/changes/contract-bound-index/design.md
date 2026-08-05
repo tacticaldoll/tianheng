@@ -86,7 +86,8 @@ register would point at a set rather than a reaction. Matching is on the definit
 never a bare mention, so a citation satisfied by a comment is not possible.
 
 **7. The completeness floor is a prose scan, and it is a floor rather than a proof.** Every
-bound-prose occurrence outside a declared bound scenario fails the gate. This makes the 55 measured
+bound-prose occurrence outside a declared bound scenario, and carrying no resolving reference, fails the
+gate. This makes the 55 measured
 occurrences the register's mandatory minimum while leaving a bound worded outside the pattern
 undetectable — which the projection states in its own header rather than letting the index imply
 totality. `PROJECT.md`'s rule applies to the index as much as to a dimension: claim exactly the
@@ -104,6 +105,20 @@ the gate under an environment flag and compared byte-for-byte otherwise, exactly
 `self_law_projection_is_fresh` treats `AGENTS.self-law.md`. It is not placed at the repository root: the
 root projection is the self-law an agent loads as its idiom, and a second root document dilutes that.
 `AGENTS.md` points at it, the way `BACKLOG.md` points at `docs/history/`.
+
+**10. Prose may reference a declared bound, and a reference is checked.** Written
+`(bound: <capability>/<slug>)`, resolving to exactly one declared bound — none fails as a dangling
+pointer, two fails and thereby checks the derived id's uniqueness instead of assuming it.
+
+This was not in the design before the gate ran; the gate's first pass produced it. Of the 22 prose
+occurrences it flagged, some are not declarations at all but sentences legitimately **pointing at** a bound
+declared elsewhere — `inline-symbol-path-confinement` says "a stated bound (see \"Observation bounds\")",
+and `runtime-origin-assertion` says "the same stated bound as the semantic dimension". The design's original
+answer was "register the bound or rephrase the sentence", and both options are wrong for those: rephrasing
+degrades prose that is doing its job, and registering restates a bound that already exists somewhere else —
+which is the drift now filed as a live `READY-PATCH` item. A reference is the third option, and it is the
+same mechanism that entry's promotion trigger was waiting for, arriving early because the gate's own false
+positives demanded it.
 
 ## Risks / Trade-offs
 

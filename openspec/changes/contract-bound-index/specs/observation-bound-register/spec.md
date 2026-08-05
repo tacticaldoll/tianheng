@@ -125,6 +125,46 @@ every bound in the system is listed.
 - **THEN** its header states that the undeclared-prose direction is a floor over recognizable wording,
   and a declared bound of this capability carries that same residual with its own pinning test
 
+### Requirement: Prose MAY reference a declared bound, and a reference SHALL resolve
+
+Prose that mentions a bound SHALL be cleared by the undeclared-prose reaction when it carries an explicit
+reference of the form `(bound: <capability>/<slug>)`, where `<slug>` is the declaring scenario's heading
+lowercased with each run of non-alphanumeric characters replaced by a single hyphen. The reference SHALL
+resolve to **exactly one** declared bound across all specs: resolving to none SHALL fail, because a
+reference that points nowhere is indistinguishable from an undeclared bound, and resolving to more than one
+SHALL fail, which is also what keeps derived ids unique rather than merely assumed unique.
+
+A reference exists because the floor's alternative is worse. Without it, a sentence that legitimately
+**points at** a bound declared elsewhere — in the same file, or in another dimension's spec — must either
+be rewritten to avoid the words or be restated as a second declaration of the same bound. The first
+degrades prose that is doing its job; the second is exactly the restatement this register exists to end,
+and the drift it produces is already recorded as a live `BACKLOG.md` item.
+
+A reference SHALL NOT be treated as a declaration: it carries no citation of its own, contributes nothing
+to the register's bound count, and cannot be the only mention of a bound anywhere.
+
+#### Scenario: Prose referencing a declared bound is cleared
+
+- **WHEN** a sentence mentions a bound and carries `(bound: <capability>/<slug>)` naming a declared bound
+- **THEN** the reaction passes for that occurrence, and the register's bound count is unchanged
+
+#### Scenario: A reference that resolves to nothing
+
+- **WHEN** a reference names a `<capability>/<slug>` that no declared bound produces
+- **THEN** the reaction fails, naming the file, the line, and the unresolved id, because a dangling
+  reference is indistinguishable from an undeclared bound
+
+#### Scenario: A reference that resolves to two declared bounds
+
+- **WHEN** two declared bounds in one capability produce the same slug and a reference names it
+- **THEN** the reaction fails, naming both declarations, so a derived id's uniqueness is checked rather
+  than assumed
+
+#### Scenario: A reference is not a declaration
+
+- **WHEN** a bound is mentioned only by references and declared nowhere
+- **THEN** every reference fails to resolve, so the bound cannot exist in the register as a reference alone
+
 ### Requirement: The register SHALL be projected as a generated, staleness-checked document
 
 The register SHALL be projected into a generated document at `docs/observation-bounds.md`, grouped by

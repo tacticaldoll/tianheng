@@ -49,7 +49,9 @@
 # as the reactions it sits beside. Read-only: it never edits a spec or writes a projection.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+# The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to
+# test only this checkout. A gate that cannot be pointed at a fixture cannot have its refusals proven.
+repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 
 BOUND_HEADING='^#### Scenario: .*(stated|documented) bound'
 BOUND_PROSE='(stated|documented) bounds?'
@@ -80,10 +82,14 @@ scanned=0
 cr=$(printf '\r')
 parse_spec() {
     local file=$1
-    sed "s/${cr}\$//" -- "$file" | awk -v file="$file" -v heading="$BOUND_HEADING" -v prose="$BOUND_PROSE" '
+    sed "s/${cr}\$//" -- "$repo/$file" | awk -v file="$file" -v heading="$BOUND_HEADING" -v prose="$BOUND_PROSE" '
+        # `<none>` rather than an empty field: TAB is IFS whitespace, so the reading shell collapses
+        # consecutive tabs and an empty citation would slide the next field into its place — which it did,
+        # reading an UNPINNED tracker as a PINNED-BY test name until the failure matrix caught it.
         function flush() {
             if (open != "") {
-                printf "BOUND\t%s\t%d\t%s\t%s\t%s\n", file, open_line, open, pinned, unpinned
+                printf "BOUND\t%s\t%d\t%s\t%s\t%s\n", file, open_line, open,
+                    (pinned == "" ? "<none>" : pinned), (unpinned == "" ? "<none>" : unpinned)
             }
             open = ""; pinned = ""; unpinned = ""
         }
@@ -114,7 +120,11 @@ parse_spec() {
             next
         }
         # Prose stating a bound outside any declared bound scenario.
-        open == "" && $0 ~ prose { printf "PROSE\t%s\t%d\t%s\n", file, NR, $0 }
+        open == "" && $0 ~ prose {
+            line = $0
+            gsub(/\t/, " ", line)
+            printf "PROSE\t%s\t%d\t%s\n", file, NR, line
+        }
         END { flush() }
     '
 }
@@ -123,54 +133,96 @@ parse_spec() {
 # comment, a string, or a doc link defends nothing, so it must not satisfy a citation.
 definitions_of() {
     grep -rnE "^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?(async[[:space:]]+)?fn[[:space:]]+$1[[:space:]]*\(" \
-        crates/ --include='*.rs' 2>/dev/null || true
+        "$repo/crates" --include='*.rs' 2>/dev/null || true
 }
 
-mapfile -t spec_files < <(git ls-files 'openspec/specs/*/spec.md' | sort)
+git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+    || cannot_judge "repository root $repo is not a git worktree; this gate judges tracked content"
+mapfile -t spec_files < <(git -C "$repo" ls-files 'openspec/specs/*/spec.md' | sort)
 [[ ${#spec_files[@]} -gt 0 ]] \
     || cannot_judge "git ls-files matched no openspec/specs/*/spec.md — this gate would report clean without reading a spec"
 
+records=$(mktemp)
+ids=$(mktemp)
+trap 'rm -f "$records" "$ids"' EXIT
+
 for spec in "${spec_files[@]}"; do
-    [[ -f $spec ]] || continue
+    [[ -f $repo/$spec ]] || continue
     scanned=$((scanned + 1))
-    while IFS=$'\t' read -r kind file line a b c; do
-        case $kind in
-        BOUND)
-            declared=$((declared + 1))
-            id="${file#openspec/specs/}"
-            id="${id%/spec.md}/$a"
-            if [[ -n $b && -n $c ]]; then
-                fail "$id ($file:$line) carries both PINNED-BY and UNPINNED; a bound is either defended or tracked, and the declaration must say which"
-                continue
-            fi
-            if [[ -z $b && -z $c ]]; then
-                fail "$id ($file:$line) carries neither PINNED-BY nor UNPINNED; a bound with no recorded defence is the unbacked claim this register exists to end"
-                continue
-            fi
-            if [[ -n $c ]]; then
-                [[ $c == "<empty>" ]] \
-                    && fail "$id ($file:$line) is UNPINNED with no tracker; untracked debt is indistinguishable from an oversight"
-                continue
-            fi
-            # PINNED-BY may repeat only if the bound genuinely has two defenders; each must resolve.
-            while IFS= read -r name; do
-                [[ -n $name ]] || continue
-                mapfile -t sites < <(definitions_of "$name")
-                case ${#sites[@]} in
-                0) fail "$id ($file:$line) is PINNED-BY \`$name\`, which no function under crates/ defines; a renamed or deleted test must not read as coverage" ;;
-                1) : ;;
-                *) fail "$id ($file:$line) is PINNED-BY \`$name\`, defined $(( ${#sites[@]} )) times — the citation names a set rather than a reaction:
+    parse_spec "$spec" >>"$records"
+done
+
+# A bound's id is derived from where it sits: `<capability>/<slug>`, the slug being the heading lowercased
+# with each run of non-alphanumerics collapsed to one hyphen. Nothing allocates it, so no ledger exists to
+# fall out of step — and the reference direction below checks the derivation is injective rather than
+# assuming it. Character classes only, never `\+` or `\{1,\}`, so BSD and GNU sed agree.
+slug_of() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
+        | sed -e 's/[^a-z0-9][^a-z0-9]*/-/g' -e 's/^-//' -e 's/-$//'
+}
+
+# Pass 1 — the id table, built from every spec before any prose is judged, because a reference may point
+# at a bound declared in a different capability's file.
+while IFS=$'\t' read -r kind file line heading pinned unpinned; do
+    [[ $kind == BOUND ]] || continue
+    declared=$((declared + 1))
+    capability="${file#openspec/specs/}"
+    capability="${capability%/spec.md}"
+    printf '%s\t%s:%s\n' "$capability/$(slug_of "$heading")" "$file" "$line" >>"$ids"
+done <"$records"
+
+# Pass 2 — the verdicts.
+while IFS=$'\t' read -r kind file line a b c; do
+    case $kind in
+    BOUND)
+        capability="${file#openspec/specs/}"
+        capability="${capability%/spec.md}"
+        id="$capability/$(slug_of "$a")"
+        [[ $b == "<none>" ]] && b=""
+        [[ $c == "<none>" ]] && c=""
+        if [[ -n $b && -n $c ]]; then
+            fail "$id ($file:$line) carries both PINNED-BY and UNPINNED; a bound is either defended or tracked, and the declaration must say which"
+            continue
+        fi
+        if [[ -z $b && -z $c ]]; then
+            fail "$id ($file:$line) carries neither PINNED-BY nor UNPINNED; a bound with no recorded defence is the unbacked claim this register exists to end"
+            continue
+        fi
+        if [[ -n $c ]]; then
+            [[ $c == "<empty>" ]] \
+                && fail "$id ($file:$line) is UNPINNED with no tracker; untracked debt is indistinguishable from an oversight"
+            continue
+        fi
+        while IFS= read -r name; do
+            [[ -n $name ]] || continue
+            mapfile -t sites < <(definitions_of "$name")
+            case ${#sites[@]} in
+            0) fail "$id ($file:$line) is PINNED-BY \`$name\`, which no function under crates/ defines; a renamed or deleted test must not read as coverage" ;;
+            1) : ;;
+            *) fail "$id ($file:$line) is PINNED-BY \`$name\`, defined ${#sites[@]} times — the citation names a set rather than a reaction:
 $(printf '           %s\n' "${sites[@]%%:*}")" ;;
-                esac
-            done < <(printf '%s\n' "${b//|/$'\n'}")
-            ;;
-        PROSE)
+            esac
+        done < <(printf '%s\n' "${b//|/$'\n'}")
+        ;;
+    PROSE)
+        # A reference is the third option between rewriting prose that is doing its job and restating a
+        # bound that already exists elsewhere — the restatement being the drift this register exists to end.
+        reference=$(printf '%s' "$a" | sed -n 's/.*(bound:[[:space:]]*\([A-Za-z0-9_./-]*\)).*/\1/p' | head -n 1)
+        if [[ -z $reference ]]; then
             fail "$file:$line states a bound outside any declared bound scenario, so it is absent from the register:
            $(printf '%s' "$a" | cut -c1-108)"
-            ;;
+            continue
+        fi
+        mapfile -t targets < <(awk -F'\t' -v want="$reference" '$1 == want { print $2 }' "$ids")
+        case ${#targets[@]} in
+        0) fail "$file:$line references bound \`$reference\`, which no declared bound produces; a dangling reference is indistinguishable from an undeclared bound" ;;
+        1) : ;;
+        *) fail "$file:$line references bound \`$reference\`, which two declared bounds produce — a derived id must be unique:
+$(printf '           %s\n' "${targets[@]}")" ;;
         esac
-    done < <(parse_spec "$spec")
-done
+        ;;
+    esac
+done <"$records"
 
 [[ $declared -gt 0 ]] \
     || cannot_judge "parsed 0 declared bounds across $scanned spec file(s) — the heading form changed, so this gate would pass vacuously"
