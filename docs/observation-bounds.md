@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**5 of 41 declared bounds have no pinning test.** That figure is the register's
+**5 of 42 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -22,13 +22,14 @@ reaction's comments, because a residual a reader cannot see is one the register 
 3. **A reference clears more than it names.** `(bound: …)` clears the prose it sits with regardless of
    how many bounds that prose states, or whether the bound it names is one of them. This is how a
    retired `#[path]` bound survived two sweeps inside a sentence listing four inherited bounds behind
-   one reference to a fifth. The discipline is one reference per stated bound, and it is the author\s:
+   one reference to a fifth. The discipline is one reference per stated bound, and it is the author's:
    closing it would mean reading which bounds a sentence lists, which no reaction can do. Scanning
    paragraphs instead of lines was measured against that defect and would not have caught it, because
    the paragraph carries the same clearing reference.
 
 The **exemption**: prose under a requirement whose heading names bounds is not reported, because three
-such requirements state their bounds as numbered lists that reading worse would not improve. Its price
+such requirements state their bounds as a numbered list, and requiring each item to become its own
+scenario would restructure them and read worse. Its price
 is charged — such a requirement must declare at least one bound scenario — but the other items of its
 list are unregistered, which is why this list is a floor rather than a proof of completeness.
 
@@ -73,6 +74,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the system reports no violation, because comments, string literals, and macro bodies are stripped before scanning, matching the scanner's stated bounds
 
 - **pinned by**: `confine_ignores_a_use_inside_a_string_literal`
+
+### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-inherited-bound`
+
+> the system reports no violation, because the rule is use-only and observes `use` imports rather
+
+- **pinned by**: `confine_ignores_an_extern_crate_declaration`
 
 ## inline-symbol-path-confinement
 

@@ -316,17 +316,24 @@ first: nothing observes them, and a declaration no reaction can reach is the nam
 
 Prose that mentions a bound SHALL be cleared by the undeclared-prose reaction when it carries an explicit
 reference of the form `(bound: <capability>/<slug>)`, where `<slug>` is the declaring scenario's heading
-lowercased with each run of non-alphanumeric characters replaced by a single hyphen. **Every** reference the
-prose carries SHALL resolve to exactly one declared bound across all specs, not merely one of them: resolving
-to none SHALL fail, because a reference that points nowhere is indistinguishable from an undeclared bound,
-and resolving to more than one SHALL fail, which is also what keeps derived ids unique rather than merely
-assumed unique. Checking one of them leaves the rest unchecked while the line reports clean — measured: the extraction was
-greedy, so only the **last** reference was ever examined and an earlier dangling one passed.
+lowercased with each run of non-alphanumeric characters replaced by a single hyphen.
+
+**Every reference SHALL be resolved wherever it appears, independent of whether its line also states a bound.**
+Resolution belongs to the id, not to the wording around it: a reference reachable only through the
+bound-prose scan is un-checked the moment a sentence is reworded out of that scan's pattern, which happened
+here — a repair reworded a capability's overview out of the scan's pattern while improving it, and the two
+references that repair added were never resolved again. A reference in a Purpose
+paragraph, a requirement's prose, or inside a declared bound scenario SHALL be resolved the same way.
+
+Each reference SHALL resolve to exactly one declared bound across all specs, and **every** reference the prose
+carries SHALL be checked rather than one of them: resolving to none SHALL fail, because a reference that points
+nowhere is indistinguishable from an undeclared bound, and resolving to more than one SHALL fail, which is also
+what keeps derived ids unique rather than merely assumed unique.
 
 What a reference does **not** establish SHALL be stated wherever the reference form is described: it clears
 the prose it sits with, and it does not certify that the bounds the prose states are the bound it names. A
 sentence listing four inherited bounds is cleared by one reference to a fifth. Authors SHALL therefore carry
-one reference for each bound the prose names, and the reaction cannot enforce that — see residual 3 above.
+one reference for each bound the prose names, and the reaction cannot enforce that.
 
 A reference exists because the floor's alternative is worse. Without it, a sentence that legitimately
 **points at** a bound declared elsewhere — in the same file, or in another dimension's spec — must either
@@ -347,6 +354,13 @@ to the register's bound count, and cannot be the only mention of a bound anywher
 - **WHEN** a reference names a `<capability>/<slug>` that no declared bound produces
 - **THEN** the reaction fails, naming the file, the line, and the unresolved id, because a dangling
   reference is indistinguishable from an undeclared bound
+
+#### Scenario: A reference on a line that states no bound
+
+- **WHEN** a reference sits in prose that does not itself match the bound-prose pattern — a Purpose
+  paragraph, or a sentence reworded away from those words
+- **THEN** the reaction resolves it exactly as it would on any other line, so rewording a sentence cannot
+  silently un-check the references it carries
 
 #### Scenario: An earlier reference on the same line that resolves to nothing
 
@@ -376,6 +390,14 @@ hand-maintained structural document drifts from what it describes.
 The projection SHALL surface the **count of unpinned bounds as its headline figure**, because that count
 is the register's audit backlog and a figure in a footnote is not read.
 
+**Staleness checking SHALL NOT be mistaken for content checking, and the companion test SHALL assert the
+document's content directly.** A byte-for-byte comparison proves the document and the reaction agree; it
+cannot prove either is right, because both come from one renderer. A mangled apostrophe rendered as
+`author\s:` survived a full review in the tracked document for exactly that reason. The companion test
+SHALL therefore assert that each disclosure the requirements oblige the header to make is literally present,
+and SHALL refuse a rendered backslash, which this document's prose never wants and which is therefore a
+quoting artifact rather than content.
+
 #### Scenario: The projection is stale
 
 - **WHEN** a bound is declared, changed, or removed without regenerating the projection
@@ -390,6 +412,12 @@ is the register's audit backlog and a figure in a footnote is not read.
 
 - **WHEN** the register contains bounds whose defence is a tracker rather than a test
 - **THEN** the projection states their count in its header, not only in the affected entries
+
+#### Scenario: The projection's disclosures are asserted, not only its freshness
+
+- **WHEN** the companion test runs
+- **THEN** it greps the blessed document for each disclosure the requirements oblige the header to make and
+  for the absence of a rendered backslash, so a renderer typo cannot pass by agreeing with itself
 
 ### Requirement: An unpinned bound SHALL be representable, and SHALL name its tracker
 

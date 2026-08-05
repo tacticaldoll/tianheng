@@ -455,6 +455,22 @@ earlier_reference_dangling=$(new_repo earlier-reference-dangling "$(spec_with '-
 Two shapes are stated bounds (bound: probe-capability/no-such-first-bound) and (bound: probe-capability/a-probed-shape-is-a-stated-bound).')")
 expect_fail "$earlier_reference_dangling" 1 'no-such-first-bound`, which no declared bound produces'
 
+# A reference is resolved wherever it sits, not only on a line that also says the trigger words. Reaching
+# references only through a prose record meant rewording a sentence silently un-checked them — and a repair
+# did exactly that here, turning `the module scanner's stated bounds` into `the module scanner's bounds, one
+# reference per bound` and leaving the two references it added unresolved from then on. Fixture: a Purpose
+# paragraph, which no trigger words appear in.
+reference_off_a_triggering_line=$(new_repo reference-off-trigger "$(printf '%s\n' \
+    '# probe-capability Specification' '' '## Purpose' '' \
+    'The probe inherits bounds, one reference per bound: (bound: probe-capability/no-such-bound-at-all).' '' \
+    '## Requirements' '### Requirement: The probe observes something' '' \
+    'The probe SHALL observe the shape it claims.' '' \
+    '#### Scenario: A probed shape is a stated bound' \
+    '- **WHEN** the probe meets the shape' \
+    '- **THEN** it does not claim to observe it' \
+    '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+expect_fail "$reference_off_a_triggering_line" 1 'no-such-bound-at-all`, which no declared bound produces'
+
 # Two declared bounds whose headings differ only in punctuation collapse to one slug, so a reference to it
 # names a set. This is what checks the derived id is injective rather than assuming it.
 ambiguous_spec="$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
@@ -567,6 +583,37 @@ expect_fail "$missing" 1 'is missing; generate it'
 headline=$(new_repo headline "$(spec_with '- **UNPINNED** BACKLOG.md "probe debt"')")
 grep -Fq '**1 of 1 declared bounds have no pinning test.**' "$headline/docs/observation-bounds.md" \
     || { printf 'the projection must lead with the unpinned count\n' >&2; exit 1; }
+
+# The projection's CONTENT, not only its freshness. Byte-for-byte staleness checking proves the document and
+# the reaction agree; it can never prove either is right, because both come from one renderer. A mangled
+# apostrophe — `author\s:` where `author's:` was meant — sat in the tracked document through a full review
+# because nothing ever asserted what the header says, only that it matched what the renderer would say again.
+#
+# So the disclosures a register reader depends on are asserted literally. Each of these is a claim the spec
+# requires the header to make, and each is now a fixture rather than a hope.
+projection=$headline/docs/observation-bounds.md
+while IFS= read -r required; do
+    [[ -n $required ]] || continue
+    grep -Fq "$required" "$projection" \
+        || { printf 'the projection header must state: %s\n' "$required" >&2; exit 1; }
+# Each entry is a claim the spec REQUIRES the header to make — read from the document rather than
+# remembered, because writing this list from memory is how the first attempt asserted a paragraph the
+# header does not have. Historical notes in the header are deliberately absent: they are retired when the
+# window ships, and a fixture must not pin what is meant to go away.
+done <<'REQUIRED'
+1. **Unrecognized wording.**
+2. **The scan is line-oriented.**
+3. **A reference clears more than it names.**
+The **exemption**:
+The second floor is the same shape.
+declared bounds have no pinning test.
+REQUIRED
+
+# And nothing rendered may carry a backslash: none of this document's prose wants one, so a lone `\` is a
+# quoting artifact of the renderer rather than content — which is exactly how `author\s:` reached the tree.
+! grep -q '\\' "$projection" \
+    || { printf 'the projection carries a backslash, which its prose never wants: %s\n' \
+        "$(grep -n '\\' "$projection" | head -3)" >&2; exit 1; }
 
 # --- cannot-judge directions ---
 

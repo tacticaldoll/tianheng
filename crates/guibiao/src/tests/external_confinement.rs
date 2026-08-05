@@ -462,3 +462,28 @@ pub(super) fn confine_observes_an_aliased_import_of_the_confined_crate() {
     assert_eq!(violations[0].target(), "libc");
     assert_eq!(violations[0].finding, "crate::service");
 }
+
+// The fourth inherited bound this capability's overview names, declared and pinned rather than left in
+// prose. It was stated twice in the spec and invisible to the register both times — once on a line with no
+// trigger words, once as "a stated, inherited bound" whose comma breaks the adjacency the scan needs — so
+// nothing defended it while the overview read as permission.
+//
+// Probed before it was declared: the assertion here is that `extern crate libc;` outside the permitted
+// subtree yields no violation, which is the scanner's use-only behaviour rather than a reasoned claim.
+#[test]
+pub(super) fn confine_ignores_an_extern_crate_declaration() {
+    let (result, violations) = run_module_check(
+        "confine-extern-crate",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+            ("ffi.rs", "\n"),
+            ("service.rs", "extern crate libc;\n"),
+        ],
+        confine("crate::ffi", "libc"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "the rule is use-only: an `extern crate` declaration is not observed: {violations:?}"
+    );
+}
