@@ -619,6 +619,5 @@ The system SHALL observe an inherent `impl` block that is written as a direct st
 
 - **WHEN** the impl is written one level further inside the body (`fn _also() { if true { impl Svc { … } } }`), or the wrapping binding is a `static` rather than a `const`
 - **THEN** the system reports no exposure for that impl — a stated coverage bound rather than a silent claim of cleanliness
-
 - **PINNED-BY** `an_impl_nested_one_level_further_stays_a_stated_bound`
 - **PINNED-BY** `a_static_wrapped_impl_stays_a_stated_bound`

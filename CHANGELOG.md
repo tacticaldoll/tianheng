@@ -54,6 +54,25 @@ them.
   several specs stale at once.
 
 ### Documentation
+- The previous entry's own repair created a hole, and a review proved it with a fixture. A `(bound: …)`
+  reference was only ever resolved through a bound-prose record, and rewording that sentence dropped its line
+  out of the scan's pattern — so the two references the repair added were **never resolved again**. Every
+  reference is now resolved **wherever it sits**, independent of the wording around it: a Purpose paragraph, a
+  requirement's prose, or inside a declared bound scenario. All 14 references in the tree already resolved, so
+  the direction is a free guard rather than a migration.
+- `` `extern crate`-blind `` was an **undeclared and undefended** bound in the same capability, stated twice
+  and invisible to the register both times — once with no trigger words, once as "a stated, inherited bound"
+  whose comma breaks the adjacency the scan needs, which is the very wording the projection's first residual
+  cites as its example. It is now the capability's **fourth declared bound**, pinned by
+  `confine_ignores_an_extern_crate_declaration`: probed before declaring, and discriminating because the
+  sibling test puts `use libc as c;` in the identical fixture shape and gets a violation. The register holds
+  **42 bounds with 42 citations**.
+- The projection's **content** is now asserted by the companion test, not only its freshness. Byte-for-byte
+  staleness proves the document and the reaction agree; it can never prove either is right, because both come
+  from one renderer. That is how `` `author\s:` `` — a shell quoting artifact where an apostrophe was meant —
+  reached the tracked document and survived a review, alongside a sentence that did not parse. Both are fixed,
+  and every disclosure the requirements oblige the header to make is now grepped literally, with a rendered
+  backslash refused outright.
 - A **retired bound was still alive** in `external-crate-confinement`'s overview paragraph: it listed
   `` `#[path]`-blind `` among the module scanner's inherited bounds while the resolution paragraph in the same
   file, corrected in this window, says a `#[path]`-remapped module is followed and its imports observed. One

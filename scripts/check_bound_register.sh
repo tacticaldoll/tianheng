@@ -111,6 +111,29 @@ parse_spec() {
             }
             open = ""; pinned = ""; unpinned = ""; statement = ""
         }
+        # EVERY line carrying a well-formed reference, wherever it sits — a Purpose paragraph, a heading, a
+        # bound scenario, a requirement whose heading names bounds. Emitted FIRST and without `next`, so no
+        # later rule can consume a line before its references are seen.
+        #
+        # Resolution belongs to the id, never to whether the line also happened to say the trigger words.
+        # It used to reach references only through a PROSE record, which meant rewording a sentence silently
+        # un-checked them: this repository reworded `the module scanner\047s stated bounds` to
+        # `the module scanner\047s bounds, one reference per bound` — a repair — and the two references that
+        # repair added were never resolved again. Measured on adoption: all 14 references in the tree resolve
+        # against the 41 derived ids, so this direction was free rather than a migration.
+        #
+        # The docs-only illustrations in the register\047s own spec are immune by the id character class:
+        # `(bound: <capability>/<slug>)` holds `<`, which the class excludes, so it never matches.
+        {
+            reference_scan = $0
+            while (match(reference_scan, /\(bound:[ \t]*[A-Za-z0-9_.\/-]+\)/)) {
+                reference_id = substr(reference_scan, RSTART, RLENGTH)
+                sub(/^\(bound:[ \t]*/, "", reference_id)
+                sub(/\)$/, "", reference_id)
+                printf "REFERENCE\t%s\t%d\t%s\n", file, NR, reference_id
+                reference_scan = substr(reference_scan, RSTART + RLENGTH)
+            }
+        }
         # A requirement or section heading closes any open bound and is never itself scanned: it names the
         # requirement whose scenarios declare the bounds.
         #
@@ -571,23 +594,21 @@ $(printf '           %s\n' "${site_paths[@]}")"
         # them. That is how a retired `#[path]` bound survived two sweeps inside a sentence listing four
         # inherited bounds behind one reference to a fifth. Closing it needs reading which bounds a sentence
         # lists, which is semantic; the discipline is one reference per stated bound, and it is the author's.
-        mapfile -t references < <(printf '%s' "$a" | grep -oE '\(bound:[[:space:]]*[A-Za-z0-9_./-]*\)' \
-            | sed -e 's/^(bound:[[:space:]]*//' -e 's/)$//')
-        if [[ ${#references[@]} -eq 0 ]]; then
+        # Whether the line is CLEARED is all this decides. Resolving the ids is the REFERENCE record's job,
+        # so a reference is checked wherever it sits rather than only where the trigger words also appear.
+        if ! printf '%s' "$a" | grep -qE '\(bound:[[:space:]]*[A-Za-z0-9_./-]+\)'; then
             fail "$file:$line states a bound outside any declared bound scenario, so it is absent from the register:
            $(printf '%s' "$a" | cut -c1-108)"
-            continue
         fi
-        for reference in "${references[@]}"; do
-            [[ -n $reference ]] || continue
-            mapfile -t targets < <(awk -F'\t' -v want="$reference" '$1 == want { print $2 }' "$ids")
-            case ${#targets[@]} in
-            0) fail "$file:$line references bound \`$reference\`, which no declared bound produces; a dangling reference is indistinguishable from an undeclared bound" ;;
-            1) : ;;
-            *) fail "$file:$line references bound \`$reference\`, which two declared bounds produce — a derived id must be unique:
+        ;;
+    REFERENCE)
+        mapfile -t targets < <(awk -F'\t' -v want="$a" '$1 == want { print $2 }' "$ids")
+        case ${#targets[@]} in
+        0) fail "$file:$line references bound \`$a\`, which no declared bound produces; a dangling reference is indistinguishable from an undeclared bound" ;;
+        1) : ;;
+        *) fail "$file:$line references bound \`$a\`, which two declared bounds produce — a derived id must be unique:
 $(printf '           %s\n' "${targets[@]}")" ;;
-            esac
-        done
+        esac
         ;;
     esac
 done <"$records"
@@ -671,13 +692,14 @@ render_projection() {
         '3. **A reference clears more than it names.** `(bound: …)` clears the prose it sits with regardless of' \
         '   how many bounds that prose states, or whether the bound it names is one of them. This is how a' \
         '   retired `#[path]` bound survived two sweeps inside a sentence listing four inherited bounds behind' \
-        '   one reference to a fifth. The discipline is one reference per stated bound, and it is the author\''s:' \
+        '   one reference to a fifth. The discipline is one reference per stated bound, and it is the author'\''s:' \
         '   closing it would mean reading which bounds a sentence lists, which no reaction can do. Scanning' \
         '   paragraphs instead of lines was measured against that defect and would not have caught it, because' \
         '   the paragraph carries the same clearing reference.' \
         '' \
         'The **exemption**: prose under a requirement whose heading names bounds is not reported, because three' \
-        'such requirements state their bounds as numbered lists that reading worse would not improve. Its price' \
+        'such requirements state their bounds as a numbered list, and requiring each item to become its own' \
+        'scenario would restructure them and read worse. Its price' \
         'is charged — such a requirement must declare at least one bound scenario — but the other items of its' \
         'list are unregistered, which is why this list is a floor rather than a proof of completeness.' \
         '' \
