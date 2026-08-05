@@ -28,6 +28,15 @@ new_repo() {
     printf '%s' "${rust:-$DEFAULT_RUST}" >"$repo/crates/probe/src/lib.rs"
     git -C "$repo" add -A
     git -C "$repo" commit -qm 'probe fixture'
+    # Bless the projection so each case tests the condition it was built for rather than the absent
+    # document. The projection directions below delete or edit it deliberately.
+    # Blessing a deliberately-broken fixture still writes the projection, and prints that fixture's own
+    # offenses on the way. Captured so the matrix output stays readable, and surfaced only if blessing
+    # itself fails — swallowing that would hide the one error this line could produce.
+    local bless_output bless_status=0
+    bless_output=$(BLESS=1 "$check" "$repo" 2>&1) || bless_status=$?
+    [[ $bless_status -eq 0 ]] \
+        || { printf 'blessing the fixture projection failed (exit %d): %s\n' "$bless_status" "$bless_output" >&2; exit 1; }
     printf '%s\n' "$repo"
 }
 
@@ -207,6 +216,28 @@ bounds_req_bare=$(new_repo bounds-req-bare "$(printf '%s\n' \
     '- **THEN** it does not claim to observe it' \
     '- **PINNED-BY** `a_probe_bound_is_pinned`')")
 expect_fail "$bounds_req_bare" 1 'names bounds, so its prose may state them, but it declares no bound scenario'
+
+# --- the projection ---
+
+# Stale: the specs moved and the document did not. This is the direction that keeps a generated register from
+# becoming a hand-maintained one, which is the drift it exists to avoid.
+stale=$(new_repo stale "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf '\nhand edit\n' >>"$stale/docs/observation-bounds.md"
+expect_fail "$stale" 1 'no longer matches the specs'
+
+# And regenerating clears it, so the failure names a repair rather than a dead end.
+BLESS=1 "$check" "$stale" >/dev/null
+expect_pass "$stale" 'bound register ok'
+
+missing=$(new_repo missing "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+rm -f "$missing/docs/observation-bounds.md"
+expect_fail "$missing" 1 'is missing; generate it'
+
+# The headline figure is the unpinned count, not a footnote — asserted on a fixture whose single bound is
+# tracked rather than pinned.
+headline=$(new_repo headline "$(spec_with '- **UNPINNED** BACKLOG.md "probe debt"')")
+grep -Fq '**1 of 1 declared bounds have no pinning test.**' "$headline/docs/observation-bounds.md" \
+    || { printf 'the projection must lead with the unpinned count\n' >&2; exit 1; }
 
 # --- cannot-judge directions ---
 

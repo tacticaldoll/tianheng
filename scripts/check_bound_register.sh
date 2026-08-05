@@ -93,10 +93,11 @@ parse_spec() {
         # reading an UNPINNED tracker as a PINNED-BY test name until the failure matrix caught it.
         function flush() {
             if (open != "") {
-                printf "BOUND\t%s\t%d\t%s\t%s\t%s\n", file, open_line, open,
-                    (pinned == "" ? "<none>" : pinned), (unpinned == "" ? "<none>" : unpinned)
+                printf "BOUND\t%s\t%d\t%s\t%s\t%s\t%s\n", file, open_line, open,
+                    (pinned == "" ? "<none>" : pinned), (unpinned == "" ? "<none>" : unpinned),
+                    (statement == "" ? "<none>" : statement)
             }
-            open = ""; pinned = ""; unpinned = ""
+            open = ""; pinned = ""; unpinned = ""; statement = ""
         }
         # A requirement or section heading closes any open bound and is never itself scanned: it names the
         # requirement whose scenarios declare the bounds.
@@ -129,6 +130,15 @@ parse_spec() {
                 open_line = NR
                 req_declared = 1
             }
+            next
+        }
+        # The bound as stated: its first THEN, which is the sentence a reader needs and the projection
+        # carries. Tabs are squashed so the record cannot be split by one.
+        open != "" && statement == "" && /^[[:space:]]*-[[:space:]]+\*\*THEN\*\*/ {
+            line = $0
+            sub(/^[[:space:]]*-[[:space:]]+\*\*THEN\*\*[[:space:]]*/, "", line)
+            gsub(/\t/, " ", line)
+            statement = line
             next
         }
         open != "" && /^[[:space:]]*-[[:space:]]+\*\*PINNED-BY\*\*/ {
@@ -224,7 +234,7 @@ slug_of() {
 
 # Pass 1 — the id table, built from every spec before any prose is judged, because a reference may point
 # at a bound declared in a different capability's file.
-while IFS=$'\t' read -r kind file line heading pinned unpinned; do
+while IFS=$'\t' read -r kind file line heading pinned unpinned statement; do
     [[ $kind == BOUND ]] || continue
     declared=$((declared + 1))
     capability="${file#openspec/specs/}"
@@ -233,7 +243,7 @@ while IFS=$'\t' read -r kind file line heading pinned unpinned; do
 done <"$records"
 
 # Pass 2 — the verdicts.
-while IFS=$'\t' read -r kind file line a b c; do
+while IFS=$'\t' read -r kind file line a b c d; do
     case $kind in
     BOUND)
         capability="${file#openspec/specs/}"
@@ -288,6 +298,79 @@ $(printf '           %s\n' "${targets[@]}")" ;;
         ;;
     esac
 done <"$records"
+
+# The projection, built from the SAME records the verdicts came from rather than a second parse, so the
+# document and the reaction cannot disagree about what a bound is.
+#
+# Generated and staleness-checked, the discipline `AGENTS.self-law.md` already follows: a hand-maintained
+# structural document drifts from what it describes, and a register of a hundred claims would drift fastest.
+# `BLESS=1` rewrites it; any other run compares and fails.
+PROJECTION=docs/observation-bounds.md
+
+render_projection() {
+    local unpinned_total=$1
+    printf '%s\n' \
+        '# Observation bounds' \
+        '' \
+        'Every **observation bound** this family declares: a claim that a reaction deliberately stops at a' \
+        'named shape, so that shape is governed policy rather than a defect.' \
+        '' \
+        "**$unpinned_total of $declared declared bounds have no pinning test.** That figure is the register's" \
+        'audit backlog and leads the document because a number in a footnote is not read. Each such bound names' \
+        'the tracker that owns closing it.' \
+        '' \
+        'Generated from `openspec/specs/*/spec.md` by `scripts/check_bound_register.sh`. **Do not edit by hand** —' \
+        'regenerate with `BLESS=1 bash scripts/check_bound_register.sh`. A stale projection fails that gate.' \
+        '' \
+        '**What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a' \
+        'scenario whose heading marks it a bound. A bound worded outside that form — "out-of-scope", "does not' \
+        'claim to observe" — is invisible to the scan that assembles this, so the list is a floor rather than a' \
+        'proof of completeness. A register that implied otherwise would mislead exactly where it is most' \
+        'trusted.' \
+        ''
+    local last=''
+    while IFS=$'\t' read -r kind file line heading pinned unpinned statement; do
+        [[ $kind == BOUND ]] || continue
+        local cap="${file#openspec/specs/}"
+        cap="${cap%/spec.md}"
+        if [[ $cap != "$last" ]]; then
+            printf '\n## %s\n' "$cap"
+            last=$cap
+        fi
+        printf '\n### `%s/%s`\n\n' "$cap" "$(slug_of "$heading")"
+        [[ $statement == "<none>" ]] || printf '> %s\n\n' "$statement"
+        if [[ $pinned != "<none>" ]]; then
+            local one
+            while IFS= read -r one; do
+                [[ -n $one ]] && printf -- '- **pinned by**: `%s`\n' "$one"
+            done < <(printf '%s\n' "${pinned//|/$'\n'}")
+        else
+            printf -- '- **unpinned**, tracked by: %s\n' "$unpinned"
+        fi
+    done <"$records"
+}
+
+unpinned_count=$(awk -F'\t' '$1 == "BOUND" && $5 == "<none>" { n++ } END { print n + 0 }' "$records")
+
+if [[ ${BLESS:-} == 1 ]]; then
+    # The directory is part of what blessing generates, so a fresh checkout — or a test fixture — can be
+    # blessed without being prepared for it first.
+    mkdir -p "$(dirname "$repo/$PROJECTION")"
+    render_projection "$unpinned_count" >"$repo/$PROJECTION"
+    printf 'blessed %s (%d declared bounds, %d unpinned)\n' "$PROJECTION" "$declared" "$unpinned_count"
+    exit 0
+fi
+
+if [[ -f $repo/$PROJECTION ]]; then
+    rendered=$(mktemp)
+    render_projection "$unpinned_count" >"$rendered"
+    if ! diff -q "$rendered" "$repo/$PROJECTION" >/dev/null 2>&1; then
+        fail "$PROJECTION no longer matches the specs; regenerate it with BLESS=1 bash scripts/check_bound_register.sh"
+    fi
+    rm -f "$rendered"
+else
+    fail "$PROJECTION is missing; generate it with BLESS=1 bash scripts/check_bound_register.sh"
+fi
 
 [[ $declared -gt 0 ]] \
     || cannot_judge "parsed 0 declared bounds across $scanned spec file(s) — the heading form changed, so this gate would pass vacuously"

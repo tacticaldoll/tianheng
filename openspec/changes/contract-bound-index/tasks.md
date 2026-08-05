@@ -47,11 +47,11 @@
 
 ## 4. Project the register
 
-- [ ] 4.1 Generate `docs/observation-bounds.md` from the specs, grouped by capability, with the unpinned
+- [x] 4.1 Generate `docs/observation-bounds.md` from the specs, grouped by capability, with the unpinned
       count as its headline figure and the floor's residual stated in its header
-- [ ] 4.2 Add the staleness direction to the gate: a projection that no longer matches the specs fails,
+- [x] 4.2 Add the staleness direction to the gate: a projection that no longer matches the specs fails,
       with an explicit regeneration path
-- [ ] 4.3 Prove the staleness direction fails on a hand-edited projection and passes after regeneration
+- [x] 4.3 Prove the staleness direction fails on a hand-edited projection and passes after regeneration
 
 ## 5. Wire it in
 
