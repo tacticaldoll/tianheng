@@ -217,6 +217,45 @@ bounds_req_bare=$(new_repo bounds-req-bare "$(printf '%s\n' \
     '- **PINNED-BY** `a_probe_bound_is_pinned`')")
 expect_fail "$bounds_req_bare" 1 'names bounds, so its prose may state them, but it declares no bound scenario'
 
+# --- restatement across capabilities ---
+
+# One behaviour has one defence, so the same test cited by two capabilities means one bound declared twice.
+# Needs a second capability, so this fixture is built by hand rather than through spec_with.
+restated=$fixture_root/restated
+mkdir -p "$restated/openspec/specs/cap-one" "$restated/openspec/specs/cap-two" "$restated/crates/probe/src"
+git init -q "$restated"
+git -C "$restated" config user.name 'Bound Register Test'
+git -C "$restated" config user.email 'bound-register@example.invalid'
+printf '%s' "$DEFAULT_RUST" >"$restated/crates/probe/src/lib.rs"
+for cap in cap-one cap-two; do
+    printf '%s\n' \
+        "# $cap Specification" '' '## Purpose' '' 'Probe capability.' '## Requirements' \
+        '### Requirement: The probe observes something' '' \
+        'The probe SHALL observe the shape it claims.' '' \
+        '#### Scenario: A probed shape is a stated bound' \
+        '- **WHEN** the probe meets the shape' \
+        '- **THEN** it does not claim to observe it' \
+        '- **PINNED-BY** `a_probe_bound_is_pinned`' >"$restated/openspec/specs/$cap/spec.md"
+done
+git -C "$restated" add -A
+git -C "$restated" commit -qm 'restatement fixture'
+BLESS=1 "$check" "$restated" >/dev/null 2>&1
+expect_fail "$restated" 1 'one behaviour has one defence'
+
+# Repetition WITHIN one capability is not a restatement: a bound covering two shapes cites two tests, and
+# one capability may cite one test from two bounds.
+within=$(new_repo within "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`
+- **PINNED-BY** `a_second_probe_bound_is_pinned`' \
+    '
+#### Scenario: A second probed shape is a stated bound
+- **WHEN** the probe meets another shape
+- **THEN** it does not claim to observe it
+- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    'pub fn a_probe_bound_is_pinned() {}
+pub fn a_second_probe_bound_is_pinned() {}
+')
+expect_pass "$within" 'bound register ok (2 declared bounds'
+
 # --- the projection ---
 
 # Stale: the specs moved and the document did not. This is the direction that keeps a generated register from
