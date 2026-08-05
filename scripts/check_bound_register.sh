@@ -73,6 +73,14 @@ repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 BOUND_HEADING='^#### Scenario: .*(stated|documented)( [A-Za-z-]+)? bounds?'
 BOUND_PROSE='(stated|documented)( [A-Za-z-]+)? bounds?'
 
+# Tracked paths matching a pathspec (every tracked path when given none), NUL-separated. The one place
+# that knows `git ls-files` quotes a non-ASCII path by default, so a quoted path would name no file on
+# disk: three call sites had grown three copies of the same `-z` loop and the same comment explaining it.
+# Callers read it with `mapfile -d ''`.
+tracked_files() {
+    git -C "$repo" ls-files -z -- "$@"
+}
+
 fail() {
     printf 'bound register: %s\n' "$*" >&2
     offenses=$((offenses + 1))
@@ -256,14 +264,13 @@ definitions_of() {
         ;;
     esac
     local files=()
-    # `-z`, and the same `read -r -d ''` loop the tracked-path index uses: `git ls-files` quotes a
-    # non-ASCII path by default, and a quoted path names no file on disk.
-    while IFS= read -r -d '' rs; do
-        files+=("$repo/$rs")
-    done < <(git -C "$repo" ls-files -z -- "$scope/*.rs")
-    # `grep` with no file arguments reads STDIN and would block inside a process substitution, so a
-    # crate holding no tracked `.rs` file emits nothing and the caller counts zero sites.
+    mapfile -d '' -t files < <(tracked_files "$scope/*.rs")
+    # The guard precedes the prefixing, so neither step ever handles an empty array: `grep` with no file
+    # arguments reads STDIN and would block inside a process substitution, so a crate holding no tracked
+    # `.rs` file emits nothing here and the caller counts zero sites.
     [[ ${#files[@]} -gt 0 ]] || return 0
+    # Absolute, because `grep` runs from wherever the caller stands; the reporting site relativizes again.
+    files=("${files[@]/#/$repo/}")
     # `-H` explicitly: `grep -n` omits the filename when given exactly ONE file, and the caller parses
     # `file:line:` — a single-file crate would have handed it a line number where a path belongs.
     grep -HnE "^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?(async[[:space:]]+)?fn[[:space:]]+$name[[:space:]]*\(" \
@@ -352,19 +359,17 @@ build_harness_index() {
         harness_error="no directory under $repo/crates, so no package could be enumerated"
         return 0
     fi
+    # cargo's own stderr is KEPT. Discarded, the exit-2 diagnosis named no cause, so a compile error, an
+    # absent package, and a lock held by another cargo all read identically and the one actionable detail
+    # had to be recovered by re-running cargo by hand.
+    cargo_errors=$(mktemp)
     for member in "${members[@]}"; do
-        # cargo's own stderr is KEPT. Discarded, the exit-2 diagnosis named no cause, so a compile
-        # error, an absent package, and a lock held by another cargo all read identically and the one
-        # actionable detail had to be recovered by re-running cargo by hand.
-        cargo_stderr=$(mktemp)
-        listed=$(cd "$repo" && cargo test -p "$member" --all-features -- --list </dev/null 2>"$cargo_stderr") || {
+        listed=$(cd "$repo" && cargo test -p "$member" --all-features -- --list </dev/null 2>"$cargo_errors") || {
             harness_state=error
             harness_error="\`cargo test -p $member --all-features -- --list\` failed:
-$(sed 's/^/           /' "$cargo_stderr" | tail -n 12)"
-            rm -f "$cargo_stderr"
+$(sed 's/^/           /' "$cargo_errors" | tail -n 12)"
             return 0
         }
-        rm -f "$cargo_stderr"
         while IFS= read -r leaf; do
             [[ -n $leaf ]] || continue
             harness_packages_of[$leaf]="${harness_packages_of[$leaf]:-,}$member,"
@@ -473,10 +478,11 @@ declare -A tracked_paths=()
 tracked_path_index_built=0
 build_tracked_path_index() {
     [[ $tracked_path_index_built == 1 ]] && return 0
-    local path
-    while IFS= read -r -d '' path; do
+    local paths=() path
+    mapfile -d '' -t paths < <(tracked_files)
+    for path in "${paths[@]}"; do
         tracked_paths[$path]=1
-    done < <(git -C "$repo" ls-files -z)
+    done
     tracked_path_index_built=1
 }
 
@@ -511,7 +517,12 @@ ids=$(mktemp)
 # The projection's compare tempfile joins the trap before it exists, so an abort inside `render_projection`
 # cannot leak it. Expanded conditionally, since an unset `rendered` would otherwise pass an empty argument.
 rendered=
-trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"}' EXIT
+# `cargo_errors` joins the trap for the same reason `rendered` does: it is created lazily, inside
+# `build_harness_index`, and a per-member `mktemp` with its own `rm` leaks the file on any abort between
+# the two. One file, reused — each `2>` truncates it — so there is one path to clean up and the trap owns
+# it, which is this file's existing discipline rather than a second one.
+cargo_errors=
+trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"}' EXIT
 
 for spec in "${spec_files[@]}"; do
     # A tracked spec missing from the worktree is UNDECIDABLE, not skippable. `continue` dropped its
@@ -824,12 +835,9 @@ reference_count=$(awk -F'\t' '$1 == "REFERENCE" { n++ } END { print n + 0 }' "$r
 # Placed AFTER the cannot-judge guard. With no declared bound parsed the counts are 0, and reporting every
 # written census as disagreeing with "0 across 0" would bury the one diagnosis that is true.
 #
-# `-z` and the same `read -r -d ''` loop `build_tracked_path_index` uses above, rather than a second idiom for
-# one query: `git ls-files` quotes a non-ASCII path by default, and a quoted path names no file on disk.
+# Tracked Markdown through the one enumerator, like every other direction here.
 census_files=()
-while IFS= read -r -d '' census_md; do
-    census_files+=("$census_md")
-done < <(git -C "$repo" ls-files -z -- '*.md')
+mapfile -d '' -t census_files < <(tracked_files '*.md')
 # The guard is load-bearing: `grep` with no file arguments reads STDIN, which inside this loop's process
 # substitution would block rather than report anything.
 if [[ ${#census_files[@]} -gt 0 ]]; then
