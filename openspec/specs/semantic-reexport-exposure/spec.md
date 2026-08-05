@@ -130,6 +130,7 @@ binding a nameable path, so it exposes no name a consumer can reach through the 
 
 - **WHEN** the governed module declares `pub use crate::infra::DbPool as _;` under `must_not_expose("crate::infra")`
 - **THEN** the system does not react — `as _` binds no nameable path a consumer can reach — and this is a stated bound, not a silent claim of cleanliness
+- **PINNED-BY** `restricted_and_private_and_underscore_reexports_do_not_react`
 
 ### Requirement: Glob re-export reacts on a forbidden root, else a stated bound
 

@@ -158,6 +158,7 @@ narrowing. The engine MUST NOT bake a default verb set of its own.
 #### Scenario: A future read verb outside the declared set is a documented adopter-owned bound
 - **WHEN** a boundary is narrowed to `.ending_with(["now"])` and `crate::core` calls `std::time::SystemTime::current()` (hypothetical non-`now` read)
 - **THEN** the system does NOT react (a false negative the adopter owns by narrowing), rather than the engine silently guessing which verbs are reads
+- **PINNED-BY** `inline_a_verb_outside_the_declared_set_is_a_bound`
 
 ### Requirement: Strict escalation forbids non-call mentions
 

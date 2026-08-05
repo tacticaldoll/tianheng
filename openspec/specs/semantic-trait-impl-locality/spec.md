@@ -177,6 +177,7 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 
 - **WHEN** an `impl Command for Foo` is produced by a macro expansion in a disallowed module
 - **THEN** the system does not claim to observe it (out of scope, the same nature as the existing macro bound), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_macro_generated_impl_is_a_documented_bound`
 
 #### Scenario: An unconditional #[path]-remapped module is followed and its disallowed impl reacts
 

@@ -39,7 +39,7 @@
 - [ ] 3.5 Triage the 22 prose occurrences the gate reports: declare each real bound as a bound-marked
       scenario, and give each genuine cross-reference a resolving `(bound: …)` reference — deciding per
       occurrence rather than applying one rule to all of them
-- [ ] 3.2 Register each unpinned bound from 1.2 with its tracker reference, and open the `BACKLOG.md`
+- [x] 3.2 Register each unpinned bound from 1.2 with its tracker reference, and open the `BACKLOG.md`
       entries those references point at
 - [ ] 3.3 Register the register's own detection residual — that the floor covers recognizable wording
       only — as a bound of `observation-bound-register`, with its own pinning test

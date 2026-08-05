@@ -173,6 +173,7 @@ signature-coupling.
 
 - **WHEN** the governed module declares `use crate::infra::*;` and `impl From<DbPool> for Service` with `.including_trait_impls()`
 - **THEN** the system does not claim to observe it (inherited glob bound), rather than silently asserting the boundary is clean
+- **UNPINNED** BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
 
 #### Scenario: A baselined trait-impl exposure does not fail; a new one does
 
