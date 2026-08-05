@@ -30,7 +30,7 @@ live item is promoted, it must name: **class**, **observed pressure**, **observa
   Detailed historical ledgers for 0.1.x – 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
 A **closed** item leaves the live class it was filed under; it does not stay there struck through. Its
-reproduction record moves to *Closed in the 0.4.0 window* below, because a class heading is read as a
+reproduction record moves to *Closed — reproduction records* below, because a class heading is read as a
 queue and an entry that carries a question and its answer at once is a reader trap.
 
 ## Open defect queue
@@ -50,7 +50,7 @@ sweep gets its own dated `docs/audit/*.md` queue file and its own pointer here.
 ### DESIGN-BREAKING
 
 **Empty.** Every item that stood here when the 0.4.0 window opened is closed; each one's reproduction
-record is kept under *Closed in the 0.4.0 window* below, out of this queue so the index cannot read as open
+record is kept under *Closed — reproduction records* below, out of this queue so the index cannot read as open
 migrations. Nothing currently requires a public or wire migration.
 
 The `xuanji` sink for shared run/projection vocabulary remains *classed* DESIGN-BREAKING while sitting
@@ -77,7 +77,7 @@ consumer for an undemonstrated deduplication.
   baseline-write requirements in `violation-baseline`.
 
 - ~~**The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**~~
-  **CLOSED** in the 0.4.1 window, swept and found defended — by a structurally enforced enumeration rather
+  **CLOSED** in the open window, swept and found defended — by a structurally enforced enumeration rather
   than by diligence, which is why the result is worth recording instead of just noting "no findings".
 
   `every_public_seam_shape_is_named_and_identity_injective` carries the enumeration and forces it to stay
@@ -103,7 +103,7 @@ consumer for an undemonstrated deduplication.
 
 
 - ~~**An inherited observation bound is RESTATED by each capability that inherits it, so one behaviour
-  change leaves several specs stale at once.**~~ **CLOSED** in the 0.4.1 window. Closed by a reaction plus
+  change leaves several specs stale at once.**~~ **CLOSED** in the open window. Closed by a reaction plus
   the repair it forced, not by choosing one of the three candidates the entry listed: they were framed as
   alternatives and are not — a reaction detects the restatement and the repair resolves it, and only the
   reaction stops the next one accumulating silently.
@@ -303,7 +303,7 @@ consumer for an undemonstrated deduplication.
     (`hunyi-shared-path-operand-validation`).
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are archived in [`docs/history/0.1.0-0.3.0-built-ledger.md`](docs/history/0.1.0-0.3.0-built-ledger.md).
 
-### Closed in the 0.4.0 window — reproduction records
+### Closed — reproduction records (0.4.0 onward)
 
 These are **not** open work. Each was a live item in this index when the window opened and is now closed;
 the original entry is kept verbatim beneath its closing note because the reproduction record —
@@ -320,13 +320,29 @@ that also holds a closed READY-PATCH record.
 
 
 - ~~**A bare trait name may not resolve against a same-module trait, contrary to the bound's own wording.**~~ **CLOSED** in the
-  0.4.1 window. Probed and confirmed a false-negative gap where un-aliased bare principal traits in the same module were dropped when `uses` map had no `use` statement. Closed by adding `{module}::{name}` resolution fallback in `resolve_principal` in `crates/hunyi/src/crate_scope.rs` and adding unit test `same_module_bare_trait_resolves_without_use`.
+  open window, in two steps, and the second is the one the record has to carry. The probe confirmed the gap: a
+  bare principal trait declared in the governed module resolved to nothing when no `use` named it, so a
+  boundary forbidding it did not react. The first fix resolved **every** unresolved single-segment principal
+  to `{module}::{name}`, which over-reached in one direction and under-reached in the other — a bare name the
+  module does not declare (a prelude trait, a glob import, a name the file never mentions) was fabricated into
+  the module and reacted against a path that module never had, while a raw identifier was left as
+  `crate::m::r#type` and never matched the canonical `crate::m::type` every other resolution site produces.
+  What stands now: the fallback fires only for a name present in the **branch-local type namespace**, carried
+  on `FileExternScope` (which already computed it for `externs_type`), and the segment is canonicalized with
+  `strip_raw` first. `BareFallback::CurrentModule` is deliberately not used — it resolves without proving the
+  name exists, which is the over-reach that was removed. Defended by four guards, two per capability: the
+  re-pointed `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound` and
+  `impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound` (now forbidding the module-qualified
+  spelling, which is what makes them observe the drop rather than a spelling mismatch), and
+  `dyn_operand_bare_raw_identifier_local_trait_resolves_canonically` with its impl-trait twin. Version class:
+  **minor**, as this entry's own promotion line predicted for a false-negative closure — see *Version
+  horizons*.
 
 - ~~**Five declared bounds have no pinning test.**~~ **CLOSED** in the
-  0.4.1 window. Closed by writing unit tests for all 5 remaining UNPINNED scenarios across `external-crate-confinement`, `runtime-origin-assertion`, and `semantic-dyn-trait-boundary`, bringing `unpinned` count to 0.
+  open window. Closed by writing unit tests for all 5 remaining UNPINNED scenarios across `external-crate-confinement`, `runtime-origin-assertion`, and `semantic-dyn-trait-boundary`, bringing `unpinned` count to 0.
 
 - ~~**`check_reference_integrity.sh` has no companion failure matrix.**~~ **CLOSED** in the
-  0.4.1 window. Closed by adding `scripts/test_reference_integrity.sh`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `scripts/check_reference_integrity.sh`.
+  open window. Closed by adding `scripts/test_reference_integrity.sh`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `scripts/check_reference_integrity.sh`.
 
 - ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
   0.4.0 window, after an independent review re-derived it. Closed by refusing to name the ambiguity
@@ -638,9 +654,19 @@ it before assigning a horizon here; the entries below are horizons, not a second
 - **0.3.0 (shipped)** — stable rule identity (`RuleKey`), `StructuredFactIdentity`, unsafe-site decomposition, async seam identity.
 - **0.4.0 (shipped)** — every compiled root governed, identity-coordinate completeness, the `cfg_if!`
   and conditional-remap conformance across all three dimensions.
-- **0.4.1 (open)** — patch-class only, per the definition above: packaging and hygiene, prose and
-  specs, opt-in depth, performance, and diagnostics whose exit code and emitted documents do not move.
-  A false-negative closure belongs in the next minor instead, however small its diff.
+- **The open window — now minor-class (`0.5.0`), no longer `0.4.1`.** It opened patch-class: packaging and
+  hygiene, prose and specs, opt-in depth, performance, and diagnostics whose exit code and emitted documents
+  do not move, with a false-negative closure explicitly deferred to the next minor. That deferral is what the
+  window then spent. A bare-principal resolver closure landed carrying a `BREAKING CHANGE:` footer, and it
+  earns a minor on the definition above rather than on its diff size: a recorded baseline no longer describes
+  the adopter's tree in either direction — a fabricated finding disappears and a raw-identifier operand begins
+  to react — and regenerating one is work the adopter did not choose. `CHANGELOG.md` marks it `**BREAKING**`
+  accordingly.
+  The **branch is still named `release/0.4.1`** and the workspace version is still `0.4.0`; aligning the
+  branch name, the version bump, the dated CHANGELOG section, the internal pins, and `Cargo.lock` is the
+  release-preparation step and a human decision, not something the window's own commits do. Recorded here so
+  the number is decided from this note rather than from the branch name, which is the input this horizon list
+  exists to be.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 
 ## Explicitly not on the roadmap
