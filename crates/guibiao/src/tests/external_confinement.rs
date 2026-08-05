@@ -8,6 +8,35 @@ pub(super) fn confine(governed: &str, crate_name: &str) -> ModuleBoundary {
         .because("the platform vocabulary stays behind the ffi module")
 }
 
+/// An import of the confined crate inside a `#[path]`-remapped module is observed.
+///
+/// Kept for the CONTRACT rather than for a change: the behaviour is already correct, and this pins it
+/// so the spec's resolution sentence cannot drift away from it again. That sentence listed
+/// `#[path]`-remapped modules among the scanner's out-of-scope bounds long after the scanner began
+/// following such a remap to its target, which would have let a reader dismiss a real escape here as
+/// governed policy.
+#[test]
+pub(super) fn confine_observes_an_import_inside_a_path_remapped_module() {
+    let (result, violations) = run_module_check(
+        "confine-remapped",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+            ("ffi.rs", "\n"),
+            ("service.rs", "#[path = \"far.rs\"]\npub mod inner;\n"),
+            ("far.rs", "use libc::c_int;\n"),
+        ],
+        confine("crate::ffi", "libc"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "libc");
+    assert!(
+        violations[0].finding.contains("crate::service::inner"),
+        "the finding must name the remapped module: {:?}",
+        violations[0].finding
+    );
+}
+
 #[test]
 pub(super) fn confine_flags_an_external_import_outside_the_subtree() {
     // The confined crate is the target; the offending importer module is the finding.

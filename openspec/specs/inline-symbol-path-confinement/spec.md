@@ -200,9 +200,9 @@ whose head is a declared dependency (`chrono::Utc::now()` with no `use chrono`) 
 non-observation **under the default**, resolved as external and observed **only** under
 `.strict_external()` (see "Strict-external observation of fully-qualified external calls"); (6) a
 forbidden path taken as a **value** (fn-item / closure) rather than called — covered only under
-`.strict_prefix_only()`; and (7) the module scanner's **inherited file-scope bounds** — a
-`#[path]`-remapped module (including a `cfg_attr`-wrapped `#[path]`), `#[cfg]`-gated code
-(observed as written, cfg-blind), and the lib+bin conventional-path conflation — **except**
+`.strict_prefix_only()`; and (7) the module scanner's **inherited file-scope bounds** —
+`#[cfg]`-gated code (observed as written, cfg-blind) and the lib+bin conventional-path
+conflation — **except**
 macro-invocation bodies, which this rule overrides by scanning them (per "Macro bodies are
 conservatively scanned"). Even under `.strict_external()`, the following SHALL remain stated
 bounds, never a silent claim of coverage: an `extern crate dep as alias;` rename (the use-map
@@ -218,9 +218,9 @@ macro-invocation body** can perturb the call scan's inline-module tracking (the 
 macro bodies while the item collector strips them), so a call's true module may be mis-attributed —
 a stated bound. Each bound is a declared non-observation, not a silent pass on a case within scope.
 
-#### Scenario: A `#[path]`-remapped file in the subtree is a documented bound
-- **WHEN** a `#[path = "…"]`-remapped module inside `crate::core` contains `std::time::Instant::now()`
-- **THEN** the system does not claim to observe it (the `#[path]` remap is an inherited scanner bound, as in `external-crate-confinement`) — a stated bound, not a silent assertion of cleanliness
+#### Scenario: A `#[path]`-remapped file in the subtree is observed
+- **WHEN** a `#[path = "…"]`-remapped module inside `crate::core` contains `std::time::Instant::now()`, whether the attribute is written directly or wrapped in `cfg_attr`
+- **THEN** the system reacts, naming the remapped module — the scanner follows an unconditional remap to its target and union-scans a `cfg_attr`-wrapped one, so the confinement observes the call there exactly as it does one written in the module's own file
 
 #### Scenario: A receiver-method read is a documented bound
 - **WHEN** `crate::core` calls `some_instant.elapsed()` where `some_instant` is an `Instant` value received by injection
