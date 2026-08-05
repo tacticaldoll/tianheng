@@ -42,10 +42,16 @@ applied and a leading-`::` head resolved against the raw set), and the `pub use`
 then compared exact-or-module-prefix. So a re-exported or aliased trait facade matches its defining
 path, **and an inline fully-qualified extern or sysroot trait operand reacts** (`dyn
 std::error::Error` under `must_not_expose_dyn_of(["std::error::Error"])`), closing the false
-negative where only the `use`-aliased spelling reacted. A principal trait that is **genuinely
-unresolvable** — a bare single-segment name with no `use` (neither a local item nor an extern head),
-a macro-generated trait, or a glob/foreign-module re-export — is dropped, the same stated
-resolver-coverage bound signature-coupling carries, never a silent pass of a *resolvable* operand.
+negative where only the `use`-aliased spelling reacted. A **bare single-segment** principal needs no
+`use` when the governed module's own `#[cfg]` branch **declares that name**: the branch's own
+type-namespace names are the observation source, and the name is canonicalized before it is used, so
+`r#type` and `type` are one name here exactly as at every other resolution site. A principal trait
+that is **genuinely unresolvable** — a bare single-segment name the branch does not declare and that
+is no extern head (a prelude trait, a glob-imported trait, or a name the file never mentions), a
+macro-generated trait, or a glob/foreign-module re-export — is dropped, the same stated
+resolver-coverage bound signature-coupling carries, never a silent pass of a *resolvable* operand;
+the drop holds against **every** operand spelling, including the module-qualified one a bare name
+would produce if it were declared.
 The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed by {seam}`), matching the shape-only rule. A mutually-exclusive `#[cfg]` collision on the `use`-map name the principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last. The crate-wide re-export closure this resolver walks includes a `pub use` declared in a module reached only through a `cfg_attr`-wrapped `#[path]` remap — the identical crate-wide collection signature-coupling's own closure gets, never a silent gap specific to this operand-scoped resolver. A forbidden operand shaped with an empty `::`-segment (leading, trailing, or doubled `::`, or the empty string) is rejected as a constitution error, inheriting signature-coupling's own requirement for the identical reason: this resolver ladder never produces a canonicalized principal with an empty segment, so such an operand could never react.
 
 #### Scenario: A dyn of a named forbidden trait is flagged
@@ -83,16 +89,26 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 - **WHEN** the module exposes `dyn crate::Port`, a `pub use crate::ports::Port` facade of the trait defined at `crate::ports::Port`, and the boundary forbids the defining path `["crate::ports::Port"]`
 - **THEN** the system emits a violation, because the exposed facade canonicalizes through the re-export closure to the same defining path — closing the re-export false negative
 
+#### Scenario: A bare principal the governed module declares resolves without a use
+
+- **WHEN** the governed module `crate::m` declares `pub trait Frobnicate {}` and exposes `Box<dyn Frobnicate>` with no `use`, and the boundary forbids `["crate::m::Frobnicate"]`
+- **THEN** the system resolves the principal against the declaring module and emits a violation, because a name its own module declares needs no import — the branch's own type-namespace names being what admits it
+
+#### Scenario: A bare raw-identifier principal canonicalizes before it is matched
+
+- **WHEN** the governed module `crate::m` declares `pub trait r#type {}` and exposes `Box<dyn r#type>`, and the boundary forbids the canonical `["crate::m::type"]`
+- **THEN** the system emits a violation, because a raw identifier canonicalizes to the same name here as at every other resolution site — never leaving `crate::m::r#type` unmatched against the canonical forbidden spelling, which would be a silent pass of a declared operand
+
 #### Scenario: A genuinely unresolvable bare principal is a documented bound
 
-- **WHEN** the module exposes `dyn Frobnicate` where `Frobnicate` has no `use`, is not a declared dependency or sysroot crate, and is not a local trait resolvable in scope, under any operand set
+- **WHEN** the module exposes `dyn Frobnicate` where `Frobnicate` has no `use`, is not a declared dependency or sysroot crate, and is **not declared by the governed module's own branch** (a prelude trait, a glob-imported trait, or a name the file never mentions), under any operand set — including one forbidding the module-qualified spelling `crate::m::Frobnicate`
 - **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound (the oracle does not over-reach a single bare segment), never a silent claim of cleanliness over a resolvable operand
 - **PINNED-BY** `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
 #### Scenario: Auto-trait markers are not operands
 
 - **WHEN** the module exposes `dyn crate::ports::Port + Send` and the boundary forbids `["crate::ports::Port"]`
-- **THEN** the system emits a violation on the principal trait `crate::ports::Port` (the sole non-auto trait); the trailing `Send` marker is not the operand, so a boundary forbidding only `["Send"]` flags nothing here — and against a bare `dyn Send`, `Send` does not resolve under `BareFallback::Ignore` and is likewise dropped
+- **THEN** the system emits a violation on the principal trait `crate::ports::Port` (the sole non-auto trait); the trailing `Send` marker is not the operand, so a boundary forbidding only `["Send"]` flags nothing here — and a bare `dyn Send` carries no principal at all, `Send` being removed as an auto trait *before* any resolution runs, so no candidate is ever built for it
 
 #### Scenario: Two mutually-exclusive cfg-gated use aliases for the principal trait's name both react
 
