@@ -124,8 +124,22 @@ parse_spec() {
             unpinned = (unpinned == "" ? (line == "" ? "<empty>" : line) : unpinned "|" line)
             next
         }
+        # A mention whose negation applies to the BOUND NOUN ITSELF is not a declaration:
+        # `a cfg-blind union rather than a skip bound` says the shape is not a bound, so demanding a
+        # declaration of it would demand a declaration of something the sentence denies.
+        #
+        # The adjacency is load-bearing and was measured, not reasoned. A first attempt allowed the negation
+        # anywhere within 60 characters before the phrase, and it hid three REAL declarations while catching
+        # none of the intended cases: `type aliases are not expanded (a stated bound)`,
+        # `the invocation is not transparent, so its body stays a stated coverage bound`, and
+        # `a production probe must not live behind a non-production cfg — a stated bound` all carry a
+        # negation on a different verb. Only `(rather than|not|never) a <word> bound` — the negation directly
+        # on the noun — is skipped.
+        function negated(text) {
+            return match(text, /(rather than|not|never) an?( [A-Za-z-]+)? bounds?/) > 0
+        }
         # Prose stating a bound outside any declared bound scenario.
-        open == "" && $0 ~ prose {
+        open == "" && $0 ~ prose && !negated($0) {
             line = $0
             gsub(/\t/, " ", line)
             printf "PROSE\t%s\t%d\t%s\n", file, NR, line

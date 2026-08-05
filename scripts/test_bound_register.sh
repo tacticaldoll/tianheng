@@ -134,6 +134,22 @@ referenced=$(new_repo referenced "$(spec_with '- **PINNED-BY** `a_probe_bound_is
 That shape is a stated bound (bound: probe-capability/a-probed-shape-is-a-stated-bound), stated once.')")
 expect_pass "$referenced" 'bound register ok (1 declared bounds'
 
+# A mention whose negation lands on the bound NOUN denies the bound, so demanding its declaration would
+# demand a declaration of what the sentence says does not exist.
+negated=$(new_repo negated "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
+    '
+Both files are read, a cfg-blind union rather than a skip bound, so nothing is skipped here.')")
+expect_pass "$negated" 'bound register ok (1 declared bounds'
+
+# And the direction that matters more, because the first attempt at the rule above broke it: a real
+# declaration whose sentence carries a negation on a DIFFERENT verb must still be caught. Allowing the
+# negation anywhere before the phrase hid three real declarations in this repository and caught none of the
+# intended cases.
+negation_elsewhere=$(new_repo negation-elsewhere "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
+    '
+Type aliases are not expanded (a stated bound), so the shape stays unobserved.')")
+expect_fail "$negation_elsewhere" 1 'states a bound outside any declared bound scenario'
+
 dangling=$(new_repo dangling "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
     '
 That shape is a stated bound (bound: probe-capability/no-such-bound-was-ever-declared).')")
