@@ -170,4 +170,41 @@ broken_output=$(PATH="$stub_bin:$PATH" "$check" "$repo_broken_extraction" 2>&1) 
 grep -Fq 'could not normalize the references extracted from' <<<"$broken_output" \
     || { printf 'a failed reference extraction must name itself, got: %s\n' "$broken_output" >&2; exit 1; }
 
+# 11. The tracked-path index cannot fail silently or with a foreign status (exit 2)
+#
+# This is the FIRST enumeration and the one every `is_tracked` answer below reads. Measured before the
+# repair: with `git ls-files` stubbed to fail, the gate exited **3** — git's own status — and printed nothing,
+# which the contract does not define and an operator cannot read. Asserted on the exit CODE, since the wrong
+# answer here is also non-zero.
+index_git_stub=$fixture_root/index-git-stub
+mkdir -p "$index_git_stub"
+real_git_bin=$(command -v git)
+cat >"$index_git_stub/git" <<STUB
+#!/usr/bin/env bash
+[[ \$1 == ls-files && \$# -eq 1 ]] && exit 3
+exec "$real_git_bin" "\$@"
+STUB
+chmod +x "$index_git_stub/git"
+
+index_status=0
+index_output=$(PATH="$index_git_stub:$PATH" "$check" "$repo_clean" 2>&1) || index_status=$?
+[[ $index_status -eq 2 ]] \
+    || { printf 'a failed tracked-path index must exit 2, got %d: %s\n' "$index_status" "$index_output" >&2; exit 1; }
+grep -Fq 'could not build the tracked-path index' <<<"$index_output" \
+    || { printf 'a failed tracked-path index must name itself, got: %s\n' "$index_output" >&2; exit 1; }
+
+# 12. And any unhandled failure at all, which is what the ERR trap is for: the sites nobody wrapped. `mktemp`
+# is unwrapped and runs before anything else, so it is the honest injection point.
+mktemp_stub=$fixture_root/mktemp-stub
+mkdir -p "$mktemp_stub"
+printf '#!/usr/bin/env bash\nexit 7\n' >"$mktemp_stub/mktemp"
+chmod +x "$mktemp_stub/mktemp"
+
+unhandled_status=0
+unhandled_output=$(PATH="$mktemp_stub:$PATH" "$check" "$repo_clean" 2>&1) || unhandled_status=$?
+[[ $unhandled_status -eq 2 ]] \
+    || { printf 'an unhandled failure must exit 2, not the utility status, got %d: %s\n' "$unhandled_status" "$unhandled_output" >&2; exit 1; }
+grep -Fq 'an unhandled command failed' <<<"$unhandled_output" \
+    || { printf 'an unhandled failure must say so and name where, got: %s\n' "$unhandled_output" >&2; exit 1; }
+
 echo "all reference integrity test matrix directions passed"

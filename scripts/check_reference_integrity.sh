@@ -52,7 +52,19 @@
 #     that was renamed or split away exists under no member at all.
 #
 # Exit 0 clean, 1 violation, 2 cannot judge — the family's own Core Contract.
-set -euo pipefail
+set -Eeuo pipefail
+
+# The exit contract, made structural — the same repair the register gate carries, for the same measured
+# reason: `set -e` with `pipefail` carries a failing utility's status out of the process, so with
+# `git ls-files` stubbed to exit 3 this gate exited **3** and printed nothing. A status outside 0/1/2 is one
+# the contract does not define, and silence is no diagnosis. The trap reports WHERE, never what; a read worth
+# naming keeps its own refusal beneath it.
+#
+# Safe over the deliberate non-zero returns here — `grep -q` misses in `is_tracked`, `git check-ignore -q`,
+# `[ -n … ] || continue` — because under `errtrace` a failure inside `if`, `||`, `&&`, or a captured pipeline
+# with its own handler does not fire it, even inside a function. Measured, not assumed; the matrix's passing
+# directions are what would fail loudly if that stopped holding.
+trap 'unhandled=$?; echo "cannot judge: an unhandled command failed (exit $unhandled) at ${BASH_SOURCE[0]}:$LINENO —" >&2; echo "this gate reports 0 clean, 1 violation, 2 cannot judge, and nothing else" >&2; exit 2' ERR
 
 target_dir="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$target_dir"
@@ -108,11 +120,21 @@ GOVERNANCE_DOCUMENTS="${GOVERNANCE_DOCUMENTS:-AGENTS.md AGENTS.self-law.md BACKL
 # so `docs/` must be recognized through the files under it.
 tracked=$(mktemp)
 trap 'rm -f "$tracked"' EXIT
-git ls-files | awk -F/ '{
+# The FIRST enumeration, and the one that decides every `is_tracked` answer below. Its status is checked here
+# rather than left to `set -e`: an abort there carried git's own status out (exit 3, measured, with no
+# output), and this read has a name worth giving. The ancestor-directory expansion is part of the same
+# pipeline, so a failure in either half is the same refusal.
+index_status=0
+{ git ls-files | awk -F/ '{
   print
   path = ""
   for (i = 1; i < NF; i++) { path = path $i; print path; path = path "/" }
-}' | sort -u >"$tracked"
+}' | sort -u >"$tracked"; } || index_status=$?
+if [ "$index_status" -ne 0 ]; then
+  echo "cannot judge: could not build the tracked-path index (exit $index_status) — every reference verdict" >&2
+  echo "below reads it, so a gate that could not build it has judged nothing" >&2
+  exit 2
+fi
 
 # Present in the repository as committed. Deliberately NOT a filesystem test: see the header.
 is_tracked() {
