@@ -278,8 +278,16 @@ parse_spec() {
 # CI's clean checkout passes. That is the checkout-dependence the census and identity directions were
 # already repaired for, still live in the one direction that walked the filesystem. Refusal, never a
 # silent pass — but a gate that fails only locally is a gate that gets distrusted.
-definitions_of() {
+# Fills the array named by $1, rather than printing for a caller's process substitution to read. That is
+# not a style choice: this function now calls `read_tracked_files`, whose refusal is a `cannot_judge`, and a
+# `cannot_judge` inside `< <(…)` exits only that subshell — leaving the parent with an empty site list and
+# reporting "no function under crates/ defines it", a false violation over a `git` failure. The enumerator's
+# own comment names that trap; this call site was in it.
+definitions_into() {
+    local -n _sites=$1
+    shift
     local name=$1 scope=crates
+    _sites=()
     case $name in
     *::*)
         scope=crates/${name%%::*}
@@ -293,15 +301,26 @@ definitions_of() {
     local files=()
     read_tracked_files files "$scope/*.rs"
     # The guard precedes the prefixing, so neither step ever handles an empty array: `grep` with no file
-    # arguments reads STDIN and would block inside a process substitution, so a crate holding no tracked
-    # `.rs` file emits nothing here and the caller counts zero sites.
+    # arguments reads STDIN — this script's own, now that the scan runs in the parent rather than in a
+    # process substitution — so a crate holding no tracked `.rs` file emits nothing here and the caller
+    # counts zero sites.
     [[ ${#files[@]} -gt 0 ]] || return 0
     # Absolute, because `grep` runs from wherever the caller stands; the reporting site relativizes again.
     files=("${files[@]/#/$repo/}")
     # `-H` explicitly: `grep -n` omits the filename when given exactly ONE file, and the caller parses
     # `file:line:` — a single-file crate would have handed it a line number where a path belongs.
+    #
+    # `grep` exit 1 means "no match" and is the answer the zero-sites branch is written for; exit >1 means it
+    # could not READ, which is not the same claim and used to be discarded with `|| true` — a citation would
+    # then be reported as defined nowhere because a file could not be opened. The sibling gate draws exactly
+    # this distinction for the identical reason.
+    local status=0
+    [[ -n $definition_hits ]] || definition_hits=$(mktemp)
     grep -HnE "^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?(async[[:space:]]+)?fn[[:space:]]+$name[[:space:]]*\(" \
-        -- "${files[@]}" 2>/dev/null || true
+        -- "${files[@]}" >"$definition_hits" 2>/dev/null || status=$?
+    ((status <= 1)) \
+        || cannot_judge "\`grep\` could not read the tracked Rust files while locating definitions of \`$name\` (exit $status); a citation reported as defined nowhere because a file could not be opened is a violation invented from an IO failure"
+    mapfile -t _sites <"$definition_hits"
 }
 
 # Whether a citation is even well formed, checked BEFORE it is resolved. Two directions were silent passes
@@ -551,7 +570,11 @@ cargo_errors=
 # `tracked_list` is the enumeration buffer `read_tracked_files` creates on its first call, for the same
 # reason and under the same expansion.
 tracked_list=
-trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"}' EXIT
+# `definition_hits` is the citation-scan buffer, created on first use for the same reason and under the same
+# expansion: `grep`'s status and its output are both needed, so the output cannot come back through a
+# process substitution whose status no one reads.
+definition_hits=
+trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"} ${definition_hits:+"$definition_hits"}' EXIT
 
 # Through the same enumerator, so a `git` failure here names the enumeration rather than reporting that
 # the repository holds no spec. `git ls-files` lists tracked paths in index order, which is path-sorted,
@@ -631,7 +654,7 @@ while IFS=$'\t' read -r kind file line a b c d; do
                 fail "$id ($file:$line) is PINNED-BY \`$name\`, which the test harness does not register for that crate; a citation names what defends the bound, and a definition removed by a cfg, trapped in an uninvoked macro, or written inside a string or comment runs nothing"
                 continue
             fi
-            mapfile -t sites < <(definitions_of "$name")
+            definitions_into sites "$name"
             case ${#sites[@]} in
             0)
                 # With the harness authoritative, "registered but not located" is a DISAGREEMENT about a form,
