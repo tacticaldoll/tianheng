@@ -935,6 +935,35 @@ impl From<std::io::Error> for BaselineWriteError {
 /// ever changed, silently stop meaning "this process created nothing." Any failure once the temp
 /// file is open unconditionally cleans it up — no kind-based inference needed there, since opening
 /// it is the only step that can fail without this process having created it.
+/// RAII guard that automatically removes a temporary file on drop unless explicitly committed.
+struct AtomicTempFileGuard {
+    path: Option<PathBuf>,
+}
+
+impl AtomicTempFileGuard {
+    fn new(path: PathBuf) -> Self {
+        Self { path: Some(path) }
+    }
+
+    fn path(&self) -> &Path {
+        self.path
+            .as_deref()
+            .expect("path accessed before commit or after drop")
+    }
+
+    fn commit(mut self) {
+        self.path.take();
+    }
+}
+
+impl Drop for AtomicTempFileGuard {
+    fn drop(&mut self) {
+        if let Some(path) = self.path.take() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineWriteError> {
     let target = std::fs::canonicalize(path)?;
     let permissions = std::fs::metadata(&target)?.permissions();
@@ -959,19 +988,18 @@ fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineW
         Err(err) => return Err(err.into()),
     };
 
+    let guard = AtomicTempFileGuard::new(tmp_path);
+
     // The fsync sits after `set_permissions` and before the `rename`, so one call flushes both
     // the bytes and the mode change (both live on the same inode) while the temp file is still
     // the only name reaching them. Syncing before the chmod would leave the mode unflushed; the
     // rename must come after both, since it is the step that publishes them.
-    let write_result = file
-        .write_all(document.as_bytes())
-        .and_then(|()| file.set_permissions(permissions))
-        .and_then(|()| file.sync_all())
-        .and_then(|()| std::fs::rename(&tmp_path, &target));
-    if let Err(err) = write_result {
-        let _ = std::fs::remove_file(&tmp_path);
-        return Err(err.into());
-    }
+    file.write_all(document.as_bytes())?;
+    file.set_permissions(permissions)?;
+    file.sync_all()?;
+    std::fs::rename(guard.path(), &target)?;
+    guard.commit();
+
     sync_parent_dir(&target);
     Ok(())
 }
