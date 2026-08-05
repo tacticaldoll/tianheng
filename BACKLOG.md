@@ -60,6 +60,26 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **The bound register cannot pin a bound of its own capability.** Class: READY-PATCH (a citation-grammar
+  widening; no declared bound moves). Observed pressure: `observation-bound-register` acquired a real,
+  observable residual — a function definition inside a block comment satisfies a `PINNED-BY` citation,
+  because the match reads a line's form and not its comment state — and it could not be **declared** as a
+  bound. `PINNED-BY` resolves a Rust test under `crates/`, while every defence of this reaction is a shell
+  fixture in `scripts/test_bound_register.sh`, so the only available declaration would be `UNPINNED` against
+  a tracker owning something already measured as out of reach: permanent debt wearing an owner's name, which
+  the unpinned requirement forbids. The residual is therefore stated in the requirement and in the
+  projection's header, and pinned by the fixture `commented-definition`, which is coverage the register
+  cannot see. Observation source: the register's own citation grammar, `scripts/check_bound_register.sh`'s
+  `definitions_of`. Current bound: any capability whose reactions are shell gates rather than Rust code —
+  this one, `self-law-projection`, `violation-baseline`'s gate surface — can state a residual but not
+  declare it, so the projection under-counts exactly where the register describes itself. Risk: LOW for
+  correctness, MEDIUM for the register's own honesty, which is the property it exists to hold. Promotion
+  trigger: none needed for the observation; the design question is whether a citation may name a shell
+  fixture (`scripts/test_bound_register.sh::commented_definition`) without making the grammar mean two
+  things, and that is worth answering before a second such residual arrives rather than after. Version
+  class: PATCH. Authority: the register's own requirement that a bound is either defended or tracked and the
+  declaration must say which — a residual that can be neither is a third state the grammar does not model.
+
 - **`check_reference_integrity.sh` has no companion failure matrix.** Class: READY-PATCH (a test; nothing
   else moves). Observed pressure: noticed while narrowing that gate for the propose phase and recorded only
   in that pull request's body until now — a 306-line gate whose siblings
