@@ -55,6 +55,19 @@ them.
   their behaviour and added six tests for bounds nothing had defended.
 
 ### Documentation
+- The register's shared-bound requirement claimed that one behaviour change cannot leave several specs
+  stale. Its reaction reaches one shape — a single pinning test cited by two capabilities — so the claim
+  is narrowed to that and the residual is stated in `docs/observation-bounds.md`'s header beside the
+  prose floor already there: two declarations of one behaviour citing two *different* tests are invisible.
+  Telling those apart from two genuine bounds over sibling shapes is a semantic judgment nothing can
+  observe, so it is stated rather than declared as a bound — two operand dimensions here declare
+  identically-worded bounds over `dyn` and `impl Trait`, each defended by its own test, and each must
+  declare its own. The record of the two historical restatements is corrected in the same edit, since it
+  was doing the overclaiming: the `#[path]`-remap bound was prose in one capability and a scenario in the
+  other, so the undeclared-prose direction is what reached it. For a reader of the register the
+  consequence is the point — it is a floor in two directions now, and says so.
+- `observation-bound-register`'s `Purpose` was still the placeholder its archive step generated, the only
+  one of 30 specs that was.
 - Two specs claimed that a `#[path]`-remapped module stays outside the scanner's observation, long after
   it stopped being true. `inline-symbol-path-confinement` carried it as a **declared bound** ("the system
   does not claim to observe it"), and `external-crate-confinement` listed it among the resolution's
@@ -69,6 +82,21 @@ them.
   dismissing it as governed policy.
 
 ### Changed
+- The bound register's own citations can no longer read as coverage while defending nothing. `PINNED-BY`
+  resolved against **any** Rust function definition, so a production entry point of the right name
+  satisfied it; it must now resolve to a **test**, read from the attribute run above the definition rather
+  than the line before it. `UNPINNED` accepted any non-empty text as a tracker, so `no test exists`
+  satisfied the very requirement forbidding it; a tracker must now name a path the repository tracks.
+  Which section of that document owns the debt stays deliberately unchecked — that is prose, and a gate
+  guessing at prose earns the false positives that get gates disabled. Every one of the 41 citations in
+  this repository already satisfies both, so neither is a migration. Nothing about a pinning test's
+  **name** is required, which is what keeps the suite's three naming variants working.
+- Regenerating the projection (`BLESS=1`) now carries the same exit contract as judging it. It exited `0`
+  after printing a register's offenses, reporting the family's "clean" over a register it had just
+  refused; it writes the document and then fails, because "the document was rewritten" and "the register
+  it describes is valid" are different claims. A register the gate cannot judge at all now fails *before*
+  the write, so it leaves behind no `0 of 0` document reading as a complete register. CI always ran the
+  judging line, so no violation ever passed this way — the misleading signal was local.
 - What earns a minor is now stated once, in `AGENTS.md`'s *Versioning* section: any change an adopter
   has to act on, a stale recorded baseline included. Three documents had grown three answers — the rule
   above marks a false-negative closure `**BREAKING**`, `BACKLOG.md`'s version horizons listed such

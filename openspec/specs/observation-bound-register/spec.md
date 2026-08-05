@@ -396,4 +396,3 @@ reaches that shape.
 - **WHEN** the projection is read
 - **THEN** its header states that the restatement direction reaches a shared citation and not a shared
   behaviour, so a reader does not take the register for a proof that no bound is declared twice
-
