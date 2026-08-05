@@ -261,6 +261,21 @@ them.
   `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
   report. What is left in a process substitution is computation over data this run already materialized, and
   the reaction says which rather than leaving the scope to be inferred.
+- The bound register's **exit contract now binds every path**, not the ones a wrapper remembered. `set -e`
+  with `pipefail` carries a failing utility's own status out of the process, so a stubbed `sed` made the gate
+  exit **4** printing nothing at all — a status the contract does not define, which no consumer can act on
+  and no operator can read. An `ERR` trap maps any unhandled failure to `cannot judge` with the line that
+  failed; it reports *where*, never what, and a failure worth naming keeps its own refusal beneath it (the
+  spec read now names the spec). Its interaction with this gate's many deliberate non-zero returns was
+  measured before being adopted: under `errtrace` a failure inside `if`, `||`, `&&`, an arithmetic guard, or
+  a captured pipeline with its own handler does not fire it, even inside a function.
+- The register's **package enumeration comes from tracked manifests** rather than a `find` walk whose
+  pipeline status the parent never saw. The previous guard caught only a *totally* empty result, so an
+  enumeration that emitted some entries and then failed left a short list reading as authoritative:
+  measured on this repository, `find` printing one directory and exiting 3 produced `24 registered test
+  names across 1 package(s)` and a cascade of false violations against citations in the five packages it
+  never enumerated. A directory with no tracked `Cargo.toml` is not a package, which `cargo test -p` would
+  have discovered one step later.
 - The reference-integrity gate refuses a **failed extraction** instead of reporting clean. The per-file
   normalization ran inside a process substitution, where a failing `sed` or `sort` reports nothing to the
   parent — `pipefail` does not reach a subshell whose status no one reads — so the stream came back empty,

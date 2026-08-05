@@ -553,6 +553,17 @@ cannot carry both. A register the reaction cannot judge at all SHALL fail **befo
 written, so a register whose declarations it could not find cannot leave behind a document that reads as a
 complete one.
 
+The exit contract SHALL bind **every** path out of the reaction, including a failure nobody anticipated.
+A command that fails without its own handling SHALL surface as cannot-judge naming where it failed, never as
+the failing utility's own status: a status outside `0`/`1`/`2` is one the contract does not define, so a
+consumer cannot act on it and an operator is given no reason. Holding this per-command is not equivalent to
+holding it structurally — the paths that break the contract are the ones nobody thought to wrap.
+
+The reaction's **package enumeration** SHALL come from tracked content like every other read, and SHALL be
+refused rather than judged when it fails: a directory listing that emits some entries and then fails leaves a
+short list that reads as authoritative, and every citation in a package the reaction never enumerated is then
+reported as one the harness does not register.
+
 An **enumeration of the observation source that fails** SHALL be a cannot-judge, never an empty result.
 The reaction reads what it judges through `git ls-files`, and a failed enumeration returns exactly what a
 repository holding nothing returns, so the two MUST be told apart by the enumeration's exit status,
@@ -609,6 +620,20 @@ register.
 - **THEN** the reaction reports that it cannot judge, naming the absent spec, and writes no projection —
   a partial tree would otherwise produce a projection describing a partial register while agreeing with
   the verdicts drawn from the same partial read
+
+#### Scenario: An unanticipated failure still reports within the exit contract
+
+- **WHEN** a command the reaction runs fails with no handling of its own — a text utility reading a spec, a
+  temp file that cannot be created
+- **THEN** the reaction reports that it cannot judge, naming where the failure occurred, and exits `2`
+  rather than the failing utility's status, because a status the contract does not define is one no consumer
+  can act on and no operator can read
+
+#### Scenario: A partial package enumeration is refused, not judged
+
+- **WHEN** the enumeration of the workspace's packages emits some entries and then fails
+- **THEN** the reaction reports that it cannot judge rather than building its harness index from the short
+  list, which would report every citation in an unenumerated package as one the harness does not register
 
 ### Requirement: A bound shared by several capabilities SHALL be declared once and referenced elsewhere
 

@@ -445,6 +445,51 @@ attribute_read_output=$(PATH="$attribute_sed_stub:$PATH" "$check" "$pinned" 2>&1
 grep -Fq 'while checking whether the definition at line' <<<"$attribute_read_output" \
     || { printf 'an unreadable attribute run must name itself, got: %s\n' "$attribute_read_output" >&2; exit 1; }
 
+# --- the exit contract binds every path, including one nobody wrapped ---
+
+# `set -e` with `pipefail` carries a failing utility's status out of the process: measured before this was
+# fixed, a stubbed `sed` made the gate exit 4 with no output at all. A status the contract does not define is
+# one no consumer can act on, so the assertion is on the CODE — 2, not "non-zero".
+#
+# `mktemp` is the injection point because nothing wraps it: it is the first thing the run does after parsing
+# arguments, which is precisely the kind of site an ERR trap exists for and a per-command wrapper misses.
+mktemp_stub=$fixture_root/mktemp-stub
+mkdir -p "$mktemp_stub"
+cat >"$mktemp_stub/mktemp" <<'STUB'
+#!/usr/bin/env bash
+exit 7
+STUB
+chmod +x "$mktemp_stub/mktemp"
+
+unhandled_status=0
+unhandled_output=$(PATH="$mktemp_stub:$PATH" "$check" "$pinned" 2>&1) || unhandled_status=$?
+[[ $unhandled_status -eq 2 ]] \
+    || { printf 'an unhandled failure must exit 2, not the utility status, got %d: %s\n' "$unhandled_status" "$unhandled_output" >&2; exit 1; }
+grep -Fq 'an unhandled command failed' <<<"$unhandled_output" \
+    || { printf 'an unhandled failure must say so and name where, got: %s\n' "$unhandled_output" >&2; exit 1; }
+
+# A spec that cannot be READ keeps its own diagnosis rather than falling to the backstop: "an unhandled
+# command failed at line N" is a worse answer than the spec, and this read has a name worth giving.
+spec_sed_stub=$fixture_root/spec-sed-stub
+mkdir -p "$spec_sed_stub"
+cat >"$spec_sed_stub/sed" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    case \$arg in
+    *spec.md) exit 6 ;;
+    esac
+done
+exec "$(command -v sed)" "\$@"
+STUB
+chmod +x "$spec_sed_stub/sed"
+
+unreadable_spec_status=0
+unreadable_spec_output=$(PATH="$spec_sed_stub:$PATH" "$check" "$pinned" 2>&1) || unreadable_spec_status=$?
+[[ $unreadable_spec_status -eq 2 ]] \
+    || { printf 'an unreadable spec must exit 2, got %d: %s\n' "$unreadable_spec_status" "$unreadable_spec_output" >&2; exit 1; }
+grep -Fq 'could not read the declared bounds from' <<<"$unreadable_spec_output" \
+    || { printf 'an unreadable spec must name itself rather than fall to the backstop, got: %s\n' "$unreadable_spec_output" >&2; exit 1; }
+
 # --- a tracked spec absent from the worktree cannot be judged ---
 
 # `git ls-files` lists it and the worktree does not hold it. Skipping it dropped its bounds from the
@@ -514,6 +559,37 @@ harness_parse_output=$(PATH="$harness_sed_stub:$PATH" "$check" "$harness_pass" 2
     || { printf 'an unparsable harness listing must exit 2, got %d: %s\n' "$harness_parse_status" "$harness_parse_output" >&2; exit 1; }
 grep -Fq 'could not parse the test names' <<<"$harness_parse_output" \
     || { printf 'an unparsable harness listing must name itself, got: %s\n' "$harness_parse_output" >&2; exit 1; }
+
+# A PARTIAL package enumeration, which is the shape the previous guard missed: it caught a totally empty
+# result, so an enumeration that emitted some entries and then failed left a short list reading as
+# authoritative — the gate judged citations against a harness index built from one package out of six. The
+# stub emits one manifest and then fails, so only the status distinguishes it from a one-package workspace.
+partial_git_stub=$fixture_root/partial-git-stub
+mkdir -p "$partial_git_stub"
+cat >"$partial_git_stub/git" <<STUB
+#!/usr/bin/env bash
+manifests=0
+for arg in "\$@"; do
+    [[ \$arg == 'crates/*/Cargo.toml' ]] && manifests=1
+done
+if [[ \$manifests == 1 ]]; then
+    for arg in "\$@"; do
+        if [[ \$arg == ls-files ]]; then
+            printf 'crates/probe/Cargo.toml\0'
+            exit 3
+        fi
+    done
+fi
+exec "$real_git" "\$@"
+STUB
+chmod +x "$partial_git_stub/git"
+
+partial_status=0
+partial_output=$(PATH="$partial_git_stub:$PATH" "$check" "$harness_pass" 2>&1) || partial_status=$?
+[[ $partial_status -eq 2 ]] \
+    || { printf 'a partial package enumeration must exit 2, got %d: %s\n' "$partial_status" "$partial_output" >&2; exit 1; }
+grep -Fq 'failed enumerating crates/*/Cargo.toml' <<<"$partial_output" \
+    || { printf 'a partial package enumeration must name itself, got: %s\n' "$partial_output" >&2; exit 1; }
 
 # A `#[test]` the build removes. The attribute run says test; nothing registers. The source-text fallback
 # accepted this with exit 0, which is what moved the authority to the harness.
