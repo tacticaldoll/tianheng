@@ -91,27 +91,6 @@ consumer for an undemonstrated deduplication.
   closure invalidates a recorded baseline. Authority: `PROJECT.md`'s audit-cycle decision, and the atomic
   baseline-write requirements in `violation-baseline`.
 
-- **Five declared bounds have no pinning test.** Class: READY-PATCH (writing a test; no public API, wire
-  format, or baseline identity moves). Observed pressure: the observation-bound register's own reaction
-  reports them, so this is measured rather than suspected — the projection's headline counts them, two each in
-  `external-crate-confinement` (cfg-blindness, the lib-and-bin conventional-path conflation)
-  and `runtime-origin-assertion` (the target-subtree corpus, a production probe behind a non-production
-  cfg), and one in `semantic-dyn-trait-boundary` (an unrenderable sub-node). Three more closed in this
-  window once probed — the macro-generated dyn, the glob-imported type in an impl position, and the
-  conservative-rank over-reaction, the last of which needed its own test because the nearest candidate
-  pinned a different ceiling. Observation source:
-  `scripts/check_bound_register.sh`, and the five `UNPINNED` citations that name this entry. Current
-  bound: each is declared and believed true, and nothing would react if the behaviour changed — a bound
-  reads as permission, so an undefended one is the shape that lets a real escape be dismissed as governed
-  policy. Risk: LOW individually and worth naming collectively, since the bounds the projection's headline
-  counts are undefended. Promotion trigger: none needed — each is a fixture and an assertion. They are debt rather
-  than done for a reason of scope, not difficulty: six bounds in this window were probed and pinned first,
-  and the five that remain need a fixture shape the cheap ones did not.
-  **Probe before pinning**: two bounds enumerated in this window described behaviour that had changed and
-  were retired rather than pinned, so a test written to match the spec without measuring first would give
-  a false claim a green guard. Version class: PATCH. Authority: the five `UNPINNED` citations, and
-  `PROJECT.md`'s drift law against a claim with no reaction.
-
 - ~~**The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**~~
   **CLOSED** in the 0.4.1 window, swept and found defended — by a structurally enforced enumeration rather
   than by diligence, which is why the result is worth recording instead of just noting "no findings".
@@ -354,6 +333,9 @@ retained entry carries its own `Class:` line, and a count here would go stale th
 closes — which is how the previous two sentences came to say "DESIGN-BREAKING" and "six" about a section
 that also holds a closed READY-PATCH record.
 
+
+- ~~**Five declared bounds have no pinning test.**~~ **CLOSED** in the
+  0.4.1 window. Closed by writing unit tests for all 5 remaining UNPINNED scenarios across `external-crate-confinement`, `runtime-origin-assertion`, and `semantic-dyn-trait-boundary`, bringing `unpinned` count to 0.
 
 - ~~**`check_reference_integrity.sh` has no companion failure matrix.**~~ **CLOSED** in the
   0.4.1 window. Closed by adding `scripts/test_reference_integrity.sh`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `scripts/check_reference_integrity.sh`.
