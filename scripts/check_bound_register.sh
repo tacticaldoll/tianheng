@@ -110,11 +110,11 @@ parse_spec() {
         # opposes. That obligation is emitted as a record and checked by the caller.
         /^#{1,3} / {
             flush()
-            if (req != "" && req_is_bounds) {
+            if (req != "" && req_is_bounds && req_stated) {
                 printf "REQBOUNDS\t%s\t%d\t%s\t%s\n", file, req_line, req, (req_declared ? "yes" : "no")
             }
             in_scenario = 0
-            req = ""; req_is_bounds = 0; req_declared = 0
+            req = ""; req_is_bounds = 0; req_declared = 0; req_stated = 0
             if ($0 ~ /^### Requirement:/) {
                 req = substr($0, length("### Requirement: ") + 1)
                 req_line = NR
@@ -170,6 +170,10 @@ parse_spec() {
             return match(text, /(rather than|not|never) an?( [A-Za-z-]+)? bounds?/) > 0
         }
         # Prose stating a bound outside any declared bound scenario.
+        # A bounds-heading requirement is answerable only for prose that actually states a bound. Its
+        # heading naming bounds is not itself an obligation: the register capability describes the
+        # mechanism in requirements whose headings say "bound" while stating none.
+        open == "" && req_is_bounds && $0 ~ prose && !negated($0) { req_stated = 1; next }
         open == "" && !req_is_bounds && $0 ~ prose && !negated($0) {
             line = $0
             gsub(/\t/, " ", line)
@@ -177,7 +181,7 @@ parse_spec() {
         }
         END {
             flush()
-            if (req != "" && req_is_bounds) {
+            if (req != "" && req_is_bounds && req_stated) {
                 printf "REQBOUNDS\t%s\t%d\t%s\t%s\n", file, req_line, req, (req_declared ? "yes" : "no")
             }
         }
