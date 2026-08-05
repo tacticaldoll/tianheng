@@ -53,8 +53,13 @@ set -euo pipefail
 # test only this checkout. A gate that cannot be pointed at a fixture cannot have its refusals proven.
 repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 
-BOUND_HEADING='^#### Scenario: .*(stated|documented) bound'
-BOUND_PROSE='(stated|documented) bounds?'
+# The marking, and why it admits one interposed word. `(stated|documented) bound` adjacent is precise but
+# brittle: `An underscore rename is a documented non-observed bound` declares a bound and would be missed,
+# so a spec would have to be reworded to suit the tool. One optional word between admits that heading and
+# `a stated coverage bound` while still refusing Rust's own sense of the word — `assoc type bound`,
+# `supertrait bound` — which a bare "contains bound" rule would sweep in wholesale.
+BOUND_HEADING='^#### Scenario: .*(stated|documented)( [A-Za-z-]+)? bounds?'
+BOUND_PROSE='(stated|documented)( [A-Za-z-]+)? bounds?'
 
 fail() {
     printf 'bound register: %s\n' "$*" >&2
