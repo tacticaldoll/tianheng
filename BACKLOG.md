@@ -60,6 +60,21 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **`check_release_coherence.sh`'s subshell reads have not been audited for a swallowed status.** Class:
+  READY-PATCH (the corrections are one line each where they exist). Observed pressure: the identical class was
+  found and closed in two sibling gates in this window — `check_bound_register.sh` (four `git ls-files`
+  enumerations, a citation scan whose refusal exited a subshell, a harness listing parse, an attribute-run
+  read, and both census greps) and `check_reference_integrity.sh` (the reference normalization, then the
+  tracked-source enumeration) — each producing either a clean report over content never read or a violation
+  invented from an IO failure. Observation source: `grep -n '< <(' scripts/check_release_coherence.sh` lists
+  five consumers (`workspace_packages` twice, the manifest pin scan, the lockfile scan, and the release-record
+  log), none of which was examined by this window's repairs. Current reaction or bound: unknown — that is the
+  entry. Risk: MEDIUM, and asymmetric: this gate decides whether a release's versions agree, so a false clean
+  reaches a published artifact while a false violation only blocks. Promotion trigger: none needed; it is a
+  bounded read of one file against a class already characterized. Version class: PATCH — the gate's exit codes
+  move only in states that previously misreported, and no adopter-facing surface is involved. Authority: the
+  two closed entries above and `release-coherence`'s own exit contract.
+
 - **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
   its corrections are classified when they exist). Observed pressure: measured on the window's own history —
   of the 116 commits landing after the last range sweep closed, **20 carry a `tianheng` scope** and none of

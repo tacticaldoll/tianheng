@@ -192,7 +192,23 @@ normalize_reference() {
 inspected=0
 offenses=0
 
+# The file list is captured with its status BEFORE the loop, like every read in this gate. Consumed from a
+# process substitution it could only be empty, and an empty list is already refused by the vacuity guard
+# below — but that guard reports "no tracked *.md or *.rs", a claim about the REPOSITORY, where the truth
+# would be that the enumeration failed. Same exit code, wrong diagnosis, and a wrong diagnosis on a
+# cannot-judge is what sends the next reader looking in the wrong place.
+sources_status=0
+tracked_sources=$(git ls-files '*.md' '*.rs') || sources_status=$?
+if [ "$sources_status" -ne 0 ]; then
+  echo "cannot judge: 'git ls-files' failed enumerating tracked *.md and *.rs (exit $sources_status) —" >&2
+  echo "a failed enumeration is not a repository holding no documents" >&2
+  exit 2
+fi
+
 while IFS= read -r file; do
+  # A here-string over an empty capture still yields one empty line; skipping it keeps `inspected` honest,
+  # which is what the vacuity guard below reads.
+  [ -n "$file" ] || continue
   # An OpenSpec change artifact describes INTENDED state, so its references to the files the change will
   # create are forward by construction — and this gate's premise ("a reader who greps for a named path
   # and finds nothing cannot tell stale prose from a bad checkout") is false for a plan: the reader of a
@@ -329,7 +345,7 @@ while IFS= read -r file; do
   done <<REFERENCES
 $extracted
 REFERENCES
-done < <(git ls-files '*.md' '*.rs')
+done <<<"$tracked_sources"
 
 if [ "$inspected" -eq 0 ]; then
   echo "cannot judge: inspected 0 files — no tracked *.md or *.rs, so this gate would report clean" >&2

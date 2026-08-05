@@ -397,6 +397,54 @@ unreadable_output=$(PATH="$grep_stub:$PATH" "$check" "$pinned" 2>&1) || unreadab
 grep -Fq 'could not read the tracked Rust files' <<<"$unreadable_output" \
     || { printf 'an unreadable definition scan must name itself, got: %s\n' "$unreadable_output" >&2; exit 1; }
 
+# Every remaining READ of the observation source, each stubbed to fail on its own call. These are not
+# enumerations, which is why they outlived the enumeration repair: a read whose status is discarded produces
+# the same two wrong answers — a clean report over content never examined, or a violation invented from an
+# IO failure — and the direction is what earns the check, not the probability.
+
+# The CENSUS read. `|| true` swallowed `grep`'s exit >1, so a tracked document the direction claims to cover
+# went unexamined behind a clean report. The fixture holds a stale census, so the false answer is exit 0.
+census_grep_stub=$fixture_root/census-grep-stub
+mkdir -p "$census_grep_stub"
+cat >"$census_grep_stub/grep" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    case \$arg in
+    *'bounds across'*) exit 2 ;;
+    esac
+done
+exec "$(command -v grep)" "\$@"
+STUB
+chmod +x "$census_grep_stub/grep"
+
+census_read_status=0
+census_read_output=$(PATH="$census_grep_stub:$PATH" "$check" "$failed_enumeration" 2>&1) || census_read_status=$?
+[[ $census_read_status -eq 2 ]] \
+    || { printf 'an unreadable census scan must exit 2, got %d: %s\n' "$census_read_status" "$census_read_output" >&2; exit 1; }
+grep -Fq 'could not read the tracked Markdown' <<<"$census_read_output" \
+    || { printf 'an unreadable census scan must name itself, got: %s\n' "$census_read_output" >&2; exit 1; }
+
+# The ATTRIBUTE-RUN read, which runs only in the manifest-less fallback: without its status checked, a real
+# test reads as carrying no `#[test]` — exit 1. The stub matches the `1,<N>p` form alone, so the spec parse's
+# own `sed` still runs.
+attribute_sed_stub=$fixture_root/attribute-sed-stub
+mkdir -p "$attribute_sed_stub"
+cat >"$attribute_sed_stub/sed" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    [[ \$arg =~ ^1,[0-9]+p$ ]] && exit 5
+done
+exec "$(command -v sed)" "\$@"
+STUB
+chmod +x "$attribute_sed_stub/sed"
+
+attribute_read_status=0
+attribute_read_output=$(PATH="$attribute_sed_stub:$PATH" "$check" "$pinned" 2>&1) || attribute_read_status=$?
+[[ $attribute_read_status -eq 2 ]] \
+    || { printf 'an unreadable attribute run must exit 2, got %d: %s\n' "$attribute_read_status" "$attribute_read_output" >&2; exit 1; }
+grep -Fq 'while checking whether the definition at line' <<<"$attribute_read_output" \
+    || { printf 'an unreadable attribute run must name itself, got: %s\n' "$attribute_read_output" >&2; exit 1; }
+
 # --- a tracked spec absent from the worktree cannot be judged ---
 
 # `git ls-files` lists it and the worktree does not hold it. Skipping it dropped its bounds from the
@@ -444,6 +492,28 @@ mod tests {
 ')
 expect_pass "$harness_pass" 'citation test-ness decided by the test harness'
 expect_pass "$harness_pass" 'bound register ok (1 declared bounds'
+
+# The HARNESS leaf parse, on a real workspace: without its status checked, a package whose test names could
+# not be read contributes none, and every citation qualified to it is reported as unregistered — exit 1.
+harness_sed_stub=$fixture_root/harness-sed-stub
+mkdir -p "$harness_sed_stub"
+cat >"$harness_sed_stub/sed" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    case \$arg in
+    *': test$'*) exit 4 ;;
+    esac
+done
+exec "$(command -v sed)" "\$@"
+STUB
+chmod +x "$harness_sed_stub/sed"
+
+harness_parse_status=0
+harness_parse_output=$(PATH="$harness_sed_stub:$PATH" "$check" "$harness_pass" 2>&1) || harness_parse_status=$?
+[[ $harness_parse_status -eq 2 ]] \
+    || { printf 'an unparsable harness listing must exit 2, got %d: %s\n' "$harness_parse_status" "$harness_parse_output" >&2; exit 1; }
+grep -Fq 'could not parse the test names' <<<"$harness_parse_output" \
+    || { printf 'an unparsable harness listing must name itself, got: %s\n' "$harness_parse_output" >&2; exit 1; }
 
 # A `#[test]` the build removes. The attribute run says test; nothing registers. The source-text fallback
 # accepted this with exit 0, which is what moved the authority to the harness.
