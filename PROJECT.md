@@ -260,5 +260,4 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   named but not committed to — 804 SHALL statements and 1020 scenarios are a multi-window program, and
   promoting one is a `BACKLOG.md` decision with its own trigger, never an assumption inherited from this
   first success.
-
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.

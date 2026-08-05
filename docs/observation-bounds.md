@@ -11,10 +11,26 @@ Generated from `openspec/specs/*/spec.md` by `scripts/check_bound_register.sh`. 
 regenerate with `BLESS=1 bash scripts/check_bound_register.sh`. A stale projection fails that gate.
 
 **What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a
-scenario whose heading marks it a bound. A bound worded outside that form — "out-of-scope", "does not
-claim to observe" — is invisible to the scan that assembles this, so the list is a floor rather than a
-proof of completeness. A register that implied otherwise would mislead exactly where it is most
-trusted.
+scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has
+three known residuals and one deliberate exemption, all four enumerated here rather than left in the
+reaction's comments, because a residual a reader cannot see is one the register is lying about:
+
+1. **Unrecognized wording.** A bound worded outside the scanned form — "out-of-scope", "does not claim
+   to observe", "a stated, inherited bound" — is invisible to the scan.
+2. **The scan is line-oriented.** A statement whose bound names continue onto the next line is examined
+   only on the line carrying the trigger words.
+3. **A reference clears more than it names.** `(bound: …)` clears the prose it sits with regardless of
+   how many bounds that prose states, or whether the bound it names is one of them. This is how a
+   retired `#[path]` bound survived two sweeps inside a sentence listing four inherited bounds behind
+   one reference to a fifth. The discipline is one reference per stated bound, and it is the author\s:
+   closing it would mean reading which bounds a sentence lists, which no reaction can do. Scanning
+   paragraphs instead of lines was measured against that defect and would not have caught it, because
+   the paragraph carries the same clearing reference.
+
+The **exemption**: prose under a requirement whose heading names bounds is not reported, because three
+such requirements state their bounds as numbered lists that reading worse would not improve. Its price
+is charged — such a requirement must declare at least one bound scenario — but the other items of its
+list are unregistered, which is why this list is a floor rather than a proof of completeness.
 
 The second floor is the same shape. A bound declared twice is caught only when both declarations cite
 the **same pinning test**, which is a fact rather than a heuristic; two declarations of one behaviour

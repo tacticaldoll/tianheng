@@ -441,6 +441,20 @@ dangling=$(new_repo dangling "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pin
 That shape is a stated bound (bound: probe-capability/no-such-bound-was-ever-declared).')")
 expect_fail "$dangling" 1 'which no declared bound produces'
 
+# EVERY reference on the line is resolved, not just one of them. The extraction was a greedy
+# `sed -n 's/.*(bound:…).*/\1/p'`, so `.*` swallowed everything up to the LAST reference and only that one was
+# ever checked — an EARLIER dangling reference passed while the line reported clean. Measured in both
+# directions, because "only one is checked" says nothing about which: an earlier dangler was accepted (exit 0)
+# and a later one was already caught, so this fixture must dangle the FIRST reference to discriminate.
+#
+# This does NOT close the residual that let a retired `#[path]` bound survive: there the reference resolved
+# and the sentence stated four other bounds. That one is in the projection header, because closing it means
+# reading which bounds a sentence lists.
+earlier_reference_dangling=$(new_repo earlier-reference-dangling "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \
+    '
+Two shapes are stated bounds (bound: probe-capability/no-such-first-bound) and (bound: probe-capability/a-probed-shape-is-a-stated-bound).')")
+expect_fail "$earlier_reference_dangling" 1 'no-such-first-bound`, which no declared bound produces'
+
 # Two declared bounds whose headings differ only in punctuation collapse to one slug, so a reference to it
 # names a set. This is what checks the derived id is injective rather than assuming it.
 ambiguous_spec="$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' \

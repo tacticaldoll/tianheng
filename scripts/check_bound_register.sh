@@ -13,7 +13,7 @@
 # policy.
 #
 # What a bound declaration is. A `#### Scenario:` whose heading marks it a bound, sitting under the
-# requirement it qualifies — 21 of the 24 declared today sit that way, and hoisting them into a common
+# requirement it qualifies — 34 of the 41 declared today sit that way, and hoisting them into a common
 # section would separate each bound from the reaction it limits. The `Observation bounds` requirement
 # three specs carry is a place bounds are gathered, never the definition of one.
 #
@@ -42,13 +42,20 @@
 #   * A bound stated in prose outside a declared bound scenario fails, which is what stops the register
 #     being completed by declaring only the convenient bounds.
 #
-# The prose direction is a FLOOR, not a proof, and the projection says so where a reader will see it: a
-# bound worded without the pattern below — "out-of-scope", "does not claim to observe" — is invisible to
-# it. Claiming otherwise would be the register lying exactly where it is most trusted.
+# The prose direction is a FLOOR, not a proof. It has THREE residuals and one deliberate exemption, and all
+# four are enumerated in the projection's header where a register reader sees them — not only here. In short:
+# unrecognized wording is invisible; the scan is line-oriented, so a statement's continuation line is not
+# examined; and a `(bound: …)` clears the prose it sits with regardless of how many bounds that prose states.
+# The third is how a retired `#[path]` bound survived two sweeps inside a sentence listing four inherited
+# bounds behind one reference to a fifth, so it is recorded as a cause rather than a curiosity.
 #
-# A requirement heading naming bounds is not itself a declaration and is not scanned: it points at the
-# bounds its scenarios declare (`External resolution has stated residual bounds`, and the glob-re-export
-# requirement, are both that shape).
+# The exemption: prose under a requirement whose heading names bounds is not reported, because three such
+# requirements state their bounds as numbered lists. Its price is charged (the requirement must declare at
+# least one bound scenario), and its cost is that the list's other items are unregistered.
+#
+# Scanning paragraphs rather than lines is residual 2's obvious repair and is deliberately NOT adopted: it was
+# measured against the defect above and would not have caught it, because the paragraph carries the same
+# clearing reference, while it adds twelve new offenses to this tree.
 #
 # Exit 0 clean, 1 violation, 2 cannot judge — the family's own Core Contract, so this reads the same way
 # as the reactions it sits beside. Read-only: it never edits a spec or writes a projection.
@@ -118,7 +125,6 @@ parse_spec() {
             if (req != "" && req_is_bounds && req_stated) {
                 printf "REQBOUNDS\t%s\t%d\t%s\t%s\n", file, req_line, req, (req_declared ? "yes" : "no")
             }
-            in_scenario = 0
             req = ""; req_is_bounds = 0; req_declared = 0; req_stated = 0
             if ($0 ~ /^### Requirement:/) {
                 req = substr($0, length("### Requirement: ") + 1)
@@ -129,7 +135,6 @@ parse_spec() {
         }
         /^#### / {
             flush()
-            in_scenario = 1
             if ($0 ~ heading) {
                 open = substr($0, length("#### Scenario: ") + 1)
                 open_line = NR
@@ -297,7 +302,7 @@ build_harness_index() {
         return 0
     fi
     for member in "${members[@]}"; do
-        listed=$(cd "$repo" && cargo test -p "$member" --all-features -- --list 2>/dev/null) || {
+        listed=$(cd "$repo" && cargo test -p "$member" --all-features -- --list </dev/null 2>/dev/null) || {
             harness_state=error
             return 0
         }
@@ -444,7 +449,10 @@ mapfile -t spec_files < <(git -C "$repo" ls-files 'openspec/specs/*/spec.md' | s
 
 records=$(mktemp)
 ids=$(mktemp)
-trap 'rm -f "$records" "$ids"' EXIT
+# The projection's compare tempfile joins the trap before it exists, so an abort inside `render_projection`
+# cannot leak it. Expanded conditionally, since an unset `rendered` would otherwise pass an empty argument.
+rendered=
+trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"}' EXIT
 
 for spec in "${spec_files[@]}"; do
     [[ -f $repo/$spec ]] || continue
@@ -553,19 +561,33 @@ $(printf '           %s\n' "${site_paths[@]}")"
     PROSE)
         # A reference is the third option between rewriting prose that is doing its job and restating a
         # bound that already exists elsewhere — the restatement being the drift this register exists to end.
-        reference=$(printf '%s' "$a" | sed -n 's/.*(bound:[[:space:]]*\([A-Za-z0-9_./-]*\)).*/\1/p' | head -n 1)
-        if [[ -z $reference ]]; then
+        #
+        # EVERY reference on the line is resolved, not the first. `head -n 1` here meant a second reference was
+        # never examined while the line reported clean — a partial check reporting clean, which this gate
+        # refuses everywhere else.
+        #
+        # What this still does NOT establish, and the projection header says so: a reference clears the prose
+        # it sits with regardless of how many bounds that prose states, or whether the bound it names is one of
+        # them. That is how a retired `#[path]` bound survived two sweeps inside a sentence listing four
+        # inherited bounds behind one reference to a fifth. Closing it needs reading which bounds a sentence
+        # lists, which is semantic; the discipline is one reference per stated bound, and it is the author's.
+        mapfile -t references < <(printf '%s' "$a" | grep -oE '\(bound:[[:space:]]*[A-Za-z0-9_./-]*\)' \
+            | sed -e 's/^(bound:[[:space:]]*//' -e 's/)$//')
+        if [[ ${#references[@]} -eq 0 ]]; then
             fail "$file:$line states a bound outside any declared bound scenario, so it is absent from the register:
            $(printf '%s' "$a" | cut -c1-108)"
             continue
         fi
-        mapfile -t targets < <(awk -F'\t' -v want="$reference" '$1 == want { print $2 }' "$ids")
-        case ${#targets[@]} in
-        0) fail "$file:$line references bound \`$reference\`, which no declared bound produces; a dangling reference is indistinguishable from an undeclared bound" ;;
-        1) : ;;
-        *) fail "$file:$line references bound \`$reference\`, which two declared bounds produce — a derived id must be unique:
+        for reference in "${references[@]}"; do
+            [[ -n $reference ]] || continue
+            mapfile -t targets < <(awk -F'\t' -v want="$reference" '$1 == want { print $2 }' "$ids")
+            case ${#targets[@]} in
+            0) fail "$file:$line references bound \`$reference\`, which no declared bound produces; a dangling reference is indistinguishable from an undeclared bound" ;;
+            1) : ;;
+            *) fail "$file:$line references bound \`$reference\`, which two declared bounds produce — a derived id must be unique:
 $(printf '           %s\n' "${targets[@]}")" ;;
-        esac
+            esac
+        done
         ;;
     esac
 done <"$records"
@@ -638,10 +660,26 @@ render_projection() {
         'regenerate with `BLESS=1 bash scripts/check_bound_register.sh`. A stale projection fails that gate.' \
         '' \
         '**What this document does not claim.** It lists the bounds the specs *state in a recognizable form*: a' \
-        'scenario whose heading marks it a bound. A bound worded outside that form — "out-of-scope", "does not' \
-        'claim to observe" — is invisible to the scan that assembles this, so the list is a floor rather than a' \
-        'proof of completeness. A register that implied otherwise would mislead exactly where it is most' \
-        'trusted.' \
+        'scenario whose heading marks it a bound. The undeclared-prose direction that keeps this list honest has' \
+        'three known residuals and one deliberate exemption, all four enumerated here rather than left in the' \
+        "reaction's comments, because a residual a reader cannot see is one the register is lying about:" \
+        '' \
+        '1. **Unrecognized wording.** A bound worded outside the scanned form — "out-of-scope", "does not claim' \
+        '   to observe", "a stated, inherited bound" — is invisible to the scan.' \
+        '2. **The scan is line-oriented.** A statement whose bound names continue onto the next line is examined' \
+        '   only on the line carrying the trigger words.' \
+        '3. **A reference clears more than it names.** `(bound: …)` clears the prose it sits with regardless of' \
+        '   how many bounds that prose states, or whether the bound it names is one of them. This is how a' \
+        '   retired `#[path]` bound survived two sweeps inside a sentence listing four inherited bounds behind' \
+        '   one reference to a fifth. The discipline is one reference per stated bound, and it is the author\''s:' \
+        '   closing it would mean reading which bounds a sentence lists, which no reaction can do. Scanning' \
+        '   paragraphs instead of lines was measured against that defect and would not have caught it, because' \
+        '   the paragraph carries the same clearing reference.' \
+        '' \
+        'The **exemption**: prose under a requirement whose heading names bounds is not reported, because three' \
+        'such requirements state their bounds as numbered lists that reading worse would not improve. Its price' \
+        'is charged — such a requirement must declare at least one bound scenario — but the other items of its' \
+        'list are unregistered, which is why this list is a floor rather than a proof of completeness.' \
         '' \
         'The second floor is the same shape. A bound declared twice is caught only when both declarations cite' \
         'the **same pinning test**, which is a fact rather than a heuristic; two declarations of one behaviour' \
