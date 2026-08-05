@@ -59,7 +59,24 @@
 #
 # Exit 0 clean, 1 violation, 2 cannot judge — the family's own Core Contract, so this reads the same way
 # as the reactions it sits beside. Read-only: it never edits a spec or writes a projection.
-set -euo pipefail
+set -Eeuo pipefail
+
+# The exit contract, made structural. `set -e` with `pipefail` carries a failing utility's own status out of
+# the process: with `sed` stubbed to exit 4, this gate exited 4 and printed nothing — a status the contract
+# does not define, so a consumer cannot act on it and an operator is given no reason. Wrapping each command
+# instead has been tried twice and twice left a site behind; the number of unwrapped commands is not the
+# property to manage.
+#
+# This reports WHERE, never what: the trap cannot know what a command meant, and one that invented a cause
+# would be worse than the raw status it replaces. A failure worth naming keeps its own refusal — the trap is
+# the floor beneath those, not a substitute for them.
+#
+# Safe over code full of deliberate non-zero returns because that was measured, not reasoned: under
+# `errtrace` a failure inside `if`, `||`, `&&`, an arithmetic guard, or a captured pipeline with its own
+# handler does not fire it, even inside a function. Every `grep -q` miss, `[[ … ]] && continue`, and
+# `((status <= 1)) || cannot_judge` in this file is one of those shapes, and the matrix's passing directions
+# are what would fail loudly if that stopped being true.
+trap 'unhandled=$?; printf "bound register: cannot judge: an unhandled command failed (exit %d) at %s:%d — the reaction reports 0 clean, 1 violation, 2 cannot judge, and nothing else\n" "$unhandled" "${BASH_SOURCE[0]}" "$LINENO" >&2; exit 2' ERR
 
 # The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to
 # test only this checkout. A gate that cannot be pointed at a fixture cannot have its refusals proven.
@@ -396,15 +413,28 @@ build_harness_index() {
         printf 'bound register: no root Cargo.toml — citation test-ness decided by the source-text fallback, not the test harness\n'
         return 0
     fi
-    # The packages are the directories under `crates/`, which is checkable and checked: `cargo metadata`'s
-    # JSON would need parsing, and a naive `grep '"name"'` over it collects target and dependency names too
-    # (26 strings where six packages exist). If a directory is not a package name, `cargo test -p` fails and
-    # this becomes `error` — loud, never a quiet skip.
-    local members member listed leaf
-    mapfile -t members < <(cd "$repo/crates" 2>/dev/null && find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+    # The packages are the directories holding a TRACKED `Cargo.toml`, read through the same enumerator as
+    # every other read here: `cargo metadata`'s JSON would need parsing, and a naive `grep '"name"'` over it
+    # collects target and dependency names too (26 strings where six packages exist).
+    #
+    # This replaced a `find` walk rather than checking it. That walk's pipeline status was invisible to the
+    # parent, and the empty-list guard below catches only a TOTALLY empty result — so `find` emitting some
+    # members and then failing left a short list that read as authoritative: measured, the gate reported "24
+    # registered test names across 1 package(s)" and refused every citation in the five packages it never
+    # enumerated. The enumerator checks its status in the parent, and a directory with no tracked manifest is
+    # not a package, which `cargo test -p` would have discovered one step later.
+    local members=() member listed leaf manifests=()
+    read_tracked_files manifests 'crates/*/Cargo.toml'
+    for manifest in "${manifests[@]}"; do
+        member=${manifest#crates/}
+        member=${member%/Cargo.toml}
+        # Only a manifest one level under `crates/` names a package directory; a nested fixture manifest
+        # (`crates/x/tests/fixtures/*/Cargo.toml`) is not a workspace member of this repository.
+        [[ $member == */* ]] || members+=("$member")
+    done
     if [[ ${#members[@]} -eq 0 ]]; then
         harness_state=error
-        harness_error="no directory under $repo/crates, so no package could be enumerated"
+        harness_error="no tracked crates/*/Cargo.toml under $repo, so no package could be enumerated"
         return 0
     fi
     # cargo's own stderr is KEPT. Discarded, the exit-2 diagnosis named no cause, so a compile error, an
@@ -607,7 +637,12 @@ for spec in "${spec_files[@]}"; do
     [[ -f $repo/$spec ]] \
         || cannot_judge "tracked spec $spec is absent from the worktree, so its declared bounds cannot be read; a partial tree cannot produce a whole register"
     scanned=$((scanned + 1))
-    parse_spec "$spec" >>"$records"
+    # Named rather than left to the ERR trap: "an unhandled command failed at line 610" is a worse answer
+    # than the spec that could not be read, and this read has a name worth giving. The pipeline inside
+    # `parse_spec` is what fails — `sed` on an unreadable file, `awk` on a malformed one — and `pipefail`
+    # surfaces it here.
+    parse_spec "$spec" >>"$records" \
+        || cannot_judge "could not read the declared bounds from $spec; a spec the reaction cannot parse leaves the register incomplete, which is not the same as a register with no bounds"
 done
 
 # A bound's id is derived from where it sits: `<capability>/<slug>`, the slug being the heading lowercased
