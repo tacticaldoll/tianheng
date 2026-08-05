@@ -194,6 +194,15 @@ workspace version; `vX.Y.Z` annotated, signed, and pointing at it; `HEAD` the li
 `origin/main`, read from the remote rather than a possibly-stale `refs/remotes/`) and only then
 `cargo publish --workspace`. The gate reads `0` publishable, `1` wrong source, `2` cannot judge.
 
+**A published release snapshot is immutable.** Once a version is on crates.io, its `release: X.Y.Z`
+commit must never be amended or force-pushed away: the published artifact points at that sha1
+permanently, so replacing it orphans the pointer just as surely as publishing from the wrong branch
+does. `0.2.2` was published from `main` correctly and then force-pushed away an hour later, which the
+publish-source gate cannot foresee — at publish time it would have passed — so this half stays a
+convention. What each published version actually records, and the two mechanisms that produced the
+disagreements, is inventoried in
+[`docs/history/published-artifact-provenance.md`](docs/history/published-artifact-provenance.md).
+
 `bash scripts/check_release_coherence.sh` is the release-state reaction. During development it
 requires an adopter-facing `[Unreleased]` entry and aligned workspace/internal dependency versions,
 but deliberately tolerates historical lockfile drift. Once the workspace version moves forward for
