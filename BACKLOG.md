@@ -60,8 +60,33 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-**Empty.** What stood here is closed; its reproduction record is kept under *Closed in the 0.4.0 window*
-below, out of this queue for the reason the governance section states.
+- **An inherited observation bound is RESTATED by each capability that inherits it, so one behaviour
+  change leaves several specs stale at once.** Class: READY-PATCH (a stating convention; no public API,
+  wire format, or baseline identity moves). **Observed pressure: two measured instances in the 0.4.1
+  window, both found by enumerating bounds rather than by review.** (1) `inline-symbol-path-confinement`
+  restated the module scanner's file-scope bounds in its own prose *and* as its own bound scenario, and
+  `external-crate-confinement` restated the same list in its resolution sentence; when the scanner began
+  following an unconditional `#[path]` remap in 0.2.2 and union-scanning a `cfg_attr`-wrapped one in
+  0.3.x, **all three statements went stale together** and stayed stale through two releases (closed in
+  `5cceee6`). (2) `rule-model-surface` carried a bound scenario contradicting a reacting scenario in its
+  own requirement after a sync added the latter without retiring the former (closed in `4d7d93c`).
+  Observation source: those two closures, and the probe fixtures kept with them
+  (`inline_path_remapped_child_is_observed`,
+  `confine_observes_an_import_inside_a_path_remapped_module`). Current bound: nothing links a restatement
+  to the behaviour it describes, so staleness is detectable only by probing the behaviour and reading
+  every capability that mentions it — which is what the two closures cost. Risk: MEDIUM and asymmetric —
+  a stale *bound* reads as permission, telling an auditor a real escape is governed policy, so it is
+  worse than ordinary stale prose in the one direction that matters. Promotion trigger: **the
+  observation-bound register lands with its derived `<capability>/<scenario-slug>` ids**, which is the
+  mechanism a restatement could be replaced by — an inheriting capability citing the owning
+  capability's bound instead of paraphrasing it. Deliberately not designed before then: the correction's
+  shape depends on that id scheme, and designing it first would be guessing at the thing being built.
+  The open question to answer then is whether the claim should **sink** to the capability that owns the
+  behaviour with inheritors referencing it, whether a shared observation surface should be **raised**
+  into its own capability that both the static rules declare against, or whether a reaction over
+  restatements is enough without moving anything. Version class: PATCH. Authority: `AGENTS.md`'s
+  document-authority rule that a fact lives in one place, `PROJECT.md`'s drift law against a claim with
+  no reaction, and the two closing commits above.
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
