@@ -160,9 +160,15 @@ pub(crate) fn resolve_principal(
         if !use_map_candidates.is_empty() {
             use_map_candidates
         } else {
-            extern_verbatim_renamed(path, &file_scope.externs_type, &file_scope.renames_bare)
-                .into_iter()
-                .collect()
+            let mut candidates: Vec<String> =
+                extern_verbatim_renamed(path, &file_scope.externs_type, &file_scope.renames_bare)
+                    .into_iter()
+                    .collect();
+            if candidates.is_empty() && path.leading_colon.is_none() && path.segments.len() == 1 {
+                let name = path.segments[0].ident.to_string();
+                candidates.push(format!("{module}::{name}"));
+            }
+            candidates
         }
     };
     resolved

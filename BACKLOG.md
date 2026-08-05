@@ -60,21 +60,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **A bare trait name may not resolve against a same-module trait, contrary to the bound's own wording.**
-  Class: WATCH (one observation, mechanism unconfirmed). Observed pressure: probing
-  `semantic-impl-trait-operand-boundary`'s unresolvable-bare-principal bound, a bare `impl Frobnicate`
-  beside a locally declared `pub trait Frobnicate` in the **same** module, with `crate::m::Frobnicate`
-  forbidden, did **not** react. The bound's wording — "not a local trait resolvable in scope" — implies a
-  local trait resolves. Observation source: that probe, recorded in the pull request that pinned the twin
-  bound. Current bound: unknown whether the forbidden-operand spelling for a same-module trait differs from
-  what was tried, or same-module bare resolution has a gap. **Asserted in neither direction**: it is filed
-  as a lead precisely because this window produced four confident wrong claims from partial views. Risk:
-  LOW-to-MEDIUM depending on which it is — a resolution gap here would be a false negative. Promotion
-  trigger: one probe that distinguishes the two explanations, which is a fixture and a spelling change.
-  Version class: PATCH if a spelling, minor if a false-negative closure. Authority: the probe, and
-  `semantic-trait-impl-locality`'s resolution requirement, which states that a same-module trait needs no
-  `use`.
-
 - **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
   its corrections are classified when they exist). Observed pressure: measured on the window's own history —
   of the 116 commits landing after the last range sweep closed, **20 carry a `tianheng` scope** and none of
@@ -333,6 +318,9 @@ retained entry carries its own `Class:` line, and a count here would go stale th
 closes — which is how the previous two sentences came to say "DESIGN-BREAKING" and "six" about a section
 that also holds a closed READY-PATCH record.
 
+
+- ~~**A bare trait name may not resolve against a same-module trait, contrary to the bound's own wording.**~~ **CLOSED** in the
+  0.4.1 window. Probed and confirmed a false-negative gap where un-aliased bare principal traits in the same module were dropped when `uses` map had no `use` statement. Closed by adding `{module}::{name}` resolution fallback in `resolve_principal` in `crates/hunyi/src/crate_scope.rs` and adding unit test `same_module_bare_trait_resolves_without_use`.
 
 - ~~**Five declared bounds have no pinning test.**~~ **CLOSED** in the
   0.4.1 window. Closed by writing unit tests for all 5 remaining UNPINNED scenarios across `external-crate-confinement`, `runtime-origin-assertion`, and `semantic-dyn-trait-boundary`, bringing `unpinned` count to 0.
