@@ -869,6 +869,45 @@ impl From<std::io::Error> for BaselineWriteError {
     }
 }
 
+/// Removes a temp file when it goes out of scope unless the write committed — the cleanup half of
+/// [`write_baseline_atomically`]'s guarantee, whose doc carries the full threat model.
+///
+/// A `bool` rather than an `Option<PathBuf>`: with the path always present, `path()` is infallible.
+/// Under an `Option`, `commit` consumed the guard and took the path, so no caller could ever observe
+/// `None` — and the `expect` standing over that unreachable state is the defensive
+/// over-foolproofing of an impossible state the minimalism bound forbids.
+struct AtomicTempFileGuard {
+    path: PathBuf,
+    committed: bool,
+}
+
+impl AtomicTempFileGuard {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            committed: false,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Consumes the guard, so a committed write cannot be followed by a use of the temp path that no
+    /// longer exists.
+    fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for AtomicTempFileGuard {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
 /// Overwrites an existing baseline durably: the merged document lands at a sibling temp path
 /// first, is fsynced there, and only then does an atomic `rename` swap it into place. A crash,
 /// interrupt, or full disk mid-write leaves the previous baseline — and the owner/tracker
@@ -922,9 +961,9 @@ impl From<std::io::Error> for BaselineWriteError {
 /// way and no test bound to it could tell the two apart: the path form issued
 /// `chmod("<target>.tmp-<pid>", 0100666)`, the descriptor form issues `fchmod(4, 0100666)`.
 ///
-/// The cleanup on the failure path below stays `remove_file(&tmp_path)`, and is not the same
-/// exposure: `unlink` does not follow symlinks, so a symlink planted at that name is itself what gets
-/// removed, never its target. The temp path is built by appending to the resolved
+/// The cleanup runs in [`AtomicTempFileGuard::drop`] and stays a `remove_file` of the temp path,
+/// which is not the same exposure: `unlink` does not follow symlinks, so a symlink planted at that
+/// name is itself what gets removed, never its target. The temp path is built by appending to the resolved
 /// target's raw `OsString`, never through `Path::display()` (which lossily replaces non-UTF-8
 /// bytes for human-readable formatting) — a resolved path is not guaranteed valid UTF-8, and a
 /// lossy round-trip through a new string can point at a directory that does not exist, failing an
@@ -935,35 +974,6 @@ impl From<std::io::Error> for BaselineWriteError {
 /// ever changed, silently stop meaning "this process created nothing." Any failure once the temp
 /// file is open unconditionally cleans it up — no kind-based inference needed there, since opening
 /// it is the only step that can fail without this process having created it.
-/// RAII guard that automatically removes a temporary file on drop unless explicitly committed.
-struct AtomicTempFileGuard {
-    path: Option<PathBuf>,
-}
-
-impl AtomicTempFileGuard {
-    fn new(path: PathBuf) -> Self {
-        Self { path: Some(path) }
-    }
-
-    fn path(&self) -> &Path {
-        self.path
-            .as_deref()
-            .expect("path accessed before commit or after drop")
-    }
-
-    fn commit(mut self) {
-        self.path.take();
-    }
-}
-
-impl Drop for AtomicTempFileGuard {
-    fn drop(&mut self) {
-        if let Some(path) = self.path.take() {
-            let _ = std::fs::remove_file(path);
-        }
-    }
-}
-
 fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineWriteError> {
     let target = std::fs::canonicalize(path)?;
     let permissions = std::fs::metadata(&target)?.permissions();
