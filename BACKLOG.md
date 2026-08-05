@@ -60,6 +60,50 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **`check_reference_integrity.sh` has no companion failure matrix.** Class: READY-PATCH (a test; nothing
+  else moves). Observed pressure: noticed while narrowing that gate for the propose phase and recorded only
+  in that pull request's body until now — a 306-line gate whose siblings
+  (`check_release_coherence.sh`, the publish-source gate, the bound register) each carry a
+  `test_*.sh` proving every refusal, while this one has none. Observation source: `scripts/` itself; the
+  asymmetry is visible from a directory listing. Current bound: its refusals are unproven, so a change that
+  narrowed it too far would pass CI — and one change already narrowed it, exempting `openspec/changes/`.
+  Risk: MEDIUM — this gate is the reason stale in-repository references get caught at all, and it judges
+  tracked content across 250 files. Promotion trigger: none needed; the fixture shape is the one
+  `test_publish_source.sh` established (a throwaway git repo, since the gate judges tracked content).
+  Version class: PATCH. Authority: the gate's own header, which states its rules in detail and proves none
+  of them.
+
+- **A bare trait name may not resolve against a same-module trait, contrary to the bound's own wording.**
+  Class: WATCH (one observation, mechanism unconfirmed). Observed pressure: probing
+  `semantic-impl-trait-operand-boundary`'s unresolvable-bare-principal bound, a bare `impl Frobnicate`
+  beside a locally declared `pub trait Frobnicate` in the **same** module, with `crate::m::Frobnicate`
+  forbidden, did **not** react. The bound's wording — "not a local trait resolvable in scope" — implies a
+  local trait resolves. Observation source: that probe, recorded in the pull request that pinned the twin
+  bound. Current bound: unknown whether the forbidden-operand spelling for a same-module trait differs from
+  what was tried, or same-module bare resolution has a gap. **Asserted in neither direction**: it is filed
+  as a lead precisely because this window produced four confident wrong claims from partial views. Risk:
+  LOW-to-MEDIUM depending on which it is — a resolution gap here would be a false negative. Promotion
+  trigger: one probe that distinguishes the two explanations, which is a fixture and a spelling change.
+  Version class: PATCH if a spelling, minor if a false-negative closure. Authority: the probe, and
+  `semantic-trait-impl-locality`'s resolution requirement, which states that a same-module trait needs no
+  `use`.
+
+- **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
+  its corrections are classified when they exist). Observed pressure: measured on the window's own history —
+  of the 116 commits landing after the last range sweep closed, **20 carry a `tianheng` scope** and none of
+  the four slices touched them. They are one coherent surface: atomic baseline writing (temp-then-rename,
+  descriptor-vs-path `chmod`, symlink resolution, a temp-plant loop, data durability, directory flush) and
+  CLI flag handling (inapplicable flags, empty and flag-shaped values). `xingbiao`'s two commits are
+  likewise unswept. Observation source: `git log 23dbee5..release/0.4.0` by scope. Current bound: the four
+  slices covered 渾儀 seam identity, 圭表's value namespace and module resolution, and 漏刻's origin and
+  labels — the shell was never a slice. Risk: MEDIUM — this is the surface where a partial write or a
+  mis-resolved symlink corrupts a recorded baseline, and its failure mode is silent. Promotion trigger: none
+  needed. Sweep **against the enumerated surface** rather than against invented shapes, per `PROJECT.md`'s
+  audit-cycle decision; the bound register does not enumerate this surface, so the first task is to find or
+  build the enumeration rather than to start guessing. Version class: PATCH for what it finds unless a
+  closure invalidates a recorded baseline. Authority: `PROJECT.md`'s audit-cycle decision, and the atomic
+  baseline-write requirements in `violation-baseline`.
+
 - **Five declared bounds have no pinning test.** Class: READY-PATCH (writing a test; no public API, wire
   format, or baseline identity moves). Observed pressure: the observation-bound register's own reaction
   reports them, so this is measured rather than suspected — five of the 41 declared bounds, two each in
