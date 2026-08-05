@@ -3050,3 +3050,45 @@ fn a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directo
         report.violations
     );
 }
+
+#[test]
+fn source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound() {
+    let tb = TempBase::new("outside-subtree-corpus-bound");
+    let _tests_file = tb.source(
+        "crates/foo/tests/integration.rs",
+        "pub fn go(o: u8) { louke::assert_boundary!(\"seam\", o); }",
+    );
+    let src = tb.source("crates/foo/src/lib.rs", "// empty lib root\n");
+
+    let declared = [boundary("seam", Severity::Enforce)];
+    let outcome = tb.audit(&declared, &[src]);
+
+    let Outcome::Violations(report) = outcome else {
+        panic!("outside subtree is out of corpus scope: {outcome:?}");
+    };
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.rule.contains("must be probed")),
+        "reports unprobed seam: {:?}",
+        report.violations
+    );
+}
+
+#[test]
+fn production_probe_behind_non_production_cfg_is_counted_as_coverage() {
+    let tb = TempBase::new("cfg-test-probe-coverage");
+    let root = tb.source(
+        "crates/foo/src/lib.rs",
+        "#[cfg(test)]\npub fn go(o: u8) { louke::assert_boundary!(\"seam\", o); }",
+    );
+
+    let declared = [boundary("seam", Severity::Enforce)];
+    let outcome = tb.audit(&declared, &[root]);
+
+    assert!(
+        matches!(outcome, Outcome::Clean),
+        "cfg(test) probe must be counted as coverage: {outcome:?}"
+    );
+}

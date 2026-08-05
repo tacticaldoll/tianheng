@@ -400,3 +400,18 @@ pub(super) fn a_macro_generated_dyn_is_a_documented_coverage_bound() {
         "the control must react, or the empty result above says nothing"
     );
 }
+
+#[test]
+pub(super) fn an_unrenderable_sub_node_is_a_stated_rendering_bound() {
+    let out1 = dyn_mod(
+        "macro-subnode-dyn-1",
+        "pub fn f() -> Box<dyn crate::ports::Port<m!(1)>> { todo!() }\n",
+    )
+    .unwrap();
+    let out2 = dyn_mod(
+        "macro-subnode-dyn-2",
+        "pub fn f() -> Box<dyn crate::ports::Port<m!(2)>> { todo!() }\n",
+    )
+    .unwrap();
+    assert_eq!(out1, out2);
+}

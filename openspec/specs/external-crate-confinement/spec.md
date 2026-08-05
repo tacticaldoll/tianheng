@@ -101,13 +101,13 @@ The rule is **use-only**, matching the scanner: an `extern crate c;` declaration
 
 - **WHEN** a confined-crate import sits under a `#[cfg(...)]` the build would not enable
 - **THEN** the system observes it as written rather than evaluating the predicate, so the reaction is cfg-blind — inherited from the module scanner and stated here, never a silent claim about which branch is live
-- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **PINNED-BY** `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
 
 #### Scenario: The lib-and-bin conventional-path conflation is a stated scanner bound
 
 - **WHEN** a package declares both a library and a binary whose conventional source paths coincide
 - **THEN** the system does not distinguish their module graphs — the conflation inherited from the module scanner, stated rather than silently resolved
-- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **PINNED-BY** `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths`
 
 #### Scenario: A confined-crate use inside a string or macro body is not observed — a stated coverage bound
 

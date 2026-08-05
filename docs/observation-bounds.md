@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**5 of 42 declared bounds have no pinning test.** That figure is the register's
+**0 of 42 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -61,13 +61,13 @@ fallback used where no manifest exists, which the register spec describes.
 
 > the system observes it as written rather than evaluating the predicate, so the reaction is cfg-blind — inherited from the module scanner and stated here, never a silent claim about which branch is live
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
 
 ### `external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-scanner-bound`
 
 > the system does not distinguish their module graphs — the conflation inherited from the module scanner, stated rather than silently resolved
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **pinned by**: `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths`
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-coverage-bound`
 
@@ -125,13 +125,13 @@ fallback used where no manifest exists, which the register spec describes.
 
 > the audit does not read it, its corpus being the member's library and binary targets — a stated bound shared with the semantic dimension, never a silent claim of coverage
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **pinned by**: `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
 
 ### `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-cfg-blind-bound`
 
 > the audit counts it as coverage, being cfg-blind, so a seam whose production probe lives there is reported as probed — a stated bound, never a silent pass
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **pinned by**: `production_probe_behind_non_production_cfg_is_counted_as_coverage`
 
 ### `runtime-origin-assertion/identical-expression-repeated-in-the-same-function-collapses-to-one-finding-a-stated-identity-bound`
 
@@ -189,7 +189,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 > the system does not claim to distinguish them: they share a canonical `subject` field and key at the same seam (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated subject-rendering bound** — the same `(target, rule_key, fact)` granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` fact carries — declared here, never a silent claim of cleanliness
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **pinned by**: `an_unrenderable_sub_node_is_a_stated_rendering_bound`
 
 ## semantic-dyn-trait-operand-boundary
 

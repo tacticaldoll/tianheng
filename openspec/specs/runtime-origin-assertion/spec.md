@@ -568,13 +568,13 @@ drop one.
 
 - **WHEN** a probe or a seam mention sits in `tests/`, `examples/`, or `build.rs`
 - **THEN** the audit does not read it, its corpus being the member's library and binary targets — a stated bound shared with the semantic dimension, never a silent claim of coverage
-- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **PINNED-BY** `source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound`
 
 #### Scenario: A production probe behind a non-production cfg is still counted — a stated cfg-blind bound
 
 - **WHEN** a seam's only probe sits behind a `#[cfg(test)]` or another non-production predicate
 - **THEN** the audit counts it as coverage, being cfg-blind, so a seam whose production probe lives there is reported as probed — a stated bound, never a silent pass
-- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+- **PINNED-BY** `production_probe_behind_non_production_cfg_is_counted_as_coverage`
 
 #### Scenario: Identical expression repeated in the same function collapses to one finding — a stated identity bound
 

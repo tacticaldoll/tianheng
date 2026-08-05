@@ -487,3 +487,39 @@ pub(super) fn confine_ignores_an_extern_crate_declaration() {
         "the rule is use-only: an `extern crate` declaration is not observed: {violations:?}"
     );
 }
+
+#[test]
+pub(super) fn confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms() {
+    let (result, violations) = run_module_check(
+        "confine-cfg-blind",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+            ("ffi.rs", "\n"),
+            (
+                "service.rs",
+                "#[cfg(impossible_predicate)]\nuse libc::c_int;\n",
+            ),
+        ],
+        confine("crate::ffi", "libc"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "libc");
+    assert_eq!(violations[0].finding, "crate::service");
+}
+
+#[test]
+pub(super) fn confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths() {
+    let (result, violations) = run_module_check(
+        "confine-lib-bin-conflation",
+        &[
+            ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+            ("ffi.rs", "\n"),
+            ("service.rs", "use libc::c_int;\n"),
+        ],
+        confine("crate::ffi", "libc"),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].target(), "libc");
+}
