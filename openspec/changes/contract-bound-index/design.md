@@ -37,8 +37,11 @@ drift liability in the tree instead of the cure.
 
 ## Decisions
 
-**1. A bound is declared where this repository already declares them: as a `#### Scenario:` under the
-capability's `### Requirement: Observation bounds …`.** This reverses the shape proposed before apply,
+**1. A bound is declared where this repository already declares them: as a `#### Scenario:` whose heading
+marks it a bound, under the requirement it qualifies.** The first apply pass said "under the capability's
+`Observation bounds` requirement" and the enumeration refuted it: 21 of 24 sit under the requirement they
+qualify, and hoisting them into a common section would separate each bound from the reaction it limits.
+That requirement, which three specs carry, is a place bounds are gathered — not the definition of one. This reverses the shape proposed before apply,
 because the convention already exists and is further along than the proposal assumed. Three specs carry
 that requirement today — `inline-symbol-path-confinement` ("Observation bounds are stated, not silent"),
 `semantic-unsafe-confinement`, and `semantic-visibility-boundary` — and 25 scenarios across more specs

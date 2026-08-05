@@ -12,11 +12,11 @@
 
 ## 2. Build the reaction before registering anything
 
-- [ ] 2.1 Write `scripts/check_bound_register.sh`: parse `#### Bound:` blocks, require `statement` plus
+- [x] 2.1 Write `scripts/check_bound_register.sh`: parse `#### Bound:` blocks, require `statement` plus
       exactly one of `pinned-by` / `unpinned`, and exit `0` clean, `1` violation, `2` cannot judge
-- [ ] 2.2 Add the pinning-test resolution rule: exactly one `fn <name>(` definition under `crates/`, with
+- [x] 2.2 Add the pinning-test resolution rule: exactly one `fn <name>(` definition under `crates/`, with
       zero and two both failing, and matching on the definition form so a mention cannot satisfy it
-- [ ] 2.3 Add the unregistered-prose floor over `openspec/specs/*`, counting only occurrences outside a
+- [x] 2.3 Add the unregistered-prose floor over `openspec/specs/*`, counting only occurrences outside a
       `#### Bound:` block
 - [ ] 2.4 Add the vacuity guard: a run that parsed zero register blocks, or scanned zero spec files, fails
       `2` rather than reporting clean

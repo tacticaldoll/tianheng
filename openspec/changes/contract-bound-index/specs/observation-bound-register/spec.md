@@ -1,26 +1,40 @@
 ## ADDED Requirements
 
-### Requirement: An observation bound is declared as a scenario under its capability's Observation-bounds requirement
+### Requirement: An observation bound is declared as a scenario that names itself one
 
-An **observation bound** SHALL be declared as a `#### Scenario:` under the `### Requirement: Observation
-bounds …` of the capability whose reaction it bounds — a bound being a claim that an observation
+An **observation bound** SHALL be declared as a `#### Scenario:` whose heading marks it as a bound, in
+the spec of the capability whose reaction it bounds — a bound being a claim that an observation
 deliberately stops at a named shape, so that shape is governed policy rather than a defect. The
 declaring file SHALL be `openspec/specs/<capability>/spec.md`.
 
-This SHALL reuse the convention the repository already carries rather than introduce another: three
-specs declare bounds that way today, and 25 scenarios across more specs already name themselves as a
-stated or documented bound. A parallel block form SHALL NOT be introduced, because for a bound already
-declared as a scenario it would state the same bound twice, which is the drift the register exists to
-end.
+The declaration SHALL sit under the requirement it qualifies, wherever that is, and SHALL NOT be hoisted
+into a common section. 21 of the 24 bounds declared today sit under the requirement they qualify rather
+than under an `Observation bounds` requirement, and moving them would separate each bound from the
+reaction it limits — the `Observation bounds` requirement three specs carry is a place bounds are
+gathered, never the definition of one.
+
+Requiring the heading convention is legitimate where requiring a test-name convention is not, and the
+difference is ownership: a scenario heading is authored in the spec, so the register may require its
+form, while a test name pre-exists the register and is owned by its suite. A bound whose heading omits
+the marking SHALL be caught by the undeclared-prose reaction below rather than silently missed.
+
+A parallel block form SHALL NOT be introduced, because for a bound already declared as a scenario it
+would state the same bound twice, which is the drift the register exists to end.
 
 A bound's identity SHALL be derived from its location as `<capability>/<scenario-slug>`, never allocated,
 so no identifier ledger is introduced and a citation cannot outlive the declaration it names.
 
-#### Scenario: A bound is declared as a scenario, not as a parallel block
+#### Scenario: A bound is declared beside the requirement it qualifies
 
 - **WHEN** a capability states that its observation stops at a named shape
-- **THEN** that statement appears as a scenario under the capability's Observation-bounds requirement,
-  carrying its own WHEN/THEN, and no second declaration of the same bound exists elsewhere in the spec
+- **THEN** that statement appears as a bound-marked scenario under the requirement it qualifies, carrying
+  its own WHEN/THEN, and no second declaration of the same bound exists elsewhere in the spec
+
+#### Scenario: A bound-marked scenario is recognized wherever it sits
+
+- **WHEN** a bound-marked scenario sits under a requirement that is not named `Observation bounds`
+- **THEN** the reaction reads it as a declared bound and requires its citation, so the register covers
+  the 21 bounds already declared that way without relocating any of them
 
 #### Scenario: A bound's id is derived rather than assigned
 
