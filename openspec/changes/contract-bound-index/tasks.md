@@ -55,13 +55,13 @@
 
 ## 5. Wire it in
 
-- [ ] 5.1 Add the gate and its companion test to `AGENTS.md`'s Definition of Done, and the identical lines
+- [x] 5.1 Add the gate and its companion test to `AGENTS.md`'s Definition of Done, and the identical lines
       to `.github/workflows/ci.yml`
-- [ ] 5.2 Point `AGENTS.md` at the projection where it explains reading the law, so an auditor and an
+- [x] 5.2 Point `AGENTS.md` at the projection where it explains reading the law, so an auditor and an
       agent find the register without knowing it exists
-- [ ] 5.3 Confirm `check_dod_coherence.sh`, `check_reference_integrity.sh`, and
+- [x] 5.3 Confirm `check_dod_coherence.sh`, `check_reference_integrity.sh`, and
       `check_whitespace_hygiene.sh` all pass over the new files
-- [ ] 5.4 Add the `[Unreleased]` `CHANGELOG.md` entry, stating that no adopter action follows
+- [x] 5.4 Add the `[Unreleased]` `CHANGELOG.md` entry, stating that no adopter action follows
 
 ## 6. Close the change
 

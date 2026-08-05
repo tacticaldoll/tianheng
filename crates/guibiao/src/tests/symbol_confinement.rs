@@ -53,7 +53,11 @@ pub(super) fn inline_a_verb_outside_the_declared_set_is_a_bound() {
         narrowed(),
     );
     assert!(result.is_ok(), "{result:?}");
-    assert_eq!(violations.len(), 1, "the declared verb must react: {violations:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the declared verb must react: {violations:?}"
+    );
 }
 
 /// A foreign crate's re-export of the confined path is NOT observed — the stated bound, with its

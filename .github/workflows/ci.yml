@@ -52,6 +52,13 @@ jobs:
         # split landing after that sweep reintroduced it in nine places, in both documents and `.rs`
         # comments. A sweep is a snapshot; the next rename re-opens what it closed.
         run: bash scripts/check_reference_integrity.sh
+      - name: observation bounds are declared and defended
+        # A bound claims a reaction STOPS somewhere, which is the one claim class no reaction defends. Two
+        # in this repository outlived the behaviour they described for two releases, and a stale bound reads
+        # as permission: it tells an auditor a real escape is governed policy.
+        run: |
+          bash scripts/test_bound_register.sh
+          bash scripts/check_bound_register.sh
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace

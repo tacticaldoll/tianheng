@@ -103,9 +103,10 @@ measured rather than estimated: 3 of 29 specs carry an Observation-bounds requir
 more state bound prose without one.
 
 This direction SHALL be described as a **floor and not a proof**, in the generated projection's own
-header: a bound worded outside the scanned pattern is undetectable to it. The register SHALL therefore
-carry that residual as one of its own declared bounds, rather than letting the projection imply that
-every bound in the system is listed.
+header: a bound worded outside the scanned pattern is undetectable to it. That residual SHALL be stated
+there and SHALL NOT be declared as a bound of this capability, because nothing can observe it — a
+declaration no reaction can reach is the name-without-a-reaction `PROJECT.md` forbids, and the register
+must not make itself the first exception.
 
 #### Scenario: Spec prose states a bound that no scenario declares
 
@@ -119,11 +120,11 @@ every bound in the system is listed.
 - **THEN** the reaction passes for that occurrence, so declaring the bound is what clears it rather than
   rewording the sentence
 
-#### Scenario: The register's own detection residual is itself a declared bound
+#### Scenario: The register states its own detection residual without declaring it a bound
 
 - **WHEN** the projection is read
-- **THEN** its header states that the undeclared-prose direction is a floor over recognizable wording,
-  and a declared bound of this capability carries that same residual with its own pinning test
+- **THEN** its header states that the undeclared-prose direction is a floor over recognizable wording, and
+  no bound of this capability claims that residual, since no reaction could reach one
 
 ### Requirement: Prose MAY reference a declared bound, and a reference SHALL resolve
 
