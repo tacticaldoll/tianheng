@@ -1,7 +1,24 @@
 # observation-bound-register Specification
 
 ## Purpose
-TBD - created by archiving change contract-bound-index. Update Purpose after archive.
+
+Put every **observation bound** this family declares onto one enumerated, defended surface. A bound is
+the claim that a reaction deliberately stops at a named shape — the one claim class no reaction defends,
+and the reason a stale one is worse than ordinary stale prose: it reads as **permission**, telling a
+future auditor that a real escape is governed policy. Two bounds here outlived the behaviour they
+described for two releases, one of them in two capabilities at once, and nothing was watching.
+
+So the register makes each bound name what defends it — a pinning test, or a tracker that owns closing
+the gap — refuses a citation that resolves to nothing or to something that never runs, and refuses a bound
+stated in prose that no scenario declares. It is projected into a generated, staleness-checked document
+whose headline is the count of bounds with no test, because that count is the audit backlog and a figure
+in a footnote is not read.
+
+Where the register cannot see, it says so in that same document rather than implying completeness: the
+prose scan is a floor over recognizable wording, and the restatement direction reaches a shared citation
+rather than a shared behaviour. A register that overclaimed would mislead exactly where it is most
+trusted — and would be committing the failure it exists to end.
+
 ## Requirements
 ### Requirement: An observation bound is declared as a scenario that names itself one
 
@@ -72,10 +89,23 @@ exclusive answers to one question, and a bound that answers it twice or not at a
 ### Requirement: A cited pinning test SHALL resolve to exactly one definition in the tree
 
 The reaction SHALL verify that each `PINNED-BY` name resolves to exactly one Rust function
-**definition** under `crates/`. Resolving to none SHALL fail: a test that was renamed or deleted leaves
-a citation that reads as coverage while defending nothing, which is the silent pass the register
-opposes. Resolving to more than one SHALL also fail: a name defined twice makes the citation name a set
-rather than a reaction, so the bound's defender is not identified.
+**definition** under `crates/`, and that the resolved definition is a **test**. Resolving to none SHALL
+fail: a test that was renamed or deleted leaves a citation that reads as coverage while defending
+nothing, which is the silent pass the register opposes. Resolving to more than one SHALL also fail: a
+name defined twice makes the citation name a set rather than a reaction, so the bound's defender is not
+identified. Resolving to a function that is **not a test** SHALL fail for the same reason as an absent
+one: a citation names what defends the bound, and a helper or production function of the right name
+defends nothing while reading as coverage.
+
+A definition SHALL be recognized as a test by an attribute run immediately above it containing `#[test]`,
+read upward past interleaved attributes rather than only on the line before — `#[should_panic]` sits
+between the attribute and the `fn` in three places in this tree, so a single-line read would refuse a
+real test.
+
+Requiring the cited function to be a test is not a naming convention imposed on a suite the register does
+not own; it is what the citation already means. The register SHALL require nothing of the test's **name**,
+which is what lets the bound-pinning tests keep at least three naming variants while some carry no
+"bound" in the name at all.
 
 Matching SHALL be on the definition form, never on a bare mention, so a citation cannot be satisfied by
 a comment, a doc link, or a string that happens to contain the name.
@@ -96,6 +126,19 @@ a comment, a doc link, or a string that happens to contain the name.
 - **WHEN** a declared bound's `PINNED-BY` name appears in the tree only inside a comment or a string,
   with no function definition of that name
 - **THEN** the reaction fails exactly as for an absent test, because a mention defends nothing
+
+#### Scenario: A citation resolving to a function that is not a test
+
+- **WHEN** a declared bound's `PINNED-BY` resolves to exactly one function definition under `crates/` and
+  that definition carries no `#[test]` in the attribute run above it
+- **THEN** the reaction fails, naming the bound id and the definition site, because a function that never
+  runs as a test defends nothing while occupying the place of the defence
+
+#### Scenario: A pinning test whose attribute run carries another attribute
+
+- **WHEN** a cited test's definition is preceded by `#[test]` and then a further attribute such as
+  `#[should_panic]`
+- **THEN** the reaction resolves it as a test, so the check reads the attribute run rather than one line
 
 #### Scenario: One test cited by bounds in two capabilities
 
@@ -220,11 +263,18 @@ practical result is a smaller register rather than more tests — the trade `vio
 settled by recording what is accepted and gating only new drift.
 
 An `UNPINNED` citation SHALL name a tracker; a citation that merely asserts the absence of a test SHALL
-fail, so accepted debt carries an owner rather than becoming anonymous.
+fail, so accepted debt carries an owner rather than becoming anonymous. The reaction SHALL enforce this by
+requiring the citation to name a **path the repository tracks**, which is the checkable part of naming an
+owner: `no test exists` names none, and a tracker naming a file the repository does not track is
+indistinguishable from an anonymous one, since the document it points at cannot be read.
+
+Which section of that document owns the debt SHALL NOT be checked. That is prose the reaction cannot read,
+and demanding it would trade a fact for a heuristic — the same trade the shared-bound direction refuses
+below.
 
 #### Scenario: A bound is declared without a pinning test
 
-- **WHEN** a bound carries `UNPINNED` with a tracker reference
+- **WHEN** a bound carries `UNPINNED` with a tracker reference naming a tracked path
 - **THEN** the reaction passes for that bound and the projection counts it among the unpinned
 
 #### Scenario: An unpinned citation names no tracker
@@ -232,6 +282,18 @@ fail, so accepted debt carries an owner rather than becoming anonymous.
 - **WHEN** a bound carries `UNPINNED` with no tracker reference
 - **THEN** the reaction fails, naming the bound id, because untracked debt is indistinguishable from an
   oversight
+
+#### Scenario: An unpinned citation asserts the absence of a test instead of naming an owner
+
+- **WHEN** a bound carries `UNPINNED` followed by text that names no path the repository tracks
+- **THEN** the reaction fails, naming the bound id, because a sentence restating that no test exists
+  records the gap without giving it an owner
+
+#### Scenario: An unpinned citation naming a document that is not tracked
+
+- **WHEN** a bound's `UNPINNED` tracker names a path absent from the repository's tracked files
+- **THEN** the reaction fails, naming the bound id and the path, because a reference to a document that
+  cannot be read is anonymous debt wearing an owner's name
 
 ### Requirement: The register reaction SHALL be a local gate CI runs identically
 
@@ -242,6 +304,13 @@ coverage claim that has not been observed failing is a restatement of the regist
 
 The reaction SHALL be read-only: it SHALL NOT edit a spec, declare a bound, or rewrite the projection
 except when explicitly asked to regenerate it.
+
+Regeneration SHALL be bound by the same exit contract as judgment — 0 clean, 1 violation, 2 cannot judge.
+Regenerating over a register that has offenses SHALL write the projection and then **fail**, because "the
+document was rewritten" and "the register it describes is valid" are different claims and one exit code
+cannot carry both. A register the reaction cannot judge at all SHALL fail **before** the projection is
+written, so a register whose declarations it could not find cannot leave behind a document that reads as a
+complete one.
 
 #### Scenario: Every failure direction is proven
 
@@ -260,6 +329,18 @@ except when explicitly asked to regenerate it.
 - **THEN** the working tree, `HEAD`, and the projection are unchanged unless regeneration was explicitly
   requested
 
+#### Scenario: Regeneration over a register that has offenses
+
+- **WHEN** regeneration is requested and a declared bound carries no citation
+- **THEN** the projection is written and the reaction still fails, naming the offense, so a successful
+  rewrite is never reported as a valid register
+
+#### Scenario: Regeneration over a register the reaction cannot judge
+
+- **WHEN** regeneration is requested and no declared bound is parsed at all
+- **THEN** the reaction reports that it cannot judge and no projection is written, so a vacuous register
+  produces no document
+
 ### Requirement: A bound shared by several capabilities SHALL be declared once and referenced elsewhere
 
 A behaviour that bounds more than one capability SHALL be declared as a bound in exactly one of them, and
@@ -276,8 +357,28 @@ leaving one declaration to maintain — so the property the old rule protected i
 price of restatement.
 
 Restatement is the failure this prevents, and it has already cost this repository twice: the
-`#[path]`-remap bound was stale in two capabilities at once, and a sync left a contradicting bound beside its
-own reacting scenario. One behaviour change SHALL NOT be able to leave several specs stale.
+`#[path]`-remap bound went stale in two capabilities at once, and a sync left a contradicting bound beside
+its own reacting scenario.
+
+**The reaction over this requirement observes exactly one shape**: a single pinning test cited by declared
+bounds in more than one capability. That is a fact rather than a heuristic, and it is a **floor**. Two
+declarations of one behaviour that cite two different tests are invisible to it, and that residual SHALL be
+stated in the projection's header beside the undeclared-prose floor, where a reader of the register sees it.
+The requirement SHALL NOT claim that the reaction prevents every restatement, because a claim wider than
+its reaction is the stale declaration this whole capability exists to end.
+
+The residual SHALL NOT be declared as a bound of this capability, for the reason the prose floor is not:
+telling two declarations of one behaviour apart from two behaviours over sibling shapes is a semantic
+judgment, and nothing can observe it. Keying on statement similarity was rejected rather than overlooked —
+two sibling operand dimensions in this repository declare identically-worded bounds over `dyn` and
+`impl Trait` operands, each defended by its own test, and 三儀 ⊥ 三儀 requires each dimension to declare
+its own; a similarity key would fail on that pair and demand the author dissolve a symmetry the
+constitution requires.
+
+The record of the two historical restatements SHALL say which direction reaches each shape, so the
+requirement is not credited with a defence it does not provide: the `#[path]`-remap bound was stated as
+prose in one capability and as a scenario in the other, so the **undeclared-prose** direction is what
+reaches that shape.
 
 #### Scenario: A shared bound is declared in its owner and referenced elsewhere
 
@@ -289,3 +390,10 @@ own reacting scenario. One behaviour change SHALL NOT be able to leave several s
 
 - **WHEN** a capability's spec already states a shared property on behalf of its siblings
 - **THEN** the bound is declared there rather than in a sibling, so the declaration sits with the claim
+
+#### Scenario: The restatement direction states its own floor
+
+- **WHEN** the projection is read
+- **THEN** its header states that the restatement direction reaches a shared citation and not a shared
+  behaviour, so a reader does not take the register for a proof that no bound is declared twice
+
