@@ -39,6 +39,20 @@ them.
   published crate's content. The eleven `0.1.x` releases point at commits the 2026-07-17 history
   rewrite dissolved, so whether they came from `main` is no longer knowable.
 
+### Documentation
+- Two specs claimed that a `#[path]`-remapped module stays outside the scanner's observation, long after
+  it stopped being true. `inline-symbol-path-confinement` carried it as a **declared bound** ("the system
+  does not claim to observe it"), and `external-crate-confinement` listed it among the resolution's
+  out-of-scope bounds. Measured on this tree, both forms react: a call inside a `#[path]`-remapped child
+  of a clock-confined module is reported against that module, whether the attribute is written directly
+  or wrapped in `cfg_attr`, and so is an import of a confined external crate. The scanner began following
+  an unconditional remap in `0.2.2` and union-scanning a `cfg_attr`-wrapped one in `0.3.x`; the prose
+  outlived the behaviour on both counts. Both claims are corrected and the behaviour is now pinned by
+  `inline_path_remapped_child_is_observed` and
+  `confine_observes_an_import_inside_a_path_remapped_module`. No reaction changed — only what the specs
+  said about it, which for an adopter is the difference between reading a real escape as a defect and
+  dismissing it as governed policy.
+
 ### Changed
 - What earns a minor is now stated once, in `AGENTS.md`'s *Versioning* section: any change an adopter
   has to act on, a stale recorded baseline included. Three documents had grown three answers — the rule

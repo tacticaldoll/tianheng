@@ -8,6 +8,45 @@ pub(super) fn confine_core_clock() -> ModuleBoundary {
         .because("core reads no wall clock — time is injected, not read")
 }
 
+/// A `#[path]`-remapped child of the confined module is observed, in both attribute forms.
+///
+/// Kept for the CONTRACT rather than for a change: the behaviour is already correct, and this pins it
+/// so the spec's claim cannot drift away from it again. It used to be claimed as an inherited scanner
+/// bound — "the system does not claim to observe it" — which stopped being true when the scanner began
+/// following an unconditional remap (0.2.2) and union-scanning a `cfg_attr`-wrapped one (0.3.x); the
+/// prose outlived the behaviour on both counts, in this spec and in `external-crate-confinement`.
+#[test]
+pub(super) fn inline_path_remapped_child_is_observed() {
+    for (label, declaration) in [
+        ("direct", "#[path = \"elsewhere.rs\"]\npub mod inner;\n"),
+        (
+            "cfg_attr",
+            "#[cfg_attr(unix, path = \"elsewhere.rs\")]\npub mod inner;\n",
+        ),
+    ] {
+        let (result, violations) = run_module_check(
+            &format!("inline-remap-{label}"),
+            &[
+                ("lib.rs", "pub mod core;\n"),
+                ("core.rs", declaration),
+                (
+                    "elsewhere.rs",
+                    "fn stamp() { let _ = std::time::Instant::now(); }\n",
+                ),
+            ],
+            confine_core_clock(),
+        );
+        assert!(result.is_ok(), "{label}: {result:?}");
+        assert_eq!(violations.len(), 1, "{label}: {violations:?}");
+        assert_eq!(violations[0].target(), "std::time", "{label}");
+        assert!(
+            violations[0].finding.contains("crate::core::inner"),
+            "{label}: the finding must name the remapped module, not the declaring file: {:?}",
+            violations[0].finding
+        );
+    }
+}
+
 #[test]
 pub(super) fn inline_default_reacts_on_an_associated_fn_call() {
     let (result, violations) = run_module_check(
