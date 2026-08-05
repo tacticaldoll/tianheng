@@ -45,7 +45,9 @@ jobs:
         # files and two independent full-range adversarial reviews — one of which ran `cargo fmt --all
         # --check` and reported it passing. Neither had anything to consult, the property being stated
         # nowhere and reacted nowhere.
-        run: bash scripts/check_whitespace_hygiene.sh
+        run: |
+          bash scripts/test_whitespace_hygiene.sh
+          bash scripts/check_whitespace_hygiene.sh
       - name: in-repository references resolve
         # A reader who greps for a named file and finds nothing cannot tell stale prose from a bad
         # checkout. This class was swept by hand twice — the second time across `*.md` only — and a module

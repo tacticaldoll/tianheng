@@ -261,6 +261,10 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features --docu
                                            # before CI gained the flag, every one pointing at something a
                                            # module split had moved or renamed)
 cargo deny check
+bash scripts/test_whitespace_hygiene.sh  # prove every refusal of whitespace hygiene: this gate had no matrix,
+                                           # and it is where the shared exit-contract backstop first misfired —
+                                           # printing cannot-judge once per clean file while still exiting 0, so
+                                           # every check reading only the code reported it passing
 bash scripts/check_whitespace_hygiene.sh # `cargo fmt` governs .rs only; nothing checked .md/.toml/.sh/.yml,
                                            # so three blank lines at EOF reached a release branch through 23
                                            # touched spec files and two full-range adversarial reviews
