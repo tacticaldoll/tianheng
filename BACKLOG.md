@@ -81,20 +81,31 @@ consumer for an undemonstrated deduplication.
   a false claim a green guard. Version class: PATCH. Authority: the five `UNPINNED` citations, and
   `PROJECT.md`'s drift law against a claim with no reaction.
 
-- **The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**
-  Class: READY-PATCH (a sweep produces findings; its corrections are classified when they exist). Observed
-  pressure: the `v0.3.0..v0.4.0` window landed 116 commits after the last range sweep closed, concentrated
-  in 渾儀 (31.6k lines) and 圭表 (20.4k), reviewed per pull request and never as a range — and the three
-  slices that were swept produced one *mis-reported* false negative while enumeration then found two real
-  contradictions in its first pass. Observation source: those commits, and
-  `docs/observation-bounds.md` as the surface to sweep against. Current bound: nothing enumerates what a
-  sweep of this surface should have covered, so its thoroughness is a claim rather than a fact. Risk: LOW
-  for regression and MEDIUM for confidence — an unswept range is where a stale bound survives, which reads
-  as permission. Promotion trigger: none needed; the instrument exists. **Sweep against the index, not
-  against invented shapes** — that is the whole lesson of the three slices, and the reason this entry names
-  a surface rather than a list of hypotheses. Version class: PATCH for what it finds unless a closure
-  invalidates a recorded baseline, which earns the next minor. Authority:
-  `PROJECT.md`'s audit-cycle decision, and the 0.4.1 window's two retired bounds.
+- ~~**The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**~~
+  **CLOSED** in the 0.4.1 window, swept and found defended — by a structurally enforced enumeration rather
+  than by diligence, which is why the result is worth recording instead of just noting "no findings".
+
+  `every_public_seam_shape_is_named_and_identity_injective` carries the enumeration and forces it to stay
+  complete: `seam_kind` matches all eleven `PublicSeam` variants with no wildcard, so a new variant cannot
+  compile without a representative; `SeamKind::ALL` is asserted duplicate-free; the observed shape set must
+  **equal** it; the shape-to-label mapping is a bijection checked in **both** directions, so a new variant
+  folded into an existing shape cannot read as covered; each seam's field schema is asserted exactly; and
+  `keys.len() == seams.len()` asserts the injectivity the name claims. Thirty-eight further
+  distinctness tests cover the owner-qualification half across the family.
+
+  **ACCEPTED DEBT, stated by that test itself**: the *content* of each representative stays hand-maintained.
+  A representative whose field values do not actually differ from a sibling's in the distinguishing field
+  would satisfy the set equality and the bijection while proving nothing about that field. The test names
+  this as a judgment no structure can force, and it is accepted rather than closed because the alternative —
+  generating representatives — would need a model of which field distinguishes which shape, which is the
+  judgment itself. It is not a bound and does not belong in the register: it limits a test's completeness,
+  not an observation.
+
+  Lesson kept, because it recurred four times in this window: a gap suspected from a partial view dissolves
+  on the full one. The injectivity assertion here was read as absent from a fifteen-line excerpt and sits on
+  the sixteenth. Read the whole construct before reporting it, and diff what a change actually moves rather
+  than reasoning about what it should.
+
 
 - ~~**An inherited observation bound is RESTATED by each capability that inherits it, so one behaviour
   change leaves several specs stale at once.**~~ **CLOSED** in the 0.4.1 window. Closed by a reaction plus
