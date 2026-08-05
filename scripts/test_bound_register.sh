@@ -634,6 +634,65 @@ git -C "$census_true" add -A
 git -C "$census_true" commit -qm 'a true census'
 expect_pass "$census_true" 'bound register ok (1 declared bounds'
 
+# A figure at the START of a line, which markdown reflow produces routinely. The first matcher guarded the
+# number with `[^0-9]` to avoid reading `142 bounds` as `42`, and that guard cannot match at position zero —
+# so a line-initial census was silently skipped while the identical figure mid-line was caught. The fixture
+# above is mid-line, which is exactly why the gap was invisible to this matrix.
+census_line_start=$(new_repo census-line-start "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf '9 bounds across 4 capabilities is what this document claims.\n' >>"$census_line_start/BACKLOG.md"
+git -C "$census_line_start" add -A
+git -C "$census_line_start" commit -qm 'a line-initial stale census'
+expect_fail "$census_line_start" 1 'where the register holds 1 across 1'
+
+# The guard the `[^0-9]` prefix was there for, kept now that the prefix is gone: `grep -o` is
+# leftmost-longest, so a longer number is read whole rather than sliced into a false agreement. Without this,
+# `21 bounds across 1 capabilities` in a one-bound register could match the trailing `1 bounds across 1` and
+# pass.
+census_longer_number=$(new_repo census-longer-number "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'The register holds 21 bounds across 1 capabilities.\n' >>"$census_longer_number/BACKLOG.md"
+git -C "$census_longer_number" add -A
+git -C "$census_longer_number" commit -qm 'a stale census whose count shares a suffix with the truth'
+expect_fail "$census_longer_number" 1 'writes "21 bounds across 1 capabilities"'
+
+# EVERY figure on the line, not the last one. A greedy `.*` examined only the final match, so an earlier
+# stale figure passed while the line reported clean — the same partial check the reference direction was
+# already repaired for, which is why it is proven here in the direction that discriminates: the FIRST figure
+# is the stale one.
+census_two_on_a_line=$(new_repo census-two-on-a-line "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'It listed 9 bounds across 4 capabilities and now holds 1 bounds across 1 capabilities.\n' \
+    >>"$census_two_on_a_line/BACKLOG.md"
+git -C "$census_two_on_a_line" add -A
+git -C "$census_two_on_a_line" commit -qm 'two censuses on one line, the first stale'
+expect_fail "$census_two_on_a_line" 1 'writes "9 bounds across 4 capabilities"'
+
+# The direction's own residual, recorded as accepted behaviour rather than left to be rediscovered: the scan
+# is line-oriented, so a figure reflowed across a line break is invisible to it. Measured, not reasoned — the
+# same figure on one line is the control above and fails. Closing it would mean joining lines before matching,
+# which costs the line number the diagnostic needs and would match across a paragraph boundary, so the spec
+# states it instead. This fixture exists so a change that silently widens or closes the residual is visible.
+census_reflowed=$(new_repo census-reflowed "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'The register holds 9 bounds across 4\ncapabilities today.\n' >>"$census_reflowed/BACKLOG.md"
+git -C "$census_reflowed" add -A
+git -C "$census_reflowed" commit -qm 'a stale census reflowed across a line break'
+expect_pass "$census_reflowed" 'bound register ok (1 declared bounds'
+
+# TRACKED content only. A filesystem walk judged the worktree, so an untracked scratch note failed the gate
+# — a local file breaking a developer's run while CI's clean checkout passed. This gate's own header says it
+# judges tracked content, and every other direction in it reads `git ls-files`.
+census_untracked=$(new_repo census-untracked "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'Scratch: 9 bounds across 4 capabilities.\n' >"$census_untracked/scratch-notes.md"
+expect_pass "$census_untracked" 'bound register ok (1 declared bounds'
+
+# And the same for a path the repository ignores, which is the shape a vendored or generated tree takes. The
+# walk excluded exactly one directory by name (`target/`), so every other ignored path was judged.
+census_ignored=$(new_repo census-ignored "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'vendor/\n' >"$census_ignored/.gitignore"
+mkdir -p "$census_ignored/vendor"
+printf 'Vendored: 9 bounds across 4 capabilities.\n' >"$census_ignored/vendor/README.md"
+git -C "$census_ignored" add .gitignore
+git -C "$census_ignored" commit -qm 'ignore the vendor tree'
+expect_pass "$census_ignored" 'bound register ok (1 declared bounds'
+
 # --- cannot-judge directions ---
 
 not_git=$fixture_root/not-git

@@ -403,13 +403,41 @@ A count of a set the reaction already enumerates is a claim with no observation 
 capability exists to end — and it went stale three times in one release window, the third time inside the
 entry recording that the first two had. Carelessness is not the cause: four independent, deliberate counts of
 this tree produced four different answers for the number of citations. A clean run SHALL therefore print the
-bound, capability, citation, unpinned, and reference counts, so prose is written from a measurement rather
-than from memory, and prose SHALL state a figure only where a reader outside the repository needs one.
+bound, capability, **pinning-citation**, unpinned, and reference counts, so prose is written from a
+measurement rather than from memory, and prose SHALL state a figure only where a reader outside the
+repository needs one.
 
-Where such a figure is stated, the reaction SHALL react to it: a tracked document writing
+The pinning-citation figure SHALL be **labelled as such rather than as "citations"**, because this
+specification defines a citation as *either* form — `PINNED-BY` or `UNPINNED` — so an unqualified figure names
+two different numbers depending on which sense a reader carries. That ambiguity is the actual cause of the
+four disagreeing counts, and a reaction emitting an unqualified figure would become a fifth answer rather
+than the arbiter. Labelled, the printed pinning-citation and unpinned counts sum to this specification's sense
+with nothing left to infer.
+
+Where such a figure is stated, the reaction SHALL react to it: a **tracked Markdown** document writing
 `N bounds across M capabilities` SHALL fail when either number disagrees with what the reaction counted. The
 matched shape SHALL be narrow rather than a general number-in-prose matcher, because a heuristic over prose
 figures would refuse unrelated numbers, which is how a gate earns the false positives that get it disabled.
+
+The scan SHALL read **tracked Markdown**, through the same `git ls-files` this reaction already uses for
+specs and for trackers, and that scope SHALL be stated here rather than inferred from a glob. A filesystem
+walk is forbidden: it judged the worktree, so an untracked scratch note and an ignored vendored tree each
+failed the reaction, which makes a local file break a developer's run while a clean checkout passes — the
+checkout-dependence this family repairs wherever it appears.
+
+**Every** figure on a line SHALL be checked, and a figure SHALL be recognized wherever it sits on that line,
+including at its start. A matcher that guarded the number against a preceding digit could not match at a
+line's first column, so a line-initial census — which reflowed Markdown produces routinely — was silently
+skipped while the identical figure mid-line was caught; and a greedy match examined only the last figure of
+two, the same partial check the reference direction was already repaired for. A longest-match extraction
+SHALL be used instead, so a longer written number is read whole rather than sliced into a false agreement.
+
+This direction's own residual SHALL be stated rather than left implicit: it is **line-oriented**, so a figure
+reflowed across a line break — `… 15` ending one line and `capabilities` opening the next — is invisible to
+it, exactly as the undeclared-prose scan is. Closing it would mean joining lines before matching, which costs
+the line number the diagnostic needs and would match across a paragraph boundary; the residual is therefore
+recorded here rather than repaired, and it SHALL NOT be declared as a bound of this capability, for the reason
+already settled for the prose floor's residuals — nothing observes it.
 
 #### Scenario: The projection is stale
 
@@ -435,20 +463,38 @@ figures would refuse unrelated numbers, which is how a gate earns the false posi
 #### Scenario: A clean run states the figures it counted
 
 - **WHEN** the reaction reports clean
-- **THEN** it prints the bound, capability, citation, unpinned, and reference counts, so a figure written into
-  prose comes from a measurement rather than from memory
+- **THEN** it prints the bound, capability, pinning-citation, unpinned, and reference counts, each labelled in
+  the sense this specification defines, so a figure written into prose comes from a measurement rather than
+  from memory
 
 #### Scenario: A tracked document's written census disagrees with the register
 
-- **WHEN** a tracked document states `N bounds across M capabilities` and either number differs from what the
-  reaction counted
+- **WHEN** a tracked Markdown document states `N bounds across M capabilities` and either number differs from
+  what the reaction counted
 - **THEN** the reaction fails, naming the file, the line, the written figures, and the counted ones
 
 #### Scenario: A written census that agrees passes
 
-- **WHEN** a tracked document's stated figures match what the reaction counted
+- **WHEN** a tracked Markdown document's stated figures match what the reaction counted
 - **THEN** the reaction passes for that document, so the direction reacts to disagreement rather than to the
   shape
+
+#### Scenario: A census written at the start of a line
+
+- **WHEN** a stale figure is the first thing on its line, as reflowed Markdown produces
+- **THEN** the reaction fails, so the figure's column cannot decide whether it is judged
+
+#### Scenario: Two censuses on one line, the earlier one stale
+
+- **WHEN** a line carries two figures and only the later one agrees with the count
+- **THEN** the reaction fails, naming the stale one, because a line examined at one figure leaves the rest
+  unchecked whichever one that is
+
+#### Scenario: A census in a path the repository does not track
+
+- **WHEN** a stale figure sits in an untracked file, or in a path the repository ignores
+- **THEN** the reaction passes for it, because this gate judges tracked content and a local file must not
+  decide a developer's run where a clean checkout would pass
 
 ### Requirement: An unpinned bound SHALL be representable, and SHALL name its tracker
 
