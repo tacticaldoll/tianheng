@@ -112,21 +112,23 @@ pub(crate) struct FileExternScope {
     /// file's own branch** removed — used for a **bare** head, exactly as `module_findings` does
     /// (see [`renames_shadowed`]).
     pub(crate) renames_bare: ExternRenameMap,
+    /// This branch's own type-namespace names, canonicalized — the observation source for a **bare**
+    /// principal that needs no `use` because its own module declares it (see [`resolve_principal`]).
+    /// The same set `externs_type` is derived from, kept rather than discarded.
+    pub(crate) local_types: HashSet<String>,
 }
 
 pub(crate) fn file_extern_scope(
     res: &ExternResolution,
     file_items: &[syn::Item],
 ) -> FileExternScope {
-    let externs_type = res
-        .externs
-        .difference(&local_type_namespace_names(file_items))
-        .cloned()
-        .collect();
+    let local_types = local_type_namespace_names(file_items);
+    let externs_type = res.externs.difference(&local_types).cloned().collect();
     let renames_bare = renames_shadowed(&res.extern_renames, &child_module_names(file_items));
     FileExternScope {
         externs_type,
         renames_bare,
+        local_types,
     }
 }
 
@@ -140,6 +142,13 @@ pub(crate) fn file_extern_scope(
 /// via [`apply_bare_alias_rename`] with the child-shadowed map) spellings of a crate-root rename
 /// are rewritten after the re-export closure. `file_scope` MUST be the branch that OWNS `path`
 /// (the exposure's own file), never a different branch's scope.
+///
+/// One step is this resolver's own, not `resolve_path_all`'s: a **bare single-segment** principal is
+/// resolved against `module` when — and only when — that branch declares the name
+/// ([`FileExternScope::local_types`]). `BareFallback::CurrentModule` would resolve it without
+/// proving it exists, which is why this call site passes [`BareFallback::Ignore`] and admits the
+/// declared case here instead; the undeclared case stays dropped, the resolver-coverage bound both
+/// operand capabilities declare.
 ///
 /// Returns **every** candidate canonical path, mirroring `module_findings`' own cfg-blind
 /// resolution. The caller checks every candidate against the forbidden set and reacts if any
@@ -164,9 +173,17 @@ pub(crate) fn resolve_principal(
                 extern_verbatim_renamed(path, &file_scope.externs_type, &file_scope.renames_bare)
                     .into_iter()
                     .collect();
-            if candidates.is_empty() && path.leading_colon.is_none() && path.segments.len() == 1 {
-                let name = path.segments[0].ident.to_string();
-                candidates.push(format!("{module}::{name}"));
+            // A bare single-segment principal needs no `use` when its own module declares it — and
+            // only then. Resolving one the branch does NOT declare would fabricate a canonical path
+            // for a name the module never had (a prelude trait, a glob import), reacting over an
+            // operand that is not there; leaving a declared one unresolved would pass over the
+            // operand that is. `strip_raw` because the set compared against is canonical, so
+            // `r#type` and `type` are one name here exactly as at every other resolution site.
+            if candidates.is_empty() && path.segments.len() == 1 {
+                let name = strip_raw(&path.segments[0].ident.to_string());
+                if file_scope.local_types.contains(&name) {
+                    candidates.push(format!("{module}::{name}"));
+                }
             }
             candidates
         }
