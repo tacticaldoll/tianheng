@@ -235,20 +235,39 @@ parse_spec() {
 # give the same-shaped bound the same test name — `a_cfg_gated_module_with_no_file_is_skipped_not_errored`
 # exists in both 渾儀 and 漏刻 — and the alternative would be renaming a pre-existing test to suit this
 # register, which is the one thing it must not require of a suite it does not own.
+#
+# TRACKED `.rs` files, like every other direction here — not a `grep -r` walk of the worktree. A walk
+# reads whatever sits on disk, so an untracked or ignored `.rs` under `crates/` decides a citation: a
+# scratch copy of a test file (the likeliest such artifact, tests being what citations name) resolves
+# the name a second time and the gate refuses with "defined 2 times" on a developer's machine while
+# CI's clean checkout passes. That is the checkout-dependence the census and identity directions were
+# already repaired for, still live in the one direction that walked the filesystem. Refusal, never a
+# silent pass — but a gate that fails only locally is a gate that gets distrusted.
 definitions_of() {
-    local name=$1 root=$repo/crates
+    local name=$1 scope=crates
     case $name in
     *::*)
-        root=$repo/crates/${name%%::*}
+        scope=crates/${name%%::*}
         name=${name##*::}
         # Emit NOTHING for an absent crate, so the caller counts zero sites and refuses. An earlier
         # attempt printed a placeholder, which the caller counted as one site — an absent crate qualifier
         # then read as coverage, the silent pass this whole gate opposes. Caught by the matrix.
-        [[ -d $root ]] || return 0
+        [[ -d $repo/$scope ]] || return 0
         ;;
     esac
-    grep -rnE "^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?(async[[:space:]]+)?fn[[:space:]]+$name[[:space:]]*\(" \
-        "$root" --include='*.rs' 2>/dev/null || true
+    local files=()
+    # `-z`, and the same `read -r -d ''` loop the tracked-path index uses: `git ls-files` quotes a
+    # non-ASCII path by default, and a quoted path names no file on disk.
+    while IFS= read -r -d '' rs; do
+        files+=("$repo/$rs")
+    done < <(git -C "$repo" ls-files -z -- "$scope/*.rs")
+    # `grep` with no file arguments reads STDIN and would block inside a process substitution, so a
+    # crate holding no tracked `.rs` file emits nothing and the caller counts zero sites.
+    [[ ${#files[@]} -gt 0 ]] || return 0
+    # `-H` explicitly: `grep -n` omits the filename when given exactly ONE file, and the caller parses
+    # `file:line:` — a single-file crate would have handed it a line number where a path belongs.
+    grep -HnE "^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?(async[[:space:]]+)?fn[[:space:]]+$name[[:space:]]*\(" \
+        -- "${files[@]}" 2>/dev/null || true
 }
 
 # Whether a citation is even well formed, checked BEFORE it is resolved. Two directions were silent passes
@@ -311,6 +330,7 @@ citation_is_well_formed() {
 # reintroduced by the shortcut. All six packages enumerate in 746ms warm.
 declare -A harness_packages_of=()
 harness_state=unknown
+harness_error=
 build_harness_index() {
     [[ $harness_state != unknown ]] && return 0
     if [[ ! -f $repo/Cargo.toml ]]; then
@@ -329,13 +349,22 @@ build_harness_index() {
     mapfile -t members < <(cd "$repo/crates" 2>/dev/null && find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
     if [[ ${#members[@]} -eq 0 ]]; then
         harness_state=error
+        harness_error="no directory under $repo/crates, so no package could be enumerated"
         return 0
     fi
     for member in "${members[@]}"; do
-        listed=$(cd "$repo" && cargo test -p "$member" --all-features -- --list </dev/null 2>/dev/null) || {
+        # cargo's own stderr is KEPT. Discarded, the exit-2 diagnosis named no cause, so a compile
+        # error, an absent package, and a lock held by another cargo all read identically and the one
+        # actionable detail had to be recovered by re-running cargo by hand.
+        cargo_stderr=$(mktemp)
+        listed=$(cd "$repo" && cargo test -p "$member" --all-features -- --list </dev/null 2>"$cargo_stderr") || {
             harness_state=error
+            harness_error="\`cargo test -p $member --all-features -- --list\` failed:
+$(sed 's/^/           /' "$cargo_stderr" | tail -n 12)"
+            rm -f "$cargo_stderr"
             return 0
         }
+        rm -f "$cargo_stderr"
         while IFS= read -r leaf; do
             [[ -n $leaf ]] || continue
             harness_packages_of[$leaf]="${harness_packages_of[$leaf]:-,}$member,"
@@ -485,7 +514,12 @@ rendered=
 trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"}' EXIT
 
 for spec in "${spec_files[@]}"; do
-    [[ -f $repo/$spec ]] || continue
+    # A tracked spec missing from the worktree is UNDECIDABLE, not skippable. `continue` dropped its
+    # bounds from both the verdicts and the projection, so the two agreed with each other about a
+    # register neither had read — the flattering direction for a gate whose subject is absence. Every
+    # other undecidable here exits 2; this one used to exit 0.
+    [[ -f $repo/$spec ]] \
+        || cannot_judge "tracked spec $spec is absent from the worktree, so its declared bounds cannot be read; a partial tree cannot produce a whole register"
     scanned=$((scanned + 1))
     parse_spec "$spec" >>"$records"
 done
@@ -544,7 +578,7 @@ while IFS=$'\t' read -r kind file line a b c d; do
             fi
             build_harness_index
             [[ $harness_state == error ]] \
-                && cannot_judge "the test harness could not be enumerated under $repo/crates — a citation's test-ness is undecided rather than weakly decided, so this gate refuses to judge instead of falling back"
+                && cannot_judge "the test harness could not be enumerated under $repo/crates — a citation's test-ness is undecided rather than weakly decided, so this gate refuses to judge instead of falling back. ${harness_error:-no cause recorded}"
             if [[ $harness_state == ready ]] && ! harness_registers "$name"; then
                 fail "$id ($file:$line) is PINNED-BY \`$name\`, which the test harness does not register for that crate; a citation names what defends the bound, and a definition removed by a cfg, trapped in an uninvoked macro, or written inside a string or comment runs nothing"
                 continue

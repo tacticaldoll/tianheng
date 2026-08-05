@@ -283,6 +283,60 @@ fn r#type() {}
 ')
 expect_pass "$raw_identifier" 'bound register ok (1 declared bounds'
 
+# --- the citation search reads TRACKED content, not the worktree ---
+
+# An untracked `.rs` file holding a same-named definition must not decide a citation. A `grep -r` walk
+# counted it, so a scratch copy of a test file — the likeliest such artifact, tests being what citations
+# name — resolved the name twice and the gate refused with "defined 2 times" on a developer's machine
+# while CI's clean checkout passed. The fixture keeps the tracked definition legitimate and adds the
+# untracked twin AFTER the commit, so only trackedness distinguishes them.
+untracked_twin=$(new_repo untracked-twin "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf '%s' "$DEFAULT_RUST" >"$untracked_twin/crates/probe/src/scratch_copy.rs"
+expect_pass "$untracked_twin" 'bound register ok (1 declared bounds'
+
+# The same file, tracked, IS a second definition and must still refuse — otherwise the direction above
+# would have been bought by blinding the search rather than by scoping it.
+tracked_twin=$(new_repo tracked-twin "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf '%s' "$DEFAULT_RUST" >"$tracked_twin/crates/probe/src/second_definition.rs"
+git -C "$tracked_twin" add -A
+git -C "$tracked_twin" commit -qm 'a second tracked definition'
+expect_fail "$tracked_twin" 1 'the citation names a set rather than a reaction'
+
+# --- a tracked spec absent from the worktree cannot be judged ---
+
+# `git ls-files` lists it and the worktree does not hold it. Skipping it dropped its bounds from the
+# verdicts AND from the projection, so the two agreed with each other about a register neither had read.
+#
+# TWO tracked specs, and the SECOND is the one removed — deliberately, because a single-spec fixture
+# cannot show the defect: with nothing left to parse the vacuity guard fires and the run exits 2 anyway,
+# on a different diagnosis.
+#
+# Two directions, and what each is worth. JUDGING was never a silent pass in a repository whose
+# projection is committed: the document still described both specs, so the old `continue` surfaced as a
+# stale-projection failure — exit 1 blaming the projection for a tree that could not be read. The gain
+# there is the diagnosis, and that is all it is claimed to be.
+#
+# BLESSING is where the silence was. The write happens after this loop, so a skipped spec produced a
+# projection rewritten to describe a partial register, exit 0, and a document that reads as the complete
+# register of a repository holding fewer bounds than it does. Refusing before the write is what closes it,
+# so the projection is asserted UNCHANGED as well as the exit code.
+absent_spec=$(new_repo absent-spec "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" '' nobless)
+mkdir -p "$absent_spec/openspec/specs/second-capability"
+spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' >"$absent_spec/openspec/specs/second-capability/spec.md"
+git -C "$absent_spec" add -A
+git -C "$absent_spec" commit -qm 'a second tracked spec'
+BLESS=1 "$check" "$absent_spec" >/dev/null 2>&1 || true
+projection_before=$(cat "$absent_spec/docs/observation-bounds.md")
+rm -f "$absent_spec/openspec/specs/second-capability/spec.md"
+expect_fail "$absent_spec" 2 'absent from the worktree'
+
+absent_spec_bless_status=0
+absent_spec_bless_output=$(BLESS=1 "$check" "$absent_spec" 2>&1) || absent_spec_bless_status=$?
+[[ $absent_spec_bless_status -eq 2 ]] \
+    || { printf 'blessing over an absent tracked spec must exit 2, got %d: %s\n' "$absent_spec_bless_status" "$absent_spec_bless_output" >&2; exit 1; }
+[[ $(cat "$absent_spec/docs/observation-bounds.md") == "$projection_before" ]] \
+    || { printf 'blessing over an absent tracked spec rewrote the projection to a partial register\n' >&2; exit 1; }
+
 # --- the harness is the authority, proven on real cargo workspaces ---
 
 # The passing direction first: a real registered test resolves, and the gate says the harness decided.
