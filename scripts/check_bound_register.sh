@@ -366,13 +366,22 @@ harness_registers() {
 # further attributes was refused, and no attribute-run length is declared anywhere. The preceding lines are
 # read once rather than one `sed` per line, which is also cheaper.
 #
-# `cargo test --list` would answer this exactly and was rejected: it needs a compiled workspace, and the
-# whole failure matrix is throwaway repositories holding one `lib.rs` and no manifest.
+# This walk is the FALLBACK, not the authority. `cargo test -- --list` decides test-ness wherever a manifest
+# exists (`build_harness_index` above), and this comment used to say that source was "rejected: it needs a
+# compiled workspace, and the whole failure matrix is throwaway repositories holding one `lib.rs` and no
+# manifest." Both halves were wrong, and the second was never measured: a fixture crate carrying a six-line
+# manifest enumerates cold in ~107ms, so a throwaway repository can carry one. The estimate was made from
+# inside this file instead of measured, which is why the text scan spent three review rounds defending a
+# claim it could not hold.
 #
-# Residual, stated because it cannot be closed by a text scan: the definition match reads a line's FORM, not
-# its comment state, so a whole definition inside a block comment satisfies a citation. Closing it needs the
-# same string-literal lexing rejected above. `docs/observation-bounds.md` states it where a register reader
-# sees it, and a fixture records the accepted behaviour so a later repair is not absorbed silently.
+# What the walk still owns is the manifest-less repository — most of this register's directions have nothing
+# to do with Rust — plus the definition SITE, which the harness's leaf names do not carry.
+#
+# In that fallback the form-matching limit is live and is not stated as a bound of the register: a definition
+# inside a block comment or a raw string satisfies a citation, because this reads a line's FORM and not its
+# comment or string state. The harness closes it wherever one exists, since neither shape compiles into a
+# registered test, and the fallback announces itself in the gate's own output so a clean result names which
+# direction decided it.
 definition_is_test() {
     local file=$1 line=$2
     local n=0 trimmed
