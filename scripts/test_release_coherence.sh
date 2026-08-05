@@ -256,4 +256,42 @@ after_tags=$(git -C "$development" tag --list)
 [[ $before_tree == "$after_tree" && $before_head == "$after_head" && $before_tags == "$after_tags" ]] \
     || { printf 'release coherence check mutated repository state\n' >&2; exit 1; }
 
+# An unhandled failure reports within the exit contract, not with the failing tool's own status. Measured
+# before the backstop existed: with `git log` stubbed to fail, this gate exited **130** and printed nothing,
+# which the contract does not define and an operator cannot read. `git log` is the injection point because it
+# is what this gate is built on, and the stub passes every other git call through so the case proves the
+# contract rather than "the gate needs git".
+contract_stub=$fixture_root/contract-stub
+mkdir -p "$contract_stub"
+contract_real_git=$(command -v git)
+cat >"$contract_stub/git" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    [[ \$arg == log ]] && exit 130
+done
+exec "$contract_real_git" "\$@"
+STUB
+chmod +x "$contract_stub/git"
+
+contract_status=0
+contract_output=$(PATH="$contract_stub:$PATH" "$check" "$development" 2>&1) || contract_status=$?
+[[ $contract_status -eq 2 ]] \
+    || { printf 'an unhandled failure must exit 2, not the tool status, got %d: %s\n' "$contract_status" "$contract_output" >&2; exit 1; }
+grep -Fq 'an unhandled command failed' <<<"$contract_output" \
+    || { printf 'an unhandled failure must say so and name where, got: %s\n' "$contract_output" >&2; exit 1; }
+
+# A PASSING run must print no backstop diagnostic. The assertion exists because installing the shared `ERR`
+# trap produced exactly that failure: `errtrace` propagates it into process substitutions, where a
+# legitimately-failing command is routine, so a clean run emitted the cannot-judge line once per file while
+# still exiting 0 — invisible to every check that reads only the exit code.
+#
+# What it does and does not hold, stated rather than implied: this fixture's clean run does not exercise a
+# failing command inside a process substitution, so removing the backstop's subshell guard does NOT fail this
+# assertion. The gate that misfired is `check_whitespace_hygiene.sh`, whose clean run does, and which has no
+# companion matrix — filed in `BACKLOG.md`. This pins the property here, where a future change could break
+# it, and the measurement is what covers the gate that has no fixture.
+clean_noise=$("$check" "$development" 2>&1 >/dev/null || true)
+grep -Fq 'an unhandled command failed' <<<"$clean_noise" \
+    && { printf 'a passing run must print no backstop diagnostic, got: %s\n' "$clean_noise" >&2; exit 1; }
+
 printf 'ok release coherence state and failure matrix\n'

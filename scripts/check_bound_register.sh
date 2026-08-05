@@ -61,22 +61,10 @@
 # as the reactions it sits beside. Read-only: it never edits a spec or writes a projection.
 set -Eeuo pipefail
 
-# The exit contract, made structural. `set -e` with `pipefail` carries a failing utility's own status out of
-# the process: with `sed` stubbed to exit 4, this gate exited 4 and printed nothing — a status the contract
-# does not define, so a consumer cannot act on it and an operator is given no reason. Wrapping each command
-# instead has been tried twice and twice left a site behind; the number of unwrapped commands is not the
-# property to manage.
-#
-# This reports WHERE, never what: the trap cannot know what a command meant, and one that invented a cause
-# would be worse than the raw status it replaces. A failure worth naming keeps its own refusal — the trap is
-# the floor beneath those, not a substitute for them.
-#
-# Safe over code full of deliberate non-zero returns because that was measured, not reasoned: under
-# `errtrace` a failure inside `if`, `||`, `&&`, an arithmetic guard, or a captured pipeline with its own
-# handler does not fire it, even inside a function. Every `grep -q` miss, `[[ … ]] && continue`, and
-# `((status <= 1)) || cannot_judge` in this file is one of those shapes, and the matrix's passing directions
-# are what would fail loudly if that stopped being true.
-trap 'unhandled=$?; printf "bound register: cannot judge: an unhandled command failed (exit %d) at %s:%d — the reaction reports 0 clean, 1 violation, 2 cannot judge, and nothing else\n" "$unhandled" "${BASH_SOURCE[0]}" "$LINENO" >&2; exit 2' ERR
+# The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
+# is a trap rather than per-command handling, and the measurements behind both.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+exit_contract_backstop 'bound register'
 
 # The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to
 # test only this checkout. A gate that cannot be pointed at a fixture cannot have its refusals proven.

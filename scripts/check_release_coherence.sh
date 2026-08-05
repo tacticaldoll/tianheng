@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Exit 0 coherent, 1 incoherent, 2 cannot judge — the family's own Core Contract, stated here because the
+# gate now holds it on every path and a contract a reader cannot find is one they cannot rely on.
+set -Eeuo pipefail
+# The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
+# is a trap rather than per-command handling, and the measurements behind both.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+exit_contract_backstop 'release coherence'
 
 repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 

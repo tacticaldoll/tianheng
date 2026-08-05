@@ -14,7 +14,13 @@
 # The comparison is whole-line, never substring: a substring match cannot see a MISSING TRAILING FLAG,
 # which is precisely the drift above (`… --all-features` is a substring of `… --all-features
 # --document-private-items`). A guard blind to the case that motivated it is not a guard.
-set -euo pipefail
+# Exit 0 coherent, 1 incoherent, 2 cannot judge — the family's own Core Contract, stated here for the same
+# reason: this gate already refused with 2 in two places without ever declaring what its codes mean.
+set -Eeuo pipefail
+# The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
+# is a trap rather than per-command handling, and the measurements behind both.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+exit_contract_backstop 'dod coherence'
 
 cd "$(dirname "$0")/.."
 

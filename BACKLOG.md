@@ -64,16 +64,32 @@ consumer for an undemonstrated deduplication.
   READY-PATCH (the corrections are one line each where they exist). Observed pressure: the identical class was
   found and closed in two sibling gates in this window — `check_bound_register.sh` (four `git ls-files`
   enumerations, a citation scan whose refusal exited a subshell, a harness listing parse, an attribute-run
-  read, and both census greps) and `check_reference_integrity.sh` (the reference normalization, then the
-  tracked-source enumeration) — each producing either a clean report over content never read or a violation
-  invented from an IO failure. Observation source: `grep -n '< <(' scripts/check_release_coherence.sh` lists
-  five consumers (`workspace_packages` twice, the manifest pin scan, the lockfile scan, and the release-record
-  log), none of which was examined by this window's repairs. Current reaction or bound: unknown — that is the
-  entry. Risk: MEDIUM, and asymmetric: this gate decides whether a release's versions agree, so a false clean
-  reaches a published artifact while a false violation only blocks. Promotion trigger: none needed; it is a
-  bounded read of one file against a class already characterized. Version class: PATCH — the gate's exit codes
-  move only in states that previously misreported, and no adopter-facing surface is involved. Authority: the
-  two closed entries above and `release-coherence`'s own exit contract.
+  read, both census greps, and a partial package enumeration) and `check_reference_integrity.sh` (the
+  reference normalization, then the tracked-source enumeration and the tracked-path index) — each producing
+  either a clean report over content never read or a violation invented from an IO failure. **The
+  foreign-exit-code half of this entry is now closed**: every gate installs the shared exit-contract
+  backstop, so an unhandled failure here reports `2` with its line rather than `130` with no output
+  (measured, and pinned by `test_release_coherence.sh`). What remains open is the SWALLOWED half — a read
+  whose failure is invisible produces a wrong answer, which no backstop can catch. Observation source:
+  `grep -n '< <(' scripts/check_release_coherence.sh` lists five consumers (`workspace_packages` twice, the
+  manifest pin scan, the lockfile scan, and the release-record log), none yet examined. Risk: MEDIUM, and
+  asymmetric: this gate decides whether a release's versions agree, so a false clean reaches a published
+  artifact while a false violation only blocks. Promotion trigger: none needed; it is a bounded read of one
+  file against a class already characterized. Version class: PATCH. Authority: the two closed entries above
+  and this gate's newly declared exit contract.
+
+- **Two gates have no companion failure matrix.** Class: READY-PATCH. Observed pressure:
+  `check_dod_coherence.sh` and `check_whitespace_hygiene.sh` are the only `check_*` gates with no `test_*`
+  companion, so their refusals are asserted nowhere — including the exit-contract backstop just installed in
+  both, which had to be verified by hand (`awk` stubbed to fail: exit 9 before, exit 2 after; `mktemp`
+  stubbed: exit 7 before, exit 2 after) where every other gate's is pinned by a fixture. Observation source:
+  `ls scripts/` — four `check_*` gates have a `test_*` twin and these two do not. Current bound: the
+  register capability's "every failure direction is proven" requirement governs its own gate only; nothing
+  states this for the others. Risk: LOW-to-MEDIUM — these two gates are simple, but "a gate that has not
+  been observed failing is a restatement, not a defence" is this repository's own standard and it is applied
+  unevenly. Promotion trigger: none needed. Version class: PATCH. Authority: the register capability's
+  proof requirement, and `AGENTS.md`'s Definition of Done, which lists both gates without a matrix beside
+  them.
 
 - **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
   its corrections are classified when they exist). Observed pressure: measured on the window's own history —

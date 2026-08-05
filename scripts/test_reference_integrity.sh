@@ -207,4 +207,18 @@ unhandled_output=$(PATH="$mktemp_stub:$PATH" "$check" "$repo_clean" 2>&1) || unh
 grep -Fq 'an unhandled command failed' <<<"$unhandled_output" \
     || { printf 'an unhandled failure must say so and name where, got: %s\n' "$unhandled_output" >&2; exit 1; }
 
+# A PASSING run must print no backstop diagnostic. The assertion exists because installing the shared `ERR`
+# trap produced exactly that failure: `errtrace` propagates it into process substitutions, where a
+# legitimately-failing command is routine, so a clean run emitted the cannot-judge line once per file while
+# still exiting 0 — invisible to every check that reads only the exit code.
+#
+# What it does and does not hold, stated rather than implied: this fixture's clean run does not exercise a
+# failing command inside a process substitution, so removing the backstop's subshell guard does NOT fail this
+# assertion. The gate that misfired is `check_whitespace_hygiene.sh`, whose clean run does, and which has no
+# companion matrix — filed in `BACKLOG.md`. This pins the property here, where a future change could break
+# it, and the measurement is what covers the gate that has no fixture.
+clean_noise=$("$check" "$repo_clean" 2>&1 >/dev/null || true)
+grep -Fq 'an unhandled command failed' <<<"$clean_noise" \
+    && { printf 'a passing run must print no backstop diagnostic, got: %s\n' "$clean_noise" >&2; exit 1; }
+
 echo "all reference integrity test matrix directions passed"
