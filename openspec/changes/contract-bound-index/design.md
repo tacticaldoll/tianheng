@@ -2,7 +2,8 @@
 
 An observation bound is a claim that a reaction **stops** at a certain shape. It is the one claim class
 no reaction defends, and this tree carries roughly a hundred of them across four unlinked surfaces:
-`openspec/specs/*` prose (43 occurrences), `crates/*/src` rustdoc (69), `BACKLOG.md` ACCEPTED DEBT (3),
+`openspec/specs/*` (55 lines naming a bound, of which 25 are scenario headings declaring one and 29 are
+prose or bare THEN clauses), `crates/*/src` rustdoc (69), `BACKLOG.md` ACCEPTED DEBT (3),
 and a `*_is_a_stated_bound` / `*_is_a_documented_bound` test-naming convention (21 tests). The sets do
 not correspond — the symlinked-directory bound's pinning test is cited by name in `BACKLOG.md` and is
 absent from the 21 — so no existing surface can be promoted to the index by itself.
@@ -36,48 +37,66 @@ drift liability in the tree instead of the cure.
 
 ## Decisions
 
-**1. A register entry is a `#### Bound: <id>` block inside the requirement it bounds.**
-Verified empirically, not assumed: a throwaway spec carrying such a heading alongside a `#### Scenario:`
-passes `openspec validate --strict`, and all 29 existing specs pass it today, so the syntax neither
-breaks validation nor needs schema work. The alternative shapes were rejected — an HTML comment hides
-the claim from the human reader, which defeats surfacing it; a separate register file re-creates the
-unlinked-surface problem this change exists to end; a fenced code block reads as sample code rather than
-as a requirement's own qualification.
+**1. A bound is declared where this repository already declares them: as a `#### Scenario:` under the
+capability's `### Requirement: Observation bounds …`.** This reverses the shape proposed before apply,
+because the convention already exists and is further along than the proposal assumed. Three specs carry
+that requirement today — `inline-symbol-path-confinement` ("Observation bounds are stated, not silent"),
+`semantic-unsafe-confinement`, and `semantic-visibility-boundary` — and 25 scenarios across more specs
+already name themselves `… is a stated bound` / `… is a documented bound`, each with its own WHEN/THEN.
+One spec even cross-references the section by name.
 
-Each block carries `- **statement**:` and exactly one of `- **pinned-by**: \`<test fn name>\`` or
-`- **unpinned**: <tracker>`.
+Introducing a `#### Bound:` block would therefore be a **third** convention competing with two that
+exist, and for the 25 already-declared bounds it would state the same bound twice — the drift this
+register exists to end. Adopting the existing shape also means each bound arrives with a WHEN/THEN
+already written, which is what makes a pinning test findable at all.
 
-**2. Ids are `<capability>/<slug>`.** Globally unique and self-locating, so a violation message or a
-`BACKLOG.md` entry can cite a bound without a path. A bare slug would collide across 29 capabilities;
-an opaque number would need its own allocation ledger, which is another hand-maintained surface.
+**2. The register's added element is a citation bullet inside the bound scenario**: exactly one of
+`- **PINNED-BY** \`<test fn name>\`` or `- **UNPINNED** <tracker>`, beside its WHEN/THEN. Verified rather
+than assumed: a throwaway spec carrying both forms passes `openspec validate --strict`, which all 29
+specs pass today, so the syntax costs no schema work. The alternatives were rejected for the reasons
+above — a separate register file re-creates the unlinked surfaces, and an HTML comment hides the claim
+from the human reader it exists to serve.
 
-**3. The reaction is a shell gate plus its own failure matrix**, `scripts/check_bound_register.sh` and
+**3. A bound's id is derived from its location, not allocated.** `<capability>/<scenario-slug>` comes
+from the spec directory and the scenario name, so nothing hand-assigns an id and no allocation ledger is
+needed — a ledger being another hand-maintained surface. A renamed scenario changes the id, which is
+correct: the citation follows the declaration rather than outliving it.
+
+**4. A spec that states a bound in prose but carries no Observation-bounds requirement fails.** This is
+the floor's real force, and its size is measured: 3 of 29 specs carry that requirement today, while 11
+more state bound prose without one. The 29 non-heading occurrences are mostly THEN clauses whose scenario
+heading does not mark the bound, so the floor's effect is to migrate them into declared bound scenarios
+rather than merely to demand a block somewhere. Migrating a bound *into* a
+scenario is a strict improvement independent of this register: a bound stated only in prose has no test
+case by construction.
+
+**5. The reaction is a shell gate plus its own failure matrix**, `scripts/check_bound_register.sh` and
 `scripts/test_bound_register.sh`, wired into `AGENTS.md`'s Definition of Done and mirrored verbatim into
 CI. This follows the established pair for a repo-wide text property (`check_release_coherence.sh` /
 `test_release_coherence.sh`, and the publish-source gate). A Rust test was considered: it is right for a
 property of Rust semantics, which this is not — the subject is Markdown and test-name existence across
 the tree, and `check_dod_coherence.sh` already enforces the DoD/CI mirroring a shell gate needs.
 
-**4. A cited test must resolve to exactly one definition.** Zero fails (a renamed or deleted test must
+**6. A cited test must resolve to exactly one definition.** Zero fails (a renamed or deleted test must
 not read as coverage). **Two also fails**: a name defined twice makes the citation ambiguous, so the
 register would point at a set rather than a reaction. Matching is on the definition form (`fn <name>(`),
 never a bare mention, so a citation satisfied by a comment is not possible.
 
-**5. The completeness floor is a prose scan, and it is a floor rather than a proof.** Every
-bound-prose occurrence in `openspec/specs/*` outside a register block fails the gate. This makes the 43
+**7. The completeness floor is a prose scan, and it is a floor rather than a proof.** Every
+bound-prose occurrence outside a declared bound scenario fails the gate. This makes the 55 measured
 occurrences the register's mandatory minimum while leaving a bound worded outside the pattern
 undetectable — which the projection states in its own header rather than letting the index imply
 totality. `PROJECT.md`'s rule applies to the index as much as to a dimension: claim exactly the
 guarantee held.
 
-**6. An unpinned bound is representable, deliberately.** The back-fill will find bounds with no pinning
+**8. An unpinned bound is representable, deliberately.** The back-fill will find bounds with no pinning
 test; requiring one would make the gate block on precisely what it exists to discover, and the practical
-result of that is a smaller register rather than more tests. So `- **unpinned**: <tracker>` is a legal
-entry, the projection surfaces the unpinned count as its headline number, and that count is the audit
+result of that is a smaller register rather than more tests. So `- **UNPINNED** <tracker>` is a legal
+citation, the projection surfaces the unpinned count as its headline number, and that count is the audit
 backlog. This mirrors `violation-baseline`'s own settled design — record what is accepted, gate on new
 drift — and inherits its discipline: an unpinned entry names a tracker, never merely asserts.
 
-**7. The projection is `docs/observation-bounds.md`, generated and staleness-checked.** Regenerated by
+**9. The projection is `docs/observation-bounds.md`, generated and staleness-checked.** Regenerated by
 the gate under an environment flag and compared byte-for-byte otherwise, exactly as
 `self_law_projection_is_fresh` treats `AGENTS.self-law.md`. It is not placed at the repository root: the
 root projection is the self-law an agent loads as its idiom, and a second root document dilutes that.
@@ -86,13 +105,13 @@ root projection is the self-law an agent loads as its idiom, and a second root d
 ## Risks / Trade-offs
 
 - **A prose-pattern floor produces false positives** — a sentence containing "documented bound" that
-  declares nothing would demand a register entry. → No exemption marker is added, because an exemption
+  declares nothing would demand a bound scenario. → No exemption marker is added, because an exemption
   list rots into the thing it was meant to avoid; the author registers the bound or rephrases the
   sentence. The failure is loud and local either way.
 - **The floor is blind to a bound worded outside the pattern** → stated in the projection header and in
   the capability's own spec, as its own registered bound. The index having a bound is not irony; a
   surface that claimed otherwise would be the problem.
-- **The back-fill is all-or-nothing across the 43 occurrences**, because the floor fails on any that
+- **The back-fill is all-or-nothing across the 55 measured occurrences**, because the floor fails on any that
   remain unregistered. → That is the feature that prevents a half-linked index from reading as complete,
   but it means this change cannot land partially. The first task is enumeration, so the real size is
   known before any registration is written rather than discovered mid-way.

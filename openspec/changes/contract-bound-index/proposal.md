@@ -2,8 +2,9 @@
 
 A declared **observation bound** — where an observation deliberately stops, so a shape that looks like
 a defect is in fact governed policy — has no single declaration site and no machine-checkable link to
-the test that pins it. Measured on this tree: 43 bound-prose occurrences across `openspec/specs/*`, 69
-across `crates/*/src` rustdoc, 3 in `BACKLOG.md`'s ACCEPTED DEBT, and 21 tests following the
+the test that pins it. Measured on this tree: 55 lines name a bound across `openspec/specs/*` — 25 of them
+scenario headings that declare one, 29 prose or bare THEN clauses that do not — plus 69 occurrences across
+`crates/*/src` rustdoc, 3 in `BACKLOG.md`'s ACCEPTED DEBT, and 21 tests following the
 `*_is_a_stated_bound` / `*_is_a_documented_bound` naming convention. Those sets do not correspond: the
 symlinked-directory bound's pinning test is cited by name in `BACKLOG.md` and is **not** among the 21,
 so the naming convention cannot serve as the index either.
@@ -21,16 +22,18 @@ reaction; roughly a hundred bound claims are that shape today.
 
 ## What Changes
 
-- A **bound register**: each observation bound already stated in a capability spec gains a
-  machine-readable declaration carrying a stable id, the bound's statement, and the **name of the test
-  that pins it**. The declaration lives in the capability's own `openspec/specs/<name>/spec.md`, which
-  `AGENTS.md` already names as the per-capability requirement truth, so this consolidates rather than
-  competes.
+- A **bound register** built on the convention this repository already has, not a new one: a bound is
+  declared as a `#### Scenario:` under its capability's `### Requirement: Observation bounds …`, and gains
+  a citation bullet naming the **test that pins it**. Three specs carry that requirement today and 25
+  scenarios already name themselves as bounds, so the register consolidates onto the existing shape; the
+  remaining work is migrating the 29 unmarked prose statements into it. A bound's id is derived from
+  `<capability>/<scenario-slug>` rather than allocated, so no ledger is introduced.
 - A **reaction** over the register, with two directions:
   - every registered bound names a test that **exists in the tree** (a register entry pointing at a
     renamed or deleted test fails, rather than reading as covered);
-  - every bound-prose occurrence a spec can be scanned for sits **inside** a register entry, so a bound
-    stated in spec prose and left unregistered fails rather than being silently absent from the index.
+  - every bound-prose occurrence a spec can be scanned for sits **inside** a declared bound scenario, so a
+    bound stated in prose and left undeclared fails rather than being silently absent from the index —
+    measured today as 11 specs stating bound prose with no Observation-bounds requirement at all.
 - A **generated index projection** of the register, ordered and stale-checked the way
   `AGENTS.self-law.md` is: the document is derived, never hand-maintained, and a stale one fails.
 - The index **states its own completeness bound**: the second reaction direction above is a floor over
@@ -59,8 +62,9 @@ Not breaking: additive, adopter-invisible, and requiring no adopter action — p
 
 ## Impact
 
-- **`openspec/specs/*`**: register entries added to the specs that already state a bound. Content grows;
-  no requirement changes.
+- **`openspec/specs/*`**: citation bullets added to the 25 scenarios that already declare a bound, and
+  bound scenarios added to the 11 specs stating bound prose without an Observation-bounds requirement.
+  Content grows; no capability's reactions change.
 - **New**: the register reaction and the generated index projection, plus their own failure-direction
   test — a gate on a claim about coverage must be proven to fail when coverage is absent, or it is a
   restatement.
