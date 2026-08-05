@@ -541,10 +541,20 @@ that also holds a closed READY-PATCH record.
 ## Version horizons
 
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
-patch, breaking → minor**, and never a vanity minor bump.
+patch, breaking → minor**, and never a vanity minor bump. `AGENTS.md`'s *Versioning* section owns what
+counts as breaking — any change the adopter has to act on, a stale recorded baseline included — so read
+it before assigning a horizon here; the entries below are horizons, not a second definition.
 
-- **0.2.x (patch)** — additive depth on an existing observation source, false-negative closures.
+- **0.2.x (shipped)** — additive depth on an existing observation source, false-negative closures. A
+  historical record, not a precedent: those closures were classified as patch-class before the 0.4.0
+  window settled that a change requiring adopter action earns a minor. The same work today is
+  minor-class.
 - **0.3.0 (shipped)** — stable rule identity (`RuleKey`), `StructuredFactIdentity`, unsafe-site decomposition, async seam identity.
+- **0.4.0 (shipped)** — every compiled root governed, identity-coordinate completeness, the `cfg_if!`
+  and conditional-remap conformance across all three dimensions.
+- **0.4.1 (open)** — patch-class only, per the definition above: packaging and hygiene, prose and
+  specs, opt-in depth, performance, and diagnostics whose exit code and emitted documents do not move.
+  A false-negative closure belongs in the next minor instead, however small its diff.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 
 ## Explicitly not on the roadmap
