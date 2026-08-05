@@ -106,10 +106,10 @@ because a public type-alias target is part of the governed exposed surface. A pu
 that *names* such an alias SHALL NOT receive an additional reaction by expanding the alias:
 the shared `hunyi::resolve` resolver follows local `pub use` re-export chains but does
 **not** expand `type` alias definitions, so a `dyn` reached only by expanding a named alias
-is a **stated coverage bound**, not a claimed reaction. This is the same alias-resolution
+is a **stated coverage bound (bound: semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-coverage-bound)**, not a claimed reaction. This is the same alias-resolution
 bound `semantic-signature-coupling` carries — the dyn is still caught, at the public alias
 site rather than the use site; only a *private* alias used in a public position escapes
-both reactions, and that escape is the stated bound, never silently asserted clean.
+both reactions, and that escape is the stated bound (bound: semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-coverage-bound), never silently asserted clean.
 
 #### Scenario: A public alias whose target writes dyn is a violation
 

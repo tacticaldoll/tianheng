@@ -39,7 +39,7 @@ a type annotation, a bare constant reference, or any non-call position SHALL NOT
 distinction is structural — the engine keys on the presence of a call application, never on a
 built-in notion of which verb is a "read". A forbidden path taken as a **value** rather than
 called (`let f = std::time::SystemTime::now; f()`) is a mention under the default and is covered
-only by `.strict_prefix_only()` — a stated bound (see "Observation bounds"), not a claim.
+only by `.strict_prefix_only()` — a stated bound (bound: inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default) (see "Observation bounds"), not a claim.
 
 #### Scenario: An associated-function call under the prefix reacts
 - **WHEN** `crate::core` contains `std::time::SystemTime::now()` and a boundary forbids inline calls under `std::time` on `crate::core`

@@ -17,7 +17,7 @@ rule, finding)` is injective by structure — a baseline of one confined crate c
 new violation of a different confined crate breached by the same importer. It reacts through
 severity (default `enforce`, `warn` available) and the baseline exactly like every other module
 rule, and introduces no new builder-intermediate type (one method on the existing module draft
-stage). The rule is use-only and inherits the module scanner's stated bounds (cfg-blind,
+stage). The rule is use-only and inherits the module scanner's stated bounds (bound: external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-coverage-bound) (cfg-blind,
 `#[path]`-blind, macro-blind, `extern crate`-blind); a deeper **inline-symbol-path** layer
 (`C::foo()` written with no `use`) is realized as the sibling `must_not_call_inline` rule
 (`inline-symbol-path-confinement`), which observes *calls* rather than `use` imports — not this
@@ -79,7 +79,7 @@ The rule SHALL observe only imports of the confined crate `c`; imports of any ot
 
 ### Requirement: External imports observed with the scanner's existing resolution
 
-The system SHALL observe the confined crate's imports using the **identical** external/internal resolution the module scanner already applies (the resolution by which the internal rules ignore external imports): a bare first segment in a submodule reaches the extern prelude and is external; a bare first segment in the crate root is external unless it names a crate-root `mod`-declared module; a leading-`::` path (`use ::c::…`) is the explicit external/global form and is external even when its head matches a crate-root module; raw identifiers are canonicalized; text inside comments, string literals, and macro bodies is stripped before scanning; a `#[path]`-remapped module and a `cfg_attr`-wrapped path attribute are followed to the file they name, so imports there are observed like any other; cfg-gated code and the lib+bin conventional-path conflation remain the scanner's stated out-of-scope bounds. The confinement SHALL therefore observe an external import of `c` **exactly when** the internal rules would have ignored that import as external — one definition of "external," never a divergent one.
+The system SHALL observe the confined crate's imports using the **identical** external/internal resolution the module scanner already applies (the resolution by which the internal rules ignore external imports): a bare first segment in a submodule reaches the extern prelude and is external; a bare first segment in the crate root is external unless it names a crate-root `mod`-declared module; a leading-`::` path (`use ::c::…`) is the explicit external/global form and is external even when its head matches a crate-root module; raw identifiers are canonicalized; text inside comments, string literals, and macro bodies is stripped before scanning; a `#[path]`-remapped module and a `cfg_attr`-wrapped path attribute are followed to the file they name, so imports there are observed like any other; cfg-gated code and the lib+bin conventional-path conflation remain the scanner's stated out-of-scope bounds (bound: external-crate-confinement/cfg-gated-code-is-observed-as-written-a-stated-scanner-bound). The confinement SHALL therefore observe an external import of `c` **exactly when** the internal rules would have ignored that import as external — one definition of "external," never a divergent one.
 
 The rule is **use-only**, matching the scanner: an `extern crate c;` declaration SHALL NOT be observed (a stated, inherited bound, noted here because FFI crates occasionally still use `extern crate`). Because the scanner is cfg-blind and scans in-`src` inline modules, a `#[cfg(…)] use c::…` — including one inside a `#[cfg(test)] mod tests { … }` — outside the permitted subtree SHALL be observed and react, regardless of the active build configuration; this is aligned with the rule's intent (confinement is a source-location property, independent of platform), and consistent with how the internal rules already treat cfg-gated and test-module imports. Integration tests under `tests/` are a separate compilation target outside the lib/bin root and SHALL NOT be scanned.
 
@@ -92,6 +92,18 @@ The rule is **use-only**, matching the scanner: an `extern crate c;` declaration
 
 - **WHEN** a file in `crate::service` (a submodule) declares `use libc::c_int;`, and another file declares `use ::libc::c_void;`, under the confinement of `libc` to `crate::ffi`
 - **THEN** the system emits a violation for each, because a submodule's bare first segment reaches only the extern prelude and a leading-`::` path is the explicit external form — both are external imports of `libc` outside the permitted subtree
+
+#### Scenario: cfg-gated code is observed as written — a stated scanner bound
+
+- **WHEN** a confined-crate import sits under a `#[cfg(...)]` the build would not enable
+- **THEN** the system observes it as written rather than evaluating the predicate, so the reaction is cfg-blind — inherited from the module scanner and stated here, never a silent claim about which branch is live
+- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+
+#### Scenario: The lib-and-bin conventional-path conflation is a stated scanner bound
+
+- **WHEN** a package declares both a library and a binary whose conventional source paths coincide
+- **THEN** the system does not distinguish their module graphs — the conflation inherited from the module scanner, stated rather than silently resolved
+- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
 
 #### Scenario: A confined-crate use inside a string or macro body is not observed — a stated coverage bound
 

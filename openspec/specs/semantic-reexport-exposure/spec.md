@@ -14,7 +14,7 @@ non-forbidden-root glob, a re-export routed through a *foreign* module (needs th
 **module-scoped** source `extern crate … as` rename (the **crate-root** form reacts, including
 through a type alias or a facade closure) or a distinct `[lib] name` (absent from `cargo metadata
 --no-deps`), a facade hop re-exporting a privately-`use`d bare name, an edition-2015 relative local
-re-export, macro-generated — is a stated bound, never a silent pass. (`pub extern crate` is now an
+re-export, macro-generated — is a stated bound (bound: semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound), never a silent pass. (`pub extern crate` is now an
 observed exposure, not a bound.)
 ## Requirements
 ### Requirement: Named public re-exports are observed by default
@@ -102,7 +102,7 @@ crate X [as Y];`** in the governed module republishes the external crate root `X
 public surface — like `pub use ::X;` — and SHALL react when `X` is in/under the forbidden set; the
 exposure names the **real crate `X`** (not the `as`-rename `Y`), seam-qualified `X exposed by pub
 extern crate X` (`extern crate self as …` is not an external exposure and is skipped). One form
-SHALL remain a **documented non-observed bound**, never a silent claim of cleanliness: an
+SHALL remain a **documented non-observed bound (bound: semantic-reexport-exposure/an-underscore-rename-is-a-documented-non-observed-bound)**, never a silent claim of cleanliness: an
 **underscore rename** (`pub use crate::infra::DbPool as _;`) imports a trait's methods without
 binding a nameable path, so it exposes no name a consumer can reach through the module.
 
@@ -266,7 +266,7 @@ so a head `Y` SHALL be mapped to the real crate `X` **before** the external-crat
 does not parse source `extern crate` renames), and is applied in the signature-coupling exposure
 pipeline, covering a renamed head in a **type position** and in the **governed module's own
 `pub use`**. Only a **crate-root** rename is collected — a module-scoped `extern crate … as …`
-binds only within its module, so collecting it crate-wide would be a false positive (a stated bound
+binds only within its module, so collecting it crate-wide would be a false positive (a stated bound (bound: semantic-reexport-exposure/a-module-scoped-extern-crate-rename-is-a-documented-bound)
 below).
 
 The rename SHALL be resolved rustc-correctly in three positions of the head:
@@ -417,7 +417,7 @@ endpoints the facade-chain guarantee already given for local endpoints. The re-e
 SHALL retain an extern-headed target (head ∈ the external-crate set) so the chain canonicalizes
 to the forbidden extern type rather than being dropped. A hop written as a re-export of a
 privately-`use`d bare name (`use dep::spi::Foo; pub use Foo;`) is NOT captured (the closure
-follows inline `pub use` paths only) — an inherited stated bound, not a silent claim.
+follows inline `pub use` paths only) — an inherited stated bound (bound: semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound), not a silent claim.
 
 #### Scenario: A facade chain of inline re-exports to an extern type is followed
 

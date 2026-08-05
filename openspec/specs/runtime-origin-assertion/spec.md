@@ -127,7 +127,7 @@ member crate's source root resolved from `cargo metadata` (the same source root 
 dimension scans), so a seam declared once and probed in any member counts as covered. A member
 whose source root cannot be resolved SHALL be a constitution error (never a silent skip). Source
 outside a member's library/binary target subtree (for example `tests/`, `examples/`, `build.rs`)
-is out of scope — the same stated bound as the semantic dimension.
+is out of scope — the same stated bound (bound: runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-corpus-bound) as the semantic dimension.
 
 The probe scan SHALL be build/CI-time only (std-only source scan, never on the runtime hot path),
 comment- and string-literal-aware (including raw and byte strings), tracking **nested** block
@@ -141,7 +141,7 @@ because 三儀 ⊥ 三儀 forbids importing 圭表's scanner).
 Otherwise a probe in a never-invoked macro body would report its seam covered while the seam never
 enforces at runtime — the audit's forbidden false negative. The scan is lexical and does not
 evaluate `cfg`: a probe behind a non-production `#[cfg(...)]` is still counted, so a seam's
-production probe must not live behind a non-production `cfg` — a stated bound, not a silent pass.
+production probe must not live behind a non-production `cfg` — a stated bound (bound: runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-cfg-blind-bound), not a silent pass.
 A probe whose seam argument is a **string literal** (plain or raw) is auditable, and a **plain**-string
 seam SHALL be compared to the declared seams by its **decoded** value — the exact `&str` the Rust
 compiler produces from that literal, resolving the standard string escapes (`\n`, `\r`, `\t`, `\\`,
@@ -177,7 +177,7 @@ an arm escaped entirely (the audit's forbidden false negative, contradicting the
 stated above). Transparency SHALL be gated on the macro **name**, matching the static and semantic
 dimensions' identical gate rather than deriving a third rule: a byte scanner cannot distinguish an
 arbitrary macro's nested blocks from a transparent macro's arms, so a body-wrapping macro under any
-other name SHALL remain excluded — a stated bound, shared across all three dimensions. Observation
+other name SHALL remain excluded — a stated bound (bound: semantic-signature-coupling/a-macro-under-another-name-is-not-treated-as-transparent-a-stated-coverage-bound), shared across all three dimensions. Observation
 SHALL stay **cfg-blind** here as everywhere in this scan: every arm is read, so a probe in an arm the
 current configuration does not compile still counts, consistent with the already-stated `#[cfg]`
 bound above.
@@ -472,7 +472,7 @@ trait_ref qualification `semantic-unsafe-confinement` already uses for the ident
 collision. A bare method name alone SHALL NOT be used, since two distinct owners may share one.
 
 Byte-identical expression text within the same file and the same owner-qualified enclosing item
-collapses to one finding — a stated bound, not a silent gap: at that granularity no further source
+collapses to one finding — a stated bound (bound: runtime-origin-assertion/identical-expression-repeated-in-the-same-function-collapses-to-one-finding-a-stated-identity-bound), not a silent gap: at that granularity no further source
 content distinguishes the two occurrences, so they represent the same restated fact (mirroring
 `module-boundary`'s "the same import on multiple lines is one violation" precedent), not two masked
 problems. Neither the enclosing-item qualification nor the expression text SHALL be derived from
@@ -563,6 +563,18 @@ drop one.
 
 - **WHEN** a single `fn` contains both `assert_boundary!(SEAM_A, obj)` and `assert_boundary!(compute_seam(), obj)`
 - **THEN** `audit_probe_coverage` emits two distinct un-auditable-probe violations, distinguished by their expression text
+
+#### Scenario: Source outside a member's library or binary target subtree is out of scope — a stated corpus bound
+
+- **WHEN** a probe or a seam mention sits in `tests/`, `examples/`, or `build.rs`
+- **THEN** the audit does not read it, its corpus being the member's library and binary targets — a stated bound shared with the semantic dimension, never a silent claim of coverage
+- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
+
+#### Scenario: A production probe behind a non-production cfg is still counted — a stated cfg-blind bound
+
+- **WHEN** a seam's only probe sits behind a `#[cfg(test)]` or another non-production predicate
+- **THEN** the audit counts it as coverage, being cfg-blind, so a seam whose production probe lives there is reported as probed — a stated bound, never a silent pass
+- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
 
 #### Scenario: Identical expression repeated in the same function collapses to one finding — a stated identity bound
 

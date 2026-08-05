@@ -60,21 +60,25 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **Three declared bounds have no pinning test.** Class: READY-PATCH (writing a test; no public API, wire
+- **Eight declared bounds have no pinning test.** Class: READY-PATCH (writing a test; no public API, wire
   format, or baseline identity moves). Observed pressure: the observation-bound register's own reaction
-  reports them, so this is measured rather than suspected — `semantic-dyn-trait-boundary`'s macro-generated
-  dyn and unrenderable-sub-node bounds, and `semantic-trait-impl-exposure`'s glob-imported type in an impl
-  position. Observation source: `scripts/check_bound_register.sh`, and the `UNPINNED` citations in those
-  three specs that name this entry. Current bound: each is declared and believed true, and nothing would
-  react if the behaviour changed — a bound reads as permission, so an undefended one is the shape that lets
-  a real escape be dismissed as governed policy. Risk: LOW individually and worth naming collectively,
-  since three of 29 declared bounds are undefended. Promotion trigger: none needed — each is a fixture and
-  an assertion, and the reason they are debt rather than done is honest scope: five other bounds in this
-  window were probed and pinned first, and stopping to discover a helper for each of these three would have
-  held the register itself. **Probe before pinning**: two bounds enumerated in this window described
-  behaviour that had changed and were retired rather than pinned, so a test written to match the spec
-  without measuring first would give a false claim a green guard. Version class: PATCH. Authority: the three
-  `UNPINNED` citations, and `PROJECT.md`'s drift law against a claim with no reaction.
+  reports them, so this is measured rather than suspected — eight of the 44 declared bounds, two each in
+  `semantic-dyn-trait-boundary` (macro-generated dyn, unrenderable sub-node),
+  `external-crate-confinement` (cfg-blindness, the lib-and-bin conventional-path conflation) and
+  `runtime-origin-assertion` (the target-subtree corpus, a production probe behind a non-production cfg),
+  one in `semantic-trait-impl-exposure` (a glob-imported type in an impl position) and one in
+  `semantic-visibility-boundary` (the conservative-rank over-reaction). Observation source:
+  `scripts/check_bound_register.sh`, and the eight `UNPINNED` citations that name this entry. Current
+  bound: each is declared and believed true, and nothing would react if the behaviour changed — a bound
+  reads as permission, so an undefended one is the shape that lets a real escape be dismissed as governed
+  policy. Risk: LOW individually and worth naming collectively, since eight of 44 declared bounds are
+  undefended. Promotion trigger: none needed — each is a fixture and an assertion. They are debt rather
+  than done for a reason of scope, not difficulty: six bounds in this window were probed and pinned first,
+  and stopping to discover a test helper for each of these eight would have held the register itself.
+  **Probe before pinning**: two bounds enumerated in this window described behaviour that had changed and
+  were retired rather than pinned, so a test written to match the spec without measuring first would give
+  a false claim a green guard. Version class: PATCH. Authority: the eight `UNPINNED` citations, and
+  `PROJECT.md`'s drift law against a claim with no reaction.
 
 - **An inherited observation bound is RESTATED by each capability that inherits it, so one behaviour
   change leaves several specs stale at once.** Class: READY-PATCH (a stating convention; no public API,
