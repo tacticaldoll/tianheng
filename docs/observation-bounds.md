@@ -16,6 +16,13 @@ claim to observe" — is invisible to the scan that assembles this, so the list 
 proof of completeness. A register that implied otherwise would mislead exactly where it is most
 trusted.
 
+The second floor is the same shape. A bound declared twice is caught only when both declarations cite
+the **same pinning test**, which is a fact rather than a heuristic; two declarations of one behaviour
+citing two different tests are invisible. Telling those apart from two genuine bounds over sibling
+shapes is a semantic judgment — two operand dimensions here declare identically-worded bounds over
+`dyn` and `impl Trait`, each defended by its own test, and each must declare its own — so nothing
+observes it and no bound of the register capability claims it.
+
 
 ## crate-source-boundary
 

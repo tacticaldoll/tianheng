@@ -30,10 +30,15 @@
 #     tracker. Neither fails, because a bound with no recorded answer to "what defends this" is the
 #     unbacked claim the register exists to end. Both fails, because a bound is either defended or
 #     tracked and the declaration must say which.
-#   * A `PINNED-BY` name resolves to exactly ONE function definition under `crates/`. Zero fails: a
-#     renamed or deleted test leaves a citation that reads as coverage while defending nothing. Two also
-#     fails: a name defined twice makes the citation name a set rather than a reaction. Matching is on the
+#   * A `PINNED-BY` name resolves to exactly ONE function definition under `crates/`, and that definition
+#     is a TEST. Zero fails: a renamed or deleted test leaves a citation that reads as coverage while
+#     defending nothing. Two also fails: a name defined twice makes the citation name a set rather than a
+#     reaction. Resolving to a function that never runs as a test fails for the same reason as zero — a
+#     helper of the right name defends nothing while occupying the place of the defence. Matching is on the
 #     definition form, never a bare mention, so a comment or a doc link cannot satisfy it.
+#   * An `UNPINNED` tracker names a path this repository TRACKS. That is the checkable part of "names an
+#     owner"; whether the named section still describes the debt is prose no reaction can read, and
+#     demanding it would trade a fact for a heuristic.
 #   * A bound stated in prose outside a declared bound scenario fails, which is what stops the register
 #     being completed by declaring only the convenient bounds.
 #
@@ -211,6 +216,72 @@ definitions_of() {
         "$root" --include='*.rs' 2>/dev/null || true
 }
 
+# Whether the definition at `file:line` is a TEST. Read from the ATTRIBUTE RUN above the definition rather
+# than from the line before it: `#[test]` / `#[should_panic(…)]` / `fn` is a shape this tree already carries
+# in three places, so a single-line read would refuse a real test. That error direction matters — a refused
+# genuine citation is a false positive an author argues with, and arguing with a gate is how a gate gets
+# turned off.
+#
+# Requiring the cited function to be a test is not a naming convention imposed on a suite this register does
+# not own; it is what the citation already means. Nothing here reads the test's NAME, which is what lets the
+# bound-pinning tests keep their three naming variants.
+#
+# The walk stops at a line ending `{`, `}`, or `;` — the previous item's end — and at a BLANK line, so a
+# `#[test]` above one function can never be read as covering a plain function beneath it. Stopping at a blank
+# refuses `#[test]`, blank, `fn`: legal Rust nobody writes, and refusing it is loud where leaking an
+# attribute across items would be the silent false coverage this gate exists to refuse. Attributes and
+# comments are walked past; `// #[test]` is not, since the marking must be the attribute and not a mention.
+#
+# `cargo test --list` would answer this exactly and was rejected: it needs a compiled workspace, and the
+# whole failure matrix is throwaway repositories holding one `lib.rs` and no manifest.
+definition_is_test() {
+    local file=$1 line=$2 window=12 n trimmed
+    for ((n = 1; n <= window; n++)); do
+        ((line - n >= 1)) || return 1
+        trimmed=$(sed -n "$((line - n))p" -- "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        case $trimmed in
+        '#[test]'*) return 0 ;;
+        '') return 1 ;;
+        *'{' | *'}' | *';') return 1 ;;
+        esac
+    done
+    return 1
+}
+
+# The paths this repository tracks, read once. `-z` because `git ls-files` quotes a non-ASCII path by
+# default, and a quoted path would match nothing — the same checkout-dependence the whitespace and identity
+# gates were fixed for.
+declare -A tracked_paths=()
+tracked_path_index_built=0
+build_tracked_path_index() {
+    [[ $tracked_path_index_built == 1 ]] && return 0
+    local path
+    while IFS= read -r -d '' path; do
+        tracked_paths[$path]=1
+    done < <(git -C "$repo" ls-files -z)
+    tracked_path_index_built=1
+}
+
+# Whether an `UNPINNED` tracker names a path this repository tracks. This is the checkable part of "names an
+# owner": `BACKLOG.md READY-PATCH "declared bounds with no pinning test"` names one, and `no test exists`
+# names none — the citation the requirement forbids, which until now passed because any non-empty text was
+# accepted. Which SECTION of that document owns the debt is deliberately not checked: that is prose, and a
+# gate guessing at prose produces the false positives that get gates disabled.
+#
+# Split with `read -ra` rather than an unquoted expansion, so a tracker containing `*` cannot glob against
+# the working directory.
+tracker_names_a_tracked_path() {
+    local text=$1 token parts=()
+    build_tracked_path_index
+    read -ra parts <<<"$text"
+    for token in "${parts[@]}"; do
+        token=${token#[\"\'\`(\[]}
+        token=${token%[\"\'\`)\].,;:]}
+        [[ -n $token && -n ${tracked_paths[$token]:-} ]] && return 0
+    done
+    return 1
+}
+
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
     || cannot_judge "repository root $repo is not a git worktree; this gate judges tracked content"
 mapfile -t spec_files < <(git -C "$repo" ls-files 'openspec/specs/*/spec.md' | sort)
@@ -264,8 +335,11 @@ while IFS=$'\t' read -r kind file line a b c d; do
             continue
         fi
         if [[ -n $c ]]; then
-            [[ $c == "<empty>" ]] \
-                && fail "$id ($file:$line) is UNPINNED with no tracker; untracked debt is indistinguishable from an oversight"
+            if [[ $c == "<empty>" ]]; then
+                fail "$id ($file:$line) is UNPINNED with no tracker; untracked debt is indistinguishable from an oversight"
+            elif ! tracker_names_a_tracked_path "$c"; then
+                fail "$id ($file:$line) is UNPINNED with \"$c\", which names no path this repository tracks; a tracker that cannot be read is anonymous debt wearing an owner's name"
+            fi
             continue
         fi
         while IFS= read -r name; do
@@ -273,9 +347,24 @@ while IFS=$'\t' read -r kind file line a b c d; do
             mapfile -t sites < <(definitions_of "$name")
             case ${#sites[@]} in
             0) fail "$id ($file:$line) is PINNED-BY \`$name\`, which no function under crates/ defines; a renamed or deleted test must not read as coverage" ;;
-            1) : ;;
-            *) fail "$id ($file:$line) is PINNED-BY \`$name\`, defined ${#sites[@]} times — the citation names a set rather than a reaction:
-$(printf '           %s\n' "${sites[@]%%:*}")" ;;
+            1)
+                site_file=${sites[0]%%:*}
+                site_line=${sites[0]#*:}
+                site_line=${site_line%%:*}
+                # Reported repo-relative, so the site is readable in a fixture run and copy-pasteable in a
+                # real one; the grep that found it had to be absolute.
+                definition_is_test "$site_file" "$site_line" \
+                    || fail "$id ($file:$line) is PINNED-BY \`$name\`, whose only definition at ${site_file#"$repo"/}:$site_line carries no \`#[test]\` in the attribute run above it; a function that never runs as a test defends nothing while occupying the place of the defence"
+                ;;
+            *)
+                site_paths=()
+                for site in "${sites[@]}"; do
+                    site=${site%%:*}
+                    site_paths+=("${site#"$repo"/}")
+                done
+                fail "$id ($file:$line) is PINNED-BY \`$name\`, defined ${#sites[@]} times — the citation names a set rather than a reaction:
+$(printf '           %s\n' "${site_paths[@]}")"
+                ;;
             esac
         done < <(printf '%s\n' "${b//|/$'\n'}")
         ;;
@@ -308,10 +397,24 @@ done <"$records"
 # bound was stale in two capabilities at once, and a sync left a contradicting bound beside its own reacting
 # scenario — so one behaviour change must not be able to leave several specs stale.
 #
-# Keyed on the cited test rather than on statement text: two declarations of one behaviour will not have
-# identical prose, and text similarity would be a heuristic where a shared citation is a fact. Repetition
-# WITHIN one capability is not a restatement — a bound covering two shapes cites two tests, and one
-# capability may cite one test from two bounds — so the direction fires only across capabilities.
+# Keyed on the cited test rather than on statement text: text similarity would be a heuristic where a shared
+# citation is a fact. Repetition WITHIN one capability is not a restatement — a bound covering two shapes
+# cites two tests, and one capability may cite one test from two bounds — so the direction fires only across
+# capabilities.
+#
+# This direction is a FLOOR, and the projection says so: two declarations of one behaviour citing two
+# DIFFERENT tests are invisible to it. Telling those apart from two genuine bounds over sibling shapes is a
+# semantic judgment, and the evidence that a similarity key would be wrong rather than merely imprecise is in
+# the tree: `semantic-dyn-trait-operand-boundary` and `semantic-impl-trait-operand-boundary` both declare
+# `A genuinely unresolvable bare principal is a documented bound`, with distinct WHEN clauses (`dyn` versus
+# `impl Trait`) and distinct pinning tests, and 三儀 ⊥ 三儀 requires each dimension to declare its own. A key
+# over heading text or statement similarity would fire on that pair and the only repair it would accept is
+# dissolving a symmetry the constitution requires.
+#
+# Of the two restatements that motivated this capability, note which direction reaches which: the
+# `#[path]`-remap bound was PROSE in `external-crate-confinement` and a scenario in
+# `inline-symbol-path-confinement`, so the undeclared-prose direction is what reaches that shape — not this
+# one. Crediting this direction with it would be the overclaim the register exists to end.
 #
 # The reaction names the capabilities and demands a choice rather than computing ownership, which would mean
 # modelling which capability a test exercises: the judgment the drift law keeps out of a reaction.
@@ -361,6 +464,13 @@ render_projection() {
         'claim to observe" — is invisible to the scan that assembles this, so the list is a floor rather than a' \
         'proof of completeness. A register that implied otherwise would mislead exactly where it is most' \
         'trusted.' \
+        '' \
+        'The second floor is the same shape. A bound declared twice is caught only when both declarations cite' \
+        'the **same pinning test**, which is a fact rather than a heuristic; two declarations of one behaviour' \
+        'citing two different tests are invisible. Telling those apart from two genuine bounds over sibling' \
+        'shapes is a semantic judgment — two operand dimensions here declare identically-worded bounds over' \
+        '`dyn` and `impl Trait`, each defended by its own test, and each must declare its own — so nothing' \
+        'observes it and no bound of the register capability claims it.' \
         ''
     local last=''
     while IFS=$'\t' read -r kind file line heading pinned unpinned statement; do
@@ -386,16 +496,30 @@ render_projection() {
 
 unpinned_count=$(awk -F'\t' '$1 == "BOUND" && $5 == "<none>" { n++ } END { print n + 0 }' "$records")
 
+# Cannot-judge precedes WRITING, not merely judging. With no declared bound parsed the heading form has
+# changed and the register is not there to be projected, so rendering first would leave behind a `0 of 0`
+# document that reads as the complete register of a repository holding no bounds — the flattering direction a
+# gate whose subject is absence makes easy.
+[[ $declared -gt 0 ]] \
+    || cannot_judge "parsed 0 declared bounds across $scanned spec file(s) — the heading form changed, so this gate would pass vacuously"
+
 if [[ ${BLESS:-} == 1 ]]; then
     # The directory is part of what blessing generates, so a fresh checkout — or a test fixture — can be
     # blessed without being prepared for it first.
     mkdir -p "$(dirname "$repo/$PROJECTION")"
     render_projection "$unpinned_count" >"$repo/$PROJECTION"
-    printf 'blessed %s (%d declared bounds, %d unpinned)\n' "$PROJECTION" "$declared" "$unpinned_count"
-    exit 0
-fi
-
-if [[ -f $repo/$PROJECTION ]]; then
+    # Blessing WRITES and then falls into the same verdict as any other run. It used to exit 0 here, which
+    # made regeneration report the family's "clean" over a register whose offenses it had just printed:
+    # "the document was rewritten" and "the register it describes is valid" are different claims, and one
+    # exit code cannot carry both. The projection is written either way, deliberately — with the register
+    # invalid, seeing what it now says is how the author repairs it.
+    if [[ $offenses -gt 0 ]]; then
+        printf 'blessed %s (%d declared bounds, %d unpinned) — the register it describes is NOT valid\n' \
+            "$PROJECTION" "$declared" "$unpinned_count"
+    else
+        printf 'blessed %s (%d declared bounds, %d unpinned)\n' "$PROJECTION" "$declared" "$unpinned_count"
+    fi
+elif [[ -f $repo/$PROJECTION ]]; then
     rendered=$(mktemp)
     render_projection "$unpinned_count" >"$rendered"
     if ! diff -q "$rendered" "$repo/$PROJECTION" >/dev/null 2>&1; then
@@ -405,9 +529,6 @@ if [[ -f $repo/$PROJECTION ]]; then
 else
     fail "$PROJECTION is missing; generate it with BLESS=1 bash scripts/check_bound_register.sh"
 fi
-
-[[ $declared -gt 0 ]] \
-    || cannot_judge "parsed 0 declared bounds across $scanned spec file(s) — the heading form changed, so this gate would pass vacuously"
 
 if [[ $offenses -gt 0 ]]; then
     printf '\nbound register: %d offense(s) across %d declared bound(s) in %d spec file(s)\n' \
