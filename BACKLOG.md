@@ -78,18 +78,19 @@ consumer for an undemonstrated deduplication.
   file against a class already characterized. Version class: PATCH. Authority: the two closed entries above
   and this gate's newly declared exit contract.
 
-- **Two gates have no companion failure matrix.** Class: READY-PATCH. Observed pressure:
-  `check_dod_coherence.sh` and `check_whitespace_hygiene.sh` are the only `check_*` gates with no `test_*`
-  companion, so their refusals are asserted nowhere — including the exit-contract backstop just installed in
-  both, which had to be verified by hand (`awk` stubbed to fail: exit 9 before, exit 2 after; `mktemp`
-  stubbed: exit 7 before, exit 2 after) where every other gate's is pinned by a fixture. Observation source:
-  `ls scripts/` — four `check_*` gates have a `test_*` twin and these two do not. Current bound: the
-  register capability's "every failure direction is proven" requirement governs its own gate only; nothing
-  states this for the others. Risk: LOW-to-MEDIUM — these two gates are simple, but "a gate that has not
-  been observed failing is a restatement, not a defence" is this repository's own standard and it is applied
-  unevenly. Promotion trigger: none needed. Version class: PATCH. Authority: the register capability's
-  proof requirement, and `AGENTS.md`'s Definition of Done, which lists both gates without a matrix beside
-  them.
+- ~~**Two gates have no companion failure matrix.**~~ **Half closed** in the open window.
+  `check_whitespace_hygiene.sh` now has `test_whitespace_hygiene.sh`, which was worth building rather than
+  recording: that gate is where the shared exit-contract backstop first misfired, and its clean-run assertion
+  is what catches it — removing the backstop's subshell guard fails that matrix and no other. The gate gained
+  a target-directory argument to make it possible, the same argument the register and reference-integrity
+  gates take for the same stated reason.
+
+  **Still open**: `check_dod_coherence.sh` has no matrix. Class: READY-PATCH. Observed pressure: it is now the
+  only `check_*` gate without a `test_*` twin, so its two `cannot judge` refusals and its violation direction
+  are asserted nowhere. Observation source: `ls scripts/`. Risk: LOW — the gate is a text comparison over two
+  tracked files, and its failure direction is loud rather than silent. Promotion trigger: none needed.
+  Version class: PATCH. Authority: the register capability's proof requirement, and this repository's own
+  standard that a gate which has not been observed failing is a restatement rather than a defence.
 
 - **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
   its corrections are classified when they exist). Observed pressure: measured on the window's own history —

@@ -45,7 +45,10 @@ set -Eeuo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
 exit_contract_backstop 'whitespace hygiene'
 
-cd "$(dirname "$0")/.."
+# The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to test
+# only this checkout — the same argument `check_bound_register.sh` and `check_reference_integrity.sh` take,
+# for the same reason: a gate that cannot be pointed at a fixture cannot have its refusals proven.
+cd "${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 # Paths are parsed out of `git ls-files --eol` on its TAB separator. Git *quotes* a path containing
 # whitespace or a backslash, which would reach the loop below as a mangled name and be silently

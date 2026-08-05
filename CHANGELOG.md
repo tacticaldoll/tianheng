@@ -261,6 +261,11 @@ them.
   `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
   report. What is left in a process substitution is computation over data this run already materialized, and
   the reaction says which rather than leaving the scope to be inferred.
+- `check_whitespace_hygiene.sh` gains a **companion failure matrix** and a target-directory argument, which
+  is what made one possible — the same argument the register and reference-integrity gates take. It was the
+  only gate whose refusals were asserted nowhere, and it is where the shared exit-contract backstop first
+  misfired: its clean-run assertion is what catches that, since removing the backstop's subshell guard fails
+  this matrix and no other. `check_dod_coherence.sh` remains the last gate without a matrix and is filed.
 - **Every repository gate now holds the 0/1/2 exit contract on every path**, through one shared backstop
   (`scripts/lib/exit_contract.sh`) rather than six copies of the same trap. Measured across the gates before
   it existed, each with one tool stubbed to fail: `check_publish_source.sh` exited **131**,
