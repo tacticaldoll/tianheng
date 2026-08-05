@@ -276,7 +276,10 @@ bash scripts/test_bound_register.sh     # prove every refusal of the observation
                                            # subject is absence can refuse nothing and still read as protection
 bash scripts/check_bound_register.sh    # every declared observation bound names the test that defends it or the
                                            # tracker that owns closing it, every bound stated in prose is declared,
-                                           # and docs/observation-bounds.md matches the specs. These two lines sit
+                                           # docs/observation-bounds.md matches the specs, and a tracked Markdown
+                                           # document writing "N bounds across M capabilities" agrees with what the
+                                           # run counted — a clean run prints the figures, so prose is written from
+                                           # a measurement rather than from memory. These two lines sit
                                            # AFTER cargo test deliberately: whether a citation names a test that
                                            # RUNS is decided by the harness's own enumeration (cargo test -p … --
                                            # --list), because three reviews defeated deciding it from source text

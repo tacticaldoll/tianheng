@@ -13,7 +13,7 @@
 # policy.
 #
 # What a bound declaration is. A `#### Scenario:` whose heading marks it a bound, sitting under the
-# requirement it qualifies — 34 of the 41 declared today sit that way, and hoisting them into a common
+# requirement it qualifies — nearly every one declared today sits that way, and hoisting them into a common
 # section would separate each bound from the reaction it limits. The `Observation bounds` requirement
 # three specs carry is a place bounds are gathered, never the definition of one.
 #
@@ -393,8 +393,8 @@ harness_registers() {
 #     delimiter-counting stripper would open a phantom comment at the first of them and swallow every
 #     definition until the next `*/`, so the gate would begin refusing real citations here on its first run.
 #
-# Verified before adopting: no `#[test]` run in this tree contains a block comment, and none of the 36 cited
-# tests is affected. The error direction is loud — a run that genuinely contains one is refused, not accepted.
+# Verified before adopting: no `#[test]` run in this tree contains a block comment, so no cited test is
+# affected. The error direction is loud — a run that genuinely contains one is refused, not accepted.
 #
 # There is NO line cap. A 12-line window was a backstop against walking to the top of a file, but the stop
 # conditions already are that boundary, so the cap only ever removed correct behaviour: a `#[test]` above 13
@@ -749,36 +749,13 @@ render_projection() {
 
 unpinned_count=$(awk -F'\t' '$1 == "BOUND" && $5 == "<none>" { n++ } END { print n + 0 }' "$records")
 capability_count=$(awk -F'\t' '$1 == "BOUND" { c = $2; sub(/^openspec\/specs\//, "", c); sub(/\/spec\.md$/, "", c); seen[c] = 1 } END { print length(seen) }' "$records")
-citation_count=$(awk -F'\t' '$1 == "BOUND" && $5 != "<none>" { n += split($5, t, "|") } END { print n + 0 }' "$records")
+# PINNING citations, and the label says so. "Citation" is defined by the requirement as either form —
+# `PINNED-BY` or `UNPINNED` — so an unqualified "citations" figure means two different numbers depending on
+# which sense a reader carries, and that ambiguity is the actual reason four careful counts of this tree
+# disagreed. Printing an unqualified figure would have made this reaction a fifth answer rather than the
+# arbiter. Qualified, the two printed numbers add to the requirement's sense with nothing left to infer.
+pinning_citation_count=$(awk -F'\t' '$1 == "BOUND" && $5 != "<none>" { n += split($5, t, "|") } END { print n + 0 }' "$records")
 reference_count=$(awk -F'\t' '$1 == "REFERENCE" { n++ } END { print n + 0 }' "$records")
-
-# A hand-written census of a set the reaction already enumerates has no reaction, which is the claim class
-# this whole capability exists to end — and it went stale three times in one release window, the third time
-# in the very CHANGELOG entry recording that the first two had. Counting by hand is not the problem:
-# four independent careful counts of this tree produced four different answers for "citations".
-#
-# So the figures are PRINTED for anyone writing prose, and the one shape that must appear in prose — the
-# adopter-facing "N bounds across M capabilities" — is REACTED to. Everything else was deleted from prose
-# instead of being swept a fourth time. The shape is deliberately narrow rather than a general
-# number-in-prose matcher, because a heuristic over prose numbers would refuse unrelated figures and that is
-# how a gate earns the false positives that get it disabled.
-census_offense=0
-while IFS= read -r site; do
-    [[ -n $site ]] || continue
-    census_file=${site%%:*}
-    census_rest=${site#*:}
-    census_line=${census_rest%%:*}
-    census_text=${census_rest#*:}
-    written_bounds=$(printf '%s' "$census_text" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) bounds across \([0-9][0-9]*\) capabilit.*/\1/p' | head -n 1)
-    written_caps=$(printf '%s' "$census_text" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) bounds across \([0-9][0-9]*\) capabilit.*/\2/p' | head -n 1)
-    [[ -n $written_bounds && -n $written_caps ]] || continue
-    if [[ $written_bounds != "$declared" || $written_caps != "$capability_count" ]]; then
-        fail "$census_file:$census_line writes \"$written_bounds bounds across $written_caps capabilities\" where the register holds $declared across $capability_count; a hand-written census of a set this reaction enumerates goes stale silently"
-        census_offense=1
-    fi
-done < <(grep -rnE '[0-9]+ bounds across [0-9]+ capabilit' --include='*.md' -- "$repo" 2>/dev/null \
-    | sed "s|^$repo/||" | grep -v '^target/' || true)
-
 
 # Cannot-judge precedes WRITING, not merely judging. With no declared bound parsed the heading form has
 # changed and the register is not there to be projected, so rendering first would leave behind a `0 of 0`
@@ -786,6 +763,56 @@ done < <(grep -rnE '[0-9]+ bounds across [0-9]+ capabilit' --include='*.md' -- "
 # gate whose subject is absence makes easy.
 [[ $declared -gt 0 ]] \
     || cannot_judge "parsed 0 declared bounds across $scanned spec file(s) — the heading form changed, so this gate would pass vacuously"
+
+# A hand-written census of a set the reaction already enumerates has no reaction, which is the claim class
+# this whole capability exists to end — and it went stale three times in one release window, the third time
+# in the very CHANGELOG entry recording that the first two had. Counting by hand is not the problem: four
+# independent careful counts of this tree produced four different answers for "citations".
+#
+# So the figures are PRINTED for anyone writing prose, and the one shape that must appear in prose — the
+# adopter-facing "N bounds across M capabilities" — is REACTED to. Everything else was deleted from prose
+# instead of being swept a fourth time. The shape is deliberately narrow rather than a general
+# number-in-prose matcher, because a heuristic over prose numbers would refuse unrelated figures and that is
+# how a gate earns the false positives that get it disabled.
+#
+# TRACKED Markdown, read through `git ls-files` like every other direction here. A filesystem walk judged the
+# WORKTREE: an untracked scratch note and a `.gitignore`d vendor directory each failed the gate, so a local
+# file broke a developer's run while CI's clean checkout passed — the checkout-dependence the whitespace and
+# identity gates were already fixed for, reintroduced by a `grep -r`. Markdown is the whole scope and is
+# stated as such in the requirement, not left to be inferred from the glob.
+#
+# EVERY occurrence on a line, and no `[^0-9]` guard before the number. That guard could not match a
+# line-INITIAL figure, so a census at the start of a line was silently skipped — and markdown reflow puts a
+# number there routinely. A greedy `.*` would additionally have examined only the LAST of two figures on one
+# line, the same partial check the reference direction was already repaired for. `grep -o` needs neither: it
+# is leftmost-longest, so `142 bounds` yields `142` rather than `42`.
+#
+# Placed AFTER the cannot-judge guard. With no declared bound parsed the counts are 0, and reporting every
+# written census as disagreeing with "0 across 0" would bury the one diagnosis that is true.
+#
+# `-z` and the same `read -r -d ''` loop `build_tracked_path_index` uses above, rather than a second idiom for
+# one query: `git ls-files` quotes a non-ASCII path by default, and a quoted path names no file on disk.
+census_files=()
+while IFS= read -r -d '' census_md; do
+    census_files+=("$census_md")
+done < <(git -C "$repo" ls-files -z -- '*.md')
+# The guard is load-bearing: `grep` with no file arguments reads STDIN, which inside this loop's process
+# substitution would block rather than report anything.
+if [[ ${#census_files[@]} -gt 0 ]]; then
+    while IFS= read -r site; do
+        [[ -n $site ]] || continue
+        census_file=${site%%:*}
+        census_rest=${site#*:}
+        census_line=${census_rest%%:*}
+        census_text=${census_rest#*:}
+        while IFS= read -r figure; do
+            [[ -n $figure ]] || continue
+            read -r written_bounds _ _ written_caps _ <<<"$figure"
+            [[ $written_bounds == "$declared" && $written_caps == "$capability_count" ]] && continue
+            fail "$census_file:$census_line writes \"$written_bounds bounds across $written_caps capabilities\" where the register holds $declared across $capability_count; a hand-written census of a set this reaction enumerates goes stale silently"
+        done < <(printf '%s' "$census_text" | grep -oE '[0-9]+ bounds across [0-9]+ capabilit' || true)
+    done < <(cd "$repo" && grep -nHE '[0-9]+ bounds across [0-9]+ capabilit' -- "${census_files[@]}" 2>/dev/null || true)
+fi
 
 if [[ ${BLESS:-} == 1 ]]; then
     # The directory is part of what blessing generates, so a fresh checkout — or a test fixture — can be
@@ -825,5 +852,5 @@ fi
 printf 'bound register ok (%d declared bounds across %d spec files)\n' "$declared" "$scanned"
 # Printed so prose is written from a measurement rather than from memory. Every one of these went stale in
 # prose at least once during this capability's first release window.
-printf '  %d bounds across %d capabilities; %d citations; %d unpinned; %d references\n' \
-    "$declared" "$capability_count" "$citation_count" "$unpinned_count" "$reference_count"
+printf '  %d bounds across %d capabilities; %d pinning citations; %d unpinned; %d references\n' \
+    "$declared" "$capability_count" "$pinning_citation_count" "$unpinned_count" "$reference_count"

@@ -54,17 +54,37 @@ them.
   several specs stale at once.
 
 ### Changed
+- **The census direction now judges tracked content and every figure on a line**, closing three ways the
+  direction added one change earlier missed or overreached. It walked the filesystem, so an untracked scratch
+  note and an ignored vendored tree each failed the reaction — a local file breaking a developer's run while a
+  clean checkout passed, which is the checkout-dependence this family repairs wherever it appears; it now
+  reads tracked Markdown through the same `git ls-files` every other direction here uses. Its matcher guarded
+  the written number against a preceding digit, and that guard cannot match at a line's first column, so a
+  **line-initial** figure was silently skipped while the identical figure mid-line was caught — and reflowed
+  Markdown puts a number there routinely. A greedy match additionally examined only the **last** of two
+  figures on one line, the same partial check the reference direction was already repaired for. A
+  longest-match extraction replaces both, so a longer number is read whole rather than sliced into a false
+  agreement, and the reaction is placed after the cannot-judge guard so a register it cannot read no longer
+  reports every written census as disagreeing with `0 across 0` ahead of the one diagnosis that is true.
+- The printed figure is **`pinning citations`, not `citations`**. This specification defines a citation as
+  either form — `PINNED-BY` or `UNPINNED` — so an unqualified figure names two different numbers depending on
+  which sense a reader carries, and that ambiguity is the actual cause of the four disagreeing counts the
+  entry below records. A reaction emitting an unqualified figure would have become a fifth answer rather than
+  the arbiter; labelled, the printed pinning-citation and unpinned counts sum to the requirement's sense with
+  nothing left to infer.
 - **A hand-written census of the register no longer lives in prose, and the one figure that must stay is now
   reacted to.** Adding a single declared bound invalidated fourteen written figures across four files —
   including the entry below whose own subject is that three measurements had gone stale in this same window.
   The cause is not carelessness: four independent, deliberate counts of this tree produced four different
   answers for the number of citations, and an ad-hoc count of unpinned bounds contradicted the generated
-  projection. So a clean run now **prints** what it counted
-  (`42 bounds across 15 capabilities; 38 citations; 5 unpinned; 20 references`), five prose figures that
-  carried no information are number-free, and a tracked document writing `N bounds across M capabilities`
+  projection. So a clean run now **prints** what it counted — the bound, capability, pinning-citation,
+  unpinned, and reference figures, on one line after a clean verdict — five prose figures that carried no
+  information are number-free, and a tracked Markdown document writing `N bounds across M capabilities`
   **fails** when either number disagrees with the count. The matched shape is deliberately narrow: a general
   number-in-prose matcher would refuse unrelated figures, which is how a gate earns the false positives that
-  get it disabled.
+  get it disabled. The printed figures are described rather than quoted here on purpose: a worked example
+  carrying the reacted shape would itself become a second census to keep in step, which is the maintenance
+  this entry removes.
 - One matcher now decides the `(bound: …)` syntax. Two independently written ones did — an `awk` regex and a
   shell `grep -qE` whose whitespace classes differed — and clearing disagreeing with resolution about which
   references exist is the divergence that cost this window a review round.
@@ -81,8 +101,8 @@ them.
   whose comma breaks the adjacency the scan needs, which is the very wording the projection's first residual
   cites as its example. It is now the capability's **fourth declared bound**, pinned by
   `confine_ignores_an_extern_crate_declaration`: probed before declaring, and discriminating because the
-  sibling test puts `use libc as c;` in the identical fixture shape and gets a violation. The register holds
-  **42 bounds, every one of them cited**.
+  sibling test puts `use libc as c;` in the identical fixture shape and gets a violation. **Every bound the
+  register holds is cited**, which the reaction requires rather than this note asserting a count.
 - The projection's **content** is now asserted by the companion test, not only its freshness. Byte-for-byte
   staleness proves the document and the reaction agree; it can never prove either is right, because both come
   from one renderer. That is how `` `author\s:` `` — a shell quoting artifact where an apostrophe was meant —
@@ -103,9 +123,9 @@ them.
   least one bound scenario. Scanning paragraphs instead of lines was measured against that defect and would
   not have caught it, so it is recorded as rejected rather than left to be re-proposed.
 - Three measurements were stated in the present tense and had gone stale within this same unreleased window:
-  the count of bounds sitting under the requirement they qualify (now **34 of 41**), the number of specs
-  carrying an Observation-bounds requirement (**3 of 30**), and a `CHANGELOG.md` entry saying 44 bounds five
-  lines after a sibling said 41.
+  the count of bounds sitting under the requirement they qualify, the number of specs carrying an
+  Observation-bounds requirement, and a `CHANGELOG.md` entry whose bound count contradicted a sibling five
+  lines away. Each is now number-free or reacted to rather than restated here.
 - The register's shared-bound requirement claimed that one behaviour change cannot leave several specs
   stale. Its reaction reaches one shape — a single pinning test cited by two capabilities — so the claim
   is narrowed to that and the residual is stated in `docs/observation-bounds.md`'s header beside the
