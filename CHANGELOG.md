@@ -38,23 +38,39 @@ them.
   `main` correctly and then force-pushed away an hour later — and neither disagreement affects any
   published crate's content. The eleven `0.1.x` releases point at commits the 2026-07-17 history
   rewrite dissolved, so whether they came from `main` is no longer knowable.
-
-### Added
-- The bound register refuses a **restatement**: one behaviour has one defence, so a test cited by declared
-  bounds in more than one capability now fails, and the bound is declared once with the others referencing
-  it. Two behaviours were declared three times each when the register first projected — the repair leaves 41
-  bounds where there were 44, and a behaviour change can no longer leave several specs stale at once.
-### Added
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. 44 bounds across 15 capabilities, generated from the specs and staleness-checked, with
+  closing the gap. **41 bounds across 15 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
-  The list is a floor rather than a proof — a bound worded outside the scanned form is invisible to it, and
-  the projection says so where a reader will see it. Assembling it retired two bounds that had outlived
-  their behaviour and added six tests for bounds nothing had defended.
+  Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
+  had defended. The list is a **floor rather than a proof**, and the projection's own header enumerates every
+  residual: unrecognized wording, a line-oriented scan, a reference that clears prose stating more bounds than
+  it names, and the exemption for requirements whose headings name bounds.
+- The bound register refuses a **restatement**: one behaviour has one defence, so a test cited by declared
+  bounds in more than one capability now fails, and the bound is declared once with the others referencing
+  it. Two behaviours were declared three times each when the register first projected, which is why the
+  register holds 41 bounds rather than the 44 it first listed — and a behaviour change can no longer leave
+  several specs stale at once.
 
 ### Documentation
+- A **retired bound was still alive** in `external-crate-confinement`'s overview paragraph: it listed
+  `` `#[path]`-blind `` among the module scanner's inherited bounds while the resolution paragraph in the same
+  file, corrected in this window, says a `#[path]`-remapped module is followed and its imports observed. One
+  file said both, and the overview reads as permission — the failure this register exists to end, committed
+  inside it. The stale name is deleted and each remaining bound in that sentence, and in the resolution
+  paragraph, now carries its own `(bound: …)` reference.
+- `docs/observation-bounds.md`'s header now enumerates **every** residual of the undeclared-prose direction
+  and the one exemption, instead of stating the first and leaving the rest in the reaction's comments: a
+  reference clears the prose it sits with regardless of how many bounds that prose states (the mechanism that
+  let the bound above survive two sweeps), the scan is line-oriented, unrecognized wording is invisible, and
+  prose under a requirement whose heading names bounds is exempt at the price of that requirement declaring at
+  least one bound scenario. Scanning paragraphs instead of lines was measured against that defect and would
+  not have caught it, so it is recorded as rejected rather than left to be re-proposed.
+- Three measurements were stated in the present tense and had gone stale within this same unreleased window:
+  the count of bounds sitting under the requirement they qualify (now **34 of 41**), the number of specs
+  carrying an Observation-bounds requirement (**3 of 30**), and a `CHANGELOG.md` entry saying 44 bounds five
+  lines after a sibling said 41.
 - The register's shared-bound requirement claimed that one behaviour change cannot leave several specs
   stale. Its reaction reaches one shape — a single pinning test cited by two capabilities — so the claim
   is narrowed to that and the residual is stated in `docs/observation-bounds.md`'s header beside the
@@ -82,6 +98,9 @@ them.
   dismissing it as governed policy.
 
 ### Changed
+- Every `(bound: …)` reference on a line is now resolved, not just one of them. The extraction was greedy, so
+  only the **last** reference was ever examined and an earlier dangling one passed while the line reported
+  clean. This does not close the residual noted above — that reference resolved — and is not offered as its fix.
 - **The test harness now decides whether a bound-register citation names a test that runs**, replacing a
   source-text judgment that three reviews defeated. A `#[test]` neutralised by `#[cfg(any())]`, a `#[test] fn`
   inside an uninvoked `macro_rules!` body, and a definition inside a raw string or a block comment were all

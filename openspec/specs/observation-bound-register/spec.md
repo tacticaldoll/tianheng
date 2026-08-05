@@ -27,7 +27,7 @@ deliberately stops at a named shape, so that shape is governed policy rather tha
 declaring file SHALL be `openspec/specs/<capability>/spec.md`.
 
 The declaration SHALL sit under the requirement it qualifies, wherever that is, and SHALL NOT be hoisted
-into a common section. 21 of the 24 bounds declared today sit under the requirement they qualify rather
+into a common section. 34 of the 41 bounds declared today sit under the requirement they qualify rather
 than under an `Observation bounds` requirement, and moving them would separate each bound from the
 reaction it limits — the `Observation bounds` requirement three specs carry is a place bounds are
 gathered, never the definition of one.
@@ -53,7 +53,7 @@ so no identifier ledger is introduced and a citation cannot outlive the declarat
 
 - **WHEN** a bound-marked scenario sits under a requirement that is not named `Observation bounds`
 - **THEN** the reaction reads it as a declared bound and requires its citation, so the register covers
-  the 21 bounds already declared that way without relocating any of them
+  the 34 bounds already declared that way without relocating any of them
 
 #### Scenario: A bound's id is derived rather than assigned
 
@@ -251,16 +251,41 @@ its being an identifier.
 ### Requirement: A bound stated in prose but not declared as a scenario SHALL fail
 
 The reaction SHALL scan `openspec/specs/*` for bound-declaring prose and SHALL fail on any occurrence
-outside a declared bound scenario. This makes the prose already present the register's mandatory
-minimum, so the register cannot be completed by declaring only the convenient bounds. Its size is
-measured rather than estimated: 3 of 29 specs carry an Observation-bounds requirement today while 11
-more state bound prose without one.
+outside a declared bound scenario, **subject to the exemptions and residuals stated below, which SHALL be
+enumerated rather than implied**. This makes the prose already present the register's mandatory minimum, so
+the register cannot be completed by declaring only the convenient bounds. Its size is measured rather than
+estimated: 3 of 30 specs carry an Observation-bounds requirement today while 11 more state bound prose
+without one.
 
-This direction SHALL be described as a **floor and not a proof**, in the generated projection's own
-header: a bound worded outside the scanned pattern is undetectable to it. That residual SHALL be stated
-there and SHALL NOT be declared as a bound of this capability, because nothing can observe it — a
-declaration no reaction can reach is the name-without-a-reaction `PROJECT.md` forbids, and the register
-must not make itself the first exception.
+One **exemption** is deliberate and SHALL be declared here rather than only in the reaction's own comments.
+Prose under a requirement whose heading names bounds is not reported, because several such requirements
+state their bounds as a numbered list — `Observation bounds are stated, not silent` enumerates seven — and
+requiring each item to become its own scenario would restructure three requirements and read worse. The
+exemption is not free, and its price SHALL be charged: such a requirement SHALL declare at least one bound
+scenario, or its list would have no reaction anywhere. What the exemption costs is that the *other* items of
+such a list are unregistered, and that cost SHALL be stated in the projection's header.
+
+The direction SHALL be described as a **floor and not a proof**, in the generated projection's own header,
+and every residual known to the reaction SHALL appear there. Three are known and SHALL be named:
+
+1. A bound worded outside the scanned pattern — "out-of-scope", "does not claim to observe" — is
+   undetectable.
+2. The scan is **line-oriented**, so a statement whose bound names continue onto the next line is examined
+   only on the line carrying the trigger words.
+3. A `(bound: …)` reference clears the prose it sits with **regardless of how many bounds that prose
+   states**, and regardless of whether the referenced bound is one of them.
+
+Residual 3 is the mechanism that let a retired `#[path]` bound survive in a capability's overview paragraph
+through two sweeps, so it SHALL be recorded as the reason rather than as a curiosity. Closing it would
+require reading which bounds a sentence lists, which is a semantic judgment no reaction can reach; residual
+2's obvious repair — scanning paragraphs rather than lines — SHALL NOT be adopted on that account, because
+it was measured against this defect and **would not have caught it**: the paragraph carries the reference
+that clears it, so the repair costs twelve new offenses and buys nothing against the failure that motivated
+it.
+
+These residuals SHALL NOT be declared as bounds of this capability, for the reason already settled for the
+first: nothing observes them, and a declaration no reaction can reach is the name-without-a-reaction
+`PROJECT.md` forbids. The register must not make itself the exception.
 
 #### Scenario: Spec prose states a bound that no scenario declares
 
@@ -274,20 +299,34 @@ must not make itself the first exception.
 - **THEN** the reaction passes for that occurrence, so declaring the bound is what clears it rather than
   rewording the sentence
 
-#### Scenario: The register states its own detection residual without declaring it a bound
+#### Scenario: Prose under a bounds-named requirement is exempt, and the requirement pays for it
+
+- **WHEN** a requirement whose heading names bounds states one in prose
+- **THEN** the occurrence is not reported, and the reaction instead requires that requirement to declare at
+  least one bound scenario, failing when it declares none
+
+#### Scenario: The register states every residual of its prose direction
 
 - **WHEN** the projection is read
-- **THEN** its header states that the undeclared-prose direction is a floor over recognizable wording, and
-  no bound of this capability claims that residual, since no reaction could reach one
+- **THEN** its header names all three residuals — unrecognized wording, the line-oriented scan, and a
+  reference clearing prose that states more bounds than it names — and no bound of this capability claims
+  any of them, since no reaction could reach one
 
 ### Requirement: Prose MAY reference a declared bound, and a reference SHALL resolve
 
 Prose that mentions a bound SHALL be cleared by the undeclared-prose reaction when it carries an explicit
 reference of the form `(bound: <capability>/<slug>)`, where `<slug>` is the declaring scenario's heading
-lowercased with each run of non-alphanumeric characters replaced by a single hyphen. The reference SHALL
-resolve to **exactly one** declared bound across all specs: resolving to none SHALL fail, because a
-reference that points nowhere is indistinguishable from an undeclared bound, and resolving to more than one
-SHALL fail, which is also what keeps derived ids unique rather than merely assumed unique.
+lowercased with each run of non-alphanumeric characters replaced by a single hyphen. **Every** reference the
+prose carries SHALL resolve to exactly one declared bound across all specs, not merely one of them: resolving
+to none SHALL fail, because a reference that points nowhere is indistinguishable from an undeclared bound,
+and resolving to more than one SHALL fail, which is also what keeps derived ids unique rather than merely
+assumed unique. Checking one of them leaves the rest unchecked while the line reports clean — measured: the extraction was
+greedy, so only the **last** reference was ever examined and an earlier dangling one passed.
+
+What a reference does **not** establish SHALL be stated wherever the reference form is described: it clears
+the prose it sits with, and it does not certify that the bounds the prose states are the bound it names. A
+sentence listing four inherited bounds is cleared by one reference to a fifth. Authors SHALL therefore carry
+one reference for each bound the prose names, and the reaction cannot enforce that — see residual 3 above.
 
 A reference exists because the floor's alternative is worse. Without it, a sentence that legitimately
 **points at** a bound declared elsewhere — in the same file, or in another dimension's spec — must either
@@ -308,6 +347,12 @@ to the register's bound count, and cannot be the only mention of a bound anywher
 - **WHEN** a reference names a `<capability>/<slug>` that no declared bound produces
 - **THEN** the reaction fails, naming the file, the line, and the unresolved id, because a dangling
   reference is indistinguishable from an undeclared bound
+
+#### Scenario: An earlier reference on the same line that resolves to nothing
+
+- **WHEN** prose carries two references and only the later one resolves
+- **THEN** the reaction fails, naming the unresolved one, because a line examined at one reference leaves the
+  rest unchecked whichever one that is
 
 #### Scenario: A reference that resolves to two declared bounds
 
