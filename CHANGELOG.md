@@ -82,6 +82,27 @@ them.
   dismissing it as governed policy.
 
 ### Changed
+- A bound-register citation is now **validated before it is resolved**, closing two ways it could resolve to
+  something other than the test it names. The cited name is interpolated into the search pattern, so a
+  regular-expression metacharacter resolved a citation for a test that does not exist to a differently-named
+  function — defeating the renamed-or-deleted direction the register exists for. The crate qualifier is
+  joined to a filesystem path, so `../` resolved a citation against a function outside `crates/`. A name must
+  now be a Rust identifier and a qualifier a crate-directory name, with at most one `::`; every citation in
+  the tree already satisfies both. Validated rather than escaped, so a malformed citation is named as
+  malformed instead of reported stale.
+- Test recognition stops at a **block-comment delimiter**, so a `#[test]` written inside `/* … */` no longer
+  satisfies the attribute run. It deliberately neither strips nor tracks comments: comment state is a
+  forward property of a file that an upward walk cannot know, and stripping needs string-literal lexing —
+  this tree carries 49 `/*` occurrences inside string literals, several nested, from its own lexer suites, so
+  a delimiter-counting scan would swallow real definitions. No `#[test]` run in the tree contains a block
+  comment, so nothing existing is refused. The walk also lost its 12-line cap, which had refused a
+  legitimate test whose attribute run was longer; the stop conditions were already the boundary the cap
+  stood in for.
+- `docs/observation-bounds.md` gains a **third floor**: a citation matches a line's form, not its comment
+  state, so a function definition sitting inside a block comment satisfies one. Closing that needs the same
+  Rust lexing the walk rejects, so it is stated where a register reader sees it and pinned by a fixture that
+  records the accepted behaviour, and what blocks *declaring* it as a bound — `PINNED-BY` names a Rust test
+  while this reaction's own defences are shell fixtures — is filed in `BACKLOG.md`.
 - The bound register's own citations can no longer read as coverage while defending nothing. `PINNED-BY`
   resolved against **any** Rust function definition, so a production entry point of the right name
   satisfied it; it must now resolve to a **test**, read from the attribute run above the definition rather
