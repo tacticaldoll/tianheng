@@ -226,6 +226,27 @@ them.
   release commit, so the whole `v0.1.0`–`v0.4.0` range is uniform and GitHub-verified. A clone that
   already fetched the old refs needs `git fetch --tags --force` to see the new tag objects; no commit
   moved and no history was rewritten.
+- The publish wrapper now **refuses `--manifest-path`** (either spelling) before the source gate runs.
+  The gate judges this repository; that argument moves cargo's workspace root to another tree, so the two
+  would disagree about what is being published, one argument away from an act that cannot be corrected.
+  It had been written down in `publish.sh` as an accepted bound — the same shape as "publish `main`, not
+  the release branch", which was also written down and then missed in the window it was written. The
+  registry-side arguments (`--registry`, `--index`, `--token`) change the publish's destination rather
+  than its source and stay forwarded, which is now stated rather than implied.
+- The bound register resolves a `PINNED-BY` citation against **tracked** `.rs` files, not a filesystem
+  walk. An untracked or ignored file decided a citation, so a scratch copy of a test file — the likeliest
+  such artifact, tests being what citations name — resolved a name twice and the gate refused with
+  "defined 2 times" locally while a clean checkout passed. Its cargo enumeration also keeps cargo's own
+  stderr, so an exit-2 refusal names its cause instead of leaving a compile error, an absent package, and
+  a held lock indistinguishable. A tracked spec absent from the worktree is now `cannot judge` **before**
+  the projection is written: judging it already failed on projection staleness, but *blessing* rewrote the
+  projection to describe a partial register and exited 0, leaving a document that reads as complete.
+- The reference-integrity gate refuses a **failed extraction** instead of reporting clean. The per-file
+  normalization ran inside a process substitution, where a failing `sed` or `sort` reports nothing to the
+  parent — `pipefail` does not reach a subshell whose status no one reads — so the stream came back empty,
+  every reference in that file went unexamined, and the file still counted as inspected. The gate had
+  already been repaired for this exact shape one step earlier, where `grep`'s status is captured so an
+  unreadable tracked file refuses to judge.
 - **BREAKING** — a **bare** principal trait in an operand-scoped `dyn` or `impl Trait` boundary now
   resolves against its own module when — and only when — that module declares the name, and the name is
   canonicalized first. Both directions move: a real local `pub trait r#type` used as `dyn r#type`
