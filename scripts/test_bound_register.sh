@@ -48,6 +48,34 @@ new_repo() {
     printf '%s\n' "$repo"
 }
 
+# A fixture that is a real cargo workspace, so the HARNESS direction can be proven. The manifest-less
+# repositories above are deliberate — most of the register's directions have nothing to do with Rust — but
+# test-ness is decided by `cargo test -- --list`, and a direction that cannot be proven on a fixture is not a
+# direction. Measured: a crate this small enumerates COLD in ~107ms, which is why the premise that the matrix
+# could not carry a manifest was wrong.
+new_cargo_repo() {
+    local name=$1 spec=$2 rust=$3
+    local repo=$fixture_root/$name
+    mkdir -p "$repo/openspec/specs/probe-capability" "$repo/crates/probe/src"
+    git init -q "$repo"
+    git -C "$repo" config user.name 'Bound Register Test'
+    git -C "$repo" config user.email 'bound-register@example.invalid'
+    printf '%s' "$spec" >"$repo/openspec/specs/probe-capability/spec.md"
+    printf '%s' "$rust" >"$repo/crates/probe/src/lib.rs"
+    printf 'probe debt\n' >"$repo/BACKLOG.md"
+    printf '%s\n' '[workspace]' 'members = ["crates/*"]' 'resolver = "2"' >"$repo/Cargo.toml"
+    printf '%s\n' '[package]' 'name = "probe"' 'version = "0.0.0"' 'edition = "2021"' \
+        '' '[lib]' 'path = "src/lib.rs"' >"$repo/crates/probe/Cargo.toml"
+    printf 'target/\n' >"$repo/.gitignore"
+    git -C "$repo" add -A
+    git -C "$repo" commit -qm 'probe cargo fixture'
+    local bless_output bless_status=0
+    bless_output=$(BLESS=1 "$check" "$repo" 2>&1) || bless_status=$?
+    [[ -f $repo/docs/observation-bounds.md ]] \
+        || { printf 'blessing the cargo fixture wrote nothing (exit %d): %s\n' "$bless_status" "$bless_output" >&2; exit 1; }
+    printf '%s\n' "$repo"
+}
+
 # The default pinning test is a TEST. It was a plain `pub fn` until the citation direction was tightened to
 # require one, and that fixture is exactly the hole the tightening closes: it proved the passing direction
 # while demonstrating that a non-test satisfied a citation.
@@ -231,12 +259,11 @@ expect_fail "$traversing_qualifier" 1 'which is not a citation this reaction can
 nested_qualifier=$(new_repo nested-qualifier "$(spec_with '- **PINNED-BY** `probe::inner::a_probe_bound_is_pinned`')")
 expect_fail "$nested_qualifier" 1 'which is not a citation this reaction can resolve'
 
-# --- the stated residual of matching a line's form ---
-
-# A whole definition inside a block comment satisfies a citation. This fixture RECORDS that accepted residual
-# rather than endorsing it: closing it needs the string-literal lexing the walk's comment rule rejects, and
-# `docs/observation-bounds.md` states it as the register's third floor. If a later change closes it, this
-# fixture fails, which is the point — the residual cannot be repaired silently.
+# A whole definition inside a block comment satisfies a citation on the FALLBACK path, and this fixture pins
+# that: the source-text walk reads the form of a line, not its comment state. It is a property of the declared
+# fallback and not of the register's judgment where a manifest exists — the cargo fixtures below prove the
+# harness refuses the same shape. Closing it in the fallback would need string-literal lexing, which this tree
+# defeats with 49 in-string `/*` occurrences.
 commented_definition=$(new_repo commented-definition "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
     '/*
 #[test]
@@ -244,6 +271,123 @@ fn a_probe_bound_is_pinned() {}
 */
 ')
 expect_pass "$commented_definition" 'bound register ok (1 declared bounds'
+
+# The fallback must SAY it is the fallback. A gate that silently drops its strongest direction reports a weaker
+# clean than the one it claims.
+expect_pass "$commented_definition" 'no root Cargo.toml — citation test-ness decided by the source-text fallback'
+
+# A raw identifier is a Rust identifier, and the register imposes no naming convention of its own.
+raw_identifier=$(new_repo raw-identifier "$(spec_with '- **PINNED-BY** `r#type`')" \
+    '#[test]
+fn r#type() {}
+')
+expect_pass "$raw_identifier" 'bound register ok (1 declared bounds'
+
+# --- the harness is the authority, proven on real cargo workspaces ---
+
+# The passing direction first: a real registered test resolves, and the gate says the harness decided.
+harness_pass=$(new_cargo_repo harness-pass "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_probe_bound_is_pinned() {}
+}
+')
+expect_pass "$harness_pass" 'citation test-ness decided by the test harness'
+expect_pass "$harness_pass" 'bound register ok (1 declared bounds'
+
+# A `#[test]` the build removes. The attribute run says test; nothing registers. The source-text fallback
+# accepted this with exit 0, which is what moved the authority to the harness.
+cfg_disabled=$(new_cargo_repo cfg-disabled "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '#[cfg(test)]
+mod tests {
+    #[test]
+    #[cfg(any())]
+    fn a_probe_bound_is_pinned() {}
+}
+')
+expect_fail "$cfg_disabled" 1 'which the test harness does not register for that crate'
+
+# Real `#[test] fn` tokens inside a macro nothing invokes expand nowhere, so they register nothing.
+macro_body=$(new_cargo_repo macro-body "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    'macro_rules! never_invoked {
+    () => {
+        #[test]
+        fn a_probe_bound_is_pinned() {}
+    };
+}
+')
+expect_fail "$macro_body" 1 'which the test harness does not register for that crate'
+
+# A definition inside a multi-line string literal: the definition scan matches the line, the harness does not.
+raw_string=$(new_cargo_repo raw-string "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    'pub const SRC: &str = r#"
+#[test]
+fn a_probe_bound_is_pinned() {}
+"#;
+')
+expect_fail "$raw_string" 1 'which the test harness does not register for that crate'
+
+# And the block-commented definition, which the previous change declared a residual and this one retires: the
+# harness refuses it where the fallback above accepts it.
+block_commented_definition=$(new_cargo_repo block-commented-definition "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '/*
+#[test]
+fn a_probe_bound_is_pinned() {}
+*/
+')
+expect_fail "$block_commented_definition" 1 'which the test harness does not register for that crate'
+
+# A registered test the definition scan cannot locate is a disagreement about a FORM, not about existence, so
+# the reaction names the line shape it requires instead of reporting the test absent.
+split_definition=$(new_cargo_repo split-definition "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '#[cfg(test)]
+mod tests {
+    #[test]
+    pub fn
+        a_probe_bound_is_pinned() {}
+}
+')
+expect_fail "$split_definition" 1 'requires `fn` and the name on one source line'
+
+# The direction that justifies enumerating PER PACKAGE rather than per workspace, and it is not hypothetical:
+# `cargo test -- --list` prints `module::path::name` with no crate label, and this repository already has one
+# test name registered in two crates. Here `alpha`'s test is cfg-disabled while `beta`'s is live, and the
+# citation is qualified to `alpha`. A workspace-wide leaf match would find beta's test and pass — the hole this
+# whole direction closes, reintroduced by the shortcut. Built by hand because it needs two crates.
+crate_precision=$fixture_root/crate-precision
+mkdir -p "$crate_precision/openspec/specs/probe-capability" \
+    "$crate_precision/crates/alpha/src" "$crate_precision/crates/beta/src"
+git init -q "$crate_precision"
+git -C "$crate_precision" config user.name 'Bound Register Test'
+git -C "$crate_precision" config user.email 'bound-register@example.invalid'
+spec_with '- **PINNED-BY** `alpha::a_shared_test_name`' >"$crate_precision/openspec/specs/probe-capability/spec.md"
+printf 'probe debt\n' >"$crate_precision/BACKLOG.md"
+printf 'target/\n' >"$crate_precision/.gitignore"
+printf '%s\n' '[workspace]' 'members = ["crates/*"]' 'resolver = "2"' >"$crate_precision/Cargo.toml"
+for member in alpha beta; do
+    printf '%s\n' '[package]' "name = \"$member\"" 'version = "0.0.0"' 'edition = "2021"' \
+        '' '[lib]' 'path = "src/lib.rs"' >"$crate_precision/crates/$member/Cargo.toml"
+done
+printf '%s\n' '#[cfg(test)]' 'mod tests {' '    #[test]' '    #[cfg(any())]' \
+    '    fn a_shared_test_name() {}' '}' >"$crate_precision/crates/alpha/src/lib.rs"
+printf '%s\n' '#[cfg(test)]' 'mod tests {' '    #[test]' \
+    '    fn a_shared_test_name() {}' '}' >"$crate_precision/crates/beta/src/lib.rs"
+git -C "$crate_precision" add -A
+git -C "$crate_precision" commit -qm 'crate precision fixture'
+BLESS=1 "$check" "$crate_precision" >/dev/null 2>&1 || true
+[[ -f $crate_precision/docs/observation-bounds.md ]] \
+    || { printf 'blessing the crate-precision fixture wrote no projection\n' >&2; exit 1; }
+expect_fail "$crate_precision" 1 'which the test harness does not register for that crate'
+
+# And its counterpart, so the refusal above is precision rather than blanket refusal of a qualified citation:
+# the same shape with the citation qualified to the crate whose test is live passes.
+sed -i.bak 's/`alpha::a_shared_test_name`/`beta::a_shared_test_name`/' \
+    "$crate_precision/openspec/specs/probe-capability/spec.md"
+rm -f "$crate_precision/openspec/specs/probe-capability/spec.md.bak"
+git -C "$crate_precision" commit -qam 'cite the live crate'
+BLESS=1 "$check" "$crate_precision" >/dev/null 2>&1
+expect_pass "$crate_precision" 'bound register ok (1 declared bounds'
 
 # A citation must not be satisfiable by a MENTION. Without the definition-form match, a doc comment naming
 # the test would read as coverage — the exact silent pass the register opposes.

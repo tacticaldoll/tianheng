@@ -234,6 +234,10 @@ definitions_of() {
 # Measured before it was written: all 36 cited names are plain Rust identifiers and every directory under
 # `crates/` is a plain name, so this refuses nothing that exists. A raw identifier (`r#type`) would be
 # refused; none is cited, and the refusal is loud.
+# A raw identifier is a Rust identifier and this register imposes no naming convention of its own, so `r#name`
+# is accepted; `#` is not an ERE metacharacter, so nothing downstream changes. Non-ASCII identifiers stay
+# refused and the requirement says so rather than implying Rust's full grammar: the search pattern is
+# byte-oriented, no cited name needs otherwise, and the refusal is loud where an unreliable match would not be.
 citation_is_well_formed() {
     local citation=$1 qualifier name
     case $citation in
@@ -245,7 +249,83 @@ citation_is_well_formed() {
         ;;
     *) name=$citation ;;
     esac
-    [[ $name =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
+    [[ $name =~ ^(r#)?[A-Za-z_][A-Za-z0-9_]*$ ]]
+}
+
+# The tests the HARNESS registers, per workspace package. This is the authority on "does this citation name a
+# test that runs", and the text scan below is not.
+#
+# Three reviews produced falsifiers against deciding that from source text, the third producing three at once:
+# a `#[test]` neutralised by `#[cfg(any())]`, a `#[test] fn` inside an uninvoked `macro_rules!` body, and a
+# definition inside a raw string — every one accepted with exit 0, none of them a test that runs. Enumerating
+# those sub-cases in a text scan is unbounded (cfg, cfg_attr, feature gates, a cfg-gated `mod`, comments,
+# strings, macros); the previous version of this gate declared one of them as a residual and three more arrived
+# in the next review.
+#
+# The enumeration was rejected TWICE in this file's own comments, on an unmeasured premise: that it needs a
+# compiled workspace while the failure matrix builds repositories holding one `lib.rs` and no manifest. A
+# throwaway repository can carry a six-line manifest, and it enumerates COLD in 107ms — the cost was estimated
+# from inside the code instead of measured, which is the failure `BACKLOG.md`'s own governance preamble warns
+# about, and it cost a wrong residual declaration that stood for one change.
+#
+# PER PACKAGE, not per workspace, because `--list` prints `module::path::name` with no crate label while a
+# citation may be crate-qualified. That is not theoretical here:
+# `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is registered in BOTH 渾儀 and 漏刻 and the register
+# cites the 渾儀 one, so a workspace-wide leaf match would let a citation qualified to a crate whose test had
+# been cfg-disabled be satisfied by the other crate's live test — the very hole this direction closes,
+# reintroduced by the shortcut. All six packages enumerate in 746ms warm.
+declare -A harness_packages_of=()
+harness_state=unknown
+build_harness_index() {
+    [[ $harness_state != unknown ]] && return 0
+    if [[ ! -f $repo/Cargo.toml ]]; then
+        harness_state=absent
+        # Said out loud. A gate that silently drops its strongest direction reports a weaker clean than the
+        # one it claims, and the failure matrix builds manifest-less repositories deliberately — most of this
+        # register's directions have nothing to do with Rust.
+        printf 'bound register: no root Cargo.toml — citation test-ness decided by the source-text fallback, not the test harness\n'
+        return 0
+    fi
+    # The packages are the directories under `crates/`, which is checkable and checked: `cargo metadata`'s
+    # JSON would need parsing, and a naive `grep '"name"'` over it collects target and dependency names too
+    # (26 strings where six packages exist). If a directory is not a package name, `cargo test -p` fails and
+    # this becomes `error` — loud, never a quiet skip.
+    local members member listed leaf
+    mapfile -t members < <(cd "$repo/crates" 2>/dev/null && find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+    if [[ ${#members[@]} -eq 0 ]]; then
+        harness_state=error
+        return 0
+    fi
+    for member in "${members[@]}"; do
+        listed=$(cd "$repo" && cargo test -p "$member" --all-features -- --list 2>/dev/null) || {
+            harness_state=error
+            return 0
+        }
+        while IFS= read -r leaf; do
+            [[ -n $leaf ]] || continue
+            harness_packages_of[$leaf]="${harness_packages_of[$leaf]:-,}$member,"
+        done < <(printf '%s\n' "$listed" | sed -n 's/: test$//p' | sed 's/.*:://' | sort -u)
+    done
+    harness_state=ready
+    printf 'bound register: citation test-ness decided by the test harness (%d registered test names across %d package(s))\n' \
+        "${#harness_packages_of[@]}" "${#members[@]}"
+}
+
+# Whether the harness registers this citation, honouring its crate qualifier when it carries one.
+harness_registers() {
+    local citation=$1
+    local qualifier=""
+    local leaf=$citation
+    case $citation in
+    *::*)
+        qualifier=${citation%%::*}
+        leaf=${citation##*::}
+        ;;
+    esac
+    local packages=${harness_packages_of[$leaf]:-}
+    [[ -n $packages ]] || return 1
+    [[ -z $qualifier ]] && return 0
+    [[ $packages == *",$qualifier,"* ]]
 }
 
 # Whether the definition at `file:line` is a TEST. Read from the ATTRIBUTE RUN above the definition rather
@@ -415,16 +495,34 @@ while IFS=$'\t' read -r kind file line a b c d; do
                 fail "$id ($file:$line) is PINNED-BY \`$name\`, which is not a citation this reaction can resolve; a name must be a Rust identifier and a crate qualifier a crate-directory name, with at most one \`::\` — otherwise a metacharacter resolves the citation to a differently-named function, or a path component resolves it outside crates/"
                 continue
             fi
+            build_harness_index
+            [[ $harness_state == error ]] \
+                && cannot_judge "the test harness could not be enumerated under $repo/crates — a citation's test-ness is undecided rather than weakly decided, so this gate refuses to judge instead of falling back"
+            if [[ $harness_state == ready ]] && ! harness_registers "$name"; then
+                fail "$id ($file:$line) is PINNED-BY \`$name\`, which the test harness does not register for that crate; a citation names what defends the bound, and a definition removed by a cfg, trapped in an uninvoked macro, or written inside a string or comment runs nothing"
+                continue
+            fi
             mapfile -t sites < <(definitions_of "$name")
             case ${#sites[@]} in
-            0) fail "$id ($file:$line) is PINNED-BY \`$name\`, which no function under crates/ defines; a renamed or deleted test must not read as coverage" ;;
+            0)
+                # With the harness authoritative, "registered but not located" is a DISAGREEMENT about a form,
+                # not about existence, so it is named as one. The scan requires `fn` and the name on one line;
+                # a definition split across lines was previously reported as an absent test.
+                if [[ $harness_state == ready ]]; then
+                    fail "$id ($file:$line) is PINNED-BY \`$name\`, which the harness registers but no line under crates/ matches the definition form; this scan requires \`fn\` and the name on one source line, so the site cannot be reported"
+                else
+                    fail "$id ($file:$line) is PINNED-BY \`$name\`, which no function under crates/ defines; a renamed or deleted test must not read as coverage"
+                fi
+                ;;
             1)
                 site_file=${sites[0]%%:*}
                 site_line=${sites[0]#*:}
                 site_line=${site_line%%:*}
+                # The attribute walk is the FALLBACK only. Where the harness answered, consulting it again
+                # would produce disagreement noise on shapes the enumeration already excludes.
                 # Reported repo-relative, so the site is readable in a fixture run and copy-pasteable in a
                 # real one; the grep that found it had to be absolute.
-                definition_is_test "$site_file" "$site_line" \
+                [[ $harness_state == ready ]] || definition_is_test "$site_file" "$site_line" \
                     || fail "$id ($file:$line) is PINNED-BY \`$name\`, whose only definition at ${site_file#"$repo"/}:$site_line carries no \`#[test]\` in the attribute run above it; a function that never runs as a test defends nothing while occupying the place of the defence"
                 ;;
             *)
@@ -543,11 +641,11 @@ render_projection() {
         '`dyn` and `impl Trait`, each defended by its own test, and each must declare its own — so nothing' \
         'observes it and no bound of the register capability claims it.' \
         '' \
-        'The third floor is narrower, and worth knowing when reading a `pinned by` line. A citation resolves' \
-        "by matching a LINE'S FORM, not its comment state, so a function definition that sits inside a block" \
-        'comment satisfies one. Telling it from a real definition needs a Rust lexer: this tree carries 49' \
-        '`/*` occurrences inside string literals, several nested, so a delimiter-counting scan would swallow' \
-        'real code instead. A fixture records the behaviour so a later repair cannot be absorbed silently.' \
+        'A third floor was stated here for one change and is **retired**: a `pinned by` line could be satisfied' \
+        'by a definition that never ran — commented out, inside a string, removed by a `cfg`, or trapped in an' \
+        'uninvoked macro — because the scan read only the form of a line. Test-ness is now decided by the test' \
+        'harness enumeration, which registers none of those. The weakness survives only in the source-text' \
+        'fallback used where no manifest exists, which the register spec describes.' \
         ''
     local last=''
     while IFS=$'\t' read -r kind file line heading pinned unpinned statement; do

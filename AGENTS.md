@@ -276,7 +276,13 @@ bash scripts/test_bound_register.sh     # prove every refusal of the observation
                                            # subject is absence can refuse nothing and still read as protection
 bash scripts/check_bound_register.sh    # every declared observation bound names the test that defends it or the
                                            # tracker that owns closing it, every bound stated in prose is declared,
-                                           # and docs/observation-bounds.md matches the specs
+                                           # and docs/observation-bounds.md matches the specs. These two lines sit
+                                           # AFTER cargo test deliberately: whether a citation names a test that
+                                           # RUNS is decided by the harness's own enumeration (cargo test -p … --
+                                           # --list), because three reviews defeated deciding it from source text
+                                           # (a cfg-removed #[test], an uninvoked macro body, a definition inside
+                                           # a string or comment). Run on a cold checkout they compile the
+                                           # workspace; run in this order the enumeration is warm (≈1s)
 bash scripts/test_examples.sh            # every dogfood example still reacts as declared
 ```
 
