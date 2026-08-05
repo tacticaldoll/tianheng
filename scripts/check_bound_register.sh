@@ -216,6 +216,38 @@ definitions_of() {
         "$root" --include='*.rs' 2>/dev/null || true
 }
 
+# Whether a citation is even well formed, checked BEFORE it is resolved. Two directions were silent passes
+# until this existed, both measured on a fixture rather than argued:
+#
+#   * The name is interpolated into the search pattern above, so a regular-expression metacharacter resolves a
+#     citation to a DIFFERENTLY NAMED function — `a_probe_bound_is_pinne.` found `a_probe_bound_is_pinned` and
+#     the gate reported clean. That defeats the renamed-or-deleted direction this whole gate was built for: a
+#     citation for a test that does not exist passed.
+#   * The crate qualifier is joined to a filesystem path, so `../outside::a_fn` resolved against a function
+#     OUTSIDE `crates/` — the boundary the requirement declares — and the gate reported clean.
+#
+# Validation rather than escaping, deliberately. Escaping `a_probe.` would make the gate search for a literal
+# dot, find nothing, and report "no function under crates/ defines it" — right exit code, wrong diagnosis,
+# since the citation is malformed and not stale. Validation names the actual defect, and the same rule on the
+# qualifier closes the traversal direction for free, a crate-directory name holding neither `/` nor `.`.
+#
+# Measured before it was written: all 36 cited names are plain Rust identifiers and every directory under
+# `crates/` is a plain name, so this refuses nothing that exists. A raw identifier (`r#type`) would be
+# refused; none is cited, and the refusal is loud.
+citation_is_well_formed() {
+    local citation=$1 qualifier name
+    case $citation in
+    *::*::*) return 1 ;;
+    *::*)
+        qualifier=${citation%%::*}
+        name=${citation##*::}
+        [[ $qualifier =~ ^[A-Za-z0-9_-]+$ ]] || return 1
+        ;;
+    *) name=$citation ;;
+    esac
+    [[ $name =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
+}
+
 # Whether the definition at `file:line` is a TEST. Read from the ATTRIBUTE RUN above the definition rather
 # than from the line before it: `#[test]` / `#[should_panic(…)]` / `fn` is a shape this tree already carries
 # in three places, so a single-line read would refuse a real test. That error direction matters — a refused
@@ -229,19 +261,52 @@ definitions_of() {
 # The walk stops at a line ending `{`, `}`, or `;` — the previous item's end — and at a BLANK line, so a
 # `#[test]` above one function can never be read as covering a plain function beneath it. Stopping at a blank
 # refuses `#[test]`, blank, `fn`: legal Rust nobody writes, and refusing it is loud where leaking an
-# attribute across items would be the silent false coverage this gate exists to refuse. Attributes and
-# comments are walked past; `// #[test]` is not, since the marking must be the attribute and not a mention.
+# attribute across items would be the silent false coverage this gate exists to refuse. Line comments are
+# walked past; `// #[test]` is not a marking, since it must be the attribute and not a mention.
+#
+# It also stops at a BLOCK-COMMENT DELIMITER, which is how `/*` `#[test]` `*/` `pub fn cited()` — a non-test
+# satisfying a citation with exit 0 — is refused. The delimiter is treated as a boundary and never
+# interpreted, because the two alternatives do not work here:
+#
+#   * Tracking comment state while walking UPWARD is impossible in principle. Whether a line sits inside a
+#     block comment is a property of everything BEFORE it, and this walk moves backwards with no knowledge of
+#     the file above.
+#   * Stripping comments needs to know which `/*` opens one and which is text inside a string literal, and
+#     this tree makes that concrete: 49 `/*` occurrences live INSIDE string literals, several of them nested,
+#     because louke's lexer and the lexical-conformance suite test exactly that
+#     (`crates/tianheng/tests/lexical_conformance.rs:72`, `crates/louke/src/audit/tests.rs:673`). A
+#     delimiter-counting stripper would open a phantom comment at the first of them and swallow every
+#     definition until the next `*/`, so the gate would begin refusing real citations here on its first run.
+#
+# Verified before adopting: no `#[test]` run in this tree contains a block comment, and none of the 36 cited
+# tests is affected. The error direction is loud — a run that genuinely contains one is refused, not accepted.
+#
+# There is NO line cap. A 12-line window was a backstop against walking to the top of a file, but the stop
+# conditions already are that boundary, so the cap only ever removed correct behaviour: a `#[test]` above 13
+# further attributes was refused, and no attribute-run length is declared anywhere. The preceding lines are
+# read once rather than one `sed` per line, which is also cheaper.
 #
 # `cargo test --list` would answer this exactly and was rejected: it needs a compiled workspace, and the
 # whole failure matrix is throwaway repositories holding one `lib.rs` and no manifest.
+#
+# Residual, stated because it cannot be closed by a text scan: the definition match reads a line's FORM, not
+# its comment state, so a whole definition inside a block comment satisfies a citation. Closing it needs the
+# same string-literal lexing rejected above. `docs/observation-bounds.md` states it where a register reader
+# sees it, and a fixture records the accepted behaviour so a later repair is not absorbed silently.
 definition_is_test() {
-    local file=$1 line=$2 window=12 n trimmed
-    for ((n = 1; n <= window; n++)); do
-        ((line - n >= 1)) || return 1
-        trimmed=$(sed -n "$((line - n))p" -- "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+    local file=$1 line=$2
+    local n=0 trimmed
+    local above=()
+    ((line > 1)) || return 1
+    mapfile -t above < <(sed -n "1,$((line - 1))p" -- "$file")
+    for ((n = ${#above[@]}; n >= 1; n--)); do
+        trimmed=${above[n - 1]}
+        trimmed=${trimmed#"${trimmed%%[![:space:]]*}"}
+        trimmed=${trimmed%"${trimmed##*[![:space:]]}"}
         case $trimmed in
         '#[test]'*) return 0 ;;
         '') return 1 ;;
+        *'/*'* | *'*/'*) return 1 ;;
         *'{' | *'}' | *';') return 1 ;;
         esac
     done
@@ -344,6 +409,12 @@ while IFS=$'\t' read -r kind file line a b c d; do
         fi
         while IFS= read -r name; do
             [[ -n $name ]] || continue
+            # Before resolution, never after: an ill-formed citation must be named as ill-formed rather than
+            # searched for and reported stale.
+            if ! citation_is_well_formed "$name"; then
+                fail "$id ($file:$line) is PINNED-BY \`$name\`, which is not a citation this reaction can resolve; a name must be a Rust identifier and a crate qualifier a crate-directory name, with at most one \`::\` — otherwise a metacharacter resolves the citation to a differently-named function, or a path component resolves it outside crates/"
+                continue
+            fi
             mapfile -t sites < <(definitions_of "$name")
             case ${#sites[@]} in
             0) fail "$id ($file:$line) is PINNED-BY \`$name\`, which no function under crates/ defines; a renamed or deleted test must not read as coverage" ;;
@@ -471,6 +542,12 @@ render_projection() {
         'shapes is a semantic judgment — two operand dimensions here declare identically-worded bounds over' \
         '`dyn` and `impl Trait`, each defended by its own test, and each must declare its own — so nothing' \
         'observes it and no bound of the register capability claims it.' \
+        '' \
+        'The third floor is narrower, and worth knowing when reading a `pinned by` line. A citation resolves' \
+        "by matching a LINE'S FORM, not its comment state, so a function definition that sits inside a block" \
+        'comment satisfies one. Telling it from a real definition needs a Rust lexer: this tree carries 49' \
+        '`/*` occurrences inside string literals, several nested, so a delimiter-counting scan would swallow' \
+        'real code instead. A fixture records the behaviour so a later repair cannot be absorbed silently.' \
         ''
     local last=''
     while IFS=$'\t' read -r kind file line heading pinned unpinned statement; do

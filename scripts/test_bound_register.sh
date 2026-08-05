@@ -180,6 +180,71 @@ pub fn a_probe_bound_is_pinned() {}
 ')
 expect_fail "$commented_attribute" 1 'carries no `#[test]` in the attribute run above it'
 
+# And the same in a BLOCK comment, which the line-comment rule above does not reach: the walk stops at the
+# delimiter rather than reading commented text as an attribute. It cannot strip or track comments — comment
+# state is a forward property an upward walk cannot know, and stripping needs string-literal lexing, which
+# this tree's 49 in-string `/*` occurrences would defeat.
+block_commented_attribute=$(new_repo block-commented-attribute "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '/*
+#[test]
+*/
+pub fn a_probe_bound_is_pinned() {}
+')
+expect_fail "$block_commented_attribute" 1 'carries no `#[test]` in the attribute run above it'
+
+# The walk has no line cap: the stop conditions are the boundary, so a run longer than any window still
+# resolves. A 12-line cap refused this exact shape.
+long_attribute_run=$(new_repo long-attribute-run "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '#[test]
+#[allow(clippy::assertions_on_constants)] // 1
+#[allow(clippy::assertions_on_constants)] // 2
+#[allow(clippy::assertions_on_constants)] // 3
+#[allow(clippy::assertions_on_constants)] // 4
+#[allow(clippy::assertions_on_constants)] // 5
+#[allow(clippy::assertions_on_constants)] // 6
+#[allow(clippy::assertions_on_constants)] // 7
+#[allow(clippy::assertions_on_constants)] // 8
+#[allow(clippy::assertions_on_constants)] // 9
+#[allow(clippy::assertions_on_constants)] // 10
+#[allow(clippy::assertions_on_constants)] // 11
+#[allow(clippy::assertions_on_constants)] // 12
+#[allow(clippy::assertions_on_constants)] // 13
+fn a_probe_bound_is_pinned() {}
+')
+expect_pass "$long_attribute_run" 'bound register ok (1 declared bounds'
+
+# --- the citation must be well formed before it is resolved ---
+
+# The cited name is interpolated into the search pattern, so a metacharacter resolved a citation for a test
+# that does not exist to a differently-named function — defeating the renamed-or-deleted direction this gate
+# was built for. Validated rather than escaped: escaping would report the citation stale when it is malformed.
+metacharacter_name=$(new_repo metacharacter-name "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinne.`')")
+expect_fail "$metacharacter_name" 1 'which is not a citation this reaction can resolve'
+
+# The crate qualifier is joined to a filesystem path, so a traversal resolved a citation against a function
+# outside the `crates/` boundary this reaction declares.
+traversing_qualifier=$(new_repo traversing-qualifier "$(spec_with '- **PINNED-BY** `../outside::a_probe_bound_is_pinned`')")
+expect_fail "$traversing_qualifier" 1 'which is not a citation this reaction can resolve'
+
+# One `::` disambiguates a crate; a second names something this reaction does not resolve, so it is refused
+# rather than silently read as a crate plus a leftover.
+nested_qualifier=$(new_repo nested-qualifier "$(spec_with '- **PINNED-BY** `probe::inner::a_probe_bound_is_pinned`')")
+expect_fail "$nested_qualifier" 1 'which is not a citation this reaction can resolve'
+
+# --- the stated residual of matching a line's form ---
+
+# A whole definition inside a block comment satisfies a citation. This fixture RECORDS that accepted residual
+# rather than endorsing it: closing it needs the string-literal lexing the walk's comment rule rejects, and
+# `docs/observation-bounds.md` states it as the register's third floor. If a later change closes it, this
+# fixture fails, which is the point — the residual cannot be repaired silently.
+commented_definition=$(new_repo commented-definition "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \
+    '/*
+#[test]
+fn a_probe_bound_is_pinned() {}
+*/
+')
+expect_pass "$commented_definition" 'bound register ok (1 declared bounds'
+
 # A citation must not be satisfiable by a MENTION. Without the definition-form match, a doc comment naming
 # the test would read as coverage — the exact silent pass the register opposes.
 mention_only=$(new_repo mention-only "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" \

@@ -23,6 +23,12 @@ shapes is a semantic judgment — two operand dimensions here declare identicall
 `dyn` and `impl Trait`, each defended by its own test, and each must declare its own — so nothing
 observes it and no bound of the register capability claims it.
 
+The third floor is narrower, and worth knowing when reading a `pinned by` line. A citation resolves
+by matching a LINE'S FORM, not its comment state, so a function definition that sits inside a block
+comment satisfies one. Telling it from a real definition needs a Rust lexer: this tree carries 49
+`/*` occurrences inside string literals, several nested, so a delimiter-counting scan would swallow
+real code instead. A fixture records the behaviour so a later repair cannot be absorbed silently.
+
 
 ## crate-source-boundary
 
