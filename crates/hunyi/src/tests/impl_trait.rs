@@ -160,6 +160,33 @@ pub(super) fn impl_trait_operand_mod(
     )
 }
 
+/// Symmetric with `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`: a bare single-segment
+/// principal that is neither in scope nor a declared or sysroot crate stays dropped.
+///
+/// Kept for the CONTRACT rather than for a change. `semantic-impl-trait-operand-boundary` declares this
+/// bound in wording near-identical to its dyn twin, and only the dyn one was pinned — the scenario was
+/// copied when this capability was added as the depth stair's sibling, and its test was not. The shared
+/// resolver made borrowing the dyn test tempting and wrong: it exercises the dyn path, so it would have
+/// reported this surface as defended without ever touching it.
+#[test]
+pub(super) fn impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound() {
+    let out = impl_trait_operand_findings(
+        "op-unresolvable-bare-impl",
+        &[
+            ("lib.rs", "pub mod m;\n"),
+            ("m.rs", "pub fn f() -> impl Frobnicate { todo!() }\n"),
+        ],
+        "crate::m",
+        &["Frobnicate"],
+        &[],
+    )
+    .unwrap();
+    assert!(
+        out.is_empty(),
+        "unresolvable bare principal must stay a bound: {out:?}"
+    );
+}
+
 #[test]
 pub(super) fn impl_trait_operand_flags_a_named_trait_and_passes_others() {
     assert_eq!(

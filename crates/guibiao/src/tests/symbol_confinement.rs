@@ -8,6 +8,53 @@ pub(super) fn confine_core_clock() -> ModuleBoundary {
         .because("core reads no wall clock — time is injected, not read")
 }
 
+/// A foreign crate's re-export of the confined path is NOT observed — the stated bound, with its
+/// control beside it so the assertion is discriminating rather than vacuous.
+///
+/// Kept for the CONTRACT rather than for a change: `inline-symbol-path-confinement` declares this bound
+/// ("foreign AST is not scanned") and nothing pinned it, so a regression that started following a foreign
+/// re-export — or a rewording that quietly widened the claim — had no reaction to trip. The control
+/// direction is what makes the empty case mean something: the same call written through the confined
+/// prefix reacts in the same fixture shape.
+#[test]
+pub(super) fn inline_foreign_reexport_of_the_confined_path_is_a_bound() {
+    // The bound: reached through the foreign crate's own path, with that crate declared.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-foreign-reexport",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = shim::SystemTime::now(); }\n",
+            ),
+        ],
+        &[("shim", None)],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a foreign re-export of the confined path is a stated bound, not a reaction: {violations:?}"
+    );
+
+    // The control: the identical call written through the confined prefix reacts, so the empty result
+    // above is about the foreign path rather than about the fixture failing to be observed at all.
+    let (result, violations) = run_module_check_with_deps(
+        "inline-foreign-reexport-control",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        &[("shim", None)],
+        confine_core_clock(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(violations.len(), 1, "control must react: {violations:?}");
+}
+
 /// A `#[path]`-remapped child of the confined module is observed, in both attribute forms.
 ///
 /// Kept for the CONTRACT rather than for a change: the behaviour is already correct, and this pins it
