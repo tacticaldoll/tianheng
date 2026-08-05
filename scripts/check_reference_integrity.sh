@@ -96,6 +96,12 @@ LINK_MARK=$(printf '\001')
 # nowhere, so a reference to it becomes unjudgeable rather than wrong. Asserting the documents
 # themselves exist turns that silence into a loud failure. A required set is safe to write down where
 # an allowlist is not: this one fails the moment it goes stale, so it cannot quietly excuse anything.
+#
+# Overridable from the environment for ONE caller: the companion failure matrix, whose fixture
+# repositories carry a governance surface that is not this one and would otherwise fail every case on
+# the absence of documents they never had. CI and the Definition of Done never set it, so the set they
+# judge is the literal below — the override widens which repository can be judged, never what this one
+# must carry.
 GOVERNANCE_DOCUMENTS="${GOVERNANCE_DOCUMENTS:-AGENTS.md AGENTS.self-law.md BACKLOG.md CHANGELOG.md COOKBOOK.md PROJECT.md README.md Cargo.toml deny.toml}"
 
 # Every tracked path, plus each of their ancestor directories — a directory is not itself a git object,
@@ -224,6 +230,22 @@ while IFS= read -r file; do
     exit 2
   fi
 
+  # Normalized and captured BEFORE the loop, for the reason the `grep` above is: a pipeline inside a
+  # process substitution reports nothing to the parent. `set -o pipefail` covers a pipeline this shell
+  # runs, not one running in a subshell whose status no one reads — so a failing `sed` or `sort` there
+  # produced an empty stream, the loop body never ran, every reference in the file went unexamined, and
+  # the run continued toward exit 0. This gate's own premise forbids that: a file counted as inspected
+  # must have been read. Captured here, the failure is a refusal to judge like every other undecidable.
+  extraction_status=0
+  extracted=$(printf '%s\n' "$matches" |
+    sed -E "s#^\]\((.*)\)\$#${LINK_MARK}\1#; s/^[^${LINK_MARK}A-Za-z0-9_.]+//; s/[.,)\`]+\$//; s/#.*\$//" |
+    sort -u) || extraction_status=$?
+  if [ "$extraction_status" -ne 0 ]; then
+    echo "cannot judge: could not normalize the references extracted from '$file'" >&2
+    echo "(sed/sort exit $extraction_status) — a file counted as inspected must have been read" >&2
+    exit 2
+  fi
+
   # Trailing `.`/`,`/`)`/`` ` `` are prose punctuation, not part of the path. A reference containing a
   # glob is a pattern rather than a location and is not resolvable by existence.
   while IFS= read -r reference; do
@@ -304,9 +326,9 @@ while IFS= read -r file; do
       offenses=$((offenses + 1))
       echo "$file: references '$reference', which is not tracked in this repository"
     fi
-  done < <(printf '%s\n' "$matches" |
-    sed -E "s#^\]\((.*)\)\$#${LINK_MARK}\1#; s/^[^${LINK_MARK}A-Za-z0-9_.]+//; s/[.,)\`]+\$//; s/#.*\$//" |
-    sort -u)
+  done <<REFERENCES
+$extracted
+REFERENCES
 done < <(git ls-files '*.md' '*.rs')
 
 if [ "$inspected" -eq 0 ]; then
