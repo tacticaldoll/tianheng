@@ -82,6 +82,28 @@ them.
   dismissing it as governed policy.
 
 ### Changed
+- **The test harness now decides whether a bound-register citation names a test that runs**, replacing a
+  source-text judgment that three reviews defeated. A `#[test]` neutralised by `#[cfg(any())]`, a `#[test] fn`
+  inside an uninvoked `macro_rules!` body, and a definition inside a raw string or a block comment were all
+  accepted; none of them registers a test. Enumeration is per package (`cargo test -p <pkg> -- --list`),
+  because `--list` carries no crate label and this repository already has one test name registered in two
+  crates — a workspace-wide match would let a citation qualified to a crate whose test was disabled be
+  satisfied by the other crate's live test. The text scan keeps the two jobs the enumeration cannot do, the
+  definition **site** and the duplicate direction, and remains a declared fallback where no manifest exists,
+  printing which direction decided so a clean result names its own strength. An enumeration that cannot be
+  produced at all is now *cannot judge* rather than a quiet fallback. **The register's two gate lines now
+  depend on a built workspace** and are documented to run after `cargo test`; CI's step moved accordingly, so
+  the enumeration is warm (≈1s) rather than a duplicate compile.
+- The **third floor stated in `docs/observation-bounds.md` one release-window change ago is retired**: a
+  `pinned by` line could be satisfied by a definition that never ran. It was declared a residual because the
+  harness enumeration had been rejected twice on an unmeasured premise — that a throwaway fixture repository
+  could not carry a manifest. Measured, such a crate enumerates cold in 107ms. The weakness survives only in
+  the source-text fallback, which the spec describes, and `BACKLOG.md`'s entry about a shell-gated capability
+  being unable to pin its own bound is demoted to WATCH with the measurement that dissolved its instance.
+- A citation may name a **raw identifier** (`r#name`), which is a Rust identifier the register had refused; the
+  contract is narrowed to ASCII identifiers with the reason stated rather than implied. A citation the harness
+  registers but the definition scan cannot locate now reports the **line shape** the scan requires — `fn` and
+  the name on one line — instead of reporting the test absent.
 - A bound-register citation is now **validated before it is resolved**, closing two ways it could resolve to
   something other than the test it names. The cited name is interpolated into the search pattern, so a
   regular-expression metacharacter resolved a citation for a test that does not exist to a differently-named
