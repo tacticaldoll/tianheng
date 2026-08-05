@@ -1,13 +1,13 @@
 ## 1. Measure the scope before writing anything
 
-- [ ] 1.1 Enumerate every bound-declaring occurrence in `openspec/specs/*`, recording file, requirement,
+- [x] 1.1 Enumerate every bound-declaring occurrence in `openspec/specs/*`, recording file, requirement,
       and the sentence, so the register's size is measured rather than assumed (the 43-occurrence figure
       is a grep count, not a count of distinct bounds)
-- [ ] 1.2 For each occurrence, identify whether a test pins it and by what name, recording the ones with
+- [x] 1.2 For each occurrence, identify whether a test pins it and by what name, recording the ones with
       no pinning test separately — that list is the register's opening unpinned set and the audit backlog
-- [ ] 1.3 Settle the prose pattern the floor scans for, derived from the occurrences actually found rather
+- [x] 1.3 Settle the prose pattern the floor scans for, derived from the occurrences actually found rather
       than guessed, and record which occurrences it matches and which it would miss
-- [ ] 1.4 Resolve the design's first open question against the enumerated set: whether a bound shared by
+- [x] 1.4 Resolve the design's first open question against the enumerated set: whether a bound shared by
       two capabilities is registered once or twice
 
 ## 2. Build the reaction before registering anything
