@@ -496,7 +496,10 @@ pub(super) fn same_module_bare_trait_resolves_without_use() {
         "op-same-module-bare-trait",
         &[
             ("lib.rs", "pub mod m;\n"),
-            ("m.rs", "pub trait Frobnicate {}\npub fn f() -> Box<dyn Frobnicate> { todo!() }\n"),
+            (
+                "m.rs",
+                "pub trait Frobnicate {}\npub fn f() -> Box<dyn Frobnicate> { todo!() }\n",
+            ),
         ],
         "crate::m",
         &["crate::m::Frobnicate"],
