@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**8 of 41 declared bounds have no pinning test.** That figure is the register's
+**5 of 41 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -147,13 +147,13 @@ trusted.
 
 > the system does not claim to observe it (the universal 渾儀 macro-expansion bound), rather than silently asserting the boundary is clean
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
+- **pinned by**: `a_macro_generated_dyn_is_a_documented_coverage_bound`
 
 ### `semantic-dyn-trait-boundary/an-unrenderable-sub-node-is-a-stated-rendering-bound`
 
 > the system does not claim to distinguish them: they share a canonical `subject` field and key at the same seam (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated subject-rendering bound** — the same `(target, rule_key, fact)` granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` fact carries — declared here, never a silent claim of cleanliness
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
+- **unpinned**, tracked by: BACKLOG.md READY-PATCH "declared bounds with no pinning test"
 
 ## semantic-dyn-trait-operand-boundary
 
@@ -256,7 +256,7 @@ trusted.
 
 > the system does not claim to observe it (inherited glob bound), rather than silently asserting the boundary is clean
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
+- **pinned by**: `a_glob_imported_type_in_an_impl_position_is_a_documented_coverage_bound`
 
 ## semantic-trait-impl-locality
 
@@ -292,4 +292,4 @@ trusted.
 
 > the system MAY react (the conservative `Crate` rank exceeds the `Module` ceiling), a stated over-reaction bound, never a silent pass
 
-- **unpinned**, tracked by: BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
+- **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`

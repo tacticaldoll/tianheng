@@ -146,7 +146,7 @@ sibling declaration for the same name. No *new* essential gap is introduced by t
 
 - **WHEN** a macro invoked in the governed module expands to a public signature containing `dyn`, while the call site writes no `dyn` token
 - **THEN** the system does not claim to observe it (the universal 渾儀 macro-expansion bound), rather than silently asserting the boundary is clean
-- **UNPINNED** BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
+- **PINNED-BY** `a_macro_generated_dyn_is_a_documented_coverage_bound`
 
 #### Scenario: A resolvable exposed dyn is never silently passed
 
@@ -167,7 +167,7 @@ sibling declaration for the same name. No *new* essential gap is introduced by t
 
 - **WHEN** two trait objects differ only inside a sub-node that cannot be rendered without macro expansion, token printing, or edit-unstable spans — a complex const-generic *expression* (`dyn Foo<{ N + 1 }>`), a same-named macro with different arguments (`dyn Foo<m!(1)>` vs `dyn Foo<m!(2)>`), a `verbatim` type, or a distinction carried only by a **lifetime** (a reference lifetime or an HRTB `for<'a>` binder, which carry no architectural intent and are not rendered)
 - **THEN** the system does not claim to distinguish them: they share a canonical `subject` field and key at the same seam (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated subject-rendering bound** — the same `(target, rule_key, fact)` granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` fact carries — declared here, never a silent claim of cleanliness
-- **UNPINNED** BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
+- **UNPINNED** BACKLOG.md READY-PATCH "declared bounds with no pinning test"
 
 #### Scenario: A dyn reached only through a cfg_attr-wrapped-path module reacts
 

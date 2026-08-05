@@ -128,7 +128,7 @@ Within the observed scope there SHALL be no false negative: an item whose declar
 
 - **WHEN** the governed module has ceiling `Module` and declares `pub(in crate::a) fn helper()` where the item is itself directly in `crate::a` (effectively private)
 - **THEN** the system MAY react (the conservative `Crate` rank exceeds the `Module` ceiling), a stated over-reaction bound, never a silent pass
-- **UNPINNED** BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
+- **PINNED-BY** `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
 #### Scenario: An observed above-ceiling item is never silently passed
 
