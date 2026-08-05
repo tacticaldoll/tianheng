@@ -8,6 +8,58 @@ pub(super) fn confine_core_clock() -> ModuleBoundary {
         .because("core reads no wall clock — time is injected, not read")
 }
 
+/// A read verb outside the declared set is not observed — the bound the adopter owns by narrowing.
+///
+/// Kept for the CONTRACT rather than for a change: `inline-symbol-path-confinement` declares that a
+/// boundary narrowed with `.ending_with([…])` does not react to a verb outside that set, and nothing pinned
+/// it. Measured before the assertion was written, with the declared verb beside it as the control, so the
+/// empty result is about the narrowing rather than about a fixture that reacts to nothing.
+#[test]
+pub(super) fn inline_a_verb_outside_the_declared_set_is_a_bound() {
+    let narrowed = || {
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::time")
+            .ending_with(["now"])
+            .because("core reads no wall clock — time is injected, not read")
+    };
+
+    let (result, violations) = run_module_check(
+        "inline-verb-outside",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = std::time::SystemTime::current(); }\n",
+            ),
+        ],
+        narrowed(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        violations.is_empty(),
+        "a verb outside the declared set is a bound the adopter owns: {violations:?}"
+    );
+
+    let (result, violations) = run_module_check(
+        "inline-verb-declared",
+        &[
+            ("lib.rs", "pub mod core;\n"),
+            (
+                "core.rs",
+                "fn stamp() { let _ = std::time::SystemTime::now(); }\n",
+            ),
+        ],
+        narrowed(),
+    );
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(
+        violations.len(),
+        1,
+        "the declared verb must react: {violations:?}"
+    );
+}
+
 /// A foreign crate's re-export of the confined path is NOT observed — the stated bound, with its
 /// control beside it so the assertion is discriminating rather than vacuous.
 ///

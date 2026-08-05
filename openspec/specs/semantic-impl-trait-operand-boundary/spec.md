@@ -93,6 +93,7 @@ Trait` and `async fn` are not governed). A mutually-exclusive `#[cfg]` collision
 
 - **WHEN** the module returns `impl Frobnicate` where `Frobnicate` has no `use`, is not a declared dependency or sysroot crate, and is not a local trait resolvable in scope, under any operand set
 - **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound, never a silent claim over a resolvable operand
+- **PINNED-BY** `impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
 #### Scenario: Two mutually-exclusive cfg-gated use aliases for the principal trait's name both react
 

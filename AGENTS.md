@@ -14,6 +14,12 @@ in imitable form) → the relevant `openspec/specs/*` (the capability you are to
 `PROJECT.md` and this file stay short on purpose; the law's per-boundary detail lives in the
 generated projection, and requirement detail in the specs — read those, do not inflate these.
 
+Where the law stops is written down too: [`docs/observation-bounds.md`](docs/observation-bounds.md)
+projects every **observation bound** — each claim that a reaction deliberately stops at a named shape —
+with the test that defends it, or the tracker that owns closing the gap. Read it before reporting a
+behaviour as a defect: a declared bound means the shape is governed policy, and the projection leads with
+the count of bounds nothing yet defends.
+
 1. **Before changing code — read the declared law.** `tianheng list --format markdown`
    (or `--format json`) projects the whole constitution: every boundary's target, what it
    forbids or restricts, and its declared reason. Read it so you know the architectural
@@ -266,6 +272,11 @@ bash scripts/test_publish_source.sh     # prove the publish-source gate refuses 
                                            # matrix is: 0.4.0's six tarballs recorded the release branch's
                                            # tip instead of main's tagged release commit, and that stamp
                                            # can never be re-uploaded
+bash scripts/test_bound_register.sh     # prove every refusal of the observation-bound register: a gate whose
+                                           # subject is absence can refuse nothing and still read as protection
+bash scripts/check_bound_register.sh    # every declared observation bound names the test that defends it or the
+                                           # tracker that owns closing it, every bound stated in prose is declared,
+                                           # and docs/observation-bounds.md matches the specs
 bash scripts/test_examples.sh            # every dogfood example still reacts as declared
 ```
 

@@ -108,6 +108,7 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 
 - **WHEN** a hand-impl's self-type is brought in by a glob import (`use crate::domain::*; impl serde::Serialize for Order`) so the scan cannot resolve `Order` to its definition
 - **THEN** the system does not claim to observe it (a stated coverage bound), rather than silently asserting cleanliness — the co-located, `use`-imported, re-export-spelled, and type-alias cases (the common ones) do resolve and react
+- **PINNED-BY** `an_unresolvable_glob_self_type_is_a_documented_bound`
 
 #### Scenario: A blanket impl's own generic parameter is never resolved through a same-named alias
 
@@ -180,3 +181,6 @@ The system SHALL observe the hand-`impl T for X` acquisition form when the `impl
 
 - **WHEN** the hand-impl is written one level further inside the body (inside an `if`/`loop`/closure/nested `fn`), or the wrapping binding is a `static` rather than a `const`
 - **THEN** the system does not claim to observe it, a stated coverage bound shared with `semantic-trait-impl-locality`'s identical bound on the same underlying observation, rather than a silent claim of cleanliness
+
+- **PINNED-BY** `an_impl_nested_one_level_further_stays_a_stated_bound`
+- **PINNED-BY** `a_static_wrapped_impl_stays_a_stated_bound`

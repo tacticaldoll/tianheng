@@ -177,6 +177,7 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 
 - **WHEN** an `impl Command for Foo` is produced by a macro expansion in a disallowed module
 - **THEN** the system does not claim to observe it (out of scope, the same nature as the existing macro bound), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_macro_generated_impl_is_a_documented_bound`
 
 #### Scenario: An unconditional #[path]-remapped module is followed and its disallowed impl reacts
 
@@ -198,10 +199,11 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 - **WHEN** a disallowed module declares a blanket `impl<T> Trait for T {}` (`T` is the impl's own generic parameter) alongside an unrelated `use SomeType as T;` naming a real crate-defined type, AND a genuine direct `impl Trait for SomeType {}` in that same module
 - **THEN** the system reports TWO distinct violations, not one — the blanket impl's own `T` is never resolved through the same-named alias to produce an owner identical to the direct impl's, which would otherwise let the two impl sites' findings collapse under exact-identity dedup and silently drop one genuine violation
 
-#### Scenario: A cfg-gated module with an absent file is skipped, not a scan error
+#### Scenario: A cfg-gated module with an absent file is skipped, not a scan error — a stated coverage bound
 
 - **WHEN** the crate declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off)
 - **THEN** the whole-crate walk skips the module (a stated coverage bound) rather than failing the gate with a scan error (exit 2)
+- **PINNED-BY** `hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`
 
 #### Scenario: A resolvable disallowed impl is never silently passed
 
@@ -288,8 +290,11 @@ The system SHALL observe a trait `impl` block that is written as a direct statem
 
 - **WHEN** a disallowed module declares `fn _also() { if true { impl Command for Foo { fn run(&self) {} } } }`
 - **THEN** the system does not claim to observe it — recovery covers only a direct statement of the const/fn's own outermost block, and this impl is one level further in, a stated coverage bound rather than a silent claim of cleanliness
+- **PINNED-BY** `an_impl_nested_one_level_further_stays_a_stated_bound`
 
 #### Scenario: A static-wrapped impl is a stated bound
 
 - **WHEN** a disallowed module declares `static S: () = { impl Command for Foo { fn run(&self) {} } };`
 - **THEN** the system does not claim to observe it — only a `const` initializer or a `fn` body is inspected, never a `static` initializer, a stated coverage bound rather than a silent claim of cleanliness
+
+- **PINNED-BY** `a_static_wrapped_impl_stays_a_stated_bound`

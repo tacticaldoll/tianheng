@@ -87,6 +87,7 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 
 - **WHEN** the module exposes `dyn Frobnicate` where `Frobnicate` has no `use`, is not a declared dependency or sysroot crate, and is not a local trait resolvable in scope, under any operand set
 - **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound (the oracle does not over-reach a single bare segment), never a silent claim of cleanliness over a resolvable operand
+- **PINNED-BY** `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
 #### Scenario: Auto-trait markers are not operands
 

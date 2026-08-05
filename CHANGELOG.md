@@ -39,6 +39,16 @@ them.
   published crate's content. The eleven `0.1.x` releases point at commits the 2026-07-17 history
   rewrite dissolved, so whether they came from `main` is no longer knowable.
 
+### Added
+- `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
+  reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
+  closing the gap. 44 bounds across 15 capabilities, generated from the specs and staleness-checked, with
+  the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
+  reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
+  The list is a floor rather than a proof — a bound worded outside the scanned form is invisible to it, and
+  the projection says so where a reader will see it. Assembling it retired two bounds that had outlived
+  their behaviour and added six tests for bounds nothing had defended.
+
 ### Documentation
 - Two specs claimed that a `#[path]`-remapped module stays outside the scanner's observation, long after
   it stopped being true. `inline-symbol-path-confinement` carried it as a **declared bound** ("the system

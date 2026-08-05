@@ -39,7 +39,7 @@ a type annotation, a bare constant reference, or any non-call position SHALL NOT
 distinction is structural — the engine keys on the presence of a call application, never on a
 built-in notion of which verb is a "read". A forbidden path taken as a **value** rather than
 called (`let f = std::time::SystemTime::now; f()`) is a mention under the default and is covered
-only by `.strict_prefix_only()` — a stated bound (see "Observation bounds"), not a claim.
+only by `.strict_prefix_only()` — a stated bound (bound: inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default) (see "Observation bounds"), not a claim.
 
 #### Scenario: An associated-function call under the prefix reacts
 - **WHEN** `crate::core` contains `std::time::SystemTime::now()` and a boundary forbids inline calls under `std::time` on `crate::core`
@@ -158,6 +158,7 @@ narrowing. The engine MUST NOT bake a default verb set of its own.
 #### Scenario: A future read verb outside the declared set is a documented adopter-owned bound
 - **WHEN** a boundary is narrowed to `.ending_with(["now"])` and `crate::core` calls `std::time::SystemTime::current()` (hypothetical non-`now` read)
 - **THEN** the system does NOT react (a false negative the adopter owns by narrowing), rather than the engine silently guessing which verbs are reads
+- **PINNED-BY** `inline_a_verb_outside_the_declared_set_is_a_bound`
 
 ### Requirement: Strict escalation forbids non-call mentions
 
@@ -225,18 +226,22 @@ a stated bound. Each bound is a declared non-observation, not a silent pass on a
 #### Scenario: A receiver-method read is a documented bound
 - **WHEN** `crate::core` calls `some_instant.elapsed()` where `some_instant` is an `Instant` value received by injection
 - **THEN** the system does not claim to observe it (no type inference on the receiver) — a stated bound, not a silent assertion of cleanliness
+- **PINNED-BY** `inline_receiver_method_read_is_a_bound`
 
 #### Scenario: A path taken as a value is a documented bound under the default
 - **WHEN** `crate::core` writes `let f = std::time::SystemTime::now; f();` under a default (non-strict) confinement
 - **THEN** the system does not react (value-position mention is a stated bound under the default; `.strict_prefix_only()` catches it) — declared, not silent
+- **PINNED-BY** `inline_value_capture_is_a_bound_under_the_default`
 
 #### Scenario: An external-crate re-export is a documented bound
 - **WHEN** a foreign crate re-exports `std::time::SystemTime` and `crate::core` reaches it through that foreign path
 - **THEN** the system does not claim to observe it (foreign AST is not scanned) — a stated bound
+- **PINNED-BY** `inline_foreign_reexport_of_the_confined_path_is_a_bound`
 
-#### Scenario: An extern-crate rename remains a bound under strict-external
+#### Scenario: An extern-crate rename is a stated bound under strict-external
 - **WHEN** a boundary declares `.must_not_call_inline("chrono::Utc").strict_external()`, `crate::core` declares `extern crate chrono as chr;` then calls `chr::Utc::now()`
 - **THEN** the system does not claim to observe the call through the `chr` alias head (the use-map reads `use` only; the `extern crate … as` rename is a stated bound even under strict-external), never a silent assertion of cleanliness
+- **PINNED-BY** `inline_strict_external_extern_crate_rename_is_a_stated_bound`
 
 ### Requirement: Constitution errors are loud, never silent
 
@@ -345,6 +350,7 @@ confinement without the flag, so no existing constitution's reaction changes.
 #### Scenario: The fully-qualified external call is a stated bound under the default
 - **WHEN** the same `chrono::Utc::now()` call is governed by `.must_not_call_inline("chrono::Utc")` **without** `.strict_external()`
 - **THEN** the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default; behavior is unchanged from before this capability)
+- **PINNED-BY** `inline_strict_external_absent_fully_qualified_call_is_a_bound`
 
 #### Scenario: A deep local module named like a dependency stays local under strict-external
 - **WHEN** a boundary declares `.must_not_call_inline("time").strict_external()`, crate `app` depends on `time`, the governed subtree `crate::core` is **not** the crate root, and `crate::core` declares `mod time;` (a local child module) then calls `time::format()`

@@ -106,25 +106,27 @@ because a public type-alias target is part of the governed exposed surface. A pu
 that *names* such an alias SHALL NOT receive an additional reaction by expanding the alias:
 the shared `hunyi::resolve` resolver follows local `pub use` re-export chains but does
 **not** expand `type` alias definitions, so a `dyn` reached only by expanding a named alias
-is a **stated coverage bound**, not a claimed reaction. This is the same alias-resolution
+is a **stated coverage bound (bound: semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-coverage-bound)**, not a claimed reaction. This is the same alias-resolution
 bound `semantic-signature-coupling` carries — the dyn is still caught, at the public alias
 site rather than the use site; only a *private* alias used in a public position escapes
-both reactions, and that escape is the stated bound, never silently asserted clean.
+both reactions, and that escape is the stated bound (bound: semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-coverage-bound), never silently asserted clean.
 
 #### Scenario: A public alias whose target writes dyn is a violation
 
 - **WHEN** the governed module declares `pub type Handler = Box<dyn crate::Port>;`
 - **THEN** the system emits a violation at the alias item, because the public type-alias target exposes `dyn crate::Port`
 
-#### Scenario: A public item naming such an alias is not expanded
+#### Scenario: A public item naming such an alias is not expanded — a stated coverage bound
 
 - **WHEN** the governed module declares `pub type Handler = Box<dyn crate::Port>;` and `pub fn make() -> Handler`
 - **THEN** the system reacts at the alias declaration but emits **no additional** reaction for `make` via alias expansion — the `dyn` is already caught at the alias, and `type` aliases are not expanded (a stated bound)
+- **PINNED-BY** `a_private_alias_hiding_a_dyn_is_a_stated_bound`
 
 #### Scenario: A private alias hiding a dyn in a public position is a stated bound
 
 - **WHEN** the governed module declares a non-public `type Handler = Box<dyn crate::Port>;` and exposes `pub fn make() -> Handler`
 - **THEN** the system does not claim to observe the hidden `dyn` (a stated coverage bound — the resolver does not expand `type` aliases), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_private_alias_hiding_a_dyn_is_a_stated_bound`
 
 ### Requirement: Stated coverage bounds with no false negative
 
@@ -144,6 +146,7 @@ sibling declaration for the same name. No *new* essential gap is introduced by t
 
 - **WHEN** a macro invoked in the governed module expands to a public signature containing `dyn`, while the call site writes no `dyn` token
 - **THEN** the system does not claim to observe it (the universal 渾儀 macro-expansion bound), rather than silently asserting the boundary is clean
+- **UNPINNED** BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
 
 #### Scenario: A resolvable exposed dyn is never silently passed
 
@@ -164,6 +167,7 @@ sibling declaration for the same name. No *new* essential gap is introduced by t
 
 - **WHEN** two trait objects differ only inside a sub-node that cannot be rendered without macro expansion, token printing, or edit-unstable spans — a complex const-generic *expression* (`dyn Foo<{ N + 1 }>`), a same-named macro with different arguments (`dyn Foo<m!(1)>` vs `dyn Foo<m!(2)>`), a `verbatim` type, or a distinction carried only by a **lifetime** (a reference lifetime or an HRTB `for<'a>` binder, which carry no architectural intent and are not rendered)
 - **THEN** the system does not claim to distinguish them: they share a canonical `subject` field and key at the same seam (each still *reacts* on first occurrence; only baseline-dedup granularity is bounded). This is a **stated subject-rendering bound** — the same `(target, rule_key, fact)` granularity bound `semantic-trait-impl-locality`'s `(impl for <self_ty>)` fact carries — declared here, never a silent claim of cleanliness
+- **UNPINNED** BACKLOG.md READY-PATCH "three declared bounds have no pinning test"
 
 #### Scenario: A dyn reached only through a cfg_attr-wrapped-path module reacts
 
