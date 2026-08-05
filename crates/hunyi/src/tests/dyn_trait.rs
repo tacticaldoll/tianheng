@@ -101,6 +101,37 @@ pub(super) fn a_dyn_in_an_inherent_impl_generic_bound_is_observed() {
     );
 }
 
+/// A non-public `type` alias hiding a `dyn` in a public position is not observed — the stated bound, with
+/// its control beside it so the empty result is discriminating rather than vacuous.
+///
+/// Kept for the CONTRACT rather than for a change: `semantic-dyn-trait-boundary` declares this bound (the
+/// resolver does not expand `type` aliases) and nothing pinned it. Measured before it was written, so the
+/// assertion records behaviour rather than restating the spec: the aliased form yields no finding and the
+/// direct form yields one.
+#[test]
+pub(super) fn a_private_alias_hiding_a_dyn_is_a_stated_bound() {
+    let hidden = dyn_mod(
+        "alias-hidden-dyn",
+        "type Handler = Box<dyn crate::ports::Port>;\npub fn make() -> Handler { todo!() }\n",
+    )
+    .unwrap();
+    assert!(
+        hidden.is_empty(),
+        "a dyn behind a non-public type alias is a stated bound: {hidden:?}"
+    );
+
+    let direct = dyn_mod(
+        "alias-hidden-dyn-control",
+        "pub fn make() -> Box<dyn crate::ports::Port> { todo!() }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        direct,
+        ["dyn crate::ports::Port exposed by fn crate::m::make"],
+        "the control must react, or the empty result above says nothing"
+    );
+}
+
 #[test]
 pub(super) fn dyn_operand_flags_a_named_trait_and_passes_others() {
     // A dyn of the listed trait is flagged; a dyn of an unlisted trait passes.

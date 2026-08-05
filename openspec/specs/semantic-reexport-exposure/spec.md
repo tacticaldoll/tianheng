@@ -163,11 +163,13 @@ future cross-module-resolution capability, not a guess.
 
 - **WHEN** the governed module declares `pub use crate::elsewhere::*;` where `crate::elsewhere` transitively re-exports a `crate::infra` type, under `must_not_expose("crate::infra")`
 - **THEN** the system does not claim to observe the transitively re-exported leaf (the inherited glob bound — the glob's leaves are not enumerable here), rather than silently asserting the boundary is clean
+- **PINNED-BY** `sibling_root_glob_does_not_react`
 
 #### Scenario: An ancestor-root glob spanning a deeper forbidden prefix is a documented bound
 
 - **WHEN** the governed module declares `pub use crate::infra::*;` under `must_not_expose("crate::infra::db")` (the forbidden prefix is *deeper* than the glob root)
 - **THEN** the system treats it as a stated bound (it cannot enumerate whether `crate::infra` publicly re-exports the forbidden `db` subtree), documented as the sharper ancestor-root sub-case rather than lumped with the innocent sibling glob or silently claimed clean
+- **PINNED-BY** `ancestor_root_glob_over_a_deeper_forbidden_prefix_does_not_react`
 
 ### Requirement: External-crate re-exports are observed by default
 
@@ -425,6 +427,7 @@ follows inline `pub use` paths only) — an inherited stated bound, not a silent
 
 - **WHEN** `crate::facade` declares `use worklane_core::spi::Foo; pub use Foo;` (private import then bare re-export), re-exported onward by `crate::domain`, under `must_not_expose("worklane_core::spi")`
 - **THEN** the system does not follow that hop (the closure captures only inline `pub use` paths) and this is a documented inherited bound, not silently claimed clean
+- **PINNED-BY** `facade_hop_reexporting_a_privately_used_bare_name_is_a_stated_bound`
 
 ### Requirement: External resolution has stated residual bounds
 
@@ -464,6 +467,7 @@ AST + declared manifest:
 
 - **WHEN** the governed module declares `pub use worklane_core::spi::*;` under `must_not_expose("worklane_core::other")`
 - **THEN** the system does not claim to observe the glob's individual leaves, rather than silently asserting the boundary is clean
+- **PINNED-BY** `extern_glob_nonforbidden_root_is_a_stated_bound`
 
 #### Scenario: A forbidden-root external glob reacts on the root
 
@@ -474,6 +478,7 @@ AST + declared manifest:
 
 - **WHEN** the governed module declares `pub use worklane_core::prelude::Foo;` where the foreign `worklane_core::prelude` re-exports `worklane_core::spi::Foo`, under `must_not_expose("worklane_core::spi")`
 - **THEN** the system matches only the written path (`worklane_core::prelude::Foo`, not in/under the forbidden set) and does not silently claim to have followed the foreign chain
+- **PINNED-BY** `foreign_prelude_rename_is_a_stated_bound`
 
 #### Scenario: A crate-root extern-crate rename reached through a type alias resolves and reacts
 
@@ -489,6 +494,7 @@ AST + declared manifest:
 
 - **WHEN** the governed crate declares `extern crate worklane_core as wc;` **inside** a module `mod m { … }` (not at the crate root) and `m` declares `pub fn make() -> wc::spi::Foo`, under `must_not_expose("worklane_core::spi")`
 - **THEN** the system does not resolve `wc` to `worklane_core` (only crate-root renames are collected, since a module-scoped alias binds only locally) and this is a documented bound, distinct from the handled crate-root rename
+- **PINNED-BY** `module_scoped_extern_crate_rename_is_a_stated_bound`
 
 #### Scenario: A crate-root rename reached by its crate-relative spelling reacts
 

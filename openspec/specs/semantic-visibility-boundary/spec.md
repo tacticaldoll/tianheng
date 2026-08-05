@@ -117,6 +117,7 @@ Within the observed scope there SHALL be no false negative: an item whose declar
 
 - **WHEN** an item in the governed module is produced by a macro expansion
 - **THEN** the system does not claim to observe it (out of scope, the same nature as the dimension's existing macro bound), rather than silently asserting the module is clean
+- **PINNED-BY** `a_macro_invocation_pub_item_is_a_documented_bound`
 
 #### Scenario: A #[macro_export] macro is out of declared scope
 

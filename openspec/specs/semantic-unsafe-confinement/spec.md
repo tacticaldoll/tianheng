@@ -151,6 +151,7 @@ The system makes no claim about `unsafe` outside these observed sites.
 
 - **WHEN** an `unsafe` block is produced by a macro expansion in a module outside the allowed subtree
 - **THEN** the system does not claim to observe it (out of scope, the dimension's macro bound), rather than silently asserting the module is unsafe-free
+- **PINNED-BY** `unsafe_in_a_macro_body_is_a_stated_bound`
 
 ### Requirement: CI reaction
 

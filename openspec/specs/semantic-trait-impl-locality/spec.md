@@ -288,8 +288,11 @@ The system SHALL observe a trait `impl` block that is written as a direct statem
 
 - **WHEN** a disallowed module declares `fn _also() { if true { impl Command for Foo { fn run(&self) {} } } }`
 - **THEN** the system does not claim to observe it — recovery covers only a direct statement of the const/fn's own outermost block, and this impl is one level further in, a stated coverage bound rather than a silent claim of cleanliness
+- **PINNED-BY** `an_impl_nested_one_level_further_stays_a_stated_bound`
 
 #### Scenario: A static-wrapped impl is a stated bound
 
 - **WHEN** a disallowed module declares `static S: () = { impl Command for Foo { fn run(&self) {} } };`
 - **THEN** the system does not claim to observe it — only a `const` initializer or a `fn` body is inspected, never a `static` initializer, a stated coverage bound rather than a silent claim of cleanliness
+
+- **PINNED-BY** `a_static_wrapped_impl_stays_a_stated_bound`

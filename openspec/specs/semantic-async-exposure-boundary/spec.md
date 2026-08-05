@@ -128,6 +128,7 @@ bare boundary's projection stays byte-identical.
 
 - **WHEN** a subtree-scoped boundary descends a module containing `pub fn outer() { mod inner { pub async fn hidden() {} } }`
 - **THEN** the system does not observe `hidden` — a `mod` inside a fn body is not public API (not reachable as `crate::…`), a stated bound, never a silent claim about it
+- **PINNED-BY** `async_subtree_does_not_observe_a_body_nested_module`
 
 #### Scenario: The subtree opt-in projects in list output
 

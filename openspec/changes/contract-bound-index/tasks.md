@@ -34,7 +34,7 @@
 
 ## 3. Register the bounds
 
-- [ ] 3.1 Add a citation to every declared bound the gate reports without one, citing its pinning test
+- [x] 3.1 Add a citation to every declared bound the gate reports without one, citing its pinning test
       where one exists
 - [ ] 3.5 Triage the 22 prose occurrences the gate reports: declare each real bound as a bound-marked
       scenario, and give each genuine cross-reference a resolving `(bound: …)` reference — deciding per
@@ -43,7 +43,7 @@
       entries those references point at
 - [ ] 3.3 Register the register's own detection residual — that the floor covers recognizable wording
       only — as a bound of `observation-bound-register`, with its own pinning test
-- [ ] 3.4 Confirm `openspec validate --specs --strict` still passes over every touched spec
+- [x] 3.4 Confirm `openspec validate --specs --strict` still passes over every touched spec
 
 ## 4. Project the register
 

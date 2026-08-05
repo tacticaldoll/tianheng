@@ -582,6 +582,7 @@ The system SHALL observe the contents of a **transparent control-flow macro** ar
 
 - **WHEN** a governed module writes `impl Api { cfg_if! { if #[cfg(unix)] { pub fn leak() -> crate::forbidden::Thing { … } } } }` and a boundary forbids `crate::forbidden::Thing`
 - **THEN** the system reports no exposure — transparency covers item position, where an arm's contents are items; an `impl`-body invocation's arms are impl items, observed through different walkers, and that remains a declared gap rather than a claimed reaction
+- **PINNED-BY** `a_cfg_if_inside_an_impl_body_is_a_stated_bound`
 
 #### Scenario: A macro under another name is not treated as transparent
 
@@ -611,8 +612,12 @@ The system SHALL observe an inherent `impl` block that is written as a direct st
 
 - **WHEN** a governed module declares `const _: () = { pub fn also_hidden() -> crate::infra::Db { … } };` — a plain `pub fn`, not wrapped in an `impl`, directly inside the const's body
 - **THEN** the system reports no exposure — only an `impl` block is recovered from a body this way; a plain item nested the same way is genuinely scoped to that body and unreachable as `crate::…`, exactly like the existing body-nested-module bound, so it stays unobserved rather than a new, unaudited claim
+- **PINNED-BY** `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
 #### Scenario: An impl nested one level further, or static-wrapped, is a stated bound
 
 - **WHEN** the impl is written one level further inside the body (`fn _also() { if true { impl Svc { … } } }`), or the wrapping binding is a `static` rather than a `const`
 - **THEN** the system reports no exposure for that impl — a stated coverage bound rather than a silent claim of cleanliness
+
+- **PINNED-BY** `an_impl_nested_one_level_further_stays_a_stated_bound`
+- **PINNED-BY** `a_static_wrapped_impl_stays_a_stated_bound`

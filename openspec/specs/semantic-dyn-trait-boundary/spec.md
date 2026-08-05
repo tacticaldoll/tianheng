@@ -125,6 +125,7 @@ both reactions, and that escape is the stated bound, never silently asserted cle
 
 - **WHEN** the governed module declares a non-public `type Handler = Box<dyn crate::Port>;` and exposes `pub fn make() -> Handler`
 - **THEN** the system does not claim to observe the hidden `dyn` (a stated coverage bound — the resolver does not expand `type` aliases), rather than silently asserting the boundary is clean
+- **PINNED-BY** `a_private_alias_hiding_a_dyn_is_a_stated_bound`
 
 ### Requirement: Stated coverage bounds with no false negative
 
