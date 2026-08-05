@@ -247,4 +247,18 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **Unsafe-site identity is structurally decomposed, not compressed into one label.** 渾儀's unsafe-confinement fact carries owner, owner kind, trait, and name as separate structured fields across nine site shapes (free fn, inherent/trait/trait-impl method, inherent/trait impl, trait, extern block, block), so two distinct sites sharing a name never collapse under one baseline entry.
 - **Async identity is the seam, not the rendered signature.** An async-exposure fact's identity is its module, owner kind, canonical owner, and item name; the full parameter/return signature is human diagnostic presentation only and never enters identity — a signature-only change preserves the baseline, while a different owner or name is a new fact.
 - **Rule construction is builder-owned; inspection stays open-ended.** Data-carrying `Rule`/`ModuleRule` variants are `#[non_exhaustive]`.
+- **Governance is driven by an audit cycle against an enumerated surface, not by invented hypotheses.**
+  A sweep that invents its own scope cannot be dry, only tired: it reports the shapes someone happened to
+  think of, and "the audit was thorough" is then unfalsifiable. So the standing direction is to enumerate a
+  claim surface, react over it, and audit against that enumeration. `observation-bound-register` is the
+  first instance and the proof of the shape — assembling it retired two bounds that had outlived their
+  behaviour and added six tests for bounds nothing defended, after twenty pull requests, ten review rounds
+  and a three-slice hypothesis-driven sweep had missed all eight. The same three-part test applies to any
+  future instance: the surface must be enumerable, the enumeration must be **generated and
+  staleness-checked** rather than hand-maintained, and the projection must state what it does not claim.
+  A register that implied completeness would mislead exactly where it is most trusted. Larger surfaces are
+  named but not committed to — 804 SHALL statements and 1020 scenarios are a multi-window program, and
+  promoting one is a `BACKLOG.md` decision with its own trigger, never an assumption inherited from this
+  first success.
+
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.

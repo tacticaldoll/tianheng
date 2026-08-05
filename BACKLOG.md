@@ -80,6 +80,21 @@ consumer for an undemonstrated deduplication.
   a false claim a green guard. Version class: PATCH. Authority: the eight `UNPINNED` citations, and
   `PROJECT.md`'s drift law against a claim with no reaction.
 
+- **The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**
+  Class: READY-PATCH (a sweep produces findings; its corrections are classified when they exist). Observed
+  pressure: the `v0.3.0..v0.4.0` window landed 116 commits after the last range sweep closed, concentrated
+  in 渾儀 (31.6k lines) and 圭表 (20.4k), reviewed per pull request and never as a range — and the three
+  slices that were swept produced one *mis-reported* false negative while enumeration then found two real
+  contradictions in its first pass. Observation source: those commits, and
+  `docs/observation-bounds.md` as the surface to sweep against. Current bound: nothing enumerates what a
+  sweep of this surface should have covered, so its thoroughness is a claim rather than a fact. Risk: LOW
+  for regression and MEDIUM for confidence — an unswept range is where a stale bound survives, which reads
+  as permission. Promotion trigger: none needed; the instrument exists. **Sweep against the index, not
+  against invented shapes** — that is the whole lesson of the three slices, and the reason this entry names
+  a surface rather than a list of hypotheses. Version class: PATCH for what it finds unless a closure
+  invalidates a recorded baseline, which earns the next minor. Authority:
+  `PROJECT.md`'s audit-cycle decision, and the 0.4.1 window's two retired bounds.
+
 - **An inherited observation bound is RESTATED by each capability that inherits it, so one behaviour
   change leaves several specs stale at once.** Class: READY-PATCH (a stating convention; no public API,
   wire format, or baseline identity moves). **Observed pressure: two measured instances in the 0.4.1
