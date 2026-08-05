@@ -3067,7 +3067,10 @@ fn source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound() {
         panic!("outside subtree is out of corpus scope: {outcome:?}");
     };
     assert!(
-        report.violations.iter().any(|v| v.rule.contains("must be probed")),
+        report
+            .violations
+            .iter()
+            .any(|v| v.rule.contains("must be probed")),
         "reports unprobed seam: {:?}",
         report.violations
     );

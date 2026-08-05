@@ -495,7 +495,10 @@ pub(super) fn confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms() {
         &[
             ("lib.rs", "pub mod ffi;\npub mod service;\n"),
             ("ffi.rs", "\n"),
-            ("service.rs", "#[cfg(impossible_predicate)]\nuse libc::c_int;\n"),
+            (
+                "service.rs",
+                "#[cfg(impossible_predicate)]\nuse libc::c_int;\n",
+            ),
         ],
         confine("crate::ffi", "libc"),
     );
