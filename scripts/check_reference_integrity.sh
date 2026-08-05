@@ -54,7 +54,8 @@
 # Exit 0 clean, 1 violation, 2 cannot judge — the family's own Core Contract.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+target_dir="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
+cd "$target_dir"
 
 members=""
 for dir in crates/*/; do
@@ -95,7 +96,7 @@ LINK_MARK=$(printf '\001')
 # nowhere, so a reference to it becomes unjudgeable rather than wrong. Asserting the documents
 # themselves exist turns that silence into a loud failure. A required set is safe to write down where
 # an allowlist is not: this one fails the moment it goes stale, so it cannot quietly excuse anything.
-GOVERNANCE_DOCUMENTS='AGENTS.md AGENTS.self-law.md BACKLOG.md CHANGELOG.md COOKBOOK.md PROJECT.md README.md Cargo.toml deny.toml'
+GOVERNANCE_DOCUMENTS="${GOVERNANCE_DOCUMENTS:-AGENTS.md AGENTS.self-law.md BACKLOG.md CHANGELOG.md COOKBOOK.md PROJECT.md README.md Cargo.toml deny.toml}"
 
 # Every tracked path, plus each of their ancestor directories — a directory is not itself a git object,
 # so `docs/` must be recognized through the files under it.

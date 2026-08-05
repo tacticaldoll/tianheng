@@ -60,19 +60,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **`check_reference_integrity.sh` has no companion failure matrix.** Class: READY-PATCH (a test; nothing
-  else moves). Observed pressure: noticed while narrowing that gate for the propose phase and recorded only
-  in that pull request's body until now — a 306-line gate whose siblings
-  (`check_release_coherence.sh`, the publish-source gate, the bound register) each carry a
-  `test_*.sh` proving every refusal, while this one has none. Observation source: `scripts/` itself; the
-  asymmetry is visible from a directory listing. Current bound: its refusals are unproven, so a change that
-  narrowed it too far would pass CI — and one change already narrowed it, exempting `openspec/changes/`.
-  Risk: MEDIUM — this gate is the reason stale in-repository references get caught at all, and it judges
-  tracked content across 250 files. Promotion trigger: none needed; the fixture shape is the one
-  `test_publish_source.sh` established (a throwaway git repo, since the gate judges tracked content).
-  Version class: PATCH. Authority: the gate's own header, which states its rules in detail and proves none
-  of them.
-
 - **A bare trait name may not resolve against a same-module trait, contrary to the bound's own wording.**
   Class: WATCH (one observation, mechanism unconfirmed). Observed pressure: probing
   `semantic-impl-trait-operand-boundary`'s unresolvable-bare-principal bound, a bare `impl Frobnicate`
@@ -367,6 +354,9 @@ retained entry carries its own `Class:` line, and a count here would go stale th
 closes — which is how the previous two sentences came to say "DESIGN-BREAKING" and "six" about a section
 that also holds a closed READY-PATCH record.
 
+
+- ~~**`check_reference_integrity.sh` has no companion failure matrix.**~~ **CLOSED** in the
+  0.4.1 window. Closed by adding `scripts/test_reference_integrity.sh`, a throwaway git repository fixture proving every refusal (exit 1 and exit 2) and pass direction of `scripts/check_reference_integrity.sh`.
 
 - ~~**Owner-label identity collapses across a cfg-collided self-type alias.**~~ **CLOSED** in the
   0.4.0 window, after an independent review re-derived it. Closed by refusing to name the ambiguity

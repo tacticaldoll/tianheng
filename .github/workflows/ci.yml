@@ -51,7 +51,9 @@ jobs:
         # checkout. This class was swept by hand twice — the second time across `*.md` only — and a module
         # split landing after that sweep reintroduced it in nine places, in both documents and `.rs`
         # comments. A sweep is a snapshot; the next rename re-opens what it closed.
-        run: bash scripts/check_reference_integrity.sh
+        run: |
+          bash scripts/test_reference_integrity.sh
+          bash scripts/check_reference_integrity.sh
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace

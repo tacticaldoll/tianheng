@@ -260,6 +260,8 @@ cargo deny check
 bash scripts/check_whitespace_hygiene.sh # `cargo fmt` governs .rs only; nothing checked .md/.toml/.sh/.yml,
                                            # so three blank lines at EOF reached a release branch through 23
                                            # touched spec files and two full-range adversarial reviews
+bash scripts/test_reference_integrity.sh # prove every refusal of in-repo path reference checking:
+                                           # fixture-based failure matrix proves broken links/paths fail loud
 bash scripts/check_reference_integrity.sh # every in-repo path a document or comment points at must exist:
                                            # this class was hand-swept twice (once for .md only) and a module
                                            # split landing after that sweep reintroduced it in nine places
