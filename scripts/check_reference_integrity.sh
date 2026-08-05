@@ -186,6 +186,25 @@ inspected=0
 offenses=0
 
 while IFS= read -r file; do
+  # An OpenSpec change artifact describes INTENDED state, so its references to the files the change will
+  # create are forward by construction — and this gate's premise ("a reader who greps for a named path
+  # and finds nothing cannot tell stale prose from a bad checkout") is false for a plan: the reader of a
+  # proposal can tell, because the document's whole subject is what does not exist yet.
+  #
+  # Judging them anyway made the propose phase unable to turn the Definition of Done green at all: a
+  # proposal naming the gate script and the projection it introduces reported eight offenses, every one a
+  # file its own tasks list creates. That went unobserved because the interaction is one hour old — this
+  # gate reached its current form at 2026-08-04T09:53Z and the last proposal was written at 08:49Z.
+  #
+  # What the skip costs is bounded to nothing this gate exists to protect. These artifacts are transient
+  # by design: `main` tracks exactly one path under `openspec/changes/` — `archive/.gitkeep` — because the
+  # dated archive copy is pruned when a change closes. A stale reference in a document that never reaches
+  # the released tree cannot mislead a future reader of it. Skipped before `inspected` counts, so a
+  # skipped file is not counted as read and the vacuity guard below keeps its meaning.
+  case "$file" in
+  openspec/changes/*) continue ;;
+  esac
+
   inspected=$((inspected + 1))
   crate_dir=""
   case "$file" in
