@@ -589,6 +589,47 @@ no_bounds=$(new_repo no-bounds "$(printf '%s\n' \
     '- **THEN** it reacts')" '' no-bless)
 expect_fail "$no_bounds" 2 'parsed 0 declared bounds'
 
+# A manifest is present, so the harness is the authority — and it cannot be enumerated. That is `cannot judge`,
+# never the source-text fallback: a citation's test-ness is then UNDECIDED rather than weakly decided, and
+# quietly dropping to the weaker direction would report a clean the gate cannot claim. Both triggers get their
+# own fixture, because they are two ways into one exit and the matrix proves directions rather than exits.
+#
+# These two were the register's only unproven refusal, found by counting `cannot_judge` call sites against the
+# matrix's `expect_fail … 2` assertions — 4 against 3. The gate's own requirement is that each failure
+# direction is proven by a companion test, so an unproven one is that requirement violated a level up.
+
+# Trigger one: `crates/<member>` is not a package, so `cargo test -p <member>` fails.
+harness_unenumerable=$fixture_root/harness-unenumerable
+mkdir -p "$harness_unenumerable/openspec/specs/probe-capability" "$harness_unenumerable/crates/probe/src"
+git init -q "$harness_unenumerable"
+git -C "$harness_unenumerable" config user.name 'Bound Register Test'
+git -C "$harness_unenumerable" config user.email 'bound-register@example.invalid'
+spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' >"$harness_unenumerable/openspec/specs/probe-capability/spec.md"
+printf '%s' "$DEFAULT_RUST" >"$harness_unenumerable/crates/probe/src/lib.rs"
+printf 'probe debt\n' >"$harness_unenumerable/BACKLOG.md"
+# A root manifest declaring no members, and no manifest under `crates/probe` — so the directory looks like a
+# package to this gate and is not one.
+printf '%s\n' '[workspace]' 'members = []' 'resolver = "2"' >"$harness_unenumerable/Cargo.toml"
+printf 'target/\n' >"$harness_unenumerable/.gitignore"
+git -C "$harness_unenumerable" add -A
+git -C "$harness_unenumerable" commit -qm 'unenumerable harness fixture'
+expect_fail "$harness_unenumerable" 2 'the test harness could not be enumerated'
+
+# Trigger two: a root manifest with no package directories at all under `crates/`, so there is nothing to
+# enumerate and the index cannot be built either.
+harness_no_members=$fixture_root/harness-no-members
+mkdir -p "$harness_no_members/openspec/specs/probe-capability" "$harness_no_members/crates"
+git init -q "$harness_no_members"
+git -C "$harness_no_members" config user.name 'Bound Register Test'
+git -C "$harness_no_members" config user.email 'bound-register@example.invalid'
+spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`' >"$harness_no_members/openspec/specs/probe-capability/spec.md"
+printf 'probe debt\n' >"$harness_no_members/BACKLOG.md"
+printf '%s\n' '[workspace]' 'members = []' 'resolver = "2"' >"$harness_no_members/Cargo.toml"
+printf 'target/\n' >"$harness_no_members/.gitignore"
+git -C "$harness_no_members" add -A
+git -C "$harness_no_members" commit -qm 'memberless harness fixture'
+expect_fail "$harness_no_members" 2 'the test harness could not be enumerated'
+
 # --- regeneration carries the exit contract ---
 
 # Regeneration used to exit 0 here, which made it report the family's "clean" over a register whose offenses
