@@ -172,20 +172,7 @@ pub(crate) fn inline_symbol_findings(
             if !path_within(&resolved, &prefix) {
                 continue;
             }
-            let react = if strict {
-                true // strict: any path under the prefix, call or not
-            } else if !occurrence.is_call {
-                false // default: only calls (a mention / value capture passes — a stated bound)
-            } else if let Some(verbs) = &verbs {
-                // narrowed: the terminal segment must be a declared read verb (leaf-exact)
-                resolved
-                    .rsplit("::")
-                    .next()
-                    .is_some_and(|leaf| verbs.iter().any(|v| v == leaf))
-            } else {
-                true // default call, no narrowing: every call under the prefix
-            };
-            if react {
+            if should_react_on_occurrence(strict, occurrence.is_call, verbs.as_deref(), &resolved) {
                 findings.push(InlineFinding {
                     fact: ModuleFact::InlinePath {
                         path: resolved,
@@ -1203,5 +1190,26 @@ fn resolve_target(
         "std" | "core" | "alloc" | "crate" => Some(parts.join("::")),
         "self" | "super" => resolve_written_path(raw, module, root_modules),
         _ => Some(format!("{module}::{}", parts.join("::"))),
+    }
+}
+
+/// Decision helper for whether an occurrence (call or path mention) triggers a boundary reaction.
+fn should_react_on_occurrence(
+    strict: bool,
+    is_call: bool,
+    verbs: Option<&[String]>,
+    resolved: &str,
+) -> bool {
+    if strict {
+        true
+    } else if !is_call {
+        false
+    } else if let Some(verbs) = verbs {
+        resolved
+            .rsplit("::")
+            .next()
+            .is_some_and(|leaf| verbs.iter().any(|v| v == leaf))
+    } else {
+        true
     }
 }
