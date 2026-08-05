@@ -73,12 +73,39 @@ repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 BOUND_HEADING='^#### Scenario: .*(stated|documented)( [A-Za-z-]+)? bounds?'
 BOUND_PROSE='(stated|documented)( [A-Za-z-]+)? bounds?'
 
-# Tracked paths matching a pathspec (every tracked path when given none), NUL-separated. The one place
-# that knows `git ls-files` quotes a non-ASCII path by default, so a quoted path would name no file on
-# disk: three call sites had grown three copies of the same `-z` loop and the same comment explaining it.
-# Callers read it with `mapfile -d ''`.
-tracked_files() {
-    git -C "$repo" ls-files -z -- "$@"
+# Tracked paths matching a pathspec (every tracked path when given none), into the array named by $1.
+# The one place that knows `git ls-files` quotes a non-ASCII path by default, so a quoted path would name
+# no file on disk — four call sites had grown copies of the same `-z` read and the same comment.
+#
+# The enumeration's exit status is checked HERE, in the parent shell, and that is the whole point.
+# `mapfile -d '' -t arr < <(git ls-files -z …)` reads a subshell whose status no one sees, and `pipefail`
+# does not reach it, so a FAILED enumeration returned exactly what a repository holding nothing returns
+# and every direction judged on it: the census examined no document and reported clean, while the tracker
+# and citation directions refused every bound in the register for a `git` failure that was not the
+# register's.
+#
+# Buffered in a file rather than a variable because both the status and the NUL stream are needed, and
+# command substitution cannot carry NUL bytes at all — bash strips them, which would silently defeat the
+# `-z` this enumerator exists for. One file, reused (each `>` truncates), joined to the EXIT trap through
+# the same conditional expansion `rendered` uses, since a per-call `mktemp` with its own `rm` leaks on any
+# abort between the two.
+#
+# `cannot_judge` from inside a function is correct only because this function runs in the PARENT shell.
+# Called from inside a process substitution it would exit that subshell and leave the parent reading an
+# empty list — the bug being fixed here, wearing the fix's clothes.
+#
+# The residual, stated rather than left to be inferred: the process substitutions elsewhere in this file
+# read already-materialized data — the attribute-run `sed` over a file `grep` just located, the `awk` over
+# the id table this run wrote — which are computations over what was read, not enumerations of the
+# observation source.
+read_tracked_files() {
+    local -n _dest=$1
+    shift
+    _dest=()
+    [[ -n $tracked_list ]] || tracked_list=$(mktemp)
+    git -C "$repo" ls-files -z -- "$@" >"$tracked_list" \
+        || cannot_judge "\`git ls-files\` failed enumerating ${*:-every tracked path} under $repo; a failed enumeration is not an empty repository, and reading it as one reports clean over content never read"
+    mapfile -d '' -t _dest <"$tracked_list"
 }
 
 fail() {
@@ -264,7 +291,7 @@ definitions_of() {
         ;;
     esac
     local files=()
-    mapfile -d '' -t files < <(tracked_files "$scope/*.rs")
+    read_tracked_files files "$scope/*.rs"
     # The guard precedes the prefixing, so neither step ever handles an empty array: `grep` with no file
     # arguments reads STDIN and would block inside a process substitution, so a crate holding no tracked
     # `.rs` file emits nothing here and the caller counts zero sites.
@@ -479,7 +506,7 @@ tracked_path_index_built=0
 build_tracked_path_index() {
     [[ $tracked_path_index_built == 1 ]] && return 0
     local paths=() path
-    mapfile -d '' -t paths < <(tracked_files)
+    read_tracked_files paths
     for path in "${paths[@]}"; do
         tracked_paths[$path]=1
     done
@@ -508,10 +535,9 @@ tracker_names_a_tracked_path() {
 
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
     || cannot_judge "repository root $repo is not a git worktree; this gate judges tracked content"
-mapfile -t spec_files < <(git -C "$repo" ls-files 'openspec/specs/*/spec.md' | sort)
-[[ ${#spec_files[@]} -gt 0 ]] \
-    || cannot_judge "git ls-files matched no openspec/specs/*/spec.md — this gate would report clean without reading a spec"
 
+# Every temp file and the trap that owns them come BEFORE the first enumeration, which now creates one of
+# them: the trap has to be installed before anything it cleans up can exist.
 records=$(mktemp)
 ids=$(mktemp)
 # The projection's compare tempfile joins the trap before it exists, so an abort inside `render_projection`
@@ -522,7 +548,18 @@ rendered=
 # the two. One file, reused — each `2>` truncates it — so there is one path to clean up and the trap owns
 # it, which is this file's existing discipline rather than a second one.
 cargo_errors=
-trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"}' EXIT
+# `tracked_list` is the enumeration buffer `read_tracked_files` creates on its first call, for the same
+# reason and under the same expansion.
+tracked_list=
+trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"}' EXIT
+
+# Through the same enumerator, so a `git` failure here names the enumeration rather than reporting that
+# the repository holds no spec. `git ls-files` lists tracked paths in index order, which is path-sorted,
+# so the previous explicit `| sort` was a no-op — and being NUL-delimited now, a path containing a newline
+# survives the read instead of splitting into two.
+read_tracked_files spec_files 'openspec/specs/*/spec.md'
+[[ ${#spec_files[@]} -gt 0 ]] \
+    || cannot_judge "git ls-files matched no openspec/specs/*/spec.md — this gate would report clean without reading a spec"
 
 for spec in "${spec_files[@]}"; do
     # A tracked spec missing from the worktree is UNDECIDABLE, not skippable. `continue` dropped its
@@ -837,7 +874,7 @@ reference_count=$(awk -F'\t' '$1 == "REFERENCE" { n++ } END { print n + 0 }' "$r
 #
 # Tracked Markdown through the one enumerator, like every other direction here.
 census_files=()
-mapfile -d '' -t census_files < <(tracked_files '*.md')
+read_tracked_files census_files '*.md'
 # The guard is load-bearing: `grep` with no file arguments reads STDIN, which inside this loop's process
 # substitution would block rather than report anything.
 if [[ ${#census_files[@]} -gt 0 ]]; then

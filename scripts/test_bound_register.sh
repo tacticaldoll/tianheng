@@ -302,6 +302,49 @@ git -C "$tracked_twin" add -A
 git -C "$tracked_twin" commit -qm 'a second tracked definition'
 expect_fail "$tracked_twin" 1 'the citation names a set rather than a reaction'
 
+# --- an enumeration that FAILED is not an empty repository ---
+
+# `mapfile -d '' -t arr < <(git ls-files -z …)` reads a subshell whose status no one sees, and `pipefail`
+# does not reach it, so a failed enumeration returned exactly what a repository holding nothing returns.
+# The census direction is the one that reports CLEAN on that reading, which is why the fixture is built to
+# hold a stale census: without the status check the run exits 0 over a document it never examined. The
+# tracker and citation directions fail the other way — refusing every bound in the register for a `git`
+# failure — and share the one enumerator this proves.
+#
+# `git` is stubbed to fail for the CENSUS enumeration alone (`ls-files -z -- *.md`) and to pass everything
+# else through, so the case proves that enumeration's own direction rather than "the gate needs git": the
+# worktree check, the spec-file enumeration, and the tracked-path index all still succeed.
+failed_enumeration=$(new_repo failed-enumeration "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')")
+printf 'This register holds 99 bounds across 7 capabilities.\n' >>"$failed_enumeration/BACKLOG.md"
+git -C "$failed_enumeration" add -A
+git -C "$failed_enumeration" commit -qm 'a stale written census'
+expect_fail "$failed_enumeration" 1 'writes "99 bounds across 7 capabilities"'
+
+git_stub=$fixture_root/git-stub
+mkdir -p "$git_stub"
+real_git=$(command -v git)
+cat >"$git_stub/git" <<STUB
+#!/usr/bin/env bash
+census=0
+for arg in "\$@"; do
+    [[ \$arg == '*.md' ]] && census=1
+done
+if [[ \$census == 1 ]]; then
+    for arg in "\$@"; do
+        [[ \$arg == ls-files ]] && exit 3
+    done
+fi
+exec "$real_git" "\$@"
+STUB
+chmod +x "$git_stub/git"
+
+enumeration_status=0
+enumeration_output=$(PATH="$git_stub:$PATH" "$check" "$failed_enumeration" 2>&1) || enumeration_status=$?
+[[ $enumeration_status -eq 2 ]] \
+    || { printf 'a failed tracked-file enumeration must exit 2, got %d: %s\n' "$enumeration_status" "$enumeration_output" >&2; exit 1; }
+grep -Fq 'failed enumerating' <<<"$enumeration_output" \
+    || { printf 'a failed enumeration must name itself, got: %s\n' "$enumeration_output" >&2; exit 1; }
+
 # --- a tracked spec absent from the worktree cannot be judged ---
 
 # `git ls-files` lists it and the worktree does not hold it. Skipping it dropped its bounds from the
