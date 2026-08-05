@@ -249,14 +249,6 @@ anchored module.
   the protected module, under `Shallow`
 - **THEN** the importer is exempt as a self-import, exactly as it would be under `Subtree`
 
-#### Scenario: A name living in two namespaces resolves to its module reading (stated bound)
-
-- **WHEN** a `Shallow` inbound rule protects a module that declares both `mod foo;` and `fn foo`, and
-  an outside importer writes the single `use <protected>::foo;` that binds both
-- **THEN** the target match resolves to the descendant module `<protected>::foo` and does not react —
-  the observed bound, pinned by a test and recorded as a live decision, never a silent claim that the
-  value reading was considered
-
 #### Scenario: An excused file's content cannot decide the inbound exit code
 
 - **WHEN** a file inside the protected module's own subtree contains source the import scanner fails
