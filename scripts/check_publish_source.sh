@@ -34,7 +34,11 @@
 # Exit 0 publishable, 1 wrong source, 2 cannot judge — the family's own Core Contract, so this script
 # reads the same way as the reactions it sits beside. It is read-only: it never fetches, commits,
 # tags, or publishes.
-set -euo pipefail
+set -Eeuo pipefail
+# The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
+# is a trap rather than per-command handling, and the measurements behind both.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+exit_contract_backstop 'publish source'
 
 repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 remote=${2:-origin}

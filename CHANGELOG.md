@@ -261,6 +261,16 @@ them.
   `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
   report. What is left in a process substitution is computation over data this run already materialized, and
   the reaction says which rather than leaving the scope to be inferred.
+- **Every repository gate now holds the 0/1/2 exit contract on every path**, through one shared backstop
+  (`scripts/lib/exit_contract.sh`) rather than six copies of the same trap. Measured across the gates before
+  it existed, each with one tool stubbed to fail: `check_publish_source.sh` exited **131**,
+  `check_release_coherence.sh` **130**, `check_dod_coherence.sh` **9**, `check_whitespace_hygiene.sh` **7**,
+  `check_bound_register.sh` **4**, `check_reference_integrity.sh` **3** — every one of them printing nothing
+  at all, because the abort was the shell's rather than the gate's. Two declared the contract in their own
+  headers and one stands before an irreversible act. `check_release_coherence.sh` and
+  `check_dod_coherence.sh` now declare the contract they hold, since a contract a reader cannot find is one
+  they cannot rely on. A read worth naming keeps its own refusal beneath the backstop, which reports *where*
+  a failure happened and never invents what it meant.
 - The bound register's **exit contract now binds every path**, not the ones a wrapper remembered. `set -e`
   with `pipefail` carries a failing utility's own status out of the process, so a stubbed `sed` made the gate
   exit **4** printing nothing at all — a status the contract does not define, which no consumer can act on

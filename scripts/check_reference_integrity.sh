@@ -54,17 +54,10 @@
 # Exit 0 clean, 1 violation, 2 cannot judge — the family's own Core Contract.
 set -Eeuo pipefail
 
-# The exit contract, made structural — the same repair the register gate carries, for the same measured
-# reason: `set -e` with `pipefail` carries a failing utility's status out of the process, so with
-# `git ls-files` stubbed to exit 3 this gate exited **3** and printed nothing. A status outside 0/1/2 is one
-# the contract does not define, and silence is no diagnosis. The trap reports WHERE, never what; a read worth
-# naming keeps its own refusal beneath it.
-#
-# Safe over the deliberate non-zero returns here — `grep -q` misses in `is_tracked`, `git check-ignore -q`,
-# `[ -n … ] || continue` — because under `errtrace` a failure inside `if`, `||`, `&&`, or a captured pipeline
-# with its own handler does not fire it, even inside a function. Measured, not assumed; the matrix's passing
-# directions are what would fail loudly if that stopped holding.
-trap 'unhandled=$?; echo "cannot judge: an unhandled command failed (exit $unhandled) at ${BASH_SOURCE[0]}:$LINENO —" >&2; echo "this gate reports 0 clean, 1 violation, 2 cannot judge, and nothing else" >&2; exit 2' ERR
+# The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
+# is a trap rather than per-command handling, and the measurements behind both.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+exit_contract_backstop 'reference integrity'
 
 target_dir="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$target_dir"

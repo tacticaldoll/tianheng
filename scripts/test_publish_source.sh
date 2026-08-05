@@ -188,4 +188,39 @@ after_tags=$(git -C "$publishable" tag --list)
 [[ $before_tree == "$after_tree" && $before_head == "$after_head" && $before_tags == "$after_tags" ]] \
     || { printf 'publish source check mutated repository state\n' >&2; exit 1; }
 
+# The same contract direction on the gate that stands before an irreversible act. Measured before the
+# backstop: with `git status` stubbed to fail after the worktree check passed, this gate exited **131** with
+# no output — a status the header's own contract does not define.
+contract_stub=$fixture_root/contract-stub
+mkdir -p "$contract_stub"
+cat >"$contract_stub/git" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    [[ \$arg == status ]] && exit 131
+done
+exec "$(command -v git)" "\$@"
+STUB
+chmod +x "$contract_stub/git"
+
+contract_status=0
+contract_output=$(PATH="$contract_stub:$PATH" "$check" "$publishable" 2>&1) || contract_status=$?
+[[ $contract_status -eq 2 ]] \
+    || { printf 'an unhandled failure must exit 2, not the tool status, got %d: %s\n' "$contract_status" "$contract_output" >&2; exit 1; }
+grep -Fq 'an unhandled command failed' <<<"$contract_output" \
+    || { printf 'an unhandled failure must say so and name where, got: %s\n' "$contract_output" >&2; exit 1; }
+
+# A PASSING run must print no backstop diagnostic. The assertion exists because installing the shared `ERR`
+# trap produced exactly that failure: `errtrace` propagates it into process substitutions, where a
+# legitimately-failing command is routine, so a clean run emitted the cannot-judge line once per file while
+# still exiting 0 — invisible to every check that reads only the exit code.
+#
+# What it does and does not hold, stated rather than implied: this fixture's clean run does not exercise a
+# failing command inside a process substitution, so removing the backstop's subshell guard does NOT fail this
+# assertion. The gate that misfired is `check_whitespace_hygiene.sh`, whose clean run does, and which has no
+# companion matrix — filed in `BACKLOG.md`. This pins the property here, where a future change could break
+# it, and the measurement is what covers the gate that has no fixture.
+clean_noise=$("$check" "$publishable" 2>&1 >/dev/null || true)
+grep -Fq 'an unhandled command failed' <<<"$clean_noise" \
+    && { printf 'a passing run must print no backstop diagnostic, got: %s\n' "$clean_noise" >&2; exit 1; }
+
 printf 'ok publish source state and failure matrix\n'
