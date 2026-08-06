@@ -297,21 +297,26 @@ them.
   every reference in that file went unexamined, and the file still counted as inspected. The gate had
   already been repaired for this exact shape one step earlier, where `grep`'s status is captured so an
   unreadable tracked file refuses to judge.
-- **BREAKING** — a **bare** principal trait in an operand-scoped `dyn` or `impl Trait` boundary now
-  resolves against its own module when — and only when — that module declares the name, and the name is
-  canonicalized first. Both directions move: a real local `pub trait r#type` used as `dyn r#type`
-  previously resolved as `crate::m::r#type` and never matched the canonical `crate::m::type` an adopter
-  forbids (a **false negative**), while a bare name the module does *not* declare — a prelude trait such
-  as `Iterator` or `Fn`, a glob-imported trait, a name the file never mentions — was resolved into the
-  module anyway and reacted against a path that module never had (a **false positive** over a fabricated
-  operand, contradicting both capabilities' own genuinely-unresolvable bound). Both capabilities' bound
-  scenarios now state what the resolver does, and both pinning tests forbid the module-qualified
-  spelling so they observe the drop rather than a spelling mismatch — forbidding the bare
-  `["Frobnicate"]`, as they did, passes whatever the resolver does. Marked because a recorded baseline no
-  longer describes the adopter's tree in either direction: a fabricated finding disappears and a
-  raw-identifier operand appears. Only the two operand-scoped rules are affected;
-  signature-coupling, forbidden-marker, trait-impl locality, and unsafe confinement resolve through a
-  different entry point and are unchanged.
+- **BREAKING** — an operand-scoped `dyn` or `impl Trait` boundary now reacts to a **bare** principal trait
+  the governed module itself declares. In `0.4.0` a bare single-segment principal did not resolve at all, so
+  `pub trait Port {}` beside `Box<dyn Port>` in the same module was passed over even under
+  `must_not_expose_dyn_of(["crate::m::Port"])` — a **false negative**, now closed. The name is canonicalized
+  before it is matched, so a local `pub trait r#type` reacts against the canonical `crate::m::type` an
+  adopter writes. **What to expect on upgrade**: new findings wherever a governed module declares a trait,
+  uses it bare in a public `dyn`/`impl Trait` position, and your boundary forbids that module-qualified
+  path — so a recorded baseline needs regenerating (`--write-baseline`), which is why this is marked.
+  A bare name the module does **not** declare — a prelude trait such as `Iterator` or `Fn`, a
+  glob-imported trait, a name the file never mentions — is still dropped: that resolver-coverage bound is
+  unchanged, and both capabilities' bound scenarios and pinning tests now state and observe it against the
+  module-qualified spelling rather than a bare one that no ladder step can produce. Only the two
+  operand-scoped rules are affected; signature-coupling, forbidden-marker, trait-impl locality, and unsafe
+  confinement resolve through a different entry point and are unchanged.
+
+  *Two intra-window states are deliberately not described as adopter effects, because neither shipped: the
+  first cut of this fallback resolved every bare segment into the module (a false positive over a fabricated
+  operand) and left a raw identifier unmatched. `BACKLOG.md`'s closed entry carries that history, where it
+  explains the shape; a release note written from an unreleased baseline would describe an upgrade nobody
+  performs.*
 
 ## [0.4.0] - 2026-08-04
 
