@@ -163,6 +163,14 @@ them.
   deliberate counter-example lives outside the workspace: `examples/observer-participant`'s declarations are
   computed on purpose, which is what the owned form is for.
 
+- `xingbiao::audit_corpus_and_anchor` derives a workspace's audit corpus **and** the directory every observed
+  file's identity label is made relative to, in one call and from one `cargo metadata` read. 漏刻's observer and
+  the composed shell both need that pair, and computing it twice is a twin derivation of **baseline identity** —
+  the one thing 星表 exists to keep single, since a label that shifts makes an adopter's recorded baseline match
+  nothing. Public because two crates share it and a crate cannot lend a private item; it takes the manifest path
+  and returns the member root files with the resolved `workspace_root`, falling back to the manifest's own
+  directory only for metadata carrying no such field.
+
 - `tianheng::testing::assert_projection_matches` is the bless-and-diff rule for **any** generated document, not
   only a rendered `Constitution`. A free function rather than a method, because blessing an unrelated document has
   nothing to do with a `Constitution` and requiring one would be a dependency invented by the API's shape.
