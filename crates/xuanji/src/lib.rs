@@ -34,6 +34,7 @@ mod bound;
 mod finding;
 mod identity;
 mod model;
+mod observer;
 mod util;
 mod violation;
 
@@ -45,5 +46,6 @@ pub use bound::{BoundDecl, BoundId, Demonstrates, Extent, FactGranularity, Owner
 pub use finding::Finding;
 pub use identity::{RuleKey, StructuredFactIdentity};
 pub use model::{BoundaryKind, Outcome, Polarity, ScanDepth, Severity};
+pub use observer::Observer;
 pub use util::pretty_json;
 pub use violation::{Report, Violation};

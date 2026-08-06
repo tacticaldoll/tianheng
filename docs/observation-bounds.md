@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 45 declared bounds have no pinning test.** That figure is the register's
+**0 of 47 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -138,6 +138,20 @@ fallback used where no manifest exists, which the register spec describes.
 > the model cannot express it, a stated bound: no declared bound exhibits the pair, and offering
 
 - **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
+
+## observer-protocol
+
+### `observer-protocol/whether-an-observer-s-declared-bounds-are-complete-is-not-observed-a-stated-bound`
+
+> the protocol does not claim to observe the omission, a stated bound: the trait compels a
+
+- **pinned by**: `an_observer_may_under_declare_its_bounds`
+
+### `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound`
+
+> the fold merges it as given, a stated bound: it composes verdicts and does not adjudicate them, and
+
+- **pinned by**: `the_fold_does_not_adjudicate_a_participant_s_verdict`
 
 ## runtime-origin-assertion
 

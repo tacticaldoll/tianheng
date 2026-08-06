@@ -311,3 +311,33 @@ pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
     roots.dedup();
     roots
 }
+
+/// The runtime audit's corpus and label anchor for the workspace at `manifest_path`, in one read.
+///
+/// The corpus is every member's crate-root file; the anchor is Cargo's own resolved `workspace_root`, made
+/// absolute. The anchor matters more than it looks: the audit labels every observed file relative to it and that
+/// label is **baseline identity**, so it must be the one directory that moves neither with the checkout location
+/// nor with the workspace's member set. It is the same directory whichever member manifest `--manifest-path`
+/// named.
+///
+/// The fallback to the given manifest's own directory exists for metadata carrying no `workspace_root` field — a
+/// synthetic value in a unit test; a real `cargo metadata` read always carries it. `absolute` is used rather than
+/// canonicalization so the cargo-reported root is never rewritten, and it refuses only an empty path, hence the
+/// working-directory last resort for a bare `Cargo.toml` whose parent is empty.
+///
+/// This lives here, in the single reader of truth, because two dimensions derived it separately once: the shell
+/// computed it for the runtime audit while a runtime observer would have had to compute it again, and a
+/// twin derivation of a baseline-identity anchor is the drift this crate exists to prevent.
+pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, PathBuf), String> {
+    let metadata = cargo_metadata(manifest_path)?;
+    let roots = member_root_files(&metadata);
+    let anchor = match workspace_root(&metadata) {
+        Some(root) => root,
+        None => {
+            let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
+            std::path::absolute(manifest_dir)
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
+        }
+    };
+    Ok((roots, anchor))
+}

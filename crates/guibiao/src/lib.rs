@@ -25,6 +25,9 @@ use serde_json::Value;
 mod bounds;
 pub use bounds::observation_bounds;
 
+mod observer;
+pub use observer::StaticObserver;
+
 mod module_scan;
 mod projection;
 pub use projection::{

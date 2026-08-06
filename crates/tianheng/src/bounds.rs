@@ -1,11 +1,12 @@
-//! `observation-bound-model`'s own declared bounds, typed in the model they describe.
+//! The shell's own declared bounds — `observation-bound-model`'s and `observer-protocol`'s, typed in the
+//! model they describe.
 //!
 //! The capability that classifies where every other reaction stops must classify where **it** stops, or its
 //! leading figure — the count of declared false negatives — would be a number the counter had exempted itself
 //! from. Its reaction lives in this crate (`tests/observation_bound_model.rs`, the only place that sees all
 //! three dimensions), so this crate owns the declarations.
 
-use crate::{BoundDecl, BoundId, Extent, FactGranularity, Reached};
+use crate::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
 
 /// Every observation bound `observation-bound-model` declares.
 pub fn observation_bounds() -> Vec<BoundDecl> {
@@ -51,6 +52,29 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           that makes a contradiction unwritable",
             },
             "granularity_is_carried_only_by_the_as_intended_extent",
+        ),
+        BoundDecl::new(
+            BoundId::new(
+                "observer-protocol/whether-an-observer-s-declared-bounds-are-complete-is-not-observed-a-stated-bound",
+            ),
+            "an observer that declares some of its limits and omits others",
+            Extent::OutOfReach {
+                because: "the trait compels a declaration and never a complete one; no reaction can enumerate \
+                          the limits of a reaction it did not write, so an omission is invisible",
+            },
+            "an_observer_may_under_declare_its_bounds",
+        ),
+        BoundDecl::new(
+            BoundId::new(
+                "observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound",
+            ),
+            "a composed observer returning an outcome that misjudges the workspace it read",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the fold composes verdicts and does not adjudicate them; second-guessing each \
+                          participant would need a second implementation of every dimension",
+                owner: Owner::Adopter,
+            }),
+            "the_fold_does_not_adjudicate_a_participant_s_verdict",
         ),
     ]
 }

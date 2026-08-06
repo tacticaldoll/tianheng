@@ -27,12 +27,15 @@ use serde_json::Value;
 // hunyi's surface; these names are also used internally below.
 pub use xuanji::{
     Baseline, BoundDecl, BoundId, BoundaryKind, Demonstrates, Extent, FactGranularity, Finding,
-    Outcome, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
+    Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
     StructuredFactIdentity, Violation, ViolationId, apply_baseline,
 };
 
 mod bounds;
 pub use bounds::observation_bounds;
+
+mod observer;
+pub use observer::SemanticObserver;
 
 mod dsl;
 pub use dsl::*;

@@ -268,4 +268,12 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   stated in the past tense on purpose: a count is only ever true of the moment it was taken, so it belongs
   to the measurement made when a surface is promoted, beside the reaction that will keep it honest, never to
   prose. Writing one here would be the claim class this very decision exists to end.
+- **An observation participant declares its limits by construction.** `xuanji::Observer` has two methods and
+  no default body on either, so a participant cannot be composed into a run without declaring what it does not
+  observe — the family's central promise becomes a property of the type rather than a convention it keeps about
+  itself. Adding a stage is a breaking change on purpose: that is the enforcement working. The fold is a
+  **fan-out with a cannot-judge short-circuit, never a pipe** — 三儀 ⊥ 三儀 forbids one dimension consuming
+  another's output, so the shell composes and the dimensions do not — and it is **eager**, which is why no trait
+  object exists anywhere: the heterogeneous set never forms. Assembly order is part of the contract, because it
+  decides which cannot-judge is reported.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.

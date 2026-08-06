@@ -3,13 +3,14 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**11 of 45 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**12 of 47 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
 - `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
+- `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
 - `semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound` — owner: engine
@@ -110,7 +111,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (20)
+## out of reach (21)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -151,6 +152,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the extent is typed and checkable while the rationale is prose the model never reads; requiring the two to agree would trade a fact for a heuristic
 - **its defence must show**: does not react
 - **pinned by**: `a_rationale_that_contradicts_its_extent_is_a_stated_bound`
+
+### `observer-protocol/whether-an-observer-s-declared-bounds-are-complete-is-not-observed-a-stated-bound`
+
+> an observer that declares some of its limits and omits others
+
+- **because**: the trait compels a declaration and never a complete one; no reaction can enumerate the limits of a reaction it did not write, so an omission is invisible
+- **its defence must show**: does not react
+- **pinned by**: `an_observer_may_under_declare_its_bounds`
 
 ### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
 
@@ -306,7 +315,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (11)
+## under-reacts (12)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -347,6 +356,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the default observes `use`-rooted paths, leaving the un-`use`d fully-qualified spelling to the adopter's stricter opt-in
 - **its defence must show**: does not react
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
+
+### `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound`
+
+> a composed observer returning an outcome that misjudges the workspace it read
+
+- **because**: the fold composes verdicts and does not adjudicate them; second-guessing each participant would need a second implementation of every dimension
+- **its defence must show**: does not react
+- **pinned by**: `the_fold_does_not_adjudicate_a_participant_s_verdict`
 
 ### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 
