@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**15 of 54 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**15 of 55 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound` — owner: engine
@@ -114,7 +114,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (25)
+## out of reach (26)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -179,6 +179,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the extent is typed and checkable while the rationale is prose the model never reads; requiring the two to agree would trade a fact for a heuristic
 - **its defence must show**: does not react
 - **pinned by**: `a_rationale_that_contradicts_its_extent_is_a_stated_bound`
+
+### `observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound`
+
+> a public signature spanning several lines that names a trait object on a line not beginning with `pub `
+
+- **because**: the reaction reads this crate lexically, one line at a time, because 渾儀 governs no module of it and the `dyn`-trait DSL offers only forbid-all and forbid-named-operands, so a declared exposure would be a name with no reaction
+- **its defence must show**: does not react
+- **pinned by**: `a_trait_object_on_a_continuation_line_is_not_recognized`
 
 ### `observer-protocol/whether-an-observer-s-declared-bounds-are-complete-is-not-observed-a-stated-bound`
 

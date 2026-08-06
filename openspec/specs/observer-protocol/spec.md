@@ -208,6 +208,7 @@ Because that same measurement leaves 渾儀 unable to watch this crate, the reac
   continuation is never a candidate it declined — it is text the observation never presents. Closing it needs 渾儀
   watching this crate, which the same measurement above found unavailable. Multi-line public signatures exist
   here, so the shape is live even where no instance names a trait object
+- **PINNED-BY** `a_trait_object_on_a_continuation_line_is_not_recognized`
 
 ### Requirement: Observation bounds
 
