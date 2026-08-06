@@ -278,9 +278,12 @@ exist.
 #### Scenario: Whether a gate's 1-versus-2 assignment is correct is not observed — a stated bound
 
 - **WHEN** a gate reports a genuine violation as cannot-judge, or a misconfiguration as a violation
-- **THEN** the reaction does not claim to observe it, a stated bound: it checks that the twin
-  asserts codes, never that the codes the gate chose are the right ones, which is the judgment that let a
-  `return`-instead-of-`exit` inversion ride green
+- **THEN** the reaction does not claim to observe it, a stated bound: it checks that the twin asserts codes,
+  never that the codes the gate chose are the right ones, which needs each gate's meaning rather than its text.
+  **Narrowed** from a wider claim that named this as what let a `return`-instead-of-`exit` inversion ride green.
+  That was wrong about its own history: the inversion produced both directions above in one gate, and what let it
+  pass CI was the matrix asserting a non-zero status rather than a code — which the `exit codes` property now
+  refuses, and whose remedy cites this instance. What remains is only the semantic judgment
 - **PINNED-BY** `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
 
 #### Scenario: Shell units that are not a gate or its twin are outside the surface — a stated bound
