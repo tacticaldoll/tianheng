@@ -169,7 +169,7 @@ signature-coupling.
 - **WHEN** the governed module declares `use crate::facade::DbPool;` (where `crate::facade` declares `pub use crate::infra::DbPool;`) and declares `impl From<DbPool> for Service` under a boundary forbidding `crate::infra` with `.including_trait_impls()`
 - **THEN** the system follows the `pub use` chain, resolves `DbPool` to `crate::infra::DbPool`, and emits a `trait-arg` violation rather than silently passing it
 
-#### Scenario: A glob-imported type in an impl position is a documented coverage bound
+#### Scenario: A glob-imported type in an impl position is a documented bound
 
 - **WHEN** the governed module declares `use crate::infra::*;` and `impl From<DbPool> for Service` with `.including_trait_impls()`
 - **THEN** the system does not claim to observe it (inherited glob bound), rather than silently asserting the boundary is clean

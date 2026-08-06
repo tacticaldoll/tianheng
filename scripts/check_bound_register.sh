@@ -70,12 +70,29 @@ exit_contract_backstop 'bound register'
 # test only this checkout. A gate that cannot be pointed at a fixture cannot have its refusals proven.
 repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 
-# The marking, and why it admits one interposed word. `(stated|documented) bound` adjacent is precise but
-# brittle: `An underscore rename is a documented non-observed bound` declares a bound and would be missed,
-# so a spec would have to be reworded to suit the tool. One optional word between admits that heading and
-# `a stated coverage bound` while still refusing Rust's own sense of the word — `assoc type bound`,
-# `supertrait bound` — which a bare "contains bound" rule would sweep in wholesale.
-BOUND_HEADING='^#### Scenario: .*(stated|documented)( [A-Za-z-]+)? bounds?'
+# The marking, adjacent, admitting NO interposed word. It admitted one until `observation-bound-model`, and
+# that slot was where the classification lived: sixteen phrasings across the declared set with no vocabulary
+# behind any of them. `stated` and `documented` were used interchangeably, and one qualifier — `cfg-blind` —
+# was used by two capabilities for bounds on OPPOSITE sides of the false-negative line, where the direction is
+# the whole content. So a qualifier read as a classification while classifying nothing. What kind of stop a
+# bound describes is now carried by its typed declaration (`xuanji::Extent`), where the value set is closed and
+# a contradiction is a compile error. The two marker words stay interchangeable: they carry no information
+# either, but they mislead no reader, and each removal renames a bound — the id is the heading's slug.
+#
+# Adjacency also still refuses Rust's own sense of the word — `assoc type bound`, `supertrait bound` — which a
+# bare "contains bound" rule would sweep in wholesale.
+BOUND_HEADING='^#### Scenario: .*(stated|documented) bounds?'
+
+# The qualified form, refused EXPLICITLY rather than merely unmatched. An unmatched heading is not read as a
+# bound at all, so it would fall through to the undeclared-prose direction below and be reported as an
+# undeclared bound — a true failure with a misleading message and the wrong repair.
+BOUND_HEADING_QUALIFIED='^#### Scenario: .*(stated|documented) [A-Za-z-]+ bounds?'
+
+# Detection, NOT a requirement on authored form, and deliberately left admitting the qualified phrasings the
+# heading rule above forbids. This pattern is the floor that catches a bound stated in prose and never
+# declared — what stops the register being completed by declaring only the convenient bounds. Narrowing it in
+# step with the heading would stop it seeing any qualified wording, which is a false negative in the register's
+# own floor. Requiring an authored form and narrowing detection look like one change and are opposite acts.
 BOUND_PROSE='(stated|documented)( [A-Za-z-]+)? bounds?'
 
 # Tracked paths matching a pathspec (every tracked path when given none), into the array named by $1.
@@ -607,7 +624,10 @@ tracked_list=
 # expansion: `grep`'s status and its output are both needed, so the output cannot come back through a
 # process substitution whose status no one reads.
 definition_hits=
-trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"} ${definition_hits:+"$definition_hits"}' EXIT
+# The qualified-heading scan's buffer, same reason and same expansion: `grep`'s status and its output are both
+# needed, so the output cannot come back through a process substitution whose status no one reads.
+qualified_hits=
+trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"} ${definition_hits:+"$definition_hits"} ${qualified_hits:+"$qualified_hits"}' EXIT
 
 # Through the same enumerator, so a `git` failure here names the enumeration rather than reporting that
 # the repository holds no spec. `git ls-files` lists tracked paths in index order, which is path-sorted,
@@ -632,6 +652,20 @@ for spec in "${spec_files[@]}"; do
     parse_spec "$spec" >>"$records" \
         || cannot_judge "could not read the declared bounds from $spec; a spec the reaction cannot parse leaves the register incomplete, which is not the same as a register with no bounds"
 done
+
+# A qualified heading marker, refused before anything is judged on the records — the classification belongs to
+# the typed declaration, not to a free word in a heading. `grep` exits 1 when nothing matches, which is the
+# clean case here, so the status is split at 1: an unreadable file must not read as "no qualified heading".
+qualified_status=0
+[[ -n $qualified_hits ]] || qualified_hits=$(mktemp)
+grep -HnE "$BOUND_HEADING_QUALIFIED" -- "${spec_files[@]/#/$repo/}" >"$qualified_hits" 2>/dev/null \
+    || qualified_status=$?
+((qualified_status <= 1)) \
+    || cannot_judge "\`grep\` could not read the tracked specs while looking for qualified bound headings (exit $qualified_status); a register that cannot read a heading must not report the heading well formed"
+while IFS= read -r hit; do
+    [[ -n $hit ]] || continue
+    fail "${hit#"$repo"/} marks a bound with a qualifier; the marker admits no interposed word, and what kind of stop a bound describes belongs to its typed declaration (\`xuanji::Extent\`) rather than to a heading — remove the qualifier, which also renames the bound, since the id is the heading's slug"
+done <"$qualified_hits"
 
 # A bound's id is derived from where it sits: `<capability>/<slug>`, the slug being the heading lowercased
 # with each run of non-alphanumerics collapsed to one hyphen. Nothing allocates it, so no ledger exists to

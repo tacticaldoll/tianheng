@@ -38,9 +38,20 @@ them.
   `main` correctly and then force-pushed away an hour later — and neither disagreement affects any
   published crate's content. The eleven `0.1.x` releases point at commits the 2026-07-17 history
   rewrite dissolved, so whether they came from `main` is no longer knowable.
+- Every declared **observation bound** now carries a typed classification of *where the measure stops*:
+  `xuanji::Extent` (re-exported through the dimensions and `tianheng::prelude`) says whether the observation
+  source never reached the shape, or reached it and then refused to judge, deliberately declined to refuse,
+  over-reacted, under-reacted, was correctly silent, or reacted exactly with only fact granularity bounded. An
+  under-reaction — a declared false negative — must name who owns closing it: the engine, a named layer beneath
+  it, or the adopter. `docs/observation-bound-extents.md` projects the result and leads with the count of
+  declared false negatives and their owners, a figure that was previously spread across sixteen adjective
+  phrasings and could not be counted at all. Read it beside `docs/observation-bounds.md`: one says what the
+  specs declare, the other says what kind of stop each is. **Nothing to migrate** — no existing signature,
+  `Constitution`, baseline format or report shape changed, and the new surface is opt-in to read.
+
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **42 bounds across 15 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **45 bounds across 16 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing

@@ -102,7 +102,7 @@ crate X [as Y];`** in the governed module republishes the external crate root `X
 public surface — like `pub use ::X;` — and SHALL react when `X` is in/under the forbidden set; the
 exposure names the **real crate `X`** (not the `as`-rename `Y`), seam-qualified `X exposed by pub
 extern crate X` (`extern crate self as …` is not an external exposure and is skipped). One form
-SHALL remain a **documented non-observed bound (bound: semantic-reexport-exposure/an-underscore-rename-is-a-documented-non-observed-bound)**, never a silent claim of cleanliness: an
+SHALL remain a **documented non-observed bound (bound: semantic-reexport-exposure/an-underscore-rename-is-a-documented-bound)**, never a silent claim of cleanliness: an
 **underscore rename** (`pub use crate::infra::DbPool as _;`) imports a trait's methods without
 binding a nameable path, so it exposes no name a consumer can reach through the module.
 
@@ -126,7 +126,7 @@ binding a nameable path, so it exposes no name a consumer can reach through the 
 - **WHEN** the governed module declares `extern crate worklane_core;` (no `pub`) under `must_not_expose("worklane_core")`
 - **THEN** the system reports no violation, because a private extern crate does not republish the crate on the public surface
 
-#### Scenario: An underscore rename is a documented non-observed bound
+#### Scenario: An underscore rename is a documented bound
 
 - **WHEN** the governed module declares `pub use crate::infra::DbPool as _;` under `must_not_expose("crate::infra")`
 - **THEN** the system does not react — `as _` binds no nameable path a consumer can reach — and this is a stated bound, not a silent claim of cleanliness

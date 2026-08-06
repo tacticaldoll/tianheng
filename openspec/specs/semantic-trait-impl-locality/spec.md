@@ -173,7 +173,7 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 - **WHEN** a disallowed module declares `use crate::facade::Command;` (where `crate::facade` re-exports `crate::command::Command` via `pub use`) then `impl Command for Foo { … }`
 - **THEN** the system follows the re-export chain, matches the anchor `crate::command::Command`, and emits a violation rather than silently passing
 
-#### Scenario: A macro-generated impl is a documented coverage bound
+#### Scenario: A macro-generated impl is a documented bound
 
 - **WHEN** an `impl Command for Foo` is produced by a macro expansion in a disallowed module
 - **THEN** the system does not claim to observe it (out of scope, the same nature as the existing macro bound), rather than silently asserting the boundary is clean
@@ -199,7 +199,7 @@ The system SHALL resolve the trait named at an impl site to a canonical path usi
 - **WHEN** a disallowed module declares a blanket `impl<T> Trait for T {}` (`T` is the impl's own generic parameter) alongside an unrelated `use SomeType as T;` naming a real crate-defined type, AND a genuine direct `impl Trait for SomeType {}` in that same module
 - **THEN** the system reports TWO distinct violations, not one — the blanket impl's own `T` is never resolved through the same-named alias to produce an owner identical to the direct impl's, which would otherwise let the two impl sites' findings collapse under exact-identity dedup and silently drop one genuine violation
 
-#### Scenario: A cfg-gated module with an absent file is skipped, not a scan error — a stated coverage bound
+#### Scenario: A cfg-gated module with an absent file is skipped, not a scan error — a stated bound
 
 - **WHEN** the crate declares `#[cfg(feature = "x")] mod optional;` with no `optional.rs` (the feature is off)
 - **THEN** the whole-crate walk skips the module (a stated coverage bound) rather than failing the gate with a scan error (exit 2)

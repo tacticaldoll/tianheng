@@ -21,6 +21,9 @@ pub use xuanji::{
     StructuredFactIdentity, Violation, ViolationId,
 };
 
+mod bounds;
+pub use bounds::observation_bounds;
+
 mod dsl;
 mod finding;
 mod registry;

@@ -1,0 +1,207 @@
+# observation-bound-model Specification
+
+## Purpose
+
+Type where a reaction's measure deliberately stops, so a declared observation bound carries a classification a
+reaction can check rather than an adjective a reader must interpret — and hold the specs' declarations and the
+code's in a bijection, in both directions.
+## Requirements
+### Requirement: A declared bound SHALL carry a typed extent whose illegal states are unrepresentable
+
+Every declared observation bound SHALL carry an `Extent`: where the reaction's measure stops. The type SHALL
+be nested rather than flat, so a shape the observation source never reached has **nowhere** to carry a claim
+about how the reaction treated it. This is the difference between a model and a label — a flat enum admits
+"never observed it, and it over-reacts", which is the exact contradiction that let a backlog entry predict a
+false negative where the real behaviour was a fail-loud constitution error.
+
+The value set SHALL be the one the declared bounds exhibit, not a designed hierarchy. Seven stops were read out
+of the family's own declarations:
+
+1. **out of reach** — the observation source never sees the shape (`external-crate-confinement`: comments,
+   string literals and macro bodies are stripped before scanning; `runtime-origin-assertion`: source outside a
+   member's library or binary targets; `semantic-dyn-trait-boundary`: a macro-generated `dyn`).
+2. **reached, refusing to judge** — exit 2 rather than a guess.
+3. **reached, deliberately not refusing** — `semantic-trait-impl-locality`: a cfg-gated module with an absent
+   file "is skipped … rather than failing the gate with a scan error (exit 2)". The mirror of the above, and a
+   real declaration, so the model carries it rather than collapsing the two.
+4. **reached, over-reacting** — `crate-source-boundary`: a `git`-plus-`version` dependency is flagged "even
+   though such a dependency would `cargo publish` successfully".
+5. **reached, under-reacting** — a declared false negative. `inline-symbol-path-confinement`: "the system does
+   NOT react (a false negative the adopter owns by narrowing)".
+6. **reached, correctly not a violation** — `semantic-reexport-exposure`'s `as _`, which "binds no nameable path
+   a consumer can reach", and the body-nested module and plain item, "unreachable as `crate::…`". Nothing is
+   bounded at all: the reaction is right, and the declaration exists only so a reader does not misread the
+   silence as an escape. This value was **absent from the first draft** and was forced by classifying the
+   declared set — three bounds are exactly it, and the granularity value below could not hold them because it
+   requires a bounded part.
+7. **reached, reacting exactly, bounded in what the fact carries** — `semantic-dyn-trait-boundary`'s
+   unrenderable sub-node: "each still *reacts* on first occurrence; only baseline-dedup granularity is
+   bounded". The reaction is not bounded at all here, so an extent that implied otherwise would misreport it.
+
+Value 2 SHALL be retained although **no declared bound uses it**, and the absence SHALL be stated rather than
+resolved by dropping it. The misclassification this model exists to prevent was exactly a confusion between it
+and value 1: a backlog entry predicted a silent false negative for a `#[cfg_attr]` path remap where the real
+behaviour was a fail-loud refusal, and the entry's own lesson is that the risk class decides urgency. A
+direction that cannot be *named* cannot be predicted with, so this value earns its place from the prediction
+side rather than from a current instance.
+
+Granularity SHALL be carried **only** by the sixth, not as an independent field on every extent. No declared
+bound is both out of reach and granularity-limited, so a model offering both on every value would invite a
+combination nothing exhibits.
+
+#### Scenario: A never-reached shape cannot claim a reaction direction
+
+- **WHEN** a declaration says the observation source never sees the shape
+- **THEN** the type offers no place to record over- or under-reaction, so the contradiction is a compile
+  error rather than a review finding
+
+#### Scenario: Refusing to judge and declining to refuse are distinct
+
+- **WHEN** one bound declares that the reaction exits 2 on a shape and another declares that it deliberately
+  continues past a shape that could have errored
+- **THEN** they carry different values, because collapsing them would make a declared fail-loud and a declared
+  skip read alike while their adopter consequences are opposite
+
+#### Scenario: A reaction that is exactly right is not described as bounded
+
+- **WHEN** a bound limits only the granularity at which two occurrences are told apart, while the reaction
+  fires correctly on each
+- **THEN** the extent records that the reaction is as intended and names the bounded part of the fact, so the
+  projection does not report a working reaction as a limited one
+
+### Requirement: A declared false negative SHALL name who owns closing it
+
+An under-reacting extent SHALL carry an owner: this dimension's own engine, a layer beneath it (naming which),
+or the adopter. A false negative is the one direction this family treats as a defect, so a declaration of one
+with nobody responsible is how it outlives its reason. The declared bounds already distinguish all three —
+"inherited from the module scanner", "shared with the semantic dimension", and "a false negative the adopter
+owns by narrowing" — in prose that no reaction can read.
+
+An owner SHALL NOT be carried by the other extents. Nothing is owed for a shape nothing observes by design,
+and inventing an owner there would make the field decorative wherever it is not load-bearing.
+
+#### Scenario: An under-reacting bound is declared without an owner
+
+- **WHEN** a declaration records that the reaction fires less than the truth
+- **THEN** the type requires the owner, so the declaration cannot be completed without saying who must act
+
+#### Scenario: An inherited bound names the layer it is inherited from
+
+- **WHEN** a bound exists because a layer beneath the dimension cannot distinguish the shape
+- **THEN** the owner names that layer, so closing it in this dimension is visibly a fork rather than a fix
+
+### Requirement: What the pinning test demonstrates SHALL be derived from the extent
+
+The direction a bound's pinning test must demonstrate SHALL be a function of the extent, never a field beside
+it. An out-of-reach or under-reacting bound is defended by a test showing the reaction does **not** fire; an
+over-reacting bound by a test showing it fires on a shape that is not really a violation; a refusing bound by
+a test showing exit 2. A separately declared direction carries no information the extent does not already
+determine, and two copies of one fact can disagree.
+
+#### Scenario: The demonstrated direction cannot contradict the extent
+
+- **WHEN** a bound declares an over-reacting extent
+- **THEN** the direction its pinning test must demonstrate is derived, so a declaration cannot claim the extent
+  of one kind and the evidence of another
+
+### Requirement: A dimension SHALL export its declarations as library items
+
+Each dimension owning declared bounds SHALL expose them from its library, not from `#[cfg(test)]` code. A
+declaration compiled only when its own crate is under test is invisible to every other crate, so no single
+reaction could hold the specs and the code in bijection — and the protocol that follows this change requires an
+observer to declare its bounds as part of joining a run, which a test-only item cannot satisfy.
+
+The three crates owning declared bounds today are the static, semantic, and runtime dimensions. A crate with no
+declared bound SHALL gain no export: an empty accessor would be a name with nothing behind it.
+
+#### Scenario: A dimension's declarations are readable from another crate
+
+- **WHEN** a reaction in the composed shell enumerates every declared bound
+- **THEN** it reads each dimension's exported declarations directly, with no test-only visibility and no
+  duplicated list
+
+### Requirement: The specs' declarations and the code's SHALL be held in bijection
+
+A reaction SHALL assert that the set of bound ids declared in `openspec/specs/*/spec.md` **equals** the set
+declared in code, and SHALL name every id on either side that has no counterpart. Ids SHALL be asserted
+duplicate-free before the sets are compared, since two declarations collapsing onto one id would satisfy an
+equality that proves nothing.
+
+The id SHALL be the `<capability>/<scenario-slug>` form the register already derives, so this reaction
+introduces no second naming scheme and no lookup table.
+
+Both directions are required for the same reason the register requires both of its own: a spec bound with no
+declaration is an unclassified claim, and a declaration with no spec bound is a classification of something no
+reader can find.
+
+#### Scenario: A spec declares a bound with no typed declaration
+
+- **WHEN** a bound scenario is added to a spec and no declaration is added in code
+- **THEN** the reaction fails, naming the id, because the qualifier slot it used to carry is gone and an
+  unclassified bound would otherwise pass silently
+
+#### Scenario: Code declares a bound no spec states
+
+- **WHEN** a declaration exists whose id matches no bound scenario
+- **THEN** the reaction fails, naming the id, because a classification a spec reader cannot find is a fact
+  recorded where nobody looks
+
+#### Scenario: Two declarations collapse onto one id
+
+- **WHEN** two declarations carry the same id
+- **THEN** the reaction fails before comparing the sets, because set equality would hold while one bound went
+  unclassified
+
+### Requirement: The extents SHALL be projected into a generated, staleness-checked document
+
+The reaction SHALL emit a projection grouping every declared bound by its extent, blessed by an environment
+variable and diffed on every run, in the manner `AGENTS.self-law.md` and `docs/observation-bounds.md` already
+are. It SHALL lead with the count of declared false negatives, because that figure is the family's own audit
+backlog and a number in a footnote is not read — the same reason the register's projection leads with its
+unpinned count.
+
+The projection SHALL state what it does not claim, in its own header.
+
+#### Scenario: The projection is stale
+
+- **WHEN** a declaration's extent changes and the projection is not regenerated
+- **THEN** the reaction fails and names the blessing command
+
+#### Scenario: A reader can count the declared false negatives without reading code
+
+- **WHEN** a reader opens the projection
+- **THEN** the number of under-reacting bounds and their owners lead the document
+
+### Requirement: Observation bounds
+
+This capability SHALL declare its own limits rather than leave them to the model's silence: it classifies where
+a reaction stops and does not verify the classification against the reaction, and a capability whose subject is
+honesty about what is not observed cannot be implicit about its own.
+
+Each is a limit of the **model**, not of a dimension's engine: one on prose the type cannot read, one on a value
+the evidence did not earn, and one on a combination the nesting deliberately forbids.
+
+#### Scenario: Whether a declaration's stated cause is the real cause is not observed — a stated bound
+
+- **WHEN** a declaration's rationale string names a cause that is not why the reaction stops
+- **THEN** the model does not claim to observe it, a stated bound: the extent is typed and checkable, the
+  rationale is prose, and requiring the prose to match would trade a fact for a heuristic
+- **PINNED-BY** `a_rationale_that_contradicts_its_extent_is_a_stated_bound`
+
+#### Scenario: An answer that depends on the corpus entry point has no extent of its own — a stated bound
+
+- **WHEN** a bound's outcome differs by which entry point observed it — one declared bound reports a seam
+  covered from the root file and unprobed from the directory
+- **THEN** it is declared as under-reacting with the entry point as the inherited owner rather than carrying an
+  extent of its own, a stated bound: one live instance does not earn a value in a set every other member has
+  several of, and the direction that matters (a seam reported covered when it is not) is recorded either way
+- **PINNED-BY** `an_entry_dependent_bound_is_declared_as_under_reacting`
+
+#### Scenario: A bound both out of reach and granularity-limited cannot be expressed — a stated bound
+
+- **WHEN** a future bound is both invisible to the observation source and limited in the granularity of the
+  fact it would have produced
+- **THEN** the model cannot express it, a stated bound: no declared bound exhibits the pair, and offering
+  granularity on every extent would invite a combination nothing shows while weakening the nesting that makes
+  the contradiction above impossible
+- **PINNED-BY** `granularity_is_carried_only_by_the_as_intended_extent`
