@@ -93,10 +93,24 @@ change's trait supplies — is that adding a *question* breaks every declaration
 an existing question correctly breaks nothing. `#[non_exhaustive]` on these enums is that second half, and it
 matches the crate's existing convention (`Severity`, `BoundaryKind`, `ScanDepth`, `Polarity`, `Outcome`).
 
-### D3 — Six values, each with a live instance, and two that a tidier model would have merged
+### D3 — Seven values, read out of the declarations, and three that a tidier model would have merged
 
-The set came out of the declarations, not out of a design. Two are worth defending because merging them is the
-obvious simplification:
+The set came out of the declarations, not out of a design — and classifying all of them **falsified this
+design's first draft**, which is the strongest evidence that the derivation was real rather than decorative.
+Two corrections, both now in the types:
+
+**A seventh value was missing.** Three bounds are reached, correctly silent, and bounded in nothing at all:
+`as _` binds no nameable path a consumer can reach, and a `mod` or a plain item in a function body is
+unreachable as `crate::…`. They exist only so a reader does not misread the silence as an escape. The
+granularity value could not hold them because it requires a bounded part, and folding them into *out of reach*
+would have been the exact confusion this model exists to end — the reaction saw them and was right.
+
+**One value has no live instance.** No declared bound refuses to judge; the only fail-loud-adjacent declaration
+is the one *declining* to refuse. It is kept and the absence is stated, because the motivating
+misclassification was precisely a confusion between refusing to judge and being out of reach, and a direction
+that cannot be named cannot be predicted with.
+
+Three are worth defending because merging them is the obvious simplification:
 
 **Refusing to judge vs deliberately not refusing.** `semantic-trait-impl-locality` declares that a cfg-gated
 module with an absent file "is skipped … rather than failing the gate with a scan error (exit 2)". That is a

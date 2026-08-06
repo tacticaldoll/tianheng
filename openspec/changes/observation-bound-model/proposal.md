@@ -43,10 +43,13 @@ vocabulary or adds to the drift.
 - **Illegal states are unrepresentable in the data, not asserted about it.** `Extent` is nested: a shape the
   observation source never reached has nowhere to carry a claim about how the reaction treated it. The
   `#[cfg_attr]` misclassification above cannot be written in this model.
-- **The value set is derived from the declared bounds, not invented.** Reading all of them yields six ways a
+- **The value set is derived from the declared bounds, not invented.** Reading all of them yields seven ways a
   measure stops — out of reach; reached and refusing to judge; reached and *deliberately not* refusing;
-  reached and over-reacting; reached and under-reacting; reached, reacting exactly, and bounded only in what
-  the fact carries. Each has at least one live instance, and each is cited in the delta spec.
+  reached and over-reacting; reached and under-reacting; reached and correctly not a violation; reached,
+  reacting exactly, and bounded only in what the fact carries. Six have live instances, cited in the delta
+  spec. **Refusing to judge has none**, and is kept because the misclassification this model exists to prevent
+  was exactly a confusion between it and *out of reach* — a direction that cannot be named cannot be predicted
+  with.
 - **A declared false negative names its owner.** `UnderReacts` carries `Owner` — this engine, a layer beneath
   it, or the adopter — because a false negative with nobody responsible for closing it is the shape that
   outlives its reason. One bound says so outright: "a false negative the adopter owns by narrowing".

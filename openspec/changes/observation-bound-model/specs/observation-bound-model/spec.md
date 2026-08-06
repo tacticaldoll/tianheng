@@ -8,8 +8,8 @@ about how the reaction treated it. This is the difference between a model and a 
 "never observed it, and it over-reacts", which is the exact contradiction that let a backlog entry predict a
 false negative where the real behaviour was a fail-loud constitution error.
 
-The value set SHALL be the one the declared bounds exhibit, not a designed hierarchy. Six stops were read out
-of the family's own declarations, each with a live instance:
+The value set SHALL be the one the declared bounds exhibit, not a designed hierarchy. Seven stops were read out
+of the family's own declarations:
 
 1. **out of reach** — the observation source never sees the shape (`external-crate-confinement`: comments,
    string literals and macro bodies are stripped before scanning; `runtime-origin-assertion`: source outside a
@@ -22,9 +22,22 @@ of the family's own declarations, each with a live instance:
    though such a dependency would `cargo publish` successfully".
 5. **reached, under-reacting** — a declared false negative. `inline-symbol-path-confinement`: "the system does
    NOT react (a false negative the adopter owns by narrowing)".
-6. **reached, reacting exactly, bounded in what the fact carries** — `semantic-dyn-trait-boundary`'s
+6. **reached, correctly not a violation** — `semantic-reexport-exposure`'s `as _`, which "binds no nameable path
+   a consumer can reach", and the body-nested module and plain item, "unreachable as `crate::…`". Nothing is
+   bounded at all: the reaction is right, and the declaration exists only so a reader does not misread the
+   silence as an escape. This value was **absent from the first draft** and was forced by classifying the
+   declared set — three bounds are exactly it, and the granularity value below could not hold them because it
+   requires a bounded part.
+7. **reached, reacting exactly, bounded in what the fact carries** — `semantic-dyn-trait-boundary`'s
    unrenderable sub-node: "each still *reacts* on first occurrence; only baseline-dedup granularity is
    bounded". The reaction is not bounded at all here, so an extent that implied otherwise would misreport it.
+
+Value 2 SHALL be retained although **no declared bound uses it**, and the absence SHALL be stated rather than
+resolved by dropping it. The misclassification this model exists to prevent was exactly a confusion between it
+and value 1: a backlog entry predicted a silent false negative for a `#[cfg_attr]` path remap where the real
+behaviour was a fail-loud refusal, and the entry's own lesson is that the risk class decides urgency. A
+direction that cannot be *named* cannot be predicted with, so this value earns its place from the prediction
+side rather than from a current instance.
 
 Granularity SHALL be carried **only** by the sixth, not as an independent field on every extent. No declared
 bound is both out of reach and granularity-limited, so a model offering both on every value would invite a

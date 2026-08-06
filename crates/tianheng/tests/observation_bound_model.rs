@@ -375,3 +375,96 @@ fn because_of(extent: &Extent) -> &str {
         _ => "(a value this projection does not yet render)",
     }
 }
+
+// --- this capability's own declared bounds, demonstrated ---
+//
+// A capability whose subject is honesty about what is not observed cannot be implicit about its own limits, so
+// each of the three is a bound-marked scenario in `observation-bound-model`'s spec and each is demonstrated
+// here. Every one shows the direction its extent predicts: the model does not react.
+
+/// `observation-bound-model/whether-a-declaration-s-stated-cause-is-the-real-cause-is-not-observed-a-stated-bound`
+///
+/// The extent is typed and checkable; the rationale is prose. Requiring the prose to agree with the extent would
+/// trade a fact for a heuristic, so a declaration whose rationale says the opposite of its extent is accepted.
+#[test]
+fn a_rationale_that_contradicts_its_extent_is_a_stated_bound() {
+    let contradictory = xuanji_bound_decl_with_a_lying_rationale();
+    // The model reports nothing about it: the extent still decides what the defence must demonstrate, and the
+    // sentence disagreeing with it changes neither.
+    assert_eq!(
+        contradictory.extent().demonstrates(),
+        tianheng::Demonstrates::DoesNotReact,
+        "the extent decides the predicted evidence, never the rationale beside it"
+    );
+    assert!(
+        because_of(contradictory.extent()).contains("over-reacts"),
+        "the fixture's rationale must actually contradict its extent, or this bound is demonstrated by nothing"
+    );
+}
+
+/// A declaration whose rationale claims the opposite of the extent it carries.
+fn xuanji_bound_decl_with_a_lying_rationale() -> BoundDecl {
+    BoundDecl::new(
+        tianheng::BoundId::new("probe-capability/a-fixture-bound"),
+        "a shape used only to demonstrate that the rationale is not read",
+        Extent::OutOfReach {
+            because: "this sentence claims the reaction over-reacts, which its extent denies",
+        },
+        "a_rationale_that_contradicts_its_extent_is_a_stated_bound",
+    )
+}
+
+/// `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
+///
+/// One declared bound's outcome differs by which entry point observed it. It is expressed through an existing
+/// value rather than earning one: a single instance does not justify a value every other member has several of,
+/// and the direction that matters — a seam reported covered when it is not — is recorded either way.
+#[test]
+fn an_entry_dependent_bound_is_declared_as_under_reacting() {
+    let code = declared_bounds();
+    let symlink = code
+        .get(
+            "runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound",
+        )
+        .expect("the entry-dependent bound is declared");
+    match symlink.extent() {
+        Extent::Reached(Reached::UnderReacts { owner, .. }) => assert!(
+            matches!(owner, Owner::Inherited { from } if from.contains("entry point")),
+            "the entry point is the layer that decides the answer, so the ownership is inherited from it"
+        ),
+        other => panic!(
+            "an entry-dependent answer is recorded as an under-reaction, not as {}",
+            other.as_str()
+        ),
+    }
+}
+
+/// `observation-bound-model/a-bound-both-out-of-reach-and-granularity-limited-cannot-be-expressed-a-stated-bound`
+///
+/// Granularity is carried only by the as-intended extent, so the pair cannot be written. What this test can
+/// show is that the pair has no instance to express: every granularity-bounded declaration is one whose
+/// reaction is exactly right.
+#[test]
+fn granularity_is_carried_only_by_the_as_intended_extent() {
+    let code = declared_bounds();
+    let granularity_bounded: Vec<&str> = code
+        .iter()
+        .filter(|(_, decl)| matches!(decl.extent(), Extent::Reached(Reached::AsIntended { .. })))
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert!(
+        !granularity_bounded.is_empty(),
+        "no granularity-bounded declaration exists, so this bound would be demonstrated by an empty set"
+    );
+    // And no out-of-reach declaration carries one, which is what the type makes unwritable rather than what
+    // this assertion discovers — stated here so a reader meets the claim beside its evidence.
+    for (id, decl) in &code {
+        if matches!(decl.extent(), Extent::OutOfReach { .. }) {
+            assert_eq!(
+                decl.extent().demonstrates(),
+                tianheng::Demonstrates::DoesNotReact,
+                "{id}: an out-of-reach bound has no granularity and no owner to carry"
+            );
+        }
+    }
+}

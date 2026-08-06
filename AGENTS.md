@@ -310,7 +310,10 @@ bash scripts/test_examples.sh            # every dogfood example still reacts as
 ```
 
 The self-governance gate (`self_governance.rs`, run under `cargo test`) and its projection
-(`self_law_projection_is_fresh`) must stay green — never weaken the law to pass it. Beyond the list
+(`self_law_projection_is_fresh`) must stay green — never weaken the law to pass it. So must
+`observation_bound_model.rs`, which holds every declared observation bound's spec scenario and its typed
+classification in a bijection and projects `docs/observation-bound-extents.md`; it needs no line of its own
+above because it runs under that same `cargo test`. Beyond the list
 above, CI also runs a **default-features** `clippy`/`doc` pass (catching an unused item or a broken
 intra-doc link when the `audit` feature is off), the declared-MSRV build and test, license-text
 bundling, the packaged-tarball self-test, and the reaction on the clean/violating fixtures (see

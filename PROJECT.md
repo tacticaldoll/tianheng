@@ -256,7 +256,10 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   and a three-slice hypothesis-driven sweep had missed all eight. The same three-part test applies to any
   future instance: the surface must be enumerable, the enumeration must be **generated and
   staleness-checked** rather than hand-maintained, and the projection must state what it does not claim.
-  A register that implied completeness would mislead exactly where it is most trusted. Larger surfaces are
+  A register that implied completeness would mislead exactly where it is most trusted. `observation-bound-model`
+  is the second instance: it enumerates the same surface the register does and reacts over what each bound's
+  stop actually *is*, which the register never governed — a slot that had accumulated many phrasings, one of
+  them used by two capabilities for bounds on opposite sides of the false-negative line. Larger surfaces are
   named but not committed to — the requirement and scenario surface across every capability is a
   multi-window program, and promoting one is a `BACKLOG.md` decision with its own trigger, never an
   assumption inherited from this first success. Its size is deliberately **not** written here. This decision
