@@ -3,13 +3,53 @@
 //! Each entry classifies a bound the runtime dimension's spec already declares, keyed on the id that spec
 //! derives from the declaring scenario's heading. See `xuanji::bound` for what each extent means and why the
 //! type is nested.
+//!
+//! **The set depends on the `audit` feature**, because a bound is a property of a *reaction* and an audit-OFF
+//! build contains none of the probe audit. Five of the six declarations describe `audit_probe_coverage` — the
+//! scanner that lives behind `audit`, as `observer` does and for the same reason — so declaring them in a build
+//! that compiles no scanner would tell a reader a bound exists for a reaction the crate does not have. The one
+//! that survives audit-OFF describes the always-present origin derivation on the hot path.
 
-use xuanji::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
+use xuanji::{BoundDecl, BoundId, Extent, Reached};
+// Only the audit-scoped declarations name an owner or a fact granularity, so both imports are gated with
+// them. `cargo clippy -p louke` — the isolated audit-OFF pass — is what would report either as unused.
+#[cfg(feature = "audit")]
+use xuanji::{FactGranularity, Owner};
 
-/// Every observation bound 漏刻 declares, in the order its spec declares them.
+/// The observation bounds 漏刻 declares **in this build**.
+///
+/// Not "every bound its spec declares": five of the six describe the probe audit, which an audit-OFF build does
+/// not contain. See this module's header.
 pub fn observation_bounds() -> Vec<BoundDecl> {
-    vec![
-        BoundDecl::new(
+    // Mutable only where something extends it. The allow is scoped to the configuration where the statement
+    // below is compiled out, rather than blanket — `cargo clippy -p louke` reported this the moment the five
+    // audit declarations moved behind the gate, which is the pass that exists for exactly this class.
+    #[cfg_attr(not(feature = "audit"), allow(unused_mut))]
+    let mut bounds = vec![        BoundDecl::new(
+            BoundId::new(
+                "runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound",
+            ),
+            "a registered type that is a reference, tuple, array, pointer, or function pointer",
+            Extent::Reached(Reached::OverReacts {
+                because: "the derived origin is a truncated rendering matching no module name, so the \
+                          crossing reacts fail-closed rather than being admitted through the wrapper".into(),
+            }),
+            "the_derived_origin_honors_its_stated_shape_bounds",
+        ),
+    ];
+    #[cfg(feature = "audit")]
+    bounds.extend(audit_bounds());
+    bounds
+}
+
+/// The bounds of the **probe audit**, present only where the audit is compiled.
+///
+/// Gated for the reason written above `mod observer`: the reaction these describe lives behind `audit`, and a
+/// declaration without its reaction is the unbacked claim the bound model exists to refuse. The order within
+/// this list is free — every projection of the register sorts by id.
+#[cfg(feature = "audit")]
+fn audit_bounds() -> Vec<BoundDecl> {
+    vec![        BoundDecl::new(
             BoundId::new(
                 "runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound",
             ),
@@ -55,17 +95,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           the raw absolute path — the violation is still emitted".into(),
             }),
             "an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote",
-        ),
-        BoundDecl::new(
-            BoundId::new(
-                "runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound",
-            ),
-            "a registered type that is a reference, tuple, array, pointer, or function pointer",
-            Extent::Reached(Reached::OverReacts {
-                because: "the derived origin is a truncated rendering matching no module name, so the \
-                          crossing reacts fail-closed rather than being admitted through the wrapper".into(),
-            }),
-            "the_derived_origin_honors_its_stated_shape_bounds",
         ),
         BoundDecl::new(
             BoundId::new(
