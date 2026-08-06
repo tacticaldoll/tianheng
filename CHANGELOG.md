@@ -471,6 +471,14 @@ them.
   What it found, recorded in `BACKLOG.md` rather than worked around: `BoundaryKind` has no value a participant
   owns, so an outsider's violation must claim one of the family's four kinds.
 
+  The participant declares **two extents**, not only two bounds: a shape it never reads (it lists a subtree one
+  level deep and never descends) and a shape it reads and judges **too harshly** — its rule tests a file's first
+  line, so a real module header below a licence comment reads as absent though a reader of that file learns
+  exactly what the rule says it should. The over-reaction was found by the window's closing review, in the one
+  artefact whose whole subject is declaring what you do not observe, and it is declared rather than closed:
+  skipping a leading comment block would trade the edge for a block comment and an inner attribute, and would
+  leave the rule's wording saying something other than what the code does.
+
 - **`Polarity` now says when a violation carries none.** It is an `Option` on `Violation`, and nothing stated the
   rule, so a reader — this window's own review included — reads the absence as a rule kind missing its repair
   direction. Measured across every production emission site: 圭表's crate and module rules answer through
