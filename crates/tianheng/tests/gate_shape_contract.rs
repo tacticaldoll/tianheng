@@ -14,7 +14,7 @@
 //! pinning test below rather than an approximation. Form conformance is not substance — see the projection's
 //! own header, which says so where a reader meets the table.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -47,94 +47,13 @@ const SCRIPTS: &str = "scripts";
 const FIXTURE_GATE: &str = "check_probe.sh";
 const FIXTURE_TWIN: &str = "test_probe.sh";
 
-/// The nine properties, in the order the projection prints them and the order a failure names them.
-///
-/// Three per gate, five per twin, one over `AGENTS.md`. Each is a class this window observed rather than a
-/// checklist item assembled for symmetry.
+/// Which file a failure of a property names.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Property {
-    Backstop,
-    ContractHeader,
-    TargetDirectory,
-    TwinExists,
-    ExitCodes,
-    BothDirections,
-    ReadOnly,
-    SilentCleanRun,
-    DefinitionOfDone,
-}
-
-impl Property {
-    /// Every property, exhaustively. The `match` below carries no wildcard, so a tenth property cannot be
-    /// added without appearing here — the shape `SeamKind::ALL` uses for the same reason.
-    const ALL: [Property; 9] = [
-        Property::Backstop,
-        Property::ContractHeader,
-        Property::TargetDirectory,
-        Property::TwinExists,
-        Property::ExitCodes,
-        Property::BothDirections,
-        Property::ReadOnly,
-        Property::SilentCleanRun,
-        Property::DefinitionOfDone,
-    ];
-
-    /// The column label, short enough for a table.
-    fn label(self) -> &'static str {
-        match self {
-            Property::Backstop => "backstop",
-            Property::ContractHeader => "contract header",
-            Property::TargetDirectory => "target directory",
-            Property::TwinExists => "twin exists",
-            Property::ExitCodes => "exit codes",
-            Property::BothDirections => "both directions",
-            Property::ReadOnly => "read-only",
-            Property::SilentCleanRun => "silent clean run",
-            Property::DefinitionOfDone => "definition of done",
-        }
-    }
-
-    /// What an author has to do about it, said in the failure rather than left to a document.
-    fn remedy(self) -> &'static str {
-        match self {
-            Property::Backstop => {
-                "source scripts/lib/exit_contract.sh and invoke exit_contract_backstop, so an unhandled \
-                 command's status cannot escape as a foreign exit code"
-            }
-            Property::ContractHeader => {
-                "state the three-way contract in the header — `Exit 0 <clean>, 1 <violation>, 2 cannot judge` \
-                 — with the verdict words for 0 and 1 chosen for this gate's subject"
-            }
-            Property::TargetDirectory => {
-                "take the repository to judge as `${1:-<this checkout>}`, so a fixture can be pointed at it; a \
-                 gate that cannot be pointed at a fixture cannot be observed refusing"
-            }
-            Property::TwinExists => {
-                "add the companion failure matrix beside it, named by substituting `test_` for `check_`; a gate \
-                 nobody has watched refuse is protection claimed rather than observed"
-            }
-            Property::ExitCodes => {
-                "assert the expected exit CODE in the matrix, not merely non-zero: a 1 collapsing into a 2 \
-                 rode green through CI exactly once this way"
-            }
-            Property::BothDirections => {
-                "hold both an `expect_pass` and an `expect_fail` direction; a gate that refuses everything \
-                 satisfies a refusal-only matrix completely"
-            }
-            Property::ReadOnly => {
-                "assert the judged repository is unchanged after the gate runs, on a fixture the gate has not \
-                 already judged, and say `mutated` when it is not"
-            }
-            Property::SilentCleanRun => {
-                "capture a clean run's stderr alone (`2>&1 >/dev/null`) and assert it is empty; nothing about \
-                 the exit code can see a gate printing cannot-judge on every clean input"
-            }
-            Property::DefinitionOfDone => {
-                "add the file to AGENTS.md's Definition of Done block, the single source for the local \
-                 pre-flight list; a gate nothing invokes is a comment"
-            }
-        }
-    }
+enum Subject {
+    Gate,
+    Twin,
+    /// The one property over both files at once: Definition-of-Done membership.
+    BothFiles,
 }
 
 /// Whether one file holds one property.
@@ -157,20 +76,126 @@ impl Holds {
     }
 }
 
-/// One gate, its twin, and how the nine properties read.
-struct Row {
-    gate: String,
-    twin: String,
-    twin_tracked: bool,
-    cells: BTreeMap<&'static str, Holds>,
+/// One property: the column it prints as, the file a failure names, the remedy that failure states, and how it
+/// is measured.
+struct Property {
+    label: &'static str,
+    subject: Subject,
+    remedy: &'static str,
+    holds: fn(&Unit) -> Holds,
 }
 
-impl Row {
-    fn holds(&self, property: Property) -> Holds {
-        *self
-            .cells
-            .get(property.label())
-            .expect("every property is measured for every row")
+/// The nine properties, in the order the projection prints them and the order a failure names them.
+///
+/// Three per gate, five per twin, one over `AGENTS.md`. Each is a class this window observed rather than a
+/// checklist item assembled for symmetry.
+///
+/// **One array, not an enum beside a list of its variants.** Written the second way first — a `Property` enum
+/// with an `ALL` constant — and it carried a silent false negative of exactly the kind this capability exists
+/// to refuse: a tenth variant compiles once it has a label and a remedy, and is then never measured, because
+/// nothing forces it into `ALL`. Every test here iterates that list, so the new property would go unchecked
+/// while the reaction reported the surface conformant. Here there is no second list to forget.
+const PROPERTIES: [Property; 9] = [
+    Property {
+        label: "backstop",
+        subject: Subject::Gate,
+        remedy: "source scripts/lib/exit_contract.sh and invoke exit_contract_backstop, so an unhandled \
+                 command's status cannot escape as a foreign exit code",
+        holds: |unit| holds(installs_the_backstop(&unit.gate_text)),
+    },
+    Property {
+        label: "contract header",
+        subject: Subject::Gate,
+        remedy: "state the three-way contract in the header — `Exit 0 <clean>, 1 <violation>, 2 cannot judge` \
+                 — with the verdict words for 0 and 1 chosen for this gate's subject",
+        holds: |unit| holds(declares_the_three_way_contract(&unit.gate_text)),
+    },
+    Property {
+        label: "target directory",
+        subject: Subject::Gate,
+        remedy: "take the repository to judge as `${1:-<this checkout>}`, so a fixture can be pointed at it; a \
+                 gate that cannot be pointed at a fixture cannot be observed refusing",
+        holds: |unit| holds(accepts_a_target_directory(&unit.gate_text)),
+    },
+    Property {
+        label: "twin exists",
+        subject: Subject::Twin,
+        remedy: "add the companion failure matrix beside it, named by substituting `test_` for `check_`; a gate \
+                 nobody has watched refuse is protection claimed rather than observed",
+        holds: |unit| holds(unit.twin_text.is_some()),
+    },
+    Property {
+        label: "exit codes",
+        subject: Subject::Twin,
+        remedy: "assert the expected exit CODE in the matrix, not merely non-zero: a 1 collapsing into a 2 \
+                 rode green through CI exactly once this way",
+        holds: |unit| unit.twin_holds(asserts_exit_codes),
+    },
+    Property {
+        label: "both directions",
+        subject: Subject::Twin,
+        remedy: "hold both an `expect_pass` and an `expect_fail` direction; a gate that refuses everything \
+                 satisfies a refusal-only matrix completely",
+        holds: |unit| unit.twin_holds(holds_both_directions),
+    },
+    Property {
+        label: "read-only",
+        subject: Subject::Twin,
+        remedy: "assert the judged repository is unchanged after the gate runs, on a fixture the gate has not \
+                 already judged, and say `mutated` when it is not",
+        holds: |unit| unit.twin_holds(asserts_read_only),
+    },
+    Property {
+        label: "silent clean run",
+        subject: Subject::Twin,
+        remedy: "capture a clean run's stderr alone (`2>&1 >/dev/null`) and assert the variable it assigned is \
+                 empty; nothing about the exit code can see a gate printing cannot-judge on every clean input",
+        holds: |unit| unit.twin_holds(asserts_a_silent_clean_run),
+    },
+    Property {
+        label: "definition of done",
+        subject: Subject::BothFiles,
+        remedy: "add the file to AGENTS.md's Definition of Done block, the single source for the local \
+                 pre-flight list; a gate nothing invokes is a comment",
+        holds: |unit| {
+            // The publish-time gate's absence is excused; its twin's membership is not. When that gate is
+            // PRESENT the cell reads as ordinary membership, and the staleness of the exemption is refused by
+            // `every_gate_and_twin_is_reachable_from_the_definition_of_done` rather than hidden in a cell.
+            if unit.gate == PUBLISH_TIME_GATE && !unit.gate_in_dod {
+                if unit.twin_in_dod {
+                    Holds::ByExemption
+                } else {
+                    Holds::No
+                }
+            } else {
+                holds(unit.gate_in_dod && unit.twin_in_dod)
+            }
+        },
+    },
+];
+
+fn holds(condition: bool) -> Holds {
+    if condition { Holds::Yes } else { Holds::No }
+}
+
+/// One gate, its twin, and everything the nine properties are measured from.
+struct Unit {
+    gate: String,
+    twin: String,
+    gate_text: String,
+    twin_text: Option<String>,
+    gate_in_dod: bool,
+    twin_in_dod: bool,
+}
+
+impl Unit {
+    /// A twin property: `No` when there is no twin, which is honest rather than noisy — a file that does not
+    /// exist holds none of them, and each absence names a real one.
+    fn twin_holds(&self, held: fn(&str) -> bool) -> Holds {
+        match &self.twin_text {
+            Some(text) => holds(held(text)),
+            None => Holds::No,
+        }
     }
 }
 
@@ -396,10 +421,18 @@ fn definition_of_done(root: &Path) -> Vec<String> {
     let end = body
         .find("\n```")
         .unwrap_or_else(|| panic!("AGENTS.md's Definition of Done fence is never closed"));
+    // Trailing comments are cut, not only whole-line ones. Every entry in this block carries a comment
+    // explaining what its gate is for, and several of those name other paths — so membership read off the whole
+    // line would answer yes for a file that is merely *discussed*. The direction that matters is the exemption:
+    // the publish-time gate's comment is where a reader would most naturally mention the gate that runs at
+    // publish time, and a false yes there reports its exemption stale.
     let commands: Vec<String> = body[..end]
         .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| match line.find('#') {
+            Some(index) => line[..index].trim(),
+            None => line.trim(),
+        })
+        .filter(|command| !command.is_empty())
         .map(str::to_string)
         .collect();
     assert!(
@@ -420,11 +453,11 @@ fn definition_of_done_runs(commands: &[String], path: &str) -> bool {
 /// Fails loudly on an empty enumeration rather than reporting every property of zero gates satisfied. Six
 /// occurrences of that direction in one window is why it is a requirement of this capability and not a detail
 /// of its implementation.
-fn measure(root: &Path) -> Vec<Row> {
-    let units = shell_units(root);
+fn measure(root: &Path) -> Vec<Unit> {
+    let tracked_units = shell_units(root);
     let commands = definition_of_done(root);
 
-    let gates: Vec<String> = units
+    let gates: Vec<String> = tracked_units
         .iter()
         .filter(|path| {
             path.rsplit_once('/')
@@ -435,72 +468,25 @@ fn measure(root: &Path) -> Vec<Row> {
         .collect();
     assert!(
         !gates.is_empty(),
-        "no gate found under `scripts/check_*.sh` in {root:?}; every property of zero gates holds, and \
-         reporting that as conformance is the silent pass this capability exists to refuse"
+        "no gate found under `scripts/` in {root:?}; every property of zero gates holds, and reporting that as \
+         conformance is the silent pass this capability exists to refuse"
     );
 
-    let tracked_units: BTreeSet<&str> = units.iter().map(String::as_str).collect();
+    let present: BTreeSet<&str> = tracked_units.iter().map(String::as_str).collect();
 
     gates
         .into_iter()
         .map(|gate| {
             let gate_text = read(root, &gate);
             let twin = twin_of(&gate);
-            let twin_tracked = tracked_units.contains(twin.as_str());
-            let twin_text = twin_tracked.then(|| read(root, &twin));
-
-            let of_twin = |held: fn(&str) -> bool| match &twin_text {
-                Some(text) if held(text) => Holds::Yes,
-                _ => Holds::No,
-            };
-            let yes = |condition: bool| if condition { Holds::Yes } else { Holds::No };
-
-            let membership = {
-                let gate_in = definition_of_done_runs(&commands, &gate);
-                let twin_in = definition_of_done_runs(&commands, &twin);
-                if gate == PUBLISH_TIME_GATE {
-                    // The exemption, checked live: it excuses an ABSENCE, so a publish-time gate that has
-                    // joined the block means the exemption is stale and must be retired, not silently kept.
-                    // An exception that only ever permits keeps permitting, and the next reader inherits a
-                    // licence with no live instance behind it.
-                    assert!(
-                        !gate_in,
-                        "{PUBLISH_TIME_GATE} now appears in AGENTS.md's Definition of Done, so its \
-                         membership exemption is stale: retire the exemption in \
-                         `gate-shape-contract`'s spec and in this reaction rather than keeping a licence \
-                         nothing exercises"
-                    );
-                    if twin_in {
-                        Holds::ByExemption
-                    } else {
-                        Holds::No
-                    }
-                } else {
-                    yes(gate_in && twin_in)
-                }
-            };
-
-            let mut cells = BTreeMap::new();
-            for property in Property::ALL {
-                let holds = match property {
-                    Property::Backstop => yes(installs_the_backstop(&gate_text)),
-                    Property::ContractHeader => yes(declares_the_three_way_contract(&gate_text)),
-                    Property::TargetDirectory => yes(accepts_a_target_directory(&gate_text)),
-                    Property::TwinExists => yes(twin_tracked),
-                    Property::ExitCodes => of_twin(asserts_exit_codes),
-                    Property::BothDirections => of_twin(holds_both_directions),
-                    Property::ReadOnly => of_twin(asserts_read_only),
-                    Property::SilentCleanRun => of_twin(asserts_a_silent_clean_run),
-                    Property::DefinitionOfDone => membership,
-                };
-                cells.insert(property.label(), holds);
-            }
-
-            Row {
+            let twin_text = present.contains(twin.as_str()).then(|| read(root, &twin));
+            Unit {
+                gate_in_dod: definition_of_done_runs(&commands, &gate),
+                twin_in_dod: definition_of_done_runs(&commands, &twin),
                 gate,
                 twin,
-                twin_tracked,
-                cells,
+                gate_text,
+                twin_text,
             }
         })
         .collect()
@@ -509,29 +495,45 @@ fn measure(root: &Path) -> Vec<Row> {
 /// Collect one offence per file per property, so a failure names what to repair and where.
 ///
 /// A reaction reporting "the gate surface is non-conformant" has moved the search cost onto the reader, which
-/// is the cost this capability exists to remove.
-fn offences(rows: &[Row], properties: &[Property]) -> Vec<String> {
+/// is the cost this capability exists to remove. `subject` selects the group a test owns, and is the same field
+/// that decides which of the two files an offence names.
+fn offences(units: &[Unit], subject: Subject) -> Vec<String> {
     let mut found = Vec::new();
-    for row in rows {
-        for property in properties {
-            if row.holds(*property) == Holds::No {
-                let file = match property {
-                    Property::TwinExists
-                    | Property::ExitCodes
-                    | Property::BothDirections
-                    | Property::ReadOnly
-                    | Property::SilentCleanRun => &row.twin,
-                    _ => &row.gate,
-                };
-                found.push(format!(
-                    "{file}: {} — {}",
-                    property.label(),
-                    property.remedy()
-                ));
+    for unit in units {
+        for property in PROPERTIES.iter().filter(|p| p.subject == subject) {
+            if (property.holds)(unit) != Holds::No {
+                continue;
+            }
+            match subject {
+                Subject::Gate => found.push(offence(&unit.gate, property)),
+                Subject::Twin => found.push(offence(&unit.twin, property)),
+                // Both files are required, so the offence names the one that is missing — naming the gate for
+                // an absent twin would send a reader to the wrong file. The publish-time gate's absence is not
+                // an offence, which is what its exemption means.
+                Subject::BothFiles => {
+                    if !unit.gate_in_dod && unit.gate != PUBLISH_TIME_GATE {
+                        found.push(offence(&unit.gate, property));
+                    }
+                    if !unit.twin_in_dod {
+                        found.push(offence(&unit.twin, property));
+                    }
+                }
             }
         }
     }
     found
+}
+
+fn offence(file: &str, property: &Property) -> String {
+    format!("{file}: {} — {}", property.label, property.remedy)
+}
+
+/// Every offence over the whole surface, in the order the properties are declared.
+fn all_offences(units: &[Unit]) -> Vec<String> {
+    [Subject::Gate, Subject::Twin, Subject::BothFiles]
+        .into_iter()
+        .flat_map(|subject| offences(units, subject))
+        .collect()
 }
 
 #[test]
@@ -539,15 +541,7 @@ fn every_gate_holds_the_exit_contract_in_a_checkable_form() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let rows = measure(&root);
-    let found = offences(
-        &rows,
-        &[
-            Property::Backstop,
-            Property::ContractHeader,
-            Property::TargetDirectory,
-        ],
-    );
+    let found = offences(&measure(&root), Subject::Gate);
     assert!(
         found.is_empty(),
         "the gate surface does not hold the exit contract in a checkable form:\n{}",
@@ -560,17 +554,7 @@ fn every_gate_has_a_twin_holding_the_five_matrix_properties() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let rows = measure(&root);
-    let found = offences(
-        &rows,
-        &[
-            Property::TwinExists,
-            Property::ExitCodes,
-            Property::BothDirections,
-            Property::ReadOnly,
-            Property::SilentCleanRun,
-        ],
-    );
+    let found = offences(&measure(&root), Subject::Twin);
     assert!(
         found.is_empty(),
         "a gate's failure matrix does not hold the shape it is for:\n{}",
@@ -583,19 +567,37 @@ fn every_gate_and_twin_is_reachable_from_the_definition_of_done() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let rows = measure(&root);
-    let found = offences(&rows, &[Property::DefinitionOfDone]);
+    let units = measure(&root);
+    let found = offences(&units, Subject::BothFiles);
     assert!(
         found.is_empty(),
         "a gate or its twin runs nowhere by default:\n{}",
         found.join("\n")
     );
-    // The exemption must have exactly one live instance. Zero would mean it is describing nothing, which is
-    // how a hand-written exception rots in the flattering direction.
-    let exempt: Vec<&str> = rows
+
+    // The exemption excuses an ABSENCE, so a publish-time gate that has joined the block means the exemption is
+    // stale and must be retired, not silently kept: an exception that only ever permits keeps permitting, and
+    // the next reader inherits a licence with no live instance behind it.
+    let publish = units
         .iter()
-        .filter(|row| row.holds(Property::DefinitionOfDone) == Holds::ByExemption)
-        .map(|row| row.gate.as_str())
+        .find(|unit| unit.gate == PUBLISH_TIME_GATE)
+        .expect("the publish-time gate is part of the surface it is exempt within");
+    assert!(
+        !publish.gate_in_dod,
+        "{PUBLISH_TIME_GATE} now appears in AGENTS.md's Definition of Done, so its membership exemption is \
+         stale: retire the exemption in `gate-shape-contract`'s spec and in this reaction rather than keeping \
+         a licence nothing exercises"
+    );
+    // And it must have exactly one live instance. Zero would mean it is describing nothing, which is how a
+    // hand-written exception rots in the flattering direction.
+    let membership = PROPERTIES
+        .iter()
+        .find(|property| property.subject == Subject::BothFiles)
+        .expect("the membership property is declared");
+    let exempt: Vec<&str> = units
+        .iter()
+        .filter(|unit| (membership.holds)(unit) == Holds::ByExemption)
+        .map(|unit| unit.gate.as_str())
         .collect();
     assert_eq!(
         exempt,
@@ -604,16 +606,27 @@ fn every_gate_and_twin_is_reachable_from_the_definition_of_done() {
     );
 }
 
+/// The tracked shell units under `scripts/` that are neither a gate nor a twin.
+///
+/// One definition, used by the projection, by the contract-carrying refusal and by the bound that declares the
+/// exclusion — three readers of one rule rather than three copies of it.
+fn outside_the_surface(root: &Path, units: &[Unit]) -> Vec<String> {
+    let paired: BTreeSet<&str> = units
+        .iter()
+        .flat_map(|unit| [unit.gate.as_str(), unit.twin.as_str()])
+        .collect();
+    shell_units(root)
+        .into_iter()
+        .filter(|path| !paired.contains(path.as_str()))
+        .collect()
+}
+
 #[test]
 fn no_unit_outside_the_pairing_carries_the_gate_contract() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let rows = measure(&root);
-    let paired: BTreeSet<&str> = rows
-        .iter()
-        .flat_map(|row| [row.gate.as_str(), row.twin.as_str()])
-        .collect();
+    let units = measure(&root);
 
     // Detection, not a requirement on authored form: any mention in executed text, so a unit that reaches the
     // backstop by an unusual spelling is still seen. The exclusion from the surface is by *naming*, so this is
@@ -631,15 +644,10 @@ fn no_unit_outside_the_pairing_carries_the_gate_contract() {
          describes nothing"
     );
 
-    let mut hiding = Vec::new();
-    for unit in shell_units(&root) {
-        if paired.contains(unit.as_str()) || unit == BACKSTOP_LIBRARY {
-            continue;
-        }
-        if carries(&unit) {
-            hiding.push(unit);
-        }
-    }
+    let hiding: Vec<String> = outside_the_surface(&root, &units)
+        .into_iter()
+        .filter(|path| path != BACKSTOP_LIBRARY && carries(path))
+        .collect();
     assert!(
         hiding.is_empty(),
         "a unit outside the gate-and-twin pairing carries the gate contract, which is a gate wearing another \
@@ -648,57 +656,59 @@ fn no_unit_outside_the_pairing_carries_the_gate_contract() {
 }
 
 /// A throwaway repository holding one gate, its twin, and a Definition of Done that runs both — with exactly
-/// one property withheld.
+/// one property withheld, named by its label.
 ///
 /// The point of building it per property rather than once: a reaction that fails only in aggregate cannot be
-/// trusted to have nine reasons, and two of the nine were originally written against a shape that made three
-/// gates look non-conformant.
-fn fixture_missing(property: Option<Property>) -> PathBuf {
-    let name = property.map(Property::label).unwrap_or("nothing");
+/// trusted to have nine reasons, and two of the nine were originally written against a shape that would have
+/// made three real gates look non-conformant.
+fn fixture_missing(withheld: Option<&str>) -> PathBuf {
+    let missing = |label: &str| withheld == Some(label);
     let root = std::env::temp_dir().join(format!(
         "tianheng-gate-shape-{}-{}",
-        name.replace(' ', "-"),
+        withheld.unwrap_or("nothing").replace(' ', "-"),
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join("scripts")).expect("the fixture directory is writable");
+    std::fs::create_dir_all(root.join(SCRIPTS)).expect("the fixture directory is writable");
 
-    let contract = if property == Some(Property::ContractHeader) {
+    let contract = if missing("contract header") {
         "# Exit 0 clean, 1 violation.\n"
     } else {
         "# Exit 0 clean, 1 violation, 2 cannot judge — the family's own Core Contract.\n"
     };
-    let backstop = if property == Some(Property::Backstop) {
-        // Sourced and never invoked, which is the half that installs nothing.
+    // Sourced and never invoked is the half that installs nothing, so that is the withholding.
+    let backstop = if missing("backstop") {
         "source \"$(dirname \"$0\")/lib/exit_contract.sh\"\n"
     } else {
         "source \"$(dirname \"$0\")/lib/exit_contract.sh\"\nexit_contract_backstop 'probe'\n"
     };
-    let target = if property == Some(Property::TargetDirectory) {
+    let target = if missing("target directory") {
         "repo=$(pwd)\n"
     } else {
         "repo=${1:-$(pwd)}\n"
     };
     std::fs::write(
         root.join(SCRIPTS).join(FIXTURE_GATE),
-        format!("#!/usr/bin/env bash\n#\n{contract}set -Eeuo pipefail\n{backstop}{target}printf 'probe ok\\n'\n"),
+        format!(
+            "#!/usr/bin/env bash\n#\n{contract}set -Eeuo pipefail\n{backstop}{target}printf 'probe ok\\n'\n"
+        ),
     )
     .expect("the fixture gate is writable");
 
-    if property != Some(Property::TwinExists) {
+    if !missing("twin exists") {
         let mut twin = String::from("#!/usr/bin/env bash\nset -Eeuo pipefail\n");
         twin.push_str("expect_pass() { :; }\n");
-        if property != Some(Property::BothDirections) {
+        if !missing("both directions") {
             twin.push_str("expect_fail() { :; }\n");
         }
-        if property != Some(Property::ExitCodes) {
+        if !missing("exit codes") {
             twin.push_str("assert_code() { local expected_status=$1; }\n");
         }
-        if property != Some(Property::SilentCleanRun) {
+        if !missing("silent clean run") {
             twin.push_str("clean_stderr=$(\"$check\" \"$clean\" 2>&1 >/dev/null || true)\n");
             twin.push_str("[[ -z $clean_stderr ]] || exit 1\n");
         }
-        if property != Some(Property::ReadOnly) {
+        if !missing("read-only") {
             twin.push_str(
                 "[[ $before == \"$after\" ]] || { printf 'the gate mutated it\\n' >&2; exit 1; }\n",
             );
@@ -707,7 +717,7 @@ fn fixture_missing(property: Option<Property>) -> PathBuf {
             .expect("the fixture twin is writable");
     }
 
-    let gate_line = if property == Some(Property::DefinitionOfDone) {
+    let gate_line = if missing("definition of done") {
         String::new()
     } else {
         format!("bash {SCRIPTS}/{FIXTURE_GATE}\n")
@@ -734,45 +744,40 @@ fn fixture_missing(property: Option<Property>) -> PathBuf {
 
 #[test]
 fn a_gate_missing_one_property_is_named_by_that_property() {
-    // The conforming fixture first: a reaction that reported an offence here would make every case below
-    // agree with it for the wrong reason.
+    // The conforming fixture first: a reaction that reported an offence here would make every case below agree
+    // with it for the wrong reason.
     let clean = fixture_missing(None);
-    let clean_offences = offences(&measure(&clean), &Property::ALL);
+    let clean_offences = all_offences(&measure(&clean));
     let _ = std::fs::remove_dir_all(&clean);
     assert!(
         clean_offences.is_empty(),
-        "the conforming fixture must hold all nine properties, got: {clean_offences:?}"
+        "the conforming fixture must hold every property, got: {clean_offences:?}"
     );
 
-    for property in Property::ALL {
-        let root = fixture_missing(Some(property));
-        let found = offences(&measure(&root), &Property::ALL);
+    for property in &PROPERTIES {
+        let root = fixture_missing(Some(property.label));
+        let found = all_offences(&measure(&root));
         let _ = std::fs::remove_dir_all(&root);
 
-        let expected_file = match property {
-            Property::TwinExists
-            | Property::ExitCodes
-            | Property::BothDirections
-            | Property::ReadOnly
-            | Property::SilentCleanRun => format!("{SCRIPTS}/{FIXTURE_TWIN}"),
-            _ => format!("{SCRIPTS}/{FIXTURE_GATE}"),
+        // The fixture's withholding is expressed in whichever file the property is a property of, and the
+        // membership one is withheld from the gate's side.
+        let expected_file = match property.subject {
+            Subject::Twin => format!("{SCRIPTS}/{FIXTURE_TWIN}"),
+            Subject::Gate | Subject::BothFiles => format!("{SCRIPTS}/{FIXTURE_GATE}"),
         };
-        let named: Vec<&String> = found
+        let named = found
             .iter()
-            .filter(|offence| {
-                offence.starts_with(&format!("{expected_file}: {}", property.label()))
-            })
-            .collect();
+            .filter(|offence| offence.starts_with(&format!("{expected_file}: {}", property.label)))
+            .count();
         assert_eq!(
-            named.len(),
-            1,
+            named, 1,
             "withholding `{}` must produce exactly that offence against {expected_file}, got: {found:?}",
-            property.label()
+            property.label
         );
 
-        // An absent twin is the one case with dependents: four matrix properties cannot be held by a file
-        // that does not exist, and reporting them is honest rather than noisy — each names a real absence.
-        let expected_total = if property == Property::TwinExists {
+        // An absent twin is the one case with dependents: four matrix properties cannot be held by a file that
+        // does not exist, and reporting them is honest rather than noisy — each names a real absence.
+        let expected_total = if property.label == "twin exists" {
             5
         } else {
             1
@@ -781,7 +786,7 @@ fn a_gate_missing_one_property_is_named_by_that_property() {
             found.len(),
             expected_total,
             "withholding `{}` must not disturb the other properties, got: {found:?}",
-            property.label()
+            property.label
         );
     }
 }
@@ -866,18 +871,8 @@ fn the_gate_shape_projection_is_fresh() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let rows = measure(&root);
-    let excluded: Vec<String> = {
-        let paired: BTreeSet<&str> = rows
-            .iter()
-            .flat_map(|row| [row.gate.as_str(), row.twin.as_str()])
-            .collect();
-        shell_units(&root)
-            .into_iter()
-            .filter(|unit| !paired.contains(unit.as_str()))
-            .collect()
-    };
-    let rendered = render(&rows, &excluded);
+    let units = measure(&root);
+    let rendered = render(&units, &outside_the_surface(&root, &units));
     assert_projection_matches(&root, PROJECTION, &rendered);
 }
 
@@ -886,7 +881,7 @@ fn the_gate_shape_projection_is_fresh() {
 /// The columns are **printed**, never written into prose. A hand-maintained table of this shape is the drift
 /// class this repository has closed twice, and the count in a sentence is the one a later reader trusts
 /// without re-measuring.
-fn render(rows: &[Row], excluded: &[String]) -> String {
+fn render(units: &[Unit], excluded: &[String]) -> String {
     let mut out = String::new();
     out.push_str("# The gate shape contract\n\n");
     out.push_str(
@@ -933,30 +928,29 @@ fn render(rows: &[Row], excluded: &[String]) -> String {
 
     out.push_str("## The surface\n\n");
     out.push_str("| gate | twin |");
-    for property in Property::ALL {
-        out.push_str(&format!(" {} |", property.label()));
+    for property in &PROPERTIES {
+        out.push_str(&format!(" {} |", property.label));
     }
     out.push_str("\n| --- | --- |");
-    for _ in Property::ALL {
+    for _ in &PROPERTIES {
         out.push_str(" --- |");
     }
     out.push('\n');
-    for row in rows {
-        let twin = if row.twin_tracked {
-            format!("`{}`", row.twin)
-        } else {
-            "**absent**".to_string()
+    for unit in units {
+        let twin = match unit.twin_text {
+            Some(_) => format!("`{}`", unit.twin),
+            None => "**absent**".to_string(),
         };
-        out.push_str(&format!("| `{}` | {twin} |", row.gate));
-        for property in Property::ALL {
-            out.push_str(&format!(" {} |", row.holds(property).cell()));
+        out.push_str(&format!("| `{}` | {twin} |", unit.gate));
+        for property in &PROPERTIES {
+            out.push_str(&format!(" {} |", (property.holds)(unit).cell()));
         }
         out.push('\n');
     }
     out.push_str(&format!(
         "\n{} gates, {} properties each.\n",
-        rows.len(),
-        Property::ALL.len()
+        units.len(),
+        PROPERTIES.len()
     ));
 
     out.push_str("\n## Declared policy exemptions\n\n");
@@ -1104,15 +1098,8 @@ fn units_outside_the_gate_pairing_are_outside_the_surface() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let rows = measure(&root);
-    let paired: BTreeSet<&str> = rows
-        .iter()
-        .flat_map(|row| [row.gate.as_str(), row.twin.as_str()])
-        .collect();
-    let outside: Vec<String> = shell_units(&root)
-        .into_iter()
-        .filter(|unit| !paired.contains(unit.as_str()))
-        .collect();
+    let units = measure(&root);
+    let outside = outside_the_surface(&root, &units);
     assert!(
         !outside.is_empty(),
         "no unit sits outside the pairing, so this bound would be demonstrated by an empty set"
@@ -1120,12 +1107,12 @@ fn units_outside_the_gate_pairing_are_outside_the_surface() {
     // Each is a real shell unit this reaction judges on none of the nine properties. The one thing asserted
     // about them is the contract-carrying refusal in `no_unit_outside_the_pairing_carries_the_gate_contract`,
     // which is what keeps the exclusion from being a hiding place rather than a claim of coverage.
-    for unit in &outside {
+    for path in &outside {
         assert!(
-            !rows
+            !units
                 .iter()
-                .any(|row| row.gate == *unit || row.twin == *unit),
-            "{unit} is both inside and outside the surface, which is not a state this reaction can report"
+                .any(|unit| unit.gate == *path || unit.twin == *path),
+            "{path} is both inside and outside the surface, which is not a state this reaction can report"
         );
     }
 }

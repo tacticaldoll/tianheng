@@ -90,6 +90,13 @@ test-name convention would not be, and the difference is ownership: these twins 
 repository for this purpose, so this capability may require their shape, exactly as the bound register may
 require a scenario heading's form while declining to require a pinning test's name.
 
+Two of the five are recognized through an authored form on that same argument, and the forms are named here so
+an author meets the requirement rather than discovering it as an invented violation. The silent-clean-run
+assertion SHALL capture stderr alone — a redirection of the form `2>&1 >/dev/null` — and SHALL test the
+variable that capture assigned for emptiness. The unchanged-repository assertion SHALL name itself in its
+refusal, saying the gate `mutated` what it judged; the comparison behind it cannot be recognized mechanically,
+since the twins compare a porcelain listing, a `HEAD`, a tag list and a directory walk in four combinations.
+
 #### Scenario: A gate has no twin
 
 - **WHEN** an enumerated gate has no companion twin beside it, named by substituting `test_` for `check_`
