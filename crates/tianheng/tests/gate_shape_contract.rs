@@ -503,6 +503,87 @@ fn a_builtin_piped_into_an_external_command_is_a_stated_bound() {
     );
 }
 
+/// What this projection says about each bound the capability declares, keyed by its declaring scenario's heading.
+///
+/// **A single array, held to the specification in both directions** by
+/// [`the_projection_discloses_every_declared_bound`]. The figure in the projection is `len()`, never typed — the
+/// paragraph it replaced typed both the figure and the membership ("Three of the six classes … a fourth bound is
+/// about coverage") and a bound added in the same window went unlisted, invisible because a literal in a generated
+/// document's template is compared with itself by the freshness check.
+///
+/// Keyed by the **exact heading**, not by a distinctive substring: recognizing a declaration by a marker it merely
+/// contains is the trap this family has paid for four times.
+const BOUND_NOTES: [(&str, &str); 5] = [
+    (
+        "Whether an enumeration carries a vacuity guard is not observed — a stated bound",
+        "A gate that iterates nothing and reports clean holds every column below.",
+    ),
+    (
+        "Whether a read's status is checked in the parent shell is not observed — a stated bound",
+        "The backstop this table does check narrows the damage without detecting the shape.",
+    ),
+    (
+        "Whether a gate's 1-versus-2 assignment is correct is not observed — a stated bound",
+        "The twin is required to assert codes, never to assert the right ones. A `return`-instead-of-`exit` \
+         inversion held every column while reporting every violation as cannot-judge.",
+    ),
+    (
+        "A permitted builtin piped into an external command is still permitted — a stated bound",
+        "The permission reads the producer's first word, so a builtin's exemption reaches a pipeline stage that \
+         has I/O to fail at. Refusing a producer containing a pipe was measured and refuses this tree's own \
+         legitimate sites too.",
+    ),
+    (
+        "Shell units that are not a gate or its twin are outside the surface — a stated bound",
+        "Coverage rather than form: such units are listed at the end, so their absence from the table is visible \
+         rather than inferred.",
+    ),
+];
+
+/// The bound headings this capability's specification declares.
+fn declared_bound_headings(root: &Path) -> Vec<String> {
+    let spec = root.join("openspec/specs/gate-shape-contract/spec.md");
+    let text = std::fs::read_to_string(&spec)
+        .unwrap_or_else(|error| panic!("cannot read {spec:?}: {error}"));
+    Source::of(text)
+        .whole()
+        .lines()
+        .filter_map(|line| line.strip_prefix("#### Scenario: "))
+        .filter(|heading| heading.trim_end().ends_with("a stated bound"))
+        .map(|heading| heading.trim_end().to_string())
+        .collect()
+}
+
+/// The projection discloses **every** bound the specification declares, and none it does not.
+///
+/// Both directions, because either alone leaves the hole this reaction was built to close: a bound added to the
+/// spec with no note here would go undisclosed, and a note whose bound was retired would disclose a bound that no
+/// longer exists. Neither is catchable by the freshness check, which compares the generator's literals with
+/// themselves.
+#[test]
+fn the_projection_discloses_every_declared_bound() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let mut declared = declared_bound_headings(&root);
+    let mut disclosed: Vec<String> = BOUND_NOTES
+        .iter()
+        .map(|(heading, _)| (*heading).to_string())
+        .collect();
+    assert!(
+        !declared.is_empty(),
+        "no declared bound was read from the specification, so this reaction would hold vacuously"
+    );
+    declared.sort();
+    disclosed.sort();
+    assert_eq!(
+        disclosed, declared,
+        "the projection's bound disclosure and the specification must name the same bounds — a bound added \
+         without a note here is a bound the generated document does not mention, and the freshness check cannot \
+         see it because the template's own text is on both sides of that comparison"
+    );
+}
+
 /// Property 2 — the header declares the three-way contract, recognized by **shape, not by wording**.
 ///
 /// The six gates word the verdicts six ways — clean/violation, coherent/incoherent, publishable/wrong source
@@ -1126,32 +1207,21 @@ fn render(units: &[Unit], excluded: &[String]) -> String {
          with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test gate_shape_contract`.\n\n",
     );
     out.push_str("## What conformance in this table does not mean\n\n");
-    out.push_str(
-        "Every column here is a property of a gate's **form**. Three of the six classes this capability was\n\
-         built for are semantic, and each is a declared observation bound rather than an approximation:\n\n",
-    );
-    out.push_str(
-        "- Whether an enumeration carries a guard against zero iterations is **not observed**.\n",
-    );
-    out.push_str("  A gate that iterates nothing and reports clean holds every column below.\n");
-    out.push_str(
-        "- Whether a read's status is checked in the parent shell is **not observed**. The\n",
-    );
-    out.push_str(
-        "  backstop this table does check narrows the damage without detecting the shape.\n",
-    );
-    out.push_str(
-        "- Whether a gate's 1-versus-2 assignment is **correct** is not observed: the twin is\n",
-    );
-    out.push_str("  required to assert codes, never to assert the right ones. A `return`-instead-of-`exit`\n");
-    out.push_str(
-        "  inversion held every column while reporting every violation as cannot-judge.\n\n",
-    );
-    out.push_str(
-        "A fourth bound is about coverage: shell units under `scripts/` that are neither a gate nor a twin are\n\
-         outside this surface, listed at the end so their absence from the table is visible rather than\n\
-         inferred.\n\n",
-    );
+    // The membership and the figure are DERIVED; only the explanations are written. This paragraph used to type
+    // both — "Three of the six classes … a fourth bound is about coverage" — and a bound added in the same window
+    // went unlisted, because a literal in a generated document's template is compared with itself by the
+    // freshness check. That is the one place a projection cannot self-correct.
+    out.push_str(&format!(
+        "Every column here is a property of a gate's **form**. This capability also declares bounds that are \
+         **not** columns — most are semantic classes it was built for, one is about coverage — and it declares \
+         {} of them. The list and its figure are read from `openspec/specs/gate-shape-contract/spec.md` rather \
+         than restated, so neither can fall behind it:\n\n",
+        BOUND_NOTES.len()
+    ));
+    for (heading, note) in BOUND_NOTES {
+        out.push_str(&format!("- **{heading}**\n  {note}\n"));
+    }
+    out.push('\n');
     out.push_str(
         "And form conformance is not substance. `expect_pass` can sit in a comment; a target-directory\n\
          argument can be accepted and ignored. The reaction is aimed at an author who *forgets* the shape,\n\

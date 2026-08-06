@@ -9,20 +9,18 @@ with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p tianheng --test gate_shap
 
 ## What conformance in this table does not mean
 
-Every column here is a property of a gate's **form**. Three of the six classes this capability was
-built for are semantic, and each is a declared observation bound rather than an approximation:
+Every column here is a property of a gate's **form**. This capability also declares bounds that are **not** columns — most are semantic classes it was built for, one is about coverage — and it declares 5 of them. The list and its figure are read from `openspec/specs/gate-shape-contract/spec.md` rather than restated, so neither can fall behind it:
 
-- Whether an enumeration carries a guard against zero iterations is **not observed**.
+- **Whether an enumeration carries a vacuity guard is not observed — a stated bound**
   A gate that iterates nothing and reports clean holds every column below.
-- Whether a read's status is checked in the parent shell is **not observed**. The
-  backstop this table does check narrows the damage without detecting the shape.
-- Whether a gate's 1-versus-2 assignment is **correct** is not observed: the twin is
-  required to assert codes, never to assert the right ones. A `return`-instead-of-`exit`
-  inversion held every column while reporting every violation as cannot-judge.
-
-A fourth bound is about coverage: shell units under `scripts/` that are neither a gate nor a twin are
-outside this surface, listed at the end so their absence from the table is visible rather than
-inferred.
+- **Whether a read's status is checked in the parent shell is not observed — a stated bound**
+  The backstop this table does check narrows the damage without detecting the shape.
+- **Whether a gate's 1-versus-2 assignment is correct is not observed — a stated bound**
+  The twin is required to assert codes, never to assert the right ones. A `return`-instead-of-`exit` inversion held every column while reporting every violation as cannot-judge.
+- **A permitted builtin piped into an external command is still permitted — a stated bound**
+  The permission reads the producer's first word, so a builtin's exemption reaches a pipeline stage that has I/O to fail at. Refusing a producer containing a pipe was measured and refuses this tree's own legitimate sites too.
+- **Shell units that are not a gate or its twin are outside the surface — a stated bound**
+  Coverage rather than form: such units are listed at the end, so their absence from the table is visible rather than inferred.
 
 And form conformance is not substance. `expect_pass` can sit in a comment; a target-directory
 argument can be accepted and ignored. The reaction is aimed at an author who *forgets* the shape,
