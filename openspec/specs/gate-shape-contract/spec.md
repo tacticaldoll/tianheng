@@ -286,6 +286,18 @@ exist.
   refuses, and whose remedy cites this instance. What remains is only the semantic judgment
 - **PINNED-BY** `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
 
+#### Scenario: A permitted builtin piped into an external command is still permitted — a stated bound
+
+- **WHEN** a gate's process substitution begins with `printf` or `echo` and pipes it onward, as
+  `< <(printf '%s\n' "$rows" | sort)`
+- **THEN** the reaction permits it, a stated bound: the recognizer reads the producer's first word, so the
+  permission's stated reason — a builtin has no I/O to fail at — is applied to a producer that does. The obvious
+  repair, refusing a producer that contains a pipe, was measured against this tree and **false-positives on both
+  live sites**, which carry a `|` inside a parameter expansion (`${b//|/$'\n'}`); telling a pipe operator from a
+  pipe inside `${…}` needs shell parsing rather than text, so it is declared rather than closed. No producer in the
+  gate surface exhibits the shape today
+- **PINNED-BY** `a_builtin_piped_into_an_external_command_is_a_stated_bound`
+
 #### Scenario: Shell units that are not a gate or its twin are outside the surface — a stated bound
 
 - **WHEN** a shell unit under `scripts/` is neither a `check_*` gate nor its twin — a sourced function

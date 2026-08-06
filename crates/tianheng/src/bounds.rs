@@ -149,6 +149,24 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::new(
             BoundId::new(
+                "gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound",
+            ),
+            "a gate's process substitution beginning with `printf` or `echo` and piped into an external command",
+            Extent::Reached(Reached::UnderReacts {
+                // The producer's text IS handed to the recognizer, which stops at its first word — so this is an
+                // under-reaction rather than a shape out of reach. Owned by the engine because closing it is this
+                // reaction's own to do; what makes it not ordinary work is that refusing a producer containing a
+                // pipe was measured and false-positives on both live sites, whose pipe sits inside a parameter
+                // expansion. Separating the two needs shell parsing rather than text.
+                because: "the permission is granted on the producer's first word, so a builtin's exemption — \
+                          having no I/O to fail at — reaches a pipeline stage that does; refusing a producer \
+                          containing a pipe was measured and refuses the tree's own legitimate sites too".into(),
+                owner: Owner::Engine,
+            }),
+            "a_builtin_piped_into_an_external_command_is_a_stated_bound",
+        ),
+        BoundDecl::new(
+            BoundId::new(
                 "gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound",
             ),
             "a sourced function library, a matrix over one, the example runner, or the publish tool",

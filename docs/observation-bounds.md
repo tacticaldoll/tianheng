@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 55 declared bounds have no pinning test.** That figure is the register's
+**0 of 56 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -100,6 +100,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction does not claim to observe it, a stated bound: it checks that the twin asserts codes,
 
 - **pinned by**: `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
+
+### `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound`
+
+> the reaction permits it, a stated bound: the recognizer reads the producer's first word, so the
+
+- **pinned by**: `a_builtin_piped_into_an_external_command_is_a_stated_bound`
 
 ### `gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound`
 

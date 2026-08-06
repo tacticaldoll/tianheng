@@ -453,6 +453,56 @@ fn reads_through_one_checked_capture(gate: &Source) -> bool {
     })
 }
 
+/// The declared bound: a permitted builtin **piped onward** is still permitted.
+///
+/// The permission is granted on a stated reason — a builtin over data already in memory has no I/O to fail at —
+/// and the recognizer applies it by reading the producer's first word. `printf … | sort` therefore passes while
+/// `sort` is an external process whose failure the parent never sees.
+///
+/// Three legs, because the first alone would prove nothing:
+///
+///   1. the under-reaction is **accepted**, which is the bound;
+///   2. an external producer is still **refused**, so the pin cannot hold for a recognizer that never fires;
+///   3. the obvious repair — also refuse a producer containing `|` — **false-positives on the live shape**, which
+///      is the reason this is declared rather than closed. Asserting it here keeps that reason executable: if a
+///      future parameter expansion no longer carries a pipe, this leg fails and the bound is worth re-examining.
+#[test]
+fn a_builtin_piped_into_an_external_command_is_a_stated_bound() {
+    // As it appears in the tree, twice: a `|` inside a parameter expansion, over data already in memory.
+    let live = r#"    while IFS= read -r one; do :; done < <(printf '%s\n' "${b//|/$'\n'}")"#;
+    let piped_onward = r#"    done < <(printf '%s\n' "$rows" | sort)"#;
+    let external = r#"    done < <(git ls-files -z)"#;
+
+    assert!(
+        reads_through_one_checked_capture(&Source::of(live)),
+        "the live shape is permitted, as the requirement's reason intends"
+    );
+    assert!(
+        reads_through_one_checked_capture(&Source::of(piped_onward)),
+        "and so is a builtin piped into an external command — the stated bound"
+    );
+    assert!(
+        !reads_through_one_checked_capture(&Source::of(external)),
+        "while an external producer is still refused, so this bound is not a recognizer that never fires"
+    );
+
+    // Leg three: the repair that would close it, measured against the tree rather than assumed.
+    let naive_refuses = |line: &str| {
+        line.split("< <(")
+            .skip(1)
+            .any(|producer| producer.contains('|'))
+    };
+    assert!(
+        naive_refuses(piped_onward),
+        "refusing a producer that contains a pipe would catch the bound"
+    );
+    assert!(
+        naive_refuses(live),
+        "and would also refuse the live shape — a pipe inside `${{…}}` is not a pipe operator, and telling them \
+         apart needs shell parsing rather than text, which is why this is declared instead of closed"
+    );
+}
+
 /// Property 2 — the header declares the three-way contract, recognized by **shape, not by wording**.
 ///
 /// The six gates word the verdicts six ways — clean/violation, coherent/incoherent, publishable/wrong source
