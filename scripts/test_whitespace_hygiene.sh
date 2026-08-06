@@ -154,4 +154,42 @@ before_head=$(git -C "$untouched" rev-parse HEAD)
     && $(git -C "$untouched" rev-parse HEAD) == "$before_head" ]] \
     || { printf 'whitespace hygiene check mutated repository state\n' >&2; exit 1; }
 
+# --- the shared backstop's subshell guard, pinned directly ---
+#
+# This matrix's own header says the clean-run assertion catches the backstop's subshell misfire. Measured, it no
+# longer does — and not because the guard broke: the `capture_or_refuse` migration in this same window removed
+# every failing-subshell-on-a-clean-run construct from every gate, so with the guard deleted NO gate prints a
+# spurious cannot-judge and NO matrix fails. The protection outlived its instance, which left it pinned by
+# nothing while a changelog entry claimed otherwise.
+#
+# So it is pinned against a fixture that carries the shape on purpose, independent of whether any real gate
+# still does. A gate installing the backstop and letting a command fail inside a subshell must stay silent and
+# exit 0, because a subshell's status reaches the parent only where the parent reads it — forcing 2 where it is
+# not read reports cannot-judge over a run that was fine.
+backstop_fixture=$fixture_root/backstop-subshell.sh
+cat >"$backstop_fixture" <<'FIXTURE'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+# shellcheck source=/dev/null
+. "$1/lib/exit_contract.sh"
+exit_contract_backstop 'fixture gate'
+# The exact shape the misfire turned into a verdict: a process substitution whose producer exits non-zero as its
+# ORDINARY answer. `errtrace` propagates the ERR trap into that subshell, and `grep` finding nothing is a clean
+# miss, not a failure. Written `( false ) || true` first, which pins nothing — a handled failure fires no trap at
+# all, so that fixture passed with the guard deleted.
+while IFS= read -r _line; do :; done < <(grep 'no-such-text' /dev/null)
+printf 'fixture gate ok\n'
+FIXTURE
+chmod +x "$backstop_fixture"
+backstop_status=0
+backstop_output=$("$backstop_fixture" "$script_dir" 2>&1) || backstop_status=$?
+[[ $backstop_status -eq 0 ]] \
+    || { printf 'a producer exiting non-zero inside an unread subshell must not become a verdict, got exit %d: %s\n' "$backstop_status" "$backstop_output" >&2; exit 1; }
+# `! grep -q`, never `grep -qv`: with `-v` the check succeeds as soon as ANY line differs, so a run printing a
+# spurious cannot-judge line beside its ordinary output would satisfy it.
+if grep -Fq 'cannot judge' <<<"$backstop_output"; then
+    printf 'the backstop must stay silent for a subshell failure the parent never reads, got: %s\n' "$backstop_output" >&2
+    exit 1
+fi
+
 printf 'ok whitespace hygiene state and failure matrix\n'

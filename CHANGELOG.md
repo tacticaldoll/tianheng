@@ -349,7 +349,12 @@ them.
   is what made one possible — the same argument the register and reference-integrity gates take. It was the
   only gate whose refusals were asserted nowhere, and it is where the shared exit-contract backstop first
   misfired: its clean-run assertion is what catches that, since removing the backstop's subshell guard fails
-  this matrix and no other. `check_dod_coherence.sh` remains the last gate without a matrix and is filed.
+  this matrix and no other — **which is no longer true, and the correction is the more useful fact**: the
+  `capture_or_refuse` migration in this same window removed every failing-subshell-on-a-clean-run construct from
+  every gate, so with the guard deleted no gate prints a spurious cannot-judge and no matrix fails. The protection
+  outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
+  carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
+  independent of whether any real gate still does.
 - `check_release_coherence.sh` **separates a violation from a gate that cannot decide**, which its header
   claimed and its code never did: every refusal was `1`, so a shallow clone with no release spine, an absent
   manifest, or a moved crate layout all reported "the release surfaces disagree". Those are now `2`. The same
