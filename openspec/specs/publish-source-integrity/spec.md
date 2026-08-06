@@ -1,5 +1,11 @@
-## ADDED Requirements
+# publish-source-integrity Specification
 
+## Purpose
+
+Govern what must be true of the source `cargo publish` runs from: the committed state asserted before an
+irreversible act, the tag signature actually verified rather than shape-matched, and the one thing about that
+signature this gate deliberately does not judge.
+## Requirements
 ### Requirement: A publish SHALL run only from the tagged release commit on the remote's main
 
 `cargo publish` SHALL be reachable only from a source where all of the following hold. Each is committed state;

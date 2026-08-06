@@ -170,6 +170,36 @@ consumer for an undemonstrated deduplication.
   reaction and named in the projection, and that is all. Trigger for giving exemptions their own register: a
   second instance. This is the first.
 
+- ~~**The pre-publish gate had no specification, and its stated bound had the cause backwards.**~~ **CLOSED** in
+  the open window as the `publish-source-integrity` capability. Found in the 0.5.0 pre-release review, and worth
+  keeping for the shape rather than the fix.
+
+  All 34 specifications were searched: **none** stated that a publish must come from a signed annotated tag at
+  the tip of `main`. The gate standing before the one irreversible act carried its contract in its own header
+  comment, while `gate-shape-contract` exempted it from Definition-of-Done membership *by name* — the one place a
+  reader was told it is special. A reaction with no requirement is the mirror of the class this window kept
+  closing, and it has a consequence: there was nowhere to declare a bound.
+
+  **The bound's stated cause was wrong, and that is why the defect survived.** The header said the signature could
+  not be verified because verification needs an allowed-signers configuration CI lacks. Measured with no such file
+  anywhere, `ssh-keygen -Y check-novalidate` verifies validity; only **attribution** needs the file. So the gate
+  matched a shape — and accepted an unsigned tag whose message quoted a signature block. **The lesson: a bound's
+  cause is what the next author reasons from. This one said "you cannot check this", so nobody tried.** A bound
+  with a wrong cause is worse than one with no cause at all.
+
+  This is the second live instance in one day of `observation-bound-model`'s own declared bound that *a
+  declaration's stated cause is the real cause is not observed*. Two instances is the number worth naming:
+  the extent is typed and checkable while the rationale is prose the model never reads, and both instances were
+  found by a human-style review rather than by any reaction. Trigger for revisiting that bound: a **third**
+  instance, or a proposal for a rationale check that is not a keyword heuristic.
+
+  Also recorded: `PINNED-BY` resolving only a Rust function meant this shell gate's bound could be defended by a
+  twin direction and cited by nothing. Rather than accept `UNPINNED` — which would have reported a defended bound
+  as undefended, buying a true figure with a false fact — the release-repository fixture builder was extracted to
+  `scripts/lib/release_fixture.sh` and a Rust test pins the bound through it. **Measured, not estimated**: one
+  shared builder, no second construction. So the WATCH entry on shell-defended capabilities stays WATCH; its
+  trigger asks for a residual measured and found *unaffordable*, and this one was affordable.
+
 - ~~**The 天衡 shell's baseline-writing and CLI surface has never been swept.**~~ **CLOSED** in the open window,
   swept against an enumeration built first as the entry required, and it found **two defects — both in the
   requirements rather than in the code.**

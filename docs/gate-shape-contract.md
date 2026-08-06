@@ -62,10 +62,11 @@ contract — a unit that does is a gate wearing another name, and the reaction r
 - `scripts/lib/example_suite.sh`
 - `scripts/lib/exit_contract.sh`
 - `scripts/lib/published_family_coverage.sh`
+- `scripts/lib/release_fixture.sh`
 - `scripts/publish.sh`
 - `scripts/test_example_quality_gate.sh`
 - `scripts/test_example_suite.sh`
 - `scripts/test_examples.sh`
 - `scripts/test_published_family_coverage.sh`
 
-9 units.
+10 units.

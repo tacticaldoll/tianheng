@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**14 of 53 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**15 of 54 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound` — owner: engine
@@ -13,6 +13,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound` — owner: engine
+- `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound` — owner: inherited from the verification environment
 - `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound` — owner: inherited from the corpus entry point
 - `runtime-origin-assertion/a-production-probe-behind-a-non-production-cfg-is-still-counted-a-stated-bound` — owner: engine
 - `semantic-reexport-exposure/a-facade-hop-re-exporting-a-privately-used-bare-name-is-a-stated-bound` — owner: engine
@@ -349,7 +350,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (14)
+## under-reacts (15)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -414,6 +415,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: it is absent from both sides of the correspondence, so that correspondence holds over a surface missing a member and the register reports itself complete
 - **its defence must show**: does not react
 - **pinned by**: `a_third_generation_mechanism_is_not_recognized`
+
+### `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound`
+
+> a release tag carrying a cryptographically valid signature made by a key no maintainer authorized
+
+- **because**: validity is verifiable with no configuration and attribution is not — it needs an allowed-signers file that exists on a maintainer's machine and not in CI, so requiring it would make the same tag judged differently by where the gate ran
+- **its defence must show**: does not react
+- **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
 
 ### `runtime-origin-assertion/a-probe-behind-a-symlinked-subdirectory-is-seen-from-the-root-and-not-from-the-directory-a-stated-bound`
 

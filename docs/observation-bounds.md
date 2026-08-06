@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 53 declared bounds have no pinning test.** That figure is the register's
+**0 of 54 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -192,6 +192,14 @@ fallback used where no manifest exists, which the register spec describes.
 > the reaction does not observe it, a stated bound: it is absent from both sides of the correspondence,
 
 - **pinned by**: `a_third_generation_mechanism_is_not_recognized`
+
+## publish-source-integrity
+
+### `publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound`
+
+> the gate accepts it, a stated bound: validity is verifiable without configuration and **attribution is
+
+- **pinned by**: `a_valid_signature_from_an_unauthorized_key_is_accepted`
 
 ## runtime-origin-assertion
 
