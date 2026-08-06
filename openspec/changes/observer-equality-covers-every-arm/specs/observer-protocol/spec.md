@@ -19,9 +19,14 @@ workspace, and with a static-only fixture, replacing an observer's body with `Cl
 Asserting per-dimension reaction is what keeps the fixture from silently going vacuous when the workspace
 changes under it.
 
-**The bound sets SHALL be compared as whole declarations**, not as ids. A `BoundDecl` carries the shape it stops
-at, its extent, and what pins it; an observer whose ids match while an extent has drifted is exactly the
-divergent second list the bijection refuses, and comparing ids alone admits it.
+**An observer declares its dimension's bounds by delegating, and the reaction SHALL be over that delegation's
+shape** rather than over a comparison of the two sides. Comparing an observer's `bounds()` against its
+dimension's exported declarations cannot fail while `bounds()` *is* that export — measured, it is `f() == f()`,
+and drifting a declaration left the reaction passing. What the requirement refuses is a **second, divergent
+list**, and a second list is something written in a body; so each observer's `bounds()` SHALL hold exactly the
+delegation and nothing else, recognized by position within that method rather than by the call appearing
+anywhere in the file. The declarations' *content* is held by `observation-bound-model`'s extent projection and
+SHALL NOT be re-asserted here.
 
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
@@ -43,8 +48,14 @@ dimensions remain independently implemented on both sides, and for them the reac
 - **THEN** the reaction fails, because from that moment the comparison proves nothing about that dimension —
   and it fails naming the dimension, since the repair is to the fixture rather than to either path
 
-#### Scenario: An observer's declared bounds differ from its dimension's
+#### Scenario: An observer's bounds method holds a list of its own
 
-- **WHEN** an observer's bounds method returns a set other than its dimension's exported declarations —
-  differing in any field of any declaration, not only in the set of ids
+- **WHEN** an observer's bounds method holds anything other than the delegation to its dimension's exported
+  declarations
 - **THEN** the reaction fails, so the protocol's obligation cannot be satisfied by a second, divergent list
+
+#### Scenario: An observer's bounds method cannot be found where the reaction looks
+
+- **WHEN** the method is absent from the source the reaction reads
+- **THEN** the reaction refuses to judge rather than passing, because a reaction that finds nothing to read has
+  not observed that the obligation holds

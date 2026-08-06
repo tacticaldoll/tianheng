@@ -121,6 +121,28 @@ them.
   requirement enumerating four check-only flags while the runner rejected five, so the set is now derived rather
   than listed in prose.
 
+- **`observer-protocol`'s equality reaction now covers all three dimensions, and two assertions that could not
+  fail were replaced by ones that can.** The reaction promises the trait-driven fold and the built-in path cannot
+  disagree silently; it proved that for one dimension. Its fixture declared only a violated static boundary, and
+  an empty declaration is clean on this workspace, so the semantic and runtime arms compared clean against clean
+  — measured, replacing `SemanticObserver::observe`'s body with `Clean` left the suite passing. The fixture now
+  violates a boundary in **each** dimension and the reaction asserts each one reacted, so a fixture that goes
+  vacuous because the workspace changed under it fails naming the dimension to repair rather than quietly proving
+  less. Verified by short-circuiting each of the three observers in turn.
+
+  The bound-set half was worse: it asserted `observer.bounds() == dimension::observation_bounds()` while every
+  `bounds()` **is** that call, so it compared a function with itself — drifting a declaration's extent with its id
+  untouched left it passing. Nothing was unguarded (that drift fails the extent projection, which is where the
+  content is held), but an assertion that cannot fail reads as a guarantee. What the requirement refuses is a
+  *second, divergent list*, which is something written in a body, so the reaction is now over each `bounds()`
+  body's shape — exactly the delegation, recognized by position within the method — and it fails when a body
+  holds a list of its own.
+
+  Behind both: `check_constitution`'s runtime arm was a hand-copied twin of `RuntimeObserver::observe`, down to a
+  duplicated `cannot read workspace` message, so equality for that dimension rested on nobody editing one of the
+  copies. It now delegates. **Nothing to migrate** — no public API moves and both paths keep their exact
+  behaviour, which is what the reaction proves.
+
 ### Changed
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the
   direction added one change earlier missed or overreached. It walked the filesystem, so an untracked scratch

@@ -18,12 +18,23 @@ Three defects, each measured rather than reasoned:
    makes the comparison vacuous, and asserts the outcome is a violation for exactly that reason. The argument
    was applied once, to the whole verdict, when it is a property of each dimension separately.
 
-2. **The bound-set comparison compares only ids.** The requirement says an observer declares *exactly the
-   bound set* its dimension exports; the reaction lowers each `BoundDecl` to its id string before comparing. A
-   `BoundDecl` also carries `shape`, `extent` and `pinned_by`. An observer returning an id-identical set with a
-   drifted extent — the field that decides what the bound *permits* — satisfies the reaction. That is the
-   divergent-copy the bijection installed by `observation-bound-model` exists to refuse, admitted through the
-   one hole the comparison leaves open.
+2. **The bound-set comparison compares a function with itself.** The requirement says an observer declares
+   *exactly the bound set* its dimension exports, and the reaction asserts
+   `observer.bounds() == dimension::observation_bounds()`. But all three `bounds()` implementations *are*
+   `observation_bounds()` — one line each, nothing else — so the assertion is `f() == f()` and no change to any
+   declaration can fail it. Measured: drifting a declaration's extent with its id untouched left this suite at
+   10 passed.
+
+   Noticed while trying to demonstrate a smaller defect. The first reading was that the comparison lowers each
+   `BoundDecl` to its id and so admits a drifted `shape`/`extent`/`pinned_by`; that reading is true and
+   irrelevant, because comparing whole declarations would have been a better comparison of two identical
+   things. The real defect is one level up.
+
+   **This is a name without a reaction, not a false negative.** What the requirement fears — an observer
+   satisfying its obligation with a second, divergent list — is prevented by construction: there is one list and
+   one function. And the declarations' *content* is held elsewhere: the same extent perturbation fails
+   `observation_bound_model`'s `the_extent_projection_is_fresh`, verified. So nothing is currently unguarded;
+   what exists is an assertion that cannot fail, sitting where a reader takes it for the guarantee.
 
 3. **The runtime arm is a hand-copied twin.** `evaluate_constitution`'s runtime arm and
    `RuntimeObserver::observe` hold the same three statements, including the same
@@ -40,7 +51,10 @@ Three defects, each measured rather than reasoned:
   declares its violating boundary, how it enters the fold, which violation kind proves it reacted, its
   observer's `bounds()`, and its dimension's exported declarations. One array, so the fixture and the fold
   cannot describe different dimension sets.
-- The bound-set comparison compares **whole `BoundDecl`s**, ordered by id.
+- The bound-set comparison is replaced by a reaction over **the shape of each `bounds()` body**: exactly one
+  executed statement, and that statement the delegation. A second list is something written in a body, so the
+  body is where the property lives and where it can fail. The declarations' content stays held by the extent
+  projection, which already reacts to it.
 - `evaluate_constitution`'s runtime arm **delegates to `RuntimeObserver`** rather than restating it. Not a new
   shared helper: the built-in path *is* the observer for this dimension, which is a stronger statement than two
   callers of a third function, and it adds no public surface to `louke`. Where the two paths share an

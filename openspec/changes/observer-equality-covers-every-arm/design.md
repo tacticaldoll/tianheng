@@ -15,9 +15,8 @@ struct Dimension {
     fold: for<'a> fn(Run<'a>, &Constitution) -> Run<'a>,
     /// A violation of this kind proves this dimension's arm fired.
     reacted: fn(BoundaryKind) -> bool,
-    /// The observer's own declaration, and the dimension's export, for the bijection.
-    declared_bounds: fn() -> Vec<BoundDecl>,
-    exported_bounds: fn() -> Vec<BoundDecl>,
+    /// Where this dimension's `Observer` impl is written — read as source, see below.
+    observer_source: &'static str,
 }
 ```
 
@@ -64,6 +63,31 @@ The runtime one is chosen so it cannot become accidentally satisfied: a seam nam
 reacts as declared-but-unprobed, and the only way to make it stop reacting is to add a probe for a seam invented
 for this fixture. An empty runtime declaration was measured first and is `Clean` — which is the whole defect
 this change is about, so it is recorded here rather than left as a thing to rediscover.
+
+## Why the bijection becomes a source-shape reaction
+
+The obligation "an observer declares exactly its dimension's bound set" was written as a value comparison, and a
+value comparison of one function against itself is inert. Three ways out were considered:
+
+1. **Compare whole declarations instead of ids.** Rejected: a better comparison of two identical things. This
+   was the first diagnosis and it was wrong at the level it aimed at.
+2. **Compare against an independently derived set** — the ids the bound register derives from the spec files.
+   Rejected: `check_bound_register.sh` already holds the bound-id ↔ spec bijection, so this would be a second
+   copy of a gate that exists, and it would still not be about the observer.
+3. **Check the construction that makes the obligation true.** Chosen. The obligation holds because there is one
+   list reached through one call; the risk the requirement names is a *second list*, which is a body someone
+   wrote. So the property is the body's shape, and it fails when a body holds anything else — verified for all
+   three.
+
+This mirrors the runtime-arm decision exactly: where a property holds by construction, the reaction moves to
+checking the construction rather than restating the property as a comparison that cannot fail.
+
+Two things this reaction deliberately does not do. It does not check the declarations' *content* — drifting an
+extent already fails `observation_bound_model`'s `the_extent_projection_is_fresh`, verified by the same
+perturbation, and a second reaction over the same fact is the divergent-copy problem again. And it recognizes the
+delegation **by position** — the executed statements between `fn bounds`'s braces — never by the call appearing
+somewhere in the file, which every one of these files does in its `use`. That trap has been paid for four times
+in this family already.
 
 ## Delegation, not a shared helper
 

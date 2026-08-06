@@ -1,9 +1,16 @@
 //! `observer-protocol`'s reaction: the trait-driven fold and the built-in path are one verdict, each observer
 //! declares exactly its dimension's bounds, and the fold's ordering directions hold.
 //!
-//! Two composition paths exist deliberately — the built-in one carries a coverage advisory the protocol cannot
-//! and splitting its single `cargo metadata` read would double it — so the cost is paid here rather than
-//! accepted: paths that could disagree silently are the drift a seam is supposed to end.
+//! Two composition paths exist deliberately for the static and semantic dimensions — the built-in one carries a
+//! coverage advisory the protocol cannot, and splitting its single `cargo metadata` read would double it — so
+//! the cost is paid here rather than accepted: paths that could disagree silently are the drift a seam is
+//! supposed to end. For the **runtime** dimension there is no second path left to compare: the built-in one
+//! delegates to `RuntimeObserver`, so equality there holds by construction, and what this file still observes
+//! is that the fixture's runtime boundary reacts at all.
+//!
+//! Two of the properties below hold **by construction**, and each says which reaction stands in for the
+//! comparison that would be inert. That is deliberate, and the alternative was worse: an assertion that cannot
+//! fail reads exactly like a guarantee.
 
 use std::path::{Path, PathBuf};
 
@@ -11,6 +18,9 @@ use std::path::{Path, PathBuf};
 // dependency boundary allows guibiao, hunyi, louke, xingbiao and serde_json.
 use tianheng::check_constitution;
 use tianheng::prelude::*;
+
+mod support;
+use support::region::Source;
 
 fn workspace_manifest() -> Option<PathBuf> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
@@ -21,6 +31,20 @@ fn workspace_manifest() -> Option<PathBuf> {
         std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
         "workspace manifest expected at {manifest:?} but absent while TIANHENG_WORKSPACE_TESTS is set — \
          the protocol's equality reaction must not silently skip in CI"
+    );
+    None
+}
+
+/// The workspace root, or `None` outside a checkout — the same skip-here / loud-in-CI discipline as above.
+fn workspace_root() -> Option<PathBuf> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if root.join("crates").is_dir() {
+        return Some(root);
+    }
+    assert!(
+        std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+        "crates/ expected under {root:?} but absent while TIANHENG_WORKSPACE_TESTS is set — the protocol's \
+         delegation reaction must not silently skip in CI"
     );
     None
 }
@@ -42,9 +66,11 @@ struct Dimension {
     /// `BoundaryKind`: 圭表 owns two kinds, and `BoundaryKind` is `#[non_exhaustive]` so a downstream crate
     /// cannot match it exhaustively anyway.
     reacted: fn(BoundaryKind) -> bool,
-    /// What this dimension's observer declares, and what the dimension exports — the bijection's two sides.
-    declared_bounds: fn() -> Vec<BoundDecl>,
-    exported_bounds: fn() -> Vec<BoundDecl>,
+    /// Where this dimension's `Observer` impl is written, relative to the workspace root.
+    ///
+    /// A path rather than a `bounds()` call, because the obligation is about the *shape* of that method — see
+    /// [`every_observer_declares_exactly_its_dimension_s_bounds`].
+    observer_source: &'static str,
 }
 
 /// 三儀, in the order the built-in path assembles them.
@@ -63,10 +89,7 @@ const DIMENSIONS: [Dimension; 3] = [
             ))
         },
         reacted: |kind| matches!(kind, BoundaryKind::Crate | BoundaryKind::Module),
-        declared_bounds: || {
-            StaticObserver::new(Constitution::new("bounds").static_boundaries().clone()).bounds()
-        },
-        exported_bounds: guibiao::observation_bounds,
+        observer_source: "crates/guibiao/src/observer.rs",
     },
     Dimension {
         label: "渾儀 (semantic)",
@@ -77,10 +100,7 @@ const DIMENSIONS: [Dimension; 3] = [
             ))
         },
         reacted: |kind| matches!(kind, BoundaryKind::Semantic),
-        declared_bounds: || {
-            SemanticObserver::new(Constitution::new("bounds").semantic_boundaries().clone()).bounds()
-        },
-        exported_bounds: hunyi::observation_bounds,
+        observer_source: "crates/hunyi/src/observer.rs",
     },
     Dimension {
         label: "漏刻 (runtime)",
@@ -91,8 +111,7 @@ const DIMENSIONS: [Dimension; 3] = [
             ))
         },
         reacted: |kind| matches!(kind, BoundaryKind::Runtime),
-        declared_bounds: || RuntimeObserver::new(Vec::new()).bounds(),
-        exported_bounds: louke::observation_bounds,
+        observer_source: "crates/louke/src/observer.rs",
     },
 ];
 
@@ -104,7 +123,9 @@ fn declare_violated_static(constitution: Constitution) -> Constitution {
     constitution.boundary(
         CrateBoundary::crate_("xuanji")
             .restrict_dependencies_to(["syn"])
-            .because("a deliberately violated boundary, so the compared verdict is not trivially clean"),
+            .because(
+                "a deliberately violated boundary, so the compared verdict is not trivially clean",
+            ),
     )
 }
 
@@ -118,7 +139,9 @@ fn declare_violated_semantic(constitution: Constitution) -> Constitution {
         ImplTraitBoundary::in_crate("hunyi")
             .module("crate")
             .must_not_expose_impl_trait()
-            .because("a deliberately violated boundary, so the semantic arm is not compared vacuously"),
+            .because(
+                "a deliberately violated boundary, so the semantic arm is not compared vacuously",
+            ),
     )
 }
 
@@ -131,7 +154,9 @@ fn declare_violated_runtime(constitution: Constitution) -> Constitution {
     constitution.runtime(
         RuntimeBoundary::at("observer-protocol-equality-unprobed-seam")
             .only_origins(["tianheng"])
-            .because("a deliberately violated boundary, so the runtime arm is not compared vacuously"),
+            .because(
+                "a deliberately violated boundary, so the runtime arm is not compared vacuously",
+            ),
     )
 }
 
@@ -204,25 +229,94 @@ fn the_trait_driven_fold_agrees_with_the_built_in_path() {
     );
 }
 
+/// Each observer's `bounds()` is **exactly a delegation** to its dimension's exported declarations.
+///
+/// This replaces a comparison that could not fail. Every `bounds()` already *is* `observation_bounds()`, so
+/// asserting `observer.bounds() == dimension::observation_bounds()` compared one function with itself —
+/// measured: drifting a declaration's extent with its id untouched left this suite at 10 passed. Comparing
+/// whole `BoundDecl`s instead of ids would have been a better comparison of two identical things, and still
+/// inert.
+///
+/// What the requirement actually fears is a **second, divergent list** — and a second list is something written
+/// in the body. So the property is the body's shape, which can fail: write a `vec![...]` there and this reaction
+/// reports it. The declarations' *content* is held elsewhere and does not need re-asserting here: drifting an
+/// extent fails `observation_bound_model`'s `the_extent_projection_is_fresh`, verified by the same perturbation.
+///
+/// Recognized by **position**, never by the bare call appearing somewhere in the file: the body between
+/// `fn bounds`'s brace and its closing brace must hold one executed statement, and that statement must be the
+/// call. A file that merely mentions `observation_bounds()` elsewhere — as every one of these does, in `use` —
+/// satisfies nothing.
 #[test]
 fn every_observer_declares_exactly_its_dimension_s_bounds() {
-    // WHOLE declarations, ordered by id — never the ids alone. A `BoundDecl` carries the shape it stops at, its
-    // extent, and what pins it; an observer whose ids match while an extent has drifted is exactly the
-    // divergent second list the bijection installed by `observation-bound-model` refuses, and the earlier
-    // id-only comparison admitted it. Delegation, never a second list: satisfying the protocol's obligation
-    // with one would be declaring bounds nobody classified.
-    let by_id = |mut bounds: Vec<BoundDecl>| -> Vec<BoundDecl> {
-        bounds.sort_by(|left, right| left.id().cmp(right.id()));
-        bounds
+    let Some(root) = workspace_root() else {
+        return;
     };
     for dimension in &DIMENSIONS {
+        let path = root.join(dimension.observer_source);
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("cannot read {path:?}: {error}"));
+        let source = Source::of(text);
+        let body = bounds_body(&source).unwrap_or_else(|| {
+            panic!(
+                "{} has no `fn bounds` body in {} — the protocol's obligation is about that method, so its \
+                 absence is a cannot-judge, not a pass",
+                dimension.label, dimension.observer_source
+            )
+        });
         assert_eq!(
-            by_id((dimension.declared_bounds)()),
-            by_id((dimension.exported_bounds)()),
-            "{}'s observer declares its dimension's bounds",
-            dimension.label
+            body.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec![DELEGATION],
+            "{}'s `bounds()` must be exactly `{DELEGATION}` — the obligation is satisfied by delegating to the \
+             dimension's exported declarations, and a body holding anything else is the second, divergent list \
+             the bijection refuses ({})",
+            dimension.label,
+            dimension.observer_source
         );
     }
+}
+
+/// The one statement a conforming `bounds()` body holds.
+const DELEGATION: &str = "observation_bounds()";
+
+/// The executed statements inside `fn bounds`'s body, or `None` if the method is absent.
+///
+/// Brace-counted from the signature's opening brace, so a nested block inside the body would be included rather
+/// than truncating at the first `}` — the body is required to be one statement, but a *wrong* body must be
+/// reported whole rather than mis-parsed into looking right.
+fn bounds_body(source: &Source) -> Option<Vec<String>> {
+    let text = source.whole();
+    let signature = text.find("fn bounds(")?;
+    let open = signature + text[signature..].find('{')?;
+    let mut depth = 0usize;
+    let mut close = None;
+    for (offset, character) in text[open..].char_indices() {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    close = Some(open + offset);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let body = Source::of(&text[open + 1..close?]);
+    Some(
+        body.executed()
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(|line| {
+                // Written as a tail expression today; a `return …;` says the same thing and must read the same.
+                line.trim_start_matches("return ")
+                    .trim_end_matches(';')
+                    .trim()
+                    .to_string()
+            })
+            .collect(),
+    )
 }
 
 // --- the fold's ordering directions, on hand-written observers ---
