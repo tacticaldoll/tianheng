@@ -88,6 +88,37 @@ consumer for an undemonstrated deduplication.
   **code** rather than a non-zero status — the property whose absence let a 1-into-2 collapse ride green
   through CI in the release-coherence gate.
 
+- **A gate's own shape is convention, so every new gate re-learns it by breaking.** Class: READY-PATCH in
+  version terms (repository-internal, no adopter surface), but a **new capability** in work terms — a spec, a
+  reaction, a generated projection, and a matrix. Observed pressure, measured on this window rather than
+  recalled: six structural classes recurred across the gate surface — a swallowed subshell status (9 mentions),
+  a foreign exit code or a 1-versus-2 collapse (11), an enumeration passing after zero iterations (6), a matrix
+  asserting non-zero instead of the code (5), a gate that could not be pointed at a fixture (3), and a matrix
+  absent or present-but-unrun (3) — over 28 of the window's 49 commits. Every one was repaired one site at a
+  time, twice leaving a sibling site behind, and one repair (the shared `ERR` backstop) *inverted* a gate whose
+  `fail` returned rather than exited, invisibly, because that gate's matrix asserted only a non-zero status.
+  Observation source: `git log v0.4.0..HEAD` by class, and the per-gate property table
+  (`grep -c exit_contract_backstop`, `grep -cE '\$\{1:-'`, twin presence, `grep -c expected_status`, DoD
+  membership) which is uniform **today** and enforced **nowhere**. Current reaction or bound: none. The
+  Definition of Done binds the gate *list* to CI; nothing binds a gate's *shape* to anything, so the seventh
+  gate inherits the shape only if its author reads five others first. Risk: MEDIUM — the failure mode is a gate
+  that reports clean or invents a violation, which is the one class this whole repository exists to refuse, and
+  a gate is exactly where nobody looks for it. Promotion trigger: **fired** — a structural property held by
+  convention that has now been observed drifting six ways in one window is the trigger, and PROJECT.md's
+  audit-cycle decision names the remedy (enumerate, react, audit against the enumeration) rather than another
+  round of one-site repairs. Version class: PATCH. Authority: this window's history, PROJECT.md's audit-cycle
+  decision and its three-part test, and `observation-bound-register` as the proven shape.
+
+  **The three-part test, checked before proposing.** *Enumerable*: `git ls-files 'scripts/check_*.sh'`.
+  *Generated and staleness-checked*: a projection blessed and diffed exactly as `docs/observation-bounds.md`
+  is. *States what it does not claim*: three of the six classes are semantic and cannot be mechanically
+  checked — whether every enumeration carries a vacuity guard, whether every read's status is checked in the
+  parent, and whether the 1-versus-2 assignment is *correct* rather than merely present. Those must be
+  declared as bounds of the capability, not implied by its silence. The nine checkable properties are the
+  backstop's installation, the header's declared contract, fixture addressability, twin existence, the twin
+  asserting codes, the twin holding at least one passing and one refusing direction, the twin asserting
+  read-only, the twin asserting a silent clean run, and both files' DoD membership.
+
 - **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
   its corrections are classified when they exist). Observed pressure: measured on the window's own history —
   of the 116 commits landing after the last range sweep closed, **20 carry a `tianheng` scope** and none of
