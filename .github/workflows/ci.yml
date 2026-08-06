@@ -228,4 +228,8 @@ jobs:
         # Each example under examples/ is its own workspace carrying a deliberate fault and the
         # adopter's real `= "0.3"` dependency form; the script patches the family to local source
         # (the packaged-selftest idiom) and asserts each reaction — the dogfood does not rot.
-        run: bash scripts/test_examples.sh
+        run: |
+          bash scripts/test_published_family_coverage.sh
+          bash scripts/test_example_quality_gate.sh
+          bash scripts/test_example_suite.sh
+          bash scripts/test_examples.sh

@@ -261,6 +261,14 @@ them.
   `|| true`, so a tracked document the census direction claims to cover went unexamined behind a clean
   report. What is left in a process substitution is computation over data this run already materialized, and
   the reaction says which rather than leaving the scope to be inferred.
+- Three failure matrices that existed but **nothing ran** are now in the Definition of Done and CI:
+  `test_published_family_coverage.sh`, `test_example_quality_gate.sh`, and `test_example_suite.sh`. The
+  reactions they prove *were* wired — `test_examples.sh` sources all three libraries and closes the
+  published-family ledger with `verify_family_coverage` — so the ledger has been running; what nobody ran
+  were the proofs that it still **refuses**. An unrun matrix is worse than an absent one: a reader who finds
+  `test_published_family_coverage.sh` in `scripts/` reasonably concludes the ledger's refusals are defended,
+  and nothing was keeping that true. All three passed when first run, so the wiring closes a latent gap
+  rather than a live defect.
 - `check_dod_coherence.sh` gains the **last missing failure matrix**, so every `check_*` gate now has a
   `test_*` twin and every one of the five asserts the expected exit **code**. This gate's subject is a claim
   `AGENTS.md` makes about itself — that its Definition of Done block is the single source for the local gate
