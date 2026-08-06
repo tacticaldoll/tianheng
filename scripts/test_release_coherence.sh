@@ -113,12 +113,18 @@ expect_pass() {
         || { printf 'expected success containing %q, got: %s\n' "$expected" "$output" >&2; exit 1; }
 }
 
+# The expected exit CODE, not merely non-zero. This matrix asserted `!= 0` and was blind to exactly the
+# regression that followed: installing the shared exit-contract backstop turned this gate's `fail` — a
+# `return 1` relying on `set -e` — into exit 2, so every genuine incoherence was reported as cannot-judge and
+# CI stayed green. The family's contract separates a violation (1) from a gate that cannot decide (2)
+# precisely so a consumer can act on the difference; a matrix that cannot see the difference cannot defend it.
 expect_fail() {
-    local repo=$1 expected=$2 output status=0
+    local repo=$1 expected_status=$2 expected=$3 output status=0
     output=$("$check" "$repo" 2>&1) || status=$?
-    [[ $status -ne 0 ]] || { printf 'expected failure containing %q\n' "$expected" >&2; exit 1; }
+    [[ $status -eq $expected_status ]] \
+        || { printf 'expected exit %d containing %q, got exit %d: %s\n' "$expected_status" "$expected" "$status" "$output" >&2; exit 1; }
     grep -Fq "$expected" <<<"$output" \
-        || { printf 'expected failure containing %q, got: %s\n' "$expected" "$output" >&2; exit 1; }
+        || { printf 'expected exit %d containing %q, got: %s\n' "$expected_status" "$expected" "$output" >&2; exit 1; }
 }
 
 snapshot=$(new_repo snapshot)
@@ -146,50 +152,50 @@ git -C "$missing_history" config user.email 'release-coherence@example.invalid'
 write_workspace "$missing_history" 0.2.0
 write_development_changelog "$missing_history" 0.2.0
 commit_all "$missing_history" 'chore: initial import'
-expect_fail "$missing_history" 'release history is unavailable'
+expect_fail "$missing_history" 2 'release history is unavailable'
 
 malformed_history=$(new_repo malformed-history)
 write_development_changelog "$malformed_history" 0.2.0
 commit_all "$malformed_history" 'release: next'
-expect_fail "$malformed_history" 'malformed release history subject: release: next'
+expect_fail "$malformed_history" 1 'malformed release history subject: release: next'
 
 regression=$(new_repo regression)
 write_workspace "$regression" 0.1.9
 write_development_changelog "$regression" 0.1.9
 commit_all "$regression" 'chore: regress version'
-expect_fail "$regression" '0.1.9 is older than latest release 0.2.0'
+expect_fail "$regression" 1 '0.1.9 is older than latest release 0.2.0'
 
 empty_development=$(new_repo empty-development)
 write_development_changelog "$empty_development" 0.2.0 no
 commit_all "$empty_development" 'chore: omit release note'
-expect_fail "$empty_development" 'requires adopter-facing release narrative'
+expect_fail "$empty_development" 1 'requires adopter-facing release narrative'
 
 stale_lock=$(new_repo stale-lock)
 write_workspace "$stale_lock" 0.2.1
 write_release_changelog "$stale_lock" 0.2.1 0.2.0
 sed -i '0,/version = "0.2.1"/s//version = "0.2.0"/' "$stale_lock/Cargo.lock"
 commit_all "$stale_lock" 'chore: leave stale lock'
-expect_fail "$stale_lock" 'Cargo.lock package tianheng is 0.2.0; expected 0.2.1'
+expect_fail "$stale_lock" 1 'Cargo.lock package tianheng is 0.2.0; expected 0.2.1'
 
 missing_notes=$(new_repo missing-notes)
 write_workspace "$missing_notes" 0.2.1
 write_development_changelog "$missing_notes" 0.2.1 no
 commit_all "$missing_notes" 'chore: omit release section'
-expect_fail "$missing_notes" 'missing dated release notes for 0.2.1'
+expect_fail "$missing_notes" 1 'missing dated release notes for 0.2.1'
 
 missing_unreleased=$(new_repo missing-unreleased)
 write_workspace "$missing_unreleased" 0.2.1
 write_release_changelog "$missing_unreleased" 0.2.1 0.2.0
 sed -i '/^## \[Unreleased\]$/d' "$missing_unreleased/CHANGELOG.md"
 commit_all "$missing_unreleased" 'chore: omit unreleased section'
-expect_fail "$missing_unreleased" 'exactly one [Unreleased] section'
+expect_fail "$missing_unreleased" 1 'exactly one [Unreleased] section'
 
 invalid_link=$(new_repo invalid-link)
 write_workspace "$invalid_link" 0.2.1
 write_release_changelog "$invalid_link" 0.2.1 0.2.0
 sed -i 's#compare/v0.2.0...v0.2.1#garbage#' "$invalid_link/CHANGELOG.md"
 commit_all "$invalid_link" 'chore: break release comparison'
-expect_fail "$invalid_link" 'comparison link for 0.2.1 must start at v0.2.0'
+expect_fail "$invalid_link" 1 'comparison link for 0.2.1 must start at v0.2.0'
 
 mismatched_snapshot=$fixture_root/mismatched-snapshot
 mkdir -p "$mismatched_snapshot"
@@ -200,7 +206,7 @@ write_workspace "$mismatched_snapshot" 0.2.1
 write_release_changelog "$mismatched_snapshot" 0.2.1 0.2.0
 git -C "$mismatched_snapshot" add .
 git -C "$mismatched_snapshot" commit -qm 'release: 0.2.0'
-expect_fail "$mismatched_snapshot" 'subject is 0.2.0 but workspace version is 0.2.1'
+expect_fail "$mismatched_snapshot" 1 'subject is 0.2.0 but workspace version is 0.2.1'
 
 # Failure branches of the manifest-and-pin checks — without these, a `require_workspace_manifests`
 # or `require_internal_pins` that degraded to zero assertions (e.g. the crate glob silently emptied)
@@ -208,12 +214,12 @@ expect_fail "$mismatched_snapshot" 'subject is 0.2.0 but workspace version is 0.
 missing_inheritance=$(new_repo missing-inheritance)
 sed -i 's/^version\.workspace = true$/version = "0.2.0"/' "$missing_inheritance/crates/xuanji/Cargo.toml"
 commit_all "$missing_inheritance" 'chore: pin a crate version literally'
-expect_fail "$missing_inheritance" 'must inherit version.workspace = true'
+expect_fail "$missing_inheritance" 1 'must inherit version.workspace = true'
 
 mismatched_pin=$(new_repo mismatched-pin)
 sed -i 's#version = "0.2.0" }#version = "0.1.0" }#' "$mismatched_pin/Cargo.toml"
 commit_all "$mismatched_pin" 'chore: drift an internal pin'
-expect_fail "$mismatched_pin" 'internal dependency xuanji is pinned to 0.1.0; expected 0.2.0'
+expect_fail "$mismatched_pin" 1 'internal dependency xuanji is pinned to 0.1.0; expected 0.2.0'
 
 # An example left behind by a release bump. This is the realistic release-prep slip: the workspace and
 # the internal pins move together, and the examples' committed published requirement does not — after
@@ -222,14 +228,14 @@ expect_fail "$mismatched_pin" 'internal dependency xuanji is pinned to 0.1.0; ex
 stale_example_pin=$(new_repo stale-example-pin)
 sed -i 's/^xuanji = "0.2"$/xuanji = "0.1"/' "$stale_example_pin/examples/adopter/Cargo.toml"
 commit_all "$stale_example_pin" 'chore: leave an example on the previous minor'
-expect_fail "$stale_example_pin" 'example adopter requires xuanji = "0.1"'
+expect_fail "$stale_example_pin" 1 'example adopter requires xuanji = "0.1"'
 
 # And that check's own vacuity guards, so a renamed examples/ or a changed dependency form cannot make
 # it pass with zero assertions.
 missing_examples=$(new_repo missing-examples)
 rm -rf "$missing_examples/examples"
 commit_all "$missing_examples" 'chore: remove the examples directory'
-expect_fail "$missing_examples" 'found no example manifests'
+expect_fail "$missing_examples" 2 'found no example manifests'
 
 # The TABLE dependency form is read too, so an example using it is checked rather than skipped. Without
 # this, one example moving to `{ version = "…" }` would go unverified while the set-level guard below
@@ -237,14 +243,14 @@ expect_fail "$missing_examples" 'found no example manifests'
 table_form_example_pin=$(new_repo table-form-example-pin)
 sed -i 's/^xuanji = "0.2"$/xuanji = { version = "0.1", features = ["audit"] }/' "$table_form_example_pin/examples/adopter/Cargo.toml"
 commit_all "$table_form_example_pin" 'chore: stale table-form requirement in an example'
-expect_fail "$table_form_example_pin" 'example adopter requires xuanji = "0.1"'
+expect_fail "$table_form_example_pin" 1 'example adopter requires xuanji = "0.1"'
 
 # The vacuity guard itself: an empty crate set (layout change / crates removed) must fail loud,
 # not iterate the manifest and lock loops zero times and report coherent.
 empty_crate_set=$(new_repo empty-crate-set)
 find "$empty_crate_set/crates" -name Cargo.toml -delete
 commit_all "$empty_crate_set" 'chore: remove crate manifests'
-expect_fail "$empty_crate_set" 'found no workspace crate manifests'
+expect_fail "$empty_crate_set" 2 'found no workspace crate manifests'
 
 before_tree=$(git -C "$development" status --porcelain=v1 --untracked-files=all)
 before_head=$(git -C "$development" rev-parse HEAD)
@@ -293,5 +299,22 @@ grep -Fq 'an unhandled command failed' <<<"$contract_output" \
 clean_noise=$("$check" "$development" 2>&1 >/dev/null || true)
 grep -Fq 'an unhandled command failed' <<<"$clean_noise" \
     && { printf 'a passing run must print no backstop diagnostic, got: %s\n' "$clean_noise" >&2; exit 1; }
+
+# The internal-pin loop's vacuity guard: it was the only loop in the gate without one, so a reformatted
+# `[workspace.dependencies]` table iterated zero times and the direction passed having asserted nothing about
+# any pin. The fixture keeps a real path dependency but in a form this line-oriented scan does not read.
+vacuous_pins=$(new_repo vacuous-pins)
+python3 - "$vacuous_pins" <<'PYEOF'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1]) / "Cargo.toml"
+t = p.read_text()
+# same dependency, same path, split across lines — a form the single-line scan cannot see
+t = re.sub(r'^\s*xuanji\s*=\s*\{[^}]*\}\s*$',
+           'xuanji = {\n    path = "crates/xuanji",\n    version = "0.2.0",\n}', t, count=1, flags=re.M)
+p.write_text(t)
+PYEOF
+git -C "$vacuous_pins" add -A
+git -C "$vacuous_pins" commit -qm 'reformat the internal dependency table'
+expect_fail "$vacuous_pins" 2 'found no internal path dependency'
 
 printf 'ok release coherence state and failure matrix\n'

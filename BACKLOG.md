@@ -60,23 +60,20 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **`check_release_coherence.sh`'s subshell reads have not been audited for a swallowed status.** Class:
-  READY-PATCH (the corrections are one line each where they exist). Observed pressure: the identical class was
-  found and closed in two sibling gates in this window — `check_bound_register.sh` (four `git ls-files`
-  enumerations, a citation scan whose refusal exited a subshell, a harness listing parse, an attribute-run
-  read, both census greps, and a partial package enumeration) and `check_reference_integrity.sh` (the
-  reference normalization, then the tracked-source enumeration and the tracked-path index) — each producing
-  either a clean report over content never read or a violation invented from an IO failure. **The
-  foreign-exit-code half of this entry is now closed**: every gate installs the shared exit-contract
-  backstop, so an unhandled failure here reports `2` with its line rather than `130` with no output
-  (measured, and pinned by `test_release_coherence.sh`). What remains open is the SWALLOWED half — a read
-  whose failure is invisible produces a wrong answer, which no backstop can catch. Observation source:
-  `grep -n '< <(' scripts/check_release_coherence.sh` lists five consumers (`workspace_packages` twice, the
-  manifest pin scan, the lockfile scan, and the release-record log), none yet examined. Risk: MEDIUM, and
-  asymmetric: this gate decides whether a release's versions agree, so a false clean reaches a published
-  artifact while a false violation only blocks. Promotion trigger: none needed; it is a bounded read of one
-  file against a class already characterized. Version class: PATCH. Authority: the two closed entries above
-  and this gate's newly declared exit contract.
+- ~~**`check_release_coherence.sh`'s subshell reads have not been audited for a swallowed status.**~~
+  **CLOSED** in the open window. Audited read by read rather than swept: four of the five consumers already
+  carried a vacuity guard (the release spine, the crate-manifest set, and both example-pin counters), which
+  is why the entry's MEDIUM risk did not materialise as a false clean. The fifth — the internal-pin loop —
+  had none, so a reformatted `[workspace.dependencies]` table iterated zero times and the direction passed
+  having asserted nothing about any pin; it now refuses with `2`.
+
+  The audit found two things the entry did not predict, both worth keeping. The gate collapsed **violation**
+  into **cannot judge**'s absence: every refusal was `1`, including a shallow clone, an absent manifest, and a
+  moved crate layout, which the family contract forbids and this gate's own header (written one change
+  earlier) already claimed it did not do. And the exit-contract backstop had **inverted** it — `fail` was a
+  `return 1` relying on `set -e`, so the `ERR` trap turned every genuine incoherence into `2`. Neither was
+  visible to CI, because this matrix asserted a non-zero status rather than a code. All five gate matrices now
+  assert the code, which is the property that would have caught it.
 
 - ~~**Two gates have no companion failure matrix.**~~ **Half closed** in the open window.
   `check_whitespace_hygiene.sh` now has `test_whitespace_hygiene.sh`, which was worth building rather than

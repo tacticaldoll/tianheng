@@ -266,6 +266,16 @@ them.
   only gate whose refusals were asserted nowhere, and it is where the shared exit-contract backstop first
   misfired: its clean-run assertion is what catches that, since removing the backstop's subshell guard fails
   this matrix and no other. `check_dod_coherence.sh` remains the last gate without a matrix and is filed.
+- `check_release_coherence.sh` **separates a violation from a gate that cannot decide**, which its header
+  claimed and its code never did: every refusal was `1`, so a shallow clone with no release spine, an absent
+  manifest, or a moved crate layout all reported "the release surfaces disagree". Those are now `2`. The same
+  audit caught a regression the previous entry introduced: this gate's `fail` was a `return 1` relying on
+  `set -e`, and the new `ERR` backstop converted it into `2` — every genuine incoherence reported as
+  cannot-judge, with CI green throughout because this matrix asserted only a non-zero status. `fail` exits
+  directly now, the matrix asserts the **code** at every call site (as its siblings already did), and the
+  internal-pin loop gained the vacuity guard every other loop in the file already had — without it a
+  reformatted `[workspace.dependencies]` table iterated zero times and the direction passed having asserted
+  nothing about any pin.
 - **Every repository gate now holds the 0/1/2 exit contract on every path**, through one shared backstop
   (`scripts/lib/exit_contract.sh`) rather than six copies of the same trap. Measured across the gates before
   it existed, each with one tool stubbed to fail: `check_publish_source.sh` exited **131**,
