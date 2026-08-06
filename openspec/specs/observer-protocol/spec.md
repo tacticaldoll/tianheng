@@ -118,6 +118,12 @@ delegation and nothing else, recognized by position within that method rather th
 anywhere in the file. The declarations' *content* is held by `observation-bound-model`'s extent projection and
 SHALL NOT be re-asserted here.
 
+Two things follow from *recognized by position*, and both were measured as gaps rather than reasoned about. The
+method SHALL be located by **line position** — a line whose trimmed start is the signature — so a mention of it
+inside a comment or a string cannot be brace-matched from. And a **trailing comment** on the delegation SHALL be
+prose, not a second list: the region discipline this family already holds says a comment is never executed text,
+and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
+
 Where the built-in path obtains a dimension's outcome **by invoking that dimension's observer**, equality for
 that dimension holds **by construction rather than by observation**, and the spec SHALL say which dimensions
 those are — otherwise a reader takes a constructed equality for a measured one. The runtime dimension is
@@ -143,6 +149,12 @@ dimensions remain independently implemented on both sides, and for them the reac
 - **WHEN** an observer's bounds method holds anything other than the delegation to its dimension's exported
   declarations
 - **THEN** the reaction fails, so the protocol's obligation cannot be satisfied by a second, divergent list
+
+#### Scenario: The delegation carries a trailing comment
+
+- **WHEN** an observer's bounds method holds the delegation followed by a comment explaining it
+- **THEN** the reaction accepts it, because a comment is prose and not a list — the same region rule every other
+  reaction in this repository reads its subject through
 
 #### Scenario: An observer's bounds method cannot be found where the reaction looks
 
@@ -177,9 +189,10 @@ Because that same measurement leaves 渾儀 unable to watch this crate, the reac
   exposure nobody governs.
 - It reads this crate's **top-level** source files only. That is sound exactly while every subdirectory of `src/`
   is reached through a non-`pub` `mod` declaration, so nothing beneath one is reachable from outside the crate —
-  and the reaction SHALL **assert that premise** rather than rest on it. Measured, eight files under
-  `src/runner/` are never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves the
-  reaction passing: harmless while those modules are private, and invisible the moment one is not.
+  and the reaction SHALL **assert that premise** rather than rest on it. Measured, the files under `src/runner/`
+  are never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves the reaction passing:
+  harmless while those modules are private, and invisible the moment one is not. How many files that is is
+  deliberately not written here — a count of an enumerable set, kept by hand, goes stale in silence.
 - Reading one line at a time leaves a residual the premise check cannot remove, declared as an observation bound
   below.
 
