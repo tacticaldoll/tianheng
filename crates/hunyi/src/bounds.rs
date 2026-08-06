@@ -19,7 +19,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`pub async fn` inside a `mod` declared in a function body",
             Extent::Reached(Reached::NotAViolation {
                 because: "a `mod` inside a fn body is not public API — it is unreachable as `crate::…`, so \
-                          there is nothing exposed to react to",
+                          there is nothing exposed to react to".into(),
             }),
             "async_subtree_does_not_observe_a_body_nested_module",
         ),
@@ -32,7 +32,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::AsIntended {
                 bounded: FactGranularity::Identity,
                 because: "the `dyn` is already caught at the alias declaration, so naming it again through \
-                          the item would be a second finding for one shape",
+                          the item would be a second finding for one shape".into(),
             }),
             "a_private_alias_hiding_a_dyn_is_a_stated_bound",
         ),
@@ -43,7 +43,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a non-public `type` alias holding a `dyn`, named by a public signature",
             Extent::OutOfReach {
                 because: "the resolver does not expand `type` aliases, so the `dyn` is never seen from the \
-                          public position that exposes it",
+                          public position that exposes it".into(),
             },
             "a_private_alias_hiding_a_dyn_is_a_stated_bound",
         ),
@@ -52,7 +52,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a `dyn` appearing only in a macro's expansion, with no `dyn` token at the call site",
             Extent::OutOfReach {
                 because: "macros are not expanded — the universal 渾儀 macro-expansion bound — so the token \
-                          never enters the observed AST",
+                          never enters the observed AST".into(),
             },
             "a_macro_generated_dyn_is_a_documented_coverage_bound",
         ),
@@ -63,7 +63,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 bounded: FactGranularity::Identity,
                 because: "a complex const-generic expression, a same-named macro, a `verbatim` type or a \
                           lifetime cannot be rendered stably, so the two share one subject and key — each \
-                          still reacts on first occurrence, and only baseline-dedup granularity is bounded",
+                          still reacts on first occurrence, and only baseline-dedup granularity is bounded".into(),
             }),
             "an_unrenderable_sub_node_is_a_stated_rendering_bound",
         ),
@@ -75,7 +75,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`dyn Frobnicate` where the bare principal has no `use`, no dependency, and no local declaration",
             Extent::OutOfReach {
                 because: "the oracle does not over-reach a single bare segment, so a prelude or glob-imported \
-                          trait resolves to nothing rather than to a guess",
+                          trait resolves to nothing rather than to a guess".into(),
             },
             "dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound",
         ),
@@ -88,7 +88,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::OutOfReach {
                 because: "a glob's leaves are not enumerable, so the self-type cannot be resolved to its \
                           definition — the co-located, `use`-imported, re-export-spelled and alias cases do \
-                          resolve and react",
+                          resolve and react".into(),
             },
             "an_unresolvable_glob_self_type_is_a_documented_bound",
         ),
@@ -100,7 +100,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`impl Frobnicate` where the bare principal has no `use`, no dependency, and no local declaration",
             Extent::OutOfReach {
                 because: "the same resolver limit as the `dyn` operand dimension — a single bare segment is \
-                          not over-reached",
+                          not over-reached".into(),
             },
             "impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound",
         ),
@@ -109,7 +109,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new("semantic-reexport-exposure/an-underscore-rename-is-a-documented-bound"),
             "`pub use crate::infra::DbPool as _;` under a boundary forbidding that module",
             Extent::Reached(Reached::NotAViolation {
-                because: "`as _` binds no nameable path a consumer can reach, so nothing is exposed",
+                because: "`as _` binds no nameable path a consumer can reach, so nothing is exposed".into(),
             }),
             "restricted_and_private_and_underscore_reexports_do_not_react",
         ),
@@ -118,7 +118,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`pub use crate::elsewhere::*;` where that module transitively re-exports a forbidden type",
             Extent::OutOfReach {
                 because: "the glob's leaves are not enumerable here, so the transitively re-exported leaf is \
-                          never seen",
+                          never seen".into(),
             },
             "sibling_root_glob_does_not_react",
         ),
@@ -130,7 +130,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::OutOfReach {
                 because: "whether the glob root publicly re-exports the deeper forbidden subtree cannot be \
                           enumerated — the sharper sub-case of the sibling glob, declared separately rather \
-                          than lumped with it",
+                          than lumped with it".into(),
             },
             "ancestor_root_glob_over_a_deeper_forbidden_prefix_does_not_react",
         ),
@@ -141,7 +141,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a private import followed by a bare `pub use Foo;`, re-exported onward",
             Extent::Reached(Reached::UnderReacts {
                 because: "the closure captures inline `pub use` paths only, so the hop through a privately \
-                          imported bare name is not followed",
+                          imported bare name is not followed".into(),
                 owner: Owner::Engine,
             }),
             "facade_hop_reexporting_a_privately_used_bare_name_is_a_stated_bound",
@@ -152,7 +152,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "`pub use worklane_core::spi::*;` under a boundary forbidding a different module of that crate",
             Extent::OutOfReach {
-                because: "an external glob's individual leaves are not enumerable, so none is observed",
+                because: "an external glob's individual leaves are not enumerable, so none is observed".into(),
             },
             "extern_glob_nonforbidden_root_is_a_stated_bound",
         ),
@@ -163,7 +163,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a re-export of a foreign prelude path that itself re-exports a forbidden module's type",
             Extent::OutOfReach {
                 because: "the foreign chain is not parsed, so only the written path is matched — the reaction \
-                          never claims to have followed it",
+                          never claims to have followed it".into(),
             },
             "foreign_prelude_rename_is_a_stated_bound",
         ),
@@ -174,7 +174,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`extern crate worklane_core as wc;` declared inside a module rather than at the crate root",
             Extent::Reached(Reached::UnderReacts {
                 because: "only crate-root renames are collected, since a module-scoped alias binds locally, \
-                          so the alias head is not resolved to the crate it names",
+                          so the alias head is not resolved to the crate it names".into(),
                 owner: Owner::Engine,
             }),
             "module_scoped_extern_crate_rename_is_a_stated_bound",
@@ -188,7 +188,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::UnderReacts {
                 because: "transparency covers item position, and an impl-body invocation's arms are impl \
                           items observed through different walkers — a declared gap rather than a claimed \
-                          reaction",
+                          reaction".into(),
                 owner: Owner::Engine,
             }),
             "a_cfg_if_inside_an_impl_body_is_a_stated_bound",
@@ -201,7 +201,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::OutOfReach {
                 because: "the invocation is not transparent and its body is not read — extracting from it \
                           would read an `impl` body's braces as an arm and report an item the macro may never \
-                          emit",
+                          emit".into(),
             },
             "an_arbitrary_macro_body_is_not_read_as_transparent_arms",
         ),
@@ -212,7 +212,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a plain item nested inside a body, where an `impl` in the same position is recovered",
             Extent::Reached(Reached::NotAViolation {
                 because: "a plain item there is genuinely scoped to that body and unreachable as `crate::…`, \
-                          exactly like the body-nested-module bound",
+                          exactly like the body-nested-module bound".into(),
             }),
             "a_plain_fn_directly_in_a_const_body_stays_a_stated_bound",
         ),
@@ -223,7 +223,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "an `impl` nested one level deeper than the recovered position, or wrapped in a `static`",
             Extent::Reached(Reached::UnderReacts {
                 because: "only an `impl` directly in such a body is recovered, so a deeper or \
-                          `static`-wrapped one exposes without being observed",
+                          `static`-wrapped one exposes without being observed".into(),
                 owner: Owner::Engine,
             }),
             "a_static_wrapped_impl_stays_a_stated_bound",
@@ -236,7 +236,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "an impl position naming a type that arrives through a glob import",
             Extent::OutOfReach {
                 because: "a glob's leaves are not enumerable, so the type in that position resolves to \
-                          nothing",
+                          nothing".into(),
             },
             "a_glob_imported_type_in_an_impl_position_is_a_documented_coverage_bound",
         ),
@@ -247,7 +247,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "an `impl` appearing only in a macro's expansion",
             Extent::OutOfReach {
-                because: "macros are not expanded, so the impl never enters the observed AST",
+                because: "macros are not expanded, so the impl never enters the observed AST".into(),
             },
             "a_macro_generated_impl_is_a_documented_bound",
         ),
@@ -259,7 +259,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::DeclinesToRefuse {
                 because: "the whole-crate walk skips the module rather than failing the gate with a scan \
                           error, because an absent cfg-gated file is an ordinary checkout state and refusing \
-                          to judge on it would make the gate unusable",
+                          to judge on it would make the gate unusable".into(),
             }),
             "hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored",
         ),
@@ -270,7 +270,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "an `unsafe` block or item appearing only in a macro's expansion",
             Extent::OutOfReach {
-                because: "macros are not expanded, so the `unsafe` token never enters the observed AST",
+                because: "macros are not expanded, so the `unsafe` token never enters the observed AST".into(),
             },
             "unsafe_in_a_macro_body_is_a_stated_bound",
         ),
@@ -281,7 +281,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a `pub` item appearing only in a macro's expansion",
             Extent::OutOfReach {
-                because: "macros are not expanded, so the item never enters the observed AST",
+                because: "macros are not expanded, so the item never enters the observed AST".into(),
             },
             "a_macro_invocation_pub_item_is_a_documented_bound",
         ),
@@ -292,7 +292,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`pub(in crate::a) fn` on an item already directly in `crate::a`, under a `Module` ceiling",
             Extent::Reached(Reached::OverReacts {
                 because: "the conservative `Crate` rank exceeds the `Module` ceiling, so an effectively \
-                          private item may react — never a silent pass",
+                          private item may react — never a silent pass".into(),
             }),
             "a_pub_in_narrow_path_over_reacts_under_a_module_ceiling",
         ),

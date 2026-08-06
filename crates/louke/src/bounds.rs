@@ -16,7 +16,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a probe or seam mention in `tests/`, `examples/`, or `build.rs`",
             Extent::OutOfReach {
                 because: "the audit's corpus is the member's library and binary targets, so it never reads \
-                          those files at all",
+                          those files at all".into(),
             },
             "source_outside_lib_or_bin_target_subtree_is_out_of_scope_corpus_bound",
         ),
@@ -27,7 +27,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a seam whose only probe sits behind `#[cfg(test)]` or another non-production predicate",
             Extent::Reached(Reached::UnderReacts {
                 because: "the audit is cfg-blind and counts the probe as coverage, so a seam with no \
-                          production probe reads as probed",
+                          production probe reads as probed".into(),
                 owner: Owner::Engine,
             }),
             "production_probe_behind_non_production_cfg_is_counted_as_coverage",
@@ -40,7 +40,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::AsIntended {
                 bounded: FactGranularity::Identity,
                 because: "no further source content distinguishes the two occurrences, so they share one \
-                          finding — the site still reacts",
+                          finding — the site still reacts".into(),
             }),
             "identical_expression_repeated_in_the_same_function_collapses_to_one_violation",
         ),
@@ -52,7 +52,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::AsIntended {
                 bounded: FactGranularity::Presentation,
                 because: "the literal has no textual relationship to the anchor, so the site is named with \
-                          the raw absolute path — the violation is still emitted",
+                          the raw absolute path — the violation is still emitted".into(),
             }),
             "an_absolute_path_literal_outside_the_anchor_keeps_the_path_the_literal_wrote",
         ),
@@ -63,7 +63,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a registered type that is a reference, tuple, array, pointer, or function pointer",
             Extent::Reached(Reached::OverReacts {
                 because: "the derived origin is a truncated rendering matching no module name, so the \
-                          crossing reacts fail-closed rather than being admitted through the wrapper",
+                          crossing reacts fail-closed rather than being admitted through the wrapper".into(),
             }),
             "the_derived_origin_honors_its_stated_shape_bounds",
         ),
@@ -74,12 +74,12 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a seam whose only probe sits in a module reached by `#[path]` into a symlinked directory",
             Extent::Reached(Reached::UnderReacts {
                 because: "the root-file run reports the seam covered while the directory run reports it \
-                          unprobed, so which entry point observed it decides the answer",
+                          unprobed, so which entry point observed it decides the answer".into(),
                 // Not a value of its own: one entry-dependent instance does not earn one, and the direction
                 // that matters — a seam reported covered when it is not — is recorded either way. The entry
                 // point is the layer, so the ownership is inherited rather than this engine's.
                 owner: Owner::Inherited {
-                    from: "the corpus entry point",
+                    from: "the corpus entry point".into(),
                 },
             }),
             "a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory",
