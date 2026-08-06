@@ -285,7 +285,18 @@ const DELEGATION: &str = "observation_bounds()";
 /// reported whole rather than mis-parsed into looking right.
 fn bounds_body(source: &Source) -> Option<Vec<String>> {
     let text = source.whole();
-    let signature = text.find("fn bounds(")?;
+    // By line POSITION, never by the bare marker: `text.find("fn bounds(")` would happily brace-match from a
+    // sentence *about* the method inside a doc comment or a string literal. No observer file mentions it that way
+    // today, which is what makes this the latent form of a trap this family has already paid for four times.
+    let signature = text
+        .lines()
+        .scan(0usize, |offset, line| {
+            let at = *offset;
+            *offset += line.len() + 1;
+            Some((at, line))
+        })
+        .find(|(_, line)| line.trim_start().starts_with("fn bounds("))
+        .map(|(at, line)| at + (line.len() - line.trim_start().len()))?;
     let open = signature + text[signature..].find('{')?;
     let mut depth = 0usize;
     let mut close = None;
@@ -309,8 +320,17 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
             .map(str::trim)
             .filter(|line| !line.is_empty())
             .map(|line| {
+                // A trailing comment is PROSE, not a second list. `Executed` filters comment lines and not
+                // comment tails, so without this `observation_bounds() // why` compares unequal and the reaction
+                // reports an offence — measured. Both whole-line recognizers in `gate_shape_contract.rs` already
+                // strip one; this is the same rule, not a new allowance.
+                let code = match line.find("//") {
+                    Some(index) => &line[..index],
+                    None => line,
+                };
                 // Written as a tail expression today; a `return …;` says the same thing and must read the same.
-                line.trim_start_matches("return ")
+                code.trim()
+                    .trim_start_matches("return ")
                     .trim_end_matches(';')
                     .trim()
                     .to_string()
@@ -516,9 +536,10 @@ fn exposes_a_trait_object(line: &str) -> bool {
 ///
 /// It reads this crate's **top-level** source files only, and that is sound because of a premise this test now
 /// checks rather than assumes: every subdirectory of `src/` is reached through a non-`pub` `mod`, so nothing
-/// beneath one is reachable from outside the crate. Measured, the eight files under `src/runner/` are never
-/// opened here and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves this passing — harmless
-/// while those modules are private, and invisible the moment one is not.
+/// beneath one is reachable from outside the crate. Measured, the files under `src/runner/` are never opened here
+/// and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves this passing — harmless while those
+/// modules are private, and invisible the moment one is not. How many files that is is deliberately not written:
+/// a count of an enumerable set, kept by hand, is the census this window already dismantled once.
 #[test]
 fn composition_introduces_no_trait_object() {
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
