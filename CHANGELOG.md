@@ -498,7 +498,12 @@ them.
   a stronger guard than a reaction, and one a reaction could only duplicate and disagree with. The single path
   carrying `None` is 漏刻's **probe audit**, where it is correct: a declared seam with no probe is repaired by
   probing it *or* by dropping the declaration, which is neither a deny breach nor an allowlist gap. Documentation
-  and a `runtime-origin-assertion` requirement, no code change and no new variant.
+  and a `runtime-origin-assertion` requirement — **and a reaction**, because the requirement was first written with
+  none: the closing review's sixth round found it, in the window whose whole subject was closing that class. Both
+  observable directions are now asserted on the one fixture that produces them together, so neither is checked on a
+  report that lacks it, and attaching a polarity to the audit's violation builder fails it naming both findings. The
+  by-construction half stays unreacted deliberately: an exhaustive match is the stronger guard, and a second copy of
+  a fact the compiler holds can disagree with it.
 
 - **The lexical trait-object guard states where it stops, and checks the premise it rested on.** The reaction
   keeping the composed shell free of trait objects has to be lexical — 渾儀 governs no module of `tianheng`, and
