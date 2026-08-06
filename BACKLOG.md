@@ -321,6 +321,27 @@ consumer for an undemonstrated deduplication.
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:**
+  - **A changelog entry that refers to another by position breaks when the entries are regrouped.**
+    *Observed pressure:* six positional cross-references in one `[Unreleased]` section; **three were broken** when
+    found. Two had been wrong before anything moved — "the previous entry's own repair" pointed at
+    `assert_projection_matches`, which has nothing to do with the repair it describes, and "a regression the
+    previous entry introduced" attributed the shared exit-contract backstop to the entry beside it rather than to
+    the backstop. The third was broken by merging the section's duplicate group headings: an entry saying "the
+    entry below" pointed into `Documentation`, which the merge moved from last to first. *Observation source:* the
+    closing review of the 0.5.0 window, sweeping `[Unreleased]` for positional references after the group merge;
+    each antecedent was resolved by reading it rather than assumed. *Current reaction or bound:* none. The group
+    merge's own verification compared the **multiset of lines** before and after, which is correct for "no entry
+    text was lost" and structurally blind to "an entry still points at what it meant". *Risk:* an adopter follows
+    a reference to the wrong entry, or to none — and a changelog is the one document written for people outside
+    this repository. *Promotion trigger:* a positional reference appearing again after this sweep. Not a count:
+    the sweep is the control, exactly as the un-reacted-SHALL entry above sets it up. *Why not simply forbidden:*
+    three of the six resolve soundly and one of them is load-bearing — an entry citing the bullet immediately
+    after it, within one group, which any regroup preserves. And references *into* `Documentation` are now
+    structurally safe, since it is the first group and everything else is below it. A rule refusing "above" and
+    "below" outright would refuse those three, so the rule has to distinguish a reference within a group from one
+    across groups, which is a design decision rather than a grep. *Version class:* documentation only; no
+    published surface. *Authority:* `release-coherence`, which owns what `CHANGELOG.md` must be true of, and this
+    window's group-merge change, whose verification is the measured gap.
   - **Whether a gate's chosen exit code is the semantically right one.** *Observed pressure:* the class occurred
     once, in `86e8592`, and produced **both** directions of `gate-shape-contract`'s `1-versus-2` bound in one
     gate — every refusal was `1`, so a shallow clone reported *"the release surfaces disagree"* (a
