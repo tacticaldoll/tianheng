@@ -970,6 +970,55 @@ fn audit_reacts_when_a_declaration_and_probe_decode_differently() {
     }
 }
 
+/// **Neither audit direction carries a repair polarity**, which the specification requires and nothing measured.
+///
+/// A polarity names a repair *direction* — deny-breach, repair by removing the offending code; allowlist-gap,
+/// repair by removing it or by widening the declared set. Neither audit direction is either: a declared seam with
+/// no probe is repaired by probing it **or** by dropping the declaration, and a probe naming an undeclared seam by
+/// declaring it **or** by deleting the probe. Assigning a value would name a direction that does not exist, and an
+/// adopter's report and baseline both carry the label.
+///
+/// The requirement stating this was written with no reaction, in the window whose subject was closing exactly that
+/// class — so it is measured here rather than trusted. The fixture is the one that produces **both** directions at
+/// once, so neither is asserted on a report that lacks it.
+#[test]
+fn neither_audit_direction_carries_a_repair_polarity() {
+    let tb = TempBase::new("audit-polarity");
+    let dir = tb.dir("pol", "fn f() { assert_boundary!(\"a\\n\", o); }");
+    let outcome = tb.audit(&[boundary("a\\n", Severity::Enforce)], &[dir]);
+    let Outcome::Violations(report) = outcome else {
+        panic!("the fixture must react in both directions, or this asserts over nothing");
+    };
+    // Both directions present, so the assertion below covers both rather than whichever one fired.
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.finding.contains("has no configured probe marker")),
+        "the declared-but-unprobed direction must be present: {:?}",
+        report.violations
+    );
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|v| v.finding.contains("undeclared seam")),
+        "the probed-but-undeclared direction must be present: {:?}",
+        report.violations
+    );
+    let with_polarity: Vec<&str> = report
+        .violations
+        .iter()
+        .filter(|v| v.polarity.is_some())
+        .map(|v| v.finding.as_str())
+        .collect();
+    assert!(
+        with_polarity.is_empty(),
+        "an audit finding names no repair direction, because probing a seam and dropping its declaration are \
+         both repairs and neither is a deny breach or an allowlist gap: {with_polarity:?}"
+    );
+}
+
 #[test]
 fn an_escape_free_or_raw_seam_is_unchanged_by_the_decoder() {
     // No baseline/behavior churn for the common case: an escape-free plain seam and a raw-string
