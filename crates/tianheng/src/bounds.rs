@@ -133,10 +133,14 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a gate reporting a genuine violation as cannot-judge, or a misconfiguration as a violation",
             Extent::Reached(Reached::UnderReacts {
+                // Narrowed with the scenario, and this is the third site the same claim was written at — the
+                // spec's THEN, the projection derived from it, and here. It used to say this judgment is what
+                // let a `fail` returning instead of exiting ride green; what let that ride green was the
+                // matrix asserting a non-zero status rather than a code, which the `exit codes` property now
+                // refuses.
                 because: "the reaction requires the twin to assert an expected code and declines to judge \
-                          whether the code the gate assigned is the right one; that judgment is what let a \
-                          `fail` returning instead of exiting turn every violation into cannot-judge and ride \
-                          green".into(),
+                          whether the code the gate assigned is the right one, which needs each gate's meaning \
+                          rather than its text".into(),
                 // The engine's own, not an adopter's: this reaction sees the codes and stops there, and no
                 // declaration by an adopter would change what it does with them.
                 owner: Owner::Engine,

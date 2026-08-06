@@ -372,7 +372,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 
 > a gate reporting a genuine violation as cannot-judge, or a misconfiguration as a violation
 
-- **because**: the reaction requires the twin to assert an expected code and declines to judge whether the code the gate assigned is the right one; that judgment is what let a `fail` returning instead of exiting turn every violation into cannot-judge and ride green
+- **because**: the reaction requires the twin to assert an expected code and declines to judge whether the code the gate assigned is the right one, which needs each gate's meaning rather than its text
 - **its defence must show**: does not react
 - **pinned by**: `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
 
