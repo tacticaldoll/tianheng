@@ -728,6 +728,12 @@ fn every_extent_derives_what_its_pinning_test_must_demonstrate() {
             Demonstrates::DoesNotReact,
         ),
         (
+            Extent::Reached(Reached::NotAViolation {
+                because: "`as _` binds no nameable path",
+            }),
+            Demonstrates::DoesNotReact,
+        ),
+        (
             Extent::Reached(Reached::AsIntended {
                 bounded: FactGranularity::Identity,
                 because: "the sub-node cannot be rendered without macro expansion",

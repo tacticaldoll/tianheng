@@ -45,6 +45,11 @@ pub use guibiao::{
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
 // pure static core (`guibiao::check`) takes this type; the self-governance gate uses it directly.
+// The declared-observation-bound model, reached through 渾儀 rather than by depending on 璇璣 directly:
+// the shell's own dependency boundary allows guibiao, hunyi, louke, xingbiao and serde_json, and a new
+// direct edge to 璇璣 would breach the law this crate governs itself by.
+pub use hunyi::{BoundDecl, BoundId, Demonstrates, Extent, FactGranularity, Owner, Reached};
+
 pub use guibiao::Constitution as GnomonConstitution;
 // 渾儀 (semantic) dimension: the boundary DSL, re-exported so an adopter declares semantic
 // boundaries the same way as static ones, then folds them into the unified [`Constitution`].
@@ -247,12 +252,12 @@ impl From<GnomonConstitution> for Constitution {
 /// composed governance continues through [`Constitution`] plus [`run`].
 pub mod prelude {
     pub use super::{
-        AsyncExposureBoundary, Baseline, BaselineEntry, Boundary, BoundaryKind, Constitution,
-        CrateBoundary, DependencyKind, DynTraitBoundary, Finding, ForbiddenMarkerBoundary,
-        GovernanceTest, ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome,
-        Polarity, Report, Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, Severity,
-        SignatureBoundary, SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary,
-        Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution,
-        run,
+        AsyncExposureBoundary, Baseline, BaselineEntry, BoundDecl, BoundId, Boundary, BoundaryKind,
+        Constitution, CrateBoundary, Demonstrates, DependencyKind, DynTraitBoundary, Extent,
+        FactGranularity, Finding, ForbiddenMarkerBoundary, GovernanceTest, ImplTraitBoundary,
+        ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome, Owner, Polarity, Reached, Report,
+        Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, Severity, SignatureBoundary,
+        SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
+        ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
     };
 }

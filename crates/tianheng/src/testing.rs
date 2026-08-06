@@ -172,7 +172,6 @@ impl GovernanceTest {
         };
 
         let root = manifest.parent().unwrap_or_else(|| Path::new("."));
-        let target_path = resolve_relative(projection_path.as_ref(), root);
 
         let projection = constitution_markdown(&self.constitution);
         let expected = if preamble.is_empty() {
@@ -183,24 +182,7 @@ impl GovernanceTest {
             format!("{preamble}\n{projection}")
         };
 
-        if bless_enabled() {
-            std::fs::write(&target_path, &expected).unwrap_or_else(|err| {
-                panic!("failed to write blessed projection to {target_path:?}: {err}")
-            });
-            return self;
-        }
-
-        let actual = std::fs::read_to_string(&target_path).unwrap_or_else(|err| {
-            panic!(
-                "failed to read projection file at {target_path:?}: {err}. Run with BLESS=1 to generate."
-            );
-        });
-
-        assert_eq!(
-            actual, expected,
-            "projection Markdown at {target_path:?} is out of sync with code constitution! Run with BLESS=1 to regenerate."
-        );
-
+        assert_projection_matches(root, projection_path, &expected);
         self
     }
 
@@ -241,6 +223,44 @@ fn ensure_cargo_toml_path(path: &Path) -> PathBuf {
     } else {
         path.join("Cargo.toml")
     }
+}
+
+/// Assert that the document at `projection_path` is exactly `expected`, blessing it under `BLESS`.
+///
+/// The bless-and-diff rule for **any** generated document.
+/// [`GovernanceTest::assert_projection_fresh`] delegates here, and a caller rendering its own content — a
+/// register of declared observation bounds, a table of gate properties — gets the same rule rather than
+/// another copy of it. This repository already carries one implementation in shell and one here, and the
+/// mechanism whose whole purpose is to stop documents drifting is a poor place to duplicate.
+///
+/// A free function rather than a method because the rule has nothing to do with a `Constitution`: requiring
+/// one in order to bless an unrelated document would be a dependency invented by the API's shape.
+///
+/// `projection_path` is resolved relative to `root` when relative.
+///
+/// # Panics
+///
+/// Panics if the target cannot be read or written, or if the contents differ while `BLESS` is unset.
+pub fn assert_projection_matches(root: &Path, projection_path: impl AsRef<Path>, expected: &str) {
+    let target_path = resolve_relative(projection_path.as_ref(), root);
+
+    if bless_enabled() {
+        std::fs::write(&target_path, expected).unwrap_or_else(|err| {
+            panic!("failed to write blessed projection to {target_path:?}: {err}")
+        });
+        return;
+    }
+
+    let actual = std::fs::read_to_string(&target_path).unwrap_or_else(|err| {
+        panic!(
+            "failed to read projection file at {target_path:?}: {err}. Run with BLESS=1 to generate."
+        );
+    });
+
+    assert_eq!(
+        actual, expected,
+        "projection Markdown at {target_path:?} is out of sync with the code that generates it! Run with BLESS=1 to regenerate."
+    );
 }
 
 #[cfg(test)]

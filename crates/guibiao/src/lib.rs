@@ -22,6 +22,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+mod bounds;
+pub use bounds::observation_bounds;
+
 mod module_scan;
 mod projection;
 pub use projection::{

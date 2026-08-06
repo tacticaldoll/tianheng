@@ -163,6 +163,13 @@ pub enum Reached {
     /// Fail-loud, so it can never be a silent pass. Kept distinct from [`Reached::DeclinesToRefuse`]: one
     /// withholds a verdict, the other gives one while stepping over something, and an adopter meets them
     /// differently.
+    ///
+    /// **No declared bound uses this today**, and that is stated rather than taken as a reason to drop it. The
+    /// misclassification this whole model exists to prevent was exactly a confusion between this and
+    /// [`Extent::OutOfReach`]: a backlog entry predicted a silent false negative for a `#[cfg_attr]` path remap
+    /// where the real behaviour was a fail-loud refusal, and it drove urgency the wrong way. A direction that
+    /// cannot be *named* cannot be predicted with, so the value earns its place from the prediction side rather
+    /// than from a current instance.
     RefusesToJudge {
         /// Why a verdict cannot be given here.
         because: &'static str,
@@ -191,6 +198,17 @@ pub enum Reached {
         /// Who must act if this is ever to close.
         owner: Owner,
     },
+    /// Reacts correctly by not reacting: the shape is genuinely not a violation, and the bound exists only so a
+    /// reader does not misread the silence as an escape.
+    ///
+    /// Distinct from [`Extent::OutOfReach`] in the direction that matters — the reaction *saw* the shape and was
+    /// *right* — and distinct from [`Reached::AsIntended`] because nothing is bounded at all. Three declared
+    /// bounds are exactly this: `pub use … as _` binds no nameable path a consumer can reach, and a `mod` or a
+    /// plain item inside a function body is unreachable as `crate::…`.
+    NotAViolation {
+        /// Why the shape is genuinely not a violation.
+        because: &'static str,
+    },
     /// Reacts exactly as intended. What is bounded is the *granularity of the fact*, not the reaction.
     ///
     /// One declared bound is precisely this: two trait objects differing only in an unrenderable sub-node
@@ -213,6 +231,7 @@ impl Reached {
             Reached::DeclinesToRefuse { .. } => Demonstrates::DoesNotRefuse,
             Reached::OverReacts { .. } => Demonstrates::ReactsOnHarmlessShape,
             Reached::UnderReacts { .. } => Demonstrates::DoesNotReact,
+            Reached::NotAViolation { .. } => Demonstrates::DoesNotReact,
             Reached::AsIntended { .. } => Demonstrates::CollapsesGranularity,
         }
     }
@@ -224,6 +243,7 @@ impl Reached {
             Reached::DeclinesToRefuse { .. } => "declines to refuse",
             Reached::OverReacts { .. } => "over-reacts",
             Reached::UnderReacts { .. } => "under-reacts",
+            Reached::NotAViolation { .. } => "not a violation",
             Reached::AsIntended { .. } => "as intended, granularity bounded",
         }
     }
