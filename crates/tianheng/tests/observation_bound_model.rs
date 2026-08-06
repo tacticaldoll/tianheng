@@ -14,6 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use tianheng::prelude::*;
 use tianheng::testing::assert_projection_matches;
 use tianheng::{BoundDecl, Extent, Owner, Reached};
 
@@ -154,13 +155,23 @@ fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
 /// Duplicate ids are refused here for the same reason as on the spec side.
 fn declared_bounds() -> BTreeMap<String, BoundDecl> {
     let mut all = BTreeMap::new();
-    // The shell's own declarations are chained too: `observation-bound-model`'s reaction lives here, so this
-    // crate owns its bounds — and a capability that exempted itself from its own bijection would be counting
-    // everyone else's unclassified bounds while hiding its own.
-    for decl in guibiao::observation_bounds()
+    // Each dimension is asked **through `Observer::bounds`**, not through its free function. That method is the
+    // protocol's whole justification — a participant must declare what it does not observe — and until this it
+    // had no consumer at all: nothing in the tree read it, so a dimension could have answered anything. Now the
+    // bijection's verdict depends on the answer.
+    //
+    // The shell's own declarations are chained too, and those come from the free function because the shell is
+    // **not** an observer: it composes dimensions rather than being one. `observation-bound-model`'s reaction
+    // lives here, so this crate owns its bounds — and a capability that exempted itself from its own bijection
+    // would be counting everyone else's unclassified bounds while hiding its own.
+    for decl in StaticObserver::new(Constitution::new("bounds").static_boundaries().clone())
+        .bounds()
         .into_iter()
-        .chain(hunyi::observation_bounds())
-        .chain(louke::observation_bounds())
+        .chain(
+            SemanticObserver::new(Constitution::new("bounds").semantic_boundaries().clone())
+                .bounds(),
+        )
+        .chain(RuntimeObserver::new(Vec::new()).bounds())
         .chain(tianheng::observation_bounds())
     {
         let id = decl.id().as_str().to_string();

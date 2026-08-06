@@ -338,6 +338,24 @@ consumer for an undemonstrated deduplication.
     could not have pinned its four bounds — and the answer was to write the reaction in Rust, not to declare
     a residual. An entry recording that shell gates cannot pin bounds is not evidence for itself every time
     a capability chooses Rust because of it.
+  - **`BoundaryKind` has no value a third-party participant owns.** *Observed pressure:* an outside
+    `Observer` must label every violation it emits with one of 三儀's four kinds — `Crate`, `Module`,
+    `Semantic`, `Runtime` — even when it governs nothing any dimension would call by those names.
+    *Observation source:* `examples/observer-participant`, written for the change that gave
+    `Observer::bounds` a consumer; its house rule is a file-header convention, and it reports `Module`
+    as the nearest honest fit with a comment saying so. *Current reaction or bound:* none — the kind is
+    accepted as written, and nothing checks that a participant's kind matches what it governs. *Risk:* the
+    kind is the projection label a report, a SARIF render and a **baseline** all carry, so borrowed kinds
+    make an adopter's recorded entries group under a dimension that did not produce them; a consumer
+    filtering by kind sees an outsider's findings as 圭表's. *Promotion trigger:* a participant that is not
+    this repository's own example — an adopter's, or a second one here — where the borrowed kind is shown to
+    mis-group a real baseline or filter, rather than merely reading wrong. One example that chose the label
+    itself is not evidence about adopters, which is the trap the shell-gate entry above records.
+    *Version class:* minor at most. Adding a variant to a `#[non_exhaustive]` enum breaks no downstream
+    match, and it changes no verdict; what it changes is the projection vocabulary, which is why it is a
+    decision rather than an addition. *Authority:* `observer-protocol`'s requirement that a participant
+    outside the family be demonstrated joining a run, and that example's README, which records the finding
+    where someone writing their own participant will meet it.
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `qianyi` generator & LSP/editor integration.
   - ~~A `#[cfg_attr(pred, path=…)]` remap on an **inline** `mod name { … }`~~ **CLOSED** in the 0.4.0

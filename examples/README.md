@@ -9,11 +9,17 @@ The focused examples are the adoption surface:
 | `composed` | staged static + semantic + runtime funnel |
 | `sans-io-pure` | composed inline-clock + async-exposure profile |
 | `unsafe-confinement` | unsafe-confinement in a crate that legitimately contains unsafe |
+| `observer-participant` | joining a run from outside the family: an adopter's own `Observer`, with computed bounds |
 
 `capability-catalog` is different: it is a deliberately dense contract-coverage fixture for the
 published families that have no honest home above—dependency-source metadata,
 external-crate confinement, trait-impl locality, forbidden markers, dyn-trait exposure, and
 impl-trait exposure. It is not an architecture recommendation or a starting tutorial.
+
+`observer-participant` is the one owner that fulfills no published family, deliberately: it governs a
+house rule no dimension of 三儀 owns, so the ledger — which tracks boundary families — has nothing to
+assign it. Its subject is the participation seam itself, and it is the only place in this repository
+where a crate outside the family implements `Observer`.
 
 Together these owners execute the published family set through real evaluators. Dimension unit
 tests remain responsible for individual modifiers and scanner edge cases; a future public builder
