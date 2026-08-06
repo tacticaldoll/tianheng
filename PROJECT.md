@@ -265,7 +265,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   mechanically checked declared as bounds. It also supplies the cycle's sharpest evidence so far that a
   hand-written table is not an enumeration — the backlog entry proposing it described the surface as uniform, and
   applying it found two properties that were not, one of which no twin held at all once the assertion was
-  actually observed rather than counted. Larger surfaces are
+  actually observed rather than counted. `projection-register` is the fourth and turns the cycle on the
+  repository's own **generated documents**: the set of them was prose in `AGENTS.md`, so the mechanism whose whole
+  purpose is to stop documents drifting was described by a document that drifted. Its lesson is narrower and
+  sharper than the others' — when a reaction's subject is *text*, the reaction's own text is part of the corpus,
+  and it hit that three times in one apply (its specification quoting the marker it requires, its own source
+  naming the signature it excludes, and its projection having to be blessed twice to include itself). The fix each
+  time was to recognize by position or shape and never by the bare string. Larger surfaces are
   named but not committed to — the requirement and scenario surface across every capability is a
   multi-window program, and promoting one is a `BACKLOG.md` decision with its own trigger, never an
   assumption inherited from this first success. Its size is deliberately **not** written here. This decision
