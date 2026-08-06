@@ -48,7 +48,7 @@ opposite acts, and only the first is legitimate here.
 The declaration SHALL sit under the requirement it qualifies, wherever that is, and SHALL NOT be hoisted
 into a common section. Nearly every bound declared today sits under the requirement it qualifies rather
 than under an `Observation bounds` requirement, and moving them would separate each bound from the
-reaction it limits — the `Observation bounds` requirement three specs carry is a place bounds are
+reaction it limits — the `Observation bounds` requirement some specs carry is a place bounds are
 gathered, never the definition of one.
 
 Requiring the heading convention is legitimate where requiring a test-name convention is not, and the
@@ -293,8 +293,9 @@ The reaction SHALL scan `openspec/specs/*` for bound-declaring prose and SHALL f
 outside a declared bound scenario, **subject to the exemptions and residuals stated below, which SHALL be
 enumerated rather than implied**. This makes the prose already present the register's mandatory minimum, so
 the register cannot be completed by declaring only the convenient bounds. Its size is measured rather than
-estimated: 3 of 30 specs carry an Observation-bounds requirement today while 11 more state bound prose
-without one.
+estimated by whoever wrote it: the reaction prints what it counted on every clean run, and a figure typed
+here would be a census in prose — the class `AGENTS.md` forbids, and one this sentence has already demonstrated,
+having had its denominator re-swept while its numerator was left behind.
 
 One **exemption** is deliberate and SHALL be declared here rather than only in the reaction's own comments.
 Prose under a requirement whose heading names bounds is not reported, because several such requirements
