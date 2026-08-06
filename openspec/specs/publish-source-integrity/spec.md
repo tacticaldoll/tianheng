@@ -1,0 +1,102 @@
+# publish-source-integrity Specification
+
+## Purpose
+
+Govern what must be true of the source `cargo publish` runs from: the committed state asserted before an
+irreversible act, the tag signature actually verified rather than shape-matched, and the one thing about that
+signature this gate deliberately does not judge.
+## Requirements
+### Requirement: A publish SHALL run only from the tagged release commit on the remote's main
+
+`cargo publish` SHALL be reachable only from a source where all of the following hold. Each is committed state;
+none is about packaged content.
+
+- The worktree SHALL be clean, so `HEAD` describes what would be packaged.
+- `HEAD` SHALL be a `release: X.Y.Z` snapshot commit whose version is the workspace version.
+- `vX.Y.Z` SHALL exist, SHALL be an annotated tag, and SHALL point at `HEAD`.
+- `HEAD` SHALL be the tip of the remote's `main`, read live rather than from a possibly-stale `refs/remotes/`.
+- The gate SHALL be read-only: it never fetches, commits, tags, or publishes.
+
+`cargo publish` stamps the commit it ran on into every tarball's `.cargo_vcs_info.json`, and a version can never
+be re-uploaded, so that pointer is permanent from the moment it lands. The `0.4.0` family records a release
+branch's tip rather than the commit its tag names; nothing about the shipped content is wrong, which is what
+makes the class easy to miss and impossible to correct.
+
+#### Scenario: The worktree is not clean
+
+- **WHEN** the gate runs with any modified or untracked file present
+- **THEN** it exits `1`, because `HEAD` no longer describes what would be packaged
+
+#### Scenario: HEAD is not the release snapshot the tag names
+
+- **WHEN** `HEAD` is a commit on top of the `release: X.Y.Z` snapshot — a release branch's tip, whose tree may
+  be identical
+- **THEN** it exits `1`, because cargo records the commit and an identical tree does not save you
+
+#### Scenario: HEAD is not the tip of the remote's main
+
+- **WHEN** the remote's `main` names a different commit
+- **THEN** it exits `1`, read live from the remote rather than from a local remote-tracking ref
+
+### Requirement: The release tag's signature SHALL be verified, not shape-matched
+
+The gate SHALL assert that `vX.Y.Z` carries a **cryptographically valid** signature over the tag payload, not
+that the tag object contains a line resembling a signature header.
+
+Matching the shape accepts an unsigned tag whose *message* quotes a signature block — a pasted verification log,
+a maintainer's note — because the assertion reads the whole object, message included. Measured on a fixture: such
+a tag passes the shape match while `git verify-tag` reports `Couldn't decode signature: invalid format`.
+
+Verification SHALL be environment-independent: the same tag SHALL receive the same verdict on a maintainer's
+machine and in CI. `git verify-tag` SHALL NOT be used for it — measured with no allowed-signers file, it exits
+non-zero with an identical `allowedSignersFile needs to be configured` message for a genuinely signed tag and an
+unsigned one alike, so a gate built on it would always report cannot-judge in CI: the check disabled while
+appearing strengthened.
+
+The payload SHALL be reconstructed by removing the signature block as a **suffix** of the tag object, never by
+stripping from the first line resembling a signature header. Measured on a genuinely signed tag whose message also
+quotes a verification log, stripping from the first such line truncates the payload and refuses a real signature —
+a false refusal introduced by the hardening itself. Suffix removal keeps a quoted block inside the payload, where
+it belongs.
+
+A signature this gate cannot read SHALL be cannot-judge (`2`), never a violation. A non-SSH signature is the live
+case. Reporting it as a wrong source would be a false refusal before an irreversible act.
+
+A failure to read the tag object SHALL likewise be `2`, not `1`.
+
+#### Scenario: An unsigned tag quotes a signature block in its message
+
+- **WHEN** `vX.Y.Z` is annotated, unsigned, and its message contains a `-----BEGIN SSH SIGNATURE-----` line
+- **THEN** the gate exits `1`, because the tag carries no signature and a quoted one is text
+
+#### Scenario: A genuinely signed tag is accepted with no allowed-signers configuration
+
+- **WHEN** `vX.Y.Z` is signed and no `gpg.ssh.allowedSignersFile` is configured or exists
+- **THEN** the gate accepts the signature, because validity is verifiable without attribution and the verdict
+  must not depend on where the gate ran
+
+#### Scenario: A signed tag whose message also quotes a signature block
+
+- **WHEN** `vX.Y.Z` is genuinely signed and its message contains a quoted `-----BEGIN SSH SIGNATURE-----` block
+  before the real trailer
+- **THEN** the gate accepts it, because the payload is reconstructed by suffix removal and the quote stays inside
+  the payload
+
+#### Scenario: A signature the gate cannot read
+
+- **WHEN** `vX.Y.Z` carries a signature this mechanism cannot verify — a non-SSH one
+- **THEN** the gate exits `2` naming what it could not read, never `1`
+
+### Requirement: Observation bounds
+
+Each bound declared here SHALL carry a typed declaration classifying where its measure stops, keyed on its
+derived id, per `observation-bound-model`.
+
+#### Scenario: Whether the tag's signer is authorized is not observed — a stated bound
+
+- **WHEN** `vX.Y.Z` carries a cryptographically valid signature made by a key no maintainer authorized
+- **THEN** the gate accepts it, a stated bound: validity is verifiable without configuration and **attribution is
+  not**, needing an allowed-signers file that exists on a maintainer's machine and not in CI. The ownership is
+  inherited from the verification environment rather than held by this engine, because no change to this gate
+  closes it — giving CI an allowed-signers file is what would
+- **PINNED-BY** `a_valid_signature_from_an_unauthorized_key_is_accepted`

@@ -135,6 +135,31 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "units_outside_the_gate_pairing_are_outside_the_surface",
         ),
+        // --- publish-source-integrity ---
+        //
+        // Its reaction is a shell gate, and `PINNED-BY` resolves only a harness-registered Rust function — so
+        // its citation is `tests/publish_source_integrity.rs`, a file that exists for this one bound. The shell
+        // gate defends it too, and cannot be cited.
+        BoundDecl::new(
+            BoundId::new(
+                "publish-source-integrity/whether-the-tag-s-signer-is-authorized-is-not-observed-a-stated-bound",
+            ),
+            "a release tag carrying a cryptographically valid signature made by a key no maintainer authorized",
+            Extent::Reached(Reached::UnderReacts {
+                because: "validity is verifiable with no configuration and attribution is not — it needs an \
+                          allowed-signers file that exists on a maintainer's machine and not in CI, so \
+                          requiring it would make the same tag judged differently by where the gate ran"
+                    .into(),
+                // The layer is the verification environment, not this engine: no change to the gate closes
+                // this, because the missing input is a configuration rather than a check. Giving CI an
+                // allowed-signers file is what would — a repository decision, so naming the environment is
+                // what makes the owner actionable.
+                owner: Owner::Inherited {
+                    from: "the verification environment".into(),
+                },
+            }),
+            "a_valid_signature_from_an_unauthorized_key_is_accepted",
+        ),
         // --- projection-register ---
         //
         // Its reaction is `tests/projection_register.rs`, so this crate owns these too. The two sit on opposite

@@ -75,7 +75,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **53 bounds across 19 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **54 bounds across 20 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -89,6 +89,23 @@ them.
   several specs stale at once.
 
 ### Fixed
+- **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the
+  whole tag object — message included — so an annotated-but-unsigned tag whose message quoted a
+  `-----BEGIN SSH SIGNATURE-----` block, a pasted verification log, satisfied it. `cargo publish` stamps a
+  permanent, non-re-uploadable commit pointer and this is the last automated check before it, so an adopter
+  auditing a tarball's provenance is the reader who cares. Verification now runs through
+  `ssh-keygen -Y check-novalidate`, which needs no configuration; `git verify-tag` was measured and cannot be
+  used, reporting an identical `allowedSignersFile needs to be configured` for a genuinely signed tag and an
+  unsigned one alike. A signature the gate cannot read, and a tag-object read failure, are both cannot-judge
+  rather than a wrong source.
+
+  The gate's own stated bound had the cause **backwards** — it said verification needs an allowed-signers file, so
+  the gate could only match a shape. Verification does not; **attribution** does. That is corrected, and what
+  remains is a declared observation bound: the gate does not judge whether the signer is authorized, owned by the
+  verification environment rather than by this family, because giving CI an allowed-signers file is what would
+  close it. `publish-source-integrity` is the new capability that finally states the gate's contract — until now
+  it lived only in the script's own header, in no specification at all.
+
 - **`list`'s refusal now names the check-only flag that was supplied**, instead of one sentence naming none of
   them. Every other refusal on this surface already named what the invocation did — all twenty malformed
   value-flag cells, and the `--format` *value* refusal which names the value and explains why `sarif` is not a
