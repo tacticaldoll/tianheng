@@ -125,9 +125,14 @@ unhandled_output=$(PATH="$mktemp_stub:$PATH" "$check" "$agreed" 2>&1) || unhandl
 
 # --- read-only, like every gate in the family ---
 
-before=$(cd "$agreed" && find . -type f | sort && cat AGENTS.md .github/workflows/ci.yml)
-"$check" "$agreed" >/dev/null
-after=$(cd "$agreed" && find . -type f | sort && cat AGENTS.md .github/workflows/ci.yml)
+# On a fixture this gate has NOT already judged. Capturing `before` from a repository the gate had run over
+# several times was blind by construction: a gate that writes the same file on every run leaves that file in
+# `before` too, so the comparison held. Measured, not reasoned — a stray write injected into a sibling gate
+# passed its read-only direction unnoticed until the fixture was made fresh.
+untouched=$(new_repo untouched 'cargo fmt --all --check' 'cargo fmt --all --check')
+before=$(cd "$untouched" && find . -type f | sort && cat AGENTS.md .github/workflows/ci.yml)
+"$check" "$untouched" >/dev/null
+after=$(cd "$untouched" && find . -type f | sort && cat AGENTS.md .github/workflows/ci.yml)
 [[ $before == "$after" ]] \
     || { printf 'dod coherence check mutated the repository it judged\n' >&2; exit 1; }
 

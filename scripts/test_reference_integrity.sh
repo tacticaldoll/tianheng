@@ -207,18 +207,30 @@ unhandled_output=$(PATH="$mktemp_stub:$PATH" "$check" "$repo_clean" 2>&1) || unh
 grep -Fq 'an unhandled command failed' <<<"$unhandled_output" \
     || { printf 'an unhandled failure must say so and name where, got: %s\n' "$unhandled_output" >&2; exit 1; }
 
-# A PASSING run must print no backstop diagnostic. The assertion exists because installing the shared `ERR`
-# trap produced exactly that failure: `errtrace` propagates it into process substitutions, where a
-# legitimately-failing command is routine, so a clean run emitted the cannot-judge line once per file while
-# still exiting 0 — invisible to every check that reads only the exit code.
+# 13. Read-only, like every gate in the family. This was the one gate twin with no such direction while five
+# siblings had one — and the gate reads a tracked-path index into a temporary file, so "it only reads" was an
+# assumption about where that file lands rather than an observation. A gate that edits what it judges makes
+# its own next verdict unreproducible.
 #
-# What it does and does not hold, stated rather than implied: this fixture's clean run does not exercise a
-# failing command inside a process substitution, so removing the backstop's subshell guard does NOT fail this
-# assertion. The gate that misfired is `check_whitespace_hygiene.sh`, whose clean run does, and which has no
-# companion matrix — filed in `BACKLOG.md`. This pins the property here, where a future change could break
-# it, and the measurement is what covers the gate that has no fixture.
-clean_noise=$("$check" "$repo_clean" 2>&1 >/dev/null || true)
-grep -Fq 'an unhandled command failed' <<<"$clean_noise" \
-    && { printf 'a passing run must print no backstop diagnostic, got: %s\n' "$clean_noise" >&2; exit 1; }
+# On a fixture this gate has NOT already judged. Written first against `$repo_clean`, and a stray write
+# injected into the gate passed unnoticed: the gate had already run over that repository several times, so a
+# file it writes on every run sits in `before` as well as in `after`. Every sibling twin carried the same
+# blindness and was corrected with it.
+untouched=$(new_valid_repo untouched)
+before_tree=$(git -C "$untouched" status --porcelain=v1 --untracked-files=all)
+before_head=$(git -C "$untouched" rev-parse HEAD)
+"$check" "$untouched" >/dev/null
+[[ $(git -C "$untouched" status --porcelain=v1 --untracked-files=all) == "$before_tree" \
+    && $(git -C "$untouched" rev-parse HEAD) == "$before_head" ]] \
+    || { printf 'reference integrity check mutated repository state\n' >&2; exit 1; }
+
+# A clean run must print NOTHING on stderr. What this replaces grepped for the backstop's own
+# `an unhandled command failed`, so any *other* line a gate printed on a clean run while exiting 0 still read
+# as clean — and a matrix that names one diagnostic has to track that diagnostic's wording. Emptiness has no
+# wording to keep in step. `test_whitespace_hygiene.sh` documents the `errtrace` misfire the property descends
+# from and is the matrix whose clean run actually exercises it.
+clean_stderr=$("$check" "$repo_clean" 2>&1 >/dev/null || true)
+[[ -z $clean_stderr ]] \
+    || { printf 'a clean run must print nothing on stderr, got: %s\n' "$clean_stderr" >&2; exit 1; }
 
 echo "all reference integrity test matrix directions passed"
