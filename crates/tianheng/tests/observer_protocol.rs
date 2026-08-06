@@ -486,6 +486,26 @@ fn the_fold_does_not_adjudicate_a_participant_s_verdict() {
     }
 }
 
+/// Whether one line of source declares a publicly exposed trait object.
+///
+/// A named recognizer over **one line**, so its limit can be demonstrated by giving it text rather than by
+/// rewriting this crate — see [`a_trait_object_on_a_continuation_line_is_not_recognized`], which pins the
+/// declared bound this shape carries.
+///
+/// Two decisions inside it, both paid for:
+///
+///   * **`pub ` prefix.** A `dyn` inside a private item is not an exposure, and a doc comment mentioning one is
+///     prose. It over-approximates in the safe direction: it cannot tell a `pub` item in a private module from a
+///     reachable one and flags both, because a false positive here is a sentence to write while a false negative
+///     is an exposure nobody governs.
+///   * **`dyn ` anywhere on the line, never ` dyn `.** `Box<dyn T>` is the commonest exposure and reads `<dyn`,
+///     which a space-prefixed matcher silently misses. Measured: an injected `pub fn … -> Vec<Box<dyn Observer>>`
+///     passed the earlier pattern.
+fn exposes_a_trait_object(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("pub ") && trimmed.contains("dyn ")
+}
+
 /// The protocol introduces no trait object, asserted mechanically rather than trusted.
 ///
 /// A collection-based entry taking `&[&dyn Observer]` was designed first and rejected on measurement: no module
@@ -493,6 +513,12 @@ fn the_fold_does_not_adjudicate_a_participant_s_verdict() {
 /// forbid-named-operands, so a declared exposure would have been a name with no reaction. The eager fold removes
 /// the exposure instead of governing it — and this assertion is what keeps that true, since 渾儀 is not watching
 /// this crate.
+///
+/// It reads this crate's **top-level** source files only, and that is sound because of a premise this test now
+/// checks rather than assumes: every subdirectory of `src/` is reached through a non-`pub` `mod`, so nothing
+/// beneath one is reachable from outside the crate. Measured, the eight files under `src/runner/` are never
+/// opened here and an injected `pub fn … -> Option<Box<dyn Debug>>` among them leaves this passing — harmless
+/// while those modules are private, and invisible the moment one is not.
 #[test]
 fn composition_introduces_no_trait_object() {
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -505,22 +531,26 @@ fn composition_introduces_no_trait_object() {
     }
     let mut offenders = Vec::new();
     let mut files = 0usize;
+    let mut subdirectories = Vec::new();
     for entry in std::fs::read_dir(&src).expect("the crate's source directory is readable") {
         let path = entry.expect("a readable directory entry").path();
+        if path.is_dir() {
+            subdirectories.push(path);
+            continue;
+        }
         if path.extension().is_none_or(|ext| ext != "rs") {
             continue;
         }
         files += 1;
         let text = std::fs::read_to_string(&path).expect("a readable source file");
         for (number, line) in text.lines().enumerate() {
-            let trimmed = line.trim_start();
-            // Public signatures only. A `dyn` inside a private item is not an exposure, and a doc comment
-            // mentioning one is prose.
-            // `dyn ` anywhere on the line, never ` dyn ` — `Box<dyn T>` is the commonest exposure and reads
-            // `<dyn`, which a space-prefixed matcher silently misses. Measured: an injected
-            // `pub fn … -> Vec<Box<dyn Observer>>` passed the earlier pattern.
-            if trimmed.starts_with("pub ") && trimmed.contains("dyn ") {
-                offenders.push(format!("{}:{}: {trimmed}", path.display(), number + 1));
+            if exposes_a_trait_object(line) {
+                offenders.push(format!(
+                    "{}:{}: {}",
+                    path.display(),
+                    number + 1,
+                    line.trim_start()
+                ));
             }
         }
     }
@@ -533,5 +563,71 @@ fn composition_introduces_no_trait_object() {
         "the composed shell must expose no trait object; the protocol's own exposure was removed rather than \
          governed, because governing it was not available:\n{}",
         offenders.join("\n")
+    );
+
+    // The premise, checked. Reading only the top level is sound exactly while every subdirectory sits behind a
+    // private `mod`; making one public would take its files out of this reaction's reach with nothing to say so,
+    // which is the difference between a bounded reaction and one that quietly shrank.
+    for directory in &subdirectories {
+        let name = directory
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("a source subdirectory has a UTF-8 name");
+        // A subdirectory `foo` is declared either in `src/foo.rs` or in `src/lib.rs`.
+        let declaring = [src.join(format!("{name}.rs")), src.join("lib.rs")];
+        let declaration = declaring
+            .iter()
+            .filter_map(|candidate| std::fs::read_to_string(candidate).ok())
+            .find_map(|text| {
+                text.lines()
+                    .map(str::trim_start)
+                    .find(|line| {
+                        line.starts_with(&format!("mod {name};"))
+                            || line.starts_with(&format!("pub mod {name};"))
+                            || line.starts_with(&format!("pub(crate) mod {name};"))
+                    })
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "no `mod {name};` declaration found for the source subdirectory {directory:?} — this \
+                     reaction reads only the top level, and it cannot judge that soundness without finding \
+                     how the subdirectory is reached"
+                )
+            });
+        assert!(
+            !declaration.starts_with("pub mod "),
+            "`{declaration}` makes {directory:?} publicly reachable, so this reaction's premise no longer \
+             holds: it reads only this crate's top-level files, and the ones beneath that module would leave \
+             its reach unnoticed. Recurse into subdirectories, or keep the module private."
+        );
+    }
+}
+
+/// The declared bound: the recognizer reads **one line**, so a wrapped signature's continuation is invisible.
+///
+/// Pinned by giving the recognizer text rather than by rewriting this crate — which is why
+/// [`exposes_a_trait_object`] is a named function at all. The control matters as much as the bound: the same
+/// exposure written on **one** line *is* recognized, so this test shows a limit of the line split rather than a
+/// recognizer that never fires.
+///
+/// Closing it needs 渾儀 watching this crate, and that was measured to be unavailable: no module here carries a
+/// semantic boundary, and the `dyn`-trait DSL offers only forbid-all and forbid-named-operands, so the
+/// declaration would have been a name with no reaction. Hence a stated bound rather than a fix.
+#[test]
+fn a_trait_object_on_a_continuation_line_is_not_recognized() {
+    assert!(
+        exposes_a_trait_object("pub fn participants() -> Vec<Box<dyn Observer>> {"),
+        "the control: on one line, this exposure is recognized"
+    );
+    // The same signature, wrapped. The marker is on the `pub fn` line and the exposure on the next, and the
+    // recognizer sees neither line as an exposure.
+    assert!(
+        !exposes_a_trait_object("pub fn participants("),
+        "the signature's first line names no trait object"
+    );
+    assert!(
+        !exposes_a_trait_object(") -> Vec<Box<dyn Observer>> {"),
+        "and its continuation carries the trait object without the `pub ` the recognizer needs — the stated bound"
     );
 }

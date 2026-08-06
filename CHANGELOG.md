@@ -75,7 +75,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **54 bounds across 20 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **55 bounds across 20 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -175,6 +175,27 @@ them.
 
   What it found, recorded in `BACKLOG.md` rather than worked around: `BoundaryKind` has no value a participant
   owns, so an outsider's violation must claim one of the family's four kinds.
+
+- **`Polarity` now says when a violation carries none.** It is an `Option` on `Violation`, and nothing stated the
+  rule, so a reader — this window's own review included — reads the absence as a rule kind missing its repair
+  direction. Measured across every production emission site: 圭表's crate and module rules answer through
+  **exhaustive matches returning `Polarity`** and 渾儀 emits every finding through a context carrying a
+  **non-optional** one, so in those dimensions a new rule variant cannot compile without declaring a direction —
+  a stronger guard than a reaction, and one a reaction could only duplicate and disagree with. The single path
+  carrying `None` is 漏刻's **probe audit**, where it is correct: a declared seam with no probe is repaired by
+  probing it *or* by dropping the declaration, which is neither a deny breach nor an allowlist gap. Documentation
+  and a `runtime-origin-assertion` requirement, no code change and no new variant.
+
+- **The lexical trait-object guard states where it stops, and checks the premise it rested on.** The reaction
+  keeping the composed shell free of trait objects has to be lexical — 渾儀 governs no module of `tianheng`, and
+  the `dyn` DSL has no allow-except form — but it read only top-level `src/*.rs` without saying so. Eight files
+  under `src/runner/` were never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them left it
+  passing. Not an exposure, because those modules are private — but the soundness rested on an **unchecked
+  premise**, and `pub mod runner;` would have removed eight files from the reaction's reach in silence. That
+  premise is now asserted, and making the module public fails the reaction telling you to recurse. What genuinely
+  remains is declared as the register's 55th bound: the recognizer is handed one line at a time, so a trait object
+  on a wrapped signature's continuation line is text it is never presented with. Pinned by a test that feeds the
+  recognizer the one-line control and the wrapped form.
 
 ### Changed
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the

@@ -76,6 +76,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "the_fold_does_not_adjudicate_a_participant_s_verdict",
         ),
+        BoundDecl::new(
+            BoundId::new(
+                "observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound",
+            ),
+            "a public signature spanning several lines that names a trait object on a line not beginning with \
+             `pub `",
+            Extent::OutOfReach {
+                // Out of reach rather than under-reacting: the recognizer is handed one line at a time, so the
+                // continuation is never a candidate it declined — it is text the observation never presents.
+                because: "the reaction reads this crate lexically, one line at a time, because 渾儀 governs no \
+                          module of it and the `dyn`-trait DSL offers only forbid-all and forbid-named-operands, \
+                          so a declared exposure would be a name with no reaction".into(),
+            },
+            "a_trait_object_on_a_continuation_line_is_not_recognized",
+        ),
         // --- gate-shape-contract ---
         //
         // Its reaction is `tests/gate_shape_contract.rs`, so this crate owns these too. The four are read out
