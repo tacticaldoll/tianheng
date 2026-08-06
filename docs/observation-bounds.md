@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 51 declared bounds have no pinning test.** That figure is the register's
+**0 of 53 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -178,6 +178,20 @@ fallback used where no manifest exists, which the register spec describes.
 > the fold merges it as given, a stated bound: it composes verdicts and does not adjudicate them, and
 
 - **pinned by**: `the_fold_does_not_adjudicate_a_participant_s_verdict`
+
+## projection-register
+
+### `projection-register/whether-a-stated-regeneration-command-regenerates-its-document-is-not-observed-a-stated-bound`
+
+> the reaction does not observe it, a stated bound: verifying the claim means running the command, and
+
+- **pinned by**: `a_regeneration_command_is_registered_and_never_run`
+
+### `projection-register/a-document-generated-by-an-unrecognized-mechanism-is-not-observed-a-stated-bound`
+
+> the reaction does not observe it, a stated bound: it is absent from both sides of the correspondence,
+
+- **pinned by**: `a_third_generation_mechanism_is_not_recognized`
 
 ## runtime-origin-assertion
 

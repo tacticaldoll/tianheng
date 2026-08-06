@@ -115,6 +115,29 @@ consumer for an undemonstrated deduplication.
   the single reader of truth, because a runtime observer would otherwise have derived it a second time — and it
   is **baseline identity**, which is precisely the twin drift that crate exists to prevent.
 
+- ~~**The list of generated documents is prose, and nothing checks it.**~~ **CLOSED** in the open window as the
+  `projection-register` capability, and filed here in the same change that closed it because the trigger was that
+  change's own last step: closing `gate-shape-contract` added a fourth projection **and** a hand edit to
+  `AGENTS.md` to mention it, with no reaction behind the edit.
+  `crates/tianheng/tests/projection_register.rs` enumerates the generated documents from the marker each carries,
+  holds a two-way correspondence with the reactions blessing them, requires each to be named in `AGENTS.md`'s prose
+  rather than inside a fence, and includes itself. Measured before proposing: 4 of 4 documents already carried the
+  marker and named their generator, and the holders already agreed 4 for 4, so it described the tree.
+
+  **Residual, declared rather than solved.** Two mechanisms are recognized — the shared Rust rule, and a `check_*`
+  gate writing under `BLESS`. A document generated a third way whose author also omitted the marker is absent from
+  both sides of the correspondence, which then holds over a surface missing a member. That is a declared false
+  negative owned by the engine, not a limit of the corpus: the third mechanism's source sits in the tree the
+  reaction already reads. Promotion trigger for closing it: a second generating mechanism actually existing. There
+  is one today. The other residual is that a stated regeneration command is registered and never run, because
+  running it means re-entering the harness already running or letting the reaction write into the tree it judges —
+  `OutOfReach`, and not closable without giving up one of those two properties.
+
+  **The lesson worth keeping is about reactions whose subject is text.** This apply hit self-reference three times:
+  the specification quoting the marker it requires, the reaction's own source naming the signature it excludes, and
+  the register having to be blessed twice to see itself. Every one was found by running it, none by reading it, and
+  the fix was the same each time — recognize by position or shape, never by the bare string.
+
 - ~~**A gate's own shape is convention, so every new gate re-learns it by breaking.**~~ **CLOSED** in the open
   window as the `gate-shape-contract` capability. `crates/tianheng/tests/gate_shape_contract.rs` enumerates the
   tracked shell units under `scripts/` whose basename begins with `check_` — on the basename rather than by a

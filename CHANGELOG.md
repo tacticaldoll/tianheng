@@ -63,7 +63,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **51 bounds across 18 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **53 bounds across 19 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing

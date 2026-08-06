@@ -319,7 +319,11 @@ are the drift a seam is supposed to end. And so must `gate_shape_contract.rs`, w
 repository's own `check_*` gates and their twins from tracked content, holds each to the structural properties of the
 family's exit contract, and projects [`docs/gate-shape-contract.md`](docs/gate-shape-contract.md) — the table
 saying which gate holds what, and which three of the classes it was built for are declared bounds rather than
-checks. It adds no line above for the same reason. Beyond the list
+checks. It adds no line above for the same reason. And so must `projection_register.rs`, which is the inventory of
+every document in this paragraph: it enumerates the generated documents from the marker each carries, holds each
+one against the reaction that blesses it in both directions, requires that this file names each of them, and
+projects [`docs/projection-register.md`](docs/projection-register.md). Adding a projection without mentioning it
+here used to be an unchecked step; it is now a failing test. Beyond the list
 above, CI also runs a **default-features** `clippy`/`doc` pass (catching an unused item or a broken
 intra-doc link when the `audit` feature is off), the declared-MSRV build and test, license-text
 bundling, the packaged-tarball self-test, and the reaction on the clean/violating fixtures (see
