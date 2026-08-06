@@ -88,29 +88,31 @@ consumer for an undemonstrated deduplication.
   **code** rather than a non-zero status — the property whose absence let a 1-into-2 collapse ride green
   through CI in the release-coherence gate.
 
-- **An observer cannot be made to declare what it does not observe.** Class: READY-PATCH in version terms
-  (additive published API, no adopter migration), a **new capability** in work terms. Observed pressure: the
-  execution layer has no seam at all — `grep -c 'pub trait' crates/tianheng/src crates/xuanji/src` returns zero,
-  and `runner.rs` hand-wires three concrete calls (`check_and_cover`, `hunyi::check_all`,
-  `audit_probe_coverage`). So a fourth observer cannot join a run, and nothing could require one to state its
-  bounds if it did. Observation source: `runner.rs`'s `evaluate_constitution`, and the absent trait. Current
-  bound: `observation-bound-model` types where a measure stops and holds the specs and the code in bijection,
-  but nothing binds a *reaction* to declaring its own. Risk: MEDIUM — the framework's central promise is honesty
-  about what it does not observe, and today that honesty is a convention this family keeps about itself rather
-  than a property the type system enforces on anyone. Promotion trigger: **fired** — `observation-bound-model`
-  landing is the trigger, because `Observer::bounds()` with no default body is what turns the promise into a
-  compile error, and it now has something to delegate to. Version class: MINOR (additive). Authority: 三儀 ⊥ 三儀
-  (no dimension composes a sibling, so the shell composes and the fold is ordered with a cannot-judge
-  short-circuit — `merge_outcomes`' existing invariant, which the protocol must preserve and declare, since
-  assembly order decides which cannot-judge wins), and `xuanji`'s own measure-never-verdict line.
+- ~~**An observer cannot be made to declare what it does not observe.**~~ **CLOSED** in the open window, and
+  worth recording for what it did **not** buy as much as for what it did.
 
-  **What the design already settled, so propose need not re-litigate it.** Stages are trait methods with no
-  default, because adding a *question* must break every implementor while adding an *answer* to an existing
-  question must not — the second half is `#[non_exhaustive]` on the extent enums. A typestate builder was
-  rejected: inherent methods on a concrete type can be called from outside but not implemented from outside, so
-  an adopter's own observer could never join. Illegal states live in the *data* instead, which is what makes the
-  stages returnable from a trait method. The heterogeneous observer set is a deliberate `dyn` seam in the shell
-  — where composition already lives — and needs its own boundary declaration rather than arriving unnoticed.
+  `xuanji::Observer` has two methods and no default body on either, so a participant cannot be composed into a
+  run without declaring its limits. The promise stops being a convention this family keeps about itself and
+  becomes a property of the type — including for a third party this family never reviews. `tianheng::Run` folds
+  eagerly, and 圭表, 渾儀 and 漏刻 each implement it, so it is dogfooded rather than offered.
+
+  **What it does not buy, and this entry should not be read as claiming it:** the obligation is to *declare*,
+  never to declare *completely*. A participant may answer with a partial list, or an empty one, and no reaction
+  can enumerate the limits of a reaction it did not write. The fold likewise composes verdicts and does not
+  adjudicate them. Both are declared bounds of `observer-protocol` rather than gaps left to be discovered.
+
+  Two design decisions were **reversed by measurement**, both recorded because each looked principled. A third
+  method — "identify your boundary kind" — was dropped because nothing reacts to it: a `Violation` already
+  carries its kind, so restating it would be a second copy of one fact. And the heterogeneous set was to be a
+  declared `dyn` exposure in the shell; measured, no module of `tianheng` is governed by a semantic boundary and
+  the `dyn`-trait DSL has no allow-except form, so the declaration would have been a name with no reaction. The
+  eager fold removes the exposure instead, and a grep-based assertion keeps it removed because 渾儀 is not
+  watching that crate. **The lesson: a boundary declaration must be checked against the DSL that would have to
+  carry it, not only against the architecture that motivates it.**
+
+  A side effect worth keeping: the corpus-and-anchor derivation the shell computed for 漏刻 now lives in 星表,
+  the single reader of truth, because a runtime observer would otherwise have derived it a second time — and it
+  is **baseline identity**, which is precisely the twin drift that crate exists to prevent.
 
 - **A gate's own shape is convention, so every new gate re-learns it by breaking.** Class: READY-PATCH in
   version terms (repository-internal, no adopter surface), but a **new capability** in work terms — a spec, a

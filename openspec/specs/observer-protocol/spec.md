@@ -1,5 +1,11 @@
-## ADDED Requirements
+# observer-protocol Specification
 
+## Purpose
+
+Make declaring what a reaction does not observe a condition of taking part: a fixed lifecycle whose every method
+has no default body, and an eager fold that composes participants into one verdict while preserving the family's
+cannot-judge-supersedes invariant.
+## Requirements
 ### Requirement: An observer SHALL declare what it does not observe in order to join a run
 
 The `Observer` trait SHALL carry a method returning the observation bounds its reaction declares, and that
@@ -32,8 +38,14 @@ what `#[non_exhaustive]` on the extent enums already provides.
 
 ### Requirement: The lifecycle SHALL be the seam each dimension actually has
 
-The trait SHALL ask an observer to identify its boundary kind, to observe a workspace and return one outcome,
-and to declare its bounds. It SHALL NOT split observation into separate corpus, fact and reaction stages.
+The trait SHALL ask an observer to observe a workspace and return one outcome, and to declare its bounds. It
+SHALL NOT split observation into separate corpus, fact and reaction stages, and SHALL NOT ask an observer to
+restate its boundary kind.
+
+A third method — "identify your boundary kind" — was designed and dropped because **nothing reacts to it**: a
+`Violation` already carries its own kind, so an observer restating it would be a second copy of one fact, and two
+copies can disagree. That is the same reason a bound's demonstrated direction is derived from its extent rather
+than declared beside it.
 
 That split was designed and then rejected against the family's own law: 三儀 ⊥ 三儀 requires each dimension to
 implement its own lexical hygiene with **no shared scanner**, so no dimension exposes those stages separately

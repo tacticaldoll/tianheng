@@ -24,6 +24,9 @@ pub use xuanji::{
 mod bounds;
 pub use bounds::observation_bounds;
 
+mod observer;
+pub use observer::RuntimeObserver;
+
 mod dsl;
 mod finding;
 mod registry;

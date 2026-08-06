@@ -30,8 +30,9 @@ use guibiao::{
     Baseline, BaselineEntry, Coverage, Outcome, Report, apply_baseline, check_and_cover,
     constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
+use hunyi::Observer;
 use louke::audit_probe_coverage;
-use xingbiao::{cargo_metadata, member_root_files, workspace_root};
+use xingbiao::audit_corpus_and_anchor;
 
 use crate::Constitution;
 
@@ -113,6 +114,77 @@ pub fn check_constitution(constitution: &Constitution, manifest_path: &Path) -> 
     evaluate_constitution(constitution, manifest_path).0
 }
 
+/// One governance run, assembled observer by observer.
+///
+/// The fold is **eager**: each [`observe`](Run::observe) call folds that observer's outcome into the accumulator
+/// immediately, so the heterogeneous set never exists as a collection and no trait object appears anywhere. An
+/// earlier design held `&[&dyn Observer]` and would have needed that exposure governed; measured, it could not
+/// be — no module of this crate is governed by a semantic boundary, and the `dyn`-trait DSL offers only
+/// forbid-all and forbid-named-operands, so the declaration would have been a name with no reaction.
+///
+/// Assembly order is **semantically observable**, deterministically: it decides which cannot-judge is reported
+/// when more than one observer cannot judge. That was a property of a hand-written call sequence nobody had to
+/// think about; the moment the order is a caller's to choose, it is part of the contract.
+///
+/// ```no_run
+/// use std::path::Path;
+/// use tianheng::prelude::*;
+///
+/// # fn demo(constitution: &Constitution, manifest: &Path) -> Outcome {
+/// Run::over(manifest)
+///     .observe(StaticObserver::new(constitution.static_boundaries().clone()))
+///     .observe(SemanticObserver::new(constitution.semantic_boundaries().clone()))
+///     .verdict()
+/// # }
+/// ```
+#[derive(Debug, Clone)]
+pub struct Run<'a> {
+    manifest_path: &'a Path,
+    accumulated: Option<Outcome>,
+}
+
+impl<'a> Run<'a> {
+    /// Begin a run over the workspace whose manifest is at `manifest_path`.
+    pub fn over(manifest_path: &'a Path) -> Self {
+        Self {
+            manifest_path,
+            accumulated: None,
+        }
+    }
+
+    /// Compose one observer, folding its outcome in immediately.
+    ///
+    /// If the accumulator already cannot judge, the observer is **not evaluated at all**: a verdict resting on a
+    /// boundary that could not be evaluated is not a verdict, so further work would be spent on an answer that
+    /// cannot be reported. This is `evaluate_constitution`'s present behaviour expressed as a property of the
+    /// builder rather than an `if` before each dimension.
+    pub fn observe(mut self, observer: impl Observer) -> Self {
+        if matches!(self.accumulated, Some(Outcome::ConstitutionError(_))) {
+            return self;
+        }
+        let next = observer.observe(self.manifest_path);
+        self.accumulated = Some(match self.accumulated.take() {
+            Some(previous) => merge_outcomes(previous, next),
+            None => next,
+        });
+        self
+    }
+
+    /// The composed verdict.
+    ///
+    /// A run that composed **no** observer cannot judge: reporting it clean would be a vacuous pass, which is
+    /// the direction this repository has re-opened most often. It is a misconfiguration, not a clean workspace.
+    pub fn verdict(self) -> Outcome {
+        self.accumulated.unwrap_or_else(|| {
+            Outcome::ConstitutionError(
+                "a run composed no observer, so there is nothing to judge; composing nothing is a \
+                 misconfiguration rather than a clean workspace"
+                    .to_string(),
+            )
+        })
+    }
+}
+
 /// The one composition seam beneath the library check and CLI runner. Coverage remains static-only
 /// and is returned separately for CLI advisory presentation; it never changes the reaction.
 fn evaluate_constitution(
@@ -137,17 +209,11 @@ fn evaluate_constitution(
     // Audit even an empty runtime declaration: an orphan `assert_boundary!` probe must react.
     // Once an earlier dimension errors the verdict is untrustworthy, so evaluation stops.
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        match cargo_metadata(manifest_path) {
-            Ok(metadata) => {
-                let roots = member_root_files(&metadata);
-                // The audit labels every observed file relative to this anchor, and that label is
-                // baseline identity, so the anchor must be the one directory that moves neither
-                // with the checkout location nor with the workspace's own member set: Cargo's
-                // resolved `workspace_root`. It is the same directory whichever member manifest
-                // `--manifest-path` named. Only if metadata carries no such field does this fall
-                // back to the given manifest's own directory — a real `cargo metadata` read always
-                // carries it, so the fallback exists for a synthetic one rather than as a guess.
-                let anchor = probe_label_anchor(&metadata, manifest_path);
+        // Through 星表's single derivation, the same one 漏刻's observer uses. Computing the corpus and the
+        // label anchor in two places is a twin derivation of BASELINE IDENTITY, which is the drift that crate
+        // exists to prevent — and the protocol's equality reaction now depends on the two agreeing.
+        match audit_corpus_and_anchor(manifest_path) {
+            Ok((roots, anchor)) => {
                 outcome = merge_outcomes(
                     outcome,
                     audit_probe_coverage(constitution.runtime_boundaries(), &roots, &anchor),
@@ -166,27 +232,6 @@ fn evaluate_constitution(
     }
 
     (outcome, observed_coverage)
-}
-
-/// The directory 漏刻's audit labels every observed file's identity relative to: Cargo's own resolved
-/// `workspace_root`, the one directory that moves neither with the checkout location nor with the
-/// workspace's member set, and the same directory whichever member manifest `--manifest-path` named.
-///
-/// The fallback exists only for synthetic metadata (a unit test's hand-built `Value`); a real
-/// `cargo metadata` read always carries the field. It is put through [`std::path::absolute`] rather
-/// than used as-is because the audit **requires** an absolute anchor and refuses anything else: a
-/// relative anchor could never prefix an absolute source path, so it would silently leave every
-/// label checkout-dependent. `absolute` prepends the working directory to a relative path, refuses
-/// only an empty one (hence the `current_dir` last resort, for a bare `Cargo.toml` whose parent is
-/// empty), and leaves an already-absolute path untouched — no canonicalization, so the
-/// cargo-reported root is never rewritten.
-fn probe_label_anchor(metadata: &serde_json::Value, manifest_path: &Path) -> PathBuf {
-    if let Some(root) = workspace_root(metadata) {
-        return root;
-    }
-    let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
-    std::path::absolute(manifest_dir)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
 }
 
 /// The command-line flags `dispatch` parses, before command-specific dispatch reacts to them.

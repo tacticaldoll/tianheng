@@ -51,7 +51,12 @@ pub use bounds::observation_bounds;
 // The declared-observation-bound model, reached through 渾儀 rather than by depending on 璇璣 directly:
 // the shell's own dependency boundary allows guibiao, hunyi, louke, xingbiao and serde_json, and a new
 // direct edge to 璇璣 would breach the law this crate governs itself by.
-pub use hunyi::{BoundDecl, BoundId, Demonstrates, Extent, FactGranularity, Owner, Reached};
+pub use guibiao::StaticObserver;
+pub use hunyi::{
+    BoundDecl, BoundId, Demonstrates, Extent, FactGranularity, Observer, Owner, Reached,
+    SemanticObserver,
+};
+pub use louke::RuntimeObserver;
 
 pub use guibiao::Constitution as GnomonConstitution;
 // 渾儀 (semantic) dimension: the boundary DSL, re-exported so an adopter declares semantic
@@ -113,7 +118,7 @@ pub use sans_io::SansIoPure;
 #[doc(hidden)]
 pub use sans_io::{SansIoPureCrateDraft, SansIoPureDraft, SansIoPureModuleDraft};
 
-pub use runner::{check_constitution, constitution_markdown, projection_gate, run};
+pub use runner::{Run, check_constitution, constitution_markdown, projection_gate, run};
 
 /// A declared constitution composing every observation dimension's boundaries — the single
 /// source of truth, in Rust. The static (圭表) boundaries, the semantic (渾儀) bundle, and the
@@ -258,9 +263,10 @@ pub mod prelude {
         AsyncExposureBoundary, Baseline, BaselineEntry, BoundDecl, BoundId, Boundary, BoundaryKind,
         Constitution, CrateBoundary, Demonstrates, DependencyKind, DynTraitBoundary, Extent,
         FactGranularity, Finding, ForbiddenMarkerBoundary, GovernanceTest, ImplTraitBoundary,
-        ModuleBoundary, ModuleRule, NoExistentialLeak, Outcome, Owner, Polarity, Reached, Report,
-        Rule, RuleKey, RuntimeBoundary, SansIoPure, ScanDepth, Severity, SignatureBoundary,
-        SourceKind, StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation,
-        ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
+        ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner, Polarity, Reached,
+        Report, Rule, RuleKey, Run, RuntimeBoundary, RuntimeObserver, SansIoPure, ScanDepth,
+        SemanticObserver, Severity, SignatureBoundary, SourceKind, StaticObserver,
+        StructuredFactIdentity, TraitImplBoundary, UnsafeBoundary, Violation, ViolationId,
+        VisibilityBoundary, VisibilityCeiling, check, check_constitution, run,
     };
 }

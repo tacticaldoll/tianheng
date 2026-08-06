@@ -38,6 +38,18 @@ them.
   `main` correctly and then force-pushed away an hour later — and neither disagreement affects any
   published crate's content. The eleven `0.1.x` releases point at commits the 2026-07-17 history
   rewrite dissolved, so whether they came from `main` is no longer knowable.
+- An **observation participant** is now a published protocol: `Observer` (in `xuanji`, re-exported through
+  the dimensions and `tianheng::prelude`) asks a participant to observe a workspace and to **declare what it does
+  not observe**. Neither method has a default body, so a participant that says nothing about its limits cannot be
+  written — and adding a stage later is deliberately a **breaking change**, because a declaration written before
+  a question existed has not answered it. `tianheng::Run` composes participants with an **eager** fold:
+  `Run::over(manifest).observe(a).observe(b).verdict()`, so no trait object appears in any signature and a
+  participant composed onto an accumulator that already cannot judge is not evaluated at all. Assembly order is
+  part of the contract — it decides which cannot-judge is reported. 圭表, 渾儀 and 漏刻 each implement it, so the
+  protocol is dogfooded rather than offered. **Nothing to migrate**: `check_constitution`, `run` and the CLI keep
+  their exact path and behaviour, coverage included, and the protocol is an additional entry rather than a
+  replacement.
+
 - Every declared **observation bound** now carries a typed classification of *where the measure stops*:
   `xuanji::Extent` (re-exported through the dimensions and `tianheng::prelude`) says whether the observation
   source never reached the shape, or reached it and then refused to judge, deliberately declined to refuse,
@@ -51,7 +63,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **45 bounds across 16 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **47 bounds across 17 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
