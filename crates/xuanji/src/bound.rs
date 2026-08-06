@@ -115,6 +115,49 @@ impl BoundDecl {
     pub fn pinned_by(&self) -> &str {
         &self.pinned_by
     }
+
+    /// Whether **every** string this declaration carries borrows rather than owning.
+    ///
+    /// The owned-or-borrowed form exists for an implementor whose bounds are computed; this family's own
+    /// declarations are literals, because a bound is a property of a *reaction* and these reactions know their
+    /// limits when they are written. That distinction was stated in the specification with nothing measuring it
+    /// — a family declaration rewritten as `format!(…)` would have compiled, allocated on every register run,
+    /// and been noticed by nothing.
+    ///
+    /// Exposed rather than kept private because the declarations live in the dimension crates, which cannot be
+    /// read from a unit test here, and because it is an honest question about a declaration in its own right:
+    /// an adopter auditing what a governance run allocates can ask it too.
+    ///
+    /// Every string is reached, including those nested in the extent and in an inherited owner's layer name.
+    /// The matches below are **exhaustive in-crate**, so a variant added with a new string of its own fails to
+    /// compile here rather than being silently unmeasured — the one place `#[non_exhaustive]` helps rather than
+    /// hinders, since the guard and the enum live in the same crate.
+    pub fn borrows_every_string(&self) -> bool {
+        borrowed(&self.id.0) && borrowed(&self.shape) && borrowed(&self.pinned_by) && {
+            match &self.extent {
+                Extent::OutOfReach { because } => borrowed(because),
+                Extent::Reached(reached) => match reached {
+                    Reached::RefusesToJudge { because }
+                    | Reached::DeclinesToRefuse { because }
+                    | Reached::OverReacts { because }
+                    | Reached::NotAViolation { because }
+                    | Reached::AsIntended { because, .. } => borrowed(because),
+                    Reached::UnderReacts { because, owner } => {
+                        borrowed(because)
+                            && match owner {
+                                Owner::Engine | Owner::Adopter => true,
+                                Owner::Inherited { from } => borrowed(from),
+                            }
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// Whether one owned-or-borrowed string borrows.
+fn borrowed(value: &Cow<'static, str>) -> bool {
+    matches!(value, Cow::Borrowed(_))
 }
 
 /// Where a reaction's measure stops for one declared shape.
