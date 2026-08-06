@@ -84,9 +84,10 @@ consumer for an undemonstrated deduplication.
   parsed) is run by CI` and exits 0. Each gate gained the target-directory argument that makes a fixture
   possible, the same argument the register and reference-integrity gates already took.
 
-  Every `check_*` gate now has a `test_*` twin, and every one of those five matrices asserts the expected exit
+  Every `check_*` gate now has a `test_*` twin, and every one of those matrices asserts the expected exit
   **code** rather than a non-zero status — the property whose absence let a 1-into-2 collapse ride green
-  through CI in the release-coherence gate.
+  through CI in the release-coherence gate. The count is deliberately not written here: it is printed by
+  `docs/gate-shape-contract.md`, whose reaction enumerates the pairing.
 
 - ~~**An observer cannot be made to declare what it does not observe.**~~ **CLOSED** in the open window, and
   worth recording for what it did **not** buy as much as for what it did.
@@ -114,45 +115,37 @@ consumer for an undemonstrated deduplication.
   the single reader of truth, because a runtime observer would otherwise have derived it a second time — and it
   is **baseline identity**, which is precisely the twin drift that crate exists to prevent.
 
-- **A gate's own shape is convention, so every new gate re-learns it by breaking.** Class: READY-PATCH in
-  version terms (repository-internal, no adopter surface), but a **new capability** in work terms — a spec, a
-  reaction, a generated projection, and a matrix. Observed pressure, measured on this window rather than
-  recalled: six structural classes recurred across the gate surface — a swallowed subshell status (9 mentions),
-  a foreign exit code or a 1-versus-2 collapse (11), an enumeration passing after zero iterations (6), a matrix
-  asserting non-zero instead of the code (5), a gate that could not be pointed at a fixture (3), and a matrix
-  absent or present-but-unrun (3) — over 28 of the window's 49 commits. Every one was repaired one site at a
-  time, twice leaving a sibling site behind, and one repair (the shared `ERR` backstop) *inverted* a gate whose
-  `fail` returned rather than exited, invisibly, because that gate's matrix asserted only a non-zero status.
-  Observation source: `git log v0.4.0..HEAD` by class, and the per-gate property table
-  (`grep -c exit_contract_backstop`, `grep -cE '\$\{1:-'`, twin presence, `grep -c expected_status`, DoD
-  membership) which is uniform **today** and enforced **nowhere**. Current reaction or bound: none. The
-  Definition of Done binds the gate *list* to CI; nothing binds a gate's *shape* to anything, so the seventh
-  gate inherits the shape only if its author reads five others first. Risk: MEDIUM — the failure mode is a gate
-  that reports clean or invents a violation, which is the one class this whole repository exists to refuse, and
-  a gate is exactly where nobody looks for it. Promotion trigger: **fired** — a structural property held by
-  convention that has now been observed drifting six ways in one window is the trigger, and PROJECT.md's
-  audit-cycle decision names the remedy (enumerate, react, audit against the enumeration) rather than another
-  round of one-site repairs. Version class: PATCH. Authority: this window's history, PROJECT.md's audit-cycle
-  decision and its three-part test, and `observation-bound-register` as the proven shape.
+- ~~**A gate's own shape is convention, so every new gate re-learns it by breaking.**~~ **CLOSED** in the open
+  window as the `gate-shape-contract` capability. `crates/tianheng/tests/gate_shape_contract.rs` enumerates the
+  tracked shell units under `scripts/` whose basename begins with `check_` — on the basename rather than by a
+  `check_*` pathspec, since git matches pathspec wildcards without `FNM_PATHNAME` and the glob would be
+  describing something other than what it says — pairs each gate with the twin its basename names, asserts the nine
+  checkable properties, declares the three semantic classes and the coverage limit as observation bounds with
+  pinning tests, and projects `docs/gate-shape-contract.md`. A Rust reaction rather than a seventh shell gate,
+  because `PINNED-BY` resolves only a harness-registered Rust function: a shell-defended capability would have
+  landed those bounds `UNPINNED` and moved the register projection's leading figure off zero. It rides the
+  existing `cargo test` line, so it added no Definition of Done entry and no CI step.
 
-  **The three-part test, checked before proposing.** *Enumerable*: `git ls-files 'scripts/check_*.sh'`.
-  *Generated and staleness-checked*: a projection blessed and diffed exactly as `docs/observation-bounds.md`
-  is. *States what it does not claim*: three of the six classes are semantic and cannot be mechanically
-  checked — whether every enumeration carries a vacuity guard, whether every read's status is checked in the
-  parent, and whether the 1-versus-2 assignment is *correct* rather than merely present. Those must be
-  declared as bounds of the capability, not implied by its silence. The nine checkable properties are the
-  backstop's installation, the header's declared contract, fixture addressability, twin existence, the twin
-  asserting codes, the twin holding at least one passing and one refusing direction, the twin asserting
-  read-only, the twin asserting a silent clean run, and both files' DoD membership.
+  **This entry's own claim was wrong, and worth recording as such.** It said the per-gate property table "is
+  uniform **today** and enforced **nowhere**"; the second half held and the first did not. Measured while
+  applying: the silent-clean-run assertion held in **2 of 6** twins — four grepped a clean run's stderr for the
+  backstop's own diagnostic, which catches the one line it names — and the unchanged-repository assertion held
+  in 5 of 6 by name and, once observed, in **none** of them, because every form captured `before` from a
+  repository the gate had already run over, so a gate writing the same file on every run left it in `before` too.
+  A stray write injected into a gate passed that direction unnoticed. The entry was wrong because it counted the
+  properties it had just finished creating: the shape it described as settled was three weeks old — probed at
+  `v0.4.0`, the backstop was installed in 0 of 4 gates and fixture-addressability in 1 of 4 — so the entry was
+  reading its own recent work as convention. **The lesson: a promotion trigger written from inside the code that
+  lacks the observation describes building the property, not finding it; measure the exact observation source
+  before writing a figure into a trigger.**
 
-  **Its parked proposal must be revised before it lands, for two reasons found while building
-  `observation-bound-model`.** It mints two qualifier phrasings (`semantic`, `membership`) into a heading slot
-  that no longer admits any — the classification now belongs to `xuanji::Extent`. And its publish-time
-  membership exemption is **not an observation bound at all**: it is a policy exemption, a statement that one
-  instance is excused, not that a reaction stops at a shape. Declaring it through the bound mechanism would put
-  something that is not an observation limit into the register whose leading figure counts exactly those. The
-  exemption belongs in the requirement's own prose, and nothing then enumerates policy exemptions — a separable
-  gap whose own trigger is a second one.
+  Both revisions the parked proposal needed were applied before it landed: the two qualifier phrasings left the
+  heading slot, since what kind of stop a bound describes now belongs to `xuanji::Extent`; and the publish-time
+  membership exemption left the bound mechanism entirely, because a bound says a reaction stops at a shape while
+  an exemption says one named instance is excused from a requirement. **Residual, declared rather than solved:**
+  nothing enumerates policy exemptions. The register enumerates bounds; this exemption is checked live by the
+  reaction and named in the projection, and that is all. Trigger for giving exemptions their own register: a
+  second instance. This is the first.
 
 - **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
   its corrections are classified when they exist). Observed pressure: measured on the window's own history —
@@ -236,7 +229,11 @@ consumer for an undemonstrated deduplication.
     WATCH rather than closed, because the observation itself stands and is independent of that instance.
     Promotion trigger: a second such residual that is genuinely out of reach — one where the exact
     observation source has been *measured* and found unaffordable, not estimated from inside the code.
-    That qualifier is the entry's real lesson.
+    That qualifier is the entry's real lesson. `gate-shape-contract` did **not** fire it, and the way it
+    avoided doing so is worth stating: the same limitation decided its shape — a shell-defended capability
+    could not have pinned its four bounds — and the answer was to write the reaction in Rust, not to declare
+    a residual. An entry recording that shell gates cannot pin bounds is not evidence for itself every time
+    a capability chooses Rust because of it.
   - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
   - `qianyi` generator & LSP/editor integration.
   - ~~A `#[cfg_attr(pred, path=…)]` remap on an **inline** `mod name { … }`~~ **CLOSED** in the 0.4.0

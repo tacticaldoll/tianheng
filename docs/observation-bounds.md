@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 47 declared bounds have no pinning test.** That figure is the register's
+**0 of 51 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -80,6 +80,32 @@ fallback used where no manifest exists, which the register spec describes.
 > the system reports no violation, because the rule is use-only and observes `use` imports rather
 
 - **pinned by**: `confine_ignores_an_extern_crate_declaration`
+
+## gate-shape-contract
+
+### `gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound`
+
+> the reaction does not claim to observe it, a stated bound, rather than reporting the gate
+
+- **pinned by**: `a_missing_vacuity_guard_is_a_stated_semantic_bound`
+
+### `gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound`
+
+> the reaction does not claim to observe it, a stated semantic bound; the backstop it does check
+
+- **pinned by**: `an_unchecked_read_status_is_a_stated_semantic_bound`
+
+### `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound`
+
+> the reaction does not claim to observe it, a stated bound: it checks that the twin
+
+- **pinned by**: `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
+
+### `gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound`
+
+> it is outside this capability's surface, a stated bound, so the projection's conformance
+
+- **pinned by**: `units_outside_the_gate_pairing_are_outside_the_surface`
 
 ## inline-symbol-path-confinement
 

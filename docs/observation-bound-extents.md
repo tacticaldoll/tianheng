@@ -3,9 +3,10 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**12 of 47 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**13 of 51 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
+- `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
 - `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
@@ -111,7 +112,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (21)
+## out of reach (24)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -120,6 +121,30 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: comments, string literals and macro bodies are stripped before scanning
 - **its defence must show**: does not react
 - **pinned by**: `confine_ignores_a_use_inside_a_string_literal`
+
+### `gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound`
+
+> a sourced function library, a matrix over one, the example runner, or the publish tool
+
+- **because**: the enumeration is the `check_*` gate and the twin its basename names, so no other shell unit is judged on any of the nine properties; the one thing asserted about them is that none carries the shared exit contract, which keeps the exclusion from being a hiding place rather than making it coverage
+- **its defence must show**: does not react
+- **pinned by**: `units_outside_the_gate_pairing_are_outside_the_surface`
+
+### `gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound`
+
+> a gate reading a command's output in a subshell or process substitution and never inspecting that command's status in the parent
+
+- **because**: the backstop the reaction does require narrows the damage — an unhandled failure becomes cannot-judge rather than a foreign status — without detecting the shape, which is why the two are stated separately
+- **its defence must show**: does not react
+- **pinned by**: `an_unchecked_read_status_is_a_stated_semantic_bound`
+
+### `gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound`
+
+> a gate iterating an enumeration with no guard against zero iterations
+
+- **because**: the reaction reads a gate's text for the properties it requires and models none of its control flow, so a loop that iterates nothing and reports clean is not a shape it examines
+- **its defence must show**: does not react
+- **pinned by**: `a_missing_vacuity_guard_is_a_stated_semantic_bound`
 
 ### `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound`
 
@@ -315,7 +340,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (12)
+## under-reacts (13)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -324,6 +349,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the rule observes `use` imports only, so a crate reached through an `extern crate` declaration and fully-qualified paths is not seen
 - **its defence must show**: does not react
 - **pinned by**: `confine_ignores_an_extern_crate_declaration`
+
+### `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound`
+
+> a gate reporting a genuine violation as cannot-judge, or a misconfiguration as a violation
+
+- **because**: the reaction requires the twin to assert an expected code and declines to judge whether the code the gate assigned is the right one; that judgment is what let a `fail` returning instead of exiting turn every violation into cannot-judge and ride green
+- **its defence must show**: does not react
+- **pinned by**: `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
 
 ### `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound`
 

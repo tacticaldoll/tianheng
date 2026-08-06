@@ -1,11 +1,24 @@
-## ADDED Requirements
+# gate-shape-contract Specification
 
+## Purpose
+
+Make the structural contract every repository gate and its failure matrix hold into a reaction rather than a
+convention: the surface enumerated from tracked content, the mechanically checkable properties asserted over
+it, the properties deliberately not asserted declared as observation bounds, and a generated projection that
+keeps the result from rotting into prose.
+## Requirements
 ### Requirement: The gate surface SHALL be enumerated from tracked content
 
-The reaction SHALL derive the surface it judges from `git ls-files 'scripts/check_*.sh'` and SHALL pair each
-gate with the twin obtained by substituting `check_` with `test_` in its basename. It SHALL judge **tracked
-content**, never the working directory: a filesystem walk makes the verdict depend on local untracked state,
-which is the class that made a sibling gate's first version pass locally and fail in CI on three references.
+The reaction SHALL derive the surface it judges from `git ls-files` under `scripts/`, taking every tracked
+shell unit whose basename begins with `check_`, and SHALL pair each gate with the twin obtained by substituting
+`check_` with `test_` in that basename. It SHALL judge **tracked content**, never the working directory: a
+filesystem walk makes the verdict depend on local untracked state, which is the class that made a sibling
+gate's first version pass locally and fail in CI on three references.
+
+The selection SHALL be made on the enumerated basenames rather than by a `check_*` pathspec. Git matches
+pathspec wildcards without `FNM_PATHNAME`, so `scripts/check_*.sh` already reaches into subdirectories: the
+glob would be describing something other than what it appears to say, and a reader auditing the surface would
+be reading a rule that does not hold.
 
 An enumeration that yields no gate SHALL fail loudly rather than report every property of zero gates
 satisfied. This is the vacuity direction, and it is the one this repository has re-opened most often — six
@@ -79,7 +92,7 @@ require a scenario heading's form while declining to require a pinning test's na
 
 #### Scenario: A gate has no twin
 
-- **WHEN** an enumerated gate has no `scripts/test_<name>.sh`
+- **WHEN** an enumerated gate has no companion twin beside it, named by substituting `test_` for `check_`
 - **THEN** the reaction fails, naming the gate, because a gate nobody has watched refuse is protection
   claimed rather than protection observed
 

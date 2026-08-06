@@ -2,7 +2,7 @@
 #
 # Every state and failure direction of `check_dod_coherence.sh`, each on a throwaway repository.
 #
-# The last `check_*` gate without a companion matrix. Its subject is a claim `AGENTS.md` makes about itself —
+# One of the two `check_*` gates that had no companion matrix. Its subject is a claim `AGENTS.md` makes about itself —
 # that its Definition of Done block is the single source for the local gate list and that CI runs a superset —
 # so a gate that could not be observed refusing would leave that claim resting on nothing, which is the shape
 # this repository keeps closing elsewhere.

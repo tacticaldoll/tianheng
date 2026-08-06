@@ -259,7 +259,13 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   A register that implied completeness would mislead exactly where it is most trusted. `observation-bound-model`
   is the second instance: it enumerates the same surface the register does and reacts over what each bound's
   stop actually *is*, which the register never governed — a slot that had accumulated many phrasings, one of
-  them used by two capabilities for bounds on opposite sides of the false-negative line. Larger surfaces are
+  them used by two capabilities for bounds on opposite sides of the false-negative line. `gate-shape-contract`
+  is the third, and the first to turn the cycle on **this repository's own reaction surface** rather than on the
+  specs: the `check_*` gates and their twins, enumerated from tracked content, with the properties that cannot be
+  mechanically checked declared as bounds. It also supplies the cycle's sharpest evidence so far that a
+  hand-written table is not an enumeration — the backlog entry proposing it described the surface as uniform, and
+  applying it found two properties that were not, one of which no twin held at all once the assertion was
+  actually observed rather than counted. Larger surfaces are
   named but not committed to — the requirement and scenario surface across every capability is a
   multi-window program, and promoting one is a `BACKLOG.md` decision with its own trigger, never an
   assumption inherited from this first success. Its size is deliberately **not** written here. This decision
