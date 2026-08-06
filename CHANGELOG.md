@@ -113,7 +113,11 @@ them.
   protocol is dogfooded rather than offered: `StaticObserver`, `SemanticObserver` and `RuntimeObserver`, all three
   re-exported through `tianheng` and its prelude. `RuntimeObserver` is behind 漏刻's **`audit` feature** — the
   `tianheng` shell enables it, so it is always present there, and a crate depending on `louke` directly must ask
-  for the feature. **Nothing to migrate**: `check_constitution`, `run` and the CLI keep
+  for the feature. Each dimension also exports **`observation_bounds()`** as a plain library item — `guibiao`,
+  `hunyi`, `louke` and the `tianheng` shell — so an adopter can read a dimension's declared bounds directly,
+  without implementing the protocol or composing a run. That is what `observation-bound-model`'s requirement *A
+  dimension SHALL export its declarations as library items* obliges, and 漏刻's set depends on its `audit` feature
+  for the reason recorded below. **Nothing to migrate**: `check_constitution`, `run` and the CLI keep
   their exact path and behaviour, coverage included, and the protocol is an additional entry rather than a
   replacement.
 
@@ -132,8 +136,8 @@ them.
   is computed can be declared at all: `Observer::bounds` carries no default body, and an implementor whose bounds
   are discovered rather than written — an observer over a plugin set, or over roots it scanned — was otherwise
   mandated to declare limits it had no way to name. A literal declaration is written exactly as before and still
-  borrows, which is asserted by pointer identity rather than intended; every one of the family's own fifty-three
-  declarations is a literal. Found in this window's pre-release review, and it earns no **BREAKING** mark for a
+  borrows, which is asserted by pointer identity rather than intended; every one of the family's own
+  declarations is a literal, which a reaction now holds over all of them. Found in this window's pre-release review, and it earns no **BREAKING** mark for a
   measured reason rather than a remembered one: none of these types exists in `0.4.0`, so no adopter has the
   narrower form.
 
