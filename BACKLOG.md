@@ -690,10 +690,19 @@ it before assigning a horizon here; the entries below are horizons, not a second
   hygiene, prose and specs, opt-in depth, performance, and diagnostics whose exit code and emitted documents
   do not move, with a false-negative closure explicitly deferred to the next minor. That deferral is what the
   window then spent. A bare-principal resolver closure landed carrying a `BREAKING CHANGE:` footer, and it
-  earns a minor on the definition above rather than on its diff size: a recorded baseline no longer describes
-  the adopter's tree in either direction — a fabricated finding disappears and a raw-identifier operand begins
-  to react — and regenerating one is work the adopter did not choose. `CHANGELOG.md` marks it `**BREAKING**`
-  accordingly.
+  earns a minor on the definition above rather than on its diff size. Stated against the **shipped** baseline,
+  which is the only one a version answers to: in `0.4.0` a bare single-segment principal did not resolve at
+  all, and now one the governed module declares does — new depth reacting by default, so a recorded baseline
+  no longer describes the adopter's tree and regenerating it is work they did not choose. The window's own
+  intermediate states (a fallback that over-reached, then the canonicalization that fixed it) are not the
+  reason and must not be quoted as one: neither shipped, so neither is an upgrade anyone performs.
+  `CHANGELOG.md` marks it `**BREAKING**` accordingly, and states the same delta from the same baseline.
+
+  Measured over the whole range rather than assumed from the commit subjects: of the 44 commits in
+  `v0.4.0..HEAD`, exactly **one** moves shipped behaviour (`crates/hunyi/src/crate_scope.rs`). The two other
+  product-code touches are a helper extraction with branch-for-branch identical logic and an RAII guard whose
+  exit codes, emitted documents, and syscalls are unchanged; everything else is `scripts/`, specs, docs, or
+  tests, none of which is packaged. So the minor rests on that single item, not on the window's size.
   The **branch is still named `release/0.4.1`** and the workspace version is still `0.4.0`; aligning the
   branch name, the version bump, the dated CHANGELOG section, the internal pins, and `Cargo.lock` is the
   release-preparation step and a human decision, not something the window's own commits do. Recorded here so
