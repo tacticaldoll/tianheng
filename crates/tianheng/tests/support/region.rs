@@ -100,13 +100,6 @@ impl<'a> Header<'a> {
     pub fn lines(&self) -> impl Iterator<Item = &'a str> + use<'a> {
         self.0.lines()
     }
-
-    /// The header's comment lines, with the leading `#` stripped — a shell gate's own prose about itself.
-    pub fn comments(&self) -> impl Iterator<Item = &'a str> + use<'a> {
-        self.0
-            .lines()
-            .filter_map(|line| line.trim_start().strip_prefix('#'))
-    }
 }
 
 /// Prose: outside every fenced block and every HTML comment.

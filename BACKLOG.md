@@ -352,6 +352,23 @@ consumer for an undemonstrated deduplication.
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **WATCH:**
+  - **A `#[path]`-shared test module's `allow(dead_code)` cannot distinguish "used by no binary" from "used by
+    some".** *Observed pressure:* `crates/tianheng/tests/support/` is compiled fresh into each `*_conformance.rs`
+    binary, so an item only some callers use is genuinely dead in the others — which is why the blanket
+    `#![allow(dead_code)]` there is correct and documented. It also silently covers an item used by **zero**
+    binaries: `Header::comments` was added with the region newtypes, never called anywhere, and passed every
+    clippy pass in the Definition of Done including the two that exist to catch dead code. *Observation source:*
+    the 0.5.0 closing review's expanded dead-code sweep, after an external review found the sibling instance in
+    `scripts/lib/capture.sh`; the method is deleted, the class is not. *Current reaction or bound:* none. Three
+    clippy passes cover non-`pub` Rust and a `--workspace` pass exists precisely to catch dead code that ships,
+    and none of them can see past a justified allow. *Risk:* a shared test helper accumulates an API nobody calls,
+    which is worse in a support module than elsewhere — it reads as the blessed way to do something, so the next
+    author adopts an untested path. *Promotion trigger:* a second item in `tests/support/` found dead by hand.
+    One instance does not justify a cross-binary usage reaction, and building one is a design decision: the
+    property is "referenced by at least one test binary", which needs an enumeration of binaries and their
+    references rather than a compiler lint. *Version class:* tests only; no published surface. *Authority:* that
+    module's own header, which states the allow and its reason, and `gate-shape-contract`, whose two-way
+    correspondence between a gate and its twin is the shape any answer here would generalize.
   - **A changelog entry that refers to another by position breaks when the entries are regrouped.**
     *Observed pressure:* six positional cross-references in one `[Unreleased]` section; **three were broken** when
     found. Two had been wrong before anything moved — "the previous entry's own repair" pointed at
