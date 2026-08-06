@@ -156,6 +156,11 @@ impl BoundDecl {
 }
 
 /// Whether one owned-or-borrowed string borrows.
+///
+/// `&Cow<_>` is exactly the argument `clippy::ptr_arg` warns about, and here it is the point: the question is
+/// *which variant* this value is, which a `&str` has already erased. Taking `&str` would make the function
+/// compile and always answer `true`.
+#[allow(clippy::ptr_arg)]
 fn borrowed(value: &Cow<'static, str>) -> bool {
     matches!(value, Cow::Borrowed(_))
 }

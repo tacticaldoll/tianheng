@@ -87,6 +87,17 @@ them.
   it. Two behaviours were declared three times each when the register first projected, which is why the
   register listed 41 bounds rather than the 44 it first projected — and a behaviour change can no longer leave
   several specs stale at once.
+- `BoundDecl::borrows_every_string()` answers whether every string a declaration carries borrows rather than
+  owning — the id, the shape, the pin, the extent's rationale, and an inherited owner's layer name, including
+  the ones nested two levels down. The family's own declarations are literals and the specification said so,
+  with **nothing measuring it**: every constructor accepts anything convertible, so a family declaration
+  rewritten as `format!(…)` compiled, allocated on every pass of the register and the extent projection, and
+  was named by no reaction. A reaction now holds it over all of them, and a `xuanji` test shows the answer can
+  be `false` for a computed string in **each position independently** — a discriminant returning a constant
+  `true` would satisfy every declaration, and one written as a short-circuiting chain can pass while examining
+  only its first field. An adopter auditing what a governance run allocates can ask the same question. The
+  deliberate counter-example lives outside the workspace: `examples/observer-participant`'s declarations are
+  computed on purpose, which is what the owned form is for.
 
 ### Fixed
 - **The pre-publish gate now verifies the release tag's signature instead of matching its shape.** It grepped the
