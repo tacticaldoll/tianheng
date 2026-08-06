@@ -241,6 +241,12 @@ are declared here rather than implied by the reaction's silence, because a bound
 the capability is lying about — and a bound that reads as coverage is worse than an unguarded gap, since it
 tells a future auditor a real escape is governed policy.
 
+A bound SHALL be **narrowed** when a reaction begins to reach part of it, and its heading SHALL NOT move when that
+happens. The heading's slug is the bound's id, so renaming it would break the citation and the typed declaration in
+one edit and move a row in two projections for a reason unrelated to the bound's content. A bound that overstates
+what is unobserved misleads in the same way as one that understates it: it tells an auditor a real check does not
+exist.
+
 #### Scenario: Whether an enumeration carries a vacuity guard is not observed — a stated bound
 
 - **WHEN** a gate iterates an enumeration with no guard against zero iterations
@@ -250,10 +256,12 @@ tells a future auditor a real escape is governed policy.
 
 #### Scenario: Whether a read's status is checked in the parent shell is not observed — a stated bound
 
-- **WHEN** a gate reads a command's output in a subshell or process substitution and never inspects that
-  command's status in the parent
-- **THEN** the reaction does not claim to observe it, a stated semantic bound; the backstop it does check
-  narrows the damage without detecting this shape, which is why both are stated separately
+- **WHEN** a gate reads a command's output through a **command substitution** whose status nobody inspects, or
+  through a pipeline whose non-final stage fails, and never inspects that status in the parent
+- **THEN** the reaction does not claim to observe it, a stated bound. This is what remains after the
+  process-substitution property above: that construct **is** now observed, so the bound is narrowed to the shapes
+  whose detection would need control flow rather than text — whether a caller inspects `$?` after a `$(…)` is not a
+  property of the source. The backstop the reaction also checks narrows the damage without detecting either shape
 - **PINNED-BY** `an_unchecked_read_status_is_a_stated_semantic_bound`
 
 #### Scenario: Whether a gate's 1-versus-2 assignment is correct is not observed — a stated bound
@@ -293,3 +301,34 @@ capability argues against.
 
 - **WHEN** the reaction cannot locate the repository layout and `TIANHENG_WORKSPACE_TESTS` is set
 - **THEN** it fails loudly, naming what was expected, rather than returning as it would outside a checkout
+
+### Requirement: A gate SHALL NOT consume a fallible observation source through process substitution
+
+Each gate SHALL read an observation source by materializing it, checking the producer's status in the **parent
+shell**, and only then consuming it. A `while … done < <(producer)` SHALL be refused when its producer can fail,
+because the status of a process substitution never reaches the parent — so a producer that emits some rows and then
+fails leaves the gate judging a partial read.
+
+Both directions of that failure are measured. A `git ls-files --eol` truncated after one clean row made a gate report
+`whitespace hygiene ok (1 tracked text files)` at **exit 0** over a repository it had read one file of. A `git log`
+truncated after one release record made another gate conclude snapshot state and report `[Unreleased] must be empty`
+at **exit 1** — a violation invented from a partial read. A vacuity guard reaches neither: it was built for zero rows
+and a partial read gives one or more.
+
+A producer that is a **shell builtin over data already in memory** — `printf` or `echo` re-splitting a variable —
+SHALL be permitted, having no I/O to fail at. The permission SHALL be granted by naming the builtin rather than by
+listing the call sites, because a list of sites rots on the next edit and would make the property about where code
+is rather than what it does.
+
+#### Scenario: A gate consumes a fallible producer through process substitution
+
+- **WHEN** an enumerated gate contains `done < <(git ls-files)`, or any process substitution whose producer is not a
+  shell builtin, in executed text
+- **THEN** the reaction fails, naming the gate, because that producer's failure cannot reach the parent and a
+  partial read would be judged as a whole one
+
+#### Scenario: A builtin re-splitting a held variable is permitted
+
+- **WHEN** the producer is `printf` or `echo` over a variable already in memory
+- **THEN** the reaction accepts it, because there is no I/O to fail at and requiring a temporary file would make the
+  gate longer without making it safer

@@ -70,7 +70,8 @@ cannot_judge() {
 
 blob=$(mktemp)
 enumeration=$(mktemp)
-trap 'rm -f "$blob" "$enumeration"' EXIT
+scan=$(mktemp)
+trap 'rm -f "$blob" "$enumeration" "$scan"' EXIT
 
 inspected=0
 offenses=0
@@ -110,9 +111,14 @@ while IFS=$'\t' read -r eol_info path; do
   # blank-line test below fires on a blank line that *content* precedes, and there is none.)
   [ -s "$blob" ] || continue
 
+  # `grep` exits 1 on a clean file, which is the ORDINARY case here — and the very shape the shared exit-contract
+  # backstop once misfired on, printing cannot-judge once per clean file while the code stayed 0. So the ordinary
+  # empty is named, and any OTHER failure still refuses.
+  trailing_lines() { grep -n '[[:space:]]$' -- "$blob" | cut -d: -f1; }
+  capture_or_refuse "trailing whitespace in $path" "$scan" cannot_judge --ordinary-empty 1 -- trailing_lines
   while IFS= read -r line_no; do
     report "$path:$line_no: trailing whitespace"
-  done < <(grep -n '[[:space:]]$' -- "$blob" | cut -d: -f1)
+  done <"$scan"
 
   # A final newline TERMINATES the last line; a second one begins a blank line that no line
   # terminates. `tail -c 2` distinguishes them without reading the whole file.

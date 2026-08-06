@@ -271,7 +271,9 @@ fi
 # gate. Mirrors the release-spine emptiness guard above (`${#release_records[@]} -gt 0`).
 capture_or_refuse 'the workspace crate manifests' "$release_capture" cannot_judge -- \
     find "$repo/crates" -mindepth 2 -maxdepth 2 -name Cargo.toml -type f
-mapfile -t workspace_manifest_files < <(sort "$release_capture")
+sort -o "$release_capture" "$release_capture" \
+    || cannot_judge "could not sort the workspace crate manifests"
+mapfile -t workspace_manifest_files <"$release_capture"
 [[ ${#workspace_manifest_files[@]} -gt 0 ]] \
     || cannot_judge "found no workspace crate manifests under $repo/crates — the crate layout changed or is absent, so manifest and lock coherence cannot be verified"
 

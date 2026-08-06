@@ -91,7 +91,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound`
 
-> the reaction does not claim to observe it, a stated semantic bound; the backstop it does check
+> the reaction does not claim to observe it, a stated bound. This is what remains after the
 
 - **pinned by**: `an_unchecked_read_status_is_a_stated_semantic_bound`
 

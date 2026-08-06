@@ -134,9 +134,9 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 
 ### `gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound`
 
-> a gate reading a command's output in a subshell or process substitution and never inspecting that command's status in the parent
+> a gate reading a command's output through a command substitution whose status nobody inspects, or through a pipeline whose non-final stage fails
 
-- **because**: the backstop the reaction does require narrows the damage — an unhandled failure becomes cannot-judge rather than a foreign status — without detecting the shape, which is why the two are stated separately
+- **because**: the process-substitution construct is now refused by its own property, so what is left is a status swallowed where detecting it would mean modelling whether the caller reads `$?` afterwards; the backstop the reaction also requires narrows the damage without detecting either shape
 - **its defence must show**: does not react
 - **pinned by**: `an_unchecked_read_status_is_a_stated_semantic_bound`
 
