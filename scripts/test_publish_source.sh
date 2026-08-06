@@ -24,55 +24,12 @@ trap 'rm -rf "$fixture_root"' EXIT
 signing_key=$fixture_root/signing
 ssh-keygen -q -t ed25519 -N '' -C 'publish-source-test' -f "$signing_key"
 
-write_workspace() {
-    local repo=$1 workspace_version=$2
-    mkdir -p "$repo/crates/xuanji"
-    printf '%s\n' \
-        '[workspace]' \
-        'members = ["crates/xuanji"]' \
-        '' \
-        '[workspace.package]' \
-        "version = \"$workspace_version\"" \
-        >"$repo/Cargo.toml"
-    printf '%s\n' \
-        '[package]' \
-        'name = "xuanji"' \
-        'version.workspace = true' \
-        'edition = "2024"' \
-        >"$repo/crates/xuanji/Cargo.toml"
-}
+# One builder, shared with the Rust test that pins this capability's declared bound — see
+# `scripts/lib/release_fixture.sh` for why it is not copied.
+source "$script_dir/lib/release_fixture.sh"
 
-# A repository in the exact shape a publish runs from: `main` pushed to a remote, its tip a
-# `release: X.Y.Z` snapshot, tagged with a signed annotated tag, worktree clean.
-new_release_repo() {
-    local name=$1 repo origin
-    repo=$fixture_root/$name
-    origin=$fixture_root/$name-origin.git
-    git init -q --bare "$origin"
-    mkdir -p "$repo"
-    git init -q -b main "$repo"
-    git -C "$repo" config user.name 'Publish Source Test'
-    git -C "$repo" config user.email 'publish-source@example.invalid'
-    git -C "$repo" config gpg.format ssh
-    git -C "$repo" config user.signingkey "$signing_key.pub"
-    # Pinned, not inherited: a maintainer's global `tag.gpgSign = true` turns the lightweight-tag
-    # fixture below into an annotated one, which then fails to build at all ("no tag message?"), so the
-    # refusal that case exists to prove would never be reached — and it would pass on CI, which has no
-    # such global. Signing is asked for explicitly with `-s` wherever a fixture wants it.
-    git -C "$repo" config commit.gpgsign false
-    git -C "$repo" config tag.gpgsign false
-    git -C "$repo" remote add origin "$origin"
-
-    write_workspace "$repo" "$version"
-    git -C "$repo" add .
-    git -C "$repo" commit -qm 'chore: groundwork'
-    printf '%s\n' '# notes' >"$repo/NOTES.md"
-    git -C "$repo" add .
-    git -C "$repo" commit -qm "release: $version"
-    git -C "$repo" tag -s "v$version" -m "release: $version"
-    git -C "$repo" push -q origin main
-    printf '%s\n' "$repo"
-}
+write_workspace() { release_fixture_workspace "$@"; }
+new_release_repo() { release_fixture_repo "$fixture_root" "$1" "$version" "$signing_key"; }
 
 expect_pass() {
     local repo=$1 expected=$2 output status=0
@@ -128,6 +85,72 @@ unsigned=$(new_release_repo unsigned)
 git -C "$unsigned" tag -d "v$version" >/dev/null
 git -C "$unsigned" tag -a "v$version" -m "release: $version"
 expect_fail "$unsigned" 1 'carries no signature'
+
+# A quoted signature block is text, not a signature. This is the shape the previous assertion accepted: it
+# grepped the whole tag object, message included, so a pasted verification log satisfied it — a silent pass on
+# the one path with no correction afterwards. Recorded before the fix: this fixture exited 0.
+quoted=$(new_release_repo quoted)
+git -C "$quoted" tag -d "v$version" >/dev/null
+git -C "$quoted" tag -a "v$version" -F - <<QUOTED
+release: $version
+
+Verification log pasted by a maintainer:
+-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQ== (quoted text, not a signature)
+-----END SSH SIGNATURE-----
+QUOTED
+expect_fail "$quoted" 1 'does not verify'
+
+# The other direction, and the one that stops the fix being a `git verify-tag` in disguise: a GENUINELY signed
+# tag must pass with NO allowed-signers configuration anywhere. Measured, `git verify-tag` cannot tell this tag
+# from the one above without that file — it reports `allowedSignersFile needs to be configured` for both — so a
+# gate built on it would always report cannot-judge in CI. `check-novalidate` verifies validity without
+# attribution, which is the split this gate needs.
+signed_no_signers=$(new_release_repo signed-no-signers)
+GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null expect_pass "$signed_no_signers" "ok publish source"
+
+# And a genuinely signed tag whose message ALSO quotes a verification log. This is the false refusal the first
+# draft of the mechanism produced: stripping the payload from the first line resembling a signature header
+# truncates it and refuses a real signature. Suffix removal of the exact signature block keeps the quote inside
+# the payload, where it belongs. A fixture rather than a memory, because the failing direction here costs a
+# release rather than permitting a bad one.
+signed_quoting=$(new_release_repo signed-quoting)
+git -C "$signed_quoting" tag -d "v$version" >/dev/null
+git -C "$signed_quoting" tag -s "v$version" -F - <<QUOTING
+release: $version
+
+Verification log pasted by a maintainer:
+-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQ== (a quote inside the message, before the real trailer)
+-----END SSH SIGNATURE-----
+QUOTING
+expect_pass "$signed_quoting" "ok publish source"
+
+# A signature this gate cannot read is cannot-judge, never a wrong source. Synthesised rather than GPG-signed:
+# the fixtures carry no GPG key, and what is being asserted is the reaction to the ARMOR HEADER, which is what
+# the gate reads to decide the kind.
+foreign_signature=$(new_release_repo foreign-signature)
+git -C "$foreign_signature" tag -d "v$version" >/dev/null
+git -C "$foreign_signature" tag -a "v$version" -F - <<FOREIGN
+release: $version
+-----BEGIN PGP SIGNATURE-----
+iQIzBAABCgAdFiEE (not a real PGP signature either; the armor header is what is read)
+-----END PGP SIGNATURE-----
+FOREIGN
+expect_fail "$foreign_signature" 2 'cannot verify'
+
+# ssh-keygen absent is cannot-judge too — never read as an unsigned tag, which would report a wrong source for a
+# missing tool. The twin already refuses to run without it; the gate now needs it and must say so.
+keygen_stub=$fixture_root/keygen-stub
+mkdir -p "$keygen_stub"
+for tool in ssh-keygen; do
+    printf '#!/usr/bin/env bash\nexit 127\n' >"$keygen_stub/$tool"
+    chmod +x "$keygen_stub/$tool"
+done
+absent_status=0
+absent_output=$(PATH="$keygen_stub:$PATH" "$check" "$publishable" 2>&1) || absent_status=$?
+[[ $absent_status -eq 2 ]] \
+    || { printf 'an unverifiable signature must be cannot-judge, got %d: %s\n' "$absent_status" "$absent_output" >&2; exit 1; }
 
 # Tag and HEAD both plausible on their own, naming different commits. Caught before the remote check,
 # so the diagnostic names the tag rather than the branch tip.
