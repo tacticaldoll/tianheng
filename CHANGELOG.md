@@ -355,6 +355,19 @@ them.
   outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
   carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
   independent of whether any real gate still does.
+- **A census is produced, never typed, and `AGENTS.md` now says so.** Hand-written figures drifted in every kind of
+  place they can live during this window — a code doc, two backlog entries, a changelog sentence, three files at
+  once, the version-horizon paragraph that assigns the release number, and a **generated projection's template**.
+  That last one is why the rule names its instrument rather than only its prohibition:
+  `docs/gate-shape-contract.md` is generated and staleness-checked and its bound disclosure still went wrong,
+  because the figure and the list were string literals in the generator — the freshness check compares the
+  generator's own text with itself, so a bound declared in this same window went unlisted. The projection now
+  **derives** that disclosure from the specification and is held to it in both directions, with the figure as the
+  list's length; a single array carries only the explanations. The rule also records why a detector over prose was
+  measured three times and rejected: widening the phrasing false-positives on both projections' headers, on the
+  register's own diagnostic, and on its matrix's expected-output literals; widening the corpus to `scripts/`
+  false-positives on the fixture censuses that matrix writes deliberately; and the one instance that occurred in a
+  code doc was spelled in words. Most numbers here describe a *shape*, not a census.
 - `check_release_coherence.sh` **separates a violation from a gate that cannot decide**, which its header
   claimed and its code never did: every refusal was `1`, so a shallow clone with no release spine, an absent
   manifest, or a moved crate layout all reported "the release surfaces disagree". Those are now `2`. The same
