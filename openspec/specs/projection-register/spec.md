@@ -40,8 +40,20 @@ satisfied.
 
 ### Requirement: Every generated document and the reaction holding it fresh SHALL correspond, in both directions
 
-Each enumerated document SHALL name the unit that generates it, and that unit SHALL be tracked. Each unit that
-holds a projection fresh SHALL be named by exactly one enumerated document.
+Each enumerated document SHALL name the unit that generates it, and that unit SHALL be tracked. **The number of
+projections a unit blesses SHALL equal the number of enumerated documents naming it** — the correspondence is
+counted per blessing call site, never per file.
+
+Per file was a measured defect: a second `assert_projection_matches` added to an existing holder, blessing a tracked
+document that carries no marker, was accepted in silence. The file was already paired with its first document and
+nothing asked about the second. A holder blessing two documents and registering one is exactly the state the register
+exists to make impossible.
+
+The correspondence is by **count**, and what that does not reach is stated rather than implied: *which* call blesses
+*which* document is not resolved, because the path is a constant in the source and reading it would mean evaluating
+Rust rather than reading it. Two holders that each bless one document and swapped which one they name would satisfy
+this count. The measured defect — a blessing nothing registers — is caught; a permutation is not, and calling the
+count a per-pair correspondence would have been the overclaim this capability exists to refuse.
 
 The reaction SHALL enumerate the holders **independently of the documents' own claims**, and SHALL recognize both
 mechanisms this repository uses: a Rust call to the shared blessing rule, and a `check_*` gate writing its
@@ -77,7 +89,9 @@ existence no reader has been told.
 Each enumerated document's path SHALL appear in `AGENTS.md`, which is the document a reader is told to open first.
 A projection nothing points at is a file a reader finds by accident.
 
-A path appearing only inside a fenced code block SHALL NOT count as a mention. Prose is where a reader is sent; a
+A path appearing only inside a fenced code block, or only inside an **HTML comment**, SHALL NOT count as a mention.
+An HTML comment is invisible to the reader the requirement is about, so a projection path wrapped in one satisfying it was the
+requirement being met in appearance and failed in substance — measured, not supposed. Prose is where a reader is sent; a
 fence is where a command lives. This is live rather than hypothetical: one projection's path appears both in prose
 and in a comment inside the Definition of Done fence, so a rule counting either would accept a document that only
 a gate's comment mentions — the shape the Definition-of-Done membership check was already bitten by once.

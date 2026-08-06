@@ -128,6 +128,12 @@ direction cannot distinguish a working gate from one that refuses everything. Th
 is the only one that catches the shape where the shared backstop printed cannot-judge once per clean file
 while the exit code stayed 0 — invisible to every check reading only the code.
 
+Every property over a twin or a gate SHALL be read from the **region of the text it is about**: executed text for a
+property about what runs, the header for a property about what a file declares of itself, prose for a property about
+what a reader is sent to. Two properties once read the whole file while their own helper's documentation said they
+were about executed text, so `expected_status` in a header comment satisfied a property about an assertion — the
+wrong check rather than a loose one.
+
 Requiring the twins' helper form (`expect_pass` / `expect_fail`) is legitimate where requiring a *product*
 test-name convention would not be, and the difference is ownership: these twins are authored in this
 repository for this purpose, so this capability may require their shape, exactly as the bound register may
@@ -172,8 +178,13 @@ since the twins compare a porcelain listing, a `HEAD`, a tag list and a director
 
 ### Requirement: Both files SHALL be reachable from the Definition of Done, except the publish-time gate
 
-Each enumerated gate and its twin SHALL appear in `AGENTS.md`'s Definition of Done block, which is the single
-source for the local pre-flight list. A gate present in the tree and absent from that block runs nowhere by
+Each enumerated gate and its twin SHALL be **invoked** by `AGENTS.md`'s Definition of Done block — appearing in
+command position, not merely mentioned in it. That block is the single source for the local pre-flight list.
+
+Mentioned-is-not-invoked is a measured defect, not a hypothetical: `test -f scripts/check_whitespace_hygiene.sh` in
+the block satisfied the membership check while executing nothing. A gate the block names and never runs is the
+"matrix present but unrun" class wearing the appearance of coverage, which is worse than the absence, because the
+projection then reports it reachable. A gate present in the tree and absent from that block runs nowhere by
 default, which is the "matrix present but unrun" class this window recorded three times.
 
 `scripts/check_publish_source.sh` is exempt from the gate half of this requirement and SHALL be declared as

@@ -17,6 +17,9 @@ use std::process::Command;
 
 use tianheng::testing::assert_projection_matches;
 
+mod support;
+use support::region::{Header, Prose, Source};
+
 /// This reaction's own projection, which is itself a member of the register.
 const PROJECTION: &str = "docs/projection-register.md";
 
@@ -87,30 +90,27 @@ fn tracked(root: &Path, pathspec: &str) -> Vec<String> {
         .collect()
 }
 
-fn read(root: &Path, relative: &str) -> String {
+/// A tracked text, as a [`Source`] rather than a `String`: the region a property is about is then decided in the
+/// type, and a recognizer that wants executed text cannot be handed the whole file.
+fn read(root: &Path, relative: &str) -> Source {
     let path = root.join(relative);
-    std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("cannot read {path:?}: {err}"))
-}
-
-/// Everything above the first `##` heading.
-fn header_of(document: &str) -> &str {
-    match document.find("\n## ") {
-        Some(index) => &document[..index],
-        None => document,
-    }
+    Source::of(
+        std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("cannot read {path:?}: {err}")),
+    )
 }
 
 /// Whether a document declares itself generated: the marker, bolded, in its header.
-fn declares_itself_generated(document: &str) -> bool {
-    header_of(document).contains(&format!("**{MARKER}"))
+fn declares_itself_generated(header: &Header<'_>) -> bool {
+    header.contains(&format!("**{MARKER}"))
 }
 
 /// The tracked paths a document's header names.
 ///
 /// Every candidate is checked against the tracked set rather than against a path-shaped pattern, so a glob
 /// (`openspec/specs/*/spec.md`, which one header names as its *input*) names no file and drops out on its own.
-fn paths_named_in_header(document: &str, tracked_files: &BTreeSet<&str>) -> BTreeSet<String> {
-    header_of(document)
+fn paths_named_in_header(header: &Header<'_>, tracked_files: &BTreeSet<&str>) -> BTreeSet<String> {
+    header
+        .text()
         .split(|ch: char| ch.is_whitespace() || ch == '`' || ch == '(' || ch == ')')
         .map(|token| token.trim_matches(|ch: char| matches!(ch, '.' | ',' | ';' | ':' | '*' | '"')))
         .filter(|token| tracked_files.contains(*token))
@@ -125,14 +125,43 @@ fn paths_named_in_header(document: &str, tracked_files: &BTreeSet<&str>) -> BTre
 /// and the third in this capability after the specification quoting the marker it requires and the register having
 /// to bless itself twice. The lesson each time is the same — when a reaction's subject is text, the reaction's own
 /// text is part of the corpus, so recognize by position or shape rather than by the bare string.
-fn defines_the_rule(source: &str) -> bool {
-    source
-        .lines()
-        .any(|line| line.trim_start().starts_with(RULE_DEFINITION))
+fn defines_the_rule(source: &Source) -> bool {
+    source.executed().starts_a_line_with(RULE_DEFINITION)
 }
 
-fn holds_a_projection(source: &str) -> bool {
-    !defines_the_rule(source) && RULE_CALLS.iter().any(|call| source.contains(call))
+/// A holder calls the shared rule in **executed** text. A bare comment mentioning the call used to be enough:
+/// measured, a `// … assert_projection_matches( …` line added to an unrelated file made it register as a holder.
+/// How many projections a unit blesses: one per call to the shared rule, in executed text.
+///
+/// The count is the correspondence — see the caller for what counting does and does not reach.
+fn blessing_call_sites(source: &Source) -> usize {
+    if defines_the_rule(source) {
+        return 0;
+    }
+    source
+        .executed()
+        .lines()
+        .map(|line| {
+            RULE_CALLS
+                .iter()
+                .map(|call| {
+                    line.match_indices(call)
+                        // A call site is not preceded by a quote. THIS file declares the call names as string
+                        // data, so counting the bare string counted its own constant — the fourth self-reference
+                        // trap in this window, and the fourth time position rather than the string was the answer.
+                        .filter(|(at, _)| *at == 0 || !line[..*at].ends_with('"'))
+                        .count()
+                })
+                .sum::<usize>()
+        })
+        .sum()
+}
+
+fn holds_a_projection(source: &Source) -> bool {
+    !defines_the_rule(source)
+        && RULE_CALLS
+            .iter()
+            .any(|call| source.executed().contains(call))
 }
 
 /// Whether `needle` appears in `text` outside every fenced block.
@@ -142,18 +171,8 @@ fn holds_a_projection(source: &str) -> bool {
 /// Markdown has no `#` comment and cutting each line at its first `#` truncates every heading, including the
 /// paragraph this check most depends on. The concern is live either way: one projection's path appears both in
 /// prose and in a comment inside the Definition of Done fence.
-fn mentions_outside_fences(text: &str, needle: &str) -> bool {
-    let mut fenced = false;
-    for line in text.lines() {
-        if line.trim_start().starts_with("```") {
-            fenced = !fenced;
-            continue;
-        }
-        if !fenced && line.contains(needle) {
-            return true;
-        }
-    }
-    false
+fn mentions_in_prose(prose: &Prose<'_>, needle: &str) -> bool {
+    prose.contains(needle)
 }
 
 /// One registered document: what it is, and the holder its header names.
@@ -176,10 +195,10 @@ fn registered(root: &Path) -> BTreeMap<String, Registered> {
     let mut found = BTreeMap::new();
     for path in all.iter().filter(|path| path.ends_with(".md")) {
         let text = read(root, path);
-        if !declares_itself_generated(&text) {
+        if !declares_itself_generated(&text.header()) {
             continue;
         }
-        let named = paths_named_in_header(&text, &tracked_files);
+        let named = paths_named_in_header(&text.header(), &tracked_files);
         // The document itself is often named in its own header's regeneration command; it is not its generator.
         let mut candidates: Vec<&String> = named.iter().filter(|name| *name != path).collect();
         let generator = match candidates.len() {
@@ -223,7 +242,7 @@ fn holders(root: &Path) -> Vec<String> {
             if is_rust {
                 holds_a_projection(&text)
             } else {
-                text.contains("BLESS")
+                text.executed().contains("BLESS")
             }
         })
         .collect();
@@ -271,18 +290,36 @@ fn every_generated_document_has_a_holder_and_every_holder_is_registered() {
 
     // Holder → document, enumerated independently of what the documents claim. A document naming its generator is
     // a claim by the document; the call site is the fact.
+    //
+    // Counted per blessing CALL SITE, not per file. Measured defect: a second `assert_projection_matches` in an
+    // existing holder, blessing a tracked document with no marker, was accepted in silence — the file was already
+    // paired with its first document and nothing asked about the second.
+    //
+    // What the count does not reach, stated because it would otherwise read as a per-pair correspondence: which
+    // call blesses which document is not resolved. The path is a constant in the source, and reading it would mean
+    // evaluating Rust rather than reading it, so two holders that swapped which document they name would satisfy
+    // this. A blessing nothing registers is caught; a permutation is not.
     for holder in &holders {
+        let blessings = blessing_call_sites(&read(&root, holder));
         let registering: Vec<&str> = documents
             .values()
             .filter(|entry| entry.generator.as_deref() == Some(holder.as_str()))
             .map(|entry| entry.document.as_str())
             .collect();
+        if registering.len() == 1 && blessings > 1 {
+            offences.push(format!(
+                "{holder}: blesses {blessings} projections and is registered by {} — a document it writes is \
+                 unregistered, and the register cannot know which",
+                registering.len()
+            ));
+            continue;
+        }
         match registering.len() {
             1 => {
                 // And the pair is tied from both sides: the holder must name the document it blesses, or the two
                 // agree only by a claim made in one direction.
                 let document = registering[0];
-                if !read(&root, holder).contains(document) {
+                if !read(&root, holder).executed().contains(document) {
                     offences.push(format!(
                         "{holder}: registered as the generator of {document} and does not name it, so the pair \
                          rests on the document's word alone"
@@ -315,14 +352,14 @@ fn every_generated_document_is_reachable_from_where_a_reader_is_sent() {
     let documents = registered(&root);
     let unreachable: Vec<&str> = documents
         .keys()
-        .filter(|document| !mentions_outside_fences(&entry_point, document))
+        .filter(|document| !mentions_in_prose(&entry_point.prose(), document))
         .map(String::as_str)
         .collect();
     assert!(
         unreachable.is_empty(),
         "a generated document is named nowhere a reader is sent: {unreachable:?} — {READERS_ENTRY_POINT} must \
          name each one in its prose, because the register knowing a document exists is not the same as a reader \
-         being able to find it (a mention inside a fenced block does not count)"
+         being able to find it (a mention inside a fenced block or an HTML comment does not count — neither is prose a reader sees)"
     );
 }
 
@@ -486,13 +523,15 @@ fn render(documents: &BTreeMap<String, Registered>, holders: &[String]) -> Strin
 /// such command is reported as naming none rather than silently blank: the register's subject is what each header
 /// claims, and a missing claim is itself the fact.
 fn command_in(document: &str) -> String {
-    let text = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .join(document),
-    )
-    .unwrap_or_default();
-    for line in header_of(&text).lines() {
+    let text = Source::of(
+        std::fs::read_to_string(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(document),
+        )
+        .unwrap_or_default(),
+    );
+    for line in text.header().lines() {
         if let Some(start) = line.find("BLESS") {
             let rest = &line[start..];
             let command = rest.split('`').next().unwrap_or(rest);
@@ -513,24 +552,26 @@ fn command_in(document: &str) -> String {
 fn a_regeneration_command_is_registered_and_never_run() {
     // A document whose header names a command that cannot regenerate anything. Every property this reaction
     // checks holds: it declares itself generated, and it names exactly one tracked generator.
-    let document = "# A fixture projection\n\n\
+    let document = Source::of(
+        "# A fixture projection\n\n\
          Generated by `crates/tianheng/tests/projection_register.rs`. **Do not edit by hand** — regenerate with\n\
-         `BLESS=1 false`.\n\n## Body\n";
+         `BLESS=1 false`.\n\n## Body\n",
+    );
     assert!(
-        declares_itself_generated(document),
+        declares_itself_generated(&document.header()),
         "the fixture must be a member of the surface, or this bound is demonstrated by a non-member"
     );
     let tracked_files: BTreeSet<&str> =
         BTreeSet::from(["crates/tianheng/tests/projection_register.rs"]);
     assert_eq!(
-        paths_named_in_header(document, &tracked_files).len(),
+        paths_named_in_header(&document.header(), &tracked_files).len(),
         1,
         "the fixture must name exactly one generator, so nothing but the command is wrong with it"
     );
     // And the command is a command no run of it could satisfy. The reaction reports nothing about that: nothing
     // above is a function of it, which is what makes this a bound rather than a check.
     assert!(
-        document.contains("BLESS=1 false"),
+        document.whole().contains("BLESS=1 false"),
         "the fixture must actually carry the defect this bound is about"
     );
 }
@@ -544,18 +585,20 @@ fn a_regeneration_command_is_registered_and_never_run() {
 #[test]
 fn a_third_generation_mechanism_is_not_recognized() {
     // A unit that writes a document under a bless flag through neither recognized mechanism.
-    let third_mechanism = "fn main() {\n    \
+    let third_mechanism = Source::of(
+        "fn main() {\n    \
          if std::env::var(\"BLESS\").is_ok() {\n        \
-         std::fs::write(\"generated-elsewhere.md\", render()).unwrap();\n    }\n}\n";
+         std::fs::write(\"generated-elsewhere.md\", render()).unwrap();\n    }\n}\n",
+    );
     assert!(
-        !holds_a_projection(third_mechanism),
+        !holds_a_projection(&third_mechanism),
         "the fixture must be invisible to the holder enumeration, or this bound is demonstrated by nothing"
     );
     // And its document, written without the marker, is invisible to the document enumeration too — so it is
     // absent from BOTH sides and the correspondence between them still holds.
-    let its_document = "# Generated elsewhere\n\nWritten by a build step.\n\n## Body\n";
+    let its_document = Source::of("# Generated elsewhere\n\nWritten by a build step.\n\n## Body\n");
     assert!(
-        !declares_itself_generated(its_document),
+        !declares_itself_generated(&its_document.header()),
         "the fixture document must be outside the surface as well, which is what makes the pair invisible"
     );
 }
