@@ -103,7 +103,7 @@ consumer for an undemonstrated deduplication.
   moved crate layout, which the family contract forbids and this gate's own header (written one change
   earlier) already claimed it did not do. And the exit-contract backstop had **inverted** it — `fail` was a
   `return 1` relying on `set -e`, so the `ERR` trap turned every genuine incoherence into `2`. Neither was
-  visible to CI, because this matrix asserted a non-zero status rather than a code. All five gate matrices now
+  visible to CI, because this matrix asserted a non-zero status rather than a code. Every gate matrix now
   assert the code, which is the property that would have caught it.
 
 - ~~**Two gates have no companion failure matrix.**~~ **CLOSED** in the open window. Both now have one, and
@@ -946,11 +946,20 @@ it before assigning a horizon here; the entries below are horizons, not a second
   reason and must not be quoted as one: neither shipped, so neither is an upgrade anyone performs.
   `CHANGELOG.md` marks it `**BREAKING**` accordingly, and states the same delta from the same baseline.
 
-  Measured over the whole range rather than assumed from the commit subjects: of the 44 commits in
-  `v0.4.0..HEAD`, exactly **one** moves shipped behaviour (`crates/hunyi/src/crate_scope.rs`). The two other
-  product-code touches are a helper extraction with branch-for-branch identical logic and an RAII guard whose
-  exit codes, emitted documents, and syscalls are unchanged; everything else is `scripts/`, specs, docs, or
-  tests, none of which is packaged. So the minor rests on that single item, not on the window's size.
+  What earns the minor is one item, and it is named rather than counted: the bare-principal resolver closure in
+  `crates/hunyi/src/crate_scope.rs`, the only change in the window that moves behaviour an adopter already had.
+  The window has since added a substantial **additive** published surface — the observation protocol (`Observer`,
+  `Run`, the three dimension observers), the typed bound model, and each dimension's `observation_bounds()` — which
+  is minor-class on its own terms and does not change the reasoning above: additive API asks nothing of an adopter,
+  while a recorded baseline going stale does. Re-derive the range rather than trusting a figure here — the counts
+  this paragraph used to carry ("of the 44 commits … the two other product-code touches") were written early and
+  falsified by the window itself:
+
+  ```bash
+  git rev-list --count v0.4.0..HEAD                                   # commits in the window
+  git log --format='' --name-only v0.4.0..HEAD -- crates \
+    | grep '/src/' | grep -v '/tests' | sort -u                       # packaged sources it touched
+  ```
   The **branch now carries the number**: `release/0.4.1` was renamed to `release/0.5.0` on 2026-08-06, so the
   first squash target names the release it will become — the role and the result agree, which is what
   `AGENTS.md`'s branch rule asks of every branch. The rename was clean because nothing pointed at the old

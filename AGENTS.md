@@ -101,6 +101,36 @@ that one placeholder also keeps `openspec/changes/` present, so no second `.gitk
 These lifecycle commits never land on `main` individually — they squash up per *Branching and
 release* below.
 
+## A census is produced, never typed
+
+A figure saying **how many members a set in this repository currently has** is produced by whatever enumerates
+that set — printed by its reaction on a clean run, or *computed* into a generated, staleness-checked projection.
+It is never typed into prose, a doc comment, or a projection's template. Where nothing enumerates the set, anchor
+the figure to a past moment so a reader cannot mistake it for current ("measured before proposing", "at `v0.4.0`"),
+or drop it: the claim almost never needs the number.
+
+This is not a style preference. Hand-written figures drifted **repeatedly in one release window, in every kind of
+place they can live**: a doc comment saying fifty-three declarations against a register holding fifty-four; a backlog entry citing
+fifty-five; a changelog sentence citing fifty-four with no time anchor; "eight files under `src/runner/`" in three
+files at once; "all five gate matrices" after a sixth gate arrived; and a version-horizon paragraph — the one that
+assigns the release number — whose measured commit count and "nothing else is packaged" claim the window itself
+falsified.
+
+**A figure inside a generated document is only safe if it is computed.** A literal in the template is the one place
+a projection cannot self-correct: the freshness check compares the generator's own text with itself, so
+`gate-shape-contract`'s projection typed both a figure and a list of bounds and silently omitted one added in the
+same window. Where a projection discloses a set, derive the membership from the source of truth and hold it in
+**both** directions; the figure is then `len()`.
+
+**Do not add a detector over prose.** It was designed and measured three times, and it is the wrong instrument:
+widening the recognized phrasing false-positives on the generated projections' own headers, on a gate's diagnostic
+string, and on six expected-output literals in its failure matrix; widening the corpus to `scripts/` false-positives
+on the fixture censuses the register's own failure matrix writes deliberately; and the one instance that occurred in a **code
+doc** was spelled in words, which no digit-based matcher reads. Most numbers in this repository describe a *shape*
+("two files of one module yield one violation"), not a census, so a matcher over numbers is mostly false positives.
+The census direction in `check_bound_register.sh` stays what it is — a backstop for the one set whose phrasing is
+stable — and the rule above is what keeps a figure honest.
+
 ## Adversarial review stance
 
 Work is gated by adversarial review, not performed agreement. At **propose**, challenge the design

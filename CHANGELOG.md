@@ -72,7 +72,7 @@ them.
   other, so the undeclared-prose direction is what reached it. For a reader of the register the
   consequence is the point — it is a floor in two directions now, and says so.
 - `observation-bound-register`'s `Purpose` was still the placeholder its archive step generated, the only
-  one of 30 specs that was.
+  specification that carried one.
 - Two specs claimed that a `#[path]`-remapped module stays outside the scanner's observation, long after
   it stopped being true. `inline-symbol-path-confinement` carried it as a **declared bound** ("the system
   does not claim to observe it"), and `external-crate-confinement` listed it among the resolution's
