@@ -3,9 +3,10 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**15 of 55 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**16 of 56 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
+- `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound` — owner: engine
 - `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
@@ -358,7 +359,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## under-reacts (15)
+## under-reacts (16)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -367,6 +368,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the rule observes `use` imports only, so a crate reached through an `extern crate` declaration and fully-qualified paths is not seen
 - **its defence must show**: does not react
 - **pinned by**: `confine_ignores_an_extern_crate_declaration`
+
+### `gate-shape-contract/a-permitted-builtin-piped-into-an-external-command-is-still-permitted-a-stated-bound`
+
+> a gate's process substitution beginning with `printf` or `echo` and piped into an external command
+
+- **because**: the permission is granted on the producer's first word, so a builtin's exemption — having no I/O to fail at — reaches a pipeline stage that does; refusing a producer containing a pipe was measured and refuses the tree's own legitimate sites too
+- **its defence must show**: does not react
+- **pinned by**: `a_builtin_piped_into_an_external_command_is_a_stated_bound`
 
 ### `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound`
 
