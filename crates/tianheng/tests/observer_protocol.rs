@@ -25,22 +25,143 @@ fn workspace_manifest() -> Option<PathBuf> {
     None
 }
 
-/// A constitution both paths evaluate to a **violation**, in the one DSL shape the self-governance suite proves.
+/// One dimension of 三儀, as both reactions below need it.
 ///
-/// Deliberately violating. A clean fixture makes the equality assertion vacuous: every subset of clean observers
-/// folds to `Clean`, so the two paths agree however many the fold omitted — measured, perturbing the fold did not
-/// fail the assertion while the fixture passed.
-fn comparable_constitution() -> Constitution {
-    Constitution::new("observer-protocol-equality").boundary(
+/// One array rather than three hand-written arms, because both reactions are three-way and a forgotten arm is
+/// precisely an arm that silently proves nothing — which is the defect this shape exists to have closed. An
+/// entry says everything either reaction needs about its dimension, so the fixture and the fold cannot come to
+/// describe different dimension sets.
+struct Dimension {
+    label: &'static str,
+    /// Declares a boundary of this dimension that this workspace **violates**. Measured, not reasoned; see
+    /// `declare_*` below for what each one bites.
+    declare: fn(Constitution) -> Constitution,
+    /// Folds this dimension's observer into a run, reading its own boundaries back out of the constitution.
+    fold: for<'a> fn(Run<'a>, &Constitution) -> Run<'a>,
+    /// A violation of this kind proves this dimension's arm actually fired. A predicate rather than a
+    /// `BoundaryKind`: 圭表 owns two kinds, and `BoundaryKind` is `#[non_exhaustive]` so a downstream crate
+    /// cannot match it exhaustively anyway.
+    reacted: fn(BoundaryKind) -> bool,
+    /// What this dimension's observer declares, and what the dimension exports — the bijection's two sides.
+    declared_bounds: fn() -> Vec<BoundDecl>,
+    exported_bounds: fn() -> Vec<BoundDecl>,
+}
+
+/// 三儀, in the order the built-in path assembles them.
+///
+/// **The order is part of the comparison, not cosmetic.** `Run::observe` folds eagerly and `merge_outcomes`
+/// concatenates violations in fold order, so the two `Debug` renderings compared below only match while this
+/// array is in `evaluate_constitution`'s order: 圭表, 渾儀, 漏刻. Sorting it would break the equality reaction
+/// without any dimension having changed.
+const DIMENSIONS: [Dimension; 3] = [
+    Dimension {
+        label: "圭表 (static)",
+        declare: declare_violated_static,
+        fold: |run, constitution| {
+            run.observe(StaticObserver::new(
+                constitution.static_boundaries().clone(),
+            ))
+        },
+        reacted: |kind| matches!(kind, BoundaryKind::Crate | BoundaryKind::Module),
+        declared_bounds: || {
+            StaticObserver::new(Constitution::new("bounds").static_boundaries().clone()).bounds()
+        },
+        exported_bounds: guibiao::observation_bounds,
+    },
+    Dimension {
+        label: "渾儀 (semantic)",
+        declare: declare_violated_semantic,
+        fold: |run, constitution| {
+            run.observe(SemanticObserver::new(
+                constitution.semantic_boundaries().clone(),
+            ))
+        },
+        reacted: |kind| matches!(kind, BoundaryKind::Semantic),
+        declared_bounds: || {
+            SemanticObserver::new(Constitution::new("bounds").semantic_boundaries().clone()).bounds()
+        },
+        exported_bounds: hunyi::observation_bounds,
+    },
+    Dimension {
+        label: "漏刻 (runtime)",
+        declare: declare_violated_runtime,
+        fold: |run, constitution| {
+            run.observe(RuntimeObserver::new(
+                constitution.runtime_boundaries().to_vec(),
+            ))
+        },
+        reacted: |kind| matches!(kind, BoundaryKind::Runtime),
+        declared_bounds: || RuntimeObserver::new(Vec::new()).bounds(),
+        exported_bounds: louke::observation_bounds,
+    },
+];
+
+/// 璇璣's real `serde_json` edge falls outside an allowlist holding only `syn`, which it does not depend on.
+///
+/// An **empty** allowlist was tried first and reads as clean, which is why every dimension's reaction is
+/// asserted below rather than assumed from the declaration looking violating.
+fn declare_violated_static(constitution: Constitution) -> Constitution {
+    constitution.boundary(
         CrateBoundary::crate_("xuanji")
-            // Restricted to `syn`, which 璇璣 does not depend on, so its real `serde_json` edge falls
-            // outside the allowlist and REACTS. An empty allowlist was tried first and reads as clean —
-            // which is why the assertion below insists the fixture actually reacted.
             .restrict_dependencies_to(["syn"])
-            .because(
-                "a deliberately violated boundary, so the compared verdict is not trivially clean",
-            ),
+            .because("a deliberately violated boundary, so the compared verdict is not trivially clean"),
     )
+}
+
+/// 渾儀's own `SemanticBoundaries::crate_packages` returns `impl Iterator<Item = &str>`.
+///
+/// The narrowest reacting semantic declaration found by running candidates: exactly one violation, from one
+/// public method. A visibility ceiling on 璇璣's root also reacts and produces eight, which makes a failure
+/// message harder to read while proving nothing more.
+fn declare_violated_semantic(constitution: Constitution) -> Constitution {
+    constitution.impl_trait_boundary(
+        ImplTraitBoundary::in_crate("hunyi")
+            .module("crate")
+            .must_not_expose_impl_trait()
+            .because("a deliberately violated boundary, so the semantic arm is not compared vacuously"),
+    )
+}
+
+/// A seam name no probe in this tree writes, so the audit reacts declared-but-unprobed.
+///
+/// Chosen because it cannot become accidentally satisfied: the only way to stop this reacting is to add a probe
+/// for a seam invented for this fixture. An **empty** runtime declaration was measured first and is `Clean` on
+/// this workspace — the very hole this array closes.
+fn declare_violated_runtime(constitution: Constitution) -> Constitution {
+    constitution.runtime(
+        RuntimeBoundary::at("observer-protocol-equality-unprobed-seam")
+            .only_origins(["tianheng"])
+            .because("a deliberately violated boundary, so the runtime arm is not compared vacuously"),
+    )
+}
+
+/// A constitution every dimension of 三儀 evaluates to a **violation of its own kind**.
+///
+/// Deliberately violating in *each* dimension, not just overall. A dimension whose declared set is empty
+/// contributes nothing to either side of the comparison, so the two paths agree for it however wrongly one of
+/// them behaves — measured: an empty constitution is `Clean` here, and with the previous static-only fixture,
+/// replacing `SemanticObserver::observe`'s body with `Outcome::Clean` left this suite passing.
+fn comparable_constitution() -> Constitution {
+    let mut constitution = Constitution::new("observer-protocol-equality");
+    for dimension in &DIMENSIONS {
+        constitution = (dimension.declare)(constitution);
+    }
+    // The guard against an entry being deleted from `DIMENSIONS`: a deleted entry leaves its dimension's
+    // accessor empty, and that dimension is then compared vacuously again. Checked against the constitution
+    // rather than by asserting the array's length beside the array, which is the same hand-kept census.
+    assert!(
+        !constitution.static_boundaries().boundaries().is_empty(),
+        "圭表 declares nothing — the static arm would be compared vacuously"
+    );
+    assert!(
+        !constitution.semantic_boundaries().is_empty(),
+        "渾儀 declares nothing — the semantic arm would be compared vacuously"
+    );
+    assert!(
+        !constitution.runtime_boundaries().is_empty(),
+        "漏刻 declares nothing — the runtime arm would be compared vacuously"
+    );
+    constitution
 }
 
 #[test]
@@ -51,26 +172,30 @@ fn the_trait_driven_fold_agrees_with_the_built_in_path() {
     let constitution = comparable_constitution();
 
     let built_in = check_constitution(&constitution, &manifest);
-    let folded = Run::over(&manifest)
-        .observe(StaticObserver::new(
-            constitution.static_boundaries().clone(),
-        ))
-        .observe(SemanticObserver::new(
-            constitution.semantic_boundaries().clone(),
-        ))
-        .observe(RuntimeObserver::new(
-            constitution.runtime_boundaries().to_vec(),
-        ))
-        .verdict();
+    let mut run = Run::over(&manifest);
+    for dimension in &DIMENSIONS {
+        run = (dimension.fold)(run, &constitution);
+    }
+    let folded = run.verdict();
 
-    // The comparison must not be able to hold vacuously. Every subset of CLEAN observers folds to `Clean`, so
-    // on a clean workspace the two paths agree however many the fold omitted — measured, perturbing the fold did
-    // not fail this assertion while the fixture passed. Asserting the verdict is a violation makes that
-    // impossible by construction rather than by having perturbed correctly once.
-    assert!(
-        matches!(built_in, Outcome::Violations(_)),
-        "the fixture must react, or comparing the two paths proves nothing: {built_in:?}"
-    );
+    // The comparison must not be able to hold vacuously in ANY ONE dimension. The earlier form asserted only
+    // that the whole verdict was a violation, which a single reacting dimension satisfies while the other two
+    // compare `Clean` against `Clean`. Reaction is therefore checked per dimension, and a fixture that goes
+    // vacuous because the workspace changed under it fails here naming the dimension to repair.
+    let Outcome::Violations(report) = &built_in else {
+        panic!("the fixture must react, or comparing the two paths proves nothing: {built_in:?}");
+    };
+    for dimension in &DIMENSIONS {
+        assert!(
+            report
+                .violations
+                .iter()
+                .any(|violation| (dimension.reacted)(violation.kind)),
+            "{} did not react, so the comparison proves nothing about it — repair the fixture's declaration \
+             for this dimension, not either path: {report:?}",
+            dimension.label
+        );
+    }
     assert_eq!(
         format!("{built_in:?}"),
         format!("{folded:?}"),
@@ -81,48 +206,23 @@ fn the_trait_driven_fold_agrees_with_the_built_in_path() {
 
 #[test]
 fn every_observer_declares_exactly_its_dimension_s_bounds() {
-    let ids = |bounds: Vec<BoundDecl>| -> Vec<String> {
-        let mut ids: Vec<String> = bounds
-            .into_iter()
-            .map(|decl| decl.id().as_str().to_string())
-            .collect();
-        ids.sort();
-        ids
+    // WHOLE declarations, ordered by id — never the ids alone. A `BoundDecl` carries the shape it stops at, its
+    // extent, and what pins it; an observer whose ids match while an extent has drifted is exactly the
+    // divergent second list the bijection installed by `observation-bound-model` refuses, and the earlier
+    // id-only comparison admitted it. Delegation, never a second list: satisfying the protocol's obligation
+    // with one would be declaring bounds nobody classified.
+    let by_id = |mut bounds: Vec<BoundDecl>| -> Vec<BoundDecl> {
+        bounds.sort_by(|left, right| left.id().cmp(right.id()));
+        bounds
     };
-    // Delegation, never a second list: a divergent copy is exactly what the bijection installed by
-    // `observation-bound-model` exists to refuse, and satisfying the protocol's obligation with one would be
-    // declaring bounds nobody classified.
-    assert_eq!(
-        ids(StaticObserver::new(empty_constitution().static_boundaries().clone()).bounds()),
-        ids(guibiao_bounds()),
-        "圭表's observer declares its dimension's bounds"
-    );
-    assert_eq!(
-        ids(SemanticObserver::new(empty_constitution().semantic_boundaries().clone()).bounds()),
-        ids(hunyi_bounds()),
-        "渾儀's observer declares its dimension's bounds"
-    );
-    assert_eq!(
-        ids(RuntimeObserver::new(Vec::new()).bounds()),
-        ids(louke_bounds()),
-        "漏刻's observer declares its dimension's bounds"
-    );
-}
-
-/// A constitution with no boundary: the bounds a dimension declares are a property of the dimension, not of
-/// what an adopter happened to govern, so the fixture deliberately governs nothing.
-fn empty_constitution() -> Constitution {
-    Constitution::new("observer-protocol-bounds")
-}
-
-fn guibiao_bounds() -> Vec<BoundDecl> {
-    guibiao::observation_bounds()
-}
-fn hunyi_bounds() -> Vec<BoundDecl> {
-    hunyi::observation_bounds()
-}
-fn louke_bounds() -> Vec<BoundDecl> {
-    louke::observation_bounds()
+    for dimension in &DIMENSIONS {
+        assert_eq!(
+            by_id((dimension.declared_bounds)()),
+            by_id((dimension.exported_bounds)()),
+            "{}'s observer declares its dimension's bounds",
+            dimension.label
+        );
+    }
 }
 
 // --- the fold's ordering directions, on hand-written observers ---
