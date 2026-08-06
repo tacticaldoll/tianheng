@@ -170,6 +170,36 @@ consumer for an undemonstrated deduplication.
   reaction and named in the projection, and that is all. Trigger for giving exemptions their own register: a
   second instance. This is the first.
 
+- ~~**A swallowed subshell status was repaired nine times and could be written a tenth.**~~ **CLOSED** in the open
+  window, and closed as a *shape* rather than as a tenth repair. `gate-shape-contract` gained an eleventh property:
+  a gate may not consume an observation source through `< <(producer)` whose producer can fail.
+
+  **Both failure directions are measured, which is what made the class worth a property rather than a habit.** A
+  `git ls-files --eol` truncated after one clean row made `check_whitespace_hygiene.sh` report
+  `whitespace hygiene ok (1 tracked text files)` at **exit 0** over a repository it had read one file of — the count
+  fell from two to one in its own output and nothing reacted to it. A `git log` truncated the same way made
+  `check_release_coherence.sh` conclude snapshot state and report `[Unreleased] must be empty` at **exit 1**, a
+  violation invented from a partial read. A vacuity guard reaches neither: it was built for zero rows, and a partial
+  read gives one or more. **The guard and the capture answer different questions, which is why they now sit side by
+  side rather than one replacing the other.**
+
+  Eight sites migrated to `scripts/lib/capture.sh`, and **the property found two more on its first run — one of them
+  written by the migration itself** (`< <(sort …)`), the other a per-file scan never migrated at all. A property that
+  catches its own author's fresh mistake within a minute of existing is the argument for having it.
+
+  **The lesson worth keeping is about the helper, not the sites.** Its first version turned `grep`'s exit 1 — a clean
+  miss, the ordinary case — into cannot-judge, and the release gate's own vacuity direction failed immediately. So it
+  takes `--ordinary-empty <status>` per call site: the rule is about the producer's *contract*, not about its name,
+  and `scripts/lib/exit_contract.sh` draws the same distinction for the same reason. A shared helper that decides a
+  producer's contract for its callers would have been a new class of its own.
+
+  **Residual, and the bound was narrowed rather than left standing.** A status swallowed by a command substitution,
+  or by a pipeline's non-final stage, is still unobserved — detecting either would mean modelling whether the caller
+  reads `$?` afterwards, which is control flow rather than text. The declared bound now says exactly that, with its
+  heading untouched because the slug is its id. Also unreproduced: the `git ls-files | grep -q` SIGPIPE shape, which
+  needs enough data to fill a pipe buffer; migrated with the class and recorded as migrated without a demonstrated
+  negative run. Trigger for revisiting: a swallowed status found in a shape the property does not reach.
+
 - ~~**The pre-publish gate had no specification, and its stated bound had the cause backwards.**~~ **CLOSED** in
   the open window as the `publish-source-integrity` capability. Found in the 0.5.0 pre-release review, and worth
   keeping for the shape rather than the fix.
