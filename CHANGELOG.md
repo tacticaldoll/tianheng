@@ -515,8 +515,8 @@ them.
 
 - **The lexical trait-object guard states where it stops, and checks the premise it rested on.** The reaction
   keeping the composed shell free of trait objects has to be lexical — 渾儀 governs no module of `tianheng`, and
-  the `dyn` DSL has no allow-except form — but it read only top-level `src/*.rs` without saying so. Eight files
-  under `src/runner/` were never opened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them left it
+  the `dyn` DSL has no allow-except form — but it read only top-level `src/*.rs` without saying so. Every file
+  under `src/runner/` went unopened, and an injected `pub fn … -> Option<Box<dyn Debug>>` among them left it
   passing. Not an exposure, because those modules are private — but the soundness rested on an **unchecked
   premise**, and `pub mod runner;` would have removed every file beneath it from the reaction's reach in
   silence. That
