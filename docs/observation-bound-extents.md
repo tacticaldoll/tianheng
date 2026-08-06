@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**11 of 42 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**11 of 45 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -24,7 +24,7 @@ Generated from each dimension's `observation_bounds()` by `crates/tianheng/tests
 
 One value carries no bound today and is kept deliberately: **refuses to judge**. The misclassification this model exists to prevent was exactly a confusion between that and *out of reach* — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
-## as intended, granularity bounded (5)
+## as intended, granularity bounded (6)
 
 ### `external-crate-confinement/the-lib-and-bin-conventional-path-conflation-is-a-stated-bound`
 
@@ -33,6 +33,14 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: the two targets' module graphs are not told apart, so a finding names one compilation unit where two share a path — the reaction still fires
 - **its defence must show**: collapses granularity
 - **pinned by**: `confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths`
+
+### `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
+
+> a bound whose outcome differs by which corpus entry point observed it
+
+- **because**: it is recorded as an under-reaction owned by the entry point rather than carrying a value of its own, so it shares that value with bounds whose answer does not depend on an entry point; one live instance does not earn a value every other member has several of
+- **its defence must show**: collapses granularity
+- **pinned by**: `an_entry_dependent_bound_is_declared_as_under_reacting`
 
 ### `runtime-origin-assertion/an-absolute-path-literal-s-target-outside-the-anchor-keeps-its-absolute-label-a-stated-bound`
 
@@ -102,7 +110,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (18)
+## out of reach (20)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -127,6 +135,22 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 - **because**: foreign ASTs are not scanned, so a re-export chain leaving this workspace is never followed
 - **its defence must show**: does not react
 - **pinned by**: `inline_foreign_reexport_of_the_confined_path_is_a_bound`
+
+### `observation-bound-model/a-bound-both-out-of-reach-and-granularity-limited-cannot-be-expressed-a-stated-bound`
+
+> a bound both invisible to the observation source and limited in the granularity of the fact it would have produced
+
+- **because**: granularity is carried only by the as-intended extent, so the pair has no representation at all; no declared bound exhibits it, and offering granularity on every extent would invite a combination nothing shows while weakening the nesting that makes a contradiction unwritable
+- **its defence must show**: does not react
+- **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
+
+### `observation-bound-model/whether-a-declaration-s-stated-cause-is-the-real-cause-is-not-observed-a-stated-bound`
+
+> a declaration whose rationale names a cause that is not why the reaction stops
+
+- **because**: the extent is typed and checkable while the rationale is prose the model never reads; requiring the two to agree would trade a fact for a heuristic
+- **its defence must show**: does not react
+- **pinned by**: `a_rationale_that_contradicts_its_extent_is_a_stated_bound`
 
 ### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
 

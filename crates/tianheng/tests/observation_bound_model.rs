@@ -154,10 +154,14 @@ fn spec_bounds(root: &Path) -> BTreeMap<String, SpecBound> {
 /// Duplicate ids are refused here for the same reason as on the spec side.
 fn declared_bounds() -> BTreeMap<String, BoundDecl> {
     let mut all = BTreeMap::new();
+    // The shell's own declarations are chained too: `observation-bound-model`'s reaction lives here, so this
+    // crate owns its bounds — and a capability that exempted itself from its own bijection would be counting
+    // everyone else's unclassified bounds while hiding its own.
     for decl in guibiao::observation_bounds()
         .into_iter()
         .chain(hunyi::observation_bounds())
         .chain(louke::observation_bounds())
+        .chain(tianheng::observation_bounds())
     {
         let id = decl.id().as_str().to_string();
         assert!(

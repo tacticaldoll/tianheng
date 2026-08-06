@@ -1,5 +1,11 @@
-## ADDED Requirements
+# observation-bound-model Specification
 
+## Purpose
+
+Type where a reaction's measure deliberately stops, so a declared observation bound carries a classification a
+reaction can check rather than an adjective a reader must interpret — and hold the specs' declarations and the
+code's in a bijection, in both directions.
+## Requirements
 ### Requirement: A declared bound SHALL carry a typed extent whose illegal states are unrepresentable
 
 Every declared observation bound SHALL carry an `Extent`: where the reaction's measure stops. The type SHALL

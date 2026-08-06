@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**0 of 42 declared bounds have no pinning test.** That figure is the register's
+**0 of 45 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -118,6 +118,26 @@ fallback used where no manifest exists, which the register spec describes.
 > the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default; behavior is unchanged from before this capability)
 
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
+
+## observation-bound-model
+
+### `observation-bound-model/whether-a-declaration-s-stated-cause-is-the-real-cause-is-not-observed-a-stated-bound`
+
+> the model does not claim to observe it, a stated bound: the extent is typed and checkable, the
+
+- **pinned by**: `a_rationale_that_contradicts_its_extent_is_a_stated_bound`
+
+### `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
+
+> it is declared as under-reacting with the entry point as the inherited owner rather than carrying an
+
+- **pinned by**: `an_entry_dependent_bound_is_declared_as_under_reacting`
+
+### `observation-bound-model/a-bound-both-out-of-reach-and-granularity-limited-cannot-be-expressed-a-stated-bound`
+
+> the model cannot express it, a stated bound: no declared bound exhibits the pair, and offering
+
+- **pinned by**: `granularity_is_carried_only_by_the_as_intended_extent`
 
 ## runtime-origin-assertion
 

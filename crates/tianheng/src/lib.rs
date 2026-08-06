@@ -45,6 +45,9 @@ pub use guibiao::{
 // The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
 // its instrument name so the bare `Constitution` can be the unified shell-level type below. The
 // pure static core (`guibiao::check`) takes this type; the self-governance gate uses it directly.
+mod bounds;
+pub use bounds::observation_bounds;
+
 // The declared-observation-bound model, reached through 渾儀 rather than by depending on 璇璣 directly:
 // the shell's own dependency boundary allows guibiao, hunyi, louke, xingbiao and serde_json, and a new
 // direct edge to 璇璣 would breach the law this crate governs itself by.
