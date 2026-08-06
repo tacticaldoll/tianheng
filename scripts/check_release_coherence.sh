@@ -5,6 +5,11 @@ set -Eeuo pipefail
 # The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
 # is a trap rather than per-command handling, and the measurements behind both.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+# One way to read an observation source: materialize, check the status HERE in the parent, then consume. See
+# `scripts/lib/capture.sh`. Measured on this gate: a `git log` that emitted one release record and then failed made
+# it conclude the tree was in snapshot state and report `[Unreleased] must be empty` — exit 1, a violation invented
+# from a partial read. Every producer whose output decides a verdict now goes through the shared rule.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/capture.sh"
 exit_contract_backstop 'release coherence'
 
 repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
@@ -23,6 +28,9 @@ fail() {
 # incoherence. A shallow clone with no release spine, an absent manifest, a layout that moved — none of those
 # say "the release surfaces disagree", and reporting them as `1` tells a consumer to go looking for a
 # disagreement that does not exist. Every sibling gate separates these two; this one collapsed them.
+release_capture=$(mktemp)
+trap 'rm -f "$release_capture"' EXIT
+
 cannot_judge() {
     printf 'release coherence: cannot judge: %s\n' "$*" >&2
     exit 2
@@ -86,6 +94,9 @@ require_workspace_manifests() {
 
 require_internal_pins() {
     local line dependency pin pins=0
+    # `grep` exits 1 on a clean miss, which the vacuity guard below is what reacts to — not this capture.
+    capture_or_refuse 'the internal path dependencies' "$release_capture" cannot_judge --ordinary-empty 1 -- \
+        grep -E '^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=.*path[[:space:]]*=[[:space:]]*"crates/' "$repo/Cargo.toml"
     while IFS= read -r line; do
         pins=$((pins + 1))
         dependency=${line%%=*}
@@ -94,7 +105,7 @@ require_internal_pins() {
         [[ -n $pin ]] || fail "internal dependency $dependency has no version pin"
         [[ $pin == "$workspace_version" ]] \
             || fail "internal dependency $dependency is pinned to $pin; expected $workspace_version"
-    done < <(grep -E '^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=.*path[[:space:]]*=[[:space:]]*"crates/' "$repo/Cargo.toml")
+    done <"$release_capture"
     # The vacuity guard every other loop in this file already had, and this one did not: a reformatted
     # `[workspace.dependencies]` table, or a `grep` that could not read the manifest, iterates zero times and
     # the direction passes having asserted nothing about any pin.
@@ -118,7 +129,8 @@ require_internal_pins() {
 require_example_pins() {
     local expected_minor manifest dependency pin family seen=0 manifests=0
     expected_minor=${workspace_version%.*}
-    mapfile -t family < <(workspace_packages)
+    capture_or_refuse 'the workspace package list' "$release_capture" cannot_judge -- workspace_packages
+    mapfile -t family <"$release_capture"
     for manifest in "$repo"/examples/*/Cargo.toml; do
         [[ -f $manifest ]] || continue
         manifests=$((manifests + 1))
@@ -127,14 +139,15 @@ require_example_pins() {
             # skipped while the set-level guard below stays satisfied by its siblings:
             #   plain  `xuanji = "0.3"`
             #   table  `xuanji = { version = "0.3", features = [...] }`
+            capture_or_refuse "example $dependency pins" "$release_capture" cannot_judge -- sed -n \
+                -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\\1/p" \
+                -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\\1/p" \
+                "$manifest"
             while IFS= read -r pin; do
                 seen=$((seen + 1))
                 [[ $pin == "$expected_minor" || $pin == "$workspace_version" ]] \
                     || fail "example $(basename "$(dirname "$manifest")") requires $dependency = \"$pin\", which the workspace version $workspace_version does not satisfy; expected \"$expected_minor\" (a release bump must carry the examples with it, or their patch.crates-io override is silently dropped)"
-            done < <(sed -n \
-                -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
-                -e "s/^[[:space:]]*$dependency[[:space:]]*=[[:space:]]*{.*version[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
-                "$manifest")
+            done <"$release_capture"
         done
     done
     # Vacuity guards, mirroring the workspace-manifest one: a rename of examples/, or a shift to the
@@ -193,12 +206,13 @@ require_release_surfaces() {
         grep -Fqx "[$workspace_version]: https://github.com/tacticaldoll/tianheng/releases/tag/v$workspace_version" "$repo/CHANGELOG.md" \
             || fail "first release CHANGELOG link must target v$workspace_version"
     fi
+    capture_or_refuse 'the workspace package list' "$release_capture" cannot_judge -- workspace_packages
     while IFS= read -r package; do
         lock_version=$(lock_version_for "$package")
         [[ -n $lock_version ]] || fail "Cargo.lock is missing workspace package $package"
         [[ $lock_version == "$workspace_version" ]] \
             || fail "Cargo.lock package $package is $lock_version; expected $workspace_version"
-    done < <(workspace_packages)
+    done <"$release_capture"
 }
 
 [[ -f $repo/Cargo.toml ]] || cannot_judge "repository root $repo has no Cargo.toml"
@@ -214,8 +228,15 @@ malformed_release=$(git -C "$repo" log --format='%s' \
     | awk '$0 ~ /^release:/ && $0 !~ /^release: (0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ { print }')
 [[ -z $malformed_release ]] \
     || fail "malformed release history subject: $(head -n 1 <<<"$malformed_release")"
-mapfile -t release_records < <(git -C "$repo" log --format='%H%x09%s' \
-    | awk -F '\t' '$2 ~ /^release: (0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ { print }')
+# A pipeline cannot be handed to `capture_or_refuse "$@"`, so it becomes a function — which also puts the `git log`
+# status where `pipefail` can carry it out. Its failure is the measured one: truncated history made this gate
+# conclude snapshot state and invent `[Unreleased] must be empty`.
+release_history() {
+    git -C "$repo" log --format='%H%x09%s' \
+        | awk -F '\t' '$2 ~ /^release: (0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ { print }'
+}
+capture_or_refuse 'the release history' "$release_capture" cannot_judge -- release_history
+mapfile -t release_records <"$release_capture"
 [[ ${#release_records[@]} -gt 0 ]] \
     || cannot_judge "exact release history is unavailable; fetch full history containing release: X.Y.Z — a shallow clone cannot see the release spine, which is not the same as surfaces that disagree"
 release_record=${release_records[0]}
@@ -248,7 +269,11 @@ fi
 # is renamed/absent, the `find` yields nothing and every manifest-and-lock loop below would
 # otherwise iterate zero times and pass with zero assertions — a coherent-looking but vacuous
 # gate. Mirrors the release-spine emptiness guard above (`${#release_records[@]} -gt 0`).
-mapfile -t workspace_manifest_files < <(find "$repo/crates" -mindepth 2 -maxdepth 2 -name Cargo.toml -type f | sort)
+capture_or_refuse 'the workspace crate manifests' "$release_capture" cannot_judge -- \
+    find "$repo/crates" -mindepth 2 -maxdepth 2 -name Cargo.toml -type f
+sort -o "$release_capture" "$release_capture" \
+    || cannot_judge "could not sort the workspace crate manifests"
+mapfile -t workspace_manifest_files <"$release_capture"
 [[ ${#workspace_manifest_files[@]} -gt 0 ]] \
     || cannot_judge "found no workspace crate manifests under $repo/crates — the crate layout changed or is absent, so manifest and lock coherence cannot be verified"
 

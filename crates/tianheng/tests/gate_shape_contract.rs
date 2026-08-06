@@ -99,7 +99,7 @@ struct Property {
 /// to refuse: a tenth variant compiles once it has a label and a remedy, and is then never measured, because
 /// nothing forces it into `ALL`. Every test here iterates that list, so the new property would go unchecked
 /// while the reaction reported the surface conformant. Here there is no second list to forget.
-const PROPERTIES: [Property; 10] = [
+const PROPERTIES: [Property; 11] = [
     Property {
         label: "backstop",
         subject: Subject::Gate,
@@ -136,6 +136,16 @@ const PROPERTIES: [Property; 10] = [
                 }
             })
         },
+    },
+    Property {
+        label: "one checked capture",
+        subject: Subject::Gate,
+        remedy: "materialize the observation source, check the producer's status in the parent shell, then read \
+                 it — `scripts/lib/capture.sh` holds the rule; a process substitution's status never reaches the \
+                 parent, so a producer that emits some rows and then fails leaves a partial read judged as a \
+                 whole one",
+        holds: |unit| holds(reads_through_one_checked_capture(&unit.gate_text)),
+        detail: |_| None,
     },
     Property {
         label: "contract header",
@@ -407,6 +417,31 @@ fn name_from_basename(gate: &str) -> String {
     let stem = base.strip_prefix("check_").unwrap_or(base);
     let stem = stem.strip_suffix(".sh").unwrap_or(stem);
     stem.replace('_', " ")
+}
+
+/// Property — no observation source is consumed through a process substitution whose producer can fail.
+///
+/// `BACKLOG.md` recorded a swallowed subshell status as this window's most recurring class — nine mentions, every
+/// recurrence repaired one site at a time — and the review found eight more. Both directions are measured: a
+/// truncated `git ls-files --eol` made a gate report `ok (1 tracked text files)` at exit 0, and a truncated
+/// `git log` made another invent `[Unreleased] must be empty` at exit 1.
+///
+/// A **builtin over data already in memory** is permitted: `printf` re-splitting a held variable has no I/O to
+/// fail at, so demanding a temporary file for it would make the gate longer without making it safer. Permitted by
+/// naming the builtin rather than by listing the call sites, because a list of sites rots on the next edit and
+/// would make the property about where code is rather than what it does.
+///
+/// Every occurrence on a line is checked, not the first: a line whose first producer is a builtin and whose second
+/// is `git` would otherwise pass.
+fn reads_through_one_checked_capture(gate: &str) -> bool {
+    uncommented(gate).all(|line| {
+        line.split("< <(").skip(1).all(|producer| {
+            matches!(
+                producer.split_whitespace().next().unwrap_or(""),
+                "printf" | "echo"
+            )
+        })
+    })
 }
 
 /// Property 2 — the header declares the three-way contract, recognized by **shape, not by wording**.
@@ -786,6 +821,12 @@ fn fixture_missing(withheld: Option<&str>) -> PathBuf {
     } else {
         format!("{source}exit_contract_backstop 'probe'\n")
     };
+    // Withheld by consuming a fallible producer the way every measured recurrence did.
+    let capture = if missing("one checked capture") {
+        "while read -r line; do :; done < <(git ls-files)\n"
+    } else {
+        "capture=$(mktemp)\ngit ls-files >\"$capture\" || exit 2\nwhile read -r line; do :; done <\"$capture\"\n"
+    };
     let target = if missing("target directory") {
         "repo=$(pwd)\n"
     } else {
@@ -794,7 +835,7 @@ fn fixture_missing(withheld: Option<&str>) -> PathBuf {
     std::fs::write(
         root.join(SCRIPTS).join(FIXTURE_GATE),
         format!(
-            "#!/usr/bin/env bash\n#\n{contract}set -Eeuo pipefail\n{backstop}{target}printf 'probe ok\\n'\n"
+            "#!/usr/bin/env bash\n#\n{contract}set -Eeuo pipefail\n{backstop}{target}{capture}printf 'probe ok\\n'\n"
         ),
     )
     .expect("the fixture gate is writable");

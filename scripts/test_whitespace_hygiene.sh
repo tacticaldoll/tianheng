@@ -111,6 +111,35 @@ unhandled_output=$(PATH="$mktemp_stub:$PATH" "$check" "$clean" 2>&1) || unhandle
 grep -Fq 'an unhandled command failed' <<<"$unhandled_output" \
     || { printf 'an unhandled failure must say so and name where, got: %s\n' "$unhandled_output" >&2; exit 1; }
 
+# --- a partial read is not an empty result ---
+
+# The enumeration emits one valid row and THEN fails. Before the shared capture rule this gate consumed it through
+# `done < <(git ls-files --eol)`, whose status the parent never sees: it reported `whitespace hygiene ok (1 tracked
+# text files)` and exit 0 over a repository it had read one file of. The count fell from two to one in its own
+# output and nothing reacted to it.
+#
+# The vacuity guard cannot cover this direction and that is why this case exists beside it: `inspected -eq 0` was
+# built for zero rows, and a partial read gives one or more. They answer different questions.
+partial_stub=$fixture_root/partial-stub
+mkdir -p "$partial_stub"
+cat >"$partial_stub/git" <<STUB
+#!/usr/bin/env bash
+for argument in "\$@"; do [[ \$argument == --eol ]] && eol=1; done
+if [[ -n \$eol ]]; then
+    printf 'i/lf    w/lf    attr/                 \tdocs/notes.md\n'
+    exit 7
+fi
+exec $(command -v git) "\$@"
+STUB
+chmod +x "$partial_stub/git"
+
+partial_status=0
+partial_output=$(PATH="$partial_stub:$PATH" "$check" "$clean" 2>&1) || partial_status=$?
+[[ $partial_status -eq 2 ]] \
+    || { printf 'a producer that failed after emitting a row must exit 2, got %d: %s\n' "$partial_status" "$partial_output" >&2; exit 1; }
+grep -Fq 'a failed read is not an empty result' <<<"$partial_output" \
+    || { printf 'the refusal must name the partial read rather than fail incidentally, got: %s\n' "$partial_output" >&2; exit 1; }
+
 # --- read-only, like every gate in the family ---
 
 # On a fixture this gate has NOT already judged. Capturing `before` from a repository the gate had run over

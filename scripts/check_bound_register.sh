@@ -64,6 +64,9 @@ set -Eeuo pipefail
 # The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
 # is a trap rather than per-command handling, and the measurements behind both.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+# One way to read an observation source — see `scripts/lib/capture.sh`. This gate already had the shape locally in
+# `read_tracked_files`, and being local is exactly why the two `awk` producers below kept their status unchecked.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/capture.sh"
 exit_contract_backstop 'bound register'
 
 # The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to
@@ -620,6 +623,8 @@ cargo_errors=
 # `tracked_list` is the enumeration buffer `read_tracked_files` creates on its first call, for the same
 # reason and under the same expansion.
 tracked_list=
+reference_targets=$(mktemp)
+restatements=$(mktemp)
 # `definition_hits` is the citation-scan buffer, created on first use for the same reason and under the same
 # expansion: `grep`'s status and its output are both needed, so the output cannot come back through a
 # process substitution whose status no one reads.
@@ -627,7 +632,7 @@ definition_hits=
 # The qualified-heading scan's buffer, same reason and same expansion: `grep`'s status and its output are both
 # needed, so the output cannot come back through a process substitution whose status no one reads.
 qualified_hits=
-trap 'rm -f "$records" "$ids" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"} ${definition_hits:+"$definition_hits"} ${qualified_hits:+"$qualified_hits"}' EXIT
+trap 'rm -f "$records" "$ids" "$reference_targets" "$restatements" ${rendered:+"$rendered"} ${cargo_errors:+"$cargo_errors"} ${tracked_list:+"$tracked_list"} ${definition_hits:+"$definition_hits"} ${qualified_hits:+"$qualified_hits"}' EXIT
 
 # Through the same enumerator, so a `git` failure here names the enumeration rather than reporting that
 # the repository holds no spec. `git ls-files` lists tracked paths in index order, which is path-sorted,
@@ -788,7 +793,9 @@ $(printf '           %s\n' "${site_paths[@]}")"
         fi
         ;;
     REFERENCE)
-        mapfile -t targets < <(awk -F'\t' -v want="$a" '$1 == want { print $2 }' "$ids")
+        capture_or_refuse "the derived ids while resolving reference \`$a\`" "$reference_targets" \
+            cannot_judge -- awk -F'\t' -v want="$a" '$1 == want { print $2 }' "$ids"
+        mapfile -t targets <"$reference_targets"
         case ${#targets[@]} in
         0) fail "$file:$line references bound \`$a\`, which no declared bound produces; a dangling reference is indistinguishable from an undeclared bound" ;;
         1) : ;;
@@ -825,9 +832,11 @@ done <"$records"
 #
 # The reaction names the capabilities and demands a choice rather than computing ownership, which would mean
 # modelling which capability a test exercises: the judgment the drift law keeps out of a reaction.
-while IFS=$'\t' read -r test caps; do
-    fail "the test \`$test\` is cited by declared bounds in ${caps//,/, } — one behaviour has one defence, so one capability declares the bound and the others reference it with (bound: …)"
-done < <(awk -F'\t' '
+# A pipeline cannot be handed to `capture_or_refuse "$@"`, so it is a function — which also puts the `awk` status
+# where `pipefail` can carry it out. Reviewed as an unchecked producer and migrated with the class rather than left
+# because it reads an already-materialized file: "less likely to fail" is not "cannot".
+restatement_scan() {
+    awk -F'\t' '
     $1 == "BOUND" && $5 != "<none>" {
         cap = $2
         sub(/^openspec\/specs\//, "", cap)
@@ -841,7 +850,13 @@ done < <(awk -F'\t' '
         }
     }
     END { for (t in count) if (count[t] > 1) printf "%s\t%s\n", t, seen[t] }
-' "$records" | sort)
+' "$records" | sort
+}
+capture_or_refuse 'the declared-bound records while scanning for a restatement' "$restatements" \
+    cannot_judge -- restatement_scan
+while IFS=$'\t' read -r test caps; do
+    fail "the test \`$test\` is cited by declared bounds in ${caps//,/, } — one behaviour has one defence, so one capability declares the bound and the others reference it with (bound: …)"
+done <"$restatements"
 
 # The projection, built from the SAME records the verdicts came from rather than a second parse, so the
 # document and the reaction cannot disagree about what a bound is.

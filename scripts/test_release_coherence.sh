@@ -300,6 +300,32 @@ clean_stderr=$("$check" "$development" 2>&1 >/dev/null || true)
 [[ -z $clean_stderr ]] \
     || { printf 'a clean run must print nothing on stderr, got: %s\n' "$clean_stderr" >&2; exit 1; }
 
+# A partial read of the release history is not a shorter history. Before the shared capture rule this gate
+# consumed `git log` through `< <(…)`, whose status the parent never sees: measured with a stub emitting one real
+# release record and then exiting 7, it concluded the tree was in SNAPSHOT state and reported
+# `[Unreleased] must be empty` — exit 1, a violation invented from truncated history, sending a maintainer to look
+# for a problem that is not there. The other direction of the same class makes a gate report clean; this one makes
+# it report a defect. Both are why the status is checked in the parent.
+partial_history=$fixture_root/partial-history-stub
+mkdir -p "$partial_history"
+cat >"$partial_history/git" <<STUB
+#!/usr/bin/env bash
+for argument in "\$@"; do [[ \$argument == "--format=%H%x09%s" ]] && want=1; done
+if [[ \${want:-0} -eq 1 ]]; then
+    printf '%s\trelease: 0.2.0\n' "\$($(command -v git) -C "\$3" rev-parse HEAD 2>/dev/null || echo deadbeef)"
+    exit 7
+fi
+exec $(command -v git) "\$@"
+STUB
+chmod +x "$partial_history/git"
+
+partial_status=0
+partial_output=$(PATH="$partial_history:$PATH" "$check" "$snapshot" 2>&1) || partial_status=$?
+[[ $partial_status -eq 2 ]] \
+    || { printf 'a truncated release history must exit 2, got %d: %s\n' "$partial_status" "$partial_output" >&2; exit 1; }
+grep -Fq 'a failed read is not an empty result' <<<"$partial_output" \
+    || { printf 'the refusal must name the partial read, got: %s\n' "$partial_output" >&2; exit 1; }
+
 # The internal-pin loop's vacuity guard: it was the only loop in the gate without one, so a reformatted
 # `[workspace.dependencies]` table iterated zero times and the direction passed having asserted nothing about
 # any pin. The fixture keeps a real path dependency but in a form this line-oriented scan does not read.

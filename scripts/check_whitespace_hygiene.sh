@@ -43,6 +43,8 @@ set -Eeuo pipefail
 # The family's exit contract as a backstop — see `scripts/lib/exit_contract.sh` for what it catches, why it
 # is a trap rather than per-command handling, and the measurements behind both.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/exit_contract.sh"
+# One way to read an observation source — see `scripts/lib/capture.sh` for the two measured failures that shape it.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/capture.sh"
 exit_contract_backstop 'whitespace hygiene'
 
 # The repository to judge, so the failure matrix can build throwaway fixtures rather than being able to test
@@ -61,11 +63,26 @@ if git ls-files | grep -q '[[:space:]"\\]'; then
   exit 2
 fi
 
+cannot_judge() {
+  echo "cannot judge: $*" >&2
+  exit 2
+}
+
 blob=$(mktemp)
-trap 'rm -f "$blob"' EXIT
+enumeration=$(mktemp)
+scan=$(mktemp)
+trap 'rm -f "$blob" "$enumeration" "$scan"' EXIT
 
 inspected=0
 offenses=0
+
+# The enumeration is MATERIALIZED and its status checked here, in the parent shell, before a single row is read.
+# It was `done < <(git ls-files --eol)`, whose status the parent never sees: measured with a stub emitting one
+# clean row and then exiting 7, this gate reported `whitespace hygiene ok (1 tracked text files)` and exit 0 over
+# a repository it had read one file of. The printed count fell from two to one and nothing reacted to it — the
+# evidence was in the output. The vacuity guard below cannot cover this: it was built for zero rows, and a partial
+# read gives one.
+capture_or_refuse '`git ls-files --eol`' "$enumeration" cannot_judge -- git ls-files --eol
 
 report() {
   offenses=$((offenses + 1))
@@ -94,9 +111,14 @@ while IFS=$'\t' read -r eol_info path; do
   # blank-line test below fires on a blank line that *content* precedes, and there is none.)
   [ -s "$blob" ] || continue
 
+  # `grep` exits 1 on a clean file, which is the ORDINARY case here — and the very shape the shared exit-contract
+  # backstop once misfired on, printing cannot-judge once per clean file while the code stayed 0. So the ordinary
+  # empty is named, and any OTHER failure still refuses.
+  trailing_lines() { grep -n '[[:space:]]$' -- "$blob" | cut -d: -f1; }
+  capture_or_refuse "trailing whitespace in $path" "$scan" cannot_judge --ordinary-empty 1 -- trailing_lines
   while IFS= read -r line_no; do
     report "$path:$line_no: trailing whitespace"
-  done < <(grep -n '[[:space:]]$' -- "$blob" | cut -d: -f1)
+  done <"$scan"
 
   # A final newline TERMINATES the last line; a second one begins a blank line that no line
   # terminates. `tail -c 2` distinguishes them without reading the whole file.
@@ -109,7 +131,7 @@ while IFS=$'\t' read -r eol_info path; do
   if [ -n "$(tail -c 1 -- "$blob")" ]; then
     report "$path:$(($(wc -l <"$blob") + 1)): no newline at end of file"
   fi
-done < <(git ls-files --eol)
+done <"$enumeration"
 
 # Vacuity guard: a gate that inspected nothing reports clean, which is the silent pass this whole
 # script exists to prevent. It can only mean the parse above stopped matching git's output.
