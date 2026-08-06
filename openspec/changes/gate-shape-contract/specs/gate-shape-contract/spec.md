@@ -127,13 +127,17 @@ permitting, and the next reader would inherit a licence with no live instance be
 - **WHEN** an enumerated gate or its twin does not appear in the Definition of Done block
 - **THEN** the reaction fails, naming the file, because a gate nothing invokes is a comment
 
-#### Scenario: The publish-time gate's absence from the Definition of Done is a stated membership bound
+#### Scenario: The publish-time gate's absence from the Definition of Done is excused by name
+
+The exemption is deliberately **not** declared through the observation-bound mechanism. A bound says a reaction
+stops at a shape; this says one named instance is excused from a requirement. Declaring it as a bound would put
+something that is not an observation limit into the register whose leading figure counts exactly those — and
+`observation-bound-model` would then demand a typed extent for it, which no value in that model honestly fits.
 
 - **WHEN** the reaction reaches `scripts/check_publish_source.sh`, which the Definition of Done deliberately
   omits because it runs at publish time
-- **THEN** the reaction accepts its absence as declared policy rather than reporting a violation, a stated
-  membership bound, while still requiring its twin's membership
-- **PINNED-BY** `the_publish_time_gate_is_exempt_from_dod_membership`
+- **THEN** the reaction accepts its absence as declared policy rather than reporting a violation, while still
+  requiring its twin's membership
 
 #### Scenario: The membership exemption has stopped applying
 
@@ -165,19 +169,23 @@ comments. A projection implying completeness would mislead exactly where it is m
 
 ### Requirement: Observation bounds
 
+Each bound declared here SHALL also carry a **typed declaration** classifying where its measure stops, keyed on
+its derived id, per `observation-bound-model`. That capability landed after this one was proposed and its
+bijection refuses an unclassified bound, so the obligation is stated here rather than discovered at sync.
+
 Three of the six classes this capability exists for are semantic and SHALL NOT be claimed as observed. They
 are declared here rather than implied by the reaction's silence, because a bound a reader cannot see is one
 the capability is lying about — and a bound that reads as coverage is worse than an unguarded gap, since it
 tells a future auditor a real escape is governed policy.
 
-#### Scenario: Whether an enumeration carries a vacuity guard is not observed — a stated semantic bound
+#### Scenario: Whether an enumeration carries a vacuity guard is not observed — a stated bound
 
 - **WHEN** a gate iterates an enumeration with no guard against zero iterations
-- **THEN** the reaction does not claim to observe it, a stated semantic bound, rather than reporting the gate
+- **THEN** the reaction does not claim to observe it, a stated bound, rather than reporting the gate
   conformant on a property it never examined
 - **PINNED-BY** `a_missing_vacuity_guard_is_a_stated_semantic_bound`
 
-#### Scenario: Whether a read's status is checked in the parent shell is not observed — a stated semantic bound
+#### Scenario: Whether a read's status is checked in the parent shell is not observed — a stated bound
 
 - **WHEN** a gate reads a command's output in a subshell or process substitution and never inspects that
   command's status in the parent
@@ -185,19 +193,19 @@ tells a future auditor a real escape is governed policy.
   narrows the damage without detecting this shape, which is why both are stated separately
 - **PINNED-BY** `an_unchecked_read_status_is_a_stated_semantic_bound`
 
-#### Scenario: Whether a gate's 1-versus-2 assignment is correct is not observed — a stated semantic bound
+#### Scenario: Whether a gate's 1-versus-2 assignment is correct is not observed — a stated bound
 
 - **WHEN** a gate reports a genuine violation as cannot-judge, or a misconfiguration as a violation
-- **THEN** the reaction does not claim to observe it, a stated semantic bound: it checks that the twin
+- **THEN** the reaction does not claim to observe it, a stated bound: it checks that the twin
   asserts codes, never that the codes the gate chose are the right ones, which is the judgment that let a
   `return`-instead-of-`exit` inversion ride green
 - **PINNED-BY** `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
 
-#### Scenario: Shell units that are not a gate or its twin are outside the surface — a stated coverage bound
+#### Scenario: Shell units that are not a gate or its twin are outside the surface — a stated bound
 
 - **WHEN** a shell unit under `scripts/` is neither a `check_*` gate nor its twin — a sourced function
   library, a matrix over one, the example runner, or the publish tool
-- **THEN** it is outside this capability's surface, a stated coverage bound, so the projection's conformance
+- **THEN** it is outside this capability's surface, a stated bound, so the projection's conformance
   covers the gate surface and not everything under `scripts/`
 - **PINNED-BY** `units_outside_the_gate_pairing_are_outside_the_surface`
 

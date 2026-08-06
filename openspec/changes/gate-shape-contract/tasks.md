@@ -62,8 +62,14 @@ these at sync, so the tests must exist and be harness-registered before task 6.
       inspected in the parent.
 - [ ] 4.3 `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound` — same form, for a gate whose twin
       asserts codes while the gate assigns the wrong one (the `return`-instead-of-`exit` inversion).
-- [ ] 4.4 `the_publish_time_gate_is_exempt_from_dod_membership` and
-      `units_outside_the_gate_pairing_are_outside_the_surface`.
+- [ ] 4.4 `units_outside_the_gate_pairing_are_outside_the_surface`. **No pin for the publish-time exemption** —
+      it is a policy exemption rather than an observation bound and no longer goes through this mechanism, so
+      `the_publish_time_gate_is_exempt_from_dod_membership` is retired before it was written.
+- [ ] 4.6 Each of the four bounds also gets a **typed declaration** in `tianheng::observation_bounds()`, keyed on
+      its derived id: three `OutOfReach` (a vacuity guard, a parent-checked read status, and units outside the
+      pairing are all shapes this reaction never looks at) and one `UnderReacts` owned by the engine (the
+      1-versus-2 assignment is seen and not judged). `observation-bound-model`'s bijection refuses the sync
+      otherwise, which is the point.
 - [ ] 4.5 Confirm each name resolves under `bash scripts/check_bound_register.sh` **after** sync, and that the
       projection's leading figure still reads 0 unpinned.
 
@@ -94,6 +100,8 @@ these at sync, so the tests must exist and be harness-registered before task 6.
       today" — measured, properties 7 and 8 read 5 of 6 and 2 of 6. Keep the lesson: the entry was right that
       nothing enforced the shape and wrong that the shape held, and it was wrong because it counted the
       properties it had just finished creating.
+- [ ] 6.4a The register's census guard will catch `CHANGELOG.md`'s bound count once four bounds join the set —
+      47 across 17 becomes 51 across 18. Correct it against the run's figures, never by recounting.
 - [ ] 6.4 Sweep for prose this change invalidates in the same window — three sites have been the pattern
       (spec, `CHANGELOG.md`, doc comment); here the candidates are `PROJECT.md`'s audit-cycle decision, which
       gains a second instance of the enumerate-react-audit shape, and the WATCH entry on shell-gate

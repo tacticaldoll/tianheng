@@ -152,6 +152,32 @@ its suite. These twins are authored in this repository for this purpose, so requ
 authored side of that line. Measured: 6 of 6 already use it, so the requirement describes the tree rather than
 migrating it.
 
+### D11 — Revised beneath two capabilities that landed after it, and one of them changes what a bound is
+
+`observation-bound-model` closed the bound heading's qualifier slot and made a typed classification a second
+obligation beside a citation. Both bite this design:
+
+**The four genuine bounds lose their qualifiers**, because the classification now lives in `xuanji::Extent`
+rather than in a free word. Their derived ids change with the headings, as always.
+
+**The publish-time membership exemption leaves the bound mechanism entirely**, and this is the sharper
+correction. A bound says *a reaction stops at a shape*; that exemption says *one named instance is excused from a
+requirement*. They are different kinds of statement, and the difference is not pedantic: the register's projection
+leads with the count of declared false negatives, so admitting something that is not an observation limit
+pollutes the one figure a reader trusts. Worse, the bound model would demand a typed extent for it, and no value
+honestly fits — it is neither out of reach, nor reached-and-anything.
+
+That leaves policy exemptions **unenumerated**, which is a real gap and is recorded as one rather than solved
+here: the register enumerates bounds and nothing enumerates exemptions. The trigger for giving them their own
+register is a second instance; this is the first.
+
+**And one obligation is added.** Each of the four bounds needs a typed declaration in the shell, since the
+reaction lives there. Classification, from the WHEN/THEN rather than from the old adjective: the vacuity guard, a
+parent-checked read status, and units outside the pairing are shapes this reaction never looks at — `OutOfReach`.
+The 1-versus-2 assignment is different: the reaction *does* see the codes and declines to judge whether they are
+right, so it is an `UnderReacts` owned by the engine. Reading those four out of one adjective — `semantic` — is
+exactly what the qualifier slot could not do.
+
 ## Risks / Trade-offs
 
 **The reaction checks form, and form can be satisfied without substance.** `expect_pass` can appear in a

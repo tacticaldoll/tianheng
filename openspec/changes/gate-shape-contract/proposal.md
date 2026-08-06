@@ -53,6 +53,24 @@ projection of the result fresh.
 - **The shape gaps close in this change**, so the reaction lands green and every exemption in it is a
   declared bound rather than a backlog of known-failing units wearing the word.
 
+## Revised after two capabilities landed beneath it
+
+This proposal was written before `observation-bound-model` and `observer-protocol`, and building the first one
+found two defects in it. Both are corrected above rather than left to be discovered at sync:
+
+- **It minted two qualifier phrasings** (`semantic`, `membership`) into a bound heading's marker slot. That slot
+  no longer admits any: what kind of stop a bound describes is carried by `xuanji::Extent`, where the value set
+  is closed and a contradiction does not compile. The four genuine bounds now use the bare marker.
+- **Its publish-time membership exemption is not an observation bound at all.** A bound says a reaction stops at
+  a shape; that exemption says one named instance is excused from a requirement. Declaring it through the bound
+  mechanism would put something that is not an observation limit into the register whose leading figure counts
+  exactly those — and the bound model would then demand a typed extent for it, which no value honestly fits. It
+  is now stated in the requirement's own prose.
+
+One obligation is **added** by what landed: each bound declared here needs a typed classification in code, keyed
+on its derived id, because `observation-bound-model`'s bijection refuses an unclassified bound. Its reaction
+lives in the shell, so the shell declares them.
+
 ## Capabilities
 
 ### New Capabilities
