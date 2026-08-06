@@ -197,6 +197,17 @@ them.
   on a wrapped signature's continuation line is text it is never presented with. Pinned by a test that feeds the
   recognizer the one-line control and the wrapped form.
 
+- **A declared bound was narrowed after its stated cause was found wrong about its own history.**
+  `gate-shape-contract`'s `1-versus-2` bound said the judgment it declines to make is what let a
+  `return`-instead-of-`exit` inversion ride green. Read back against that inversion, it produced **both** of the
+  bound's directions in one gate — every refusal was `1`, so a shallow clone reported *"the release surfaces
+  disagree"*, while the exit-contract backstop turned every genuine incoherence into `2` — but what let it pass CI
+  was the matrix asserting a **non-zero status rather than a code**, in that commit's own words. That mechanism is
+  closed: the `exit codes` property requires the exact code from every twin and cites this very instance. So the
+  residual is only the semantic judgment, and the bound now says so at all **three** sites it was written — the
+  spec's THEN clause, the typed declaration's rationale, and the projections derived from them. A bound reads as
+  *permission*, so one that overstates what is unobserved misleads exactly as much as one that understates it.
+
 ### Changed
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the
   direction added one change earlier missed or overreached. It walked the filesystem, so an untracked scratch

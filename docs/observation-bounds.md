@@ -97,7 +97,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound`
 
-> the reaction does not claim to observe it, a stated bound: it checks that the twin
+> the reaction does not claim to observe it, a stated bound: it checks that the twin asserts codes,
 
 - **pinned by**: `a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound`
 
