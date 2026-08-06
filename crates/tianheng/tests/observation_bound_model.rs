@@ -187,6 +187,38 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
     all
 }
 
+/// Every one of the family's own declarations borrows every string it carries.
+///
+/// The specification says the family's declarations stay literals and that the owned-or-borrowed form exists for
+/// implementors whose reactions do not know their limits when they are written. Nothing measured it: the
+/// constructors accept anything convertible, so a declaration rewritten as `format!(…)` compiles, allocates on
+/// every pass of this reaction and of the projection below, and would be named by nothing.
+///
+/// The counter-example is deliberate and lives outside this workspace — `examples/observer-participant`'s
+/// declarations are computed on purpose, which is what the form is for. This reaction is about *these*
+/// declarations, so it reads the family's four sets and nothing else.
+#[test]
+fn every_declaration_of_this_family_borrows_every_string_it_carries() {
+    let declarations = declared_bounds();
+    // Not vacuous: an empty set would satisfy the filter below. `declared_bounds()` already refuses to be empty,
+    // and this states the dependency where a reader of this assertion is standing.
+    assert!(
+        !declarations.is_empty(),
+        "no declaration was read, so this reaction would hold over nothing"
+    );
+    let allocating: Vec<&str> = declarations
+        .values()
+        .filter(|decl| !decl.borrows_every_string())
+        .map(|decl| decl.id().as_str())
+        .collect();
+    assert!(
+        allocating.is_empty(),
+        "these declarations carry a computed string: {allocating:?} — the family's own bounds are literals \
+         because a bound is a property of a reaction that knows its limits when it is written, and the owned \
+         form exists for implementors whose reactions do not"
+    );
+}
+
 #[test]
 fn every_declared_bound_is_classified_and_every_classification_names_one() {
     let Some(root) = workspace_root() else {

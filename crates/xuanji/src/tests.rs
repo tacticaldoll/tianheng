@@ -911,10 +911,13 @@ fn a_bound_may_be_declared_from_computed_strings() {
 
 #[test]
 fn a_literal_declaration_borrows_rather_than_allocating() {
-    // The zero-allocation half is asserted rather than intended: every one of this family's fifty-three
-    // declarations is a literal, and `observation_bounds()` runs on every pass of the reaction that holds them
-    // against the specs. Pointer identity is the observation — a borrowed value still points into the literal,
-    // an owned one cannot.
+    // The zero-allocation half is asserted rather than intended: every one of this family's declarations is a
+    // literal, and `observation_bounds()` runs on every pass of the reaction that holds them against the specs.
+    // Pointer identity is the observation — a borrowed value still points into the literal, an owned one cannot.
+    //
+    // How many there are is deliberately not written here. It was, as "fifty-three", while the register counted
+    // fifty-four — a census in prose with no observation source, which `check_bound_register.sh` prints on every
+    // clean run precisely so a number like that is read rather than remembered.
     const SHAPE: &str = "a shape whose pointer identity is what this test reads";
     let declaration = BoundDecl::new(
         BoundId::new("probe-capability/a-literal-declaration-a-stated-bound"),
@@ -927,5 +930,103 @@ fn a_literal_declaration_borrows_rather_than_allocating() {
     assert!(
         std::ptr::eq(declaration.shape().as_ptr(), SHAPE.as_ptr()),
         "a declaration written from a literal must borrow it, not allocate a copy"
+    );
+    assert!(
+        declaration.borrows_every_string(),
+        "and it says so of itself, which is what the reaction over the family's declarations reads"
+    );
+}
+
+/// The discriminant answers **`false`** for a computed string in **each position, independently**.
+///
+/// Without this the reaction over the family's declarations would be untestable in the direction that matters. A
+/// discriminant that returned a constant `true` would satisfy every family declaration; and one written as a
+/// single short-circuiting `&&` chain — which it is — can pass while examining only its first operand. So each
+/// position is perturbed on its own, with every other string left literal, and the answer must be `false` for all
+/// of them.
+///
+/// The positions are the five strings a declaration carries: its id, the shape it names, the test that pins it,
+/// its extent's rationale, and the layer an inherited ownership names.
+#[test]
+fn a_computed_string_in_any_position_is_not_a_borrowing_declaration() {
+    let literal_id = || BoundId::new("probe-capability/a-computed-declaration-a-stated-bound");
+    let computed = || format!("built at {}", 1 + 1);
+
+    let owned_id = BoundDecl::new(
+        BoundId::new(computed()),
+        "a literal shape",
+        Extent::OutOfReach {
+            because: "a literal rationale".into(),
+        },
+        "a_pin",
+    );
+    assert!(!owned_id.borrows_every_string(), "the id is computed");
+
+    let owned_shape = BoundDecl::new(
+        literal_id(),
+        computed(),
+        Extent::OutOfReach {
+            because: "a literal rationale".into(),
+        },
+        "a_pin",
+    );
+    assert!(!owned_shape.borrows_every_string(), "the shape is computed");
+
+    let owned_pin = BoundDecl::new(
+        literal_id(),
+        "a literal shape",
+        Extent::OutOfReach {
+            because: "a literal rationale".into(),
+        },
+        computed(),
+    );
+    assert!(!owned_pin.borrows_every_string(), "the pin is computed");
+
+    let owned_rationale = BoundDecl::new(
+        literal_id(),
+        "a literal shape",
+        Extent::OutOfReach {
+            because: computed().into(),
+        },
+        "a_pin",
+    );
+    assert!(
+        !owned_rationale.borrows_every_string(),
+        "the extent's rationale is computed"
+    );
+
+    // The deepest string a declaration carries: nested two levels, inside the one extent that names an owner.
+    let owned_layer = BoundDecl::new(
+        literal_id(),
+        "a literal shape",
+        Extent::Reached(Reached::UnderReacts {
+            because: "a literal rationale".into(),
+            owner: Owner::Inherited {
+                from: computed().into(),
+            },
+        }),
+        "a_pin",
+    );
+    assert!(
+        !owned_layer.borrows_every_string(),
+        "the inherited layer name is computed"
+    );
+
+    // And the control: the same nested shape, all literal, must still answer `true` — otherwise the assertions
+    // above would hold for the wrong reason, an extent this deep simply always reading as owned.
+    let all_literal = BoundDecl::new(
+        literal_id(),
+        "a literal shape",
+        Extent::Reached(Reached::UnderReacts {
+            because: "a literal rationale".into(),
+            owner: Owner::Inherited {
+                from: "a literal layer".into(),
+            },
+        }),
+        "a_pin",
+    );
+    assert!(
+        all_literal.borrows_every_string(),
+        "a fully literal declaration borrows every string, however deeply nested"
     );
 }
