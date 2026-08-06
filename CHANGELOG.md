@@ -359,6 +359,14 @@ them.
   outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
   carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
   independent of whether any real gate still does.
+- CI checks out with **`actions/checkout@v5`** in all eight jobs. GitHub reports `@v4` as targeting the deprecated
+  Node.js 20 and is already forcing it onto Node 24, so nothing was broken — the bump is ahead of the date that
+  forcing stops. Verified as far as it can be locally: the eight occurrences are the only `checkout` references, the
+  workflow still parses to its eight jobs, `release-coherence`'s `fetch-depth: 0` is untouched (a shallow checkout
+  cannot see the release spine, and `v5` keeps that input), and the runner in use is well past `v5`'s minimum. Its
+  real verification is a CI run. `EmbarkStudios/cargo-deny-action@v2` is deliberately unchanged — GitHub's warning
+  does not name it, and the DoD-coherence gate's exemption comment cites that version.
+
 - **漏刻's audit-scoped bound declarations are gated with the reaction they describe.** `mod bounds` and its
   `pub use observation_bounds` were unconditional while `mod observer` immediately beneath them is behind the
   non-default `audit` feature, with a comment explaining exactly why — reasoning that applies to `bounds` and had
