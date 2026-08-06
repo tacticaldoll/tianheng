@@ -2,7 +2,8 @@ use serde_json::Value;
 use std::path::Path;
 
 use crate::{
-    Baseline, BaselineEntry, BoundaryKind, Finding, Polarity, Report, RuleKey, ScanDepth, Severity,
+    Baseline, BaselineEntry, BoundDecl, BoundId, BoundaryKind, Demonstrates, Extent,
+    FactGranularity, Finding, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
     StructuredFactIdentity, Violation, ViolationId,
 };
 
@@ -668,4 +669,199 @@ fn a_fixed_violation_leaves_a_stale_baseline_entry() {
     assert_eq!(stale[0].id, sample_violation().id());
     assert_eq!(stale[0].rule, "must not import");
     assert_eq!(stale[0].finding, "crate::projection");
+}
+
+// --- the declared-observation-bound model ---
+//
+// What is deliberately NOT tested here, recorded rather than silently skipped: "an out-of-reach bound cannot
+// claim an owner" and "granularity is carried only by the as-intended extent" have no tests, because the code
+// expressing either would not compile. A test that has to name a field the type does not offer is the wrong
+// proof; the nesting is the proof.
+
+fn out_of_reach_bound() -> BoundDecl {
+    BoundDecl::new(
+        BoundId::new(
+            "external-crate-confinement/a-confined-crate-use-inside-a-string-is-a-stated-bound",
+        ),
+        "a `use` inside a string literal or macro body",
+        Extent::OutOfReach {
+            because: "comments, string literals and macro bodies are stripped before scanning",
+        },
+        "a_confined_use_inside_a_string_or_macro_body_is_not_observed",
+    )
+}
+
+#[test]
+fn every_extent_derives_what_its_pinning_test_must_demonstrate() {
+    // Derived, never declared: a direction beside the extent would be a second copy of one fact, and two
+    // copies can disagree. Each pairing below is the one the specs' own defences take.
+    let cases = [
+        (
+            Extent::OutOfReach {
+                because: "stripped before scanning",
+            },
+            Demonstrates::DoesNotReact,
+        ),
+        (
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "the source file cannot be located",
+            }),
+            Demonstrates::RefusesToJudge,
+        ),
+        (
+            Extent::Reached(Reached::DeclinesToRefuse {
+                because: "a cfg-gated module's file is absent",
+            }),
+            Demonstrates::DoesNotRefuse,
+        ),
+        (
+            Extent::Reached(Reached::OverReacts {
+                because: "the rule governs the declared source kind",
+            }),
+            Demonstrates::ReactsOnHarmlessShape,
+        ),
+        (
+            Extent::Reached(Reached::UnderReacts {
+                because: "the use-map reads `use` only",
+                owner: Owner::Adopter,
+            }),
+            Demonstrates::DoesNotReact,
+        ),
+        (
+            Extent::Reached(Reached::AsIntended {
+                bounded: FactGranularity::Identity,
+                because: "the sub-node cannot be rendered without macro expansion",
+            }),
+            Demonstrates::CollapsesGranularity,
+        ),
+    ];
+
+    for (extent, expected) in cases {
+        assert_eq!(
+            extent.demonstrates(),
+            expected,
+            "{} must be defended by a test that {}",
+            extent.as_str(),
+            expected.as_str()
+        );
+    }
+}
+
+#[test]
+fn only_an_under_reaction_is_a_declared_false_negative() {
+    // The projection leads with this count, so the predicate is what decides whether a reader sees a bound as
+    // the family's audit backlog or as governed conservatism. An over-reaction is NOT one: it costs a false
+    // positive, which is the safe direction.
+    assert!(
+        Extent::Reached(Reached::UnderReacts {
+            because: "only crate-root renames are collected",
+            owner: Owner::Engine,
+        })
+        .is_declared_false_negative()
+    );
+
+    for safe in [
+        Extent::OutOfReach {
+            because: "foreign AST is not scanned",
+        },
+        Extent::Reached(Reached::RefusesToJudge {
+            because: "no verdict is possible",
+        }),
+        Extent::Reached(Reached::DeclinesToRefuse {
+            because: "skipping beats erroring",
+        }),
+        Extent::Reached(Reached::OverReacts {
+            because: "fail-closed on a composite shape",
+        }),
+        Extent::Reached(Reached::AsIntended {
+            bounded: FactGranularity::Presentation,
+            because: "a lifetime carries no architectural intent",
+        }),
+    ] {
+        assert!(
+            !safe.is_declared_false_negative(),
+            "{} is not a declared false negative",
+            safe.as_str()
+        );
+    }
+}
+
+#[test]
+fn a_declaration_reports_the_id_shape_extent_and_pin_it_was_given() {
+    let bound = out_of_reach_bound();
+    assert_eq!(
+        bound.id().as_str(),
+        "external-crate-confinement/a-confined-crate-use-inside-a-string-is-a-stated-bound"
+    );
+    assert_eq!(
+        bound.shape(),
+        "a `use` inside a string literal or macro body"
+    );
+    assert_eq!(bound.extent().as_str(), "out of reach");
+    assert_eq!(bound.extent().demonstrates(), Demonstrates::DoesNotReact);
+    assert_eq!(
+        bound.pinned_by(),
+        "a_confined_use_inside_a_string_or_macro_body_is_not_observed"
+    );
+    // The id renders as itself, so a diagnostic can name a bound without a lookup table.
+    assert_eq!(bound.id().to_string(), bound.id().as_str());
+}
+
+#[test]
+fn every_projection_label_is_distinct_within_its_enum() {
+    // Two values sharing a label would collapse in the projection while remaining distinct in code, so a
+    // reader would see one group where two exist. Asserted as a set, so adding a value with a duplicate label
+    // fails rather than merging silently.
+    let extents = [
+        Extent::OutOfReach { because: "" }.as_str(),
+        Reached::RefusesToJudge { because: "" }.as_str(),
+        Reached::DeclinesToRefuse { because: "" }.as_str(),
+        Reached::OverReacts { because: "" }.as_str(),
+        Reached::UnderReacts {
+            because: "",
+            owner: Owner::Engine,
+        }
+        .as_str(),
+        Reached::AsIntended {
+            bounded: FactGranularity::Identity,
+            because: "",
+        }
+        .as_str(),
+    ];
+    let unique: std::collections::BTreeSet<_> = extents.iter().collect();
+    assert_eq!(
+        unique.len(),
+        extents.len(),
+        "extent labels must be distinct"
+    );
+
+    let owners = [
+        Owner::Engine.as_str(),
+        Owner::Inherited { from: "" }.as_str(),
+        Owner::Adopter.as_str(),
+    ];
+    assert_eq!(
+        owners
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        owners.len(),
+        "owner labels must be distinct"
+    );
+
+    let demos = [
+        Demonstrates::DoesNotReact.as_str(),
+        Demonstrates::ReactsOnHarmlessShape.as_str(),
+        Demonstrates::RefusesToJudge.as_str(),
+        Demonstrates::DoesNotRefuse.as_str(),
+        Demonstrates::CollapsesGranularity.as_str(),
+    ];
+    assert_eq!(
+        demos
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        demos.len(),
+        "demonstration labels must be distinct"
+    );
 }
