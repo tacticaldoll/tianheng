@@ -131,6 +131,32 @@ fn defines_the_rule(source: &Source) -> bool {
 
 /// A holder calls the shared rule in **executed** text. A bare comment mentioning the call used to be enough:
 /// measured, a `// … assert_projection_matches( …` line added to an unrelated file made it register as a holder.
+/// How many projections a unit blesses: one per call to the shared rule, in executed text.
+///
+/// The count is the correspondence — see the caller for what counting does and does not reach.
+fn blessing_call_sites(source: &Source) -> usize {
+    if defines_the_rule(source) {
+        return 0;
+    }
+    source
+        .executed()
+        .lines()
+        .map(|line| {
+            RULE_CALLS
+                .iter()
+                .map(|call| {
+                    line.match_indices(call)
+                        // A call site is not preceded by a quote. THIS file declares the call names as string
+                        // data, so counting the bare string counted its own constant — the fourth self-reference
+                        // trap in this window, and the fourth time position rather than the string was the answer.
+                        .filter(|(at, _)| *at == 0 || !line[..*at].ends_with('"'))
+                        .count()
+                })
+                .sum::<usize>()
+        })
+        .sum()
+}
+
 fn holds_a_projection(source: &Source) -> bool {
     !defines_the_rule(source)
         && RULE_CALLS
@@ -264,12 +290,30 @@ fn every_generated_document_has_a_holder_and_every_holder_is_registered() {
 
     // Holder → document, enumerated independently of what the documents claim. A document naming its generator is
     // a claim by the document; the call site is the fact.
+    //
+    // Counted per blessing CALL SITE, not per file. Measured defect: a second `assert_projection_matches` in an
+    // existing holder, blessing a tracked document with no marker, was accepted in silence — the file was already
+    // paired with its first document and nothing asked about the second.
+    //
+    // What the count does not reach, stated because it would otherwise read as a per-pair correspondence: which
+    // call blesses which document is not resolved. The path is a constant in the source, and reading it would mean
+    // evaluating Rust rather than reading it, so two holders that swapped which document they name would satisfy
+    // this. A blessing nothing registers is caught; a permutation is not.
     for holder in &holders {
+        let blessings = blessing_call_sites(&read(&root, holder));
         let registering: Vec<&str> = documents
             .values()
             .filter(|entry| entry.generator.as_deref() == Some(holder.as_str()))
             .map(|entry| entry.document.as_str())
             .collect();
+        if registering.len() == 1 && blessings > 1 {
+            offences.push(format!(
+                "{holder}: blesses {blessings} projections and is registered by {} — a document it writes is \
+                 unregistered, and the register cannot know which",
+                registering.len()
+            ));
+            continue;
+        }
         match registering.len() {
             1 => {
                 // And the pair is tied from both sides: the holder must name the document it blesses, or the two

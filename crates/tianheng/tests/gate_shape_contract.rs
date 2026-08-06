@@ -20,6 +20,9 @@ use std::process::Command;
 
 use tianheng::testing::assert_projection_matches;
 
+mod support;
+use support::region::Source;
+
 /// The projection this reaction holds fresh.
 const PROJECTION: &str = "docs/gate-shape-contract.md";
 
@@ -234,8 +237,8 @@ fn holds(condition: bool) -> Holds {
 struct Unit {
     gate: String,
     twin: String,
-    gate_text: String,
-    twin_text: Option<String>,
+    gate_text: Source,
+    twin_text: Option<Source>,
     gate_in_dod: bool,
     twin_in_dod: bool,
 }
@@ -243,7 +246,7 @@ struct Unit {
 impl Unit {
     /// A twin property: `No` when there is no twin, which is honest rather than noisy — a file that does not
     /// exist holds none of them, and each absence names a real one.
-    fn twin_holds(&self, held: fn(&str) -> bool) -> Holds {
+    fn twin_holds(&self, held: fn(&Source) -> bool) -> Holds {
         match &self.twin_text {
             Some(text) => holds(held(text)),
             None => Holds::No,
@@ -329,22 +332,25 @@ fn twin_of(gate: &str) -> String {
 }
 
 /// Read a tracked file, naming it if it cannot be read.
-fn read(root: &Path, relative: &str) -> String {
+/// A tracked text, as a [`Source`] rather than a `String`: the region a property is about is then decided in the
+/// type, and a recognizer that wants executed text cannot be handed the whole file.
+fn read(root: &Path, relative: &str) -> Source {
     let path = root.join(relative);
-    std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("cannot read {path:?}: {err}"))
+    Source::of(
+        std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("cannot read {path:?}: {err}")),
+    )
 }
 
-/// Lines that are not comments. Every property below is a property of executed text.
-fn uncommented(text: &str) -> impl Iterator<Item = &str> {
-    text.lines()
-        .filter(|line| !line.trim_start().starts_with('#'))
-}
-
-/// The header: everything before the first `set -` line.
-fn header_of(gate: &str) -> &str {
-    match gate.find("\nset -") {
-        Some(index) => &gate[..index],
-        None => gate,
+/// A shell gate's header: everything before the first `set -` line.
+///
+/// Not [`Source::header`], which cuts at the first `##` heading — that is a Markdown document's shape. A gate's
+/// self-description ends where its execution begins, and the region types carry the document rule because that is
+/// the one four documents share.
+fn gate_header(gate: &Source) -> &str {
+    let text = gate.whole();
+    match text.find("\nset -") {
+        Some(index) => &text[..index],
+        None => text,
     }
 }
 
@@ -353,14 +359,15 @@ fn header_of(gate: &str) -> &str {
 /// Sourcing alone installs nothing, and the difference is not hypothetical: the trap is what turns an
 /// unhandled command's own status into the family's cannot-judge, and a gate that sourced without invoking
 /// would exit 7 or 131 with no output.
-fn installs_the_backstop(gate: &str) -> bool {
-    let sourced = uncommented(gate).any(|line| {
+fn installs_the_backstop(gate: &Source) -> bool {
+    let sourced = gate.executed().lines().any(|line| {
         let trimmed = line.trim_start();
         (trimmed.starts_with("source ") || trimmed.starts_with(". "))
             && trimmed.contains("lib/exit_contract.sh")
     });
-    let invoked =
-        uncommented(gate).any(|line| line.trim_start().starts_with(&format!("{BACKSTOP} ")[..]));
+    let invoked = gate
+        .executed()
+        .starts_a_line_with(&format!("{BACKSTOP} ")[..]);
     sourced && invoked
 }
 
@@ -380,9 +387,11 @@ enum BackstopLabel {
 /// A trailing comment is cut before the argument is read, for the reason the Definition-of-Done parse cuts one:
 /// a comment is not part of what runs, and reading it as part of the label would report a mismatch against text
 /// the shell never sees.
-fn backstop_label(gate: &str) -> BackstopLabel {
-    let invocation =
-        uncommented(gate).find(|line| line.trim_start().starts_with(&format!("{BACKSTOP} ")[..]));
+fn backstop_label(gate: &Source) -> BackstopLabel {
+    let invocation = gate
+        .executed()
+        .lines()
+        .find(|line| line.trim_start().starts_with(&format!("{BACKSTOP} ")[..]));
     let Some(line) = invocation else {
         return BackstopLabel::Absent;
     };
@@ -433,8 +442,8 @@ fn name_from_basename(gate: &str) -> String {
 ///
 /// Every occurrence on a line is checked, not the first: a line whose first producer is a builtin and whose second
 /// is `git` would otherwise pass.
-fn reads_through_one_checked_capture(gate: &str) -> bool {
-    uncommented(gate).all(|line| {
+fn reads_through_one_checked_capture(gate: &Source) -> bool {
+    gate.executed().lines().all(|line| {
         line.split("< <(").skip(1).all(|producer| {
             matches!(
                 producer.split_whitespace().next().unwrap_or(""),
@@ -451,8 +460,8 @@ fn reads_through_one_checked_capture(gate: &str) -> bool {
 /// literal sentence reads 3 of 6 and would report three gates violating a requirement every one of them
 /// meets. So the words for 0 and 1 are free and only the third term is fixed, because *cannot judge* is the
 /// term the family's contract is about.
-fn declares_the_three_way_contract(gate: &str) -> bool {
-    header_of(gate)
+fn declares_the_three_way_contract(gate: &Source) -> bool {
+    gate_header(gate)
         .lines()
         .filter_map(|line| line.trim_start().strip_prefix('#'))
         .any(|comment| {
@@ -470,13 +479,13 @@ fn declares_the_three_way_contract(gate: &str) -> bool {
 }
 
 /// Property 3 — the gate takes the repository to judge as an argument.
-fn accepts_a_target_directory(gate: &str) -> bool {
-    uncommented(gate).any(|line| line.contains("${1:-"))
+fn accepts_a_target_directory(gate: &Source) -> bool {
+    gate.executed().contains("${1:-")
 }
 
 /// Property 5 — the twin asserts an expected exit **code**.
-fn asserts_exit_codes(twin: &str) -> bool {
-    twin.contains("expected_status")
+fn asserts_exit_codes(twin: &Source) -> bool {
+    twin.executed().contains("expected_status")
 }
 
 /// Property 6 — the twin holds both a passing and a refusing direction.
@@ -484,8 +493,8 @@ fn asserts_exit_codes(twin: &str) -> bool {
 /// Checked through the twins' own helper names, which is legitimate here by ownership: these files are
 /// authored in this repository for this purpose, the same line `observation-bound-register` draws when it
 /// requires a scenario heading's form while declining to require a pinning test's name.
-fn holds_both_directions(twin: &str) -> bool {
-    twin.contains("expect_pass") && twin.contains("expect_fail")
+fn holds_both_directions(twin: &Source) -> bool {
+    twin.executed().contains("expect_pass") && twin.executed().contains("expect_fail")
 }
 
 /// Property 7 — the twin asserts the judged repository is unchanged.
@@ -494,8 +503,8 @@ fn holds_both_directions(twin: &str) -> bool {
 /// mechanically — the six twins compare a `git status` porcelain listing, a `HEAD`, a tag list and a `find`
 /// walk in four combinations — so what is required is the authored diagnostic, on the same ownership
 /// argument as property 6.
-fn asserts_read_only(twin: &str) -> bool {
-    uncommented(twin).any(|line| line.contains("mutated"))
+fn asserts_read_only(twin: &Source) -> bool {
+    twin.executed().contains("mutated")
 }
 
 /// Property 8 — the twin asserts a clean run's stderr is empty.
@@ -504,8 +513,10 @@ fn asserts_read_only(twin: &str) -> bool {
 /// capture assigned. Four twins previously grepped that capture for the backstop's own diagnostic, which
 /// catches the one line it names and reads every other line as clean — so the shape required here is
 /// emptiness, which has no wording to keep in step.
-fn asserts_a_silent_clean_run(twin: &str) -> bool {
-    let captures: Vec<&str> = uncommented(twin)
+fn asserts_a_silent_clean_run(twin: &Source) -> bool {
+    let captures: Vec<&str> = twin
+        .executed()
+        .lines()
         .filter(|line| line.contains("2>&1 >/dev/null"))
         .filter_map(|line| line.trim_start().split_once("=$(").map(|(name, _)| name))
         .filter(|name| {
@@ -516,7 +527,7 @@ fn asserts_a_silent_clean_run(twin: &str) -> bool {
         })
         .collect();
     captures.iter().any(|name| {
-        uncommented(twin).any(|line| {
+        twin.executed().lines().any(|line| {
             line.contains("-z")
                 && (line.contains(&format!("${name}")) || line.contains(&format!("${{{name}}}")))
         })
@@ -530,7 +541,8 @@ fn asserts_a_silent_clean_run(twin: &str) -> bool {
 /// that parses to zero commands, must refuse rather than report every property of nothing satisfied — the
 /// flattering direction, and the one `scripts/check_dod_coherence.sh` already refuses for this same list.
 fn definition_of_done(root: &Path) -> Vec<String> {
-    let text = read(root, "AGENTS.md");
+    let source = read(root, "AGENTS.md");
+    let text = source.whole();
     let heading = "\n## Definition of Done\n";
     let start = text.find(heading).unwrap_or_else(|| {
         panic!(
@@ -575,9 +587,27 @@ fn definition_of_done(root: &Path) -> Vec<String> {
     commands
 }
 
-/// Whether the Definition of Done invokes `path`.
+/// Whether the Definition of Done **invokes** `path`, rather than merely naming it.
+///
+/// Measured defect: `commands.iter().any(|c| c.contains(path))` accepted
+/// `test -f scripts/check_whitespace_hygiene.sh` in the block — a gate that executes nothing satisfying the
+/// membership requirement, which is worse than its absence because the projection then reports it reachable.
+///
+/// An invocation is recognized by the path sitting in **command position**: the interpreter's argument
+/// (`bash <path>`) or the command word itself (`<path>` or `./<path>`). Trailing arguments are allowed; a path
+/// appearing anywhere later on the line is a mention, which is what `test -f` and `printf` produce.
 fn definition_of_done_runs(commands: &[String], path: &str) -> bool {
-    commands.iter().any(|command| command.contains(path))
+    commands.iter().any(|command| {
+        let mut words = command.split_whitespace();
+        let Some(first) = words.next() else {
+            return false;
+        };
+        let invoked = match first {
+            "bash" | "sh" => words.next(),
+            _ => Some(first),
+        };
+        invoked.is_some_and(|word| word == path || word.trim_start_matches("./") == path)
+    })
 }
 
 /// Measure the whole surface. The enumeration, the pairing, and every property, in one pass.
@@ -767,7 +797,7 @@ fn no_unit_outside_the_pairing_carries_the_gate_contract() {
     // backstop by an unusual spelling is still seen. The exclusion from the surface is by *naming*, so this is
     // what stops it becoming a place a gate can hide — a `verify_*.sh` carrying the contract would otherwise
     // leave the surface by rename rather than by a spec change.
-    let carries = |path: &str| uncommented(&read(&root, path)).any(|line| line.contains(BACKSTOP));
+    let carries = |path: &str| read(&root, path).executed().contains(BACKSTOP);
 
     // The one exception is checked live, and BEFORE the loop it protects. Written after that loop first, and
     // the observation was that it never ran: pointing the exception at a unit carrying nothing made the real
@@ -1142,8 +1172,9 @@ fn render(units: &[Unit], excluded: &[String]) -> String {
 ///
 /// One fixture serves two bounds because one gate exhibits both shapes, which is how they reached this
 /// repository — the same gate, in the same commit.
-fn a_gate_with_both_semantic_defects() -> &'static str {
-    r#"#!/usr/bin/env bash
+fn a_gate_with_both_semantic_defects() -> Source {
+    Source::of(
+        r#"#!/usr/bin/env bash
 #
 # A fixture gate.
 #
@@ -1157,7 +1188,8 @@ while read -r line; do
     printf 'considering %s\n' "$line"
 done < <(grep -rn 'never matches anything' "$repo")
 printf 'fixture ok\n'
-"#
+"#,
+    )
 }
 
 /// `gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound`
@@ -1168,16 +1200,16 @@ printf 'fixture ok\n'
 fn a_missing_vacuity_guard_is_a_stated_semantic_bound() {
     let gate = a_gate_with_both_semantic_defects();
     assert!(
-        installs_the_backstop(gate)
-            && declares_the_three_way_contract(gate)
-            && accepts_a_target_directory(gate),
+        installs_the_backstop(&gate)
+            && declares_the_three_way_contract(&gate)
+            && accepts_a_target_directory(&gate),
         "the fixture must hold every property this reaction checks, or the bound is demonstrated by a gate \
          that fails for another reason"
     );
     // The defect is present and the reaction is silent about it. Demonstrated rather than stated: nothing in
     // the three properties above is a function of the guard.
     assert!(
-        gate.contains("no vacuity guard"),
+        gate.whole().contains("no vacuity guard"),
         "the fixture must actually carry the defect this bound is about"
     );
 }
@@ -1191,11 +1223,11 @@ fn a_missing_vacuity_guard_is_a_stated_semantic_bound() {
 fn an_unchecked_read_status_is_a_stated_semantic_bound() {
     let gate = a_gate_with_both_semantic_defects();
     assert!(
-        gate.contains("done < <(grep"),
+        gate.whole().contains("done < <(grep"),
         "the fixture must read through a process substitution, or this bound is demonstrated by nothing"
     );
     assert!(
-        installs_the_backstop(gate),
+        installs_the_backstop(&gate),
         "the gate holds the property the reaction does check — which is the point: the backstop is present \
          and the unchecked status is still invisible"
     );
@@ -1209,7 +1241,8 @@ fn an_unchecked_read_status_is_a_stated_semantic_bound() {
 /// exiting turn every violation into cannot-judge and ride green.
 #[test]
 fn a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound() {
-    let twin = r#"#!/usr/bin/env bash
+    let twin = Source::of(
+        r#"#!/usr/bin/env bash
 set -Eeuo pipefail
 expect_pass() { :; }
 expect_fail() {
@@ -1223,19 +1256,20 @@ expect_fail "$violating" 2 'a real violation'
 clean_stderr=$("$check" "$clean" 2>&1 >/dev/null || true)
 [[ -z $clean_stderr ]] || { printf 'noise\n' >&2; exit 1; }
 [[ $before == "$after" ]] || { printf 'the gate mutated the repository\n' >&2; exit 1; }
-"#;
+"#,
+    );
     assert!(
-        asserts_exit_codes(twin)
-            && holds_both_directions(twin)
-            && asserts_read_only(twin)
-            && asserts_a_silent_clean_run(twin),
+        asserts_exit_codes(&twin)
+            && holds_both_directions(&twin)
+            && asserts_read_only(&twin)
+            && asserts_a_silent_clean_run(&twin),
         "the fixture twin must hold every matrix property, or the bound is demonstrated by a twin that fails \
          for another reason"
     );
     // Every column reads held while the asserted code is the wrong one. Nothing above is a function of which
     // code the gate should have chosen, and choosing it is the judgment this reaction declines.
     assert!(
-        twin.contains("expect_fail \"$violating\" 2"),
+        twin.whole().contains("expect_fail \"$violating\" 2"),
         "the fixture must assert the wrong code, or this bound is demonstrated by nothing"
     );
 }

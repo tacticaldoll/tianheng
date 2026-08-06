@@ -7,7 +7,7 @@
 //!   * a **comment** made a file count as holding a projection (`projection_register.rs`);
 //!   * an **HTML comment** satisfied "a reader can find this document", being invisible to a reader;
 //!   * `expected_status` in a twin's **header comment** satisfied a property about executed text;
-//!   * `test -f scripts/check_x.sh` in the Definition of Done satisfied "this gate is invoked";
+//!   * a `test -f` on a gate's path in the Definition of Done satisfied "this gate is invoked";
 //!   * a signature block quoted in a **tag message** satisfied "this tag carries a signature";
 //!   * and two of my own probes measured a `usage:` banner and a dragged-along flag rather than the cell.
 //!
@@ -57,14 +57,20 @@ impl Source {
     }
 }
 
-/// Executed text: comments removed.
+/// Executed text: line comments removed.
+///
+/// Both markers, because this family's reactions read **shell** and **Rust** with one region rule. Written filtering
+/// only `#` first, and a Rust `///` line in the reaction's own source was then counted as a call site — the region
+/// was correct for the language it was written against and wrong for the one it was used on. A region type that is
+/// language-blind is only useful if it is blind in the safe direction.
 pub struct Executed<'a>(&'a str);
 
 impl<'a> Executed<'a> {
     pub fn lines(&self) -> impl Iterator<Item = &'a str> + use<'a> {
-        self.0
-            .lines()
-            .filter(|line| !line.trim_start().starts_with('#'))
+        self.0.lines().filter(|line| {
+            let trimmed = line.trim_start();
+            !trimmed.starts_with('#') && !trimmed.starts_with("//")
+        })
     }
 
     /// Whether any executed line contains `needle`.

@@ -2,14 +2,20 @@
 
 ### Requirement: Every generated document and the reaction holding it fresh SHALL correspond, in both directions
 
-Each enumerated document SHALL name the unit that generates it, and that unit SHALL be tracked. Each **projection a
-unit blesses** SHALL be named by exactly one enumerated document — the correspondence is per *(call site, document)*,
-never per file.
+Each enumerated document SHALL name the unit that generates it, and that unit SHALL be tracked. **The number of
+projections a unit blesses SHALL equal the number of enumerated documents naming it** — the correspondence is
+counted per blessing call site, never per file.
 
 Per file was a measured defect: a second `assert_projection_matches` added to an existing holder, blessing a tracked
-document that carries no marker, was accepted in silence. The file was already paired with its first document, and
+document that carries no marker, was accepted in silence. The file was already paired with its first document and
 nothing asked about the second. A holder blessing two documents and registering one is exactly the state the register
 exists to make impossible.
+
+The correspondence is by **count**, and what that does not reach is stated rather than implied: *which* call blesses
+*which* document is not resolved, because the path is a constant in the source and reading it would mean evaluating
+Rust rather than reading it. Two holders that each bless one document and swapped which one they name would satisfy
+this count. The measured defect — a blessing nothing registers — is caught; a permutation is not, and calling the
+count a per-pair correspondence would have been the overclaim this capability exists to refuse.
 
 The reaction SHALL enumerate the holders **independently of the documents' own claims**, and SHALL recognize both
 mechanisms this repository uses: a Rust call to the shared blessing rule, and a `check_*` gate writing its
