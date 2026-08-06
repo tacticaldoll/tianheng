@@ -1,0 +1,19 @@
+# A crate OUTSIDE the family joining a governance run as its own observation participant.
+#
+# Its own workspace (`[workspace]` below) so its deliberate faults are never swept by Tianheng's
+# workspace-wide gates; CI runs it in isolation via `scripts/test_examples.sh`, patching the family
+# crates to local source so the committed `tianheng = "0.4"` still resolves.
+#
+# One dependency, and deliberately nothing else. The participant is written against the published
+# surface alone — `tianheng::prelude` — because an example that needed a new export would be proving
+# the opposite of what it exists to prove.
+[package]
+name = "house_rules"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tianheng = "0.4"
+
+[workspace]

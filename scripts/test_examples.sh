@@ -252,6 +252,32 @@ fulfill_family hunyi/async-exposure
 fulfill_family tianheng/sans-io-pure
 fulfill_example sans-io-pure
 
+# ---------------------------------------------------------------- observer-participant
+# A crate OUTSIDE the family implementing `Observer` and joining a composed run. It fulfills no
+# published family: it governs a house rule no dimension of 三儀 owns, which is the point — the
+# ledger tracks boundary families, and this owner exists for the participation seam instead.
+cd "$WS/examples/observer-participant"
+mapfile -d '' PATCH < <(patch xuanji xingbiao guibiao hunyi louke tianheng)
+assert_patched "observer-participant" xuanji xingbiao guibiao hunyi louke tianheng
+quality_gates "observer-participant" "${PATCH[@]}"
+cargo test "${PATCH[@]}"
+got=0
+cargo run --quiet --bin demo "${PATCH[@]}" >"$EXAMPLE_ARTIFACT_ROOT/participant.txt" 2>&1 || got=$?
+expect "$got" 1 "observer-participant demo reacts"
+
+# The composition, never the exit code: each fault reacts on its own, so exit 1 would keep holding
+# with the participant contributing nothing at all. Both contributions must appear in the one
+# verdict, and the participant's DECLARED BOUND must be printed beside it — a participant whose
+# limits are unreadable at the point of the verdict is the honesty this protocol exists to require.
+grep -q "module must not import" "$EXAMPLE_ARTIFACT_ROOT/participant.txt" \
+    || { echo "::error::observer-participant lost 圭表's contribution from the composed verdict"; exit 1; }
+grep -q 'every module file opens with a `//!` header' "$EXAMPLE_ARTIFACT_ROOT/participant.txt" \
+    || { echo "::error::observer-participant lost the participant's own contribution — joining the run did nothing"; exit 1; }
+grep -q "house-rules/a-file-nested-below-src-is-out-of-reach" "$EXAMPLE_ARTIFACT_ROOT/participant.txt" \
+    || { echo "::error::observer-participant printed no computed bound id — the owned-or-borrowed declaration form has no caller again"; exit 1; }
+echo "ok  observer-participant folds an outside participant with 圭表 and declares computed bounds"
+fulfill_example observer-participant
+
 verify_example_coverage
 verify_family_coverage
 echo "all examples reacted as declared."

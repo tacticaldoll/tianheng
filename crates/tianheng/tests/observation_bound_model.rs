@@ -14,8 +14,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use tianheng::testing::assert_projection_matches;
 use tianheng::prelude::*;
+use tianheng::testing::assert_projection_matches;
 use tianheng::{BoundDecl, Extent, Owner, Reached};
 
 /// The projection this reaction holds fresh.
@@ -167,7 +167,10 @@ fn declared_bounds() -> BTreeMap<String, BoundDecl> {
     for decl in StaticObserver::new(Constitution::new("bounds").static_boundaries().clone())
         .bounds()
         .into_iter()
-        .chain(SemanticObserver::new(Constitution::new("bounds").semantic_boundaries().clone()).bounds())
+        .chain(
+            SemanticObserver::new(Constitution::new("bounds").semantic_boundaries().clone())
+                .bounds(),
+        )
         .chain(RuntimeObserver::new(Vec::new()).bounds())
         .chain(tianheng::observation_bounds())
     {

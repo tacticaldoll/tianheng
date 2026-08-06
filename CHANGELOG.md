@@ -143,6 +143,28 @@ them.
   copies. It now delegates. **Nothing to migrate** — no public API moves and both paths keep their exact
   behaviour, which is what the reaction proves.
 
+- **`Observer::bounds` has a consumer, and the protocol has a third-party implementor.** The method is required
+  precisely so a participant cannot join a run without declaring what it does not observe — and nothing read the
+  answer: measured, no call site anywhere outside a comment, so a dimension could have answered anything without
+  moving a verdict. Three implementors and 54 classified bounds made it look answered, because the register
+  reached those through each dimension's free function while the trait method was a parallel door nobody walked
+  through. The bijection now reads each dimension **through `Observer::bounds`**; returning the wrong set from one
+  fails it, naming every id left unclassified. The shell's own declarations keep coming from its free function,
+  because the shell composes dimensions rather than being one.
+
+  Nothing in the repository had ever been a **third party** to the protocol either — all three implementors are
+  family crates returning literal lists. `examples/observer-participant` is a crate outside the family that
+  implements `Observer` and joins a composed run: its house rule (every module file opens with a `//!` header) is
+  one no dimension of 三儀 has a DSL for, its violations carry its own structured identity, a subtree it was told
+  to read and could not is exit `2`, and its bounds are **computed** — id, shape, reason and pin all built with
+  `format!` from what it was configured to read. That is the first caller of `BoundId`'s owned-or-borrowed form
+  that is not a literal; it shipped in this window for a caller that did not yet exist. The example needed **no
+  addition to any crate's public API**, which is the load-bearing result: the published surface is enough to join
+  a run. A `COOKBOOK.md` entry shows the same shape at teaching size.
+
+  What it found, recorded in `BACKLOG.md` rather than worked around: `BoundaryKind` has no value a participant
+  owns, so an outsider's violation must claim one of the family's four kinds.
+
 ### Changed
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the
   direction added one change earlier missed or overreached. It walked the filesystem, so an untracked scratch
