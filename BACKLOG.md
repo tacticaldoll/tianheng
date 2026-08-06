@@ -730,11 +730,16 @@ it before assigning a horizon here; the entries below are horizons, not a second
   product-code touches are a helper extraction with branch-for-branch identical logic and an RAII guard whose
   exit codes, emitted documents, and syscalls are unchanged; everything else is `scripts/`, specs, docs, or
   tests, none of which is packaged. So the minor rests on that single item, not on the window's size.
-  The **branch is still named `release/0.4.1`** and the workspace version is still `0.4.0`; aligning the
-  branch name, the version bump, the dated CHANGELOG section, the internal pins, and `Cargo.lock` is the
-  release-preparation step and a human decision, not something the window's own commits do. Recorded here so
-  the number is decided from this note rather than from the branch name, which is the input this horizon list
-  exists to be.
+  The **branch now carries the number**: `release/0.4.1` was renamed to `release/0.5.0` on 2026-08-06, so the
+  first squash target names the release it will become — the role and the result agree, which is what
+  `AGENTS.md`'s branch rule asks of every branch. The rename was clean because nothing pointed at the old
+  name: no open pull request targeted it, CI triggers on `main` and on any pull request rather than on a
+  branch name, and the only prose naming it was this paragraph.
+
+  What is deliberately **not** done yet: the workspace version is still `0.4.0`, and the bump, the dated
+  CHANGELOG section, the internal pins, and `Cargo.lock` all move together at release preparation. Until then
+  `check_release_coherence.sh` reports `development: 0.4.0`, which is the coherent state for an open window —
+  it reads versions, never a branch name, so the rename changed nothing it judges.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 
 ## Explicitly not on the roadmap
