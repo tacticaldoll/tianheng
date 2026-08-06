@@ -119,8 +119,8 @@ consumer for an undemonstrated deduplication.
   window as the `gate-shape-contract` capability. `crates/tianheng/tests/gate_shape_contract.rs` enumerates the
   tracked shell units under `scripts/` whose basename begins with `check_` — on the basename rather than by a
   `check_*` pathspec, since git matches pathspec wildcards without `FNM_PATHNAME` and the glob would be
-  describing something other than what it says — pairs each gate with the twin its basename names, asserts the nine
-  checkable properties, declares the three semantic classes and the coverage limit as observation bounds with
+  describing something other than what it says — pairs each gate with the twin its basename names, asserts every
+  checkable property, declares the three semantic classes and the coverage limit as observation bounds with
   pinning tests, and projects `docs/gate-shape-contract.md`. A Rust reaction rather than a seventh shell gate,
   because `PINNED-BY` resolves only a harness-registered Rust function: a shell-defended capability would have
   landed those bounds `UNPINNED` and moved the register projection's leading figure off zero. It rides the

@@ -30,16 +30,16 @@ which is what every recurrence in the window that motivated it was.
 
 ## The surface
 
-| gate | twin | backstop | contract header | target directory | twin exists | exit codes | both directions | read-only | silent clean run | definition of done |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `scripts/check_bound_register.sh` | `scripts/test_bound_register.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `scripts/check_dod_coherence.sh` | `scripts/test_dod_coherence.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `scripts/check_publish_source.sh` | `scripts/test_publish_source.sh` | yes | yes | yes | yes | yes | yes | yes | yes | twin only (exempt) |
-| `scripts/check_reference_integrity.sh` | `scripts/test_reference_integrity.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `scripts/check_release_coherence.sh` | `scripts/test_release_coherence.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| `scripts/check_whitespace_hygiene.sh` | `scripts/test_whitespace_hygiene.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| gate | twin | backstop | backstop label | contract header | target directory | twin exists | exit codes | both directions | read-only | silent clean run | definition of done |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `scripts/check_bound_register.sh` | `scripts/test_bound_register.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `scripts/check_dod_coherence.sh` | `scripts/test_dod_coherence.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `scripts/check_publish_source.sh` | `scripts/test_publish_source.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | twin only (exempt) |
+| `scripts/check_reference_integrity.sh` | `scripts/test_reference_integrity.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `scripts/check_release_coherence.sh` | `scripts/test_release_coherence.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| `scripts/check_whitespace_hygiene.sh` | `scripts/test_whitespace_hygiene.sh` | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 
-6 gates, 9 properties each.
+6 gates, 10 properties each.
 
 ## Declared policy exemptions
 
