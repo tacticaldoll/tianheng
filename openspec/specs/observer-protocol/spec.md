@@ -197,4 +197,3 @@ it did not write.
 - **THEN** the fold merges it as given, a stated bound: it composes verdicts and does not adjudicate them, and
   a protocol that second-guessed each participant would need a second implementation of every dimension
 - **PINNED-BY** `the_fold_does_not_adjudicate_a_participant_s_verdict`
-
