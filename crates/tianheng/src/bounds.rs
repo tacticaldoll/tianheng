@@ -18,7 +18,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a declaration whose rationale names a cause that is not why the reaction stops",
             Extent::OutOfReach {
                 because: "the extent is typed and checkable while the rationale is prose the model never \
-                          reads; requiring the two to agree would trade a fact for a heuristic",
+                          reads; requiring the two to agree would trade a fact for a heuristic".into(),
             },
             "a_rationale_that_contradicts_its_extent_is_a_stated_bound",
         ),
@@ -35,7 +35,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "it is recorded as an under-reaction owned by the entry point rather than carrying a \
                           value of its own, so it shares that value with bounds whose answer does not depend \
                           on an entry point; one live instance does not earn a value every other member has \
-                          several of",
+                          several of".into(),
             }),
             "an_entry_dependent_bound_is_declared_as_under_reacting",
         ),
@@ -49,7 +49,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "granularity is carried only by the as-intended extent, so the pair has no \
                           representation at all; no declared bound exhibits it, and offering granularity on \
                           every extent would invite a combination nothing shows while weakening the nesting \
-                          that makes a contradiction unwritable",
+                          that makes a contradiction unwritable".into(),
             },
             "granularity_is_carried_only_by_the_as_intended_extent",
         ),
@@ -60,7 +60,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "an observer that declares some of its limits and omits others",
             Extent::OutOfReach {
                 because: "the trait compels a declaration and never a complete one; no reaction can enumerate \
-                          the limits of a reaction it did not write, so an omission is invisible",
+                          the limits of a reaction it did not write, so an omission is invisible".into(),
             },
             "an_observer_may_under_declare_its_bounds",
         ),
@@ -71,7 +71,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a composed observer returning an outcome that misjudges the workspace it read",
             Extent::Reached(Reached::UnderReacts {
                 because: "the fold composes verdicts and does not adjudicate them; second-guessing each \
-                          participant would need a second implementation of every dimension",
+                          participant would need a second implementation of every dimension".into(),
                 owner: Owner::Adopter,
             }),
             "the_fold_does_not_adjudicate_a_participant_s_verdict",
@@ -89,7 +89,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::OutOfReach {
                 because: "the reaction reads a gate's text for the properties it requires and models none of \
                           its control flow, so a loop that iterates nothing and reports clean is not a shape \
-                          it examines",
+                          it examines".into(),
             },
             "a_missing_vacuity_guard_is_a_stated_semantic_bound",
         ),
@@ -102,7 +102,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::OutOfReach {
                 because: "the backstop the reaction does require narrows the damage — an unhandled failure \
                           becomes cannot-judge rather than a foreign status — without detecting the shape, \
-                          which is why the two are stated separately",
+                          which is why the two are stated separately".into(),
             },
             "an_unchecked_read_status_is_a_stated_semantic_bound",
         ),
@@ -115,7 +115,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "the reaction requires the twin to assert an expected code and declines to judge \
                           whether the code the gate assigned is the right one; that judgment is what let a \
                           `fail` returning instead of exiting turn every violation into cannot-judge and ride \
-                          green",
+                          green".into(),
                 // The engine's own, not an adopter's: this reaction sees the codes and stops there, and no
                 // declaration by an adopter would change what it does with them.
                 owner: Owner::Engine,
@@ -131,7 +131,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "the enumeration is the `check_*` gate and the twin its basename names, so no other \
                           shell unit is judged on any of the properties it holds them to; the one thing asserted about \
                           them is that none carries the shared exit contract, which keeps the exclusion from \
-                          being a hiding place rather than making it coverage",
+                          being a hiding place rather than making it coverage".into(),
             },
             "units_outside_the_gate_pairing_are_outside_the_surface",
         ),
@@ -149,7 +149,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 because: "the header is read and never evaluated; running the command would mean re-entering the \
                           `cargo test` harness already running, or — for the shell mechanism — writing the \
                           projection into the tree the reaction is judging, which every gate in this family is \
-                          forbidden from doing",
+                          forbidden from doing".into(),
             },
             "a_regeneration_command_is_registered_and_never_run",
         ),
@@ -161,7 +161,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
              author also omitted the marker",
             Extent::Reached(Reached::UnderReacts {
                 because: "it is absent from both sides of the correspondence, so that correspondence holds over \
-                          a surface missing a member and the register reports itself complete",
+                          a surface missing a member and the register reports itself complete".into(),
                 // Not out of reach: the third mechanism's source sits in the tree this reaction already reads,
                 // so it is seen and not reacted to. Recording it as out-of-reach would be the misclassification
                 // this model exists to prevent — a silent false negative dressed as an invisible shape.

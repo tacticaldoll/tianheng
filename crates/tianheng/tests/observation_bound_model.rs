@@ -412,7 +412,8 @@ fn xuanji_bound_decl_with_a_lying_rationale() -> BoundDecl {
         tianheng::BoundId::new("probe-capability/a-fixture-bound"),
         "a shape used only to demonstrate that the rationale is not read",
         Extent::OutOfReach {
-            because: "this sentence claims the reaction over-reacts, which its extent denies",
+            because: "this sentence claims the reaction over-reacts, which its extent denies"
+                .into(),
         },
         "a_rationale_that_contradicts_its_extent_is_a_stated_bound",
     )

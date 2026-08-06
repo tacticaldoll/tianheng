@@ -21,7 +21,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a dependency declaring both `git` and `version` under a registry-only allowlist",
             Extent::Reached(Reached::OverReacts {
                 because: "the rule governs the declared source kind, not publish-eligibility, so a dependency \
-                          that would `cargo publish` successfully is still classified `Git`",
+                          that would `cargo publish` successfully is still classified `Git`".into(),
             }),
             "source_rule_flags_every_git_source_outside_a_registry_or_path_allowlist",
         ),
@@ -33,7 +33,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a confined-crate import under a `#[cfg(...)]` the build would not enable",
             Extent::Reached(Reached::OverReacts {
                 because: "the predicate is never evaluated, so a dead arm is observed as live — cfg-blindness \
-                          inherited from the module scanner, which reacts wider than the build",
+                          inherited from the module scanner, which reacts wider than the build".into(),
             }),
             "confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms",
         ),
@@ -45,7 +45,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::AsIntended {
                 bounded: FactGranularity::Identity,
                 because: "the two targets' module graphs are not told apart, so a finding names one \
-                          compilation unit where two share a path — the reaction still fires",
+                          compilation unit where two share a path — the reaction still fires".into(),
             }),
             "confine_external_crate_conflates_coincident_lib_and_bin_conventional_paths",
         ),
@@ -55,7 +55,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a confined-crate `use` written inside a string literal or a macro body",
             Extent::OutOfReach {
-                because: "comments, string literals and macro bodies are stripped before scanning",
+                because: "comments, string literals and macro bodies are stripped before scanning".into(),
             },
             "confine_ignores_a_use_inside_a_string_literal",
         ),
@@ -66,7 +66,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "`extern crate libc;` reaching a confined crate without a `use`",
             Extent::Reached(Reached::UnderReacts {
                 because: "the rule observes `use` imports only, so a crate reached through an \
-                          `extern crate` declaration and fully-qualified paths is not seen",
+                          `extern crate` declaration and fully-qualified paths is not seen".into(),
                 owner: Owner::Engine,
             }),
             "confine_ignores_an_extern_crate_declaration",
@@ -79,7 +79,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a read expressed through a verb outside the adopter's declared set",
             Extent::Reached(Reached::UnderReacts {
                 because: "the engine declines to guess which verbs are reads, so a verb the declaration \
-                          omits is not observed",
+                          omits is not observed".into(),
                 owner: Owner::Adopter,
             }),
             "inline_a_verb_outside_the_declared_set_is_a_bound",
@@ -91,7 +91,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a read reached through a method call on a receiver",
             Extent::OutOfReach {
                 because: "no type inference is performed on the receiver, so the confined path is never \
-                          resolved from the call site",
+                          resolved from the call site".into(),
             },
             "inline_receiver_method_read_is_a_bound",
         ),
@@ -102,7 +102,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a confined path mentioned in value position rather than called",
             Extent::Reached(Reached::UnderReacts {
                 because: "value-position mentions are not observed under the default; the adopter's \
-                          `strict_prefix_only()` reacts to them",
+                          `strict_prefix_only()` reacts to them".into(),
                 owner: Owner::Adopter,
             }),
             "inline_value_capture_is_a_bound_under_the_default",
@@ -114,7 +114,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a confined path reached through an external crate's own re-export",
             Extent::OutOfReach {
                 because: "foreign ASTs are not scanned, so a re-export chain leaving this workspace is \
-                          never followed",
+                          never followed".into(),
             },
             "inline_foreign_reexport_of_the_confined_path_is_a_bound",
         ),
@@ -125,7 +125,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a call reached through an `extern crate … as` alias head under strict-external",
             Extent::Reached(Reached::UnderReacts {
                 because: "the use-map is built from `use` declarations only, so an `extern crate` rename \
-                          binds an alias the resolver does not know",
+                          binds an alias the resolver does not know".into(),
                 owner: Owner::Engine,
             }),
             "inline_strict_external_extern_crate_rename_is_a_stated_bound",
@@ -137,7 +137,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a fully-qualified call into an external crate with no `use`",
             Extent::Reached(Reached::UnderReacts {
                 because: "the default observes `use`-rooted paths, leaving the un-`use`d fully-qualified \
-                          spelling to the adopter's stricter opt-in",
+                          spelling to the adopter's stricter opt-in".into(),
                 owner: Owner::Adopter,
             }),
             "inline_strict_external_absent_fully_qualified_call_is_a_bound",

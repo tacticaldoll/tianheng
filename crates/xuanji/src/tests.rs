@@ -685,7 +685,8 @@ fn out_of_reach_bound() -> BoundDecl {
         ),
         "a `use` inside a string literal or macro body",
         Extent::OutOfReach {
-            because: "comments, string literals and macro bodies are stripped before scanning",
+            because: "comments, string literals and macro bodies are stripped before scanning"
+                .into(),
         },
         "a_confined_use_inside_a_string_or_macro_body_is_not_observed",
     )
@@ -698,45 +699,45 @@ fn every_extent_derives_what_its_pinning_test_must_demonstrate() {
     let cases = [
         (
             Extent::OutOfReach {
-                because: "stripped before scanning",
+                because: "stripped before scanning".into(),
             },
             Demonstrates::DoesNotReact,
         ),
         (
             Extent::Reached(Reached::RefusesToJudge {
-                because: "the source file cannot be located",
+                because: "the source file cannot be located".into(),
             }),
             Demonstrates::RefusesToJudge,
         ),
         (
             Extent::Reached(Reached::DeclinesToRefuse {
-                because: "a cfg-gated module's file is absent",
+                because: "a cfg-gated module's file is absent".into(),
             }),
             Demonstrates::DoesNotRefuse,
         ),
         (
             Extent::Reached(Reached::OverReacts {
-                because: "the rule governs the declared source kind",
+                because: "the rule governs the declared source kind".into(),
             }),
             Demonstrates::ReactsOnHarmlessShape,
         ),
         (
             Extent::Reached(Reached::UnderReacts {
-                because: "the use-map reads `use` only",
+                because: "the use-map reads `use` only".into(),
                 owner: Owner::Adopter,
             }),
             Demonstrates::DoesNotReact,
         ),
         (
             Extent::Reached(Reached::NotAViolation {
-                because: "`as _` binds no nameable path",
+                because: "`as _` binds no nameable path".into(),
             }),
             Demonstrates::DoesNotReact,
         ),
         (
             Extent::Reached(Reached::AsIntended {
                 bounded: FactGranularity::Identity,
-                because: "the sub-node cannot be rendered without macro expansion",
+                because: "the sub-node cannot be rendered without macro expansion".into(),
             }),
             Demonstrates::CollapsesGranularity,
         ),
@@ -760,7 +761,7 @@ fn only_an_under_reaction_is_a_declared_false_negative() {
     // positive, which is the safe direction.
     assert!(
         Extent::Reached(Reached::UnderReacts {
-            because: "only crate-root renames are collected",
+            because: "only crate-root renames are collected".into(),
             owner: Owner::Engine,
         })
         .is_declared_false_negative()
@@ -768,20 +769,20 @@ fn only_an_under_reaction_is_a_declared_false_negative() {
 
     for safe in [
         Extent::OutOfReach {
-            because: "foreign AST is not scanned",
+            because: "foreign AST is not scanned".into(),
         },
         Extent::Reached(Reached::RefusesToJudge {
-            because: "no verdict is possible",
+            because: "no verdict is possible".into(),
         }),
         Extent::Reached(Reached::DeclinesToRefuse {
-            because: "skipping beats erroring",
+            because: "skipping beats erroring".into(),
         }),
         Extent::Reached(Reached::OverReacts {
-            because: "fail-closed on a composite shape",
+            because: "fail-closed on a composite shape".into(),
         }),
         Extent::Reached(Reached::AsIntended {
             bounded: FactGranularity::Presentation,
-            because: "a lifetime carries no architectural intent",
+            because: "a lifetime carries no architectural intent".into(),
         }),
     ] {
         assert!(
@@ -819,18 +820,18 @@ fn every_projection_label_is_distinct_within_its_enum() {
     // reader would see one group where two exist. Asserted as a set, so adding a value with a duplicate label
     // fails rather than merging silently.
     let extents = [
-        Extent::OutOfReach { because: "" }.as_str(),
-        Reached::RefusesToJudge { because: "" }.as_str(),
-        Reached::DeclinesToRefuse { because: "" }.as_str(),
-        Reached::OverReacts { because: "" }.as_str(),
+        Extent::OutOfReach { because: "".into() }.as_str(),
+        Reached::RefusesToJudge { because: "".into() }.as_str(),
+        Reached::DeclinesToRefuse { because: "".into() }.as_str(),
+        Reached::OverReacts { because: "".into() }.as_str(),
         Reached::UnderReacts {
-            because: "",
+            because: "".into(),
             owner: Owner::Engine,
         }
         .as_str(),
         Reached::AsIntended {
             bounded: FactGranularity::Identity,
-            because: "",
+            because: "".into(),
         }
         .as_str(),
     ];
@@ -843,7 +844,7 @@ fn every_projection_label_is_distinct_within_its_enum() {
 
     let owners = [
         Owner::Engine.as_str(),
-        Owner::Inherited { from: "" }.as_str(),
+        Owner::Inherited { from: "".into() }.as_str(),
         Owner::Adopter.as_str(),
     ];
     assert_eq!(
@@ -869,5 +870,62 @@ fn every_projection_label_is_distinct_within_its_enum() {
             .len(),
         demos.len(),
         "demonstration labels must be distinct"
+    );
+}
+
+#[test]
+fn a_bound_may_be_declared_from_computed_strings() {
+    // What the `&'static str` form forbade outright. `Observer::bounds` carries no default body, so declaring
+    // bounds is a condition of implementing the protocol — and an implementor whose bounds are *discovered*
+    // rather than written was mandated to declare limits it had no way to name. This test is the whole reason the
+    // strings are owned-or-borrowed; without the change it does not compile, which is the honest negative run for
+    // a type-level guard.
+    let discovered = "plugin-42";
+    let declaration = BoundDecl::new(
+        BoundId::new(format!(
+            "third-party-observer/{discovered}-is-not-scanned-a-stated-bound"
+        )),
+        format!("a shape only {discovered} exhibits"),
+        Extent::OutOfReach {
+            because: format!(
+                "{discovered} was discovered at run time, so no literal could name it"
+            )
+            .into(),
+        },
+        format!("a_{}_bound_is_pinned", discovered.replace('-', "_")),
+    );
+
+    assert_eq!(
+        declaration.id().as_str(),
+        "third-party-observer/plugin-42-is-not-scanned-a-stated-bound"
+    );
+    assert_eq!(declaration.pinned_by(), "a_plugin_42_bound_is_pinned");
+    // And it behaves exactly as a literal declaration does: the extent still decides the predicted evidence, and
+    // an out-of-reach bound is still not a declared false negative.
+    assert_eq!(
+        declaration.extent().demonstrates(),
+        Demonstrates::DoesNotReact
+    );
+    assert!(!declaration.extent().is_declared_false_negative());
+}
+
+#[test]
+fn a_literal_declaration_borrows_rather_than_allocating() {
+    // The zero-allocation half is asserted rather than intended: every one of this family's fifty-three
+    // declarations is a literal, and `observation_bounds()` runs on every pass of the reaction that holds them
+    // against the specs. Pointer identity is the observation — a borrowed value still points into the literal,
+    // an owned one cannot.
+    const SHAPE: &str = "a shape whose pointer identity is what this test reads";
+    let declaration = BoundDecl::new(
+        BoundId::new("probe-capability/a-literal-declaration-a-stated-bound"),
+        SHAPE,
+        Extent::OutOfReach {
+            because: "a literal rationale".into(),
+        },
+        "a_literal_declaration_borrows_rather_than_allocating",
+    );
+    assert!(
+        std::ptr::eq(declaration.shape().as_ptr(), SHAPE.as_ptr()),
+        "a declaration written from a literal must borrow it, not allocate a copy"
     );
 }

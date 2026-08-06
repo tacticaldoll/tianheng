@@ -46,7 +46,10 @@ them.
   `Run::over(manifest).observe(a).observe(b).verdict()`, so no trait object appears in any signature and a
   participant composed onto an accumulator that already cannot judge is not evaluated at all. Assembly order is
   part of the contract — it decides which cannot-judge is reported. 圭表, 渾儀 and 漏刻 each implement it, so the
-  protocol is dogfooded rather than offered. **Nothing to migrate**: `check_constitution`, `run` and the CLI keep
+  protocol is dogfooded rather than offered: `StaticObserver`, `SemanticObserver` and `RuntimeObserver`, all three
+  re-exported through `tianheng` and its prelude. `RuntimeObserver` is behind 漏刻's **`audit` feature** — the
+  `tianheng` shell enables it, so it is always present there, and a crate depending on `louke` directly must ask
+  for the feature. **Nothing to migrate**: `check_constitution`, `run` and the CLI keep
   their exact path and behaviour, coverage included, and the protocol is an additional entry rather than a
   replacement.
 
@@ -60,6 +63,15 @@ them.
   phrasings and could not be counted at all. Read it beside `docs/observation-bounds.md`: one says what the
   specs declare, the other says what kind of stop each is. **Nothing to migrate** — no existing signature,
   `Constitution`, baseline format or report shape changed, and the new surface is opt-in to read.
+
+  A declaration's strings are **owned-or-borrowed** (`Cow<'static, str>`), so a bound whose id, shape or rationale
+  is computed can be declared at all: `Observer::bounds` carries no default body, and an implementor whose bounds
+  are discovered rather than written — an observer over a plugin set, or over roots it scanned — was otherwise
+  mandated to declare limits it had no way to name. A literal declaration is written exactly as before and still
+  borrows, which is asserted by pointer identity rather than intended; every one of the family's own fifty-three
+  declarations is a literal. Found in this window's pre-release review, and it earns no **BREAKING** mark for a
+  measured reason rather than a remembered one: none of these types exists in `0.4.0`, so no adopter has the
+  narrower form.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
@@ -127,6 +139,14 @@ them.
 - One matcher now decides the `(bound: …)` syntax. Two independently written ones did — an `awk` regex and a
   shell `grep -qE` whose whitespace classes differed — and clearing disagreeing with resolution about which
   references exist is the divergence that cost this window a review round.
+
+### Added
+- `tianheng::testing::assert_projection_matches` is the bless-and-diff rule for **any** generated document, not
+  only a rendered `Constitution`. A free function rather than a method, because blessing an unrelated document has
+  nothing to do with a `Constitution` and requiring one would be a dependency invented by the API's shape.
+  `GovernanceTest::assert_projection_fresh` delegates to it, so an adopter holding their own generated document —
+  a register, a table, a report — gets the same `BLESS=1` behaviour and the same diff instead of writing a second
+  copy of it.
 
 ### Documentation
 - The previous entry's own repair created a hole, and a review proved it with a fixture. A `(bound: …)`

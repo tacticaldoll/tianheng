@@ -22,33 +22,44 @@
 //! [`Reached::RefusesToJudge`] against [`Reached::DeclinesToRefuse`], and [`Reached::UnderReacts`], which
 //! alone carries an [`Owner`].
 
+use std::borrow::Cow;
+
 /// A declared bound's identity: `<capability>/<scenario-slug>`, derived from where the bound is declared.
 ///
-/// Never allocated, so no ledger exists to fall out of step with the specs. The slug is the declaring
-/// scenario's heading, lowercased, with each run of non-alphanumerics collapsed to one hyphen and the ends
-/// trimmed.
+/// Owned-or-borrowed: a literal id borrows and allocates nothing, which is what every one of this family's own
+/// declarations is, while an implementor whose ids are discovered rather than written can still name them. It
+/// said "never allocated" while the type was `&'static str`, and that mandated a declaration the caller had no
+/// way to produce. The slug is the declaring scenario's heading, lowercased, with each run of non-alphanumerics
+/// collapsed to one hyphen and the ends trimmed.
 ///
 /// The form is **not** validated here. A malformed id simply matches no declared scenario, and the reaction
 /// holding the two sets equal names it — one check rather than two that could disagree about what is well
 /// formed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BoundId(&'static str);
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BoundId(Cow<'static, str>);
 
 impl BoundId {
     /// The id as written in the declaring spec's derived form.
-    pub const fn new(id: &'static str) -> Self {
-        Self(id)
+    ///
+    /// Takes anything convertible, so a literal reads as it always did and a computed id — an observer over a
+    /// discovered plugin set, or over roots it scanned — is expressible at all. Before this it was not: the type
+    /// was `&'static str`, which mandated a declaration and admitted only one written by hand.
+    pub fn new(id: impl Into<Cow<'static, str>>) -> Self {
+        Self(id.into())
     }
 
-    /// The underlying `<capability>/<scenario-slug>` text.
-    pub const fn as_str(&self) -> &'static str {
-        self.0
+    /// The underlying `<capability>/<scenario-slug>` text, borrowed from this id.
+    ///
+    /// `&str` rather than `&'static str`: an owned-or-borrowed value can only honestly lend for as long as it
+    /// lives, and nothing holds one beyond its declaration.
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
 impl std::fmt::Display for BoundId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.0)
+        f.write_str(&self.0)
     }
 }
 
@@ -57,12 +68,12 @@ impl std::fmt::Display for BoundId {
 /// The declaring spec scenario states the bound for a *reader*; this states what kind of stop it is for a
 /// *reaction*. Neither alone is the declaration — a scenario with no declaration is an unclassified claim, and
 /// a declaration with no scenario is a classification no spec reader can find.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoundDecl {
     id: BoundId,
-    shape: &'static str,
+    shape: Cow<'static, str>,
     extent: Extent,
-    pinned_by: &'static str,
+    pinned_by: Cow<'static, str>,
 }
 
 impl BoundDecl {
@@ -71,28 +82,28 @@ impl BoundDecl {
     /// `shape` names what the bound stops at, in the declaring scenario's terms. `pinned_by` is the test that
     /// defends it — what that test must *demonstrate* is not a parameter, because [`Extent::demonstrates`]
     /// already determines it and a second copy of one fact can disagree with the first.
-    pub const fn new(
+    pub fn new(
         id: BoundId,
-        shape: &'static str,
+        shape: impl Into<Cow<'static, str>>,
         extent: Extent,
-        pinned_by: &'static str,
+        pinned_by: impl Into<Cow<'static, str>>,
     ) -> Self {
         Self {
             id,
-            shape,
+            shape: shape.into(),
             extent,
-            pinned_by,
+            pinned_by: pinned_by.into(),
         }
     }
 
     /// The declared id, matched against the declaring spec's derived id.
-    pub const fn id(&self) -> BoundId {
-        self.id
+    pub fn id(&self) -> &BoundId {
+        &self.id
     }
 
     /// What the bound stops at.
-    pub const fn shape(&self) -> &'static str {
-        self.shape
+    pub fn shape(&self) -> &str {
+        &self.shape
     }
 
     /// Where the measure stops.
@@ -101,8 +112,8 @@ impl BoundDecl {
     }
 
     /// The name of the test that defends this bound.
-    pub const fn pinned_by(&self) -> &'static str {
-        self.pinned_by
+    pub fn pinned_by(&self) -> &str {
+        &self.pinned_by
     }
 }
 
@@ -110,7 +121,7 @@ impl BoundDecl {
 ///
 /// Nested rather than flat so that a shape the observation source never reached has no place to carry a claim
 /// about how the reaction treated it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Extent {
     /// The observation source never sees the shape — text stripped before scanning, source outside the
@@ -120,7 +131,7 @@ pub enum Extent {
     /// it carries no owner for that reason: nothing is owed for a shape nothing observes by design.
     OutOfReach {
         /// Why the source does not reach it.
-        because: &'static str,
+        because: Cow<'static, str>,
     },
     /// The observation source sees the shape. What the reaction then does is the nested question.
     Reached(Reached),
@@ -155,7 +166,7 @@ impl Extent {
 }
 
 /// What a reaction does with a shape it *did* see.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Reached {
     /// Refuses to give a verdict — exit 2 — rather than guess.
@@ -172,7 +183,7 @@ pub enum Reached {
     /// than from a current instance.
     RefusesToJudge {
         /// Why a verdict cannot be given here.
-        because: &'static str,
+        because: Cow<'static, str>,
     },
     /// Deliberately does *not* refuse — continues past a shape that could have been a scan error.
     ///
@@ -180,12 +191,12 @@ pub enum Reached {
     /// bound records that a cfg-gated module with an absent file is skipped rather than failing the gate.
     DeclinesToRefuse {
         /// Why continuing is preferred to erroring.
-        because: &'static str,
+        because: Cow<'static, str>,
     },
     /// Reacts more than the truth. The safe direction; the cost is a false positive an adopter must dismiss.
     OverReacts {
         /// Why the reaction is deliberately wider than the shape.
-        because: &'static str,
+        because: Cow<'static, str>,
     },
     /// Reacts *less* than the truth — a declared false negative.
     ///
@@ -194,7 +205,7 @@ pub enum Reached {
     /// reason.
     UnderReacts {
         /// Why the reaction stops short.
-        because: &'static str,
+        because: Cow<'static, str>,
         /// Who must act if this is ever to close.
         owner: Owner,
     },
@@ -207,7 +218,7 @@ pub enum Reached {
     /// plain item inside a function body is unreachable as `crate::…`.
     NotAViolation {
         /// Why the shape is genuinely not a violation.
-        because: &'static str,
+        because: Cow<'static, str>,
     },
     /// Reacts exactly as intended. What is bounded is the *granularity of the fact*, not the reaction.
     ///
@@ -219,7 +230,7 @@ pub enum Reached {
         /// granularity-limited, so offering this on every extent would invite a combination nothing exhibits.
         bounded: FactGranularity,
         /// Why the granularity stops where it does.
-        because: &'static str,
+        because: Cow<'static, str>,
     },
 }
 
@@ -253,7 +264,7 @@ impl Reached {
 ///
 /// Carried only by [`Reached::UnderReacts`]. Nothing is owed for a shape nothing observes by design, and an
 /// owner field on every extent would be decorative wherever it is not load-bearing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Owner {
     /// This dimension's own engine. Closing it is ordinary work here.
@@ -262,7 +273,7 @@ pub enum Owner {
     /// fix it, which is why the layer is named rather than implied.
     Inherited {
         /// The layer the bound is inherited from.
-        from: &'static str,
+        from: Cow<'static, str>,
     },
     /// The adopter, by narrowing their own declaration. One bound says so outright: the engine declines to
     /// guess, and the narrowing is the adopter's to make.
