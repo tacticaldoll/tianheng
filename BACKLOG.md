@@ -370,7 +370,9 @@ consumer for an undemonstrated deduplication.
     **after** this window's sweep. The sweep is the control: four found before it means little if the fifth is
     found the same way, and the trigger is deliberately about the residual rate rather than about the count.
     *Measured cost, not estimated:* the specs hold **1048** `SHALL` occurrences across **310** requirements and
-    **1177** scenarios, against **55** declared bounds. Requiring a citation per SHALL would add on the order of a
+    **1177** scenarios, against the register's **56 bounds across 20 capabilities** — written in that exact form
+    because it is the one phrasing `check_bound_register.sh` reacts to, and a census in any other wording is what
+    that gate's own policy says must not exist in prose. Requiring a citation per SHALL would add on the order of a
     thousand hand-maintained pointers — the drift class this family already refuses, where a structural property
     is kept by prose rather than by a reaction. A per-*requirement* or per-*scenario* form is smaller but not
     small, and neither is decidable from the text: which test defends a requirement is nowhere written. So the
