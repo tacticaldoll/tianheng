@@ -257,7 +257,12 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   future instance: the surface must be enumerable, the enumeration must be **generated and
   staleness-checked** rather than hand-maintained, and the projection must state what it does not claim.
   A register that implied completeness would mislead exactly where it is most trusted. Larger surfaces are
-  named but not committed to — 804 SHALL statements and 1020 scenarios are a multi-window program, and
-  promoting one is a `BACKLOG.md` decision with its own trigger, never an assumption inherited from this
-  first success.
+  named but not committed to — the requirement and scenario surface across every capability is a
+  multi-window program, and promoting one is a `BACKLOG.md` decision with its own trigger, never an
+  assumption inherited from this first success. Its size is deliberately **not** written here. This decision
+  once named two such figures, and by 2026-08-05 both had drifted by dozens — measured, not noticed — so a
+  promotion estimate read off them would have been drawn from a surface that had already moved. That is
+  stated in the past tense on purpose: a count is only ever true of the moment it was taken, so it belongs
+  to the measurement made when a surface is promoted, beside the reaction that will keep it honest, never to
+  prose. Writing one here would be the claim class this very decision exists to end.
 - **The composed adopter surface is compile-reacted.** `tianheng::prelude::*` is the entrypoint. `check_constitution(&Constitution, &Path) -> Outcome` unifies CLI and library testing evaluation.
