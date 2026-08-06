@@ -25,14 +25,21 @@ fn workspace_manifest() -> Option<PathBuf> {
     None
 }
 
-/// A constitution both paths can evaluate identically, in the one DSL shape the self-governance suite already
-/// proves. Deliberately a crate boundary only: the comparison is about **composition**, not about which
-/// boundaries were declared, and a richer fixture would risk failing for a reason that is not this seam's.
+/// A constitution both paths evaluate to a **violation**, in the one DSL shape the self-governance suite proves.
+///
+/// Deliberately violating. A clean fixture makes the equality assertion vacuous: every subset of clean observers
+/// folds to `Clean`, so the two paths agree however many the fold omitted — measured, perturbing the fold did not
+/// fail the assertion while the fixture passed.
 fn comparable_constitution() -> Constitution {
     Constitution::new("observer-protocol-equality").boundary(
         CrateBoundary::crate_("xuanji")
-            .restrict_dependencies_to(["serde_json"])
-            .because("璇璣 is the measure-only reaction model: serde_json only"),
+            // Restricted to `syn`, which 璇璣 does not depend on, so its real `serde_json` edge falls
+            // outside the allowlist and REACTS. An empty allowlist was tried first and reads as clean —
+            // which is why the assertion below insists the fixture actually reacted.
+            .restrict_dependencies_to(["syn"])
+            .because(
+                "a deliberately violated boundary, so the compared verdict is not trivially clean",
+            ),
     )
 }
 
@@ -56,6 +63,14 @@ fn the_trait_driven_fold_agrees_with_the_built_in_path() {
         ))
         .verdict();
 
+    // The comparison must not be able to hold vacuously. Every subset of CLEAN observers folds to `Clean`, so
+    // on a clean workspace the two paths agree however many the fold omitted — measured, perturbing the fold did
+    // not fail this assertion while the fixture passed. Asserting the verdict is a violation makes that
+    // impossible by construction rather than by having perturbed correctly once.
+    assert!(
+        matches!(built_in, Outcome::Violations(_)),
+        "the fixture must react, or comparing the two paths proves nothing: {built_in:?}"
+    );
     assert_eq!(
         format!("{built_in:?}"),
         format!("{folded:?}"),
@@ -307,7 +322,10 @@ fn composition_introduces_no_trait_object() {
             let trimmed = line.trim_start();
             // Public signatures only. A `dyn` inside a private item is not an exposure, and a doc comment
             // mentioning one is prose.
-            if trimmed.starts_with("pub ") && trimmed.contains(" dyn ") {
+            // `dyn ` anywhere on the line, never ` dyn ` — `Box<dyn T>` is the commonest exposure and reads
+            // `<dyn`, which a space-prefixed matcher silently misses. Measured: an injected
+            // `pub fn … -> Vec<Box<dyn Observer>>` passed the earlier pattern.
+            if trimmed.starts_with("pub ") && trimmed.contains("dyn ") {
                 offenders.push(format!("{}:{}: {trimmed}", path.display(), number + 1));
             }
         }
