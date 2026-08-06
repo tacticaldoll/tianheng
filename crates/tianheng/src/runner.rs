@@ -387,13 +387,34 @@ where
 /// check-only flag supplied to `list` is a usage error, not a silent no-op (PROJECT.md: never
 /// silently ignore a flag).
 fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
-    if parsed.manifest_path.is_some()
-        || parsed.baseline_path.is_some()
-        || parsed.write_baseline_path.is_some()
-        || parsed.warn_uncovered
-        || parsed.disallow_stale
-    {
-        return usage("list takes only --format; other flags are check-only");
+    // The flags SUPPLIED are named, not merely the fact that some inapplicable flag was present. This was a single
+    // sentence naming none of them, which satisfied this command's own requirement while the requirement covering
+    // the same conflict inside `check` — one that cites this rule as the one it extends — requires the flag to be
+    // named. The two disagreed and each implementation matched its own, so no test caught it.
+    //
+    // It matters most for `--manifest-path`, the flag a user types by habit: told only that "list takes only
+    // --format", a reader who passed both `--manifest-path` and `--format` is being shown the flag they got right.
+    //
+    // Ordered by this check rather than by the command line, so the message is a function of the set supplied and
+    // not of how it was typed — which is what makes it assertable.
+    let mut inapplicable = Vec::new();
+    for (flag, supplied) in [
+        ("--manifest-path", parsed.manifest_path.is_some()),
+        ("--baseline", parsed.baseline_path.is_some()),
+        ("--write-baseline", parsed.write_baseline_path.is_some()),
+        ("--warn-uncovered", parsed.warn_uncovered),
+        ("--disallow-stale", parsed.disallow_stale),
+    ] {
+        if supplied {
+            inapplicable.push(flag);
+        }
+    }
+    if !inapplicable.is_empty() {
+        return usage(&format!(
+            "list takes only --format; {} {} check-only",
+            inapplicable.join(", "),
+            if inapplicable.len() == 1 { "is" } else { "are" }
+        ));
     }
     let semantic = constitution.semantic_boundaries();
     let runtime = constitution.runtime_boundaries();

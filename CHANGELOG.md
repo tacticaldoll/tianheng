@@ -76,6 +76,22 @@ them.
   register listed 41 bounds rather than the 44 it first projected — and a behaviour change can no longer leave
   several specs stale at once.
 
+### Fixed
+- **`list`'s refusal now names the check-only flag that was supplied**, instead of one sentence naming none of
+  them. Every other refusal on this surface already named what the invocation did — all twenty malformed
+  value-flag cells, and the `--format` *value* refusal which names the value and explains why `sarif` is not a
+  `list` format — so this was the one place the surface moved the search onto the reader. It mattered most for
+  `--manifest-path`, which is in the rejected set and is the flag typed by habit: told only that "list takes only
+  `--format`", someone who passed both was being shown the flag they got right. Every supplied flag is named, not
+  the first. No invocation's verdict changes: what was refused is still refused, with the same exit `2`.
+
+  Found by sweeping the CLI surface against an enumeration rather than against invented shapes, and the defect was
+  in the **requirements**, not the code: `list`'s own requirement asked only for usage guidance and exit 2, while
+  the requirement covering the same conflict inside `check` cites it as "the rule the `list` requirement above
+  states" and requires the flag to be named. Each implementation satisfied its own. The same sweep found that
+  requirement enumerating four check-only flags while the runner rejected five, so the set is now derived rather
+  than listed in prose.
+
 ### Changed
 - **The census direction now judges tracked content and every figure on a line**, closing three ways the
   direction added one change earlier missed or overreached. It walked the filesystem, so an untracked scratch

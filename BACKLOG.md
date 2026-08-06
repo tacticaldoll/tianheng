@@ -170,21 +170,42 @@ consumer for an undemonstrated deduplication.
   reaction and named in the projection, and that is all. Trigger for giving exemptions their own register: a
   second instance. This is the first.
 
-- **The 天衡 shell's baseline-writing and CLI surface has never been swept.** Class: READY-PATCH (a sweep;
-  its corrections are classified when they exist). Observed pressure: measured on the window's own history —
-  of the 116 commits landing after the last range sweep closed, **20 carry a `tianheng` scope** and none of
-  the four slices touched them. They are one coherent surface: atomic baseline writing (temp-then-rename,
-  descriptor-vs-path `chmod`, symlink resolution, a temp-plant loop, data durability, directory flush) and
-  CLI flag handling (inapplicable flags, empty and flag-shaped values). `xingbiao`'s two commits are
-  likewise unswept. Observation source: `git log 23dbee5..release/0.4.0` by scope. Current bound: the four
-  slices covered 渾儀 seam identity, 圭表's value namespace and module resolution, and 漏刻's origin and
-  labels — the shell was never a slice. Risk: MEDIUM — this is the surface where a partial write or a
-  mis-resolved symlink corrupts a recorded baseline, and its failure mode is silent. Promotion trigger: none
-  needed. Sweep **against the enumerated surface** rather than against invented shapes, per `PROJECT.md`'s
-  audit-cycle decision; the bound register does not enumerate this surface, so the first task is to find or
-  build the enumeration rather than to start guessing. Version class: PATCH for what it finds unless a
-  closure invalidates a recorded baseline. Authority: `PROJECT.md`'s audit-cycle decision, and the atomic
-  baseline-write requirements in `violation-baseline`.
+- ~~**The 天衡 shell's baseline-writing and CLI surface has never been swept.**~~ **CLOSED** in the open window,
+  swept against an enumeration built first as the entry required, and it found **two defects — both in the
+  requirements rather than in the code.**
+
+  **The enumeration, and what it measured.** The baseline write path's twelve filesystem operations, read out of
+  the code rather than guessed: `canonicalize` on the target, the mode read, the `O_EXCL` temp create, the
+  temp-plant loop, `fchmod` on the *descriptor* rather than the path, `sync_all` after the mode and before the
+  rename, the rename, the parent-directory flush whose error is deliberately discarded, the guard's cleanup on
+  drop, and on the create path `create_new`, the `symlink_metadata` dangling-symlink diagnosis and `read_link`.
+  Every one already has a test in `crates/tianheng/tests/baseline_cli.rs`. Five further adversarial shapes were
+  probed live — absent parent directory, target is a directory, read-only parent, unreadable target, symlink to a
+  directory — and all five exit 2 naming the path and the OS cause, with no silent success and no misdiagnosis.
+  The create-versus-overwrite decision takes the create path on `NotFound` **only**, so an unreadable existing
+  baseline cannot be misreported as a creation race. On the CLI side, twenty-five cells: four value-taking flags ×
+  {missing value, empty, flag-shaped, empty in the equals form, repeated}, plus the boolean flags, the unknown
+  flag and positional, and the `--format` value. **Swept and defended, except for one column.**
+
+  **What it found.** `list`'s refusal named no flag — one sentence for all five check-only flags — while the
+  requirement covering the same conflict inside `check` cites `list`'s rule as the one it extends *and* requires
+  the flag to be named. Each implementation satisfied its own requirement, which is why no test caught it. And
+  `list`'s requirement enumerated four check-only flags while the runner rejected five: `--disallow-stale` was
+  added to the code and not to the prose. Corrected by tightening the requirement and deriving the set, so a sixth
+  flag is covered the moment it exists.
+
+  **Two of the sweep's own measurements were wrong before they were right**, recorded because the correction is the
+  transferable part. The first CLI probe grepped the whole output for the flag name — and the `usage:` banner lists
+  every flag by construction, so every cell measured as naming its flag, including a nonexistent one. The second
+  read the `error:` line only. Separately, `list --format sarif` looked like it shared the generic message until
+  the probe stopped passing `--manifest-path` alongside it, which was tripping the check-only guard first. **A
+  probe that carries an unrelated flag is measuring that flag.**
+
+  **Residual: the enumeration is hand-made and will rot.** It is a snapshot taken against a named revision, in a
+  proposal that dissolves at sync, and nothing enumerates the CLI surface as a reaction — which is how this
+  requirement's own list of four went stale in the first place. Not solved here: a register over six flags would be
+  ceremony this finding does not justify. Promotion trigger: a **second** defect found in this surface, or a flag
+  added to the runner without a test that names it.
 
 - ~~**The 渾儀 seam-identity and owner-qualification surface has not been swept against the bound index.**~~
   **CLOSED** in the open window, swept and found defended — by a structurally enforced enumeration rather
