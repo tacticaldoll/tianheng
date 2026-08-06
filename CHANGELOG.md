@@ -139,7 +139,7 @@ them.
 
 - `docs/observation-bounds.md` projects every **observation bound** the family declares — each claim that a
   reaction deliberately stops at a named shape — with the test that defends it or the tracker that owns
-  closing the gap. **55 bounds across 20 capabilities**, generated from the specs and staleness-checked, with
+  closing the gap. **56 bounds across 20 capabilities**, generated from the specs and staleness-checked, with
   the count of bounds nothing yet defends leading the document rather than buried in it. Read it before
   reporting a behaviour as a defect: a declared bound means the shape is governed policy, not an escape.
   Assembling it retired two bounds that had outlived their behaviour and added six tests for bounds nothing
@@ -514,6 +514,17 @@ them.
   residual is only the semantic judgment, and the bound now says so at all **three** sites it was written — the
   spec's THEN clause, the typed declaration's rationale, and the projections derived from them. A bound reads as
   *permission*, so one that overstates what is unobserved misleads exactly as much as one that understates it.
+
+- **A latent under-reaction in the process-substitution property is declared.** `gate-shape-contract` permits a
+  producer that is a shell builtin over data already in memory, on the stated reason that it has *no I/O to fail
+  at* — and the recognizer applies that permission by reading the producer's **first word**. So
+  `< <(printf '%s\n' "$rows" | sort)` passes while `sort` is an external process whose failure the parent never
+  sees. Latent, not live: every process substitution in the gate surface was read, and the two real ones are
+  `printf` over memory. Declared rather than closed because the repair was measured first — refusing a producer
+  that contains a pipe **also refuses both live sites**, whose pipe sits inside a parameter expansion
+  (`${b//|/$'\n'}`), and separating a pipe operator from a pipe inside `${…}` needs shell parsing rather than
+  text. Its pin asserts that false positive alongside the bound, so the reason for declaring rather than fixing is
+  executable: if a future parameter expansion loses its pipe, that leg fails and the bound is worth re-examining.
 
 ## [0.4.0] - 2026-08-04
 
