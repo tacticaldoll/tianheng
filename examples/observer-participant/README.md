@@ -25,10 +25,21 @@ Two faults are deliberate and neither is a bug: `src/api.rs` imports `crate::inf
 `tianheng::prelude`. Nothing was added to any crate to make this compile. If it had needed an export, that would
 have been the finding: a protocol a third party cannot use is not a protocol.
 
-**A participant's bounds can be computed.** `ModuleHeaderObserver` declares one bound per configured subtree,
+**A participant's bounds can be computed.** `ModuleHeaderObserver` declares two bounds per configured subtree,
 with the id, the shape, the reason and the pin all built by `format!` at the moment it is asked, because *which*
 bounds it has depends on what it was told to read. `BoundId`'s owned-or-borrowed form exists for exactly this,
 and nothing inside the family exercises it — every family declaration is a literal.
+
+**And it declares more than one *extent*.** One bound is a shape it never reads: it lists a subtree one level deep
+and never descends, so a nested module file is out of reach. The other is a shape it reads and judges **too
+harshly** — the rule tests a file's first line, so a real module header sitting below a licence comment reads as
+absent, even though a reader of that file learns exactly what the rule says it should. That distance between a
+rule's wording and the reason it gives for itself is what `Reached::OverReacts` names.
+
+It is **declared rather than closed**, deliberately. Skipping a leading comment block would trade this edge for a
+`/* … */` header and for an inner attribute above the doc comment, and would leave the rule's wording saying
+something other than what the code does. Declaring it is what a participant owes a reader; fixing every edge is
+not.
 
 **An outsider inherits the contract.** A subtree the participant was told to read and could not is exit `2`, not
 a quiet pass. Reporting clean because the look failed is the one bug 天衡 forbids outright, and joining a run

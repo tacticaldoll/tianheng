@@ -91,18 +91,99 @@ fn the_declared_bounds_are_built_from_the_configuration() {
         .iter()
         .map(|bound| bound.id().as_str().to_string())
         .collect();
+    // The whole declared SET, never a bare count: a bound added without a pin has to be visible here, and
+    // `len() == 2` would have accepted any two.
     assert_eq!(
         ids,
         vec![
             "house-rules/a-file-nested-below-src-is-out-of-reach".to_string(),
+            "house-rules/a-header-below-a-leading-comment-in-src-over-reacts".to_string(),
             "house-rules/a-file-nested-below-src/bin-is-out-of-reach".to_string(),
+            "house-rules/a-header-below-a-leading-comment-in-src/bin-over-reacts".to_string(),
         ],
-        "one bound per governed subtree, named after it"
+        "one bound per extent per governed subtree, each named after it"
     );
+    // Two extents, not one: the example is about the bound model, so a participant declaring only shapes it never
+    // reads would be teaching half of it.
+    let extents: Vec<String> = participant()
+        .bounds()
+        .iter()
+        .map(|bound| format!("{:?}", bound.extent()))
+        .collect();
+    assert_eq!(extents.len(), 2, "{extents:?}");
     assert!(
-        participant().bounds().len() == 1,
-        "and a participant reading one subtree declares one"
+        extents.iter().any(|extent| extent.contains("OutOfReach"))
+            && extents.iter().any(|extent| extent.contains("OverReacts")),
+        "a shape never read, and a shape read and judged too harshly: {extents:?}"
     );
+}
+
+/// The declared over-reaction: a real module header below a leading comment is reported missing.
+///
+/// The **control** is what keeps this from holding for the wrong reason — the same content with its header on line
+/// one does not react, so the fixture proves the *position* of the header decides it and not the file's presence.
+#[test]
+fn a_header_below_a_leading_comment_over_reacts() {
+    let fixture = Fixture::new("over-reaction");
+    let governed = fixture.root.join("src");
+    let manifest = fixture.root.join("Cargo.toml");
+    let header = "//! This file carries a module header.\n\npub fn probe() {}\n";
+
+    std::fs::write(
+        governed.join("licensed.rs"),
+        format!("// SPDX-License-Identifier: MIT\n{header}"),
+    )
+    .expect("a writable fixture");
+    let outcome = ModuleHeaderObserver::reading(["src"]).observe(&manifest);
+    let Outcome::Violations(report) = &outcome else {
+        panic!("the declared over-reaction must be reproducible, or the bound describes nothing: {outcome:?}");
+    };
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|violation| violation.finding.ends_with("licensed.rs")),
+        "a header below a leading comment reads as absent — the declared over-reaction: {report:?}"
+    );
+
+    // The control: the same header, on line one.
+    std::fs::write(governed.join("licensed.rs"), header).expect("a writable fixture");
+    assert_eq!(
+        ModuleHeaderObserver::reading(["src"])
+            .observe(&manifest)
+            .exit_code(),
+        0,
+        "the header's POSITION is what the over-reaction turns on, not the file's presence"
+    );
+}
+
+/// A temporary governed subtree, qualified by process id and removed on drop.
+///
+/// Both properties are the repository's own discipline rather than caution: a fixed path makes two concurrent
+/// invocations share one root, and cleaning up at the end of the test body leaves the root behind whenever the
+/// test fails — which is exactly when someone is running it. `Drop` runs on the panic path too.
+struct Fixture {
+    root: PathBuf,
+}
+
+impl Fixture {
+    fn new(name: &str) -> Self {
+        let root = std::env::temp_dir().join(format!("house-rules-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).expect("a writable temporary subtree");
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "# not parsed by this participant\n",
+        )
+        .expect("a writable manifest stand-in");
+        Self { root }
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
 }
 
 /// The bound this participant declares is the truth about it: a file nested below the governed subtree is

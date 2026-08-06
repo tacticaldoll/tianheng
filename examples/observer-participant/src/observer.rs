@@ -142,24 +142,49 @@ impl Observer for ModuleHeaderObserver {
     fn bounds(&self) -> Vec<BoundDecl> {
         self.subtrees
             .iter()
-            .map(|subtree| {
-                BoundDecl::new(
-                    BoundId::new(format!(
-                        "house-rules/a-file-nested-below-{subtree}-is-out-of-reach"
-                    )),
-                    format!("a `.rs` file in a directory below `{subtree}`"),
-                    Extent::OutOfReach {
-                        because: format!(
-                            "this participant lists `{subtree}` one level deep and never descends, so a \
-                             nested module file is never read at all"
-                        )
-                        .into(),
-                    },
-                    format!(
-                        "a_file_nested_below_{}_is_out_of_reach",
-                        subtree.replace(['/', '-', '.'], "_")
+            .flat_map(|subtree| {
+                let slug = subtree.replace(['/', '-', '.'], "_");
+                [
+                    BoundDecl::new(
+                        BoundId::new(format!(
+                            "house-rules/a-file-nested-below-{subtree}-is-out-of-reach"
+                        )),
+                        format!("a `.rs` file in a directory below `{subtree}`"),
+                        Extent::OutOfReach {
+                            because: format!(
+                                "this participant lists `{subtree}` one level deep and never descends, so a \
+                                 nested module file is never read at all"
+                            )
+                            .into(),
+                        },
+                        format!("a_file_nested_below_{slug}_is_out_of_reach"),
                     ),
-                )
+                    // The second extent, and the one that makes this example about the bound MODEL rather than
+                    // about the call that declares a bound. The rule reads a file's FIRST line, so a real module
+                    // header sitting below a licence comment is reported missing — correct against the rule as
+                    // worded, wrong against the rule's reason, which such a reader is already served by.
+                    //
+                    // Declared rather than closed on purpose. Skipping a leading comment block would trade this
+                    // edge for a `/* … */` header and an inner attribute above the doc comment, and would leave
+                    // the rule's wording saying something other than what the code does.
+                    BoundDecl::new(
+                        BoundId::new(format!(
+                            "house-rules/a-header-below-a-leading-comment-in-{subtree}-over-reacts"
+                        )),
+                        format!(
+                            "a `.rs` file under `{subtree}` whose `//!` header sits below a leading comment"
+                        ),
+                        Extent::Reached(Reached::OverReacts {
+                            because: format!(
+                                "the rule reads the first line of a file under `{subtree}`, so a header below a \
+                                 licence comment reads as absent though a reader of that file learns what it is \
+                                 for — which is the reason the rule gives for itself"
+                            )
+                            .into(),
+                        }),
+                        format!("a_header_below_a_leading_comment_in_{slug}_over_reacts"),
+                    ),
+                ]
             })
             .collect()
     }

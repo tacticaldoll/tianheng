@@ -255,6 +255,17 @@ participant observed rather than written as a literal. `BoundId`'s owned-or-borr
 implementor whose bounds are discovered, and until this it had no caller that was not a literal — a capability
 shipped for a caller that did not exist.
 
+The participant SHALL declare **every** bound it has, not only the one that demonstrates the mechanism. The
+example is the one artefact teaching a third party how to join a run honestly, so a participant there that reacts
+where its own stated reason does not require it — and says nothing — teaches the mechanism while withholding an
+instance of it. Measured: its header rule read only a file's first line, so a module header below a license comment
+was reported missing while the rule's reason, *that a reader learns what the file is for*, was satisfied. That
+distance between a rule's wording and its reason is what `Reached::OverReacts` names, and it SHALL be declared
+rather than closed where closing it would trade one edge for others and make the wording diverge from the code.
+
+The example SHALL therefore exhibit **more than one extent**, so it demonstrates the bound *model* and not only the
+call that declares a bound.
+
 The example SHALL require **no addition to any crate's public API**. If joining a run needs an export the family
 does not publish, the protocol is not usable by a third party, and that is the finding rather than a reason to add
 the export.
@@ -270,6 +281,12 @@ the export.
 - **WHEN** the participant declares its bounds
 - **THEN** at least one id is built from what it observed, so the owned-or-borrowed declaration form is exercised
   by a caller outside the family
+
+#### Scenario: The participant reacts where its own reason does not require it
+
+- **WHEN** the participant's rule reacts to a shape its stated reason is already satisfied by
+- **THEN** that is declared as an over-reaction with its own bound, so the example demonstrates the extent model
+  rather than only the mechanism for declaring one
 
 #### Scenario: Joining a run would require a new export
 
