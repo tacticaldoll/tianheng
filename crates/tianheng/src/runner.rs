@@ -31,8 +31,7 @@ use guibiao::{
     constitution_text, report_json, report_json_with_stale_policy, stale_policy,
 };
 use hunyi::Observer;
-use louke::audit_probe_coverage;
-use xingbiao::audit_corpus_and_anchor;
+use louke::RuntimeObserver;
 
 use crate::Constitution;
 
@@ -209,26 +208,20 @@ fn evaluate_constitution(
     // Audit even an empty runtime declaration: an orphan `assert_boundary!` probe must react.
     // Once an earlier dimension errors the verdict is untrustworthy, so evaluation stops.
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        // Through 星表's single derivation, the same one 漏刻's observer uses. Computing the corpus and the
-        // label anchor in two places is a twin derivation of BASELINE IDENTITY, which is the drift that crate
-        // exists to prevent — and the protocol's equality reaction now depends on the two agreeing.
-        match audit_corpus_and_anchor(manifest_path) {
-            Ok((roots, anchor)) => {
-                outcome = merge_outcomes(
-                    outcome,
-                    audit_probe_coverage(constitution.runtime_boundaries(), &roots, &anchor),
-                );
-            }
-            Err(message) => {
-                outcome = merge_outcomes(
-                    outcome,
-                    Outcome::ConstitutionError(format!(
-                        "cannot read workspace '{}': {message}",
-                        manifest_path.display()
-                    )),
-                );
-            }
-        }
+        // **Delegated, not restated.** This arm held its own copy of 漏刻's three statements — the corpus and
+        // anchor derivation, the audit call, and the `cannot read workspace` message — so equality between
+        // this path and the protocol's for the runtime dimension depended on nobody editing one of the two
+        // copies. That is the exact drift `observer-protocol` exists to end, and it was sitting inside the
+        // thing being compared. This path now IS the observer for this dimension, which cannot drift; the
+        // cost is one `to_vec` of the declared seams per run, paid deliberately.
+        //
+        // Consequence the spec states: for the runtime dimension the two paths agree **by construction**
+        // rather than by observation. What still bites is the equality reaction's per-dimension assertion
+        // that the fixture's runtime boundary actually reacted.
+        outcome = merge_outcomes(
+            outcome,
+            RuntimeObserver::new(constitution.runtime_boundaries().to_vec()).observe(manifest_path),
+        );
     }
 
     (outcome, observed_coverage)
