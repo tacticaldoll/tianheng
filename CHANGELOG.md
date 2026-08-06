@@ -23,8 +23,9 @@ them.
 ## [Unreleased]
 
 ### Documentation
-- The previous entry's own repair created a hole, and a review proved it with a fixture. A `(bound: …)`
-  reference was only ever resolved through a bound-prose record, and rewording that sentence dropped its line
+- Giving each bound in `external-crate-confinement`'s overview its own `(bound: …)` reference created a hole,
+  and a review proved it with a fixture. A `(bound: …)` reference was only ever resolved through a bound-prose
+  record, and rewording that sentence dropped its line
   out of the scan's pattern — so the two references the repair added were **never resolved again**. Every
   reference is now resolved **wherever it sits**, independent of the wording around it: a Purpose paragraph, a
   requirement's prose, or inside a declared bound scenario. Every reference in the tree already resolved when
@@ -190,7 +191,8 @@ them.
   nothing left to infer.
 - **A hand-written census of the register no longer lives in prose, and the one figure that must stay is now
   reacted to.** Adding a single declared bound invalidated fourteen written figures across four files —
-  including the entry below whose own subject is that three measurements had gone stale in this same window.
+  including the *Documentation* note whose own subject is that three measurements had gone stale in this same
+  window.
   The cause is not carelessness: four independent, deliberate counts of this tree produced four different
   answers for the number of citations, and an ad-hoc count of unpinned bounds contradicted the generated
   projection. So a clean run now **prints** what it counted — the bound, capability, pinning-citation,
@@ -335,7 +337,8 @@ them.
 - `check_release_coherence.sh` **separates a violation from a gate that cannot decide**, which its header
   claimed and its code never did: every refusal was `1`, so a shallow clone with no release spine, an absent
   manifest, or a moved crate layout all reported "the release surfaces disagree". Those are now `2`. The same
-  audit caught a regression the previous entry introduced: this gate's `fail` was a `return 1` relying on
+  audit caught a regression the shared exit-contract backstop introduced: this gate's `fail` was a `return 1`
+  relying on
   `set -e`, and the new `ERR` backstop converted it into `2` — every genuine incoherence reported as
   cannot-judge, with CI green throughout because this matrix asserted only a non-zero status. `fail` exits
   directly now, the matrix asserts the **code** at every call site (as its siblings already did), and the
