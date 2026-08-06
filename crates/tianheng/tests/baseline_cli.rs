@@ -953,3 +953,102 @@ fn disallow_stale_equals_form_is_unrecognized_argument_usage_error() {
 
     let _ = std::fs::remove_file(path);
 }
+
+/// Every flag `list` rejects, with the value each needs to reach the rejection at all.
+///
+/// Derived from the runner's own check rather than restated: the requirement stopped enumerating this set in prose
+/// because that enumeration had already gone stale — it named four while the runner rejected five.
+const CHECK_ONLY_FLAGS: [(&str, Option<&str>); 5] = [
+    ("--manifest-path", Some("Cargo.toml")),
+    ("--baseline", Some("baseline.json")),
+    ("--write-baseline", Some("baseline.json")),
+    ("--warn-uncovered", None),
+    ("--disallow-stale", None),
+];
+
+fn list_with(flags: &[(&str, Option<&str>)]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tianheng"));
+    command.arg("list");
+    for (flag, value) in flags {
+        command.arg(flag);
+        if let Some(value) = value {
+            command.arg(value);
+        }
+    }
+    command.output().expect("run tianheng CLI")
+}
+
+#[test]
+fn list_names_every_check_only_flag_it_rejects() {
+    // Each driven individually. One case asserting "some flag is named" would pass while four of the five went
+    // unnamed, which is the state this test was written against: the refusal was a single sentence naming none.
+    for (flag, value) in CHECK_ONLY_FLAGS {
+        let output = list_with(&[(flag, value)]);
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "`list {flag}` must be a usage error, got: {text}"
+        );
+        let diagnostic = text
+            .lines()
+            .find(|line| line.starts_with("error:"))
+            .unwrap_or_else(|| panic!("`list {flag}` printed no error line: {text}"));
+        assert!(
+            diagnostic.contains(flag),
+            "`list {flag}` must name the flag supplied; the usage banner lists every flag by construction, so \
+             only the diagnostic line counts. Got: {diagnostic}"
+        );
+    }
+}
+
+#[test]
+fn list_names_all_of_several_check_only_flags() {
+    // Reporting the first would send a reader back for a second round.
+    let output = list_with(&[
+        ("--manifest-path", Some("Cargo.toml")),
+        ("--warn-uncovered", None),
+    ]);
+    let text = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "must be a usage error: {text}"
+    );
+    let diagnostic = text
+        .lines()
+        .find(|line| line.starts_with("error:"))
+        .unwrap_or_else(|| panic!("no error line: {text}"));
+    for flag in ["--manifest-path", "--warn-uncovered"] {
+        assert!(
+            diagnostic.contains(flag),
+            "every supplied flag must be named, {flag} was not: {diagnostic}"
+        );
+    }
+}
+
+#[test]
+fn a_list_format_value_refusal_stays_distinguishable_from_an_inapplicable_flag() {
+    // `--format` IS applicable to `list`; `sarif` is not a `list` format. Sweeping this into the inapplicable-flag
+    // message would tell a reader that the flag they got right is the problem — and that misreading is exactly what
+    // an earlier probe of this surface produced, by dragging `--manifest-path` along and tripping the other guard.
+    let output = list_with(&[("--format", Some("sarif"))]);
+    let text = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "must be a usage error: {text}"
+    );
+    let diagnostic = text
+        .lines()
+        .find(|line| line.starts_with("error:"))
+        .unwrap_or_else(|| panic!("no error line: {text}"));
+    assert!(
+        diagnostic.contains("sarif") && !diagnostic.contains("check-only"),
+        "a rejected --format VALUE must be reported as a value, not as an inapplicable flag: {diagnostic}"
+    );
+}
