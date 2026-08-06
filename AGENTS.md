@@ -274,7 +274,7 @@ bash scripts/check_reference_integrity.sh # every in-repo path a document or com
                                            # this class was hand-swept twice (once for .md only) and a module
                                            # split landing after that sweep reintroduced it in nine places
 bash scripts/test_dod_coherence.sh       # prove every refusal of the coherence gate that binds this list to
-                                           # CI: it was the last gate with no matrix, so the claim this block
+                                           # CI: it was one of two gates with no matrix, so the claim this block
                                            # makes about itself rested on a reaction nobody had watched refuse
 bash scripts/check_dod_coherence.sh     # this list is a subset of CI's — checked, not promised
 bash scripts/test_release_coherence.sh # prove every release state and failure direction
@@ -315,7 +315,11 @@ The self-governance gate (`self_governance.rs`, run under `cargo test`) and its 
 classification in a bijection and projects `docs/observation-bound-extents.md`; it needs no line of its own
 above because it runs under that same `cargo test`. And so must `observer_protocol.rs`, which holds the
 trait-driven fold and the built-in composition path to one verdict — two paths that could disagree silently
-are the drift a seam is supposed to end. Beyond the list
+are the drift a seam is supposed to end. And so must `gate_shape_contract.rs`, which enumerates this
+repository's own `check_*` gates and their twins from tracked content, holds each to the nine properties of the
+family's exit contract, and projects [`docs/gate-shape-contract.md`](docs/gate-shape-contract.md) — the table
+saying which gate holds what, and which three of the classes it was built for are declared bounds rather than
+checks. It adds no line above for the same reason. Beyond the list
 above, CI also runs a **default-features** `clippy`/`doc` pass (catching an unused item or a broken
 intra-doc link when the `audit` feature is off), the declared-MSRV build and test, license-text
 bundling, the packaged-tarball self-test, and the reaction on the clean/violating fixtures (see

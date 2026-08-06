@@ -113,11 +113,16 @@ grep -Fq 'an unhandled command failed' <<<"$unhandled_output" \
 
 # --- read-only, like every gate in the family ---
 
-before_tree=$(git -C "$clean" status --porcelain=v1 --untracked-files=all)
-before_head=$(git -C "$clean" rev-parse HEAD)
-"$check" "$clean" >/dev/null
-[[ $(git -C "$clean" status --porcelain=v1 --untracked-files=all) == "$before_tree" \
-    && $(git -C "$clean" rev-parse HEAD) == "$before_head" ]] \
+# On a fixture this gate has NOT already judged. Capturing `before` from a repository the gate had run over
+# several times was blind by construction: a gate that writes the same file on every run leaves that file in
+# `before` too, so the comparison held. Measured, not reasoned — a stray write injected into a sibling gate
+# passed its read-only direction unnoticed until the fixture was made fresh.
+untouched=$(new_repo untouched)
+before_tree=$(git -C "$untouched" status --porcelain=v1 --untracked-files=all)
+before_head=$(git -C "$untouched" rev-parse HEAD)
+"$check" "$untouched" >/dev/null
+[[ $(git -C "$untouched" status --porcelain=v1 --untracked-files=all) == "$before_tree" \
+    && $(git -C "$untouched" rev-parse HEAD) == "$before_head" ]] \
     || { printf 'whitespace hygiene check mutated repository state\n' >&2; exit 1; }
 
 printf 'ok whitespace hygiene state and failure matrix\n'

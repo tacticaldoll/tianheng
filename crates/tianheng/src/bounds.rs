@@ -1,5 +1,5 @@
-//! The shell's own declared bounds — `observation-bound-model`'s and `observer-protocol`'s, typed in the
-//! model they describe.
+//! The shell's own declared bounds — `observation-bound-model`'s, `observer-protocol`'s and
+//! `gate-shape-contract`'s, typed in the model they describe.
 //!
 //! The capability that classifies where every other reaction stops must classify where **it** stops, or its
 //! leading figure — the count of declared false negatives — would be a number the counter had exempted itself
@@ -75,6 +75,65 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Adopter,
             }),
             "the_fold_does_not_adjudicate_a_participant_s_verdict",
+        ),
+        // --- gate-shape-contract ---
+        //
+        // Its reaction is `tests/gate_shape_contract.rs`, so this crate owns these too. The four are read out
+        // of each scenario's WHEN and THEN rather than out of a shared adjective: three name shapes the
+        // reaction never looks at, and one names a shape it looks straight at and declines to judge.
+        BoundDecl::new(
+            BoundId::new(
+                "gate-shape-contract/whether-an-enumeration-carries-a-vacuity-guard-is-not-observed-a-stated-bound",
+            ),
+            "a gate iterating an enumeration with no guard against zero iterations",
+            Extent::OutOfReach {
+                because: "the reaction reads a gate's text for the properties it requires and models none of \
+                          its control flow, so a loop that iterates nothing and reports clean is not a shape \
+                          it examines",
+            },
+            "a_missing_vacuity_guard_is_a_stated_semantic_bound",
+        ),
+        BoundDecl::new(
+            BoundId::new(
+                "gate-shape-contract/whether-a-read-s-status-is-checked-in-the-parent-shell-is-not-observed-a-stated-bound",
+            ),
+            "a gate reading a command's output in a subshell or process substitution and never inspecting \
+             that command's status in the parent",
+            Extent::OutOfReach {
+                because: "the backstop the reaction does require narrows the damage — an unhandled failure \
+                          becomes cannot-judge rather than a foreign status — without detecting the shape, \
+                          which is why the two are stated separately",
+            },
+            "an_unchecked_read_status_is_a_stated_semantic_bound",
+        ),
+        BoundDecl::new(
+            BoundId::new(
+                "gate-shape-contract/whether-a-gate-s-1-versus-2-assignment-is-correct-is-not-observed-a-stated-bound",
+            ),
+            "a gate reporting a genuine violation as cannot-judge, or a misconfiguration as a violation",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reaction requires the twin to assert an expected code and declines to judge \
+                          whether the code the gate assigned is the right one; that judgment is what let a \
+                          `fail` returning instead of exiting turn every violation into cannot-judge and ride \
+                          green",
+                // The engine's own, not an adopter's: this reaction sees the codes and stops there, and no
+                // declaration by an adopter would change what it does with them.
+                owner: Owner::Engine,
+            }),
+            "a_wrong_one_versus_two_assignment_is_a_stated_semantic_bound",
+        ),
+        BoundDecl::new(
+            BoundId::new(
+                "gate-shape-contract/shell-units-that-are-not-a-gate-or-its-twin-are-outside-the-surface-a-stated-bound",
+            ),
+            "a sourced function library, a matrix over one, the example runner, or the publish tool",
+            Extent::OutOfReach {
+                because: "the enumeration is the `check_*` gate and the twin its basename names, so no other \
+                          shell unit is judged on any of the nine properties; the one thing asserted about \
+                          them is that none carries the shared exit contract, which keeps the exclusion from \
+                          being a hiding place rather than making it coverage",
+            },
+            "units_outside_the_gate_pairing_are_outside_the_surface",
         ),
     ]
 }

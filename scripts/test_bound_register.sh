@@ -1122,26 +1122,35 @@ bless_output=$(BLESS=1 "$check" "$bless_vacuous" 2>&1) && bless_status=0 || bles
 
 # --- read-only ---
 
-before_tree=$(git -C "$pinned" status --porcelain=v1 --untracked-files=all)
-before_head=$(git -C "$pinned" rev-parse HEAD)
-"$check" "$pinned" >/dev/null
-after_tree=$(git -C "$pinned" status --porcelain=v1 --untracked-files=all)
-after_head=$(git -C "$pinned" rev-parse HEAD)
+# On a fixture this gate has NEVER judged, which for this twin means `no-bless`: `new_repo` blesses by
+# default and blessing *runs the gate*, so a fixture built the usual way already carries whatever that run
+# wrote. The earlier form captured `before` from exactly such a repository, and a stray write injected into
+# the gate passed it unnoticed — a file written on every run sits in `before` as well as in `after`. Every
+# sibling twin carried the same blindness in its own form and was corrected with it.
+#
+# The run then refuses (exit 1) because the projection it wants was never generated. That is the right
+# fixture rather than a compromise: a refusing run must be read-only too, and this is the only path here
+# where the gate is one flag away from writing a document.
+untouched=$(new_repo untouched "$(spec_with '- **PINNED-BY** `a_probe_bound_is_pinned`')" '' no-bless)
+before_tree=$(git -C "$untouched" status --porcelain=v1 --untracked-files=all)
+before_head=$(git -C "$untouched" rev-parse HEAD)
+untouched_status=0
+untouched_output=$("$check" "$untouched" 2>&1) || untouched_status=$?
+# Asserted so the direction cannot pass by the gate exiting before it read anything.
+[[ $untouched_status -eq 1 ]] \
+    || { printf 'the read-only fixture must still reach a verdict, got exit %d: %s\n' "$untouched_status" "$untouched_output" >&2; exit 1; }
+after_tree=$(git -C "$untouched" status --porcelain=v1 --untracked-files=all)
+after_head=$(git -C "$untouched" rev-parse HEAD)
 [[ $before_tree == "$after_tree" && $before_head == "$after_head" ]] \
     || { printf 'bound register check mutated repository state\n' >&2; exit 1; }
 
-# A PASSING run must print no backstop diagnostic. The assertion exists because installing the shared `ERR`
-# trap produced exactly that failure: `errtrace` propagates it into process substitutions, where a
-# legitimately-failing command is routine, so a clean run emitted the cannot-judge line once per file while
-# still exiting 0 — invisible to every check that reads only the exit code.
-#
-# What it does and does not hold, stated rather than implied: this fixture's clean run does not exercise a
-# failing command inside a process substitution, so removing the backstop's subshell guard does NOT fail this
-# assertion. The gate that misfired is `check_whitespace_hygiene.sh`, whose clean run does, and which has no
-# companion matrix — filed in `BACKLOG.md`. This pins the property here, where a future change could break
-# it, and the measurement is what covers the gate that has no fixture.
-clean_noise=$("$check" "$pinned" 2>&1 >/dev/null || true)
-grep -Fq 'an unhandled command failed' <<<"$clean_noise" \
-    && { printf 'a passing run must print no backstop diagnostic, got: %s\n' "$clean_noise" >&2; exit 1; }
+# A clean run must print NOTHING on stderr. What this replaces grepped for the backstop's own
+# `an unhandled command failed`, so any *other* line a gate printed on a clean run while exiting 0 still read
+# as clean — and a matrix that names one diagnostic has to track that diagnostic's wording. Emptiness has no
+# wording to keep in step. `test_whitespace_hygiene.sh` documents the `errtrace` misfire the property descends
+# from and is the matrix whose clean run actually exercises it.
+clean_stderr=$("$check" "$pinned" 2>&1 >/dev/null || true)
+[[ -z $clean_stderr ]] \
+    || { printf 'a clean run must print nothing on stderr, got: %s\n' "$clean_stderr" >&2; exit 1; }
 
 printf 'ok bound register state and failure matrix\n'

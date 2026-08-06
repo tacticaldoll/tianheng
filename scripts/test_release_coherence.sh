@@ -252,13 +252,18 @@ find "$empty_crate_set/crates" -name Cargo.toml -delete
 commit_all "$empty_crate_set" 'chore: remove crate manifests'
 expect_fail "$empty_crate_set" 2 'found no workspace crate manifests'
 
-before_tree=$(git -C "$development" status --porcelain=v1 --untracked-files=all)
-before_head=$(git -C "$development" rev-parse HEAD)
-before_tags=$(git -C "$development" tag --list)
-"$check" "$development" >/dev/null
-after_tree=$(git -C "$development" status --porcelain=v1 --untracked-files=all)
-after_head=$(git -C "$development" rev-parse HEAD)
-after_tags=$(git -C "$development" tag --list)
+# Read-only, on a fixture this gate has NOT already judged. Capturing `before` from a repository the gate had
+# run over several times was blind by construction: a gate that writes the same file on every run leaves that
+# file in `before` too, so the comparison held. Measured, not reasoned — a stray write injected into a sibling
+# gate passed its read-only direction unnoticed until the fixture was made fresh.
+untouched=$(new_repo untouched)
+before_tree=$(git -C "$untouched" status --porcelain=v1 --untracked-files=all)
+before_head=$(git -C "$untouched" rev-parse HEAD)
+before_tags=$(git -C "$untouched" tag --list)
+"$check" "$untouched" >/dev/null
+after_tree=$(git -C "$untouched" status --porcelain=v1 --untracked-files=all)
+after_head=$(git -C "$untouched" rev-parse HEAD)
+after_tags=$(git -C "$untouched" tag --list)
 [[ $before_tree == "$after_tree" && $before_head == "$after_head" && $before_tags == "$after_tags" ]] \
     || { printf 'release coherence check mutated repository state\n' >&2; exit 1; }
 
@@ -286,19 +291,14 @@ contract_output=$(PATH="$contract_stub:$PATH" "$check" "$development" 2>&1) || c
 grep -Fq 'an unhandled command failed' <<<"$contract_output" \
     || { printf 'an unhandled failure must say so and name where, got: %s\n' "$contract_output" >&2; exit 1; }
 
-# A PASSING run must print no backstop diagnostic. The assertion exists because installing the shared `ERR`
-# trap produced exactly that failure: `errtrace` propagates it into process substitutions, where a
-# legitimately-failing command is routine, so a clean run emitted the cannot-judge line once per file while
-# still exiting 0 — invisible to every check that reads only the exit code.
-#
-# What it does and does not hold, stated rather than implied: this fixture's clean run does not exercise a
-# failing command inside a process substitution, so removing the backstop's subshell guard does NOT fail this
-# assertion. The gate that misfired is `check_whitespace_hygiene.sh`, whose clean run does, and which has no
-# companion matrix — filed in `BACKLOG.md`. This pins the property here, where a future change could break
-# it, and the measurement is what covers the gate that has no fixture.
-clean_noise=$("$check" "$development" 2>&1 >/dev/null || true)
-grep -Fq 'an unhandled command failed' <<<"$clean_noise" \
-    && { printf 'a passing run must print no backstop diagnostic, got: %s\n' "$clean_noise" >&2; exit 1; }
+# A clean run must print NOTHING on stderr. What this replaces grepped for the backstop's own
+# `an unhandled command failed`, so any *other* line a gate printed on a clean run while exiting 0 still read
+# as clean — and a matrix that names one diagnostic has to track that diagnostic's wording. Emptiness has no
+# wording to keep in step. `test_whitespace_hygiene.sh` documents the `errtrace` misfire the property descends
+# from and is the matrix whose clean run actually exercises it.
+clean_stderr=$("$check" "$development" 2>&1 >/dev/null || true)
+[[ -z $clean_stderr ]] \
+    || { printf 'a clean run must print nothing on stderr, got: %s\n' "$clean_stderr" >&2; exit 1; }
 
 # The internal-pin loop's vacuity guard: it was the only loop in the gate without one, so a reformatted
 # `[workspace.dependencies]` table iterated zero times and the direction passed having asserted nothing about
