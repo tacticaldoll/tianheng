@@ -24,7 +24,13 @@ pub use xuanji::{
 mod bounds;
 pub use bounds::observation_bounds;
 
+// Gated with the audit face it delegates to: `audit_probe_coverage` and the 星表 dependency it derives
+// its corpus from are both behind `audit`, so an audit-OFF build of this crate alone must not see this
+// module. CI's isolated `cargo clippy -p louke` is what caught the ungated version — the pass that exists
+// precisely because every `--workspace` run feature-unifies `audit` ON.
+#[cfg(feature = "audit")]
 mod observer;
+#[cfg(feature = "audit")]
 pub use observer::RuntimeObserver;
 
 mod dsl;
