@@ -60,6 +60,37 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
+- **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* **seven** found
+  and closed in the 0.5.0 window — the family's declarations staying literal, the equality fixture reacting in
+  every dimension, an observer declaring exactly its dimension's bounds (a comparison that was `f() == f()`), the
+  protocol's required `bounds` method having no consumer at all, *an audit finding carries no repair polarity*, *an
+  observer's bounds method cannot be found where the reaction looks*, and *joining a run would require no new
+  export*. Every one found by hand. *Observation source:* the window's closing review, rounds 1–7; each is recorded
+  in `CHANGELOG.md`'s `[Unreleased]` with the perturbation that proved it.
+
+  **Promoted from WATCH because its own trigger fired, three times.** That trigger was *a normative SHALL found
+  un-reacted **after** this window's sweep* — the sweep being the control, so the four found before it could not
+  stand as evidence for themselves. Rounds 6 and 7 then found three more, and **all three were requirements this
+  window had just written**: a SHALL added in one change and left unreacted, in the window whose whole subject was
+  closing that class. That is stronger evidence than the original four, because it shows the class reproducing under
+  authors actively watching for it.
+
+  *Current reaction or bound:* none. Only a **bound** carries a `PINNED-BY`; an ordinary requirement is bound to
+  nothing, so no gate can tell a SHALL with a reaction from one without. *Risk:* the class recurring and being found
+  by hand or not at all — a normative rule nothing enforces is indistinguishable from one that is enforced, which is
+  the failure the bound register was built to end one level down. *Measured cost, not estimated:* the specs hold
+  **1048** `SHALL` occurrences across **310** requirements and **1177** scenarios, against the register's
+  **56 bounds across 20 capabilities** — written in that exact form because it is the one phrasing
+  `check_bound_register.sh` reacts to, and a census in any other wording is what that gate's own policy says must
+  not exist in prose. A citation per SHALL would add on the order of a thousand hand-maintained pointers, which is
+  the drift class this family already refuses. *First step, and why it is not simply "add a gate":* the binding must
+  be **derived**, not declared — which test defends a requirement is nowhere written, so the honest first move is to
+  find a derivation (a naming convention between requirement and reaction, or a reaction that enumerates what it
+  covers) rather than to require an annotation. That is a capability to design, and designing it inside the closing
+  review of a window would be the same haste this entry documents. *Version class:* not release-affecting; a new
+  capability with its own gate, preserving every published API. *Authority:* `observation-bound-register`, which
+  solves the same problem for bounds and is the shape any answer here would have to generalize.
+
 - ~~**`check_release_coherence.sh`'s subshell reads have not been audited for a swallowed status.**~~
   **CLOSED** in the open window. Audited read by read rather than swept: four of the five consumers already
   carried a vacuity guard (the release spine, the crate-manifest set, and both example-pin counters), which
@@ -357,29 +388,6 @@ consumer for an undemonstrated deduplication.
     could not have drawn, which is why this entry exists rather than the old wording standing as evidence for
     itself. *Version class:* patch. *Authority:* `gate-shape-contract`'s *Observation bounds* requirement, whose
     own rule that a bound is narrowed rather than restated is what this correction followed.
-  - **Every normative SHALL either has a reaction or is a declared bound.** *Observed pressure:* this window found
-    four normative SHALLs with no reaction and closed each one — the family's declarations staying literal, the
-    equality fixture reacting in every dimension, an observer declaring exactly its dimension's bounds (a
-    comparison that was `f() == f()`), and the protocol's required `bounds` method having no consumer at all. Four
-    in one window, all found by hand. *Observation source:* the 0.5.0-window sweep; each is recorded in
-    `CHANGELOG.md`'s `[Unreleased]` with the perturbation that proved it. *Current reaction or bound:* none. Only
-    a **bound** carries a `PINNED-BY`; an ordinary requirement is bound to nothing, so no gate can tell a SHALL
-    with a reaction from one without. *Risk:* the same class recurring, and being found by hand or not at all — a
-    normative rule nothing enforces is indistinguishable from one that is enforced, which is the exact failure the
-    bound register was built to end one level down. *Promotion trigger:* a normative SHALL found un-reacted
-    **after** this window's sweep. The sweep is the control: four found before it means little if the fifth is
-    found the same way, and the trigger is deliberately about the residual rate rather than about the count.
-    *Measured cost, not estimated:* the specs hold **1048** `SHALL` occurrences across **310** requirements and
-    **1177** scenarios, against the register's **56 bounds across 20 capabilities** — written in that exact form
-    because it is the one phrasing `check_bound_register.sh` reacts to, and a census in any other wording is what
-    that gate's own policy says must not exist in prose. Requiring a citation per SHALL would add on the order of a
-    thousand hand-maintained pointers — the drift class this family already refuses, where a structural property
-    is kept by prose rather than by a reaction. A per-*requirement* or per-*scenario* form is smaller but not
-    small, and neither is decidable from the text: which test defends a requirement is nowhere written. So the
-    honest first step is a **derived** binding, not a declared one, and this entry stays WATCH until the trigger
-    says the residual rate justifies designing it. *Version class:* not a release-affecting change; a new
-    capability with its own gate. *Authority:* `observation-bound-register`, which solves the same problem for
-    bounds and is the shape any answer here would have to generalize.
   - **A capability whose reactions are shell gates cannot pin a bound of its own.** `PINNED-BY` resolves a
     Rust test under `crates/`, while every defence of `observation-bound-register`,
     `self-law-projection`, and the gate surface of `violation-baseline` is a shell fixture — so such a
