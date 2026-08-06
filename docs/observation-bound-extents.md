@@ -126,7 +126,7 @@ One value carries no bound today and is kept deliberately: **refuses to judge**.
 
 > a sourced function library, a matrix over one, the example runner, or the publish tool
 
-- **because**: the enumeration is the `check_*` gate and the twin its basename names, so no other shell unit is judged on any of the nine properties; the one thing asserted about them is that none carries the shared exit contract, which keeps the exclusion from being a hiding place rather than making it coverage
+- **because**: the enumeration is the `check_*` gate and the twin its basename names, so no other shell unit is judged on any of the properties it holds them to; the one thing asserted about them is that none carries the shared exit contract, which keeps the exclusion from being a hiding place rather than making it coverage
 - **its defence must show**: does not react
 - **pinned by**: `units_outside_the_gate_pairing_are_outside_the_surface`
 

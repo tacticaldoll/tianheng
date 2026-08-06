@@ -83,25 +83,59 @@ struct Property {
     subject: Subject,
     remedy: &'static str,
     holds: fn(&Unit) -> Holds,
+    /// What this offence can say about *this* gate that a static remedy cannot — the label it wrote against the
+    /// label its name asks for. Most properties have nothing to add, because the absence *is* the whole fact.
+    detail: fn(&Unit) -> Option<String>,
 }
 
-/// The nine properties, in the order the projection prints them and the order a failure names them.
+/// Every property, in the order the projection prints them and the order a failure names them.
 ///
-/// Three per gate, five per twin, one over `AGENTS.md`. Each is a class this window observed rather than a
-/// checklist item assembled for symmetry.
+/// Some are properties of the gate, some of its twin, and one of `AGENTS.md`'s Definition of Done — each entry
+/// says which. Each is a class this repository observed rather than a checklist item assembled for symmetry. How
+/// many there are is printed by the projection and stated in no prose: this array is the only place that knows.
 ///
 /// **One array, not an enum beside a list of its variants.** Written the second way first — a `Property` enum
 /// with an `ALL` constant — and it carried a silent false negative of exactly the kind this capability exists
 /// to refuse: a tenth variant compiles once it has a label and a remedy, and is then never measured, because
 /// nothing forces it into `ALL`. Every test here iterates that list, so the new property would go unchecked
 /// while the reaction reported the surface conformant. Here there is no second list to forget.
-const PROPERTIES: [Property; 9] = [
+const PROPERTIES: [Property; 10] = [
     Property {
         label: "backstop",
         subject: Subject::Gate,
         remedy: "source scripts/lib/exit_contract.sh and invoke exit_contract_backstop, so an unhandled \
                  command's status cannot escape as a foreign exit code",
         holds: |unit| holds(installs_the_backstop(&unit.gate_text)),
+        detail: |_| None,
+    },
+    Property {
+        label: "backstop label",
+        subject: Subject::Gate,
+        remedy: "pass the backstop this gate's own name, written as a literal: its basename with `check_` and \
+                 `.sh` removed and underscores read as spaces",
+        holds: |unit| match backstop_label(&unit.gate_text) {
+            BackstopLabel::Literal(label) => holds(label == name_from_basename(&unit.gate)),
+            BackstopLabel::Computed | BackstopLabel::Absent => Holds::No,
+        },
+        detail: |unit| {
+            Some(match backstop_label(&unit.gate_text) {
+                BackstopLabel::Literal(label) => format!(
+                    "it passes `{label}` where its basename asks for `{}`",
+                    name_from_basename(&unit.gate)
+                ),
+                // Said as what it is. Reporting a computed label as a *mismatch* would compare against a label
+                // the gate never wrote — and the shape most likely to appear here, deriving the name from `$0`,
+                // is a better implementation than any literal rather than a naming error.
+                BackstopLabel::Computed => {
+                    "its label is built by expansion, and a reaction that reads text \
+                     cannot confirm one"
+                        .to_string()
+                }
+                BackstopLabel::Absent => {
+                    "it invokes no backstop, so it passes no label".to_string()
+                }
+            })
+        },
     },
     Property {
         label: "contract header",
@@ -109,6 +143,7 @@ const PROPERTIES: [Property; 9] = [
         remedy: "state the three-way contract in the header — `Exit 0 <clean>, 1 <violation>, 2 cannot judge` \
                  — with the verdict words for 0 and 1 chosen for this gate's subject",
         holds: |unit| holds(declares_the_three_way_contract(&unit.gate_text)),
+        detail: |_| None,
     },
     Property {
         label: "target directory",
@@ -116,6 +151,7 @@ const PROPERTIES: [Property; 9] = [
         remedy: "take the repository to judge as `${1:-<this checkout>}`, so a fixture can be pointed at it; a \
                  gate that cannot be pointed at a fixture cannot be observed refusing",
         holds: |unit| holds(accepts_a_target_directory(&unit.gate_text)),
+        detail: |_| None,
     },
     Property {
         label: "twin exists",
@@ -123,6 +159,7 @@ const PROPERTIES: [Property; 9] = [
         remedy: "add the companion failure matrix beside it, named by substituting `test_` for `check_`; a gate \
                  nobody has watched refuse is protection claimed rather than observed",
         holds: |unit| holds(unit.twin_text.is_some()),
+        detail: |_| None,
     },
     Property {
         label: "exit codes",
@@ -130,6 +167,7 @@ const PROPERTIES: [Property; 9] = [
         remedy: "assert the expected exit CODE in the matrix, not merely non-zero: a 1 collapsing into a 2 \
                  rode green through CI exactly once this way",
         holds: |unit| unit.twin_holds(asserts_exit_codes),
+        detail: |_| None,
     },
     Property {
         label: "both directions",
@@ -137,6 +175,7 @@ const PROPERTIES: [Property; 9] = [
         remedy: "hold both an `expect_pass` and an `expect_fail` direction; a gate that refuses everything \
                  satisfies a refusal-only matrix completely",
         holds: |unit| unit.twin_holds(holds_both_directions),
+        detail: |_| None,
     },
     Property {
         label: "read-only",
@@ -144,6 +183,7 @@ const PROPERTIES: [Property; 9] = [
         remedy: "assert the judged repository is unchanged after the gate runs, on a fixture the gate has not \
                  already judged, and say `mutated` when it is not",
         holds: |unit| unit.twin_holds(asserts_read_only),
+        detail: |_| None,
     },
     Property {
         label: "silent clean run",
@@ -151,6 +191,7 @@ const PROPERTIES: [Property; 9] = [
         remedy: "capture a clean run's stderr alone (`2>&1 >/dev/null`) and assert the variable it assigned is \
                  empty; nothing about the exit code can see a gate printing cannot-judge on every clean input",
         holds: |unit| unit.twin_holds(asserts_a_silent_clean_run),
+        detail: |_| None,
     },
     Property {
         label: "definition of done",
@@ -171,6 +212,7 @@ const PROPERTIES: [Property; 9] = [
                 holds(unit.gate_in_dod && unit.twin_in_dod)
             }
         },
+        detail: |_| None,
     },
 ];
 
@@ -178,7 +220,7 @@ fn holds(condition: bool) -> Holds {
     if condition { Holds::Yes } else { Holds::No }
 }
 
-/// One gate, its twin, and everything the nine properties are measured from.
+/// One gate, its twin, and everything the properties are measured from.
 struct Unit {
     gate: String,
     twin: String,
@@ -310,6 +352,61 @@ fn installs_the_backstop(gate: &str) -> bool {
     let invoked =
         uncommented(gate).any(|line| line.trim_start().starts_with(&format!("{BACKSTOP} ")[..]));
     sourced && invoked
+}
+
+/// What a gate wrote as its backstop label.
+enum BackstopLabel {
+    Literal(String),
+    /// Built by expansion. Not resolved: this reaction reads a gate's text and does not evaluate it, so it
+    /// cannot confirm such a label — and must not report an unconfirmed one as correct.
+    Computed,
+    /// No invocation at all, so there is no label. The backstop property reports that absence too, and both
+    /// offences stand: each names something real, which is the precedent an absent twin already set.
+    Absent,
+}
+
+/// The label a gate passes to the shared backstop.
+///
+/// A trailing comment is cut before the argument is read, for the reason the Definition-of-Done parse cuts one:
+/// a comment is not part of what runs, and reading it as part of the label would report a mismatch against text
+/// the shell never sees.
+fn backstop_label(gate: &str) -> BackstopLabel {
+    let invocation =
+        uncommented(gate).find(|line| line.trim_start().starts_with(&format!("{BACKSTOP} ")[..]));
+    let Some(line) = invocation else {
+        return BackstopLabel::Absent;
+    };
+    let argument = line.trim_start()[BACKSTOP.len()..].trim();
+    let argument = match argument.find(" #") {
+        Some(index) => argument[..index].trim(),
+        None => argument,
+    };
+    let literal = match (argument.starts_with('\''), argument.starts_with('"')) {
+        (true, _) if argument.len() >= 2 && argument.ends_with('\'') => {
+            &argument[1..argument.len() - 1]
+        }
+        (_, true) if argument.len() >= 2 && argument.ends_with('"') => {
+            &argument[1..argument.len() - 1]
+        }
+        // Unquoted is accepted: the shell accepts it for a single-word label, and refusing it would be a rule
+        // about quoting rather than about naming.
+        _ => argument,
+    };
+    if literal.is_empty() || literal.contains('$') || literal.contains('`') {
+        return BackstopLabel::Computed;
+    }
+    BackstopLabel::Literal(literal.to_string())
+}
+
+/// The name a gate's own basename asks it to answer to: `check_` and `.sh` removed, underscores read as spaces.
+///
+/// Derived rather than looked up. A table from gate to label would be a second declaration of the gate's name,
+/// and would rot exactly as the thing it checks.
+fn name_from_basename(gate: &str) -> String {
+    let base = gate.rsplit_once('/').map(|(_, base)| base).unwrap_or(gate);
+    let stem = base.strip_prefix("check_").unwrap_or(base);
+    let stem = stem.strip_suffix(".sh").unwrap_or(stem);
+    stem.replace('_', " ")
 }
 
 /// Property 2 — the header declares the three-way contract, recognized by **shape, not by wording**.
@@ -448,7 +545,7 @@ fn definition_of_done_runs(commands: &[String], path: &str) -> bool {
     commands.iter().any(|command| command.contains(path))
 }
 
-/// Measure the whole surface. The enumeration, the pairing, and the nine properties, in one pass.
+/// Measure the whole surface. The enumeration, the pairing, and every property, in one pass.
 ///
 /// Fails loudly on an empty enumeration rather than reporting every property of zero gates satisfied. Six
 /// occurrences of that direction in one window is why it is a requirement of this capability and not a detail
@@ -505,17 +602,17 @@ fn offences(units: &[Unit], subject: Subject) -> Vec<String> {
                 continue;
             }
             match subject {
-                Subject::Gate => found.push(offence(&unit.gate, property)),
-                Subject::Twin => found.push(offence(&unit.twin, property)),
+                Subject::Gate => found.push(offence(&unit.gate, property, unit)),
+                Subject::Twin => found.push(offence(&unit.twin, property, unit)),
                 // Both files are required, so the offence names the one that is missing — naming the gate for
                 // an absent twin would send a reader to the wrong file. The publish-time gate's absence is not
                 // an offence, which is what its exemption means.
                 Subject::BothFiles => {
                     if !unit.gate_in_dod && unit.gate != PUBLISH_TIME_GATE {
-                        found.push(offence(&unit.gate, property));
+                        found.push(offence(&unit.gate, property, unit));
                     }
                     if !unit.twin_in_dod {
-                        found.push(offence(&unit.twin, property));
+                        found.push(offence(&unit.twin, property, unit));
                     }
                 }
             }
@@ -524,8 +621,11 @@ fn offences(units: &[Unit], subject: Subject) -> Vec<String> {
     found
 }
 
-fn offence(file: &str, property: &Property) -> String {
-    format!("{file}: {} — {}", property.label, property.remedy)
+fn offence(file: &str, property: &Property, unit: &Unit) -> String {
+    match (property.detail)(unit) {
+        Some(detail) => format!("{file}: {} — {detail}; {}", property.label, property.remedy),
+        None => format!("{file}: {} — {}", property.label, property.remedy),
+    }
 }
 
 /// Every offence over the whole surface, in the order the properties are declared.
@@ -659,7 +759,7 @@ fn no_unit_outside_the_pairing_carries_the_gate_contract() {
 /// one property withheld, named by its label.
 ///
 /// The point of building it per property rather than once: a reaction that fails only in aggregate cannot be
-/// trusted to have nine reasons, and two of the nine were originally written against a shape that would have
+/// trusted to have as many reasons as it has properties, and two of them were originally written against a shape that would have
 /// made three real gates look non-conformant.
 fn fixture_missing(withheld: Option<&str>) -> PathBuf {
     let missing = |label: &str| withheld == Some(label);
@@ -677,10 +777,14 @@ fn fixture_missing(withheld: Option<&str>) -> PathBuf {
         "# Exit 0 clean, 1 violation, 2 cannot judge — the family's own Core Contract.\n"
     };
     // Sourced and never invoked is the half that installs nothing, so that is the withholding.
+    let source = "source \"$(dirname \"$0\")/lib/exit_contract.sh\"\n";
     let backstop = if missing("backstop") {
-        "source \"$(dirname \"$0\")/lib/exit_contract.sh\"\n"
+        source.to_string()
+    } else if missing("backstop label") {
+        // A sibling's name: the copy-paste shape the property exists for.
+        format!("{source}exit_contract_backstop 'some other gate'\n")
     } else {
-        "source \"$(dirname \"$0\")/lib/exit_contract.sh\"\nexit_contract_backstop 'probe'\n"
+        format!("{source}exit_contract_backstop 'probe'\n")
     };
     let target = if missing("target directory") {
         "repo=$(pwd)\n"
@@ -765,9 +869,14 @@ fn a_gate_missing_one_property_is_named_by_that_property() {
             Subject::Twin => format!("{SCRIPTS}/{FIXTURE_TWIN}"),
             Subject::Gate | Subject::BothFiles => format!("{SCRIPTS}/{FIXTURE_GATE}"),
         };
+        // Matched through the separator, not on the prefix: `backstop` is a prefix of `backstop label`, and the
+        // looser form counted the label's offence as the backstop's — found by this test failing rather than by
+        // reading it.
         let named = found
             .iter()
-            .filter(|offence| offence.starts_with(&format!("{expected_file}: {}", property.label)))
+            .filter(|offence| {
+                offence.starts_with(&format!("{expected_file}: {} — ", property.label))
+            })
             .count();
         assert_eq!(
             named, 1,
@@ -775,12 +884,14 @@ fn a_gate_missing_one_property_is_named_by_that_property() {
             property.label
         );
 
-        // An absent twin is the one case with dependents: four matrix properties cannot be held by a file that
-        // does not exist, and reporting them is honest rather than noisy — each names a real absence.
-        let expected_total = if property.label == "twin exists" {
-            5
-        } else {
-            1
+        // Two properties carry dependents, and reporting them is honest rather than noisy — each names a real
+        // absence. An absent twin cannot hold the four matrix properties; a gate that never invokes the backstop
+        // passes no label. Suppressing either would need a third value of "held" meaning *not applicable*, which
+        // is a claim about the file that neither yes nor no is making.
+        let expected_total = match property.label {
+            "twin exists" => 5,
+            "backstop" => 2,
+            _ => 1,
         };
         assert_eq!(
             found.len(),
@@ -1104,7 +1215,7 @@ fn units_outside_the_gate_pairing_are_outside_the_surface() {
         !outside.is_empty(),
         "no unit sits outside the pairing, so this bound would be demonstrated by an empty set"
     );
-    // Each is a real shell unit this reaction judges on none of the nine properties. The one thing asserted
+    // Each is a real shell unit this reaction judges on none of its properties. The one thing asserted
     // about them is the contract-carrying refusal in `no_unit_outside_the_pairing_carries_the_gate_contract`,
     // which is what keeps the exclusion from being a hiding place rather than a claim of coverage.
     for path in &outside {

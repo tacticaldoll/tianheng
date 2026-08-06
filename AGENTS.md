@@ -316,7 +316,7 @@ classification in a bijection and projects `docs/observation-bound-extents.md`; 
 above because it runs under that same `cargo test`. And so must `observer_protocol.rs`, which holds the
 trait-driven fold and the built-in composition path to one verdict — two paths that could disagree silently
 are the drift a seam is supposed to end. And so must `gate_shape_contract.rs`, which enumerates this
-repository's own `check_*` gates and their twins from tracked content, holds each to the nine properties of the
+repository's own `check_*` gates and their twins from tracked content, holds each to the structural properties of the
 family's exit contract, and projects [`docs/gate-shape-contract.md`](docs/gate-shape-contract.md) — the table
 saying which gate holds what, and which three of the classes it was built for are declared bounds rather than
 checks. It adds no line above for the same reason. Beyond the list
