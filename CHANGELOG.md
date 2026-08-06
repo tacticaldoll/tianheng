@@ -355,6 +355,19 @@ them.
   outlived its instance and was left pinned by nothing. It is now pinned **directly**, against a fixture gate that
   carries the shape on purpose — a process substitution whose producer exits non-zero as its ordinary answer —
   independent of whether any real gate still does.
+- **漏刻's audit-scoped bound declarations are gated with the reaction they describe.** `mod bounds` and its
+  `pub use observation_bounds` were unconditional while `mod observer` immediately beneath them is behind the
+  non-default `audit` feature, with a comment explaining exactly why — reasoning that applies to `bounds` and had
+  not been applied to it. Five of the six declarations describe `audit_probe_coverage`, the scanner an audit-OFF
+  build compiles none of, including two declared false negatives owned by the engine; only the composite-shape
+  bound describes the always-present origin derivation on the hot path. So an audit-OFF dependent read **six**
+  declared bounds for a reaction its build did not contain, and the accessor's own doc comment was false in that
+  configuration. **Adopter-visible only under a non-default feature**: such a dependent now reads one, and the
+  `tianheng` shell enables `audit`, so nothing changes for the composed entry. The defect arrived through the
+  *export* rather than through a declaration, which is why no reaction saw it — the bijection runs with
+  `--all-features` — and `observation-bound-model` now carries the rule: where a reaction is behind a Cargo
+  feature, the declarations describing it are gated with it.
+
 - **Two helpers nothing called are deleted, and the shared-capture library says what it actually shares.**
   `capture_nul_or_refuse` was written into `scripts/lib/capture.sh` and never adopted — and deleting it is the
   answer rather than wiring it up, because it `mktemp`ed and `rm`ed internally, the discipline `513803a` measured
