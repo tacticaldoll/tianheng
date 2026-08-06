@@ -38,7 +38,9 @@ jobs:
         # gained --document-private-items while the local list kept the flagless form), so the gate a
         # contributor actually runs went blind to the exact class this job had just learned to catch.
         # Checked here rather than promised in prose.
-        run: bash scripts/check_dod_coherence.sh
+        run: |
+          bash scripts/test_dod_coherence.sh
+          bash scripts/check_dod_coherence.sh
       - name: whitespace hygiene across every tracked text file
         # `cargo fmt` governs .rs only, so nothing in the repository checked .md, .toml, .sh, or .yml.
         # Three blank lines at EOF reached a release branch in the 0.4.0 window, through 23 touched spec
