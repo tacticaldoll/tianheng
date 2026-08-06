@@ -9,9 +9,23 @@ exit_contract_backstop 'release coherence'
 
 repo=${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 
+# Exits rather than `return 1`-and-let-`set -e`-do-it. That indirection was live and wrong: with the shared
+# exit-contract backstop installed, the `ERR` trap fired on the returned 1 and converted every genuine
+# incoherence into `2` — cannot judge — which is the one collapse the family contract forbids. Measured on a
+# fixture whose internal pin disagreed: the gate printed the right diagnosis and then exited 2. The matrix
+# could not see it, asserting only a non-zero status; that is fixed too.
 fail() {
     printf 'release coherence: %s\n' "$*" >&2
-    return 1
+    exit 1
+}
+
+# The other half of the contract this gate's header claims and never held: an input it cannot read is not an
+# incoherence. A shallow clone with no release spine, an absent manifest, a layout that moved — none of those
+# say "the release surfaces disagree", and reporting them as `1` tells a consumer to go looking for a
+# disagreement that does not exist. Every sibling gate separates these two; this one collapsed them.
+cannot_judge() {
+    printf 'release coherence: cannot judge: %s\n' "$*" >&2
+    exit 2
 }
 
 read_workspace_version() {
@@ -71,8 +85,9 @@ require_workspace_manifests() {
 }
 
 require_internal_pins() {
-    local line dependency pin
+    local line dependency pin pins=0
     while IFS= read -r line; do
+        pins=$((pins + 1))
         dependency=${line%%=*}
         dependency=${dependency//[[:space:]]/}
         pin=$(sed -n 's/.*version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' <<<"$line")
@@ -80,6 +95,11 @@ require_internal_pins() {
         [[ $pin == "$workspace_version" ]] \
             || fail "internal dependency $dependency is pinned to $pin; expected $workspace_version"
     done < <(grep -E '^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=.*path[[:space:]]*=[[:space:]]*"crates/' "$repo/Cargo.toml")
+    # The vacuity guard every other loop in this file already had, and this one did not: a reformatted
+    # `[workspace.dependencies]` table, or a `grep` that could not read the manifest, iterates zero times and
+    # the direction passes having asserted nothing about any pin.
+    [[ $pins -gt 0 ]] \
+        || cannot_judge "found no internal path dependency in $repo/Cargo.toml — the declaration form changed, so pin coherence cannot be verified"
 }
 
 # Every example's committed family-crate requirement must be satisfiable by the workspace version.
@@ -121,9 +141,9 @@ require_example_pins() {
     # table form (`tianheng = { version = "…" }`) that this line-form parse does not read, would
     # otherwise iterate zero times and pass with zero assertions.
     [[ $manifests -gt 0 ]] \
-        || fail "found no example manifests under $repo/examples — the layout changed or is absent, so example version coherence cannot be verified"
+        || cannot_judge "found no example manifests under $repo/examples — the layout changed or is absent, so example version coherence cannot be verified"
     [[ $seen -gt 0 ]] \
-        || fail "read $manifests example manifest(s) but found no family dependency requirement in any of them — the dependency form changed and this gate would pass vacuously"
+        || cannot_judge "read $manifests example manifest(s) but found no family dependency requirement in any of them — the dependency form changed and this gate would pass vacuously"
 }
 
 workspace_packages() {
@@ -181,14 +201,14 @@ require_release_surfaces() {
     done < <(workspace_packages)
 }
 
-[[ -f $repo/Cargo.toml ]] || fail "repository root $repo has no Cargo.toml"
-[[ -f $repo/CHANGELOG.md ]] || fail "repository root $repo has no CHANGELOG.md"
+[[ -f $repo/Cargo.toml ]] || cannot_judge "repository root $repo has no Cargo.toml"
+[[ -f $repo/CHANGELOG.md ]] || cannot_judge "repository root $repo has no CHANGELOG.md"
 git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-    || fail "repository root $repo has no git history"
+    || cannot_judge "repository root $repo has no git history"
 
 workspace_version=$(read_workspace_version)
 [[ $workspace_version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] \
-    || fail "workspace version is missing or malformed: ${workspace_version:-<missing>}"
+    || cannot_judge "workspace version is missing or malformed: ${workspace_version:-<missing>}"
 
 malformed_release=$(git -C "$repo" log --format='%s' \
     | awk '$0 ~ /^release:/ && $0 !~ /^release: (0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ { print }')
@@ -197,7 +217,7 @@ malformed_release=$(git -C "$repo" log --format='%s' \
 mapfile -t release_records < <(git -C "$repo" log --format='%H%x09%s' \
     | awk -F '\t' '$2 ~ /^release: (0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ { print }')
 [[ ${#release_records[@]} -gt 0 ]] \
-    || fail "exact release history is unavailable; fetch full history containing release: X.Y.Z"
+    || cannot_judge "exact release history is unavailable; fetch full history containing release: X.Y.Z — a shallow clone cannot see the release spine, which is not the same as surfaces that disagree"
 release_record=${release_records[0]}
 release_commit=${release_record%%$'\t'*}
 release_subject=${release_record#*$'\t'}
@@ -230,7 +250,7 @@ fi
 # gate. Mirrors the release-spine emptiness guard above (`${#release_records[@]} -gt 0`).
 mapfile -t workspace_manifest_files < <(find "$repo/crates" -mindepth 2 -maxdepth 2 -name Cargo.toml -type f | sort)
 [[ ${#workspace_manifest_files[@]} -gt 0 ]] \
-    || fail "found no workspace crate manifests under $repo/crates — the crate layout changed or is absent, so manifest and lock coherence cannot be verified"
+    || cannot_judge "found no workspace crate manifests under $repo/crates — the crate layout changed or is absent, so manifest and lock coherence cannot be verified"
 
 require_workspace_manifests
 require_internal_pins
