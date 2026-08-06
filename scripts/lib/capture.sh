@@ -21,17 +21,35 @@
 
 # Run a producer, capturing its output into the file named by $2 and refusing in the parent shell if it failed.
 #
-#   capture_or_refuse <what> <destination-file> <refusal-function> -- cmd...
+#   capture_or_refuse <what> <destination-file> <refusal-function> [--ordinary-empty <status>] -- cmd...
 #
 # `<what>` names the observation source for the diagnostic. `<refusal-function>` is the caller's own
 # cannot-judge — this library never decides a gate's exit contract for it, because the family's three-way contract
 # belongs to the gate.
+#
+# `--ordinary-empty <status>` names a non-zero status that means "no matches", not "I failed". `grep` exits 1 on a
+# clean miss, and this was found the hard way: the first version of this helper turned a legitimate no-match into a
+# cannot-judge, and `test_release_coherence.sh`'s vacuity direction — a reformatted dependency table the
+# single-line scan cannot see — failed immediately. Naming the status per call site rather than special-casing
+# `grep` keeps the rule about the producer's contract instead of about its name; `scripts/lib/exit_contract.sh`
+# makes the same distinction for the same reason.
 capture_or_refuse() {
-    local what=$1 destination=$2 refuse=$3
+    local what=$1 destination=$2 refuse=$3 ordinary_empty=
     shift 3
-    [[ $1 == -- ]] && shift
-    "$@" >"$destination" \
-        || "$refuse" "reading $what failed (exit $?), and a failed read is not an empty result — treating it as one reports a verdict over content that was never read"
+    while [[ $# -gt 0 && $1 != -- ]]; do
+        case $1 in
+            --ordinary-empty)
+                ordinary_empty=$2
+                shift 2
+                ;;
+            *) break ;;
+        esac
+    done
+    [[ ${1:-} == -- ]] && shift
+    local status=0
+    "$@" >"$destination" || status=$?
+    [[ $status -eq 0 || ( -n $ordinary_empty && $status -eq $ordinary_empty ) ]] \
+        || "$refuse" "reading $what failed (exit $status), and a failed read is not an empty result — treating it as one reports a verdict over content that was never read"
 }
 
 # The same, into an array named by $2, for a NUL-separated producer.
